@@ -9,6 +9,27 @@ class ModelResponse(BaseMessage):
     model: Optional[str] = None
     finish_reason: Optional[str] = None
 
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data.update({
+            "usage": self.usage,
+            "model": self.model,
+            "finish_reason": self.finish_reason,
+        })
+        return data
+    
+    def from_dict(cls, data: dict) -> "ModelResponse":
+        return cls(
+            id=data.get("id", ""),
+            role=data.get("role", ""),
+            content=data.get("content", ""),
+            timestamp=data.get("timestamp"),
+            metadata=data.get("metadata", {}),
+            usage=data.get("usage"),
+            model=data.get("model"),
+            finish_reason=data.get("finish_reason"),
+        )
+
 
 class BaseModelClient(ABC):
     """Base class for all model clients (OpenAI, Anthropic, etc.)."""

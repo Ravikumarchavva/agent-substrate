@@ -1,6 +1,6 @@
 from .base_message import BaseMessage
 from typing import Any, Optional, Literal
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 class SystemMessage(BaseMessage):
     """System message for agent instructions."""

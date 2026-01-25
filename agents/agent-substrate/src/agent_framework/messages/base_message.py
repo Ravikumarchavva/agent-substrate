@@ -23,8 +23,8 @@ class BaseMessage(BaseModel, ABC):
         """Convert message to dictionary for LLM API."""
         pass
 
-    @abstractmethod
     @classmethod
+    @abstractmethod
     def from_dict(cls, data: dict) -> "BaseMessage":
         """Create message from dictionary."""
         pass

@@ -1,10 +1,51 @@
 from abc import ABC, abstractmethod
+from typing import Any, AsyncIterator, Optional
+from agent_framework.messages.base_message import BaseMessage
+
+
+class ModelResponse(BaseMessage):
+    """Structured response from model client."""
+    usage: Optional[dict[str, Any]] = None
+    model: Optional[str] = None
+    finish_reason: Optional[str] = None
+
 
 class BaseModelClient(ABC):
+    """Base class for all model clients (OpenAI, Anthropic, etc.)."""
+    
+    def __init__(
+        self,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **kwargs
+    ):
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.kwargs = kwargs
+    
     @abstractmethod
-    def on_create(self, *args, **kwargs):
+    async def generate(
+        self,
+        messages: list[BaseMessage],
+        tools: Optional[list[dict]] = None,
+        **kwargs
+    ) -> ModelResponse:
+        """Generate a single response from the model."""
         pass
-
+    
     @abstractmethod
-    def on_create_stream(self, *args, **kwargs):
+    async def generate_stream(
+        self,
+        messages: list[BaseMessage],
+        tools: Optional[list[dict]] = None,
+        **kwargs
+    ) -> AsyncIterator[ModelResponse]:
+        """Generate a streaming response from the model."""
+        pass
+    
+    @abstractmethod
+    def count_tokens(self, messages: list[BaseMessage]) -> int:
+        """Count tokens in messages."""
         pass

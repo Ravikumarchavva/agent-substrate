@@ -11,6 +11,7 @@
 
 - **🤖 Multiple Agent Types**: ReAct, Conversational, Planner (coming soon)
 - **🔧 Tool Calling**: OpenAI-compatible function calling with JSON Schema validation
+- **🔌 MCP Support**: Connect to external tools via Model Context Protocol
 - **💾 Memory Management**: Multiple strategies (unbounded, sliding window, token-limited)
 - **🎯 Multi-Provider**: OpenAI, Anthropic, Gemini, Ollama (expanding)
 - **📊 Observability**: Built-in logging, tracing, and metrics
@@ -90,7 +91,7 @@ import json
 from agent_framework.model_clients.openai_client import OpenAIClient
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.agent_messages import UserMessage, ToolMessage
-from agent_framework.tools.example_tools import CalculatorTool
+from agent_framework.tools.builtin_tools import CalculatorTool
 
 async def main():
     client = OpenAIClient(model="gpt-4o")
@@ -185,6 +186,27 @@ from agent_framework.memory.unbounded_memory import UnboundedMemory
 memory = UnboundedMemory()
 memory.add_message(message)
 messages = memory.get_messages()
+```
+
+### MCP Tools
+
+Connect to external tools via Model Context Protocol:
+
+```python
+from agent_framework.tools import MCPClient, MCPTool
+
+# Connect to MCP server
+mcp_client = MCPClient()
+await mcp_client.connect(
+    command="npx",
+    args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+)
+
+# Auto-discover and create tools
+tools = await MCPTool.from_mcp_client(mcp_client)
+
+# Use with your agent
+agent = ReActAgent(tools=tools, ...)
 ```
 
 ---

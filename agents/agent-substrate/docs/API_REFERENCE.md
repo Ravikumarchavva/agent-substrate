@@ -277,7 +277,7 @@ class WeatherTool(BaseTool):
 ### Built-in Tools
 
 ```python
-from agent_framework.tools.example_tools import (
+from agent_framework.tools.builtin_tools import (
     CalculatorTool,
     GetCurrentTimeTool,
     WebSearchTool
@@ -412,7 +412,7 @@ Reasoning + Acting agent with tool loop.
 from agent_framework.agents.react_agent import ReActAgent
 from agent_framework.model_clients.openai_client import OpenAIClient
 from agent_framework.memory.unbounded_memory import UnboundedMemory
-from agent_framework.tools.example_tools import CalculatorTool
+from agent_framework.tools.builtin_tools import CalculatorTool
 
 # Create agent
 agent = ReActAgent(

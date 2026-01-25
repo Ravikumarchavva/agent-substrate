@@ -1,4 +1,4 @@
-"""Example tool implementations."""
+"""Built-in tool implementations."""
 from typing import Any
 import json
 from datetime import datetime

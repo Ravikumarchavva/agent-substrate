@@ -95,7 +95,7 @@ from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.agent_messages import (
     UserMessage, SystemMessage, ToolMessage
 )
-from agent_framework.tools.example_tools import CalculatorTool, GetCurrentTimeTool
+from agent_framework.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 
 async def run_agent_with_tools():
     # Initialize

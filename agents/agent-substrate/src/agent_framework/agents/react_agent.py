@@ -1,0 +1,174 @@
+import json
+import asyncio
+from typing import List, Optional, Any, Dict
+
+from agent_framework.agents.base_agent import BaseAgent
+from agent_framework.tools import BaseTool
+from agent_framework.model_clients.base_client import BaseModelClient
+from agent_framework.memory.base_memory import BaseMemory
+from agent_framework.memory.unbounded_memory import UnboundedMemory
+from agent_framework.messages.agent_messages import (
+    UserMessage,
+    SystemMessage,
+    AssistantMessage,
+    ToolMessage,
+)
+from opentelemetry.trace import Status, StatusCode
+from agent_framework.observability import global_tracer, global_metrics, logger
+
+class ReActAgent(BaseAgent):
+    """
+    Reasoning + Acting (ReAct) Agent that uses tools to solve problems.
+    
+    It operates in a loop:
+    1. Observe current context (memory)
+    2. Think (LLM generation)
+    3. Act (Tool execution)
+    4. Repeat until complete or max iterations reached.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        *,
+        model_client: BaseModelClient,
+        tools: List[BaseTool] | None = None,
+        system_instructions: str = "You are a helpful AI assistant. Use the provided tools to solve the user's request. Think step-by-step.",
+        memory: BaseMemory | None = None,
+        max_iterations: int = 10,
+        verbose: bool = True,
+    ):
+        super().__init__(
+            name=name,
+            description=description,
+            model_client=model_client,
+            tools=tools or [],
+            system_instructions=system_instructions,
+            memory=memory or UnboundedMemory(),
+        )
+        self.max_iterations = max_iterations
+        self.verbose = verbose
+        
+        # Initialize system prompt if memory is empty
+        if len(self.memory.get_messages()) == 0:
+            self.memory.add_message(SystemMessage(content=self.system_instructions))
+
+    async def run(self, input_text: str, **kwargs) -> Any:
+        """
+        Run the agent with the given user input.
+        """
+        attributes = {"agent_name": self.name, "input_length": len(input_text)}
+        
+        with global_tracer.start_span("agent_run", attributes) as span:
+            global_metrics.increment_counter("agent_runs", tags={"name": self.name})
+            
+            logger.info(f"[{self.name}] Starting run for input: {input_text[:50]}...")
+            
+            # 1. Add User Message
+            user_msg = UserMessage(content=input_text)
+            self.memory.add_message(user_msg)
+            
+            # 2. ReAct Loop
+            final_response = None
+            
+            for i in range(self.max_iterations):
+                iteration_span_name = f"iteration_{i+1}"
+                with global_tracer.start_span(iteration_span_name, {"iteration": i+1}) as iter_span:
+                    if self.verbose:
+                        logger.info(f"[{self.name}] Iteration {i+1}/{self.max_iterations}")
+
+                    # A. Generate Response (THINK)
+                    tool_schemas = [t.get_schema() for t in self.tools]
+                    messages = self.memory.get_messages()
+                    
+                    with global_tracer.start_span("llm_generate", {"msg_count": len(messages)}) as llm_span:
+                        start_time = asyncio.get_event_loop().time()
+                        try:
+                            response = await self.model_client.generate(
+                                messages=messages,
+                                tools=tool_schemas if tool_schemas else None,
+                                tool_choice="auto" if tool_schemas else None
+                            )
+                            end_time = asyncio.get_event_loop().time()
+                            global_metrics.record_histogram("llm_latency", end_time - start_time, tags={"model": getattr(self.model_client, "model", "unknown")})
+                        except Exception as e:
+                            global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
+                            raise e
+
+                    # B. Update Memory
+                    self.memory.add_message(response)
+                    final_response = response.content
+                    
+                    # C. Check for Tool Calls (ACT)
+                    if not response.tool_calls:
+                        if self.verbose:
+                            logger.info(f"[{self.name}] No tool calls, finishing.")
+                        iter_span.set_attribute("outcome", "finished")
+                        span.set_attribute("final_iterations", i + 1)
+                        break
+                    
+                    if self.verbose:
+                        logger.info(f"[{self.name}] Tool calls requested: {[tc.function['name'] for tc in response.tool_calls]}")
+
+                    # D. Execute Tools
+                    with global_tracer.start_span("execute_tools", {"count": len(response.tool_calls)}):
+                        # Execute sequential for safety, but could be parallel
+                        for tool_call in response.tool_calls:
+                            tc_name = tool_call.function["name"]
+                            tc_args_str = tool_call.function["arguments"]
+                            call_id = tool_call.id
+                            
+                            with global_tracer.start_span("tool_execution", {"tool": tc_name}) as tool_span:
+                                tool = next((t for t in self.tools if t.name == tc_name), None)
+                                result_content = ""
+                                
+                                if not tool:
+                                    error_msg = f"Error: Tool '{tc_name}' not found."
+                                    logger.error(f"[{self.name}] {error_msg}")
+                                    result_content = json.dumps({"error": error_msg})
+                                    tool_span.set_status(Status(StatusCode.ERROR))
+                                    global_metrics.increment_counter("tool_not_found_errors", tags={"tool": tc_name})
+                                else:
+                                    try:
+                                        tc_args = json.loads(tc_args_str)
+                                        if self.verbose:
+                                            logger.info(f"[{self.name}] Executing {tc_name} with {tc_args}")
+                                        
+                                        # EXECUTE
+                                        result_content = await tool.execute(**tc_args)
+                                        
+                                        global_metrics.increment_counter("tool_executions", tags={"tool": tc_name, "status": "success"})
+                                    except Exception as e:
+                                        error_msg = str(e)
+                                        logger.error(f"[{self.name}] Tool execution failed: {e}")
+                                        result_content = json.dumps({"error": error_msg})
+                                        tool_span.set_status(Status(StatusCode.ERROR))
+                                        global_metrics.increment_counter("tool_execution_errors", tags={"tool": tc_name, "error": type(e).__name__})
+
+                                # Add Result to Memory
+                                tool_msg = ToolMessage(
+                                    content=result_content,
+                                    tool_call_id=call_id,
+                                    name=tc_name
+                                )
+                                self.memory.add_message(tool_msg)
+
+            return final_response
+
+    async def run_stream(self, *args, **kwargs):
+        raise NotImplementedError("Streaming not yet implemented for ReActAgent")
+
+    def save_state(self):
+        # Basic state dump
+        return {
+            "name": self.name,
+            "memory_messages": [m.to_dict() for m in self.memory.get_messages()]
+        }
+
+    def load_state(self, state: Dict[str, Any]):
+        if state.get("name") != self.name:
+            logger.warning("Loading state for a different agent name")
+        # Logic to restore memory would go here
+        # For now, simplistic implementation
+        pass

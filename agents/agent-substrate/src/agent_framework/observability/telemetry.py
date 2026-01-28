@@ -6,11 +6,13 @@ from contextlib import contextmanager
 from opentelemetry import trace, metrics
 from opentelemetry.trace import Status, StatusCode
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor, BatchSpanProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from agent_framework.logger import setup_logging, logger
 from agent_framework.logger import setup_logging, logger
 
 
@@ -24,21 +26,48 @@ logger = logging.getLogger("agent_framework")
 # The user of this lib should configure the provider (e.g. in the demo script).
 # But for convenience we provide a helper.
 
-def configure_opentelemetry(service_name: str = "agent-framework"):
+def configure_opentelemetry(
+    service_name: str = "agent-framework", 
+    otlp_trace_endpoint: Optional[str] = None,
+    otlp_metric_endpoint: Optional[str] = None
+):
     """
-    Configure OpenTelemetry with a Console Exporter for demo purposes.
-    In production, you'd use OTLP or other exporters.
+    Configure OpenTelemetry. 
+    If endpoints are provided, use OTLP Exporters.
+    Otherwise, use Console Exporter for demo purposes.
     """
     resource = Resource.create({"service.name": service_name})
     
-    # Trace Provider
+    # --- Trace Provider ---
     tracer_provider = TracerProvider(resource=resource)
-    span_processor = SimpleSpanProcessor(ConsoleSpanExporter())
+    
+    if otlp_trace_endpoint:
+        # Using HTTP OTLP exporter as it's generally more reliable for local setups
+        # Ensure endpoint is a full URL
+        endpoint = otlp_trace_endpoint
+        if "://" not in endpoint:
+            endpoint = f"http://{endpoint}"
+        if not endpoint.endswith("/v1/traces"):
+            endpoint = endpoint.rstrip("/") + "/v1/traces"
+            
+        span_exporter = OTLPSpanExporter(endpoint=endpoint)
+        span_processor = BatchSpanProcessor(span_exporter)
+    else:
+        span_processor = SimpleSpanProcessor(ConsoleSpanExporter())
+        
     tracer_provider.add_span_processor(span_processor)
     trace.set_tracer_provider(tracer_provider)
     
-    # Meter Provider
-    reader = PeriodicExportingMetricReader(ConsoleMetricExporter())
+    # --- Meter Provider ---
+    if otlp_metric_endpoint:
+        # Metrics often still use gRPC in OTLP
+        grpc_endpoint = otlp_metric_endpoint
+        if "://" in grpc_endpoint:
+            grpc_endpoint = grpc_endpoint.split("://")[-1]
+        reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=grpc_endpoint, insecure=True))
+    else:
+        reader = PeriodicExportingMetricReader(ConsoleMetricExporter())
+        
     meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
     metrics.set_meter_provider(meter_provider)
 

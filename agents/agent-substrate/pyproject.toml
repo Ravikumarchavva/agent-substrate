@@ -21,6 +21,8 @@ dependencies = [
     "pytest>=9.0.2",
     "python-json-logger>=2.0.7",
     "tiktoken>=0.12.0",
+    "fastapi>=0.128.0",
+    "opentelemetry-instrumentation-fastapi>=0.60b1",
 ]
 
 [project.scripts]

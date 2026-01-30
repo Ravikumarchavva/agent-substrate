@@ -14,6 +14,7 @@ class Settings(BaseSettings):
         case_sensitive=True,
     )
 
+settings = Settings()
 if __name__ == "__main__":
     settings = Settings()
     print(settings.model_dump_json())

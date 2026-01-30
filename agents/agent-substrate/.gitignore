@@ -2,9 +2,13 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+symbols
+ssl
+*.pem
 # C extensions
 *.so
+*.parquet
+data
 
 # Distribution / packaging
 .Python

@@ -1,3 +1,4 @@
+
 import logging
 import sys
 from typing import Any, Dict, Optional, ContextManager
@@ -40,10 +41,16 @@ def configure_opentelemetry(
     service_name: str = "agent-framework",
     otlp_trace_endpoint: Optional[str] = None,
     otlp_metric_endpoint: Optional[str] = None,
+    export_metrics_to_console: bool = False,
+    export_traces_to_console: bool = False,
 ):
     """
     Configure OpenTelemetry exactly once.
     Safe for FastAPI + scripts.
+
+    Parameters:
+        export_metrics_to_console: If True, enable ConsoleMetricExporter when no OTLP metrics endpoint
+            is configured. Defaults to False to avoid noisy metric dumps to stdout in development.
     """
 
     global _OTEL_CONFIGURED
@@ -76,31 +83,40 @@ def configure_opentelemetry(
 
         span_exporter = OTLPSpanExporter(endpoint=endpoint)
         span_processor = BatchSpanProcessor(span_exporter)
+        tracer_provider.add_span_processor(span_processor)
     else:
-        logger.warning("No OTLP trace endpoint set, using ConsoleSpanExporter")
-        span_processor = SimpleSpanProcessor(ConsoleSpanExporter())
+        if export_traces_to_console:
+            logger.warning("No OTLP trace endpoint set, using ConsoleSpanExporter (enable only for debugging)")
+            span_processor = SimpleSpanProcessor(ConsoleSpanExporter())
+            tracer_provider.add_span_processor(span_processor)
+        else:
+            logger.info("Trace export is disabled (no OTLP trace endpoint and console export disabled)")
+            # Do not add a console span exporter by default to avoid noisy span dumps
 
-    tracer_provider.add_span_processor(span_processor)
     trace.set_tracer_provider(tracer_provider)
 
     # ------------------------
     # Metrics
     # ------------------------
 
+    metric_readers = []
     if otlp_metric_endpoint:
         grpc_endpoint = otlp_metric_endpoint
         if "://" in grpc_endpoint:
             grpc_endpoint = grpc_endpoint.split("://")[-1]
 
-        reader = PeriodicExportingMetricReader(
+        metric_readers.append(PeriodicExportingMetricReader(
             OTLPMetricExporter(endpoint=grpc_endpoint, insecure=True)
-        )
+        ))
+    elif export_metrics_to_console:
+        logger.warning("No OTLP metric endpoint set, using ConsoleMetricExporter (enable only for debugging)")
+        metric_readers.append(PeriodicExportingMetricReader(ConsoleMetricExporter()))
     else:
-        reader = PeriodicExportingMetricReader(ConsoleMetricExporter())
+        logger.info("Metrics export is disabled (no OTLP metric endpoint and console export disabled)")
 
     meter_provider = MeterProvider(
         resource=resource,
-        metric_readers=[reader],
+        metric_readers=metric_readers,
     )
     metrics.set_meter_provider(meter_provider)
 

@@ -1,40 +1,72 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pydantic import BaseModel, Field
-from typing import Literal, Any, Optional
+from typing import Literal, Any, Optional, Dict
 from datetime import datetime
 from uuid import uuid4
 
-ROLES = Literal["system", "user", "assistant", "tool"]
+CLIENT_ROLES = Literal["system", "user", "assistant", "tool_call", "tool_response"]
+SOURCE_ROLES = Literal["user", "agent"]
 
-class BaseMessage(BaseModel, ABC):
+@dataclass
+class UsageStats:
+    """Usage statistics for model interactions."""
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    
+class BaseClientMessage(BaseModel, ABC):
     """Base message class with common fields for all message types."""
     
     id: str = Field(default_factory=lambda: str(uuid4()))
-    role: ROLES
+    role: CLIENT_ROLES
     content: Any
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    type: Literal["BaseClientMessage"] = "BaseClientMessage"
     
     class Config:
         arbitrary_types_allowed = True
     
     @abstractmethod
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict:
         """Convert message to dictionary for LLM API."""
         pass
 
     @classmethod
     @abstractmethod
-    def from_dict(cls, data: dict) -> "BaseMessage":
+    def from_dict(cls, data: Dict) -> "BaseClientMessage":
         """Create message from dictionary."""
         pass
     
-    def to_storage_dict(self) -> dict:
-        """Convert message to dictionary for storage (includes all fields)."""
-        return {
-            "id": self.id,
-            "role": self.role,
-            "content": self.content,
-            "timestamp": self.timestamp.isoformat(),
-            "metadata": self.metadata,
-        }
+class BaseAgentMessage(BaseModel, ABC):
+    """Base agent message class with for agent-to-agent communication."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    source: str
+    model_usage: Optional[UsageStats] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @abstractmethod
+    def to_model_client_message(self) -> BaseClientMessage:
+        """Convert to a BaseClientMessage for model client consumption."""
+        pass
+
+    @abstractmethod
+    def to_dict(self) -> Dict:
+        """Convert agent message to dictionary."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, data: Dict) -> "BaseAgentMessage":
+        """Create agent message from dictionary."""
+        pass
+
+class BaseAgentEvent(BaseModel, ABC):
+    """Base class for signaling observable agent events."""
+    
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    source: str
+    "The name of the agent emitting the event."
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.utcnow)

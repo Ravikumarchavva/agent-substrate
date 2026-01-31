@@ -23,6 +23,7 @@ dependencies = [
     "tiktoken>=0.12.0",
     "fastapi>=0.128.0",
     "opentelemetry-instrumentation-fastapi>=0.60b1",
+    "pillow>=12.1.0",
 ]
 
 [project.scripts]

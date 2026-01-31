@@ -2,7 +2,7 @@ import asyncio
 import os
 from agent_framework.agents.react_agent import ReActAgent
 from agent_framework.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_framework.model_clients.openai_client import OpenAIClient
+from agent_framework.model_clients.openai.openai_client import OpenAIClient
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.observability.telemetry import configure_opentelemetry
 from agent_framework.configs.settings import Settings

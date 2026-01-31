@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Optional
-from agent_framework.messages.base_message import BaseMessage
-from agent_framework.messages.agent_messages import ToolCall
+from agent_framework.messages.base_message import BaseClientMessage
+from agent_framework.messages.client_messages import ToolCallMessage
 
 
-class ModelResponse(BaseMessage):
+class ModelResponse(BaseClientMessage):
     """Structured response from model client."""
-    tool_calls: Optional[list[ToolCall]] = None
+    tool_calls: Optional[list[ToolCallMessage]] = None
     usage: Optional[dict[str, Any]] = None
     model: Optional[str] = None
     finish_reason: Optional[str] = None
@@ -79,7 +79,7 @@ class BaseModelClient(ABC):
     @abstractmethod
     async def generate(
         self,
-        messages: list[BaseMessage],
+        messages: list[BaseClientMessage],
         tools: Optional[list[dict]] = None,
         **kwargs
     ) -> ModelResponse:
@@ -89,7 +89,7 @@ class BaseModelClient(ABC):
     @abstractmethod
     async def generate_stream(
         self,
-        messages: list[BaseMessage],
+        messages: list[BaseClientMessage],
         tools: Optional[list[dict]] = None,
         **kwargs
     ) -> AsyncIterator[ModelResponse]:
@@ -97,6 +97,6 @@ class BaseModelClient(ABC):
         pass
     
     @abstractmethod
-    def count_tokens(self, messages: list[BaseMessage]) -> int:
+    def count_tokens(self, messages: list[BaseClientMessage]) -> int:
         """Count tokens in messages."""
         pass

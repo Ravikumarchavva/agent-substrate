@@ -4,7 +4,7 @@ from typing import List, Optional, Any, Dict
 
 from agent_framework.agents.base_agent import BaseAgent
 from agent_framework.tools import BaseTool
-from agent_framework.model_clients.base_client import BaseModelClient
+from agent_framework.model_clients.base_client import BaseModelClient, ModelResponse
 from agent_framework.memory.base_memory import BaseMemory
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.agent_messages import (
@@ -15,6 +15,7 @@ from agent_framework.messages.agent_messages import (
 )
 from opentelemetry.trace import Status, StatusCode
 from agent_framework.observability import global_tracer, global_metrics, logger
+from uuid import uuid4
 
 class ReActAgent(BaseAgent):
     """
@@ -156,8 +157,171 @@ class ReActAgent(BaseAgent):
 
             return final_response
 
-    async def run_stream(self, *args, **kwargs):
-        raise NotImplementedError("Streaming not yet implemented for ReActAgent")
+    async def run_stream(self, input_text: str, **kwargs):
+        """
+        Run the agent with streaming, yielding partial responses and tool results as they are available.
+        """
+        attributes = {"agent_name": self.name, "input_length": len(input_text)}
+        with global_tracer.start_span("agent_run_stream", attributes) as span:
+            global_metrics.increment_counter("agent_runs", tags={"name": self.name})
+            logger.info(f"[{self.name}] Starting streaming run for input: {input_text[:50]}...")
+
+            # 1. Add User Message
+            user_msg = UserMessage(content=input_text)
+            self.memory.add_message(user_msg)
+
+            # 2. ReAct Loop
+            for i in range(self.max_iterations):
+                iteration_span_name = f"iteration_{i+1}"
+                with global_tracer.start_span(iteration_span_name, {"iteration": i+1}) as iter_span:
+                    if self.verbose:
+                        logger.info(f"[{self.name}] [stream] Iteration {i+1}/{self.max_iterations}")
+
+                    tool_schemas = [t.get_schema() for t in self.tools]
+                    messages = self.memory.get_messages()
+
+                    # A. Generate Response (THINK, streaming)
+                    with global_tracer.start_span("llm_generate_stream", {"msg_count": len(messages)}) as llm_span:
+                        start_time = asyncio.get_event_loop().time()
+                        assistant_text = ""
+                        final_response_obj = None
+                        try:
+                            async for response in self.model_client.generate_stream(
+                                messages=messages,
+                                tools=tool_schemas if tool_schemas else None,
+                                tool_choice="auto" if tool_schemas else None,
+                                **kwargs
+                            ):
+                                # If this response is a tool call, stop collecting text and handle tool execution
+                                if response.tool_calls:
+                                    # Construct a final response object using accumulated text and attach tool_calls
+                                    final_response_obj = ModelResponse(
+                                        role="assistant",
+                                        content=assistant_text,
+                                        tool_calls=response.tool_calls,
+                                        usage=response.usage,
+                                        model=response.model,
+                                    )
+                                    # Yield the tool call event to external consumers and break to execute tools
+                                    yield response
+                                    break
+
+                                # If it's a partial chunk (delta), append to the buffer and yield the chunk
+                                partial_flag = response.metadata.get("partial") if getattr(response, "metadata", None) else None
+                                if partial_flag is True and response.content:
+                                    assistant_text += response.content
+                                    yield response
+                                else:
+                                    # Could be final completion indicator - yield and continue
+                                    if getattr(response, "metadata", None) and response.metadata.get("complete"):
+                                        # Stream finished; mark final_response_obj if not set
+                                        final_response_obj = final_response_obj or ModelResponse(
+                                            role="assistant",
+                                            content=assistant_text,
+                                            usage=response.usage,
+                                            model=response.model,
+                                            finish_reason=response.finish_reason,
+                                        )
+                                        yield response
+
+                            end_time = asyncio.get_event_loop().time()
+                            global_metrics.record_histogram("llm_latency", end_time - start_time, tags={"model": getattr(self.model_client, "model", "unknown")})
+                        except Exception as e:
+                            global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
+                            raise e
+
+                    # B. Update Memory with the assembled response
+                    response = final_response_obj or ModelResponse(role="assistant", content=assistant_text, model=getattr(self.model_client, "model", "unknown"))
+
+                    # Heuristic: If the assistant produced a JSON object and no explicit tool_calls were present,
+                    # try to map it to a single tool by matching parameter names. This covers models that return
+                    # raw JSON arguments instead of a structured function_call event.
+                    if not response.tool_calls and assistant_text:
+                        try:
+                            parsed = json.loads(assistant_text)
+                            if isinstance(parsed, dict) and self.tools:
+                                # Score tools by matching parameter names
+                                candidates = []
+                                for t in self.tools:
+                                    schema = t.get_schema()
+                                    params = {}
+                                    fn = schema.get("function") or {}
+                                    parameters = fn.get("parameters") or {}
+                                    properties = parameters.get("properties") if isinstance(parameters, dict) else {}
+                                    param_keys = set(properties.keys()) if properties else set()
+                                    # Heuristic: candidate if parsed keys subset or non-empty intersection
+                                    if param_keys and (set(parsed.keys()).issubset(param_keys) or set(parsed.keys()).intersection(param_keys)):
+                                        candidates.append((t, param_keys))
+                                if not candidates and len(self.tools) == 1:
+                                    # If only one tool is available, assume it's intended
+                                    chosen_tool = self.tools[0]
+                                elif candidates:
+                                    # Pick the candidate with the largest intersection
+                                    candidates.sort(key=lambda x: len(set(parsed.keys()).intersection(x[1])), reverse=True)
+                                    chosen_tool = candidates[0][0]
+                                else:
+                                    chosen_tool = None
+
+                                if chosen_tool:
+                                    tc = ToolCall(id=response.id or str(uuid4()), type="function", function={"name": chosen_tool.name, "arguments": json.dumps(parsed)})
+                                    response.tool_calls = [tc]
+                                    logger.info(f"[{self.name}] [stream] Heuristically detected tool call for '{chosen_tool.name}' with args: {parsed}")
+                        except Exception:
+                            # Not JSON or couldn't parse; ignore
+                            pass
+
+                    self.memory.add_message(response)
+
+                    # C. Check for Tool Calls (ACT)
+                    if not response.tool_calls:
+                        if self.verbose:
+                            logger.info(f"[{self.name}] [stream] No tool calls, finishing.")
+                        iter_span.set_attribute("outcome", "finished")
+                        span.set_attribute("final_iterations", i + 1)
+                        break
+
+                    if self.verbose:
+                        logger.info(f"[{self.name}] [stream] Tool calls requested: {[tc.function['name'] for tc in response.tool_calls]}")
+
+                    # D. Execute Tools (sequential, yield results)
+                    with global_tracer.start_span("execute_tools_stream", {"count": len(response.tool_calls)}):
+                        for tool_call in response.tool_calls:
+                            tc_name = tool_call.function["name"]
+                            tc_args_str = tool_call.function["arguments"]
+                            call_id = tool_call.id
+
+                            with global_tracer.start_span("tool_execution_stream", {"tool": tc_name}) as tool_span:
+                                tool = next((t for t in self.tools if t.name == tc_name), None)
+                                result_content = ""
+
+                                if not tool:
+                                    error_msg = f"Error: Tool '{tc_name}' not found."
+                                    logger.error(f"[{self.name}] [stream] {error_msg}")
+                                    result_content = json.dumps({"error": error_msg})
+                                    tool_span.set_status(Status(StatusCode.ERROR))
+                                    global_metrics.increment_counter("tool_not_found_errors", tags={"tool": tc_name})
+                                else:
+                                    try:
+                                        tc_args = json.loads(tc_args_str)
+                                        if self.verbose:
+                                            logger.info(f"[{self.name}] [stream] Executing {tc_name} with {tc_args}")
+                                        result_content = await tool.execute(**tc_args)
+                                        global_metrics.increment_counter("tool_executions", tags={"tool": tc_name, "status": "success"})
+                                    except Exception as e:
+                                        error_msg = str(e)
+                                        logger.error(f"[{self.name}] [stream] Tool execution failed: {e}")
+                                        result_content = json.dumps({"error": error_msg})
+                                        tool_span.set_status(Status(StatusCode.ERROR))
+                                        global_metrics.increment_counter("tool_execution_errors", tags={"tool": tc_name, "error": type(e).__name__})
+
+                                # Add Result to Memory and yield as ToolMessage
+                                tool_msg = ToolMessage(
+                                    content=result_content,
+                                    tool_call_id=call_id,
+                                    name=tc_name
+                                )
+                                self.memory.add_message(tool_msg)
+                                yield tool_msg
 
     def save_state(self):
         # Basic state dump

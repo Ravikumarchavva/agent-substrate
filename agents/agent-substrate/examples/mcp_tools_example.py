@@ -7,7 +7,7 @@ This example demonstrates how to:
 """
 import asyncio
 from agent_framework.tools import MCPClient, MCPTool
-from agent_framework.model_clients.openai_client import OpenAIClient
+from agent_framework.model_clients.openai.openai_client import OpenAIClient
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.agent_messages import UserMessage, SystemMessage
 

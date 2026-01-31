@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Optional
-from agent_framework.messages.base_message import BaseMessage
+from agent_framework.messages.base_message import BaseClientMessage
 
 
 class BaseMemory(ABC):
     """Base class for conversation memory management."""
     
     @abstractmethod
-    def add_message(self, message: BaseMessage) -> None:
+    def add_message(self, message: BaseClientMessage) -> None:
         """Add a message to memory.
         
         Args:
@@ -16,7 +16,7 @@ class BaseMemory(ABC):
         pass
 
     @abstractmethod
-    def get_messages(self, limit: Optional[int] = None) -> list[BaseMessage]:
+    def get_messages(self, limit: Optional[int] = None) -> list[BaseClientMessage]:
         """Retrieve messages from memory.
         
         Args:

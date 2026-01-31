@@ -3,7 +3,7 @@ from typing import Optional
 import json
 
 from .base_memory import BaseMemory
-from agent_framework.messages.base_message import BaseMessage
+from agent_framework.messages.base_message import BaseClientMessage
 
 
 class UnboundedMemory(BaseMemory):
@@ -14,13 +14,13 @@ class UnboundedMemory(BaseMemory):
     """
     
     def __init__(self):
-        self._messages: list[BaseMessage] = []
+        self._messages: list[BaseClientMessage] = []
 
-    def add_message(self, message: BaseMessage) -> None:
+    def add_message(self, message: BaseClientMessage) -> None:
         """Add a message to memory."""
         self._messages.append(message)
 
-    def get_messages(self, limit: Optional[int] = None) -> list[BaseMessage]:
+    def get_messages(self, limit: Optional[int] = None) -> list[BaseClientMessage]:
         """Retrieve messages from memory.
         
         Args:

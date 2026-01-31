@@ -6,7 +6,7 @@ and MCP tools (like filesystem) together in a single agent.
 import asyncio
 import json
 from agent_framework.tools import CalculatorTool, GetCurrentTimeTool, MCPClient, MCPTool
-from agent_framework.model_clients.openai_client import OpenAIClient
+from agent_framework.model_clients.openai.openai_client import OpenAIClient
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.agent_messages import (
     UserMessage, SystemMessage, ToolMessage

@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Optional
-from agent_framework.messages.client_messages import AssistantMessage
-
+from agent_framework.messages.client_messages import BaseClientMessage, AssistantMessage
 
 class BaseModelClient(ABC):
     """Base class for all model clients (OpenAI, Anthropic, etc.)."""
@@ -24,7 +23,7 @@ class BaseModelClient(ABC):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict]] = None,
         **kwargs
-    ) -> ModelResponse:
+    ) -> AssistantMessage:
         """Generate a single response from the model."""
         pass
     
@@ -34,7 +33,7 @@ class BaseModelClient(ABC):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict]] = None,
         **kwargs
-    ) -> AsyncIterator[ModelResponse]:
+    ) -> AsyncIterator[AssistantMessage]:
         """Generate a streaming response from the model."""
         pass
     

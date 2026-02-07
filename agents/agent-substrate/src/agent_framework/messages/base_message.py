@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import Literal, Any, Optional, Dict
 from datetime import datetime
@@ -8,13 +7,19 @@ from uuid import uuid4
 CLIENT_ROLES = Literal["system", "user", "assistant", "tool_call", "tool_response"]
 SOURCE_ROLES = Literal["user", "agent"]
 
-@dataclass
-class UsageStats:
-    """Usage statistics for model interactions."""
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
+
+class UsageStats(BaseModel):
+    """Token usage statistics for a single LLM call.
     
+    Pydantic model (not dataclass) so it serializes cleanly everywhere.
+    """
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+    model_config = {"frozen": False}
+
+
 class BaseClientMessage(BaseModel, ABC):
     """Base message class for client-model communication (LLM API)."""
     
@@ -23,8 +28,7 @@ class BaseClientMessage(BaseModel, ABC):
     content: Any
     type: Literal["BaseClientMessage"] = "BaseClientMessage"
     
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}
     
     @abstractmethod
     def to_dict(self) -> Dict:
@@ -36,6 +40,7 @@ class BaseClientMessage(BaseModel, ABC):
     def from_dict(cls, data: Dict) -> "BaseClientMessage":
         """Create message from dictionary."""
         pass
+
 
 class BaseAgentMessage(BaseModel, ABC):
     """Base message class for agent-to-agent communication."""
@@ -61,6 +66,7 @@ class BaseAgentMessage(BaseModel, ABC):
     def from_dict(cls, data: Dict) -> "BaseAgentMessage":
         """Create agent message from dictionary."""
         pass
+
 
 class BaseAgentEvent(BaseModel, ABC):
     """Base class for agent events (tool execution, thinking, etc.)."""

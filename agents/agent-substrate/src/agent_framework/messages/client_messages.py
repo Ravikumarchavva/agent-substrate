@@ -5,7 +5,6 @@ from pydantic import ConfigDict, field_validator, model_serializer, Field
 from .base_message import BaseClientMessage, CLIENT_ROLES, UsageStats
 from agent_framework.tools.base_tool import ToolCall as ToolCallDataclass, ToolResult
 import json
-from dataclasses import asdict
 from uuid import uuid4
 
 from agent_framework.messages._types import (
@@ -42,7 +41,7 @@ class UserMessage(BaseClientMessage):
     @model_serializer
     def ser_model(self) -> Dict[str, Any]:
         serialized_content = [
-            serialize_media_content(item) for item in self.content
+            serialize_media_content(item, role=self.role) for item in self.content
         ]
         msg = {
             "role": self.role,
@@ -52,6 +51,16 @@ class UserMessage(BaseClientMessage):
         if self.name:
             msg["name"] = self.name
         return msg
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary format."""
+        return self.ser_model()
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> "UserMessage":
+        """Create from dictionary."""
+        return cls(**data)
+    
     @field_validator("content", mode="before")
 
     def des_content(cls, v: Any) -> List[MediaType]:
@@ -66,6 +75,7 @@ class ToolCallMessage(BaseClientMessage):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     role: CLIENT_ROLES = "tool_call"
+    content: Optional[str] = None  # Override base - not needed for tool calls
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     arguments: Dict[str, Any] = Field(default_factory=dict)
@@ -91,6 +101,15 @@ class ToolCallMessage(BaseClientMessage):
             "name": self.name,
             "arguments": self.arguments,
         }
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary format."""
+        return self.ser_model()
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> "ToolCallMessage":
+        """Create from dictionary."""
+        return cls(**data)
     
     def to_mcp_format(self) -> Dict[str, Any]:
         """Convert to MCP tool call format."""
@@ -139,7 +158,7 @@ class AssistantMessage(BaseClientMessage):
             msg["reasoning"] = self.reasoning
         if self.content is not None:
             serialized_content = [
-                serialize_media_content(item) for item in self.content
+                serialize_media_content(item, role=self.role) for item in self.content
             ]
             msg["content"] = serialized_content
         if self.tool_calls is not None:
@@ -148,11 +167,11 @@ class AssistantMessage(BaseClientMessage):
                 if isinstance(tc, ToolCallMessage):
                     serialized_tool_calls.append(tc.ser_model())
                 elif isinstance(tc, ToolCallDataclass):
-                    # ToolCallDataclass may be a Pydantic BaseModel or a dataclass
+                    # ToolCallDataclass is a Pydantic BaseModel
                     if hasattr(tc, "model_dump"):
                         serialized_tool_calls.append(tc.model_dump())
                     else:
-                        serialized_tool_calls.append(asdict(tc))
+                        serialized_tool_calls.append(vars(tc))
                 elif isinstance(tc, dict):
                     serialized_tool_calls.append(tc)
                 elif hasattr(tc, "model_dump"):
@@ -161,12 +180,21 @@ class AssistantMessage(BaseClientMessage):
                     serialized_tool_calls.append({"name": getattr(tc, "name", None), "arguments": getattr(tc, "arguments", None)})
             msg["tool_calls"] = serialized_tool_calls
         if self.usage is not None:
-            msg["usage"] = {
+            msg["usage"] = self.usage.model_dump() if hasattr(self.usage, 'model_dump') else {
                 "prompt_tokens": self.usage.prompt_tokens,
                 "completion_tokens": self.usage.completion_tokens,
                 "total_tokens": self.usage.total_tokens,
             }
         return msg
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary format."""
+        return self.ser_model()
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> "AssistantMessage":
+        """Create from dictionary."""
+        return cls(**data)
 
 class ToolExecutionResultMessage(BaseClientMessage):
     """Tool execution result message (MCP-compatible)."""

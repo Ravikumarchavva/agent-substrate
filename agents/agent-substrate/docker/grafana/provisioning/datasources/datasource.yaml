@@ -20,7 +20,7 @@ datasources:
         enabled: true
       search:
         hide: false
-      lokiSearch:
+      tracesToMetrics:
+        datasourceUid: 'prometheus'
+      tracesToLogs:
         datasourceUid: 'loki'
-      traceQuery:
-        limit: 20

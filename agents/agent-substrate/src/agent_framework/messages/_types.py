@@ -2,12 +2,10 @@ from PIL import Image
 from typing import Dict, Any, Union
 
 MediaType = Union[str, Image.Image]
-ToolResponseContent = Union[str, Image.Image]
 
 def serialize_media_content(content: MediaType) -> Union[str, Dict[str, Any]]:
-    """Serialize media content for tool calls."""
+    """Serialize media content for messages."""
     if isinstance(content, Image.Image):
-        # Convert image to a base64 string or similar representation
         import io
         import base64
 
@@ -21,7 +19,7 @@ def serialize_media_content(content: MediaType) -> Union[str, Dict[str, Any]]:
         raise ValueError("Unsupported media content type")
     
 def deserialize_media_content(data: Union[str, Dict[str, Any]]) -> MediaType:
-    """Deserialize media content from tool calls."""
+    """Deserialize media content from messages."""
     if isinstance(data, dict) and data.get("type") == "image/png":
         import io
         import base64
@@ -33,11 +31,3 @@ def deserialize_media_content(data: Union[str, Dict[str, Any]]) -> MediaType:
         return data
     else:
         raise ValueError("Unsupported media content format")
-
-def serialize_tool_response_content(content: ToolResponseContent) -> Union[str, Dict[str, Any]]:
-    """Serialize tool response content."""
-    return serialize_media_content(content)
-
-def deserialize_tool_response_content(data: Union[str, Dict[str, Any]]) -> ToolResponseContent:
-    """Deserialize tool response content."""
-    return deserialize_media_content(data)

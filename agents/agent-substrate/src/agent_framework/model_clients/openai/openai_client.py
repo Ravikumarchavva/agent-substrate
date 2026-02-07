@@ -6,7 +6,7 @@ import tiktoken
 
 from agent_framework.messages.client_messages import ToolExecutionResultMessage, ToolCallMessage, AssistantMessage, SystemMessage, UserMessage
 
-from ..base_client import BaseModelClient, ModelResponse
+from ..base_client import BaseModelClient
 from agent_framework.messages.base_message import BaseClientMessage
 
 class OpenAIClient(BaseModelClient):
@@ -49,7 +49,7 @@ class OpenAIClient(BaseModelClient):
         tools: Optional[list[dict]] = None,
         tool_choice: Optional[str | dict] = None,
         **kwargs
-    ) -> ModelResponse:
+    ) -> AssistantMessage:
         """Generate a single response from OpenAI using Responses API."""
         # Separate system instructions from other messages
         instructions = ""
@@ -75,7 +75,7 @@ class OpenAIClient(BaseModelClient):
                         "content": msg.content
                     })
                 
-                # Check for tool_calls (framework AssistantMessage or ModelResponse)
+                # Check for tool_calls (AssistantMessage format)
                 tool_calls = getattr(msg, "tool_calls", None)
                 if tool_calls:
                     for tc in tool_calls:
@@ -170,12 +170,11 @@ class OpenAIClient(BaseModelClient):
                 "total_tokens": response.usage.total_tokens,
             }
 
-        return ModelResponse(
+        return AssistantMessage(
             role="assistant",
             content=final_content,
             tool_calls=tool_calls_obj,
             usage=usage_dict,
-            model=response.model if hasattr(response, "model") else self.model,
             finish_reason=None,
         )
     
@@ -185,7 +184,7 @@ class OpenAIClient(BaseModelClient):
         tools: Optional[list[dict]] = None,
         tool_choice: Optional[str | dict] = None,
         **kwargs
-    ) -> AsyncIterator[ModelResponse]:
+    ) -> AsyncIterator[AssistantMessage]:
         """Generate a streaming response from OpenAI using Responses API."""
         instructions = ""
         conversation_input = []
@@ -302,12 +301,11 @@ class OpenAIClient(BaseModelClient):
 
             # If we have a tool call emitted, yield a response with tool_calls and no content delta
             if event_tool_calls:
-                yield ModelResponse(
+                yield AssistantMessage(
                     role="assistant",
                     content="",
                     tool_calls=event_tool_calls,
                     usage=usage_dict,
-                    model=model_name,
                     finish_reason=None,
                 )
                 # Tool calls usually terminate the generation; continue to next events
@@ -315,24 +313,22 @@ class OpenAIClient(BaseModelClient):
 
             # For normal incremental text, yield only the delta with metadata marking it partial
             if chunk:
-                yield ModelResponse(
+                yield AssistantMessage(
                     role="assistant",
                     content=chunk,
                     tool_calls=None,
                     usage=usage_dict,
-                    model=model_name,
                     finish_reason=None,
                     metadata={"partial": True},
                 )
 
         # When the stream completes, yield a final message indicating completion
         if content_accum:
-            yield ModelResponse(
+            yield AssistantMessage(
                 role="assistant",
                 content="",
                 tool_calls=None,
                 usage=usage_dict,
-                model=model_name,
                 finish_reason="stop",
                 metadata={"partial": False, "complete": True},
             )

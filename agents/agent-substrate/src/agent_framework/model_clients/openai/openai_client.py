@@ -2,6 +2,12 @@
 from typing import Any, AsyncIterator, Optional
 import json
 from openai import AsyncOpenAI
+from openai.types.shared_params.reasoning import Reasoning
+from openai.types.responses.response_completed_event import ResponseCompletedEvent
+from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
+from openai.types.responses.response_reasoning_summary_text_delta_event import ResponseReasoningSummaryTextDeltaEvent
+from openai.types.responses.response_function_call_arguments_done_event import ResponseFunctionCallArgumentsDoneEvent
+from openai.types.responses import Response
 import tiktoken
 
 from agent_framework.messages.client_messages import ToolExecutionResultMessage, ToolCallMessage, AssistantMessage, SystemMessage, UserMessage
@@ -256,40 +262,81 @@ class OpenAIClient(BaseModelClient):
         tools: Optional[list[dict]] = None,
         tool_choice: Optional[str | dict] = None,
         **kwargs
-    ) -> AsyncIterator[AssistantMessage]:
-        """Generate a streaming response from OpenAI using Responses API."""
+    ) -> AsyncIterator[Any]:
+        """Generate a streaming response from OpenAI using Responses API.
+        
+        Yields StreamChunk objects:
+        - TextDeltaChunk: Incremental text content
+        - ReasoningDeltaChunk: Incremental reasoning (o1/o3 models)
+        - CompletionChunk: Final response with complete AssistantMessage (includes tool calls)
+        """
+        from agent_framework.messages._types import (
+            TextDeltaChunk,
+            ReasoningDeltaChunk,
+            CompletionChunk,
+        )
+        
         instructions = ""
         conversation_input = []
         for msg in messages:
             if msg.role == "system":
                 instructions += f"{msg.content}\n"
             elif msg.role == "user":
+                msg_dict = msg.to_dict()
                 conversation_input.append({
                     "type": "message",
                     "role": "user",
-                    "content": msg.content
+                    "content": msg_dict.get("content", [])
                 })
             elif msg.role == "assistant":
+                msg_dict = msg.to_dict()
                 if msg.content:
-                    conversation_input.append({
-                        "type": "message",
-                        "role": "assistant",
-                        "content": msg.content
-                    })
+                    serialized_content = msg_dict.get("content", [])
+                    if serialized_content:
+                        conversation_input.append({
+                            "type": "message",
+                            "role": "assistant",
+                            "content": serialized_content
+                        })
                 tool_calls = getattr(msg, "tool_calls", None)
                 if tool_calls:
                     for tc in tool_calls:
+                        if hasattr(tc, 'name') and hasattr(tc, 'arguments'):
+                            tc_name = tc.name
+                            tc_args = tc.arguments
+                            tc_id = tc.id
+                        elif hasattr(tc, 'function') and isinstance(tc.function, dict):
+                            tc_name = tc.function["name"]
+                            tc_args = tc.function["arguments"]
+                            tc_id = tc.id
+                        else:
+                            continue
+                        
+                        if isinstance(tc_args, dict):
+                            tc_args = json.dumps(tc_args)
+                        
                         conversation_input.append({
                             "type": "function_call",
-                            "call_id": tc.id,
-                            "name": tc.function["name"],
-                            "arguments": tc.function["arguments"]
+                            "call_id": tc_id,
+                            "name": tc_name,
+                            "arguments": tc_args
                         })
-            elif msg.role == "tool":
+            elif msg.role == "tool_response" or msg.role == "tool":
+                content_str = ""
+                if hasattr(msg, 'content') and msg.content:
+                    if isinstance(msg.content, list):
+                        text_parts = []
+                        for block in msg.content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text_parts.append(block.get("text", ""))
+                        content_str = "\n".join(text_parts)
+                    elif isinstance(msg.content, str):
+                        content_str = msg.content
+                
                 conversation_input.append({
                     "type": "function_call_output",
                     "call_id": getattr(msg, "tool_call_id", None),
-                    "output": msg.content
+                    "output": content_str
                 })
 
         params = {
@@ -321,89 +368,85 @@ class OpenAIClient(BaseModelClient):
                 params["tool_choice"] = tool_choice
         params.update({k: v for k, v in kwargs.items() if k not in params})
 
-        # Streaming loop
-        content_accum = ""
-        tool_calls_obj = None
-        usage_dict = None
-        model_name = self.model
+        # Stream and yield deltas, collect final Response object
+        final_response = None
+        
         stream = await self.client.responses.create(**params)
         async for event in stream:
-            # Accumulate incremental content for internal assembly, but yield only the delta
-            chunk = ""
-            if hasattr(event, "output_text") and event.output_text:
-                chunk += event.output_text
-            if hasattr(event, "text") and event.text:
-                chunk += event.text
-            if hasattr(event, "delta") and event.delta:
-                if isinstance(event.delta, dict):
-                    chunk += event.delta.get("content", "")
-                elif isinstance(event.delta, str):
-                    chunk += event.delta
+            # Yield incremental text deltas
+            if isinstance(event, ResponseTextDeltaEvent):
+                text = event.delta if hasattr(event, 'delta') else ""
+                if text:
+                    yield TextDeltaChunk(text=text)
+            
+            # Yield incremental reasoning deltas (o1/o3 models)
+            elif isinstance(event, ResponseReasoningSummaryTextDeltaEvent):
+                reasoning = event.delta if hasattr(event, 'delta') else ""
+                if reasoning:
+                    yield ReasoningDeltaChunk(text=reasoning)
+            
+            # Capture final Response object
+            elif isinstance(event, ResponseCompletedEvent):
+                if hasattr(event, 'response'):
+                    final_response = event.response
 
-            # Detect function call outputs in the event
-            event_tool_calls = None
-            if hasattr(event, "output") and event.output:
-                for item in event.output:
+        # Use the Response object to build final message (same as generate())
+        if final_response is None:
+            # Fallback if no completion event
+            final_message = AssistantMessage(
+                role="assistant",
+                content=None,
+                tool_calls=None,
+                usage=None,
+                finish_reason="error",
+            )
+        else:
+            # Extract content text
+            final_content_text = final_response.output_text if hasattr(final_response, "output_text") else ""
+            final_content = [final_content_text] if final_content_text else None
+            
+            # Extract tool calls from output
+            tool_calls_obj = None
+            if final_response.output:
+                for item in final_response.output:
                     if item.type == "function_call":
-                        if event_tool_calls is None:
-                            event_tool_calls = []
-                        event_tool_calls.append(
+                        if tool_calls_obj is None:
+                            tool_calls_obj = []
+                        tool_calls_obj.append(
                             ToolCallMessage(
                                 id=getattr(item, "call_id", getattr(item, "id", None)),
-                                type="function",
-                                function={
-                                    "name": item.name,
-                                    "arguments": item.arguments
-                                }
+                                name=item.name,
+                                arguments=item.arguments
                             )
                         )
-
-            if hasattr(event, "usage") and event.usage:
-                usage_dict = {
-                    "prompt_tokens": event.usage.input_tokens,
-                    "completion_tokens": event.usage.output_tokens,
-                    "total_tokens": event.usage.total_tokens,
-                }
-            if hasattr(event, "model"):
-                model_name = event.model
-
-            # Update internal accumulator
-            if chunk:
-                content_accum += chunk
-
-            # If we have a tool call emitted, yield a response with tool_calls and no content delta
-            if event_tool_calls:
-                yield AssistantMessage(
-                    role="assistant",
-                    content="",
-                    tool_calls=event_tool_calls,
-                    usage=usage_dict,
-                    finish_reason=None,
+            
+            # Extract usage
+            usage_dict = None
+            if hasattr(final_response, "usage") and final_response.usage:
+                from agent_framework.messages.base_message import UsageStats
+                usage_dict = UsageStats(
+                    prompt_tokens=final_response.usage.input_tokens,
+                    completion_tokens=final_response.usage.output_tokens,
+                    total_tokens=final_response.usage.total_tokens,
                 )
-                # Tool calls usually terminate the generation; continue to next events
-                continue
-
-            # For normal incremental text, yield only the delta with metadata marking it partial
-            if chunk:
-                yield AssistantMessage(
-                    role="assistant",
-                    content=chunk,
-                    tool_calls=None,
-                    usage=usage_dict,
-                    finish_reason=None,
-                    metadata={"partial": True},
-                )
-
-        # When the stream completes, yield a final message indicating completion
-        if content_accum:
-            yield AssistantMessage(
+            
+            # Determine finish reason
+            finish_reason = "stop"
+            if tool_calls_obj:
+                finish_reason = "tool_calls"
+            elif hasattr(final_response, "finish_reason") and final_response.finish_reason:
+                finish_reason = final_response.finish_reason
+            
+            final_message = AssistantMessage(
                 role="assistant",
-                content="",
-                tool_calls=None,
+                content=final_content,
+                tool_calls=tool_calls_obj,
                 usage=usage_dict,
-                finish_reason="stop",
-                metadata={"partial": False, "complete": True},
+                finish_reason=finish_reason,
             )
+        
+        # Yield final completion
+        yield CompletionChunk(message=final_message)
     
     def count_tokens(self, messages: list[BaseClientMessage]) -> int:
         """Count tokens using tiktoken."""

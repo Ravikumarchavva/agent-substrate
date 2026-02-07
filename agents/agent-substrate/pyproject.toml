@@ -27,6 +27,9 @@ dependencies = [
     "fastmcp>=2.14.5",
     "mcp-server-fetch>=2025.1.17",
     "playwright>=1.58.0",
+    "sqlalchemy>=2.0.46",
+    "asyncpg>=0.30.0",
+    "uvicorn[standard]>=0.34.0",
 ]
 
 [project.scripts]

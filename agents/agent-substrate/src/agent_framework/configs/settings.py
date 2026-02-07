@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     ROOT_DIR: Path = Path(__file__).parent.parent.parent.parent
     OPENAI_API_KEY: str
+    DATABASE_URL: str
 
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",

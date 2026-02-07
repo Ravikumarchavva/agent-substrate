@@ -6,7 +6,15 @@ from .client_messages import (
     ToolCallMessage, 
     ToolExecutionResultMessage
 )
-from ._types import MediaType, AudioContent, VideoContent
+from ._types import (
+    MediaType, 
+    AudioContent, 
+    VideoContent,
+    StreamChunk,
+    TextDeltaChunk,
+    ReasoningDeltaChunk,
+    CompletionChunk,
+)
 
 __all__ = [
     "BaseClientMessage",

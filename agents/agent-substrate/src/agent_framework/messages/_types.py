@@ -28,6 +28,35 @@ class VideoContent:
 
 MediaType = Union[str, Image.Image, AudioContent, VideoContent]
 
+# Streaming event types
+class StreamChunk:
+    """Base class for streaming chunks from LLM/Agent."""
+    def __init__(self, type: str, data: Any = None, metadata: Dict[str, Any] = None):
+        self.type = type
+        self.data = data
+        self.metadata = metadata or {}
+    
+    def __repr__(self):
+        return f"StreamChunk(type={self.type}, data={self.data!r})"
+
+class TextDeltaChunk(StreamChunk):
+    """Incremental text content."""
+    def __init__(self, text: str, metadata: Dict[str, Any] = None):
+        super().__init__("text_delta", text, metadata)
+        self.text = text
+
+class ReasoningDeltaChunk(StreamChunk):
+    """Incremental reasoning/thinking content (for o1/o3 models)."""
+    def __init__(self, text: str, metadata: Dict[str, Any] = None):
+        super().__init__("reasoning_delta", text, metadata)
+        self.text = text
+
+class CompletionChunk(StreamChunk):
+    """Final completion event with full response."""
+    def __init__(self, message: Any, metadata: Dict[str, Any] = None):
+        super().__init__("completion", message, metadata)
+        self.message = message
+
 def serialize_media_content(content: MediaType, role: str = "user") -> Dict[str, Any]:
     """Serialize media content for messages in OpenAI format.
     

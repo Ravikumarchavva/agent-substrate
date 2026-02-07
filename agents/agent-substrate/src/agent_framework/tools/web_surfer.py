@@ -117,6 +117,18 @@ class WebSurferTool(BaseTool):
             }
         )
     
+    @property
+    def name(self) -> str:
+        return self.tool_schema.name
+    
+    @property
+    def description(self) -> str:
+        return self.tool_schema.description
+    
+    @property
+    def input_schema(self) -> dict:
+        return self.tool_schema.inputSchema
+    
     async def _ensure_browser(self) -> None:
         """Ensure browser is initialized and ready."""
         if self._browser is None:

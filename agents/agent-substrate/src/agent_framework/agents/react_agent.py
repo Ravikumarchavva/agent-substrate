@@ -114,6 +114,12 @@ class ReActAgent(BaseAgent):
 
     # ── Core run ─────────────────────────────────────────────────────────────
 
+    def reset(self) -> None:
+        """Clear memory and return agent to initial state with system message."""
+        super().reset()
+        # Re-add system message after clearing
+        self.memory.add_message(SystemMessage(content=self.system_instructions))
+
     async def run(self, input_text: str, **kwargs) -> AgentRunResult:
         run_start = datetime.utcnow()
         usage = AggregatedUsage()
@@ -237,9 +243,10 @@ class ReActAgent(BaseAgent):
                     messages = self.memory.get_messages()
 
                     with global_tracer.start_span("llm_generate_stream", {"msg_count": len(messages)}):
+                        from agent_framework.messages._types import CompletionChunk
+                        
                         llm_t0 = asyncio.get_event_loop().time()
                         final_response_obj = None
-                        assistant_text = ""
 
                         try:
                             async for chunk in self.model_client.generate_stream(
@@ -248,44 +255,31 @@ class ReActAgent(BaseAgent):
                                 tool_choice="auto" if tool_schemas else None,
                                 **kwargs,
                             ):
-                                if chunk.tool_calls:
-                                    final_response_obj = AssistantMessage(
-                                        role="assistant",
-                                        content=None,
-                                        tool_calls=chunk.tool_calls,
-                                        usage=chunk.usage,
-                                    )
-                                    yield chunk
-                                    break
-
-                                partial = getattr(chunk, "metadata", {}) or {}
-                                if partial.get("partial") and chunk.content:
-                                    text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
-                                    assistant_text += text
-                                    yield chunk
-                                elif partial.get("complete"):
-                                    final_response_obj = final_response_obj or AssistantMessage(
-                                        role="assistant",
-                                        content=[assistant_text] if assistant_text else None,
-                                        usage=chunk.usage,
-                                        finish_reason=chunk.finish_reason or "stop",
-                                    )
-                                    yield chunk
+                                # Yield the chunk to user
+                                yield chunk
+                                
+                                # Track final completion
+                                if isinstance(chunk, CompletionChunk):
+                                    final_response_obj = chunk.message
+                            
+                            # After stream completes, add final message to memory
+                            if final_response_obj:
+                                self.memory.add_message(final_response_obj)
+                            
+                            llm_t1 = asyncio.get_event_loop().time()
+                            global_metrics.record_histogram(
+                                "llm_latency", llm_t1 - llm_t0,
+                                tags={"model": getattr(self.model_client, "model", "unknown")},
+                            )
                         except Exception as e:
                             global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
                             raise
 
-                        llm_t1 = asyncio.get_event_loop().time()
-                        global_metrics.record_histogram(
-                            "llm_latency", llm_t1 - llm_t0,
-                            tags={"model": getattr(self.model_client, "model", "unknown")},
-                        )
-
+                    # Use the final response from streaming (should always exist)
                     response = final_response_obj or AssistantMessage(
                         role="assistant",
-                        content=[assistant_text] if assistant_text else None,
+                        content=None,
                     )
-                    self.memory.add_message(response)
 
                     # No tool calls → done
                     if not response.tool_calls:

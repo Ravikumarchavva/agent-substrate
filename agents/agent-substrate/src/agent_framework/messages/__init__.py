@@ -6,6 +6,7 @@ from .client_messages import (
     ToolCallMessage, 
     ToolExecutionResultMessage
 )
+from ._types import MediaType, AudioContent, VideoContent
 
 __all__ = [
     "BaseClientMessage",
@@ -17,4 +18,7 @@ __all__ = [
     "AssistantMessage",
     "ToolCallMessage",
     "ToolExecutionResultMessage",
+    "MediaType",
+    "AudioContent",
+    "VideoContent",
 ]

@@ -2,7 +2,7 @@
 from typing import Any
 import json
 
-from .base_tool import BaseTool
+from .base_tool import BaseTool, ToolResult
 from .mcp_client import MCPClient
 
 
@@ -60,18 +60,17 @@ class MCPTool(BaseTool):
             description: Tool description from MCP server
             input_schema: JSON Schema for tool parameters from MCP server
         """
-        super().__init__(name=name, description=description)
+        super().__init__(name=name, description=description, input_schema=input_schema)
         self.client = client
-        self.input_schema = input_schema
     
-    async def execute(self, **kwargs) -> str:
+    async def execute(self, **kwargs) -> ToolResult:
         """Execute the MCP tool with given parameters.
         
         Args:
             **kwargs: Tool parameters matching the input schema
             
         Returns:
-            Tool execution result as JSON string
+            ToolResult with structured content
             
         Raises:
             RuntimeError: If MCP client is not connected
@@ -79,26 +78,39 @@ class MCPTool(BaseTool):
         if not self.client.is_connected:
             raise RuntimeError(f"MCP client not connected for tool '{self.name}'")
         
-        # Call tool via MCP client
-        result = await self.client.call_tool(self.name, kwargs)
-        return result
-    
-    def get_schema(self) -> dict[str, Any]:
-        """Return OpenAI function calling schema.
-        
-        Converts the MCP tool's JSON Schema to OpenAI function calling format.
-        
-        Returns:
-            Dictionary with 'type' and 'function' keys following OpenAI format
-        """
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.input_schema
-            }
-        }
+        try:
+            # Call tool via MCP client - returns MCP response object
+            result = await self.client.call_tool(self.name, kwargs)
+            
+            # MCP responses come back as CallToolResult objects with content list
+            # Convert to our ToolResult format
+            if hasattr(result, 'content'):
+                # Native MCP SDK response
+                content = []
+                for item in result.content:
+                    if hasattr(item, 'type') and hasattr(item, 'text'):
+                        # TextContent object
+                        content.append({"type": "text", "text": item.text})
+                    elif isinstance(item, dict):
+                        # Already a dict
+                        content.append(item)
+                    else:
+                        # Fallback
+                        content.append({"type": "text", "text": str(item)})
+                
+                is_error = getattr(result, 'isError', False)
+                return ToolResult(content=content, isError=is_error)
+            else:
+                # Legacy: result is a raw string/object
+                content = [{"type": "text", "text": str(result)}]
+                return ToolResult(content=content, isError=False)
+                
+        except Exception as e:
+            # Wrap execution errors
+            return ToolResult(
+                content=[{"type": "text", "text": f"Tool execution failed: {str(e)}"}],
+                isError=True
+            )
     
     @classmethod
     async def from_mcp_client(cls, client: MCPClient) -> list["MCPTool"]:

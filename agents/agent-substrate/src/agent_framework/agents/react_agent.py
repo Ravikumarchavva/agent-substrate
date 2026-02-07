@@ -1,32 +1,85 @@
-import json
-import asyncio
-from typing import List, Optional, Any, Dict
+"""ReAct (Reasoning + Acting) agent implementation.
 
-from agent_framework.agents.base_agent import BaseAgent
-from agent_framework.tools import BaseTool
-from agent_framework.model_clients.base_client import BaseModelClient
-from agent_framework.memory.base_memory import BaseMemory
-from agent_framework.memory.unbounded_memory import UnboundedMemory
-from agent_framework.messages.client_messages import (
-    SystemMessage,
-    UserMessage,
-    AssistantMessage,
-    ToolExecutionResultMessage,
-)
-from agent_framework.messages.client_messages import ToolCallMessage
-from opentelemetry.trace import Status, StatusCode
-from agent_framework.observability import global_tracer, global_metrics, logger
+The agent operates in a loop:
+  1. THINK  — call the LLM with current memory
+  2. ACT    — execute any requested tool calls
+  3. OBSERVE — store results back into memory
+  4. Repeat until the LLM stops requesting tools or max_iterations is hit
+
+Key design decisions:
+  - Tool-call parsing is centralised in _parse_tool_call() — one place to handle
+    every shape the SDK might emit.
+  - Tool execution is centralised in _execute_tool() — handles lookup, error
+    wrapping, and timing.
+  - Every LLM call produces exactly one StepResult.
+  - The final AgentRunResult contains zero duplication.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+from datetime import datetime
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 from uuid import uuid4
 
+from opentelemetry.trace import Status, StatusCode
+
+from agent_framework.agents.base_agent import BaseAgent
+from agent_framework.agents.agent_result import (
+    AgentRunResult,
+    AggregatedUsage,
+    RunStatus,
+    StepResult,
+    ToolCallRecord,
+)
+from agent_framework.memory.base_memory import BaseMemory
+from agent_framework.memory.unbounded_memory import UnboundedMemory
+from agent_framework.messages.base_message import UsageStats
+from agent_framework.messages.client_messages import (
+    AssistantMessage,
+    SystemMessage,
+    ToolCallMessage,
+    ToolExecutionResultMessage,
+    UserMessage,
+)
+from agent_framework.model_clients.base_client import BaseModelClient
+from agent_framework.observability import global_metrics, global_tracer, logger
+from agent_framework.tools.base_tool import BaseTool, ToolResult
+
+
+# ---------------------------------------------------------------------------
+# Helper: Parsed tool-call (normalised from any SDK shape)
+# ---------------------------------------------------------------------------
+
+class _ParsedToolCall:
+    """Internal normalised representation of a tool call."""
+    __slots__ = ("call_id", "name", "arguments")
+
+    def __init__(self, call_id: str, name: str, arguments: Dict[str, Any]):
+        self.call_id = call_id
+        self.name = name
+        self.arguments = arguments
+
+
+# ---------------------------------------------------------------------------
+# ReActAgent
+# ---------------------------------------------------------------------------
+
 class ReActAgent(BaseAgent):
-    """
-    Reasoning + Acting (ReAct) Agent that uses tools to solve problems.
-    
-    It operates in a loop:
-    1. Observe current context (memory)
-    2. Think (LLM generation)
-    3. Act (Tool execution)
-    4. Repeat until complete or max iterations reached.
+    """Reasoning + Acting agent with tool calling loop.
+
+    Usage::
+
+        agent = ReActAgent(
+            name="researcher",
+            description="Answers questions using web tools",
+            model_client=openai_client,
+            tools=mcp_tools,
+        )
+        result = await agent.run("Find the top 3 repos for user X on GitHub")
+        print(result.output)
+        print(result.summary())
     """
 
     def __init__(
@@ -35,9 +88,12 @@ class ReActAgent(BaseAgent):
         description: str,
         *,
         model_client: BaseModelClient,
-        tools: List[BaseTool] | None = None,
-        system_instructions: str = "You are a helpful AI assistant. Use the provided tools to solve the user's request. Think step-by-step.",
-        memory: BaseMemory | None = None,
+        tools: Optional[List[BaseTool]] = None,
+        system_instructions: str = (
+            "You are a helpful AI assistant. Use the provided tools to solve "
+            "the user's request. Think step-by-step."
+        ),
+        memory: Optional[BaseMemory] = None,
         max_iterations: int = 10,
         verbose: bool = True,
     ):
@@ -51,386 +107,429 @@ class ReActAgent(BaseAgent):
         )
         self.max_iterations = max_iterations
         self.verbose = verbose
-        
-        # Initialize system prompt if memory is empty
+
+        # Seed system prompt
         if len(self.memory.get_messages()) == 0:
             self.memory.add_message(SystemMessage(content=self.system_instructions))
 
-    async def run(self, input_text: str, **kwargs) -> Any:
-        """
-        Run the agent with the given user input.
-        """
-        attributes = {"agent_name": self.name, "input_length": len(input_text)}
-        
-        with global_tracer.start_span("agent_run", attributes) as span:
+    # ── Core run ─────────────────────────────────────────────────────────────
+
+    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+        run_start = datetime.utcnow()
+        usage = AggregatedUsage()
+        steps: List[StepResult] = []
+        tool_calls_by_name: Dict[str, int] = {}
+        total_tool_calls = 0
+        status = RunStatus.COMPLETED
+        error_msg: Optional[str] = None
+        final_output: List[Any] = []  # Multimodal output
+
+        attrs = {"agent_name": self.name, "input_length": len(input_text)}
+
+        with global_tracer.start_span("agent_run", attrs) as run_span:
             global_metrics.increment_counter("agent_runs", tags={"name": self.name})
-            
-            logger.info(f"[{self.name}] Starting run for input: {input_text[:50]}...")
-            
-            # 1. Add User Message
-            user_msg = UserMessage(content=input_text)
-            self.memory.add_message(user_msg)
-            
-            # 2. ReAct Loop
-            final_response = None
-            
-            for i in range(self.max_iterations):
-                iteration_span_name = f"iteration_{i+1}"
-                with global_tracer.start_span(iteration_span_name, {"iteration": i+1}) as iter_span:
-                    if self.verbose:
-                        logger.info(f"[{self.name}] Iteration {i+1}/{self.max_iterations}")
+            if self.verbose:
+                logger.info(f"[{self.name}] Starting run: {input_text[:80]}...")
 
-                    # A. Generate Response (THINK)
-                    tool_schemas = [t.get_schema().to_openai_format() for t in self.tools]
-                    messages = self.memory.get_messages()
-                    
-                    with global_tracer.start_span("llm_generate", {"msg_count": len(messages)}) as llm_span:
-                        start_time = asyncio.get_event_loop().time()
-                        try:
-                            response = await self.model_client.generate(
-                                messages=messages,
-                                tools=tool_schemas if tool_schemas else None,
-                                tool_choice="auto" if tool_schemas else None
-                            )
-                            end_time = asyncio.get_event_loop().time()
-                            global_metrics.record_histogram("llm_latency", end_time - start_time, tags={"model": getattr(self.model_client, "model", "unknown")})
-                        except Exception as e:
-                            global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
-                            raise e
+            # 1. Add user message
+            self.memory.add_message(UserMessage(content=[input_text]))
 
-                    # B. Update Memory
+            # 2. ReAct loop
+            for step_num in range(1, self.max_iterations + 1):
+                with global_tracer.start_span(f"step_{step_num}", {"step": step_num}):
+
+                    # A. THINK — call LLM
+                    response = await self._call_llm(**kwargs)
+                    usage.add(response.usage)
                     self.memory.add_message(response)
-                    final_response = response
-                    
-                    # C. Check for Tool Calls (ACT)
+
+                    # Extract content (can be multimodal)
+                    thought_content = response.content if response.content else None
+
+                    # B. No tool calls → final answer
                     if not response.tool_calls:
                         if self.verbose:
-                            logger.info(f"[{self.name}] No tool calls, finishing.")
-                        iter_span.set_attribute("outcome", "finished")
-                        span.set_attribute("final_iterations", i + 1)
+                            logger.info(f"[{self.name}] Step {step_num}: final answer")
+                        run_span.set_attribute("final_step", step_num)
+
+                        steps.append(StepResult(
+                            step=step_num,
+                            thought=thought_content,
+                            tool_calls=[],
+                            usage=response.usage,
+                            finish_reason=response.finish_reason or "stop",
+                        ))
+                        final_output = thought_content or []
                         break
-                    
+
+                    # C. ACT — execute tool calls
                     if self.verbose:
-                        logger.info(f"[{self.name}] Tool calls requested: {[ (tc.function['name'] if hasattr(tc, 'function') and isinstance(tc.function, dict) else (tc.name if hasattr(tc, 'name') else getattr(tc, 'id', None))) for tc in response.tool_calls ]}")
+                        names = [self._parse_tool_call(tc).name for tc in response.tool_calls]
+                        logger.info(f"[{self.name}] Step {step_num}: tool calls → {names}")
 
-                    # D. Execute Tools
-                    with global_tracer.start_span("execute_tools", {"count": len(response.tool_calls)}):
-                        # Execute sequential for safety, but could be parallel
-                        for tool_call in response.tool_calls:
-                            # Support several tool_call shapes: new ToolCallMessage, legacy dicts, or Pydantic ToolCall
-                            call_id = getattr(tool_call, "id", None)
-                            tc_name = None
-                            tc_args = None
+                    tool_records: List[ToolCallRecord] = []
+                    for tc_raw in response.tool_calls:
+                        parsed = self._parse_tool_call(tc_raw)
+                        record, tool_msg = await self._execute_tool(parsed, step_num)
+                        self.memory.add_message(tool_msg)
+                        tool_records.append(record)
 
-                            if hasattr(tool_call, "function") and isinstance(tool_call.function, dict):
-                                fn = tool_call.function
-                                tc_name = fn.get("name")
-                                raw_args = fn.get("arguments")
-                                if isinstance(raw_args, str):
-                                    try:
-                                        tc_args = json.loads(raw_args)
-                                    except Exception:
-                                        tc_args = {}
-                                else:
-                                    tc_args = raw_args
-                            elif isinstance(tool_call, ToolCallMessage):
-                                tc_name = tool_call.name
-                                tc_args = tool_call.arguments
-                                call_id = tool_call.id
-                            elif isinstance(tool_call, dict):
-                                if "function" in tool_call and isinstance(tool_call["function"], dict):
-                                    fn = tool_call["function"]
-                                    tc_name = fn.get("name")
-                                    raw_args = fn.get("arguments")
-                                    if isinstance(raw_args, str):
-                                        try:
-                                            tc_args = json.loads(raw_args)
-                                        except Exception:
-                                            tc_args = {}
-                                    else:
-                                        tc_args = raw_args
-                                else:
-                                    tc_name = tool_call.get("name")
-                                    tc_args = tool_call.get("arguments")
-                            else:
-                                # Pydantic ToolCall from tools.base_tool
-                                if hasattr(tool_call, "name") and hasattr(tool_call, "arguments"):
-                                    tc_name = getattr(tool_call, "name")
-                                    tc_args = getattr(tool_call, "arguments")
-                                    call_id = getattr(tool_call, "id", call_id)
+                        # Tally
+                        tool_calls_by_name[parsed.name] = tool_calls_by_name.get(parsed.name, 0) + 1
+                        total_tool_calls += 1
 
-                            call_id = call_id or str(uuid4())
-                            tc_args = tc_args or {}
+                    steps.append(StepResult(
+                        step=step_num,
+                        thought=thought_content,
+                        tool_calls=tool_records,
+                        usage=response.usage,
+                        finish_reason="tool_calls",
+                    ))
 
-                            with global_tracer.start_span("tool_execution", {"tool": tc_name}) as tool_span:
-                                tool = next((t for t in self.tools if t.name == tc_name), None)
+            else:
+                # Loop exhausted without breaking → max iterations
+                status = RunStatus.MAX_ITERATIONS
+                if self.verbose:
+                    logger.warning(f"[{self.name}] Hit max iterations ({self.max_iterations})")
+                # Try to extract whatever the last response said
+                if steps and steps[-1].thought:
+                    final_output = steps[-1].thought
 
-                                if not tool:
-                                    error_msg = f"Error: Tool '{tc_name}' not found."
-                                    logger.error(f"[{self.name}] {error_msg}")
-                                    tool_msg = ToolExecutionResultMessage(
-                                        content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
-                                        tool_call_id=call_id,
-                                        name=tc_name,
-                                        isError=True
-                                    )
-                                    tool_span.set_status(Status(StatusCode.ERROR))
-                                    global_metrics.increment_counter("tool_not_found_errors", tags={"tool": tc_name})
-                                else:
-                                    try:
-                                        if self.verbose:
-                                            logger.info(f"[{self.name}] Executing {tc_name} with {tc_args}")
-                                        # EXECUTE - now returns ToolResult
-                                        tool_result = await tool.execute(**tc_args)
-                                        tool_msg = ToolExecutionResultMessage.from_tool_result(
-                                            tool_result=tool_result,
-                                            tool_call_id=call_id,
-                                            tool_name=tc_name
-                                        )
-                                        global_metrics.increment_counter("tool_executions", tags={"tool": tc_name, "status": "success"})
-                                    except Exception as e:
-                                        error_msg = str(e)
-                                        logger.error(f"[{self.name}] Tool execution failed: {e}")
-                                        tool_msg = ToolExecutionResultMessage(
-                                            content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
-                                            tool_call_id=call_id,
-                                            name=tc_name,
-                                            isError=True
-                                        )
-                                        tool_span.set_status(Status(StatusCode.ERROR))
-                                        global_metrics.increment_counter("tool_execution_errors", tags={"tool": tc_name, "error": type(e).__name__})
+            # 3. Build result
+            run_end = datetime.utcnow()
+            duration = (run_end - run_start).total_seconds()
 
-                                # Add Result to Memory
-                                self.memory.add_message(tool_msg)
+            return AgentRunResult(
+                agent_name=self.name,
+                output=final_output,
+                status=status,
+                steps=steps,
+                usage=usage,
+                tool_calls_total=total_tool_calls,
+                tool_calls_by_name=tool_calls_by_name,
+                start_time=run_start,
+                end_time=run_end,
+                duration_seconds=duration,
+                max_iterations=self.max_iterations,
+                error=error_msg,
+            )
 
-            return final_response
+    # ── Streaming run ────────────────────────────────────────────────────────
 
-    async def run_stream(self, input_text: str, **kwargs):
+    async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
+        """Streaming variant — yields partial chunks and tool results.
+
+        For now this is a thin wrapper; a full streaming implementation
+        can be added later with SSE / async generators.
         """
-        Run the agent with streaming, yielding partial responses and tool results as they are available.
-        """
-        attributes = {"agent_name": self.name, "input_length": len(input_text)}
-        with global_tracer.start_span("agent_run_stream", attributes) as span:
+        attrs = {"agent_name": self.name, "input_length": len(input_text)}
+        with global_tracer.start_span("agent_run_stream", attrs):
             global_metrics.increment_counter("agent_runs", tags={"name": self.name})
-            logger.info(f"[{self.name}] Starting streaming run for input: {input_text[:50]}...")
+            if self.verbose:
+                logger.info(f"[{self.name}] Starting streaming run: {input_text[:80]}...")
 
-            # 1. Add User Message
-            user_msg = UserMessage(content=input_text)
-            self.memory.add_message(user_msg)
+            self.memory.add_message(UserMessage(content=[input_text]))
 
-            # 2. ReAct Loop
-            for i in range(self.max_iterations):
-                iteration_span_name = f"iteration_{i+1}"
-                with global_tracer.start_span(iteration_span_name, {"iteration": i+1}) as iter_span:
-                    if self.verbose:
-                        logger.info(f"[{self.name}] [stream] Iteration {i+1}/{self.max_iterations}")
-
-                    tool_schemas = [t.get_schema().to_openai_format() for t in self.tools]
+            for step_num in range(1, self.max_iterations + 1):
+                with global_tracer.start_span(f"step_{step_num}", {"step": step_num}):
+                    # THINK
+                    tool_schemas = self._build_tool_schemas()
                     messages = self.memory.get_messages()
 
-                    # A. Generate Response (THINK, streaming)
-                    with global_tracer.start_span("llm_generate_stream", {"msg_count": len(messages)}) as llm_span:
-                        start_time = asyncio.get_event_loop().time()
-                        assistant_text = ""
+                    with global_tracer.start_span("llm_generate_stream", {"msg_count": len(messages)}):
+                        llm_t0 = asyncio.get_event_loop().time()
                         final_response_obj = None
+                        assistant_text = ""
+
                         try:
-                            async for response in self.model_client.generate_stream(
+                            async for chunk in self.model_client.generate_stream(
                                 messages=messages,
-                                tools=tool_schemas if tool_schemas else None,
+                                tools=tool_schemas or None,
                                 tool_choice="auto" if tool_schemas else None,
-                                **kwargs
+                                **kwargs,
                             ):
-                                # If this response is a tool call, stop collecting text and handle tool execution
-                                if response.tool_calls:
-                                    # Construct a final response object using accumulated text and attach tool_calls
+                                if chunk.tool_calls:
                                     final_response_obj = AssistantMessage(
                                         role="assistant",
-                                        content=assistant_text,
-                                        tool_calls=response.tool_calls,
-                                        usage=response.usage,
+                                        content=None,
+                                        tool_calls=chunk.tool_calls,
+                                        usage=chunk.usage,
                                     )
-                                    # Yield the tool call event to external consumers and break to execute tools
-                                    yield response
+                                    yield chunk
                                     break
 
-                                # If it's a partial chunk (delta), append to the buffer and yield the chunk
-                                partial_flag = response.metadata.get("partial") if getattr(response, "metadata", None) else None
-                                if partial_flag is True and response.content:
-                                    assistant_text += response.content
-                                    yield response
-                                else:
-                                    # Could be final completion indicator - yield and continue
-                                    if getattr(response, "metadata", None) and response.metadata.get("complete"):
-                                        # Stream finished; mark final_response_obj if not set
-                                        final_response_obj = final_response_obj or AssistantMessage(
-                                            role="assistant",
-                                            content=assistant_text,
-                                            usage=response.usage,
-                                            finish_reason=response.finish_reason,
-                                        )
-                                        yield response
-
-                            end_time = asyncio.get_event_loop().time()
-                            global_metrics.record_histogram("llm_latency", end_time - start_time, tags={"model": getattr(self.model_client, "model", "unknown")})
+                                partial = getattr(chunk, "metadata", {}) or {}
+                                if partial.get("partial") and chunk.content:
+                                    text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+                                    assistant_text += text
+                                    yield chunk
+                                elif partial.get("complete"):
+                                    final_response_obj = final_response_obj or AssistantMessage(
+                                        role="assistant",
+                                        content=[assistant_text] if assistant_text else None,
+                                        usage=chunk.usage,
+                                        finish_reason=chunk.finish_reason or "stop",
+                                    )
+                                    yield chunk
                         except Exception as e:
                             global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
-                            raise e
+                            raise
 
-                    # B. Update Memory with the assembled response
+                        llm_t1 = asyncio.get_event_loop().time()
+                        global_metrics.record_histogram(
+                            "llm_latency", llm_t1 - llm_t0,
+                            tags={"model": getattr(self.model_client, "model", "unknown")},
+                        )
+
                     response = final_response_obj or AssistantMessage(
                         role="assistant",
-                        content=assistant_text
+                        content=[assistant_text] if assistant_text else None,
                     )
-
-                    # Heuristic: If the assistant produced a JSON object and no explicit tool_calls were present,
-                    # try to map it to a single tool by matching parameter names. This covers models that return
-                    # raw JSON arguments instead of a structured function_call event.
-                    if not response.tool_calls and assistant_text:
-                        try:
-                            parsed = json.loads(assistant_text)
-                            if isinstance(parsed, dict) and self.tools:
-                                # Score tools by matching parameter names
-                                candidates = []
-                                for t in self.tools:
-                                    schema = t.get_schema()
-                                    params = {}
-                                    fn = schema.get("function") or {}
-                                    parameters = fn.get("parameters") or {}
-                                    properties = parameters.get("properties") if isinstance(parameters, dict) else {}
-                                    param_keys = set(properties.keys()) if properties else set()
-                                    # Heuristic: candidate if parsed keys subset or non-empty intersection
-                                    if param_keys and (set(parsed.keys()).issubset(param_keys) or set(parsed.keys()).intersection(param_keys)):
-                                        candidates.append((t, param_keys))
-                                if not candidates and len(self.tools) == 1:
-                                    # If only one tool is available, assume it's intended
-                                    chosen_tool = self.tools[0]
-                                elif candidates:
-                                    # Pick the candidate with the largest intersection
-                                    candidates.sort(key=lambda x: len(set(parsed.keys()).intersection(x[1])), reverse=True)
-                                    chosen_tool = candidates[0][0]
-                                else:
-                                    chosen_tool = None
-
-                                if chosen_tool:
-                                    tc = ToolCallMessage(id=response.id or str(uuid4()), name=chosen_tool.name, arguments=parsed)
-                                    response.tool_calls = [tc]
-                                    logger.info(f"[{self.name}] [stream] Heuristically detected tool call for '{chosen_tool.name}' with args: {parsed}")
-                        except Exception:
-                            # Not JSON or couldn't parse; ignore
-                            pass
-
                     self.memory.add_message(response)
 
-                    # C. Check for Tool Calls (ACT)
+                    # No tool calls → done
                     if not response.tool_calls:
                         if self.verbose:
-                            logger.info(f"[{self.name}] [stream] No tool calls, finishing.")
-                        iter_span.set_attribute("outcome", "finished")
-                        span.set_attribute("final_iterations", i + 1)
+                            logger.info(f"[{self.name}] [stream] Step {step_num}: done")
                         break
 
+                    # ACT — execute tools
                     if self.verbose:
-                        logger.info(f"[{self.name}] [stream] Tool calls requested: {[ (tc.function['name'] if hasattr(tc, 'function') and isinstance(tc.function, dict) else (tc.name if hasattr(tc, 'name') else getattr(tc, 'id', None))) for tc in response.tool_calls ]}")
+                        names = [self._parse_tool_call(tc).name for tc in response.tool_calls]
+                        logger.info(f"[{self.name}] [stream] Step {step_num}: tools → {names}")
 
-                    # D. Execute Tools (sequential, yield results)
                     with global_tracer.start_span("execute_tools_stream", {"count": len(response.tool_calls)}):
-                        for tool_call in response.tool_calls:
-                            # Support several tool_call shapes: new ToolCallMessage, legacy dicts, or Pydantic ToolCall
-                            call_id = getattr(tool_call, "id", None)
-                            tc_name = None
-                            tc_args = None
+                        for tc_raw in response.tool_calls:
+                            parsed = self._parse_tool_call(tc_raw)
+                            _, tool_msg = await self._execute_tool(parsed, step_num)
+                            self.memory.add_message(tool_msg)
+                            yield tool_msg
 
-                            if hasattr(tool_call, "function") and isinstance(tool_call.function, dict):
-                                fn = tool_call.function
-                                tc_name = fn.get("name")
-                                raw_args = fn.get("arguments")
-                                if isinstance(raw_args, str):
-                                    try:
-                                        tc_args = json.loads(raw_args)
-                                    except Exception:
-                                        tc_args = {}
-                                else:
-                                    tc_args = raw_args
-                            elif isinstance(tool_call, ToolCallMessage):
-                                tc_name = tool_call.name
-                                tc_args = tool_call.arguments
-                                call_id = tool_call.id
-                            elif isinstance(tool_call, dict):
-                                if "function" in tool_call and isinstance(tool_call["function"], dict):
-                                    fn = tool_call["function"]
-                                    tc_name = fn.get("name")
-                                    raw_args = fn.get("arguments")
-                                    if isinstance(raw_args, str):
-                                        try:
-                                            tc_args = json.loads(raw_args)
-                                        except Exception:
-                                            tc_args = {}
-                                    else:
-                                        tc_args = raw_args
-                                else:
-                                    tc_name = tool_call.get("name")
-                                    tc_args = tool_call.get("arguments")
-                            else:
-                                # Pydantic ToolCall from tools.base_tool
-                                if hasattr(tool_call, "name") and hasattr(tool_call, "arguments"):
-                                    tc_name = getattr(tool_call, "name")
-                                    tc_args = getattr(tool_call, "arguments")
-                                    call_id = getattr(tool_call, "id", call_id)
+    # ── State management ─────────────────────────────────────────────────────
 
-                            call_id = call_id or str(uuid4())
-                            tc_args = tc_args or {}
-
-                            with global_tracer.start_span("tool_execution_stream", {"tool": tc_name}) as tool_span:
-                                tool = next((t for t in self.tools if t.name == tc_name), None)
-
-                                if not tool:
-                                    error_msg = f"Error: Tool '{tc_name}' not found."
-                                    logger.error(f"[{self.name}] [stream] {error_msg}")
-                                    tool_msg = ToolExecutionResultMessage(
-                                        content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
-                                        tool_call_id=call_id,
-                                        name=tc_name,
-                                        isError=True
-                                    )
-                                    tool_span.set_status(Status(StatusCode.ERROR))
-                                    global_metrics.increment_counter("tool_not_found_errors", tags={"tool": tc_name})
-                                else:
-                                    try:
-                                        if self.verbose:
-                                            logger.info(f"[{self.name}] [stream] Executing {tc_name} with {tc_args}")
-                                        # EXECUTE - now returns ToolResult
-                                        tool_result = await tool.execute(**tc_args)
-                                        tool_msg = ToolExecutionResultMessage.from_tool_result(
-                                            tool_result=tool_result,
-                                            tool_call_id=call_id,
-                                            tool_name=tc_name
-                                        )
-                                        global_metrics.increment_counter("tool_executions", tags={"tool": tc_name, "status": "success"})
-                                    except Exception as e:
-                                        error_msg = str(e)
-                                        logger.error(f"[{self.name}] [stream] Tool execution failed: {e}")
-                                        tool_msg = ToolExecutionResultMessage(
-                                            content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
-                                            tool_call_id=call_id,
-                                            name=tc_name,
-                                            isError=True
-                                        )
-                                        tool_span.set_status(Status(StatusCode.ERROR))
-                                        global_metrics.increment_counter("tool_execution_errors", tags={"tool": tc_name, "error": type(e).__name__})
-                                # Add Result to Memory and yield as ToolExecutionResultMessage
-                                self.memory.add_message(tool_msg)
-                                yield tool_msg
-
-    def save_state(self):
-        # Basic state dump
+    def save_state(self) -> Dict[str, Any]:
         return {
             "name": self.name,
-            "memory_messages": [m.to_dict() for m in self.memory.get_messages()]
+            "description": self.description,
+            "system_instructions": self.system_instructions,
+            "max_iterations": self.max_iterations,
+            "messages": [m.to_dict() for m in self.memory.get_messages()],
         }
 
-    def load_state(self, state: Dict[str, Any]):
+    def load_state(self, state: Dict[str, Any]) -> None:
         if state.get("name") != self.name:
             logger.warning("Loading state for a different agent name")
-        # Logic to restore memory would go here
-        # For now, simplistic implementation
-        pass
+        self.max_iterations = state.get("max_iterations", self.max_iterations)
+        # TODO: reconstruct memory from state["messages"]
+
+    # ── Private helpers ──────────────────────────────────────────────────────
+
+    def _build_tool_schemas(self) -> List[Dict[str, Any]]:
+        """Build tool schemas for the LLM from the agent's tools list."""
+        schemas: List[Dict[str, Any]] = []
+        for t in self.tools:
+            if hasattr(t, "get_schema"):
+                schema = t.get_schema()
+                if hasattr(schema, "to_openai_format"):
+                    schemas.append(schema.to_openai_format())
+                elif isinstance(schema, dict):
+                    schemas.append(schema)
+            elif isinstance(t, dict):
+                schemas.append(t)
+        return schemas
+
+    async def _call_llm(self, **kwargs) -> AssistantMessage:
+        """Single LLM call with tool schemas and observability."""
+        tool_schemas = self._build_tool_schemas()
+        messages = self.memory.get_messages()
+
+        with global_tracer.start_span("llm_generate", {"msg_count": len(messages)}):
+            llm_t0 = asyncio.get_event_loop().time()
+            try:
+                response = await self.model_client.generate(
+                    messages=messages,
+                    tools=tool_schemas or None,
+                    tool_choice="auto" if tool_schemas else None,
+                )
+                llm_t1 = asyncio.get_event_loop().time()
+                global_metrics.record_histogram(
+                    "llm_latency", llm_t1 - llm_t0,
+                    tags={"model": getattr(self.model_client, "model", "unknown")},
+                )
+            except Exception as e:
+                global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
+                raise
+        return response
+
+    @staticmethod
+    def _parse_tool_call(tc: Any) -> _ParsedToolCall:
+        """Normalise any tool-call shape into a _ParsedToolCall.
+
+        Handles: ToolCallMessage, OpenAI SDK objects with .function dict,
+        raw dicts, and Pydantic ToolCall models.
+        """
+        call_id: Optional[str] = getattr(tc, "id", None)
+        name: Optional[str] = None
+        args: Any = None
+
+        # 1. ToolCallMessage (our own type)
+        if isinstance(tc, ToolCallMessage):
+            return _ParsedToolCall(
+                call_id=tc.id or str(uuid4()),
+                name=tc.name,
+                arguments=tc.arguments or {},
+            )
+
+        # 2. Object with .function dict (OpenAI SDK ChatCompletionMessageToolCall)
+        if hasattr(tc, "function") and isinstance(getattr(tc, "function", None), dict):
+            fn = tc.function
+            name = fn.get("name")
+            raw = fn.get("arguments")
+            args = json.loads(raw) if isinstance(raw, str) else (raw or {})
+
+        # 3. Plain dict
+        elif isinstance(tc, dict):
+            if "function" in tc and isinstance(tc["function"], dict):
+                fn = tc["function"]
+                name = fn.get("name")
+                raw = fn.get("arguments")
+                args = json.loads(raw) if isinstance(raw, str) else (raw or {})
+            else:
+                name = tc.get("name")
+                args = tc.get("arguments", {})
+                call_id = tc.get("id", call_id)
+
+        # 4. Generic object with .name / .arguments
+        elif hasattr(tc, "name") and hasattr(tc, "arguments"):
+            name = tc.name
+            args = tc.arguments if isinstance(tc.arguments, dict) else {}
+            call_id = getattr(tc, "id", call_id)
+
+        return _ParsedToolCall(
+            call_id=call_id or str(uuid4()),
+            name=name or "unknown",
+            arguments=args if isinstance(args, dict) else {},
+        )
+
+    async def _execute_tool(
+        self,
+        parsed: _ParsedToolCall,
+        step_num: int,
+    ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
+        """Look up and execute a single tool call.
+
+        Returns both the record (for AgentRunResult) and the message (for memory).
+        """
+        with global_tracer.start_span("tool_execution", {"tool": parsed.name}) as span:
+            t0 = time.monotonic()
+
+            # Find tool
+            tool = self._find_tool(parsed.name)
+
+            if tool is None:
+                return self._tool_error(
+                    parsed, step_num, t0, span,
+                    f"Tool '{parsed.name}' not found in agent's tool list",
+                    "tool_not_found_errors",
+                )
+
+            if isinstance(tool, dict):
+                return self._tool_error(
+                    parsed, step_num, t0, span,
+                    f"Tool '{parsed.name}' is a raw dict schema, not executable. "
+                    "Wrap with MCPTool.from_mcp_client().",
+                    "tool_not_executable_errors",
+                )
+
+            # Execute
+            try:
+                if self.verbose:
+                    logger.info(f"[{self.name}] Executing {parsed.name}({parsed.arguments})")
+
+                result: ToolResult = await tool.execute(**parsed.arguments)
+                duration_ms = (time.monotonic() - t0) * 1000
+
+                tool_msg = ToolExecutionResultMessage.from_tool_result(
+                    tool_result=result,
+                    tool_call_id=parsed.call_id,
+                    tool_name=parsed.name,
+                )
+                global_metrics.increment_counter("tool_executions", tags={"tool": parsed.name, "status": "success"})
+
+                record = ToolCallRecord(
+                    tool_name=parsed.name,
+                    call_id=parsed.call_id,
+                    arguments=parsed.arguments,
+                    result=self._content_to_str(tool_msg.content),
+                    is_error=False,
+                    duration_ms=duration_ms,
+                )
+                return record, tool_msg
+
+            except Exception as e:
+                return self._tool_error(
+                    parsed, step_num, t0, span,
+                    str(e), "tool_execution_errors",
+                )
+
+    def _tool_error(
+        self,
+        parsed: _ParsedToolCall,
+        step_num: int,
+        t0: float,
+        span: Any,
+        error_msg: str,
+        metric_name: str,
+    ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
+        """Build error record + message for a failed tool call."""
+        duration_ms = (time.monotonic() - t0) * 1000
+        logger.error(f"[{self.name}] {error_msg}")
+        span.set_status(Status(StatusCode.ERROR))
+        global_metrics.increment_counter(metric_name, tags={"tool": parsed.name})
+
+        tool_msg = ToolExecutionResultMessage(
+            content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
+            tool_call_id=parsed.call_id,
+            name=parsed.name,
+            isError=True,
+        )
+        record = ToolCallRecord(
+            tool_name=parsed.name,
+            call_id=parsed.call_id,
+            arguments=parsed.arguments,
+            result=error_msg,
+            is_error=True,
+            duration_ms=duration_ms,
+        )
+        return record, tool_msg
+
+    def _find_tool(self, name: str) -> Optional[Any]:
+        """Look up a tool by name from the agent's tools list."""
+        for t in self.tools:
+            t_name = getattr(t, "name", None) or (t.get("name") if isinstance(t, dict) else None)
+            if t_name == name:
+                return t
+        return None
+
+    @staticmethod
+    def _extract_text(response: AssistantMessage) -> Optional[str]:
+        """Extract plain text content from an AssistantMessage."""
+        if response.content is None:
+            return None
+        if isinstance(response.content, list):
+            parts = [str(c) for c in response.content if c]
+            return " ".join(parts) if parts else None
+        return str(response.content) if response.content else None
+
+    @staticmethod
+    def _content_to_str(content: Any) -> str:
+        """Convert tool result content to a plain string for the record."""
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+                else:
+                    parts.append(str(block))
+            return "\n".join(parts)
+        return str(content) if content else ""

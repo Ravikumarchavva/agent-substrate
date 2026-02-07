@@ -61,36 +61,74 @@ class OpenAIClient(BaseModelClient):
                 # But if we have multiple, we can append them.
                 instructions += f"{msg.content}\n"
             elif msg.role == "user":
+                # Get the properly serialized content from the message
+                msg_dict = msg.to_dict()
                 conversation_input.append({
                     "type": "message",
                     "role": "user",
-                    "content": msg.content
+                    "content": msg_dict.get("content", [])
                 })
             elif msg.role == "assistant":
                 # Assistant message might have content OR tool_calls or both
+                msg_dict = msg.to_dict()
                 if msg.content:
-                    conversation_input.append({
-                        "type": "message",
-                        "role": "assistant",
-                        "content": msg.content
-                    })
+                    # Serialize content properly
+                    serialized_content = msg_dict.get("content", [])
+                    if serialized_content:
+                        conversation_input.append({
+                            "type": "message",
+                            "role": "assistant",
+                            "content": serialized_content
+                        })
                 
                 # Check for tool_calls (AssistantMessage format)
                 tool_calls = getattr(msg, "tool_calls", None)
                 if tool_calls:
                     for tc in tool_calls:
+                        # Handle both ToolCallMessage and legacy formats
+                        if hasattr(tc, 'name') and hasattr(tc, 'arguments'):
+                            # ToolCallMessage has name and arguments directly
+                            tc_name = tc.name
+                            tc_args = tc.arguments
+                            tc_id = tc.id
+                        elif hasattr(tc, 'function') and isinstance(tc.function, dict):
+                            # Legacy format with function dict
+                            tc_name = tc.function["name"]
+                            tc_args = tc.function["arguments"]
+                            tc_id = tc.id
+                        else:
+                            # Skip unknown format
+                            continue
+                        
+                        # Convert arguments to JSON string if it's a dict
+                        if isinstance(tc_args, dict):
+                            tc_args = json.dumps(tc_args)
+                        
                         conversation_input.append({
                             "type": "function_call",
-                            "call_id": tc.id,
-                            "name": tc.function["name"],
-                            "arguments": tc.function["arguments"]
+                            "call_id": tc_id,
+                            "name": tc_name,
+                            "arguments": tc_args
                         })
-            elif msg.role == "tool":
-                # ToolMessage maps to function_call_output
+            elif msg.role == "tool_response" or msg.role == "tool":
+                # ToolExecutionResultMessage maps to function_call_output
+                # Content is a list of MCP content blocks - convert to string
+                content_str = ""
+                if hasattr(msg, 'content') and msg.content:
+                    if isinstance(msg.content, list):
+                        # MCP format: list of content blocks
+                        text_parts = []
+                        for block in msg.content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text_parts.append(block.get("text", ""))
+                        content_str = "\n".join(text_parts)
+                    elif isinstance(msg.content, str):
+                        content_str = msg.content
+                
                 conversation_input.append({
                     "type": "function_call_output",
                     "call_id": getattr(msg, "tool_call_id", None),
-                    "output": msg.content
+                    "output": content_str
                 })
 
         params = {
@@ -108,20 +146,46 @@ class OpenAIClient(BaseModelClient):
         if tools:
             # Transform tools to Responses API format (flattened)
             # The Responses API expects { "type": "function", "name": "...", "description": "...", "parameters": ... }
-            # whereas the previous format was { "type": "function", "function": { "name": "...", ... } }
+            # Input can be:
+            # 1. OpenAI format: { "type": "function", "function": { "name": "...", "description": "...", "parameters": {...} } }
+            # 2. MCP format: { "name": "...", "description": "...", "inputSchema": {...} }
+            # 3. Already flattened: { "type": "function", "name": "...", "description": "...", "parameters": {...} }
+            
             transformed_tools = []
             for tool in tools:
-                if tool.get("type") == "function" and "function" in tool:
+                # Check if it's already in the flattened Responses API format
+                if "type" in tool and "name" in tool and "parameters" in tool:
+                    transformed_tools.append(tool)
+                # OpenAI nested format
+                elif tool.get("type") == "function" and "function" in tool:
                     fn_def = tool["function"]
                     new_tool = {
                         "type": "function",
                         "name": fn_def.get("name"),
-                        "description": fn_def.get("description"),
-                        "parameters": fn_def.get("parameters"),
+                        "description": fn_def.get("description", ""),
+                        "parameters": fn_def.get("parameters", {"type": "object", "properties": {}}),
+                    }
+                    transformed_tools.append(new_tool)
+                # MCP format (has inputSchema instead of parameters)
+                elif "name" in tool and "inputSchema" in tool:
+                    new_tool = {
+                        "type": "function",
+                        "name": tool.get("name"),
+                        "description": tool.get("description", ""),
+                        "parameters": tool.get("inputSchema", {"type": "object", "properties": {}}),
+                    }
+                    transformed_tools.append(new_tool)
+                # MCP format without explicit inputSchema (use default)
+                elif "name" in tool:
+                    new_tool = {
+                        "type": "function",
+                        "name": tool.get("name"),
+                        "description": tool.get("description", ""),
+                        "parameters": tool.get("parameters") or tool.get("inputSchema") or {"type": "object", "properties": {}},
                     }
                     transformed_tools.append(new_tool)
                 else:
-                    # Pass through if it doesn't match expected structure (might already be correct or different type)
+                    # Unknown format - pass through and let API handle it
                     transformed_tools.append(tool)
             
             params["tools"] = transformed_tools
@@ -136,7 +200,10 @@ class OpenAIClient(BaseModelClient):
         
         # Convert to framework format
         # The Responses API has a convenience property for text
-        final_content = response.output_text if hasattr(response, "output_text") else ""
+        final_content_text = response.output_text if hasattr(response, "output_text") else ""
+        
+        # Convert string content to List[MediaType] format
+        final_content = [final_content_text] if final_content_text else None
         
         tool_calls_obj = None
         
@@ -152,11 +219,8 @@ class OpenAIClient(BaseModelClient):
                     tool_calls_obj.append(
                         ToolCallMessage(
                             id=getattr(item, "call_id", getattr(item, "id", None)),
-                            type="function",
-                            function={
-                                "name": item.name,
-                                "arguments": item.arguments
-                            }
+                            name=item.name,
+                            arguments=item.arguments
                         )
                     )
                 # Handle other tool call types if necessary (mcp_call, etc.) in the future
@@ -164,18 +228,26 @@ class OpenAIClient(BaseModelClient):
         # Usage mapping
         usage_dict = None
         if hasattr(response, "usage") and response.usage:
-            usage_dict = {
-                "prompt_tokens": response.usage.input_tokens,
-                "completion_tokens": response.usage.output_tokens,
-                "total_tokens": response.usage.total_tokens,
-            }
+            from agent_framework.messages.base_message import UsageStats
+            usage_dict = UsageStats(
+                prompt_tokens=response.usage.input_tokens,
+                completion_tokens=response.usage.output_tokens,
+                total_tokens=response.usage.total_tokens,
+            )
+        
+        # Determine finish reason
+        finish_reason = "stop"
+        if tool_calls_obj:
+            finish_reason = "tool_calls"
+        elif hasattr(response, "finish_reason") and response.finish_reason:
+            finish_reason = response.finish_reason
 
         return AssistantMessage(
             role="assistant",
             content=final_content,
             tool_calls=tool_calls_obj,
             usage=usage_dict,
-            finish_reason=None,
+            finish_reason=finish_reason,
         )
     
     async def generate_stream(

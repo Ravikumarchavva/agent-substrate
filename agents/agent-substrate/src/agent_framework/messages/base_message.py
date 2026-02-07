@@ -16,7 +16,7 @@ class UsageStats:
     total_tokens: int
     
 class BaseClientMessage(BaseModel, ABC):
-    """Base message class with common fields for all message types."""
+    """Base message class for client-model communication (LLM API)."""
     
     id: str = Field(default_factory=lambda: str(uuid4()))
     role: CLIENT_ROLES
@@ -36,19 +36,19 @@ class BaseClientMessage(BaseModel, ABC):
     def from_dict(cls, data: Dict) -> "BaseClientMessage":
         """Create message from dictionary."""
         pass
-    
+
 class BaseAgentMessage(BaseModel, ABC):
-    """Base agent message class with for agent-to-agent communication."""
+    """Base message class for agent-to-agent communication."""
 
     id: str = Field(default_factory=lambda: str(uuid4()))
-    source: str
+    source: SOURCE_ROLES
     model_usage: Optional[UsageStats] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @abstractmethod
-    def to_model_client_message(self) -> BaseClientMessage:
-        """Convert to a BaseClientMessage for model client consumption."""
+    def to_model_client_message(self):
+        """Convert agent message to client message(s) for model consumption."""
         pass
 
     @abstractmethod
@@ -63,10 +63,9 @@ class BaseAgentMessage(BaseModel, ABC):
         pass
 
 class BaseAgentEvent(BaseModel, ABC):
-    """Base class for signaling observable agent events."""
+    """Base class for agent events (tool execution, thinking, etc.)."""
     
     id: str = Field(default_factory=lambda: str(uuid4()))
     source: str
-    "The name of the agent emitting the event."
     metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)

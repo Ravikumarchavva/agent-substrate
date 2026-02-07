@@ -1,6 +1,4 @@
 """MCP (Model Context Protocol) client for connecting to MCP servers."""
-import asyncio
-import json
 from typing import Any, Optional, Literal
 from contextlib import AsyncExitStack
 
@@ -238,27 +236,10 @@ class MCPClient:
         
         try:
             response = await self.session.call_tool(name, arguments)
-            
-            # Convert response to JSON string
-            result = {
-                "content": [
-                    {
-                        "type": item.type,
-                        "text": item.text if hasattr(item, "text") else str(item)
-                    }
-                    for item in response.content
-                ],
-                "isError": response.isError if hasattr(response, "isError") else False
-            }
-            
-            return json.dumps(result)
+            return response
             
         except Exception as e:
-            return json.dumps({
-                "error": str(e),
-                "tool": name,
-                "arguments": arguments
-            })
+            raise RuntimeError(f"Tool execution failed for '{name}': {e}") from e
     
     async def list_resources(self) -> list[dict[str, Any]]:
         """List all available resources from the MCP server.

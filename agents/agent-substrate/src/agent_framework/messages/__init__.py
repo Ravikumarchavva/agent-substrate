@@ -1,10 +1,18 @@
-from .base_message import BaseClientMessage, BaseAgentMessage, BaseAgentEvent
-from .client_messages import UserMessage, AssistantMessage, ToolCallMessage, ToolExecutionResultMessage
+from .base_message import BaseClientMessage, BaseAgentMessage, BaseAgentEvent, SOURCE_ROLES
+from .client_messages import (
+    SystemMessage,
+    UserMessage, 
+    AssistantMessage, 
+    ToolCallMessage, 
+    ToolExecutionResultMessage
+)
 
 __all__ = [
     "BaseClientMessage",
     "BaseAgentMessage",
     "BaseAgentEvent",
+    "SOURCE_ROLES",
+    "SystemMessage",
     "UserMessage",
     "AssistantMessage",
     "ToolCallMessage",

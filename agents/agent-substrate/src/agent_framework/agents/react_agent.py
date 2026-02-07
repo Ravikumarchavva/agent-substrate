@@ -4,15 +4,16 @@ from typing import List, Optional, Any, Dict
 
 from agent_framework.agents.base_agent import BaseAgent
 from agent_framework.tools import BaseTool
-from agent_framework.model_clients.base_client import BaseModelClient, ModelResponse
+from agent_framework.model_clients.base_client import BaseModelClient
 from agent_framework.memory.base_memory import BaseMemory
 from agent_framework.memory.unbounded_memory import UnboundedMemory
-from agent_framework.messages.agent_messages import (
-    UserMessage,
+from agent_framework.messages.client_messages import (
     SystemMessage,
+    UserMessage,
     AssistantMessage,
-    ToolMessage,
+    ToolExecutionResultMessage,
 )
+from agent_framework.messages.client_messages import ToolCallMessage
 from opentelemetry.trace import Status, StatusCode
 from agent_framework.observability import global_tracer, global_metrics, logger
 from uuid import uuid4
@@ -80,7 +81,7 @@ class ReActAgent(BaseAgent):
                         logger.info(f"[{self.name}] Iteration {i+1}/{self.max_iterations}")
 
                     # A. Generate Response (THINK)
-                    tool_schemas = [t.get_schema() for t in self.tools]
+                    tool_schemas = [t.get_schema().to_openai_format() for t in self.tools]
                     messages = self.memory.get_messages()
                     
                     with global_tracer.start_span("llm_generate", {"msg_count": len(messages)}) as llm_span:
@@ -99,7 +100,7 @@ class ReActAgent(BaseAgent):
 
                     # B. Update Memory
                     self.memory.add_message(response)
-                    final_response = response.content
+                    final_response = response
                     
                     # C. Check for Tool Calls (ACT)
                     if not response.tool_calls:
@@ -110,49 +111,96 @@ class ReActAgent(BaseAgent):
                         break
                     
                     if self.verbose:
-                        logger.info(f"[{self.name}] Tool calls requested: {[tc.function['name'] for tc in response.tool_calls]}")
+                        logger.info(f"[{self.name}] Tool calls requested: {[ (tc.function['name'] if hasattr(tc, 'function') and isinstance(tc.function, dict) else (tc.name if hasattr(tc, 'name') else getattr(tc, 'id', None))) for tc in response.tool_calls ]}")
 
                     # D. Execute Tools
                     with global_tracer.start_span("execute_tools", {"count": len(response.tool_calls)}):
                         # Execute sequential for safety, but could be parallel
                         for tool_call in response.tool_calls:
-                            tc_name = tool_call.function["name"]
-                            tc_args_str = tool_call.function["arguments"]
-                            call_id = tool_call.id
-                            
+                            # Support several tool_call shapes: new ToolCallMessage, legacy dicts, or Pydantic ToolCall
+                            call_id = getattr(tool_call, "id", None)
+                            tc_name = None
+                            tc_args = None
+
+                            if hasattr(tool_call, "function") and isinstance(tool_call.function, dict):
+                                fn = tool_call.function
+                                tc_name = fn.get("name")
+                                raw_args = fn.get("arguments")
+                                if isinstance(raw_args, str):
+                                    try:
+                                        tc_args = json.loads(raw_args)
+                                    except Exception:
+                                        tc_args = {}
+                                else:
+                                    tc_args = raw_args
+                            elif isinstance(tool_call, ToolCallMessage):
+                                tc_name = tool_call.name
+                                tc_args = tool_call.arguments
+                                call_id = tool_call.id
+                            elif isinstance(tool_call, dict):
+                                if "function" in tool_call and isinstance(tool_call["function"], dict):
+                                    fn = tool_call["function"]
+                                    tc_name = fn.get("name")
+                                    raw_args = fn.get("arguments")
+                                    if isinstance(raw_args, str):
+                                        try:
+                                            tc_args = json.loads(raw_args)
+                                        except Exception:
+                                            tc_args = {}
+                                    else:
+                                        tc_args = raw_args
+                                else:
+                                    tc_name = tool_call.get("name")
+                                    tc_args = tool_call.get("arguments")
+                            else:
+                                # Pydantic ToolCall from tools.base_tool
+                                if hasattr(tool_call, "name") and hasattr(tool_call, "arguments"):
+                                    tc_name = getattr(tool_call, "name")
+                                    tc_args = getattr(tool_call, "arguments")
+                                    call_id = getattr(tool_call, "id", call_id)
+
+                            call_id = call_id or str(uuid4())
+                            tc_args = tc_args or {}
+
                             with global_tracer.start_span("tool_execution", {"tool": tc_name}) as tool_span:
                                 tool = next((t for t in self.tools if t.name == tc_name), None)
-                                result_content = ""
-                                
+
                                 if not tool:
                                     error_msg = f"Error: Tool '{tc_name}' not found."
                                     logger.error(f"[{self.name}] {error_msg}")
-                                    result_content = json.dumps({"error": error_msg})
+                                    tool_msg = ToolExecutionResultMessage(
+                                        content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
+                                        tool_call_id=call_id,
+                                        name=tc_name,
+                                        isError=True
+                                    )
                                     tool_span.set_status(Status(StatusCode.ERROR))
                                     global_metrics.increment_counter("tool_not_found_errors", tags={"tool": tc_name})
                                 else:
                                     try:
-                                        tc_args = json.loads(tc_args_str)
                                         if self.verbose:
                                             logger.info(f"[{self.name}] Executing {tc_name} with {tc_args}")
-                                        
-                                        # EXECUTE
-                                        result_content = await tool.execute(**tc_args)
-                                        
+                                        # EXECUTE - now returns ToolResult
+                                        tool_result = await tool.execute(**tc_args)
+                                        tool_msg = ToolExecutionResultMessage.from_tool_result(
+                                            tool_result=tool_result,
+                                            tool_call_id=call_id,
+                                            tool_name=tc_name
+                                        )
                                         global_metrics.increment_counter("tool_executions", tags={"tool": tc_name, "status": "success"})
                                     except Exception as e:
                                         error_msg = str(e)
                                         logger.error(f"[{self.name}] Tool execution failed: {e}")
-                                        result_content = json.dumps({"error": error_msg})
+                                        tool_msg = ToolExecutionResultMessage(
+                                            content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
+                                            tool_call_id=call_id,
+                                            name=tc_name,
+                                            isError=True
+                                        )
                                         tool_span.set_status(Status(StatusCode.ERROR))
                                         global_metrics.increment_counter("tool_execution_errors", tags={"tool": tc_name, "error": type(e).__name__})
 
                                 # Add Result to Memory
-                                tool_msg = ToolMessage(
-                                    content=result_content,
-                                    tool_call_id=call_id,
-                                    name=tc_name
-                                )
                                 self.memory.add_message(tool_msg)
 
             return final_response
@@ -177,7 +225,7 @@ class ReActAgent(BaseAgent):
                     if self.verbose:
                         logger.info(f"[{self.name}] [stream] Iteration {i+1}/{self.max_iterations}")
 
-                    tool_schemas = [t.get_schema() for t in self.tools]
+                    tool_schemas = [t.get_schema().to_openai_format() for t in self.tools]
                     messages = self.memory.get_messages()
 
                     # A. Generate Response (THINK, streaming)
@@ -195,12 +243,11 @@ class ReActAgent(BaseAgent):
                                 # If this response is a tool call, stop collecting text and handle tool execution
                                 if response.tool_calls:
                                     # Construct a final response object using accumulated text and attach tool_calls
-                                    final_response_obj = ModelResponse(
+                                    final_response_obj = AssistantMessage(
                                         role="assistant",
                                         content=assistant_text,
                                         tool_calls=response.tool_calls,
                                         usage=response.usage,
-                                        model=response.model,
                                     )
                                     # Yield the tool call event to external consumers and break to execute tools
                                     yield response
@@ -215,11 +262,10 @@ class ReActAgent(BaseAgent):
                                     # Could be final completion indicator - yield and continue
                                     if getattr(response, "metadata", None) and response.metadata.get("complete"):
                                         # Stream finished; mark final_response_obj if not set
-                                        final_response_obj = final_response_obj or ModelResponse(
+                                        final_response_obj = final_response_obj or AssistantMessage(
                                             role="assistant",
                                             content=assistant_text,
                                             usage=response.usage,
-                                            model=response.model,
                                             finish_reason=response.finish_reason,
                                         )
                                         yield response
@@ -231,7 +277,10 @@ class ReActAgent(BaseAgent):
                             raise e
 
                     # B. Update Memory with the assembled response
-                    response = final_response_obj or ModelResponse(role="assistant", content=assistant_text, model=getattr(self.model_client, "model", "unknown"))
+                    response = final_response_obj or AssistantMessage(
+                        role="assistant",
+                        content=assistant_text
+                    )
 
                     # Heuristic: If the assistant produced a JSON object and no explicit tool_calls were present,
                     # try to map it to a single tool by matching parameter names. This covers models that return
@@ -263,7 +312,7 @@ class ReActAgent(BaseAgent):
                                     chosen_tool = None
 
                                 if chosen_tool:
-                                    tc = ToolCall(id=response.id or str(uuid4()), type="function", function={"name": chosen_tool.name, "arguments": json.dumps(parsed)})
+                                    tc = ToolCallMessage(id=response.id or str(uuid4()), name=chosen_tool.name, arguments=parsed)
                                     response.tool_calls = [tc]
                                     logger.info(f"[{self.name}] [stream] Heuristically detected tool call for '{chosen_tool.name}' with args: {parsed}")
                         except Exception:
@@ -281,45 +330,94 @@ class ReActAgent(BaseAgent):
                         break
 
                     if self.verbose:
-                        logger.info(f"[{self.name}] [stream] Tool calls requested: {[tc.function['name'] for tc in response.tool_calls]}")
+                        logger.info(f"[{self.name}] [stream] Tool calls requested: {[ (tc.function['name'] if hasattr(tc, 'function') and isinstance(tc.function, dict) else (tc.name if hasattr(tc, 'name') else getattr(tc, 'id', None))) for tc in response.tool_calls ]}")
 
                     # D. Execute Tools (sequential, yield results)
                     with global_tracer.start_span("execute_tools_stream", {"count": len(response.tool_calls)}):
                         for tool_call in response.tool_calls:
-                            tc_name = tool_call.function["name"]
-                            tc_args_str = tool_call.function["arguments"]
-                            call_id = tool_call.id
+                            # Support several tool_call shapes: new ToolCallMessage, legacy dicts, or Pydantic ToolCall
+                            call_id = getattr(tool_call, "id", None)
+                            tc_name = None
+                            tc_args = None
+
+                            if hasattr(tool_call, "function") and isinstance(tool_call.function, dict):
+                                fn = tool_call.function
+                                tc_name = fn.get("name")
+                                raw_args = fn.get("arguments")
+                                if isinstance(raw_args, str):
+                                    try:
+                                        tc_args = json.loads(raw_args)
+                                    except Exception:
+                                        tc_args = {}
+                                else:
+                                    tc_args = raw_args
+                            elif isinstance(tool_call, ToolCallMessage):
+                                tc_name = tool_call.name
+                                tc_args = tool_call.arguments
+                                call_id = tool_call.id
+                            elif isinstance(tool_call, dict):
+                                if "function" in tool_call and isinstance(tool_call["function"], dict):
+                                    fn = tool_call["function"]
+                                    tc_name = fn.get("name")
+                                    raw_args = fn.get("arguments")
+                                    if isinstance(raw_args, str):
+                                        try:
+                                            tc_args = json.loads(raw_args)
+                                        except Exception:
+                                            tc_args = {}
+                                    else:
+                                        tc_args = raw_args
+                                else:
+                                    tc_name = tool_call.get("name")
+                                    tc_args = tool_call.get("arguments")
+                            else:
+                                # Pydantic ToolCall from tools.base_tool
+                                if hasattr(tool_call, "name") and hasattr(tool_call, "arguments"):
+                                    tc_name = getattr(tool_call, "name")
+                                    tc_args = getattr(tool_call, "arguments")
+                                    call_id = getattr(tool_call, "id", call_id)
+
+                            call_id = call_id or str(uuid4())
+                            tc_args = tc_args or {}
 
                             with global_tracer.start_span("tool_execution_stream", {"tool": tc_name}) as tool_span:
                                 tool = next((t for t in self.tools if t.name == tc_name), None)
-                                result_content = ""
 
                                 if not tool:
                                     error_msg = f"Error: Tool '{tc_name}' not found."
                                     logger.error(f"[{self.name}] [stream] {error_msg}")
-                                    result_content = json.dumps({"error": error_msg})
+                                    tool_msg = ToolExecutionResultMessage(
+                                        content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
+                                        tool_call_id=call_id,
+                                        name=tc_name,
+                                        isError=True
+                                    )
                                     tool_span.set_status(Status(StatusCode.ERROR))
                                     global_metrics.increment_counter("tool_not_found_errors", tags={"tool": tc_name})
                                 else:
                                     try:
-                                        tc_args = json.loads(tc_args_str)
                                         if self.verbose:
                                             logger.info(f"[{self.name}] [stream] Executing {tc_name} with {tc_args}")
-                                        result_content = await tool.execute(**tc_args)
+                                        # EXECUTE - now returns ToolResult
+                                        tool_result = await tool.execute(**tc_args)
+                                        tool_msg = ToolExecutionResultMessage.from_tool_result(
+                                            tool_result=tool_result,
+                                            tool_call_id=call_id,
+                                            tool_name=tc_name
+                                        )
                                         global_metrics.increment_counter("tool_executions", tags={"tool": tc_name, "status": "success"})
                                     except Exception as e:
                                         error_msg = str(e)
                                         logger.error(f"[{self.name}] [stream] Tool execution failed: {e}")
-                                        result_content = json.dumps({"error": error_msg})
+                                        tool_msg = ToolExecutionResultMessage(
+                                            content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
+                                            tool_call_id=call_id,
+                                            name=tc_name,
+                                            isError=True
+                                        )
                                         tool_span.set_status(Status(StatusCode.ERROR))
                                         global_metrics.increment_counter("tool_execution_errors", tags={"tool": tc_name, "error": type(e).__name__})
-
-                                # Add Result to Memory and yield as ToolMessage
-                                tool_msg = ToolMessage(
-                                    content=result_content,
-                                    tool_call_id=call_id,
-                                    name=tc_name
-                                )
+                                # Add Result to Memory and yield as ToolExecutionResultMessage
                                 self.memory.add_message(tool_msg)
                                 yield tool_msg
 

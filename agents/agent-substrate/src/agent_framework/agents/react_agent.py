@@ -33,6 +33,14 @@ from agent_framework.agents.agent_result import (
     StepResult,
     ToolCallRecord,
 )
+from agent_framework.exceptions import GuardrailTripwireError
+from agent_framework.guardrails.base_guardrail import (
+    BaseGuardrail,
+    GuardrailContext,
+    GuardrailResult,
+    GuardrailType,
+)
+from agent_framework.guardrails.runner import run_guardrails
 from agent_framework.memory.base_memory import BaseMemory
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.base_message import UsageStats
@@ -96,6 +104,8 @@ class ReActAgent(BaseAgent):
         memory: Optional[BaseMemory] = None,
         max_iterations: int = 10,
         verbose: bool = True,
+        input_guardrails: Optional[List[BaseGuardrail]] = None,
+        output_guardrails: Optional[List[BaseGuardrail]] = None,
     ):
         super().__init__(
             name=name,
@@ -104,6 +114,8 @@ class ReActAgent(BaseAgent):
             tools=tools or [],
             system_instructions=system_instructions,
             memory=memory or UnboundedMemory(),
+            input_guardrails=input_guardrails,
+            output_guardrails=output_guardrails,
         )
         self.max_iterations = max_iterations
         self.verbose = verbose
@@ -121,6 +133,7 @@ class ReActAgent(BaseAgent):
         self.memory.add_message(SystemMessage(content=self.system_instructions))
 
     async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+        run_id = str(uuid4())
         run_start = datetime.utcnow()
         usage = AggregatedUsage()
         steps: List[StepResult] = []
@@ -129,6 +142,7 @@ class ReActAgent(BaseAgent):
         status = RunStatus.COMPLETED
         error_msg: Optional[str] = None
         final_output: List[Any] = []  # Multimodal output
+        guardrail_results: List[GuardrailResult] = []
 
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
 
@@ -139,6 +153,39 @@ class ReActAgent(BaseAgent):
 
             # 1. Add user message
             self.memory.add_message(UserMessage(content=[input_text]))
+
+            # ── INPUT GUARDRAILS ─────────────────────────────────────────
+            try:
+                if self.input_guardrails:
+                    ctx = GuardrailContext(
+                        agent_name=self.name,
+                        run_id=run_id,
+                        input_text=input_text,
+                    )
+                    results = await run_guardrails(
+                        self.input_guardrails, ctx,
+                        guardrail_type=GuardrailType.INPUT,
+                    )
+                    guardrail_results.extend(results)
+            except GuardrailTripwireError as e:
+                logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
+                run_end = datetime.utcnow()
+                return AgentRunResult(
+                    run_id=run_id,
+                    agent_name=self.name,
+                    output=[f"Request blocked: {e.message}"],
+                    status=RunStatus.GUARDRAIL_TRIPPED,
+                    steps=steps,
+                    usage=usage,
+                    start_time=run_start,
+                    end_time=run_end,
+                    duration_seconds=(run_end - run_start).total_seconds(),
+                    max_iterations=self.max_iterations,
+                    error=e.message,
+                    guardrail_results=guardrail_results + (
+                        [e.details["result"]] if "result" in e.details else []
+                    ),
+                )
 
             # 2. ReAct loop
             for step_num in range(1, self.max_iterations + 1):
@@ -158,6 +205,41 @@ class ReActAgent(BaseAgent):
                             logger.info(f"[{self.name}] Step {step_num}: final answer")
                         run_span.set_attribute("final_step", step_num)
 
+                        # ── OUTPUT GUARDRAILS ────────────────────────────
+                        output_text = self._extract_text(response)
+                        try:
+                            if self.output_guardrails:
+                                ctx = GuardrailContext(
+                                    agent_name=self.name,
+                                    run_id=run_id,
+                                    output_text=output_text,
+                                    raw_message=response,
+                                )
+                                results = await run_guardrails(
+                                    self.output_guardrails, ctx,
+                                    guardrail_type=GuardrailType.OUTPUT,
+                                )
+                                guardrail_results.extend(results)
+                        except GuardrailTripwireError as e:
+                            logger.error(f"[{self.name}] Output guardrail tripwire: {e.message}")
+                            run_end = datetime.utcnow()
+                            return AgentRunResult(
+                                run_id=run_id,
+                                agent_name=self.name,
+                                output=[f"Response blocked: {e.message}"],
+                                status=RunStatus.GUARDRAIL_TRIPPED,
+                                steps=steps,
+                                usage=usage,
+                                start_time=run_start,
+                                end_time=run_end,
+                                duration_seconds=(run_end - run_start).total_seconds(),
+                                max_iterations=self.max_iterations,
+                                error=e.message,
+                                guardrail_results=guardrail_results + (
+                                    [e.details["result"]] if "result" in e.details else []
+                                ),
+                            )
+
                         steps.append(StepResult(
                             step=step_num,
                             thought=thought_content,
@@ -176,9 +258,53 @@ class ReActAgent(BaseAgent):
                     tool_records: List[ToolCallRecord] = []
                     for tc_raw in response.tool_calls:
                         parsed = self._parse_tool_call(tc_raw)
-                        record, tool_msg = await self._execute_tool(parsed, step_num)
-                        self.memory.add_message(tool_msg)
-                        tool_records.append(record)
+
+                        # ── TOOL-CALL GUARDRAILS ─────────────────────────
+                        tool_blocked = False
+                        try:
+                            all_guardrails = self.input_guardrails + self.output_guardrails
+                            tool_guardrails = [
+                                g for g in all_guardrails
+                                if g.guardrail_type == GuardrailType.TOOL_CALL
+                            ]
+                            if tool_guardrails:
+                                ctx = GuardrailContext(
+                                    agent_name=self.name,
+                                    run_id=run_id,
+                                    tool_name=parsed.name,
+                                    tool_arguments=parsed.arguments,
+                                )
+                                results = await run_guardrails(
+                                    tool_guardrails, ctx,
+                                    guardrail_type=GuardrailType.TOOL_CALL,
+                                )
+                                guardrail_results.extend(results)
+                        except GuardrailTripwireError as e:
+                            logger.error(f"[{self.name}] Tool-call guardrail tripwire: {e.message}")
+                            tool_blocked = True
+                            # Create error tool message so the LLM sees it was blocked
+                            tool_msg = ToolExecutionResultMessage(
+                                content=[{"type": "text", "text": json.dumps({"error": f"Tool blocked: {e.message}"})}],
+                                tool_call_id=parsed.call_id,
+                                name=parsed.name,
+                                isError=True,
+                            )
+                            self.memory.add_message(tool_msg)
+                            tool_records.append(ToolCallRecord(
+                                tool_name=parsed.name,
+                                call_id=parsed.call_id,
+                                arguments=parsed.arguments,
+                                result=f"Blocked by guardrail: {e.message}",
+                                is_error=True,
+                            ))
+                            guardrail_results.extend(
+                                [e.details["result"]] if "result" in e.details else []
+                            )
+
+                        if not tool_blocked:
+                            record, tool_msg = await self._execute_tool(parsed, step_num)
+                            self.memory.add_message(tool_msg)
+                            tool_records.append(record)
 
                         # Tally
                         tool_calls_by_name[parsed.name] = tool_calls_by_name.get(parsed.name, 0) + 1
@@ -206,6 +332,7 @@ class ReActAgent(BaseAgent):
             duration = (run_end - run_start).total_seconds()
 
             return AgentRunResult(
+                run_id=run_id,
                 agent_name=self.name,
                 output=final_output,
                 status=status,
@@ -218,6 +345,7 @@ class ReActAgent(BaseAgent):
                 duration_seconds=duration,
                 max_iterations=self.max_iterations,
                 error=error_msg,
+                guardrail_results=guardrail_results,
             )
 
     # ── Streaming run ────────────────────────────────────────────────────────
@@ -225,9 +353,14 @@ class ReActAgent(BaseAgent):
     async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
         """Streaming variant — yields partial chunks and tool results.
 
-        For now this is a thin wrapper; a full streaming implementation
-        can be added later with SSE / async generators.
+        Guardrails are applied at the same points as run():
+          - Input guardrails: before first LLM call
+          - Output guardrails: after final response (on CompletionChunk)
+          - Tool-call guardrails: before each tool.execute()
+
+        If an input guardrail trips, yields a single error message and returns.
         """
+        run_id = str(uuid4())
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
         with global_tracer.start_span("agent_run_stream", attrs):
             global_metrics.increment_counter("agent_runs", tags={"name": self.name})
@@ -235,6 +368,31 @@ class ReActAgent(BaseAgent):
                 logger.info(f"[{self.name}] Starting streaming run: {input_text[:80]}...")
 
             self.memory.add_message(UserMessage(content=[input_text]))
+
+            # ── INPUT GUARDRAILS ─────────────────────────────────────────
+            try:
+                if self.input_guardrails:
+                    ctx = GuardrailContext(
+                        agent_name=self.name,
+                        run_id=run_id,
+                        input_text=input_text,
+                    )
+                    await run_guardrails(
+                        self.input_guardrails, ctx,
+                        guardrail_type=GuardrailType.INPUT,
+                    )
+            except GuardrailTripwireError as e:
+                logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
+                from agent_framework.messages._types import CompletionChunk
+                yield CompletionChunk(
+                    message=AssistantMessage(
+                        role="assistant",
+                        content=[f"Request blocked: {e.message}"],
+                        finish_reason="guardrail_tripped",
+                    ),
+                    metadata={"guardrail_tripped": True, "guardrail": e.guardrail_name},
+                )
+                return
 
             for step_num in range(1, self.max_iterations + 1):
                 with global_tracer.start_span(f"step_{step_num}", {"step": step_num}):
@@ -285,6 +443,32 @@ class ReActAgent(BaseAgent):
                     if not response.tool_calls:
                         if self.verbose:
                             logger.info(f"[{self.name}] [stream] Step {step_num}: done")
+
+                        # ── OUTPUT GUARDRAILS (stream) ───────────────────
+                        try:
+                            if self.output_guardrails:
+                                output_text = self._extract_text(response)
+                                ctx = GuardrailContext(
+                                    agent_name=self.name,
+                                    run_id=run_id,
+                                    output_text=output_text,
+                                    raw_message=response,
+                                )
+                                await run_guardrails(
+                                    self.output_guardrails, ctx,
+                                    guardrail_type=GuardrailType.OUTPUT,
+                                )
+                        except GuardrailTripwireError as e:
+                            logger.error(f"[{self.name}] Output guardrail tripwire (stream): {e.message}")
+                            yield CompletionChunk(
+                                message=AssistantMessage(
+                                    role="assistant",
+                                    content=[f"Response blocked: {e.message}"],
+                                    finish_reason="guardrail_tripped",
+                                ),
+                                metadata={"guardrail_tripped": True, "guardrail": e.guardrail_name},
+                            )
+                            return
                         break
 
                     # ACT — execute tools
@@ -295,9 +479,42 @@ class ReActAgent(BaseAgent):
                     with global_tracer.start_span("execute_tools_stream", {"count": len(response.tool_calls)}):
                         for tc_raw in response.tool_calls:
                             parsed = self._parse_tool_call(tc_raw)
-                            _, tool_msg = await self._execute_tool(parsed, step_num)
-                            self.memory.add_message(tool_msg)
-                            yield tool_msg
+
+                            # ── TOOL-CALL GUARDRAILS (stream) ────────────
+                            tool_blocked = False
+                            try:
+                                all_guardrails = self.input_guardrails + self.output_guardrails
+                                tool_guardrails = [
+                                    g for g in all_guardrails
+                                    if g.guardrail_type == GuardrailType.TOOL_CALL
+                                ]
+                                if tool_guardrails:
+                                    ctx = GuardrailContext(
+                                        agent_name=self.name,
+                                        run_id=run_id,
+                                        tool_name=parsed.name,
+                                        tool_arguments=parsed.arguments,
+                                    )
+                                    await run_guardrails(
+                                        tool_guardrails, ctx,
+                                        guardrail_type=GuardrailType.TOOL_CALL,
+                                    )
+                            except GuardrailTripwireError as e:
+                                logger.error(f"[{self.name}] Tool-call guardrail tripwire (stream): {e.message}")
+                                tool_blocked = True
+                                tool_msg = ToolExecutionResultMessage(
+                                    content=[{"type": "text", "text": json.dumps({"error": f"Tool blocked: {e.message}"})}],
+                                    tool_call_id=parsed.call_id,
+                                    name=parsed.name,
+                                    isError=True,
+                                )
+                                self.memory.add_message(tool_msg)
+                                yield tool_msg
+
+                            if not tool_blocked:
+                                _, tool_msg = await self._execute_tool(parsed, step_num)
+                                self.memory.add_message(tool_msg)
+                                yield tool_msg
 
     # ── State management ─────────────────────────────────────────────────────
 

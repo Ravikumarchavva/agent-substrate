@@ -34,3 +34,21 @@ class ToolExecutionError(ToolError):
 class AgentExecutionError(AgentError):
     """Raised when the agent fails to complete its run loop."""
     pass
+
+# ---------------------------------------------------------------------------
+# Guardrail errors
+# ---------------------------------------------------------------------------
+
+class GuardrailError(AgentError):
+    """Base class for guardrail-related errors."""
+    def __init__(self, message: str, guardrail_name: str = "", details: dict = None):
+        super().__init__(message, details)
+        self.guardrail_name = guardrail_name
+
+class GuardrailTripwireError(GuardrailError):
+    """Raised when a guardrail triggers a hard stop (tripwire).
+
+    This immediately halts the agent run loop and produces an
+    AgentRunResult with status = GUARDRAIL_TRIPPED.
+    """
+    pass

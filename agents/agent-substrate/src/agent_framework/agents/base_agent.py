@@ -15,6 +15,7 @@ from agent_framework.agents.agent_result import AgentRunResult
 from agent_framework.tools.base_tool import BaseTool
 from agent_framework.model_clients.base_client import BaseModelClient
 from agent_framework.memory.base_memory import BaseMemory
+from agent_framework.guardrails.base_guardrail import BaseGuardrail
 
 
 class BaseAgent(ABC):
@@ -29,6 +30,8 @@ class BaseAgent(ABC):
         tools: Optional[List[BaseTool]] = None,
         system_instructions: str = "You are a helpful assistant.",
         memory: Optional[BaseMemory] = None,
+        input_guardrails: Optional[List[BaseGuardrail]] = None,
+        output_guardrails: Optional[List[BaseGuardrail]] = None,
     ):
         self.name = name
         self.description = description
@@ -36,6 +39,8 @@ class BaseAgent(ABC):
         self.tools = tools or []
         self.system_instructions = system_instructions
         self.memory = memory
+        self.input_guardrails = input_guardrails or []
+        self.output_guardrails = output_guardrails or []
 
     # -- Core lifecycle -------------------------------------------------------
 

@@ -30,6 +30,7 @@ class RunStatus(str, Enum):
     MAX_ITERATIONS = "max_iterations_reached"   # Hit iteration ceiling
     ERROR = "error"                             # Unrecoverable error
     CANCELLED = "cancelled"                     # Externally cancelled
+    GUARDRAIL_TRIPPED = "guardrail_tripped"     # Hard-stopped by a guardrail
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +149,9 @@ class AgentRunResult(BaseModel):
 
     # Error (only when status == ERROR)
     error: Optional[str] = None
+
+    # Guardrail audit trail
+    guardrail_results: List[Any] = Field(default_factory=list)
 
     # Config snapshot
     max_iterations: int = 0

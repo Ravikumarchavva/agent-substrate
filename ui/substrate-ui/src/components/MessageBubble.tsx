@@ -67,12 +67,12 @@ export function MessageBubble({
       <div className="max-w-3xl mx-auto">
         <div className="flex gap-4">
           {/* Avatar */}
-          <div className="flex-shrink-0">
+          <div className="shrink-0">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
                 isUser
-                  ? "bg-gradient-to-br from-blue-500 to-purple-600"
-                  : "bg-gradient-to-br from-emerald-500 to-teal-600"
+                  ? "bg-linear-to-br from-blue-500 to-purple-600"
+                  : "bg-linear-to-br from-emerald-500 to-teal-600"
               }`}
             >
               {isUser ? "U" : "AI"}

@@ -395,7 +395,7 @@ export default function ChatPage() {
   const currentThread = threads.find((t) => t.id === currentThreadId);
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100">
+    <div className="flex h-screen bg-[var(--background)] text-[var(--foreground)]" suppressHydrationWarning>
       {/* Sidebar */}
       <div
         className={`${
@@ -531,7 +531,7 @@ export default function ChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-zinc-800 bg-zinc-950">
+        <div className="border-t border-[var(--border)] bg-[var(--background)]">
           <div className="max-w-3xl mx-auto px-4 py-4">
             <form onSubmit={sendMessage} className="relative">
               <textarea
@@ -545,14 +545,14 @@ export default function ChatPage() {
                   }
                 }}
                 rows={1}
-                className="w-full resize-none rounded-2xl bg-zinc-900 border border-zinc-800 px-4 py-3 pr-12 text-sm outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
+                className="w-full resize-none rounded-2xl bg-[var(--input-bg)] border border-[var(--border)] px-4 py-3 pr-12 text-sm outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
                 placeholder="Message AI assistant..."
                 disabled={loading}
               />
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="absolute right-2 bottom-2 p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="absolute right-2 bottom-2 p-2 rounded-lg bg-[var(--card)] hover:bg-[var(--card-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 aria-label="Send message"
               >
                 <Send className="w-4 h-4" />

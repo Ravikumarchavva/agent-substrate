@@ -2,8 +2,29 @@
 @import "katex/dist/katex.min.css";
 
 :root {
+  /* Light theme - ChatGPT style */
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #374151;
+  --border: #e5e7eb;
+  --card: #f9fafb;
+  --card-hover: #f3f4f6;
+  --input-bg: #ffffff;
+  --sidebar-bg: #f9fafb;
+  --message-user: #10a37f;
+  --message-assistant: #f9fafb;
+}
+
+.dark {
+  /* Dark theme - ChatGPT cement grey */
+  --background: #212121;
+  --foreground: #ececec;
+  --border: #3e3e3e;
+  --card: #2f2f2f;
+  --card-hover: #3a3a3a;
+  --input-bg: #40414f;
+  --sidebar-bg: #202123;
+  --message-user: #343541;
+  --message-assistant: #444654;
 }
 
 @theme inline {
@@ -13,17 +34,11 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 /* Custom scrollbar styles */
@@ -37,16 +52,35 @@ body {
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--border);
   border-radius: 3px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--card-hover);
 }
 
 /* Hide scrollbar for Firefox */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: #3f3f46 transparent;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Prose styles for both themes */
+.prose-light {
+  --tw-prose-body: #374151;
+  --tw-prose-headings: #111827;
+  --tw-prose-links: #10a37f;
+  --tw-prose-bold: #111827;
+  --tw-prose-code: #111827;
+  --tw-prose-pre-bg: #f3f4f6;
+}
+
+.prose-dark {
+  --tw-prose-body: #d1d5db;
+  --tw-prose-headings: #f9fafb;
+  --tw-prose-links: #10a37f;
+  --tw-prose-bold: #f9fafb;
+  --tw-prose-code: #f9fafb;
+  --tw-prose-pre-bg: #1f2937;
 }

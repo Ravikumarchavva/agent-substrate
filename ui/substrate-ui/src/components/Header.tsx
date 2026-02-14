@@ -1,7 +1,8 @@
 "use client";
 
-import { Menu, Settings, HelpCircle, LogOut } from "lucide-react";
+import { Menu, Settings, HelpCircle, LogOut, Sun, Moon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type Props = {
   onToggleSidebar?: () => void;
@@ -11,6 +12,7 @@ type Props = {
 export function Header({ onToggleSidebar, threadName }: Props) {
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -29,13 +31,13 @@ export function Header({ onToggleSidebar, threadName }: Props) {
   }, [showMenu]);
 
   return (
-    <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-10">
+    <header className="border-b border-[var(--border)] bg-[var(--background)] sticky top-0 z-10" suppressHydrationWarning>
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
-              className="p-2 hover:bg-zinc-800 rounded-lg lg:hidden"
+              className="p-2 hover:bg-[var(--card-hover)] rounded-lg lg:hidden"
               aria-label="Toggle sidebar"
             >
               <Menu className="w-5 h-5" />
@@ -46,33 +48,48 @@ export function Header({ onToggleSidebar, threadName }: Props) {
           </h1>
         </div>
 
-        {/* User Menu */}
-        <div className="relative" ref={menuRef}>
+        <div className="flex items-center gap-2">
+          {/* Theme Toggle */}
           <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-            aria-label="User menu"
+            onClick={toggleTheme}
+            className="p-2 hover:bg-[var(--card-hover)] rounded-lg transition-colors"
+            aria-label="Toggle theme"
           >
-            <Settings className="w-5 h-5" />
+            {theme === "dark" ? (
+              <Sun className="w-5 h-5" />
+            ) : (
+              <Moon className="w-5 h-5" />
+            )}
           </button>
 
-          {showMenu && (
-            <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg py-1">
-              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-zinc-800 transition-colors">
-                <Settings className="w-4 h-4" />
-                Settings
-              </button>
-              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-zinc-800 transition-colors">
-                <HelpCircle className="w-4 h-4" />
-                Help & FAQ
-              </button>
-              <div className="border-t border-zinc-800 my-1" />
-              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-zinc-800 transition-colors">
-                <LogOut className="w-4 h-4" />
-                Log out
-              </button>
-            </div>
-          )}
+          {/* User Menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="p-2 hover:bg-[var(--card-hover)] rounded-lg transition-colors"
+              aria-label="User menu"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+
+            {showMenu && (
+              <div className="absolute right-0 mt-2 w-56 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-lg py-1">
+                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-[var(--card-hover)] transition-colors">
+                  <Settings className="w-4 h-4" />
+                  Settings
+                </button>
+                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-[var(--card-hover)] transition-colors">
+                  <HelpCircle className="w-4 h-4" />
+                  Help & FAQ
+                </button>
+                <div className="border-t border-[var(--border)] my-1" />
+                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-[var(--card-hover)] transition-colors">
+                  <LogOut className="w-4 h-4" />
+                  Log out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

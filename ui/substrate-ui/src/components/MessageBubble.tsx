@@ -63,7 +63,7 @@ export function MessageBubble({
   };
 
   return (
-    <div className="group relative px-4 py-6 hover:bg-zinc-900/30 transition-colors">
+    <div className="group relative px-4 py-6 hover:bg-[var(--card-hover)] transition-colors">
       <div className="max-w-3xl mx-auto">
         <div className="flex gap-4">
           {/* Avatar */}
@@ -98,11 +98,11 @@ export function MessageBubble({
                 {toolCalls.map((tool) => (
                   <div
                     key={tool.id}
-                    className="border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden"
+                    className="border border-[var(--border)] rounded-lg bg-[var(--card)] overflow-hidden"
                   >
                     <button
                       onClick={() => toggleTool(tool.id)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-800/50 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--card-hover)] transition-colors"
                     >
                       {isToolExecuting ? (
                         <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
@@ -121,10 +121,10 @@ export function MessageBubble({
                     </button>
                     
                     {expandedTools[tool.id] && (
-                      <div className="px-3 py-2 border-t border-zinc-800 space-y-2">
+                      <div className="px-3 py-2 border-t border-[var(--border)] space-y-2">
                         <div>
                           <div className="text-xs font-semibold text-zinc-500 mb-1">Arguments</div>
-                          <pre className="text-xs text-zinc-400 bg-zinc-950 p-2 rounded overflow-x-auto">
+                          <pre className="text-xs text-zinc-400 bg-[var(--input-bg)] p-2 rounded overflow-x-auto">
                             {JSON.stringify(
                               typeof tool.arguments === 'string' 
                                 ? JSON.parse(tool.arguments) 
@@ -137,7 +137,7 @@ export function MessageBubble({
                         {tool.result && (
                           <div>
                             <div className="text-xs font-semibold text-zinc-500 mb-1">Result</div>
-                            <div className="text-xs text-zinc-400 bg-zinc-950 p-2 rounded max-h-40 overflow-y-auto">
+                            <div className="text-xs text-zinc-400 bg-[var(--input-bg)] p-2 rounded max-h-40 overflow-y-auto">
                               {tool.result}
                             </div>
                           </div>
@@ -178,7 +178,7 @@ export function MessageBubble({
               <div className="flex items-center gap-2 pt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={copyToClipboard}
-                  className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors"
+                  className="p-1.5 hover:bg-[var(--card)] rounded text-zinc-400 hover:text-zinc-200 transition-colors"
                   title="Copy to clipboard"
                 >
                   {copied ? (
@@ -190,7 +190,7 @@ export function MessageBubble({
                 {onRegenerate && (
                   <button
                     onClick={onRegenerate}
-                    className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors"
+                    className="p-1.5 hover:bg-[var(--card)] rounded text-zinc-400 hover:text-zinc-200 transition-colors"
                     title="Regenerate response"
                   >
                     <RotateCw className="w-4 h-4" />

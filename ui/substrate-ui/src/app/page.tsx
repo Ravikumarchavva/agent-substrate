@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { nanoid } from "nanoid";
 import { MessageBubble } from "@/components/MessageBubble";
+import { ToolApprovalCard } from "@/components/ToolApprovalCard";
+import { HumanInputCard } from "@/components/HumanInputCard";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { Thread, Message } from "@/types";
@@ -113,6 +115,22 @@ export default function ChatPage() {
     }
   };
 
+  // HITL: respond to a tool approval or human input request
+  async function respondToHITL(
+    requestId: string,
+    data: Record<string, unknown>
+  ) {
+    try {
+      await fetch(`/api/chat/respond/${requestId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+    } catch (err) {
+      console.error("Failed to send HITL response:", err);
+    }
+  }
+
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || loading) return;
@@ -209,6 +227,68 @@ export default function ChatPage() {
               
               try {
                 const data = JSON.parse(jsonStr);
+
+                // ── HITL: Tool Approval Request ──
+                if (data.type === "tool_approval_request") {
+                  const hitlId = nanoid();
+                  setMessages((m) => [
+                    ...m,
+                    {
+                      id: hitlId,
+                      role: "tool_approval" as const,
+                      content: "",
+                      timestamp: new Date(),
+                      metadata: {
+                        requestId: data.request_id,
+                        toolName: data.tool_name,
+                        arguments: data.arguments,
+                        context: data.context,
+                      },
+                    },
+                  ]);
+                  continue;
+                }
+
+                // ── HITL: Human Input Request ──
+                if (data.type === "human_input_request") {
+                  const hitlId = nanoid();
+                  setMessages((m) => [
+                    ...m,
+                    {
+                      id: hitlId,
+                      role: "human_input" as const,
+                      content: "",
+                      timestamp: new Date(),
+                      metadata: {
+                        requestId: data.request_id,
+                        question: data.question,
+                        context: data.context,
+                        options: data.options,
+                        allowFreeform: data.allow_freeform,
+                      },
+                    },
+                  ]);
+                  continue;
+                }
+
+                // ── Tool result ──
+                if (data.type === "tool_result") {
+                  const trId = nanoid();
+                  setMessages((m) => [
+                    ...m,
+                    {
+                      id: trId,
+                      role: "tool_result" as const,
+                      content: data.content || "",
+                      timestamp: new Date(),
+                      metadata: {
+                        toolName: data.tool_name,
+                        isError: data.is_error,
+                      },
+                    },
+                  ]);
+                  continue;
+                }
 
                 if (data.type === 'text_delta') {
                   // Append incremental text to the assistant message
@@ -358,17 +438,78 @@ export default function ChatPage() {
             </div>
           ) : (
             <div>
-              {messages.map((m) => (
-                <MessageBubble
-                  key={m.id}
-                  role={m.role}
-                  content={m.content}
-                  reasoning={m.reasoning}
-                  timestamp={m.timestamp}
-                  toolCalls={m.toolCalls}
-                  isToolExecuting={m.isToolExecuting}
-                />
-              ))}
+              {messages.map((m) => {
+                if (m.role === "tool_approval" && m.metadata) {
+                  return (
+                    <ToolApprovalCard
+                      key={m.id}
+                      requestId={m.metadata.requestId as string}
+                      toolName={m.metadata.toolName as string}
+                      arguments={m.metadata.arguments as Record<string, unknown>}
+                      context={m.metadata.context as string | undefined}
+                      onRespond={respondToHITL}
+                    />
+                  );
+                }
+
+                if (m.role === "human_input" && m.metadata) {
+                  return (
+                    <HumanInputCard
+                      key={m.id}
+                      requestId={m.metadata.requestId as string}
+                      question={m.metadata.question as string}
+                      context={m.metadata.context as string | undefined}
+                      options={
+                        (m.metadata.options as
+                          | { key: string; label: string; description?: string }[]
+                          | undefined) || []
+                      }
+                      allowFreeform={m.metadata.allowFreeform as boolean | undefined}
+                      onRespond={respondToHITL}
+                    />
+                  );
+                }
+
+                if (m.role === "tool_result" && m.metadata) {
+                  const isErr = m.metadata.isError as boolean | undefined;
+                  return (
+                    <div
+                      key={m.id}
+                      className={`px-4 py-3 my-2 max-w-3xl mx-auto text-xs rounded-md border ${
+                        isErr
+                          ? "border-red-700 bg-red-950/40 text-red-300"
+                          : "border-zinc-700 bg-zinc-900 text-zinc-400"
+                      }`}
+                    >
+                      <span className="font-semibold">
+                        🔧 {(m.metadata.toolName as string) || "tool"}
+                      </span>
+                      {m.content && (
+                        <pre className="mt-1 whitespace-pre-wrap text-[11px]">
+                          {m.content}
+                        </pre>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Only render MessageBubble for user/assistant messages
+                if (m.role === "user" || m.role === "assistant") {
+                  return (
+                    <MessageBubble
+                      key={m.id}
+                      role={m.role}
+                      content={m.content}
+                      reasoning={m.reasoning}
+                      timestamp={m.timestamp}
+                      toolCalls={m.toolCalls}
+                      isToolExecuting={m.isToolExecuting}
+                    />
+                  );
+                }
+
+                return null;
+              })}
               {loading && (
                 <div className="px-4 py-6">
                   <div className="max-w-3xl mx-auto flex gap-4">

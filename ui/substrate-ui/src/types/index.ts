@@ -7,12 +7,13 @@ export type ToolCall = {
 
 export type Message = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool_approval" | "human_input" | "tool_result";
   content: string;
   reasoning?: string;
   timestamp: Date;
   toolCalls?: ToolCall[];
   isToolExecuting?: boolean;
+  metadata?: Record<string, unknown>;
 };
 
 export type Thread = {

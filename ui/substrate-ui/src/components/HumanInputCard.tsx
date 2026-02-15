@@ -54,7 +54,7 @@ export function HumanInputCard({
         {/* Header */}
         <div className="mb-2 flex items-center gap-2">
           <span className="rounded bg-blue-600/20 px-2 py-0.5 text-xs font-semibold text-blue-400">
-            ≡ƒÆ¼ Input Needed
+            🤔 Input Needed
           </span>
         </div>
 
@@ -67,7 +67,7 @@ export function HumanInputCard({
         {/* Answered state */}
         {answered ? (
           <div className="inline-block rounded bg-blue-600/20 px-2 py-1 text-xs font-medium text-blue-400">
-            Γ£ô Answered: {selectedAnswer}
+            ✅ Answered: {selectedAnswer}
           </div>
         ) : (
           <div className="space-y-2">
@@ -84,7 +84,7 @@ export function HumanInputCard({
                   </span>
                   {opt.description && (
                     <span className="ml-1 text-zinc-400">
-                      ΓÇö {opt.description}
+                      — {opt.description}
                     </span>
                   )}
                 </button>
@@ -103,7 +103,7 @@ export function HumanInputCard({
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleFreeformSubmit();
                       }}
-                      placeholder="Type your answerΓÇª"
+                      placeholder="Type your answer..."
                       className="flex-1 rounded bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-blue-500"
                       autoFocus
                     />
@@ -120,7 +120,7 @@ export function HumanInputCard({
                     onClick={() => setShowFreeform(true)}
                     className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
-                    Γ£Ä Other ΓÇö type your own answer
+                    ✏️ Other — type your own answer
                   </button>
                 )}
               </div>

@@ -9,7 +9,7 @@ export async function POST(
 
   try {
     const upstream = await fetch(
-      `http://localhost:8000/chat/respond/${requestId}`,
+      `http://localhost:8001/chat/respond/${requestId}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

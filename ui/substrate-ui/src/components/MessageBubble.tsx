@@ -7,6 +7,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Copy, Check, RotateCw, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { ToolCall } from "@/types";
+import { McpAppRenderer } from "@/components/McpAppRenderer";
 import "katex/dist/katex.min.css";
 
 type Props = {
@@ -17,6 +18,8 @@ type Props = {
   toolCalls?: ToolCall[];
   isToolExecuting?: boolean;
   onRegenerate?: () => void;
+  /** Called when an MCP App sends a context update (submitResult / ui/update-model-context) */
+  onMcpAppResult?: (toolName: string, result: unknown) => void;
 };
 
 export function MessageBubble({ 
@@ -26,7 +29,8 @@ export function MessageBubble({
   timestamp, 
   toolCalls,
   isToolExecuting,
-  onRegenerate 
+  onRegenerate,
+  onMcpAppResult 
 }: Props) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
@@ -95,57 +99,81 @@ export function MessageBubble({
             {/* Tool Calls - Show during execution */}
             {!isUser && toolCalls && toolCalls.length > 0 && (
               <div className="space-y-2">
-                {toolCalls.map((tool) => (
-                  <div
-                    key={tool.id}
-                    className="border border-[var(--border)] rounded-lg bg-[var(--card)] overflow-hidden"
-                  >
-                    <button
-                      onClick={() => toggleTool(tool.id)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--card-hover)] transition-colors"
-                    >
-                      {isToolExecuting ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
-                      ) : expandedTools[tool.id] ? (
-                        <ChevronDown className="w-4 h-4 text-zinc-400" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-zinc-400" />
-                      )}
-                      <span className="text-lg">{getToolIcon(tool.name)}</span>
-                      <span className="text-sm font-medium text-zinc-300">
-                        {tool.name.replace(/_/g, ' ')}
-                      </span>
-                      {isToolExecuting && (
-                        <span className="text-xs text-zinc-500 ml-auto">Running...</span>
-                      )}
-                    </button>
-                    
-                    {expandedTools[tool.id] && (
-                      <div className="px-3 py-2 border-t border-[var(--border)] space-y-2">
-                        <div>
-                          <div className="text-xs font-semibold text-zinc-500 mb-1">Arguments</div>
-                          <pre className="text-xs text-zinc-400 bg-[var(--input-bg)] p-2 rounded overflow-x-auto">
-                            {JSON.stringify(
-                              typeof tool.arguments === 'string' 
-                                ? JSON.parse(tool.arguments) 
-                                : tool.arguments,
-                              null,
-                              2
-                            )}
-                          </pre>
-                        </div>
-                        {tool.result && (
-                          <div>
-                            <div className="text-xs font-semibold text-zinc-500 mb-1">Result</div>
-                            <div className="text-xs text-zinc-400 bg-[var(--input-bg)] p-2 rounded max-h-40 overflow-y-auto">
-                              {tool.result}
+                {toolCalls.map((tool) => {
+                  const hasApp = tool._meta?.ui?.httpUrl;
+                  
+                  return (
+                    <div key={tool.id}>
+                      <div
+                        className="border border-[var(--border)] rounded-lg bg-[var(--card)] overflow-hidden"
+                      >
+                        <button
+                          onClick={() => toggleTool(tool.id)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--card-hover)] transition-colors"
+                        >
+                          {isToolExecuting ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
+                          ) : expandedTools[tool.id] ? (
+                            <ChevronDown className="w-4 h-4 text-zinc-400" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-zinc-400" />
+                          )}
+                          <span className="text-lg">{getToolIcon(tool.name)}</span>
+                          <span className="text-sm font-medium text-zinc-300">
+                            {tool.name.replace(/_/g, ' ')}
+                          </span>
+                          {hasApp && (
+                            <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-400 border border-emerald-800">
+                              Interactive
+                            </span>
+                          )}
+                          {isToolExecuting && (
+                            <span className="text-xs text-zinc-500 ml-auto">Running...</span>
+                          )}
+                        </button>
+                        
+                        {expandedTools[tool.id] && (
+                          <div className="px-3 py-2 border-t border-[var(--border)] space-y-2">
+                            <div>
+                              <div className="text-xs font-semibold text-zinc-500 mb-1">Arguments</div>
+                              <pre className="text-xs text-zinc-400 bg-[var(--input-bg)] p-2 rounded overflow-x-auto">
+                                {JSON.stringify(
+                                  typeof tool.arguments === 'string' 
+                                    ? JSON.parse(tool.arguments) 
+                                    : tool.arguments,
+                                  null,
+                                  2
+                                )}
+                              </pre>
                             </div>
+                            {tool.result && (
+                              <div>
+                                <div className="text-xs font-semibold text-zinc-500 mb-1">Result</div>
+                                <div className="text-xs text-zinc-400 bg-[var(--input-bg)] p-2 rounded max-h-40 overflow-y-auto">
+                                  {tool.result}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {/* MCP App interactive UI */}
+                      {hasApp && (
+                        <McpAppRenderer
+                          httpUrl={tool._meta!.ui!.httpUrl}
+                          toolName={tool.name}
+                          toolArguments={
+                            typeof tool.arguments === 'string'
+                              ? JSON.parse(tool.arguments)
+                              : tool.arguments
+                          }
+                          onResult={(result) => onMcpAppResult?.(tool.name, result)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 

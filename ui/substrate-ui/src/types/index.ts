@@ -1,8 +1,16 @@
+export type ToolCallMeta = {
+  ui?: {
+    resourceUri: string;
+    httpUrl: string;
+  };
+};
+
 export type ToolCall = {
   id: string;
   name: string;
-  arguments: string;
+  arguments: string | Record<string, any>;
   result?: string;
+  _meta?: ToolCallMeta;
 };
 
 export type Message = {
@@ -26,11 +34,22 @@ export type Thread = {
 
 export type BackendMessage = {
   id: string;
-  type: string; // "user_message" | "assistant_message"
+  type: string; // "user_message" | "assistant_message" | "tool_result"
   name?: string;
   input?: string;
   output?: string | string[];
   created_at: string;
+  generation?: {
+    finish_reason?: string;
+    tool_calls?: Array<{
+      id: string;
+      name: string;
+      arguments: string | Record<string, any>;
+      _meta?: ToolCallMeta;
+    }>;
+  };
+  metadata?: Record<string, any>;
+  is_error?: boolean;
 };
 
 export type User = {
@@ -38,4 +57,17 @@ export type User = {
   name: string;
   email: string;
   avatar?: string;
+};
+
+export type Element = {
+  id: string;
+  thread_id?: string;
+  type?: string;
+  name: string;
+  mime?: string;
+  size?: string;
+  display?: string;
+  url?: string;
+  for_id?: string;
+  props?: Record<string, unknown>;
 };

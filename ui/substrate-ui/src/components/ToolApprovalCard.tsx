@@ -55,10 +55,10 @@ export function ToolApprovalCard({
   }
 
   const statusBadge = {
-    approved: { label: "Γ£ô Approved", cls: "bg-green-600/20 text-green-400" },
-    denied: { label: "Γ£ù Denied", cls: "bg-red-600/20 text-red-400" },
+    approved: { label: "✅ Approved", cls: "bg-green-600/20 text-green-400" },
+    denied: { label: "❌ Denied", cls: "bg-red-600/20 text-red-400" },
     modified: {
-      label: "Γƒ│ Modified & Approved",
+      label: "✏️ Modified & Approved",
       cls: "bg-blue-600/20 text-blue-400",
     },
     pending: null,
@@ -70,7 +70,7 @@ export function ToolApprovalCard({
         {/* Header */}
         <div className="mb-2 flex items-center gap-2">
           <span className="rounded bg-amber-600/20 px-2 py-0.5 text-xs font-semibold text-amber-400">
-            ΓÜí Tool Approval
+            🔐 Tool Approval
           </span>
           <span className="font-mono text-xs text-zinc-400">{toolName}</span>
         </div>
@@ -137,27 +137,27 @@ export function ToolApprovalCard({
                 onClick={handleApprove}
                 className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500 transition-colors"
               >
-                Γ£ô Approve
+                ✅ Approve
               </button>
               <button
                 onClick={handleDeny}
                 className="rounded bg-red-600/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500 transition-colors"
               >
-                Γ£ù Deny
+                ❌ Deny
               </button>
               {showModify ? (
                 <button
                   onClick={handleModifySubmit}
                   className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"
                 >
-                  Γƒ│ Save & Approve
+                  💾 Save & Approve
                 </button>
               ) : (
                 <button
                   onClick={() => setShowModify(true)}
                   className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-600 transition-colors"
                 >
-                  Γ£Ä Modify
+                  ✏️ Modify
                 </button>
               )}
             </div>

@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
+import { McpAppRenderer } from "@/components/McpAppRenderer";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { Thread, Message } from "@/types";
@@ -128,6 +129,16 @@ export default function ChatPage() {
       });
     } catch (err) {
       console.error("Failed to send HITL response:", err);
+    }
+  }
+
+  // MCP App: handle context updates from interactive widgets
+  async function handleMcpAppResult(toolName: string, result: unknown) {
+    if (!currentThreadId) return;
+    try {
+      await api.updateMcpContext(currentThreadId, toolName, result);
+    } catch (err) {
+      console.error("Failed to update MCP context:", err);
     }
   }
 
@@ -273,6 +284,34 @@ export default function ChatPage() {
 
                 // ── Tool result ──
                 if (data.type === "tool_result") {
+                  // For MCP App tools with app_data, merge the data into
+                  // the tool_call arguments so the iframe receives it
+                  if (data.has_app && data.app_data) {
+                    setMessages((m) =>
+                      m.map((msg) => {
+                        if (msg.role !== "assistant" || !msg.toolCalls) return msg;
+                        const updatedCalls = msg.toolCalls.map((tc) => {
+                          // Match by tool_call_id or tool name
+                          const matchById = data.tool_call_id && tc.id === data.tool_call_id;
+                          const matchByName = tc.name === data.tool_name;
+                          if (!matchById && !matchByName) return tc;
+                          const existingArgs =
+                            typeof tc.arguments === "string"
+                              ? JSON.parse(tc.arguments)
+                              : tc.arguments;
+                          return {
+                            ...tc,
+                            arguments: { ...existingArgs, ...data.app_data },
+                            result: data.content || tc.result,
+                          };
+                        });
+                        return { ...msg, toolCalls: updatedCalls };
+                      })
+                    );
+                    continue;
+                  }
+                  // Skip rendering if an MCP App UI is already showing this tool's output
+                  if (data.has_app) continue;
                   const trId = nanoid();
                   setMessages((m) => [
                     ...m,
@@ -311,17 +350,20 @@ export default function ChatPage() {
                     )
                   );
                 } else if (data.type === 'completion') {
-                  // Final message received - update with complete content
+                  // Completion event — may be intermediate (with tool_calls)
+                  // or final (text response, no tool_calls).
                   const finalContent = Array.isArray(data.content) 
                     ? data.content.join("") 
                     : String(data.content || "");
+                  const hasToolCalls = !!data.has_tool_calls;
                   
                   // Parse tool calls if present
                   const toolCalls = data.tool_calls?.map((tc: any) => ({
                     id: tc.id,
                     name: tc.name,
                     arguments: tc.arguments,
-                    result: "Completed" // You can enhance this with actual results
+                    result: "Completed",
+                    _meta: tc._meta || undefined,
                   })) || [];
                   
                   setMessages((m) =>
@@ -329,17 +371,22 @@ export default function ChatPage() {
                       msg.id === assistantId
                         ? { 
                             ...msg, 
-                            content: finalContent, 
+                            // Only replace content if there IS content (avoid clearing on tool-call-only completions)
+                            content: finalContent || msg.content, 
                             role: data.role,
                             toolCalls: toolCalls.length > 0 ? toolCalls : msg.toolCalls,
-                            isToolExecuting: false
+                            // Keep executing flag while tools are running
+                            isToolExecuting: hasToolCalls
                           }
                         : msg
                     )
                   );
-                  setLoading(false);
-                  // Reload threads to update message count
-                  loadThreads();
+
+                  // Only stop loading on the final completion (no tool calls)
+                  if (!hasToolCalls) {
+                    setLoading(false);
+                    loadThreads();
+                  }
                 } else if (data.type === 'tool_call') {
                   // Tool is being called - show it in UI
                   const toolCall = {
@@ -437,36 +484,38 @@ export default function ChatPage() {
               </div>
             </div>
           ) : (
-            <div>
+            <div className="space-y-2">
               {messages.map((m) => {
                 if (m.role === "tool_approval" && m.metadata) {
                   return (
-                    <ToolApprovalCard
-                      key={m.id}
-                      requestId={m.metadata.requestId as string}
-                      toolName={m.metadata.toolName as string}
-                      arguments={m.metadata.arguments as Record<string, unknown>}
-                      context={m.metadata.context as string | undefined}
-                      onRespond={respondToHITL}
-                    />
+                    <div key={m.id} className="px-4 py-3">
+                      <ToolApprovalCard
+                        requestId={m.metadata.requestId as string}
+                        toolName={m.metadata.toolName as string}
+                        arguments={m.metadata.arguments as Record<string, unknown>}
+                        context={m.metadata.context as string | undefined}
+                        onRespond={respondToHITL}
+                      />
+                    </div>
                   );
                 }
 
                 if (m.role === "human_input" && m.metadata) {
                   return (
-                    <HumanInputCard
-                      key={m.id}
-                      requestId={m.metadata.requestId as string}
-                      question={m.metadata.question as string}
-                      context={m.metadata.context as string | undefined}
-                      options={
-                        (m.metadata.options as
-                          | { key: string; label: string; description?: string }[]
-                          | undefined) || []
-                      }
-                      allowFreeform={m.metadata.allowFreeform as boolean | undefined}
-                      onRespond={respondToHITL}
-                    />
+                    <div key={m.id} className="px-4 py-3">
+                      <HumanInputCard
+                        requestId={m.metadata.requestId as string}
+                        question={m.metadata.question as string}
+                        context={m.metadata.context as string | undefined}
+                        options={
+                          (m.metadata.options as
+                            | { key: string; label: string; description?: string }[]
+                            | undefined) || []
+                        }
+                        allowFreeform={m.metadata.allowFreeform as boolean | undefined}
+                        onRespond={respondToHITL}
+                      />
+                    </div>
                   );
                 }
 
@@ -504,6 +553,7 @@ export default function ChatPage() {
                       timestamp={m.timestamp}
                       toolCalls={m.toolCalls}
                       isToolExecuting={m.isToolExecuting}
+                      onMcpAppResult={handleMcpAppResult}
                     />
                   );
                 }

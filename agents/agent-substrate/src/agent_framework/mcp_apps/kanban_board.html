@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kanban Board – MCP App</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #18181b;
+    color: #e4e4e7;
+    padding: 16px;
+  }
+  .header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .header h2 { font-size: 14px; font-weight: 600; }
+  .header .badge {
+    font-size: 10px; background: #1e3a5f; color: #60a5fa;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .board-title {
+    font-size: 12px; color: #a1a1aa; margin-bottom: 12px;
+  }
+  .board {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .column {
+    min-width: 200px;
+    max-width: 260px;
+    flex: 1;
+    background: #09090b;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+  }
+  .column-header {
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #3f3f46;
+  }
+  .column-header .col-count {
+    font-size: 10px; font-weight: 400; color: #71717a;
+    background: #27272a; padding: 1px 6px; border-radius: 10px;
+  }
+  .column-header .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 6px; display: inline-block;
+  }
+  .column-body {
+    padding: 8px;
+    flex: 1;
+    min-height: 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .column-body.drag-over {
+    background: rgba(96, 165, 250, 0.04);
+    border-radius: 0 0 8px 8px;
+  }
+  .task-card {
+    background: #27272a;
+    border: 1px solid #3f3f46;
+    border-radius: 6px;
+    padding: 10px;
+    cursor: grab;
+    transition: box-shadow 0.15s, transform 0.15s, opacity 0.15s;
+    user-select: none;
+  }
+  .task-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transform: translateY(-1px);
+  }
+  .task-card.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+  }
+  .task-card .task-title {
+    font-size: 12px; font-weight: 500; margin-bottom: 4px;
+    line-height: 1.4;
+  }
+  .task-card .task-desc {
+    font-size: 11px; color: #71717a; line-height: 1.4;
+    margin-bottom: 6px;
+  }
+  .task-card .task-footer {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    font-weight: 500;
+  }
+  .tag-priority-high { background: #450a0a; color: #fca5a5; }
+  .tag-priority-medium { background: #451a03; color: #fdba74; }
+  .tag-priority-low { background: #052e16; color: #86efac; }
+  .tag-default { background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; }
+  .task-card .assignee {
+    font-size: 9px; color: #a78bfa; margin-left: auto;
+  }
+  .stats-bar {
+    display: flex; gap: 12px; margin-top: 12px; font-size: 11px; color: #71717a;
+  }
+  .no-data {
+    display: flex; align-items: center; justify-content: center;
+    height: 80px; color: #71717a; font-size: 14px;
+  }
+  .empty-col {
+    display: flex; align-items: center; justify-content: center;
+    height: 40px; color: #3f3f46; font-size: 11px;
+    border: 1px dashed #3f3f46; border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h2>📋 Kanban Board</h2>
+    <span class="badge">Interactive</span>
+  </div>
+  <div class="board-title" id="board-title"></div>
+  <div class="board" id="board"></div>
+  <div class="stats-bar" id="stats"></div>
+
+<script>
+(function() {
+  let rpcId = 0;
+  function sendRpc(method, params) {
+    const id = ++rpcId;
+    window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+    return id;
+  }
+
+  sendRpc("ready");
+  const ctxId = sendRpc("getContext");
+
+  const defaultColumnColors = ["#60a5fa", "#fbbf24", "#a78bfa", "#34d399", "#f472b6", "#fb923c"];
+  let boardData = { columns: [], tasks: [] };
+
+  window.addEventListener("message", function(e) {
+    const msg = e.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id === ctxId && msg.result) {
+      const args = msg.result.arguments || {};
+      boardData = parseBoard(args);
+      document.getElementById("board-title").textContent = args.title || "";
+      render();
+      sendRpc("resize", { height: document.body.scrollHeight + 24 });
+    }
+  });
+
+  function parseBoard(args) {
+    let columns = args.columns || [];
+    let tasks = args.tasks || args.items || args.cards || [];
+
+    // If columns is strings, convert to objects
+    if (columns.length && typeof columns[0] === "string") {
+      columns = columns.map((name, i) => ({
+        id: name.toLowerCase().replace(/\s+/g, "_"),
+        name: name,
+        color: defaultColumnColors[i % defaultColumnColors.length]
+      }));
+    } else {
+      columns = columns.map((c, i) => ({
+        id: c.id || c.name?.toLowerCase().replace(/\s+/g, "_") || "col_" + i,
+        name: c.name || c.title || "Column " + (i+1),
+        color: c.color || defaultColumnColors[i % defaultColumnColors.length]
+      }));
+    }
+
+    // If no columns, derive from tasks
+    if (!columns.length && tasks.length) {
+      const colSet = new Set();
+      tasks.forEach(t => colSet.add(t.column || t.status || "Backlog"));
+      columns = Array.from(colSet).map((name, i) => ({
+        id: name.toLowerCase().replace(/\s+/g, "_"),
+        name: name,
+        color: defaultColumnColors[i % defaultColumnColors.length]
+      }));
+    }
+
+    // Default board
+    if (!columns.length) {
+      columns = [
+        { id: "todo", name: "To Do", color: "#60a5fa" },
+        { id: "in_progress", name: "In Progress", color: "#fbbf24" },
+        { id: "done", name: "Done", color: "#34d399" }
+      ];
+    }
+
+    // Normalize tasks
+    tasks = tasks.map((t, i) => ({
+      id: t.id || "task_" + i,
+      title: t.title || t.name || "Task " + (i+1),
+      description: t.description || t.desc || "",
+      column: normalizeColId(t.column || t.status || columns[0].id, columns),
+      priority: t.priority || "",
+      tags: t.tags || t.labels || [],
+      assignee: t.assignee || t.assigned_to || ""
+    }));
+
+    return { columns, tasks };
+  }
+
+  function normalizeColId(val, columns) {
+    // match by id or name
+    const lower = val.toLowerCase().replace(/\s+/g, "_");
+    const match = columns.find(c => c.id === lower || c.name.toLowerCase().replace(/\s+/g, "_") === lower);
+    return match ? match.id : columns[0]?.id || lower;
+  }
+
+  let draggedTaskId = null;
+
+  function render() {
+    const board = document.getElementById("board");
+    if (!boardData.columns.length) {
+      board.innerHTML = '<div class="no-data">No board data</div>';
+      return;
+    }
+
+    board.innerHTML = boardData.columns.map(col => {
+      const colTasks = boardData.tasks.filter(t => t.column === col.id);
+      return `
+        <div class="column" data-col="${col.id}">
+          <div class="column-header">
+            <div>
+              <span class="dot" style="background:${col.color}"></span>
+              ${col.name}
+            </div>
+            <span class="col-count">${colTasks.length}</span>
+          </div>
+          <div class="column-body" data-col="${col.id}">
+            ${colTasks.length ? colTasks.map(t => renderTask(t, col.color)).join("") :
+              '<div class="empty-col">Drop tasks here</div>'}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // Drag & drop events
+    board.querySelectorAll(".task-card").forEach(card => {
+      card.addEventListener("dragstart", function(e) {
+        draggedTaskId = card.dataset.taskId;
+        card.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+      });
+      card.addEventListener("dragend", function() {
+        card.classList.remove("dragging");
+        draggedTaskId = null;
+        document.querySelectorAll(".column-body").forEach(cb => cb.classList.remove("drag-over"));
+      });
+    });
+
+    board.querySelectorAll(".column-body").forEach(body => {
+      body.addEventListener("dragover", function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        body.classList.add("drag-over");
+      });
+      body.addEventListener("dragleave", function() {
+        body.classList.remove("drag-over");
+      });
+      body.addEventListener("drop", function(e) {
+        e.preventDefault();
+        body.classList.remove("drag-over");
+        if (draggedTaskId) {
+          const targetCol = body.dataset.col;
+          const task = boardData.tasks.find(t => t.id === draggedTaskId);
+          if (task && task.column !== targetCol) {
+            const fromColumn = task.column;
+            task.column = targetCol;
+            render();
+            renderStats();
+            // Send full board state to host (per MCP Apps spec ui/update-model-context)
+            // This overwrites previous context so the LLM always sees latest state
+            sendRpc("submitResult", {
+              result: getBoardState(),
+              lastAction: {
+                action: "move_task",
+                taskId: task.id,
+                taskTitle: task.title,
+                fromColumn: fromColumn,
+                toColumn: targetCol
+              }
+            });
+            sendRpc("resize", { height: document.body.scrollHeight + 24 });
+          }
+        }
+      });
+    });
+
+    renderStats();
+  }
+
+  function renderTask(task, colColor) {
+    const priorityClass = task.priority ?
+      "tag-priority-" + task.priority.toLowerCase() : "";
+    const tagsHtml = (Array.isArray(task.tags) ? task.tags : []).map(t =>
+      `<span class="tag tag-default">${t}</span>`
+    ).join("");
+
+    return `
+      <div class="task-card" draggable="true" data-task-id="${task.id}">
+        <div class="task-title">${task.title}</div>
+        ${task.description ? '<div class="task-desc">' + task.description + '</div>' : ''}
+        <div class="task-footer">
+          ${task.priority ? '<span class="tag ' + priorityClass + '">' + task.priority + '</span>' : ''}
+          ${tagsHtml}
+          ${task.assignee ? '<span class="assignee">@' + task.assignee + '</span>' : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStats() {
+    const total = boardData.tasks.length;
+    const perCol = boardData.columns.map(c => {
+      const count = boardData.tasks.filter(t => t.column === c.id).length;
+      return c.name + ": " + count;
+    }).join(" · ");
+    document.getElementById("stats").innerHTML = `<span>${total} tasks</span><span>${perCol}</span>`;
+  }
+
+  /** Build a snapshot of the full board state for the model context. */
+  function getBoardState() {
+    const state = {};
+    boardData.columns.forEach(col => {
+      state[col.name] = boardData.tasks
+        .filter(t => t.column === col.id)
+        .map(t => ({
+          id: t.id,
+          title: t.title,
+          priority: t.priority || undefined,
+          assignee: t.assignee || undefined,
+        }));
+    });
+    return state;
+  }
+})();
+</script>
+</body>
+</html>

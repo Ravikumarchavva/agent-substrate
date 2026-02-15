@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Color Palette – MCP App</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #18181b;
+    color: #e4e4e7;
+    padding: 16px;
+  }
+  .header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .header h2 { font-size: 14px; font-weight: 600; }
+  .header .badge {
+    font-size: 10px; background: #4a1942; color: #f472b6;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .palette-name {
+    font-size: 12px; color: #a1a1aa; margin-bottom: 12px;
+  }
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .color-card {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #3f3f46;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .color-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .color-card.selected {
+    border-color: #f4f4f5;
+    box-shadow: 0 0 0 2px rgba(244,244,245,0.3);
+  }
+  .color-swatch {
+    height: 72px;
+    position: relative;
+  }
+  .color-swatch .copy-hint {
+    position: absolute; bottom: 4px; right: 4px;
+    font-size: 9px; background: rgba(0,0,0,0.5); color: #fff;
+    padding: 2px 5px; border-radius: 3px; opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .color-card:hover .copy-hint { opacity: 1; }
+  .color-info {
+    padding: 8px;
+    background: #27272a;
+  }
+  .color-info .hex {
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px; font-weight: 600; color: #e4e4e7;
+  }
+  .color-info .name {
+    font-size: 10px; color: #71717a; margin-top: 2px;
+  }
+  .detail-panel {
+    display: none;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    background: #09090b;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .detail-panel.active { display: block; }
+  .detail-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  }
+  .detail-swatch {
+    width: 48px; height: 48px; border-radius: 8px;
+    border: 1px solid #3f3f46;
+  }
+  .detail-title { font-size: 16px; font-weight: 600; }
+  .detail-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .detail-item {
+    background: #27272a; border-radius: 6px; padding: 8px;
+    border: 1px solid #3f3f46;
+  }
+  .detail-item .label {
+    font-size: 10px; color: #71717a; text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .detail-item .value {
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px; color: #e4e4e7; cursor: pointer;
+  }
+  .detail-item .value:hover { color: #f472b6; }
+  .detail-item .value.copied { color: #34d399; }
+  .contrast-row {
+    display: flex; gap: 8px; margin-top: 12px;
+  }
+  .contrast-chip {
+    flex: 1; padding: 6px 10px; border-radius: 6px;
+    font-size: 12px; font-weight: 600; text-align: center;
+    border: 1px solid #3f3f46;
+  }
+  .harmony-section {
+    margin-top: 16px;
+  }
+  .harmony-section h3 {
+    font-size: 12px; color: #71717a; margin-bottom: 8px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .harmony-row {
+    display: flex; gap: 4px; margin-bottom: 8px;
+  }
+  .harmony-swatch {
+    flex: 1; height: 32px; border-radius: 4px; cursor: pointer;
+    border: 1px solid transparent; transition: border-color 0.15s;
+    position: relative;
+  }
+  .harmony-swatch:hover { border-color: #f4f4f5; }
+  .harmony-swatch .tip {
+    position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: #71717a; white-space: nowrap; display: none;
+  }
+  .harmony-swatch:hover .tip { display: block; }
+  .no-data {
+    display: flex; align-items: center; justify-content: center;
+    height: 80px; color: #71717a; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h2>🎨 Color Palette</h2>
+    <span class="badge">Interactive</span>
+  </div>
+  <div class="palette-name" id="palette-name"></div>
+  <div class="palette-grid" id="palette"></div>
+  <div class="detail-panel" id="detail"></div>
+  <div class="harmony-section" id="harmonies"></div>
+
+<script>
+(function() {
+  let rpcId = 0;
+  function sendRpc(method, params) {
+    const id = ++rpcId;
+    window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+    return id;
+  }
+
+  sendRpc("ready");
+  const ctxId = sendRpc("getContext");
+
+  let colors = [];
+  let selectedIdx = -1;
+
+  window.addEventListener("message", function(e) {
+    const msg = e.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id === ctxId && msg.result) {
+      const args = msg.result.arguments || {};
+      colors = parseColors(args);
+      document.getElementById("palette-name").textContent = args.title || args.theme || "Custom Palette";
+      render();
+      sendRpc("resize", { height: document.body.scrollHeight + 24 });
+    }
+  });
+
+  function parseColors(args) {
+    // Accept: {colors: ["#hex",...]} or {colors: [{hex, name},...]} or {palette: [...]}
+    let raw = args.colors || args.palette || args.data || [];
+    if (!Array.isArray(raw)) {
+      if (typeof raw === "string") raw = raw.split(/[,\s]+/).filter(Boolean);
+      else return [];
+    }
+    return raw.map(c => {
+      if (typeof c === "string") return { hex: normalizeHex(c), name: "" };
+      return { hex: normalizeHex(c.hex || c.color || c.value || "#888"), name: c.name || c.label || "" };
+    });
+  }
+
+  function normalizeHex(h) {
+    h = h.trim();
+    if (!h.startsWith("#")) h = "#" + h;
+    if (h.length === 4) h = "#" + h[1]+h[1] + h[2]+h[2] + h[3]+h[3];
+    return h.toUpperCase();
+  }
+
+  function render() {
+    const grid = document.getElementById("palette");
+    if (!colors.length) {
+      grid.innerHTML = '<div class="no-data">No colors provided</div>';
+      return;
+    }
+    grid.innerHTML = colors.map((c, i) => `
+      <div class="color-card${i === selectedIdx ? ' selected' : ''}" data-idx="${i}">
+        <div class="color-swatch" style="background:${c.hex}">
+          <span class="copy-hint">Click to inspect</span>
+        </div>
+        <div class="color-info">
+          <div class="hex">${c.hex}</div>
+          ${c.name ? '<div class="name">' + c.name + '</div>' : ''}
+        </div>
+      </div>
+    `).join("");
+
+    grid.addEventListener("click", function(e) {
+      const card = e.target.closest(".color-card");
+      if (!card) return;
+      selectedIdx = parseInt(card.dataset.idx);
+      render();
+      showDetail(colors[selectedIdx]);
+      sendRpc("resize", { height: document.body.scrollHeight + 24 });
+    });
+
+    if (selectedIdx >= 0 && selectedIdx < colors.length) {
+      showDetail(colors[selectedIdx]);
+    }
+  }
+
+  function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1,3), 16);
+    const g = parseInt(hex.slice(3,5), 16);
+    const b = parseInt(hex.slice(5,7), 16);
+    return {r,g,b};
+  }
+
+  function rgbToHsl(r,g,b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    let h, s, l = (max+min)/2;
+    if (max === min) { h = s = 0; }
+    else {
+      const d = max - min;
+      s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+      switch(max) {
+        case r: h = ((g-b)/d + (g<b?6:0))/6; break;
+        case g: h = ((b-r)/d + 2)/6; break;
+        case b: h = ((r-g)/d + 4)/6; break;
+      }
+    }
+    return { h: Math.round(h*360), s: Math.round(s*100), l: Math.round(l*100) };
+  }
+
+  function hslToHex(h,s,l) {
+    s /= 100; l /= 100;
+    const a = s * Math.min(l, 1-l);
+    const f = n => {
+      const k = (n + h/30) % 12;
+      const color = l - a * Math.max(Math.min(k-3, 9-k, 1), -1);
+      return Math.round(255*color).toString(16).padStart(2, "0");
+    };
+    return ("#" + f(0) + f(8) + f(4)).toUpperCase();
+  }
+
+  function luminance(r,g,b) {
+    const a = [r,g,b].map(v => { v /= 255; return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); });
+    return a[0]*0.2126 + a[1]*0.7152 + a[2]*0.0722;
+  }
+
+  function contrast(hex1, hex2) {
+    const c1 = hexToRgb(hex1), c2 = hexToRgb(hex2);
+    const l1 = luminance(c1.r, c1.g, c1.b);
+    const l2 = luminance(c2.r, c2.g, c2.b);
+    const lighter = Math.max(l1,l2), darker = Math.min(l1,l2);
+    return ((lighter + 0.05) / (darker + 0.05)).toFixed(2);
+  }
+
+  function showDetail(color) {
+    const panel = document.getElementById("detail");
+    panel.classList.add("active");
+    const rgb = hexToRgb(color.hex);
+    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+    const wcagBlack = contrast(color.hex, "#000000");
+    const wcagWhite = contrast(color.hex, "#FFFFFF");
+    const textOnColor = luminance(rgb.r,rgb.g,rgb.b) > 0.179 ? "#000000" : "#FFFFFF";
+
+    panel.innerHTML = `
+      <div class="detail-header">
+        <div class="detail-swatch" style="background:${color.hex}"></div>
+        <div>
+          <div class="detail-title">${color.name || color.hex}</div>
+          <div style="font-size:11px;color:#71717a">${color.hex}</div>
+        </div>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="label">HEX</div>
+          <div class="value" data-copy="${color.hex}">${color.hex}</div>
+        </div>
+        <div class="detail-item">
+          <div class="label">RGB</div>
+          <div class="value" data-copy="rgb(${rgb.r}, ${rgb.g}, ${rgb.b})">rgb(${rgb.r}, ${rgb.g}, ${rgb.b})</div>
+        </div>
+        <div class="detail-item">
+          <div class="label">HSL</div>
+          <div class="value" data-copy="hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)">hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)</div>
+        </div>
+        <div class="detail-item">
+          <div class="label">CSS Variable</div>
+          <div class="value" data-copy="--color: ${color.hex};">--color: ${color.hex};</div>
+        </div>
+      </div>
+      <div class="contrast-row">
+        <div class="contrast-chip" style="background:${color.hex};color:#000">
+          ■ Black ${wcagBlack}:1
+        </div>
+        <div class="contrast-chip" style="background:${color.hex};color:#fff">
+          □ White ${wcagWhite}:1
+        </div>
+      </div>
+    `;
+
+    // Click to copy
+    panel.querySelectorAll(".value[data-copy]").forEach(el => {
+      el.addEventListener("click", function() {
+        copyToClipboard(el.dataset.copy);
+        el.classList.add("copied");
+        const orig = el.textContent;
+        el.textContent = "✓ Copied!";
+        setTimeout(() => { el.textContent = orig; el.classList.remove("copied"); }, 1200);
+      });
+    });
+
+    // Harmonies
+    showHarmonies(hsl);
+  }
+
+  function showHarmonies(hsl) {
+    const section = document.getElementById("harmonies");
+    const harmonies = {
+      "Complementary": [hsl, { h: (hsl.h+180)%360, s: hsl.s, l: hsl.l }],
+      "Analogous": [
+        { h: (hsl.h+330)%360, s: hsl.s, l: hsl.l },
+        hsl,
+        { h: (hsl.h+30)%360, s: hsl.s, l: hsl.l }
+      ],
+      "Triadic": [
+        hsl,
+        { h: (hsl.h+120)%360, s: hsl.s, l: hsl.l },
+        { h: (hsl.h+240)%360, s: hsl.s, l: hsl.l }
+      ],
+      "Split-Complementary": [
+        hsl,
+        { h: (hsl.h+150)%360, s: hsl.s, l: hsl.l },
+        { h: (hsl.h+210)%360, s: hsl.s, l: hsl.l }
+      ],
+      "Shades": Array.from({length: 5}, (_, i) => ({
+        h: hsl.h, s: hsl.s, l: Math.max(10, hsl.l - 20 + i*10)
+      })),
+    };
+
+    section.innerHTML = '<h3>Color Harmonies</h3>' +
+      Object.entries(harmonies).map(([name, cols]) =>
+        `<div style="margin-bottom:4px;font-size:10px;color:#52525b">${name}</div>
+         <div class="harmony-row">
+           ${cols.map(c => {
+             const hex = hslToHex(c.h, c.s, c.l);
+             return `<div class="harmony-swatch" style="background:${hex}" data-hex="${hex}" title="${hex}">
+               <span class="tip">${hex}</span>
+             </div>`;
+           }).join("")}
+         </div>`
+      ).join("");
+
+    section.addEventListener("click", function(e) {
+      const swatch = e.target.closest(".harmony-swatch");
+      if (swatch) {
+        copyToClipboard(swatch.dataset.hex);
+        swatch.style.borderColor = "#34d399";
+        setTimeout(() => swatch.style.borderColor = "transparent", 800);
+      }
+    });
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>

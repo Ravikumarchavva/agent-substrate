@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JSON Explorer – MCP App</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #18181b;
+    color: #e4e4e7;
+    padding: 16px;
+  }
+  .header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .header h2 { font-size: 14px; font-weight: 600; }
+  .header .badge {
+    font-size: 10px; background: #3b1764; color: #a78bfa;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .toolbar {
+    display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    padding: 4px 10px; border-radius: 5px; border: 1px solid #3f3f46;
+    background: #27272a; color: #a1a1aa; font-size: 11px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .toolbar button:hover { background: #3f3f46; color: #e4e4e7; }
+  .search-box {
+    flex: 1; min-width: 120px; padding: 4px 10px;
+    border-radius: 5px; border: 1px solid #3f3f46;
+    background: #27272a; color: #e4e4e7; font-size: 11px;
+    outline: none;
+  }
+  .search-box:focus { border-color: #a78bfa; }
+  .search-box::placeholder { color: #52525b; }
+  .tree-container {
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    background: #09090b;
+    padding: 12px 16px;
+    overflow-x: auto;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 500px;
+    overflow-y: auto;
+  }
+  .node { position: relative; }
+  .node-row {
+    display: flex; align-items: flex-start; gap: 4px; padding: 1px 0;
+    cursor: default; border-radius: 3px;
+  }
+  .node-row:hover { background: rgba(167, 139, 250, 0.06); }
+  .node-row.highlight { background: rgba(167, 139, 250, 0.15); }
+  .toggle {
+    width: 16px; height: 16px; display: inline-flex; align-items: center;
+    justify-content: center; cursor: pointer; color: #71717a;
+    font-size: 10px; flex-shrink: 0; margin-top: 2px;
+    border-radius: 3px; user-select: none;
+  }
+  .toggle:hover { background: #3f3f46; color: #e4e4e7; }
+  .toggle-placeholder { width: 16px; flex-shrink: 0; }
+  .key { color: #a78bfa; }
+  .colon { color: #71717a; margin: 0 4px; }
+  .val-string { color: #34d399; }
+  .val-number { color: #60a5fa; }
+  .val-boolean { color: #fbbf24; }
+  .val-null { color: #71717a; font-style: italic; }
+  .bracket { color: #71717a; }
+  .count { color: #52525b; font-size: 10px; margin-left: 4px; }
+  .children { padding-left: 20px; }
+  .children.collapsed { display: none; }
+  .copy-btn {
+    opacity: 0; margin-left: 4px; padding: 0 4px;
+    font-size: 10px; color: #71717a; cursor: pointer;
+    background: none; border: none; transition: opacity 0.15s;
+  }
+  .node-row:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { color: #a78bfa; }
+  .stats {
+    display: flex; gap: 12px; margin-top: 10px; font-size: 11px; color: #71717a;
+  }
+  .no-data {
+    display: flex; align-items: center; justify-content: center;
+    height: 80px; color: #71717a; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h2>🔍 JSON Explorer</h2>
+    <span class="badge">Interactive</span>
+  </div>
+  <div class="toolbar" id="toolbar">
+    <button id="btn-expand">▶ Expand All</button>
+    <button id="btn-collapse">▼ Collapse All</button>
+    <button id="btn-copy">📋 Copy</button>
+    <input class="search-box" id="search" placeholder="Search keys or values…" />
+  </div>
+  <div class="tree-container" id="tree"></div>
+  <div class="stats" id="stats"></div>
+
+<script>
+(function() {
+  let rpcId = 0;
+  function sendRpc(method, params) {
+    const id = ++rpcId;
+    window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+    return id;
+  }
+
+  sendRpc("ready");
+  const ctxId = sendRpc("getContext");
+
+  let jsonData = null;
+  let jsonTitle = "JSON";
+
+  window.addEventListener("message", function(e) {
+    const msg = e.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id === ctxId && msg.result) {
+      const args = msg.result.arguments || {};
+      jsonTitle = args.title || "JSON";
+      jsonData = args.data !== undefined ? args.data : args;
+      // Remove title from display data if it's a top-level arg
+      if (jsonData && typeof jsonData === "object" && jsonData.title === jsonTitle && jsonData.data !== undefined) {
+        jsonData = jsonData.data;
+      }
+      renderTree();
+      renderStats();
+      sendRpc("resize", { height: document.body.scrollHeight + 24 });
+    }
+  });
+
+  function renderTree() {
+    const tree = document.getElementById("tree");
+    if (jsonData === null || jsonData === undefined) {
+      tree.innerHTML = '<div class="no-data">No data to explore</div>';
+      return;
+    }
+    tree.innerHTML = "";
+    tree.appendChild(buildNode(jsonData, null, 0, true));
+  }
+
+  function buildNode(value, key, depth, expanded) {
+    const node = document.createElement("div");
+    node.className = "node";
+
+    const row = document.createElement("div");
+    row.className = "node-row";
+
+    const isObject = value !== null && typeof value === "object" && !Array.isArray(value);
+    const isArray = Array.isArray(value);
+    const isExpandable = isObject || isArray;
+    const autoExpand = expanded && depth < 2;
+
+    if (isExpandable) {
+      const toggle = document.createElement("span");
+      toggle.className = "toggle";
+      toggle.textContent = autoExpand ? "▼" : "▶";
+      row.appendChild(toggle);
+
+      if (key !== null) {
+        const keySpan = document.createElement("span");
+        keySpan.className = "key";
+        keySpan.textContent = '"' + key + '"';
+        keySpan.dataset.searchable = key.toLowerCase();
+        row.appendChild(keySpan);
+        const colon = document.createElement("span");
+        colon.className = "colon";
+        colon.textContent = ":";
+        row.appendChild(colon);
+      }
+
+      const bracket = document.createElement("span");
+      bracket.className = "bracket";
+      bracket.textContent = isArray ? "[" : "{";
+      row.appendChild(bracket);
+
+      const count = document.createElement("span");
+      count.className = "count";
+      const len = isArray ? value.length : Object.keys(value).length;
+      count.textContent = len + (isArray ? " items" : " keys");
+      row.appendChild(count);
+
+      // Copy button for this sub-tree
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "copy-btn";
+      copyBtn.textContent = "📋";
+      copyBtn.title = "Copy value";
+      copyBtn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        copyToClipboard(JSON.stringify(value, null, 2));
+        copyBtn.textContent = "✓";
+        setTimeout(() => copyBtn.textContent = "📋", 1200);
+      });
+      row.appendChild(copyBtn);
+
+      node.appendChild(row);
+
+      const children = document.createElement("div");
+      children.className = "children" + (autoExpand ? "" : " collapsed");
+
+      const entries = isArray ? value.map((v, i) => [i, v]) : Object.entries(value);
+      entries.forEach(([k, v]) => {
+        children.appendChild(buildNode(v, String(k), depth + 1, autoExpand));
+      });
+
+      // Closing bracket
+      const closingRow = document.createElement("div");
+      closingRow.className = "node-row";
+      closingRow.innerHTML = '<span class="toggle-placeholder"></span><span class="bracket">' + (isArray ? "]" : "}") + '</span>';
+      children.appendChild(closingRow);
+
+      node.appendChild(children);
+
+      toggle.addEventListener("click", function() {
+        const collapsed = children.classList.toggle("collapsed");
+        toggle.textContent = collapsed ? "▶" : "▼";
+        count.style.display = collapsed ? "inline" : "none";
+        sendRpc("resize", { height: document.body.scrollHeight + 24 });
+      });
+
+      count.style.display = autoExpand ? "none" : "inline";
+    } else {
+      // Leaf value
+      const placeholder = document.createElement("span");
+      placeholder.className = "toggle-placeholder";
+      row.appendChild(placeholder);
+
+      if (key !== null) {
+        const keySpan = document.createElement("span");
+        keySpan.className = "key";
+        keySpan.textContent = '"' + key + '"';
+        keySpan.dataset.searchable = key.toLowerCase();
+        row.appendChild(keySpan);
+        const colon = document.createElement("span");
+        colon.className = "colon";
+        colon.textContent = ":";
+        row.appendChild(colon);
+      }
+
+      const valSpan = document.createElement("span");
+      if (value === null) {
+        valSpan.className = "val-null";
+        valSpan.textContent = "null";
+      } else if (typeof value === "boolean") {
+        valSpan.className = "val-boolean";
+        valSpan.textContent = String(value);
+      } else if (typeof value === "number") {
+        valSpan.className = "val-number";
+        valSpan.textContent = String(value);
+      } else {
+        valSpan.className = "val-string";
+        const str = String(value);
+        valSpan.textContent = '"' + (str.length > 120 ? str.substring(0, 117) + "..." : str) + '"';
+        valSpan.title = str;
+      }
+      valSpan.dataset.searchable = String(value).toLowerCase();
+      row.appendChild(valSpan);
+
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "copy-btn";
+      copyBtn.textContent = "📋";
+      copyBtn.title = "Copy value";
+      copyBtn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        copyToClipboard(typeof value === "string" ? value : JSON.stringify(value));
+        copyBtn.textContent = "✓";
+        setTimeout(() => copyBtn.textContent = "📋", 1200);
+      });
+      row.appendChild(copyBtn);
+
+      node.appendChild(row);
+    }
+
+    return node;
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+  }
+
+  // Toolbar actions
+  document.getElementById("btn-expand").addEventListener("click", function() {
+    document.querySelectorAll(".children.collapsed").forEach(el => el.classList.remove("collapsed"));
+    document.querySelectorAll(".toggle").forEach(el => el.textContent = "▼");
+    document.querySelectorAll(".count").forEach(el => el.style.display = "none");
+    sendRpc("resize", { height: document.body.scrollHeight + 24 });
+  });
+
+  document.getElementById("btn-collapse").addEventListener("click", function() {
+    document.querySelectorAll(".children").forEach(el => el.classList.add("collapsed"));
+    document.querySelectorAll(".toggle").forEach(el => el.textContent = "▶");
+    document.querySelectorAll(".count").forEach(el => el.style.display = "inline");
+    sendRpc("resize", { height: document.body.scrollHeight + 24 });
+  });
+
+  document.getElementById("btn-copy").addEventListener("click", function() {
+    if (jsonData !== null) {
+      copyToClipboard(JSON.stringify(jsonData, null, 2));
+      this.textContent = "✓ Copied";
+      setTimeout(() => this.textContent = "📋 Copy", 1200);
+    }
+  });
+
+  // Search
+  let searchTimeout;
+  document.getElementById("search").addEventListener("input", function(e) {
+    clearTimeout(searchTimeout);
+    const q = e.target.value.toLowerCase().trim();
+    searchTimeout = setTimeout(function() {
+      document.querySelectorAll(".node-row").forEach(row => row.classList.remove("highlight"));
+      if (!q) return;
+      document.querySelectorAll("[data-searchable]").forEach(el => {
+        if (el.dataset.searchable.includes(q)) {
+          const row = el.closest(".node-row");
+          if (row) row.classList.add("highlight");
+          // Expand parents
+          let parent = el.closest(".children.collapsed");
+          while (parent) {
+            parent.classList.remove("collapsed");
+            const prevToggle = parent.previousElementSibling?.querySelector(".toggle");
+            if (prevToggle) prevToggle.textContent = "▼";
+            parent = parent.parentElement?.closest(".children.collapsed");
+          }
+        }
+      });
+      sendRpc("resize", { height: document.body.scrollHeight + 24 });
+    }, 200);
+  });
+
+  function renderStats() {
+    if (!jsonData) { document.getElementById("stats").innerHTML = ""; return; }
+    const stats = countNodes(jsonData);
+    document.getElementById("stats").innerHTML =
+      `<span>Type: ${stats.type}</span>` +
+      `<span>${stats.keys} keys</span>` +
+      `<span>${stats.values} values</span>` +
+      `<span>Depth: ${stats.depth}</span>`;
+  }
+
+  function countNodes(obj, depth) {
+    depth = depth || 0;
+    if (obj === null || typeof obj !== "object") {
+      return { type: typeof obj, keys: 0, values: 1, depth: depth };
+    }
+    const isArr = Array.isArray(obj);
+    const entries = isArr ? obj.map((v, i) => [i, v]) : Object.entries(obj);
+    let keys = entries.length;
+    let values = 0;
+    let maxDepth = depth;
+    entries.forEach(([, v]) => {
+      const sub = countNodes(v, depth + 1);
+      keys += sub.keys;
+      values += sub.values;
+      maxDepth = Math.max(maxDepth, sub.depth);
+    });
+    return {
+      type: isArr ? "Array[" + obj.length + "]" : "Object{" + Object.keys(obj).length + "}",
+      keys, values, depth: maxDepth,
+    };
+  }
+})();
+</script>
+</body>
+</html>

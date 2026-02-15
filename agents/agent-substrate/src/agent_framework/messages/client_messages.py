@@ -205,6 +205,7 @@ class ToolExecutionResultMessage(BaseClientMessage):
     name: Optional[str] = None  # Tool name
     content: List[Dict[str, Any]]  # MCP format: list of content blocks
     isError: bool = False  # MCP naming convention
+    app_data: Optional[Dict[str, Any]] = None  # Structured data for MCP App UIs
     type: Literal["ToolExecutionResultMessage"] = "ToolExecutionResultMessage"
 
     @field_validator("content", mode="before")
@@ -268,6 +269,7 @@ class ToolExecutionResultMessage(BaseClientMessage):
             name=tool_name,
             content=tool_result.content,
             isError=tool_result.isError,
+            app_data=tool_result.app_data,
         )
     
     def to_mcp_format(self) -> Dict[str, Any]:

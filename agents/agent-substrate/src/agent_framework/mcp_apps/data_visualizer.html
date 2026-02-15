@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Data Visualizer – MCP App</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #18181b;
+    color: #e4e4e7;
+    padding: 16px;
+  }
+  .header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .header h2 { font-size: 14px; font-weight: 600; }
+  .header .badge {
+    font-size: 10px; background: #064e3b; color: #34d399;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .chart-container {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #09090b;
+    padding: 8px;
+  }
+  canvas { width: 100%; height: 100%; }
+  .controls {
+    display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+  }
+  .controls button {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid #3f3f46;
+    background: #27272a; color: #e4e4e7; font-size: 12px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .controls button:hover { background: #3f3f46; }
+  .controls button.active { background: #065f46; border-color: #34d399; color: #34d399; }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 8px; margin-top: 12px;
+  }
+  .stat {
+    background: #27272a; border-radius: 6px; padding: 8px;
+    text-align: center; border: 1px solid #3f3f46;
+  }
+  .stat .label { font-size: 10px; color: #71717a; text-transform: uppercase; }
+  .stat .value { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  .no-data {
+    display: flex; align-items: center; justify-content: center;
+    height: 200px; color: #71717a; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h2>📊 Data Visualizer</h2>
+    <span class="badge">Interactive</span>
+  </div>
+  <div id="chart" class="chart-container">
+    <canvas id="canvas"></canvas>
+  </div>
+  <div class="controls" id="controls"></div>
+  <div class="stats" id="stats"></div>
+
+<script>
+(function() {
+  // ── JSON-RPC helpers ────────────────────────────────────
+  let rpcId = 0;
+  function sendRpc(method, params) {
+    const id = ++rpcId;
+    const msg = { jsonrpc: "2.0", id, method, params };
+    window.parent.postMessage(msg, "*");
+    return id;
+  }
+
+  // ── Signal ready & request context ──────────────────────
+  sendRpc("ready");
+  const ctxId = sendRpc("getContext");
+
+  let chartData = null;
+  let chartType = "bar";
+
+  window.addEventListener("message", function(e) {
+    const msg = e.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id === ctxId && msg.result) {
+      const args = msg.result.arguments || {};
+      chartData = parseData(args);
+      render();
+      // Resize to fit
+      sendRpc("resize", { height: document.body.scrollHeight + 24 });
+    }
+  });
+
+  function parseData(args) {
+    // Accept multiple formats:
+    // { data: [{label, value}] }  OR  { labels: [], values: [] }  OR  { items: [{name, count}] }
+    if (args.data && Array.isArray(args.data)) {
+      return args.data.map(d => ({
+        label: d.label || d.name || d.key || "?",
+        value: Number(d.value || d.count || d.amount || 0)
+      }));
+    }
+    if (args.labels && args.values) {
+      return args.labels.map((l, i) => ({
+        label: l,
+        value: Number(args.values[i] || 0)
+      }));
+    }
+    if (args.items && Array.isArray(args.items)) {
+      return args.items.map(d => ({
+        label: d.name || d.label || "?",
+        value: Number(d.count || d.value || 0)
+      }));
+    }
+    // Try treating the whole args as key-value pairs
+    const entries = Object.entries(args).filter(([k,v]) => typeof v === 'number');
+    if (entries.length > 0) {
+      return entries.map(([k, v]) => ({ label: k, value: v }));
+    }
+    return null;
+  }
+
+  function render() {
+    renderControls();
+    if (!chartData || chartData.length === 0) {
+      document.getElementById("chart").innerHTML = '<div class="no-data">No data to visualize</div>';
+      document.getElementById("stats").innerHTML = '';
+      return;
+    }
+    renderChart();
+    renderStats();
+  }
+
+  function renderControls() {
+    const types = ["bar", "line", "pie"];
+    const el = document.getElementById("controls");
+    el.innerHTML = types.map(t =>
+      `<button class="${t === chartType ? 'active' : ''}" data-type="${t}">
+        ${t === 'bar' ? '📊' : t === 'line' ? '📈' : '🥧'} ${t.charAt(0).toUpperCase() + t.slice(1)}
+      </button>`
+    ).join('');
+    el.addEventListener("click", function(e) {
+      const btn = e.target.closest("button");
+      if (btn) {
+        chartType = btn.dataset.type;
+        render();
+      }
+    });
+  }
+
+  function renderStats() {
+    if (!chartData) return;
+    const values = chartData.map(d => d.value);
+    const sum = values.reduce((a, b) => a + b, 0);
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const avg = (sum / values.length).toFixed(1);
+    document.getElementById("stats").innerHTML = `
+      <div class="stat"><div class="label">Total</div><div class="value">${sum}</div></div>
+      <div class="stat"><div class="label">Average</div><div class="value">${avg}</div></div>
+      <div class="stat"><div class="label">Max</div><div class="value">${max}</div></div>
+      <div class="stat"><div class="label">Min</div><div class="value">${min}</div></div>
+      <div class="stat"><div class="label">Items</div><div class="value">${values.length}</div></div>
+    `;
+  }
+
+  function renderChart() {
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const container = document.getElementById("chart");
+    canvas.width = container.clientWidth - 16;
+    canvas.height = 184;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const colors = ["#34d399","#60a5fa","#f472b6","#fbbf24","#a78bfa","#fb923c","#22d3ee","#e879f9"];
+
+    if (chartType === "bar") drawBar(ctx, canvas, colors);
+    else if (chartType === "line") drawLine(ctx, canvas, colors);
+    else if (chartType === "pie") drawPie(ctx, canvas, colors);
+  }
+
+  function drawBar(ctx, canvas, colors) {
+    const maxVal = Math.max(...chartData.map(d => d.value));
+    const barW = Math.min(40, (canvas.width - 40) / chartData.length - 8);
+    const startX = (canvas.width - chartData.length * (barW + 8)) / 2;
+
+    chartData.forEach((d, i) => {
+      const h = (d.value / maxVal) * (canvas.height - 30);
+      const x = startX + i * (barW + 8);
+      const y = canvas.height - h - 20;
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.beginPath();
+      ctx.roundRect(x, y, barW, h, 3);
+      ctx.fill();
+      ctx.fillStyle = "#71717a";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(d.label.substring(0, 6), x + barW / 2, canvas.height - 4);
+      ctx.fillStyle = "#e4e4e7";
+      ctx.fillText(d.value, x + barW / 2, y - 4);
+    });
+  }
+
+  function drawLine(ctx, canvas, colors) {
+    const maxVal = Math.max(...chartData.map(d => d.value));
+    const stepX = (canvas.width - 40) / Math.max(chartData.length - 1, 1);
+    const startX = 20;
+
+    // Fill area
+    ctx.beginPath();
+    ctx.moveTo(startX, canvas.height - 20);
+    chartData.forEach((d, i) => {
+      const x = startX + i * stepX;
+      const y = canvas.height - 20 - (d.value / maxVal) * (canvas.height - 40);
+      ctx.lineTo(x, y);
+    });
+    ctx.lineTo(startX + (chartData.length - 1) * stepX, canvas.height - 20);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(52, 211, 153, 0.1)";
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = colors[0];
+    ctx.lineWidth = 2;
+    chartData.forEach((d, i) => {
+      const x = startX + i * stepX;
+      const y = canvas.height - 20 - (d.value / maxVal) * (canvas.height - 40);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Points + labels
+    chartData.forEach((d, i) => {
+      const x = startX + i * stepX;
+      const y = canvas.height - 20 - (d.value / maxVal) * (canvas.height - 40);
+      ctx.beginPath();
+      ctx.fillStyle = colors[0];
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#71717a";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(d.label.substring(0, 6), x, canvas.height - 4);
+    });
+  }
+
+  function drawPie(ctx, canvas, colors) {
+    const total = chartData.reduce((s, d) => s + d.value, 0);
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const r = Math.min(cx, cy) - 20;
+    let startAngle = -Math.PI / 2;
+
+    chartData.forEach((d, i) => {
+      const sliceAngle = (d.value / total) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, startAngle, startAngle + sliceAngle);
+      ctx.closePath();
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.fill();
+
+      // Label
+      const mid = startAngle + sliceAngle / 2;
+      const lx = cx + (r * 0.65) * Math.cos(mid);
+      const ly = cy + (r * 0.65) * Math.sin(mid);
+      if (sliceAngle > 0.3) {
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(d.label.substring(0, 5), lx, ly);
+      }
+      startAngle += sliceAngle;
+    });
+  }
+})();
+</script>
+</body>
+</html>

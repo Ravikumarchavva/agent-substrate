@@ -5,14 +5,24 @@ import json
 from uuid import uuid4
 
 class Tool(BaseModel):
-    """MCP-compatible tool schema."""
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    """MCP-compatible tool schema with annotations and MCP Apps UI support."""
+    model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
     
     name: str
     description: str
     inputSchema: Dict[str, Any] = Field(
         default_factory=lambda: {"type": "object", "properties": {}, "required": []},
         description="JSON Schema for tool input parameters (MCP format)"
+    )
+    annotations: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="MCP tool annotations (readOnlyHint, destructiveHint, openWorldHint, title)"
+    )
+    meta: Optional[Dict[str, Any]] = Field(
+        default=None,
+        alias="_meta",
+        serialization_alias="_meta",
+        description="MCP Apps metadata — e.g. {'ui': {'resourceUri': 'ui://...'}}"
     )
     
     def to_openai_format(self) -> Dict[str, Any]:
@@ -28,17 +38,26 @@ class Tool(BaseModel):
         }
     
     def to_mcp_format(self) -> Dict[str, Any]:
-        """Export as MCP tool schema."""
-        return {
+        """Export as MCP tool schema with annotations and _meta."""
+        result: Dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "inputSchema": self.inputSchema
         }
+        if self.annotations:
+            result["annotations"] = self.annotations
+        if self.meta:
+            result["_meta"] = self.meta
+        return result
 
 class ToolResult(BaseModel):
     """Structured result from tool execution (MCP-compatible)."""
     content: List[Dict[str, Any]] = Field(default_factory=list)
     isError: bool = Field(default=False, alias="is_error")
+    app_data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Structured data for MCP App UIs (passed to iframe, not to LLM)",
+    )
     
     model_config = ConfigDict(populate_by_name=True)
 
@@ -60,13 +79,15 @@ class ToolCall(BaseModel):
         raise ValueError("arguments must be a dict")
 
 class BaseTool(ABC):
-    """Base class for MCP-compatible tools."""
+    """Base class for MCP-compatible tools with optional MCP Apps UI support."""
     
     def __init__(
         self,
         name: str,
         description: str,
-        input_schema: Optional[Dict[str, Any]] = None
+        input_schema: Optional[Dict[str, Any]] = None,
+        annotations: Optional[Dict[str, Any]] = None,
+        _meta: Optional[Dict[str, Any]] = None,
     ):
         self.name = name
         self.description = description
@@ -75,6 +96,8 @@ class BaseTool(ABC):
             "properties": {},
             "required": []
         }
+        self.annotations = annotations
+        self._meta = _meta
     
     @abstractmethod
     async def execute(self, **kwargs) -> ToolResult:
@@ -93,7 +116,9 @@ class BaseTool(ABC):
         return Tool(
             name=self.name,
             description=self.description,
-            inputSchema=self.input_schema
+            inputSchema=self.input_schema,
+            annotations=getattr(self, 'annotations', None),
+            meta=getattr(self, '_meta', None),
         )
     
     def get_openai_schema(self) -> Dict[str, Any]:

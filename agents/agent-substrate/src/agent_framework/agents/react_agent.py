@@ -41,6 +41,7 @@ from agent_framework.guardrails.base_guardrail import (
     GuardrailType,
 )
 from agent_framework.guardrails.runner import run_guardrails
+from agent_framework.hooks import HookEvent, HookManager
 from agent_framework.memory.base_memory import BaseMemory
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.base_message import UsageStats
@@ -53,6 +54,19 @@ from agent_framework.messages.client_messages import (
 )
 from agent_framework.model_clients.base_client import BaseModelClient
 from agent_framework.observability import global_metrics, global_tracer, logger
+from agent_framework.human_input import (
+    ToolApprovalAction,
+    ToolApprovalHandler,
+    ToolApprovalRequest,
+    ToolApprovalResponse,
+)
+from agent_framework.resilience import (
+    CircuitBreaker,
+    LLM_RETRY_POLICY,
+    RetryPolicy,
+    TOOL_RETRY_POLICY,
+    _calculate_delay,
+)
 from agent_framework.tools.base_tool import BaseTool, ToolResult
 
 
@@ -106,6 +120,15 @@ class ReActAgent(BaseAgent):
         verbose: bool = True,
         input_guardrails: Optional[List[BaseGuardrail]] = None,
         output_guardrails: Optional[List[BaseGuardrail]] = None,
+        # Production features
+        hooks: Optional[HookManager] = None,
+        llm_retry_policy: Optional[RetryPolicy] = None,
+        tool_retry_policy: Optional[RetryPolicy] = None,
+        run_timeout: Optional[float] = None,
+        tool_timeout: Optional[float] = 30.0,
+        # HITL: Tool approval
+        tool_approval_handler: Optional[ToolApprovalHandler] = None,
+        tools_requiring_approval: Optional[List[str]] = None,
     ):
         super().__init__(
             name=name,
@@ -120,6 +143,17 @@ class ReActAgent(BaseAgent):
         self.max_iterations = max_iterations
         self.verbose = verbose
 
+        # Production features
+        self.hooks = hooks or HookManager()
+        self.llm_retry_policy = llm_retry_policy or LLM_RETRY_POLICY
+        self.tool_retry_policy = tool_retry_policy or TOOL_RETRY_POLICY
+        self.run_timeout = run_timeout  # None = no timeout
+        self.tool_timeout = tool_timeout  # Per-tool timeout in seconds
+
+        # HITL: tool approval
+        self.tool_approval_handler = tool_approval_handler
+        self.tools_requiring_approval = tools_requiring_approval  # None = all tools when handler set
+
         # Seed system prompt
         if len(self.memory.get_messages()) == 0:
             self.memory.add_message(SystemMessage(content=self.system_instructions))
@@ -131,8 +165,26 @@ class ReActAgent(BaseAgent):
         super().reset()
         # Re-add system message after clearing
         self.memory.add_message(SystemMessage(content=self.system_instructions))
+        # Reset HITL tool counters
+        self._reset_hitl_tools()
+
+    def _reset_hitl_tools(self) -> None:
+        """Reset AskHumanTool request counters between runs."""
+        from agent_framework.human_input import AskHumanTool
+        for tool in self.tools:
+            if isinstance(tool, AskHumanTool):
+                tool.reset()
 
     async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+        # Apply run-level timeout if configured
+        if self.run_timeout:
+            return await asyncio.wait_for(
+                self._run_inner(input_text, **kwargs),
+                timeout=self.run_timeout,
+            )
+        return await self._run_inner(input_text, **kwargs)
+
+    async def _run_inner(self, input_text: str, **kwargs) -> AgentRunResult:
         run_id = str(uuid4())
         run_start = datetime.utcnow()
         usage = AggregatedUsage()
@@ -150,6 +202,14 @@ class ReActAgent(BaseAgent):
             global_metrics.increment_counter("agent_runs", tags={"name": self.name})
             if self.verbose:
                 logger.info(f"[{self.name}] Starting run: {input_text[:80]}...")
+
+            # ── LIFECYCLE HOOK: RUN_START ─────────────────────────────
+            await self.hooks.dispatch(HookEvent.RUN_START, {
+                "event": "on_run_start",
+                "agent_name": self.name,
+                "run_id": run_id,
+                "input_text": input_text,
+            })
 
             # 1. Add user message
             self.memory.add_message(UserMessage(content=[input_text]))
@@ -331,7 +391,7 @@ class ReActAgent(BaseAgent):
             run_end = datetime.utcnow()
             duration = (run_end - run_start).total_seconds()
 
-            return AgentRunResult(
+            result = AgentRunResult(
                 run_id=run_id,
                 agent_name=self.name,
                 output=final_output,
@@ -347,6 +407,20 @@ class ReActAgent(BaseAgent):
                 error=error_msg,
                 guardrail_results=guardrail_results,
             )
+
+            # ── LIFECYCLE HOOK: RUN_END ──────────────────────────────
+            await self.hooks.dispatch(HookEvent.RUN_END, {
+                "event": "on_run_end",
+                "agent_name": self.name,
+                "run_id": run_id,
+                "status": status.value,
+                "steps_used": len(steps),
+                "tool_calls_total": total_tool_calls,
+                "tokens_used": usage.total_tokens,
+                "duration_seconds": duration,
+            })
+
+            return result
 
     # ── Streaming run ────────────────────────────────────────────────────────
 
@@ -535,6 +609,13 @@ class ReActAgent(BaseAgent):
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
+    def _tool_needs_approval(self, tool_name: str) -> bool:
+        """Check whether the given tool requires human approval."""
+        if self.tools_requiring_approval is None:
+            # Handler set but no explicit list → all tools need approval
+            return True
+        return tool_name in self.tools_requiring_approval
+
     def _build_tool_schemas(self) -> List[Dict[str, Any]]:
         """Build tool schemas for the LLM from the agent's tools list."""
         schemas: List[Dict[str, Any]] = []
@@ -550,27 +631,73 @@ class ReActAgent(BaseAgent):
         return schemas
 
     async def _call_llm(self, **kwargs) -> AssistantMessage:
-        """Single LLM call with tool schemas and observability."""
+        """Single LLM call with retry, hooks, and observability."""
         tool_schemas = self._build_tool_schemas()
         messages = self.memory.get_messages()
 
+        # ── LIFECYCLE HOOK: LLM_START ────────────────────────────────
+        await self.hooks.dispatch(HookEvent.LLM_START, {
+            "event": "on_llm_start",
+            "agent_name": self.name,
+            "message_count": len(messages),
+            "tool_count": len(tool_schemas),
+        })
+
         with global_tracer.start_span("llm_generate", {"msg_count": len(messages)}):
             llm_t0 = asyncio.get_event_loop().time()
-            try:
-                response = await self.model_client.generate(
-                    messages=messages,
-                    tools=tool_schemas or None,
-                    tool_choice="auto" if tool_schemas else None,
-                )
-                llm_t1 = asyncio.get_event_loop().time()
-                global_metrics.record_histogram(
-                    "llm_latency", llm_t1 - llm_t0,
-                    tags={"model": getattr(self.model_client, "model", "unknown")},
-                )
-            except Exception as e:
-                global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
-                raise
-        return response
+            last_exception: Optional[Exception] = None
+
+            for attempt in range(self.llm_retry_policy.max_retries + 1):
+                try:
+                    response = await self.model_client.generate(
+                        messages=messages,
+                        tools=tool_schemas or None,
+                        tool_choice="auto" if tool_schemas else None,
+                    )
+                    llm_t1 = asyncio.get_event_loop().time()
+                    global_metrics.record_histogram(
+                        "llm_latency", llm_t1 - llm_t0,
+                        tags={"model": getattr(self.model_client, "model", "unknown")},
+                    )
+
+                    # ── LIFECYCLE HOOK: LLM_END ──────────────────────
+                    await self.hooks.dispatch(HookEvent.LLM_END, {
+                        "event": "on_llm_end",
+                        "agent_name": self.name,
+                        "duration_ms": (llm_t1 - llm_t0) * 1000,
+                        "usage": response.usage,
+                        "has_tool_calls": bool(response.tool_calls),
+                    })
+
+                    return response
+
+                except self.llm_retry_policy.retryable_exceptions as e:
+                    last_exception = e
+                    if attempt < self.llm_retry_policy.max_retries:
+                        delay = _calculate_delay(attempt, self.llm_retry_policy)
+                        logger.warning(
+                            f"[{self.name}] LLM retry {attempt + 1}/"
+                            f"{self.llm_retry_policy.max_retries}: {e} "
+                            f"(waiting {delay:.1f}s)"
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        global_metrics.increment_counter(
+                            "llm_errors",
+                            tags={"error": type(e).__name__},
+                        )
+                        raise
+
+                except Exception as e:
+                    global_metrics.increment_counter(
+                        "llm_errors", tags={"error": type(e).__name__}
+                    )
+                    raise
+
+        # Safety fallback (should never reach here)
+        if last_exception:
+            raise last_exception
+        raise RuntimeError("LLM call failed unexpectedly")
 
     @staticmethod
     def _parse_tool_call(tc: Any) -> _ParsedToolCall:
@@ -629,59 +756,199 @@ class ReActAgent(BaseAgent):
     ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
         """Look up and execute a single tool call.
 
+        Features: per-tool timeout, retry on transient errors, lifecycle hooks.
         Returns both the record (for AgentRunResult) and the message (for memory).
         """
         with global_tracer.start_span("tool_execution", {"tool": parsed.name}) as span:
             t0 = time.monotonic()
 
+            # ── LIFECYCLE HOOK: TOOL_START ────────────────────────────
+            await self.hooks.dispatch(HookEvent.TOOL_START, {
+                "event": "on_tool_start",
+                "agent_name": self.name,
+                "tool_name": parsed.name,
+                "arguments": parsed.arguments,
+                "step": step_num,
+            })
+
             # Find tool
             tool = self._find_tool(parsed.name)
 
             if tool is None:
-                return self._tool_error(
+                result = self._tool_error(
                     parsed, step_num, t0, span,
                     f"Tool '{parsed.name}' not found in agent's tool list",
                     "tool_not_found_errors",
                 )
+                await self.hooks.dispatch(HookEvent.TOOL_END, {
+                    "event": "on_tool_end",
+                    "agent_name": self.name,
+                    "tool_name": parsed.name,
+                    "is_error": True,
+                    "error": "tool_not_found",
+                    "duration_ms": (time.monotonic() - t0) * 1000,
+                })
+                return result
 
             if isinstance(tool, dict):
-                return self._tool_error(
+                result = self._tool_error(
                     parsed, step_num, t0, span,
                     f"Tool '{parsed.name}' is a raw dict schema, not executable. "
                     "Wrap with MCPTool.from_mcp_client().",
                     "tool_not_executable_errors",
                 )
+                await self.hooks.dispatch(HookEvent.TOOL_END, {
+                    "event": "on_tool_end",
+                    "agent_name": self.name,
+                    "tool_name": parsed.name,
+                    "is_error": True,
+                    "error": "tool_not_executable",
+                    "duration_ms": (time.monotonic() - t0) * 1000,
+                })
+                return result
 
-            # Execute
-            try:
-                if self.verbose:
-                    logger.info(f"[{self.name}] Executing {parsed.name}({parsed.arguments})")
-
-                result: ToolResult = await tool.execute(**parsed.arguments)
-                duration_ms = (time.monotonic() - t0) * 1000
-
-                tool_msg = ToolExecutionResultMessage.from_tool_result(
-                    tool_result=result,
-                    tool_call_id=parsed.call_id,
-                    tool_name=parsed.name,
-                )
-                global_metrics.increment_counter("tool_executions", tags={"tool": parsed.name, "status": "success"})
-
-                record = ToolCallRecord(
+            # ── HITL: TOOL APPROVAL GATE ─────────────────────────
+            if self.tool_approval_handler and self._tool_needs_approval(parsed.name):
+                approval_request = ToolApprovalRequest(
                     tool_name=parsed.name,
                     call_id=parsed.call_id,
                     arguments=parsed.arguments,
-                    result=self._content_to_str(tool_msg.content),
-                    is_error=False,
-                    duration_ms=duration_ms,
+                    context=f"Agent wants to call '{parsed.name}' at step {step_num}",
                 )
-                return record, tool_msg
+                try:
+                    approval = await self.tool_approval_handler.request_approval(
+                        approval_request
+                    )
+                except Exception as exc:
+                    logger.error(f"[{self.name}] Approval handler error: {exc}")
+                    approval = ToolApprovalResponse(
+                        request_id=approval_request.request_id,
+                        action=ToolApprovalAction.DENY,
+                        reason=f"Approval handler error: {exc}",
+                    )
 
-            except Exception as e:
-                return self._tool_error(
-                    parsed, step_num, t0, span,
-                    str(e), "tool_execution_errors",
-                )
+                if approval.action == ToolApprovalAction.DENY:
+                    deny_msg = approval.reason or "User denied tool execution"
+                    logger.info(f"[{self.name}] Tool '{parsed.name}' DENIED: {deny_msg}")
+                    result = self._tool_error(
+                        parsed, step_num, t0, span,
+                        f"Tool denied by user: {deny_msg}",
+                        "tool_denied_by_user",
+                    )
+                    await self.hooks.dispatch(HookEvent.TOOL_END, {
+                        "event": "on_tool_end",
+                        "agent_name": self.name,
+                        "tool_name": parsed.name,
+                        "is_error": True,
+                        "error": "denied_by_user",
+                        "reason": deny_msg,
+                        "duration_ms": (time.monotonic() - t0) * 1000,
+                    })
+                    return result
+
+                if approval.action == ToolApprovalAction.MODIFY:
+                    if approval.modified_arguments:
+                        logger.info(
+                            f"[{self.name}] Tool '{parsed.name}' MODIFIED: "
+                            f"{parsed.arguments} → {approval.modified_arguments}"
+                        )
+                        parsed.arguments = approval.modified_arguments
+                    else:
+                        logger.info(f"[{self.name}] Tool '{parsed.name}' APPROVED (modify with no changes)")
+
+                else:
+                    logger.info(f"[{self.name}] Tool '{parsed.name}' APPROVED")
+
+            # Execute with retry and timeout
+            last_error: Optional[Exception] = None
+            for attempt in range(self.tool_retry_policy.max_retries + 1):
+                try:
+                    if self.verbose:
+                        logger.info(f"[{self.name}] Executing {parsed.name}({parsed.arguments})")
+
+                    # Apply per-tool timeout
+                    if self.tool_timeout:
+                        exec_result: ToolResult = await asyncio.wait_for(
+                            tool.execute(**parsed.arguments),
+                            timeout=self.tool_timeout,
+                        )
+                    else:
+                        exec_result = await tool.execute(**parsed.arguments)
+
+                    duration_ms = (time.monotonic() - t0) * 1000
+
+                    tool_msg = ToolExecutionResultMessage.from_tool_result(
+                        tool_result=exec_result,
+                        tool_call_id=parsed.call_id,
+                        tool_name=parsed.name,
+                    )
+                    global_metrics.increment_counter("tool_executions", tags={"tool": parsed.name, "status": "success"})
+
+                    record = ToolCallRecord(
+                        tool_name=parsed.name,
+                        call_id=parsed.call_id,
+                        arguments=parsed.arguments,
+                        result=self._content_to_str(tool_msg.content),
+                        is_error=False,
+                        duration_ms=duration_ms,
+                    )
+
+                    # ── LIFECYCLE HOOK: TOOL_END ─────────────────────
+                    await self.hooks.dispatch(HookEvent.TOOL_END, {
+                        "event": "on_tool_end",
+                        "agent_name": self.name,
+                        "tool_name": parsed.name,
+                        "is_error": False,
+                        "duration_ms": duration_ms,
+                        "step": step_num,
+                    })
+
+                    return record, tool_msg
+
+                except asyncio.TimeoutError:
+                    last_error = TimeoutError(
+                        f"Tool '{parsed.name}' timed out after {self.tool_timeout}s"
+                    )
+                    if attempt < self.tool_retry_policy.max_retries:
+                        delay = _calculate_delay(attempt, self.tool_retry_policy)
+                        logger.warning(
+                            f"[{self.name}] Tool timeout, retry "
+                            f"{attempt + 1}/{self.tool_retry_policy.max_retries} "
+                            f"(waiting {delay:.1f}s)"
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                except self.tool_retry_policy.retryable_exceptions as e:
+                    last_error = e
+                    if attempt < self.tool_retry_policy.max_retries:
+                        delay = _calculate_delay(attempt, self.tool_retry_policy)
+                        logger.warning(
+                            f"[{self.name}] Tool retry {attempt + 1}/"
+                            f"{self.tool_retry_policy.max_retries}: {e} "
+                            f"(waiting {delay:.1f}s)"
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                except Exception as e:
+                    last_error = e
+
+            # All retries exhausted
+            error_msg = str(last_error) if last_error else "Unknown tool error"
+            result = self._tool_error(
+                parsed, step_num, t0, span,
+                error_msg, "tool_execution_errors",
+            )
+            await self.hooks.dispatch(HookEvent.TOOL_END, {
+                "event": "on_tool_end",
+                "agent_name": self.name,
+                "tool_name": parsed.name,
+                "is_error": True,
+                "error": error_msg,
+                "duration_ms": (time.monotonic() - t0) * 1000,
+            })
+            return result
 
     def _tool_error(
         self,

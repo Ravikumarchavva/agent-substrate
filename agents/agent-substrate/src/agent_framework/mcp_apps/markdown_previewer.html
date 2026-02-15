@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Markdown Previewer – MCP App</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #18181b;
+    color: #e4e4e7;
+    padding: 16px;
+  }
+  .header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .header h2 { font-size: 14px; font-weight: 600; }
+  .header .badge {
+    font-size: 10px; background: #1e3a5f; color: #60a5fa;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .toolbar {
+    display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    padding: 4px 10px; border-radius: 5px; border: 1px solid #3f3f46;
+    background: #27272a; color: #a1a1aa; font-size: 11px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .toolbar button:hover { background: #3f3f46; color: #e4e4e7; }
+  .toolbar button.active { background: #1e3a5f; border-color: #60a5fa; color: #60a5fa; }
+  .content {
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #09090b;
+  }
+  .preview {
+    padding: 16px 20px;
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: auto;
+    min-height: 60px;
+  }
+  .source {
+    display: none;
+    padding: 16px 20px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #a1a1aa;
+    min-height: 60px;
+  }
+  /* Markdown rendered styles */
+  .preview h1 { font-size: 22px; font-weight: 700; margin: 16px 0 8px; color: #f4f4f5; border-bottom: 1px solid #3f3f46; padding-bottom: 6px; }
+  .preview h2 { font-size: 18px; font-weight: 600; margin: 14px 0 6px; color: #f4f4f5; }
+  .preview h3 { font-size: 15px; font-weight: 600; margin: 12px 0 4px; color: #e4e4e7; }
+  .preview h4 { font-size: 14px; font-weight: 600; margin: 10px 0 4px; color: #d4d4d8; }
+  .preview p { margin: 8px 0; }
+  .preview strong { color: #f4f4f5; font-weight: 600; }
+  .preview em { font-style: italic; color: #d4d4d8; }
+  .preview a { color: #60a5fa; text-decoration: none; }
+  .preview a:hover { text-decoration: underline; }
+  .preview code {
+    background: #27272a; padding: 2px 6px; border-radius: 4px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px;
+    color: #f472b6;
+  }
+  .preview pre {
+    background: #1a1a1e; border: 1px solid #3f3f46; border-radius: 6px;
+    padding: 12px 16px; margin: 10px 0; overflow-x: auto;
+  }
+  .preview pre code {
+    background: none; padding: 0; color: #e4e4e7; display: block;
+    line-height: 1.5;
+  }
+  .preview blockquote {
+    border-left: 3px solid #60a5fa; margin: 10px 0; padding: 8px 16px;
+    background: rgba(96, 165, 250, 0.05); color: #a1a1aa;
+  }
+  .preview ul, .preview ol { margin: 8px 0; padding-left: 24px; }
+  .preview li { margin: 4px 0; }
+  .preview hr { border: none; border-top: 1px solid #3f3f46; margin: 16px 0; }
+  .preview table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  .preview th, .preview td {
+    border: 1px solid #3f3f46; padding: 6px 12px; text-align: left; font-size: 13px;
+  }
+  .preview th { background: #27272a; font-weight: 600; color: #f4f4f5; }
+  .preview tr:nth-child(even) td { background: rgba(39, 39, 42, 0.3); }
+  .preview img { max-width: 100%; border-radius: 6px; margin: 8px 0; }
+  .preview .task-list { list-style: none; padding-left: 4px; }
+  .preview .task-list li { display: flex; align-items: center; gap: 6px; }
+  .preview .task-list input[type="checkbox"] { accent-color: #34d399; }
+  .meta {
+    display: flex; gap: 12px; margin-top: 10px; font-size: 11px; color: #71717a;
+  }
+  .no-data {
+    display: flex; align-items: center; justify-content: center;
+    height: 80px; color: #71717a; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h2>📝 Markdown Previewer</h2>
+    <span class="badge">Interactive</span>
+  </div>
+  <div class="toolbar" id="toolbar">
+    <button class="active" data-view="preview">👁 Preview</button>
+    <button data-view="source">📄 Source</button>
+  </div>
+  <div class="content">
+    <div class="preview" id="preview"></div>
+    <div class="source" id="source"></div>
+  </div>
+  <div class="meta" id="meta"></div>
+
+<script>
+(function() {
+  let rpcId = 0;
+  function sendRpc(method, params) {
+    const id = ++rpcId;
+    window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+    return id;
+  }
+
+  sendRpc("ready");
+  const ctxId = sendRpc("getContext");
+
+  let markdown = "";
+  let currentView = "preview";
+
+  window.addEventListener("message", function(e) {
+    const msg = e.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id === ctxId && msg.result) {
+      const args = msg.result.arguments || {};
+      markdown = args.content || args.markdown || args.text || "";
+      render();
+      sendRpc("resize", { height: document.body.scrollHeight + 24 });
+    }
+  });
+
+  // Toolbar
+  document.getElementById("toolbar").addEventListener("click", function(e) {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    currentView = btn.dataset.view;
+    document.querySelectorAll(".toolbar button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    render();
+    sendRpc("resize", { height: document.body.scrollHeight + 24 });
+  });
+
+  function render() {
+    if (!markdown) {
+      document.getElementById("preview").innerHTML = '<div class="no-data">No content to preview</div>';
+      document.getElementById("source").style.display = "none";
+      document.getElementById("meta").innerHTML = "";
+      return;
+    }
+
+    const html = parseMarkdown(markdown);
+    document.getElementById("preview").innerHTML = html;
+    document.getElementById("source").textContent = markdown;
+
+    document.getElementById("preview").style.display = currentView === "preview" ? "block" : "none";
+    document.getElementById("source").style.display = currentView === "source" ? "block" : "none";
+
+    // Meta stats
+    const words = markdown.split(/\s+/).filter(w => w.length > 0).length;
+    const lines = markdown.split("\n").length;
+    const chars = markdown.length;
+    document.getElementById("meta").innerHTML =
+      `<span>${words} words</span><span>${lines} lines</span><span>${chars} chars</span>`;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function parseMarkdown(md) {
+    let html = md;
+
+    // Fenced code blocks
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {
+      return '<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + escapeHtml(code.trim()) + '</code></pre>';
+    });
+
+    // Inline code (before other inline processing)
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Headings
+    html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+    // Horizontal rule
+    html = html.replace(/^---+$/gm, '<hr>');
+
+    // Blockquotes
+    html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+
+    // Bold & italic
+    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // Strikethrough
+    html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
+
+    // Images
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
+
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    // Task lists
+    html = html.replace(/^- \[x\] (.+)$/gm, '<li class="task-item"><input type="checkbox" checked disabled> $1</li>');
+    html = html.replace(/^- \[ \] (.+)$/gm, '<li class="task-item"><input type="checkbox" disabled> $1</li>');
+
+    // Unordered lists
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li class="task-item">[\s\S]*?<\/li>(\n|$))+/g, function(match) {
+      return '<ul class="task-list">' + match + '</ul>';
+    });
+    html = html.replace(/(<li>[\s\S]*?<\/li>(\n|$))+/g, function(match) {
+      if (match.includes('task-list')) return match;
+      return '<ul>' + match + '</ul>';
+    });
+
+    // Ordered lists
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+
+    // Tables
+    html = html.replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)*)/gm, function(_, header, sep, body) {
+      const ths = header.split('|').filter(c => c.trim()).map(c => '<th>' + c.trim() + '</th>').join('');
+      const rows = body.trim().split('\n').map(row => {
+        const tds = row.split('|').filter(c => c.trim()).map(c => '<td>' + c.trim() + '</td>').join('');
+        return '<tr>' + tds + '</tr>';
+      }).join('');
+      return '<table><thead><tr>' + ths + '</tr></thead><tbody>' + rows + '</tbody></table>';
+    });
+
+    // Paragraphs: wrap lines not already in block elements
+    html = html.replace(/^(?!<[a-z])((?!<\/)[^\n]+)$/gm, '<p>$1</p>');
+
+    // Clean up empty paragraphs
+    html = html.replace(/<p>\s*<\/p>/g, '');
+
+    return html;
+  }
+})();
+</script>
+</body>
+</html>

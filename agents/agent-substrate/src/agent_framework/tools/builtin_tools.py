@@ -10,10 +10,10 @@ class CalculatorTool(BaseTool):
     """Simple calculator tool for basic math operations."""
     
     def __init__(self):
-        self.tool_schema = Tool(
+        super().__init__(
             name="calculator",
             description="Performs basic mathematical calculations. Supports +, -, *, /, ** (power), and % (modulo).",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "expression": {
@@ -52,19 +52,16 @@ class CalculatorTool(BaseTool):
                 }],
                 isError=True
             )
-    
-    def get_schema(self) -> Tool:
-        return self.tool_schema
 
 
 class GetCurrentTimeTool(BaseTool):
     """Tool to get the current time."""
     
     def __init__(self):
-        self.tool_schema = Tool(
+        super().__init__(
             name="get_current_time",
             description="Returns the current date and time in ISO format.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "timezone": {
@@ -98,19 +95,17 @@ class GetCurrentTimeTool(BaseTool):
             }],
             isError=False
         )
-    
-    def get_schema(self) -> Tool:
-        return self.tool_schema
+
 
 
 class WebSearchTool(BaseTool):
     """Placeholder for web search tool (you'd integrate with real API)."""
     
     def __init__(self):
-        self.tool_schema = Tool(
+        super().__init__(
             name="web_search",
             description="Search the web for information. Returns relevant search results.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "query": {
@@ -151,6 +146,3 @@ class WebSearchTool(BaseTool):
             }],
             isError=False
         )
-    
-    def get_schema(self) -> Tool:
-        return self.tool_schema

@@ -23,6 +23,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     func,
@@ -195,6 +196,9 @@ class Element(Base):
     )
     mime: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     props: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+    # Binary content (images, files stored directly in DB)
+    content: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
 
     # Relationships
     thread: Mapped[Optional["Thread"]] = relationship(back_populates="elements")

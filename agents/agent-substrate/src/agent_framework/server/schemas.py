@@ -93,6 +93,46 @@ class FeedbackOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── HITL schemas ─────────────────────────────────────────────────────────────
+
+class HITLResponse(BaseModel):
+    """POST /chat/respond/{request_id} – resolve a pending HITL request."""
+    # For tool approval
+    action: Optional[str] = None          # "approve" | "deny" | "modify"
+    modified_arguments: Optional[Dict[str, Any]] = None
+    reason: Optional[str] = None
+    # For human input
+    selected_key: Optional[str] = None
+    selected_label: Optional[str] = None
+    freeform_text: Optional[str] = None
+
+
+# ── MCP App schemas ──────────────────────────────────────────────────────────
+
+class McpContextUpdate(BaseModel):
+    """POST /threads/{id}/mcp-context – update model context from MCP App."""
+    tool_name: str
+    context: Any  # Structured data from the app (e.g., current board state)
+
+
+# ── Element schemas ──────────────────────────────────────────────────────────
+
+class ElementOut(BaseModel):
+    """Element (attachment) response object."""
+    id: uuid.UUID
+    thread_id: Optional[uuid.UUID] = None
+    type: Optional[str] = None
+    name: str
+    mime: Optional[str] = None
+    size: Optional[str] = None
+    display: Optional[str] = None
+    url: Optional[str] = None
+    for_id: Optional[uuid.UUID] = None
+    props: Optional[Dict[str, Any]] = None
+
+    model_config = {"from_attributes": True}
+
+
 # ── User schemas ─────────────────────────────────────────────────────────────
 
 class UserOut(BaseModel):

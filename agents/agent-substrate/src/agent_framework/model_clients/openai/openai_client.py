@@ -140,8 +140,14 @@ class OpenAIClient(BaseModelClient):
         params = {
             "model": self.model,
             "input": conversation_input,
-            "temperature": kwargs.get("temperature", self.temperature),
         }
+        
+        # Only add temperature if explicitly passed or if the model supports it
+        # GPT-5 models don't support temperature parameter
+        if "temperature" in kwargs:
+            params["temperature"] = kwargs["temperature"]
+        elif not self.model.startswith("gpt-5"):
+            params["temperature"] = self.temperature
         
         if instructions:
              params["instructions"] = instructions.strip()
@@ -342,9 +348,16 @@ class OpenAIClient(BaseModelClient):
         params = {
             "model": self.model,
             "input": conversation_input,
-            "temperature": kwargs.get("temperature", self.temperature),
             "stream": True,
         }
+        
+        # Only add temperature if explicitly passed or if the model supports it
+        # GPT-5 models don't support temperature parameter
+        if "temperature" in kwargs:
+            params["temperature"] = kwargs["temperature"]
+        elif not self.model.startswith("gpt-5"):
+            params["temperature"] = self.temperature
+        
         if instructions:
             params["instructions"] = instructions.strip()
         if self.max_tokens:

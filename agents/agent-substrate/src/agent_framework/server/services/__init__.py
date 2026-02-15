@@ -248,7 +248,7 @@ async def load_messages_for_memory(
     steps = await get_steps(
         db,
         thread_id,
-        types=["system_message", "user_message", "assistant_message", "tool_call", "tool_result"],
+        types=["system_message", "user_message", "assistant_message", "tool_call", "tool_result", "mcp_app_context"],
     )
     return [
         {

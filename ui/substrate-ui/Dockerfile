@@ -18,6 +18,7 @@ RUN pnpm install --frozen-lockfile
 # Generate Prisma client
 RUN pnpm prisma generate
 
+
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
@@ -28,8 +29,10 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+
 # Build Next.js
 ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm prisma generate
 RUN pnpm build
 
 # Production image, copy all the files and run next
@@ -46,7 +49,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules ./node_modules
 
 USER nextjs
 

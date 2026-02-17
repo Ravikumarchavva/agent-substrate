@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       // Check Google auth
-      const googleRes = await fetch("http://127.0.0.1:3001/api/auth/google/token", {
+      const googleRes = await fetch("http://127.0.0.1:3000/api/auth/google/token", {
         credentials: "include",
       });
       if (googleRes.ok) {
@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Check Spotify auth
-      const spotifyRes = await fetch("http://127.0.0.1:3001/api/spotify/token", {
+      const spotifyRes = await fetch("http://127.0.0.1:3000/api/spotify/token", {
         credentials: "include",
       });
       if (spotifyRes.ok) {
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const top = window.screen.height / 2 - height / 2;
     
     const popup = window.open(
-      "http://127.0.0.1:3001/api/auth/google/login",
+      "http://127.0.0.1:3000/api/auth/google/login",
       "google-auth",
       `width=${width},height=${height},left=${left},top=${top}`
     );
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const top = window.screen.height / 2 - height / 2;
     
     const popup = window.open(
-      "http://127.0.0.1:3001/api/spotify/login",
+      "http://127.0.0.1:3000/api/spotify/login",
       "spotify-auth",
       `width=${width},height=${height},left=${left},top=${top}`
     );
@@ -122,13 +122,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Logout from both services
       if (googleAuth) {
-        await fetch("http://127.0.0.1:3001/api/auth/google/logout", {
+        await fetch("http://127.0.0.1:3000/api/auth/google/logout", {
           method: "POST",
           credentials: "include",
         });
       }
       if (spotifyAuth) {
-        await fetch("http://127.0.0.1:3001/api/spotify/logout", {
+        await fetch("http://127.0.0.1:3000/api/spotify/logout", {
           method: "POST",
           credentials: "include",
         });

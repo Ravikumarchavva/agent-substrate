@@ -103,11 +103,12 @@ export function McpAppRenderer({
   // Handle incoming postMessage from the iframe
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      // Validate message format first
-      const data = event.data as JsonRpcRequest;
+      const data = event.data;
+      
+      // Validate JSON-RPC format
       if (!data || data.jsonrpc !== "2.0") return;
 
-      // Validate source is our iframe (after we know it's a valid JSON-RPC message)
+      // Validate source is our iframe
       if (iframeRef.current && event.source !== iframeRef.current.contentWindow) {
         return;
       }

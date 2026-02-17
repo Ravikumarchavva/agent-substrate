@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { nanoid } from "nanoid";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
-import { McpAppRenderer } from "@/components/McpAppRenderer";
+import { AppPanel, AppPanelItem } from "@/components/AppPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { Thread, Message } from "@/types";
@@ -19,6 +19,11 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // ── App Panel State ──────────────────────────────────────
+  const [panelItems, setPanelItems] = useState<AppPanelItem[]>([]);
+  const [activePanelId, setActivePanelId] = useState<string | null>(null);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -142,9 +147,41 @@ export default function ChatPage() {
     }
   }
 
-  async function sendMessage(e: React.FormEvent) {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  // ── App Panel Management ────────────────────────────────
+  const openInPanel = useCallback((item: AppPanelItem) => {
+    setPanelItems((prev) => {
+      // Replace existing item with same toolName, or add new
+      const existing = prev.findIndex((p) => p.toolName === item.toolName);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = { ...item, id: prev[existing].id };
+        return updated;
+      }
+      return [...prev, item];
+    });
+    setActivePanelId(item.id);
+    setPanelCollapsed(false);
+  }, []);
+
+  const closePanelItem = useCallback((id: string) => {
+    setPanelItems((prev) => {
+      const filtered = prev.filter((i) => i.id !== id);
+      if (activePanelId === id && filtered.length > 0) {
+        setActivePanelId(filtered[filtered.length - 1].id);
+      } else if (filtered.length === 0) {
+        setActivePanelId(null);
+      }
+      return filtered;
+    });
+  }, [activePanelId]);
+
+  const closeAllPanels = useCallback(() => {
+    setPanelItems([]);
+    setActivePanelId(null);
+  }, []);
+
+  async function doSendMessage(text: string) {
+    if (!text.trim() || loading) return;
 
     // If no thread exists, create one first
     let threadId = currentThreadId;
@@ -163,13 +200,13 @@ export default function ChatPage() {
     const userMessage: Message = {
       id: nanoid(),
       role: "user",
-      content: input,
+      content: text,
       timestamp: new Date(),
     };
 
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
-    const currentInput = input;
+    const currentInput = text;
     setInput("");
     setLoading(true);
 
@@ -287,6 +324,17 @@ export default function ChatPage() {
                   // For MCP App tools with app_data, merge the data into
                   // the tool_call arguments so the iframe receives it
                   if (data.has_app && data.app_data) {
+                    // Auto-open in side panel
+                    const panelId = data.tool_call_id || nanoid();
+                    const httpUrl = data.http_url || `/ui/${data.tool_name}`;
+                    openInPanel({
+                      id: panelId,
+                      httpUrl,
+                      toolName: data.tool_name,
+                      toolArguments: data.app_data,
+                      timestamp: Date.now(),
+                    });
+
                     setMessages((m) =>
                       m.map((msg) => {
                         if (msg.role !== "assistant" || !msg.toolCalls) return msg;
@@ -311,7 +359,8 @@ export default function ChatPage() {
                     continue;
                   }
                   // Skip rendering if an MCP App UI is already showing this tool's output
-                  if (data.has_app) continue;
+                  // (only skip if app_data was received; otherwise show text fallback)
+                  if (data.has_app && !data.is_error) continue;
                   const trId = nanoid();
                   setMessages((m) => [
                     ...m,
@@ -439,6 +488,10 @@ export default function ChatPage() {
     }
   }
 
+  function sendMessage(e: React.FormEvent) {
+    e.preventDefault();
+    doSendMessage(input);
+  }
   const currentThread = threads.find((t) => t.id === currentThreadId);
 
   return (
@@ -460,7 +513,9 @@ export default function ChatPage() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex min-w-0">
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col min-w-0">
         <Header
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           threadName={currentThread?.name}
@@ -473,7 +528,7 @@ export default function ChatPage() {
         >
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center">
-              <div className="text-center space-y-4 max-w-md px-4">
+              <div className="text-center space-y-6 max-w-2xl px-4">
                 <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl font-bold">
                   AI
                 </div>
@@ -481,6 +536,31 @@ export default function ChatPage() {
                 <p className="text-zinc-400">
                   Ask me anything, and I'll do my best to assist you with thoughtful, detailed responses.
                 </p>
+                
+                {/* Conversation Starters */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8">
+                  {[
+                    { icon: "🎵", text: "Play Despacito" },
+                    { icon: "🎷", text: "Play some jazz music" },
+                    { icon: "🎸", text: "Play top rock songs" },
+                    { icon: "🎼", text: "Play Hindi songs" },
+                    { icon: "📊", text: "Show me a data visualization" },
+                    { icon: "🌐", text: "What's the current time?" },
+                  ].map((starter, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => doSendMessage(starter.text)}
+                      className="flex items-center gap-3 p-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 border border-zinc-700 hover:border-zinc-600 transition-all text-left group"
+                    >
+                      <span className="text-2xl group-hover:scale-110 transition-transform">
+                        {starter.icon}
+                      </span>
+                      <span className="text-sm text-zinc-300 group-hover:text-white">
+                        {starter.text}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
@@ -554,6 +634,18 @@ export default function ChatPage() {
                       toolCalls={m.toolCalls}
                       isToolExecuting={m.isToolExecuting}
                       onMcpAppResult={handleMcpAppResult}
+                      onOpenInPanel={(tool) => {
+                        const args = typeof tool.arguments === "string"
+                          ? JSON.parse(tool.arguments)
+                          : tool.arguments;
+                        openInPanel({
+                          id: tool.id,
+                          httpUrl: tool._meta?.ui?.httpUrl || `/ui/${tool.name}`,
+                          toolName: tool.name,
+                          toolArguments: args,
+                          timestamp: Date.now(),
+                        });
+                      }}
                     />
                   );
                 }
@@ -613,6 +705,19 @@ export default function ChatPage() {
             </p>
           </div>
         </div>
+      </div>
+
+        {/* App Side Panel */}
+        <AppPanel
+          items={panelItems}
+          activeItemId={activePanelId}
+          onSetActive={setActivePanelId}
+          onClose={closePanelItem}
+          onClosePanel={closeAllPanels}
+          isCollapsed={panelCollapsed}
+          onToggleCollapse={() => setPanelCollapsed((c) => !c)}
+          onResult={handleMcpAppResult}
+        />
       </div>
 
       {/* Overlay for mobile sidebar */}

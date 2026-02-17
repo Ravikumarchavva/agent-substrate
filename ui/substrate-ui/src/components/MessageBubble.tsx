@@ -5,9 +5,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Copy, Check, RotateCw, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Copy, Check, RotateCw, ChevronDown, ChevronRight, Loader2, PanelRightOpen } from "lucide-react";
 import { ToolCall } from "@/types";
-import { McpAppRenderer } from "@/components/McpAppRenderer";
 import "katex/dist/katex.min.css";
 
 type Props = {
@@ -20,6 +19,8 @@ type Props = {
   onRegenerate?: () => void;
   /** Called when an MCP App sends a context update (submitResult / ui/update-model-context) */
   onMcpAppResult?: (toolName: string, result: unknown) => void;
+  /** Called when an MCP App should open in the side panel */
+  onOpenInPanel?: (toolCall: ToolCall) => void;
 };
 
 export function MessageBubble({ 
@@ -30,7 +31,8 @@ export function MessageBubble({
   toolCalls,
   isToolExecuting,
   onRegenerate,
-  onMcpAppResult 
+  onMcpAppResult,
+  onOpenInPanel
 }: Props) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
@@ -158,18 +160,20 @@ export function MessageBubble({
                         )}
                       </div>
 
-                      {/* MCP App interactive UI */}
+                      {/* MCP App - open in side panel */}
                       {hasApp && (
-                        <McpAppRenderer
-                          httpUrl={tool._meta!.ui!.httpUrl}
-                          toolName={tool.name}
-                          toolArguments={
-                            typeof tool.arguments === 'string'
-                              ? JSON.parse(tool.arguments)
-                              : tool.arguments
-                          }
-                          onResult={(result) => onMcpAppResult?.(tool.name, result)}
-                        />
+                        <button
+                          onClick={() => onOpenInPanel?.(tool)}
+                          className="w-full mt-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors text-left"
+                        >
+                          <PanelRightOpen className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span className="text-xs text-zinc-300 font-medium">
+                            Open {tool.name.replace(/_/g, " ")}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-400 border border-emerald-800 ml-auto">
+                            Interactive
+                          </span>
+                        </button>
                       )}
                     </div>
                   );

@@ -84,3 +84,9 @@ body {
   --tw-prose-code: #f9fafb;
   --tw-prose-pre-bg: #1f2937;
 }
+
+/* App Panel writing mode for collapsed tab */
+.writing-mode-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}

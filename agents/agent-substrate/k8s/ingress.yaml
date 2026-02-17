@@ -58,21 +58,21 @@ spec:
           service:
             name: agent-backend
             port:
-              number: 8001
+              number: 8000
       - path: /api/mcp
         pathType: Prefix
         backend:
           service:
             name: agent-backend
             port:
-              number: 8001
+              number: 8000
       - path: /ui
         pathType: Prefix
         backend:
           service:
             name: agent-backend
             port:
-              number: 8001
+              number: 8000
       # Frontend (Next.js) - catch-all
       - path: /
         pathType: Prefix

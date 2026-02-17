@@ -1,3 +1,6 @@
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_framework"]
+
 [project]
 name = "agent-framework"
 version = "0.1.0"

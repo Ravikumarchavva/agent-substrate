@@ -5,9 +5,9 @@ set -e
 
 # Configuration
 NAMESPACE="agent-framework"
-REGISTRY="${DOCKER_REGISTRY:-your-registry.com}"
-BACKEND_IMAGE="${REGISTRY}/agent-backend:latest"
-FRONTEND_IMAGE="${REGISTRY}/agent-frontend:latest"
+REGISTRY=""
+BACKEND_IMAGE="agent-backend:latest"
+FRONTEND_IMAGE="agent-frontend:latest"
 
 echo "🚀 Deploying Agent Framework to Kubernetes"
 echo "==========================================="
@@ -34,7 +34,6 @@ echo ""
 # Build Docker images
 echo "📦 Building Docker images..."
 echo "Building backend..."
-cd agent-framework
 docker build -t $BACKEND_IMAGE -f Dockerfile .
 
 echo "Building frontend..."
@@ -44,11 +43,11 @@ docker build -t $FRONTEND_IMAGE -f Dockerfile .
 cd ..
 
 # Push images
-echo "⬆️  Pushing images to registry..."
-docker push $BACKEND_IMAGE
-docker push $FRONTEND_IMAGE
+# echo "⬆️  Pushing images to registry..."
+# docker push $BACKEND_IMAGE
+# docker push $FRONTEND_IMAGE
 
-echo "✅ Images pushed successfully"
+echo "✅ Images built locally"
 echo ""
 
 # Create namespace
@@ -89,16 +88,16 @@ kubectl wait --for=condition=ready pod -l app=postgres -n $NAMESPACE --timeout=3
 echo "✅ PostgreSQL is ready"
 echo ""
 
-# Run database migrations
-echo "🔄 Running database migrations..."
-kubectl run -it --rm migration \
-    --image=$FRONTEND_IMAGE \
-    --restart=Never \
-    -n $NAMESPACE \
-    --command -- sh -c "pnpm prisma migrate deploy"
-
-echo "✅ Migrations completed"
-echo ""
+# Run database migrations (optional - skip if DB already initialized)
+# echo "🔄 Running database migrations..."
+# kubectl run -it --rm migration \
+#     --image=$FRONTEND_IMAGE \
+#     --restart=Never \
+#     -n $NAMESPACE \
+#     --command -- sh -c "pnpm prisma migrate deploy"
+# 
+# echo "✅ Migrations completed"
+# echo ""
 
 # Deploy Backend
 echo "🖥️  Deploying backend..."

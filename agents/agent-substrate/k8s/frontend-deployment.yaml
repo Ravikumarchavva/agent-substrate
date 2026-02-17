@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: your-registry/agent-frontend:latest  # Replace with your image
-        imagePullPolicy: Always
+        image: agent-frontend:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
           name: http

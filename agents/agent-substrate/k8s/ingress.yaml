@@ -1,0 +1,83 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-ingress
+  namespace: agent-framework
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"  # If using cert-manager
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+spec:
+  tls:
+  - hosts:
+    - your-domain.com  # Replace with your domain
+    secretName: agent-tls-cert
+  rules:
+  - host: your-domain.com  # Replace with your domain
+    http:
+      paths:
+      # OAuth endpoints (Next.js)
+      - path: /api/auth
+        pathType: Prefix
+        backend:
+          service:
+            name: agent-frontend
+            port:
+              number: 3000
+      - path: /api/spotify
+        pathType: Prefix
+        backend:
+          service:
+            name: agent-frontend
+            port:
+              number: 3000
+      - path: /api/google
+        pathType: Prefix
+        backend:
+          service:
+            name: agent-frontend
+            port:
+              number: 3000
+      # Chat & MCP endpoints (Python FastAPI)
+      - path: /api/chat
+        pathType: Prefix
+        backend:
+          service:
+            name: agent-backend
+            port:
+              number: 8001
+      - path: /api/mcp
+        pathType: Prefix
+        backend:
+          service:
+            name: agent-backend
+            port:
+              number: 8001
+      - path: /ui
+        pathType: Prefix
+        backend:
+          service:
+            name: agent-backend
+            port:
+              number: 8001
+      # Frontend (Next.js) - catch-all
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: agent-frontend
+            port:
+              number: 3000

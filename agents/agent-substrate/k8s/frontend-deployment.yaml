@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-frontend
+  namespace: agent-framework
+spec:
+  replicas: 2  # Start with 2, HPA will scale up/down
+  selector:
+    matchLabels:
+      app: agent-frontend
+  template:
+    metadata:
+      labels:
+        app: agent-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: your-registry/agent-frontend:latest  # Replace with your image
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: DATABASE_URL
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: ENCRYPTION_KEY
+        - name: NEXTAUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: NEXTAUTH_SECRET
+        - name: NEXTAUTH_URL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: NEXTAUTH_URL
+        - name: SPOTIFY_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: SPOTIFY_CLIENT_ID
+        - name: SPOTIFY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: SPOTIFY_CLIENT_SECRET
+        - name: SPOTIFY_REDIRECT_URI
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: SPOTIFY_REDIRECT_URI
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: GOOGLE_CLIENT_ID
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: GOOGLE_CLIENT_SECRET
+        - name: GOOGLE_REDIRECT_URI
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: GOOGLE_REDIRECT_URI
+        - name: NEXT_PUBLIC_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: NEXT_PUBLIC_API_URL
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: NODE_ENV
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-frontend
+  namespace: agent-framework
+spec:
+  selector:
+    app: agent-frontend
+  ports:
+  - port: 3000
+    targetPort: 3000
+  type: ClusterIP

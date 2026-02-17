@@ -336,7 +336,22 @@
 
   window.addEventListener("message", function(e) {
     const msg = e.data;
-    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (!msg) return;
+    
+    // Handle Spotify token from parent (cross-origin auth fix)
+    if (msg.type === "spotify_token_from_parent" && msg.access_token) {
+      console.log("[Spotify] Received token from parent window");
+      accessToken = msg.access_token;
+      saveTokens({ access_token: msg.access_token, expires_in: 3600 });
+      document.getElementById("auth-banner").classList.add("hidden");
+      if (!spotifyPlayer) {
+        initSpotifyPlayer();
+      }
+      return;
+    }
+    
+    // Handle JSON-RPC messages
+    if (msg.jsonrpc !== "2.0") return;
     
     // Handle RPC responses
     if (msg.id && pending[msg.id]) {
@@ -349,7 +364,7 @@
       handleToolInput(msg.params.arguments || msg.params);
     }
     
-    // Handle Spotify auth success from parent window
+    // Handle Spotify auth success from popup window
     if (msg.type === "spotify_auth_success" && msg.tokens) {
       handleAuthSuccess(msg.tokens);
     }
@@ -364,8 +379,65 @@
   let spotifyPlayer = null;
   let deviceId = null;
   let accessToken = null;
+  let refreshToken = null;
+  let tokenExpiresAt = 0;
   let progressInterval = null;
   let playerState = null;
+
+  // ── Token Persistence (localStorage) ────────────────────
+  function saveTokens(tokens) {
+    try {
+      const data = {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token || refreshToken,
+        expires_at: Date.now() + (tokens.expires_in || 3600) * 1000,
+      };
+      localStorage.setItem("spotify_tokens", JSON.stringify(data));
+      accessToken = data.access_token;
+      refreshToken = data.refresh_token;
+      tokenExpiresAt = data.expires_at;
+    } catch (e) {
+      console.log("[Spotify] Could not save tokens to localStorage");
+    }
+  }
+
+  function loadSavedTokens() {
+    try {
+      const raw = localStorage.getItem("spotify_tokens");
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      // Check if token is still valid (with 5 min buffer)
+      if (data.expires_at && data.expires_at > Date.now() + 300000) {
+        return data;
+      }
+      // Token expired but we have refresh token
+      if (data.refresh_token) {
+        return { ...data, expired: true };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearSavedTokens() {
+    try { localStorage.removeItem("spotify_tokens"); } catch (e) {}
+  }
+
+
+  async function refreshAccessToken() {
+    try {
+      const resp = await fetch("http://127.0.0.1:3001/api/spotify/refresh", { method: "POST", credentials: "include" });
+      if (resp.ok) {
+        const data = await resp.json();
+        saveTokens(data);
+        return data.access_token;
+      }
+    } catch (e) {
+      console.log("[Spotify] Token refresh failed");
+    }
+    return null;
+  }
 
   // ── Spotify Web Playback SDK Initialization ─────────────
   window.onSpotifyWebPlaybackSDKReady = () => {
@@ -373,23 +445,42 @@
     checkAuthAndInitPlayer();
   };
 
+
   async function checkAuthAndInitPlayer() {
-    try {
-      // Try to get existing token from backend
-      const resp = await fetch("/auth/spotify/token");
-      if (resp.ok) {
-        const data = await resp.json();
-        accessToken = data.access_token;
+    // 1. Check localStorage for saved tokens
+    const saved = loadSavedTokens();
+    if (saved && saved.access_token) {
+      if (saved.expired) {
+        // Try server refresh
+        let newToken = await refreshAccessToken();
+        if (newToken) {
+          accessToken = newToken;
+          document.getElementById("auth-banner").classList.add("hidden");
+          initSpotifyPlayer();
+          return;
+        }
+      } else {
+        accessToken = saved.access_token;
+        refreshToken = saved.refresh_token;
+        tokenExpiresAt = saved.expires_at;
         document.getElementById("auth-banner").classList.add("hidden");
         initSpotifyPlayer();
-      } else {
-        // Show auth banner
+        return;
+      }
+    }
+
+    // 2. Request token from parent window (cross-origin fix)
+    // Parent window has access to cookies and will send token via postMessage
+    console.log("[Spotify] Waiting for token from parent window...");
+    
+    // Show auth banner for now - parent will send token if available
+    // If no token arrives within 2 seconds, show the login button
+    setTimeout(() => {
+      if (!accessToken) {
+        console.log("[Spotify] No token received, showing login banner");
         document.getElementById("auth-banner").classList.remove("hidden");
       }
-    } catch (err) {
-      console.log("[Spotify] Not authenticated, showing login banner");
-      document.getElementById("auth-banner").classList.remove("hidden");
-    }
+    }, 2000);
   }
 
   function initSpotifyPlayer() {
@@ -406,6 +497,11 @@
       console.log("[Spotify] Player ready with device ID:", device_id);
       deviceId = device_id;
       showNotification("✅ Connected to Spotify", "success");
+      
+      // Auto-play first track if tracks are loaded and nothing is playing
+      if (tracks.length > 0 && currentIndex < 0) {
+        setTimeout(() => playTrack(0), 500);
+      }
     });
 
     // Not ready event
@@ -491,12 +587,11 @@
 
   // ── Authentication ──────────────────────────────────────
   window.loginSpotify = function() {
-    const authUrl = "/auth/spotify/login";
+    const authUrl = "http://127.0.0.1:3001/api/spotify/login";
     const width = 500;
     const height = 700;
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
-    
     window.open(
       authUrl,
       "spotify-auth",
@@ -505,18 +600,38 @@
   };
 
   function handleAuthSuccess(tokens) {
-    accessToken = tokens.access_token;
+    saveTokens(tokens);
     document.getElementById("auth-banner").classList.add("hidden");
     
     if (!spotifyPlayer) {
+      // Player will auto-play first track in the "ready" listener
       initSpotifyPlayer();
+    } else if (deviceId && tracks.length > 0 && currentIndex < 0) {
+      // Player already ready, auto-play now
+      playTrack(0);
     }
     
     showNotification("✅ Connected to Spotify!", "success");
+    
+    // Notify agent that user is now authenticated
+    notifyState("authenticated");
+    
+    // Notify parent window to refresh token (cross-origin fix)
+    window.parent.postMessage({
+      type: "spotify_auth_changed",
+      authenticated: true
+    }, "*");
   }
 
   // ── Init ────────────────────────────────────────────────
   async function init() {
+    // Early auth check — hide banner immediately if we have saved tokens
+    // (don't wait for SDK to load)
+    const saved = loadSavedTokens();
+    if (saved && saved.access_token && !saved.expired) {
+      document.getElementById("auth-banner").classList.add("hidden");
+    }
+    
     sendRpc("ready");
     const ctx = await sendRpc("getContext");
     if (ctx && ctx.arguments) {

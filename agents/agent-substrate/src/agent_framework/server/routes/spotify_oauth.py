@@ -121,6 +121,7 @@ async def spotify_callback(
                                 type: 'spotify_auth_success',
                                 tokens: {{
                                     access_token: '{token_data["access_token"]}',
+                                    refresh_token: '{token_data.get("refresh_token", "")}',
                                     expires_in: {token_data.get("expires_in", 3600)},
                                     scope: '{token_data.get("scope", "")}'
                                 }}
@@ -213,3 +214,67 @@ async def logout(request: Request):
         logger.info(f"Logged out session: {session_id}")
     
     return JSONResponse({"message": "Logged out successfully"})
+
+
+@router.post("/restore")
+async def restore_tokens(request: Request):
+    """Restore OAuth tokens from client-side localStorage.
+    
+    Called when the Spotify player iframe loads and has tokens saved
+    in localStorage that the server may have lost (e.g., after restart).
+    Uses the refresh_token to obtain a fresh access_token.
+    """
+    body = await request.json()
+    session_id = "default_user"
+    
+    access_token_val = body.get("access_token")
+    refresh_token_val = body.get("refresh_token")
+    
+    if not access_token_val and not refresh_token_val:
+        raise HTTPException(status_code=400, detail="No tokens provided")
+    
+    # If we already have tokens in memory, just return them
+    existing = _user_tokens.get(session_id)
+    if existing and existing.get("access_token"):
+        return JSONResponse({
+            "access_token": existing["access_token"],
+            "expires_in": existing.get("expires_in", 3600),
+            "status": "already_active",
+        })
+    
+    # Try to refresh using the provided refresh token
+    if refresh_token_val:
+        try:
+            auth_service = get_auth_service()
+            new_data = await auth_service.refresh_access_token(refresh_token_val)
+            _user_tokens[session_id] = {
+                "access_token": new_data["access_token"],
+                "refresh_token": refresh_token_val,
+                "expires_in": new_data.get("expires_in", 3600),
+                "scope": body.get("scope", ""),
+            }
+            logger.info("Restored Spotify tokens from client localStorage (refreshed)")
+            return JSONResponse({
+                "access_token": new_data["access_token"],
+                "expires_in": new_data.get("expires_in", 3600),
+                "status": "refreshed",
+            })
+        except Exception as e:
+            logger.warning(f"Could not refresh during restore: {e}")
+    
+    # Fall back to storing the provided access token as-is
+    if access_token_val:
+        _user_tokens[session_id] = {
+            "access_token": access_token_val,
+            "refresh_token": refresh_token_val,
+            "expires_in": body.get("expires_in", 3600),
+            "scope": body.get("scope", ""),
+        }
+        logger.info("Restored Spotify tokens from client localStorage (stored as-is)")
+        return JSONResponse({
+            "access_token": access_token_val,
+            "expires_in": body.get("expires_in", 3600),
+            "status": "stored",
+        })
+    
+    raise HTTPException(status_code=400, detail="Could not restore tokens")

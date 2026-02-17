@@ -106,7 +106,7 @@ async def serve_ui_resource(resource_name: str):
             # In production, set this to your specific frontend origin
             "Content-Security-Policy": (
                 "default-src 'self'; "
-                "script-src 'unsafe-inline' https://sdk.scdn.co; "
+                "script-src 'unsafe-inline' https://sdk.scdn.co blob:; "
                 "style-src 'unsafe-inline'; "
                 "img-src * data:; "
                 "media-src *; "

@@ -1,0 +1,42 @@
+# Kubernetes Secrets
+k8s/secrets.yaml
+
+# Environment Files
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+
+# SSL Certificates (generate locally)
+ssl/*.pem
+ssl/*.key
+ssl/*.crt
+
+# Backup files
+backup-*.sql
+backup-*.sql.gz

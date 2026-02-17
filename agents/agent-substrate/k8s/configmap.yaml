@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+  namespace: agent-framework
+data:
+  # Database
+  POSTGRES_DB: "agent_framework"
+  POSTGRES_USER: "agent"
+  
+  # Application URLs
+  NEXTAUTH_URL: "https://your-domain.com"
+  NEXT_PUBLIC_API_URL: "https://your-domain.com"
+  
+  # Spotify OAuth
+  SPOTIFY_REDIRECT_URI: "https://your-domain.com/api/spotify/callback"
+  
+  # Google OAuth
+  GOOGLE_REDIRECT_URI: "https://your-domain.com/api/auth/google/callback"
+  
+  # Environment
+  NODE_ENV: "production"
+  PORT: "8001"

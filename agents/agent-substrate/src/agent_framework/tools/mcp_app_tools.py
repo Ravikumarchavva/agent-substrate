@@ -15,6 +15,23 @@ from agent_framework.tools.base_tool import BaseTool, ToolResult
 logger = logging.getLogger(__name__)
 
 
+# Helper to check Spotify OAuth authentication status
+def _is_spotify_authenticated() -> bool:
+    """Check if user has authenticated with Spotify OAuth.
+    
+    Returns True if user has valid OAuth tokens for the Web Playback SDK.
+    """
+    try:
+        import requests
+        resp = requests.get("http://127.0.0.1:3001/api/spotify/token", timeout=2)
+        if resp.ok:
+            data = resp.json()
+            return bool(data.get("authenticated"))
+        return False
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Data Visualizer
 # ---------------------------------------------------------------------------
@@ -400,6 +417,7 @@ class SpotifyPlayerTool(BaseTool):
 
     def __init__(self, spotify_service: Any = None) -> None:
         self._spotify = spotify_service
+        self._base_spotify_service = spotify_service  # Keep base service for refreshing
         super().__init__(
             name="spotify_player",
             description=(
@@ -426,7 +444,7 @@ class SpotifyPlayerTool(BaseTool):
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Number of tracks to return (default: 20, max: 50)",
+                        "description": "Number of tracks to return (default: 10, max: 50)",
                     },
                 },
                 "required": ["query"],
@@ -447,7 +465,7 @@ class SpotifyPlayerTool(BaseTool):
     async def execute(self, **kwargs: Any) -> ToolResult:
         query: str = kwargs.get("query", "")
         genre: str = kwargs.get("genre", "")
-        limit: int = kwargs.get("limit", 20)
+        limit: int = kwargs.get("limit", 10)
 
         if not query:
             return ToolResult(
@@ -456,7 +474,7 @@ class SpotifyPlayerTool(BaseTool):
             )
 
         # Check if Spotify service is configured
-        if not self._spotify:
+        if not self._base_spotify_service:
             return ToolResult(
                 content=[{
                     "type": "text",
@@ -468,22 +486,70 @@ class SpotifyPlayerTool(BaseTool):
                 isError=True,
             )
 
-        # Build search query with optional genre
-        search_query = query
-        if genre:
-            search_query = f"{query} genre:{genre}"
+        # Try to use OAuth token from Next.js API if user is authenticated
+        oauth_token = None
+        try:
+            import requests
+            resp = requests.get("http://127.0.0.1:3001/api/spotify/token", timeout=2)
+            if resp.ok:
+                data = resp.json()
+                if data.get("access_token"):
+                    oauth_token = data["access_token"]
+                    logger.info("Using OAuth token from Next.js for Spotify search")
+        except Exception as e:
+            logger.debug(f"No OAuth token available from Next.js: {e}")
+
+        from agent_framework.services.spotify import SpotifyService
+        if oauth_token:
+            spotify = SpotifyService(
+                client_id=self._base_spotify_service._client_id,
+                client_secret=self._base_spotify_service._client_secret,
+                oauth_token=oauth_token,
+            )
+        else:
+            spotify = self._base_spotify_service
+
+        # Search Spotify — use the user query as-is first.
+        # If a genre hint is provided, we only use it as a fallback
+        # qualifier (never the genre: filter, which Spotify deprecated).
+        effective_limit = min(limit, 50)
+        tracks: list = []
 
         try:
-            tracks = await self._spotify.search_tracks(
-                query=search_query,
-                limit=min(limit, 50),
+            tracks = await spotify.search_tracks(
+                query=query,
+                limit=effective_limit,
             )
         except Exception as e:
-            logger.exception("Spotify search failed")
-            return ToolResult(
-                content=[{"type": "text", "text": f"Spotify search failed: {e}"}],
-                isError=True,
-            )
+            logger.warning("Spotify search failed for query=%r (limit=%d): %s", query, effective_limit, e)
+            # Retry with a smaller limit and simpler query
+            try:
+                simple_query = query.split()[0] if query.split() else query
+                tracks = await spotify.search_tracks(
+                    query=simple_query,
+                    limit=min(effective_limit, 5),
+                )
+            except Exception as retry_err:
+                logger.exception("Spotify search retry also failed")
+                # If OAuth token was used, try falling back to Client Credentials
+                if oauth_token:
+                    try:
+                        logger.info("Falling back to Client Credentials for search")
+                        tracks = await self._base_spotify_service.search_tracks(
+                            query=query, limit=min(effective_limit, 5),
+                        )
+                    except Exception:
+                        pass
+                    else:
+                        if tracks:
+                            logger.info("Client Credentials fallback succeeded")
+                            # Continue to result handling below
+                
+                if not tracks:
+                    return ToolResult(
+                        content=[{"type": "text", "text": f"Spotify search failed: {e}"}],
+                        isError=True,
+                    )
 
         if not tracks:
             return ToolResult(
@@ -494,6 +560,9 @@ class SpotifyPlayerTool(BaseTool):
         # Filter to tracks with preview URLs available
         playable = [t for t in tracks if t.get("preview_url")]
         all_tracks = tracks
+        
+        # Check Spotify OAuth authentication status
+        is_authenticated = _is_spotify_authenticated()
 
         # Build text summary for the LLM
         track_list = []
@@ -502,13 +571,23 @@ class SpotifyPlayerTool(BaseTool):
                 f"{i}. 🎵 {t['name']} — {t['artist']} "
                 f"({t['album']})"
             )
-
-        summary = (
-            f"Found {len(all_tracks)} tracks for \"{query}\""
-            + (f" (genre: {genre})" if genre else "")
-            + f". User can log in with Spotify Premium to play full tracks.\n"
-            + "\n".join(track_list)
-        )
+        
+        # Different message based on authentication state
+        if is_authenticated:
+            summary = (
+                f"🎵 Found {len(all_tracks)} tracks for \"{query}\""
+                + (f" (genre: {genre})" if genre else "")
+                + f". User is connected to Spotify Premium and can play full tracks.\n"
+                + "\n".join(track_list)
+            )
+        else:
+            summary = (
+                f"🎵 Found {len(all_tracks)} tracks for \"{query}\""
+                + (f" (genre: {genre})" if genre else "")
+                + f". ⚠️ User needs to connect their Spotify Premium account first to play full tracks. "
+                + "The player will show a 'Connect Spotify' button.\n"
+                + "\n".join(track_list)
+            )
 
         return ToolResult(
             content=[{"type": "text", "text": summary}],

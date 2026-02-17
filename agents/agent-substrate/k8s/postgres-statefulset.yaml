@@ -18,7 +18,7 @@ spec:
       - name: postgres
         image: postgres:16-alpine
         ports:
-        - containerPort: 5432
+        - containerPort: 5434
           name: postgres
         env:
         - name: POSTGRES_DB
@@ -69,7 +69,7 @@ spec:
       name: postgres-storage
     spec:
       accessModes: [ "ReadWriteOnce" ]
-      storageClassName: gp3
+      storageClassName: local-path
       resources:
         requests:
           storage: 20Gi

@@ -9,7 +9,7 @@ spec:
   resources:
     requests:
       storage: 20Gi  # Adjust based on needs
-  storageClassName: gp3  # AWS EBS gp3, adjust for your cloud provider
+  storageClassName: local-path  # Local storage for development
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -22,4 +22,4 @@ spec:
   resources:
     requests:
       storage: 50Gi  # For backups
-  storageClassName: gp3
+  storageClassName: local-path

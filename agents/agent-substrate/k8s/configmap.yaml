@@ -20,4 +20,4 @@ data:
   
   # Environment
   NODE_ENV: "production"
-  PORT: "8001"
+  PORT: "8000"

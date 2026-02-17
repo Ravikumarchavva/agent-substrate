@@ -21,16 +21,26 @@ SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 
 
 class SpotifyService:
-    """Lightweight async Spotify API client using Client Credentials."""
+    """Lightweight async Spotify API client supporting both OAuth and Client Credentials."""
 
-    def __init__(self, client_id: str, client_secret: str) -> None:
+    def __init__(
+        self, 
+        client_id: str, 
+        client_secret: str,
+        oauth_token: Optional[str] = None,
+    ) -> None:
         self._client_id = client_id
         self._client_secret = client_secret
+        self._oauth_token = oauth_token  # User OAuth token (if authenticated)
         self._access_token: Optional[str] = None
         self._token_expires_at: float = 0.0
 
     async def _ensure_token(self) -> str:
-        """Obtain (or refresh) the Client Credentials access token."""
+        """Get access token (OAuth if available, otherwise Client Credentials)."""
+        # Prefer OAuth token if available
+        if self._oauth_token:
+            return self._oauth_token
+            
         if self._access_token and time.time() < self._token_expires_at - 60:
             return self._access_token
 
@@ -77,8 +87,16 @@ class SpotifyService:
                 resp.raise_for_status()
                 return resp.json()
         except httpx.HTTPStatusError as e:
+            # Log the response body for debugging
+            try:
+                error_body = e.response.text
+            except Exception:
+                error_body = "(could not read response body)"
+            logger.error(
+                "Spotify API error %s for %s: %s",
+                e.response.status_code, path, error_body,
+            )
             if e.response.status_code == 403:
-                logger.error("Spotify API access forbidden (403): %s", e)
                 raise ValueError(
                     "Spotify API access denied. Your credentials may be invalid or expired. "
                     "Please update SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in your .env file. "
@@ -104,16 +122,16 @@ class SpotifyService:
                     If None, Spotify auto-detects based on user's IP/location.
             prefer_previews: If True, prioritize tracks with preview URLs
         """
-        # Fetch more than needed to have better preview coverage
-        fetch_limit = min(limit * 2, 50) if prefer_previews else min(limit, 50)
+        # Ensure limit is valid (Spotify requires 1-50)
+        safe_limit = max(1, min(limit, 50))
         
-        params = {
+        params: Dict[str, Any] = {
             "q": query,
             "type": "track",
-            "limit": fetch_limit,
+            "limit": safe_limit,
         }
         
-        # Only add market if explicitly specified
+        # Add market if explicitly specified
         if market:
             params["market"] = market
         

@@ -253,6 +253,12 @@ async def chat(
                                 content_text = "\n".join(parts)
 
                             tool_name = getattr(chunk, "name", "unknown")
+                            tool_http_url = ""
+                            if tool_name in tool_meta_map:
+                                meta_info = tool_meta_map[tool_name]
+                                ui_info = meta_info.get("ui", {})
+                                resource_uri = ui_info.get("resourceUri", "")
+                                tool_http_url = resolve_ui_uri(resource_uri) if resource_uri else f"/ui/{tool_name}"
                             payload = {
                                 "type": "tool_result",
                                 "tool_name": tool_name,
@@ -260,6 +266,7 @@ async def chat(
                                 "content": content_text,
                                 "is_error": getattr(chunk, "isError", False),
                                 "has_app": tool_name in tool_meta_map,
+                                "http_url": tool_http_url,
                                 "app_data": getattr(chunk, "app_data", None),
                                 "partial": False,
                             }

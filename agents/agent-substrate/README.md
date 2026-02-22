@@ -19,6 +19,8 @@
 - **🔒 Type-Safe**: Pydantic models throughout with comprehensive type hints
 - **🎨 Extensible**: Protocol-oriented design for easy customization
 
+![Architecture Diagram](public/diagrams/architecture.drawio.png)
+
 ---
 
 ## 📋 Table of Contents

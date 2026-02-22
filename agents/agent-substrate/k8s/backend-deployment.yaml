@@ -56,6 +56,36 @@ spec:
             configMapKeyRef:
               name: agent-config
               key: PORT
+        # Code Interpreter service (separate pod)
+        - name: CODE_INTERPRETER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: CODE_INTERPRETER_URL
+        - name: CI_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: CI_AUTH_TOKEN
+              optional: true
+        - name: CI_REPLICAS
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: CI_REPLICAS
+              optional: true
+        - name: CI_HEADLESS_SERVICE
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: CI_HEADLESS_SERVICE
+              optional: true
+        - name: CI_NAMESPACE
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: CI_NAMESPACE
+              optional: true
         resources:
           requests:
             memory: "1Gi"

@@ -1,0 +1,169 @@
+# Code Interpreter StatefulSet + Services
+#
+# StatefulSet gives stable DNS names for consistent-hash session routing:
+#   code-interpreter-0.code-interpreter-headless.agent-framework.svc.cluster.local
+#   code-interpreter-1.code-interpreter-headless.agent-framework.svc.cluster.local
+#
+# Prerequisites:
+#   1. Label KVM-capable node(s):   kubectl label node <node> firecracker=true
+#   2. Place kernel + rootfs at /opt/code-interpreter/ on those nodes
+#   3. Apply configmap first:       kubectl apply -f code-interpreter-configmap.yaml
+#
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: code-interpreter
+  namespace: agent-framework
+  labels:
+    app: code-interpreter
+    component: code-execution
+spec:
+  serviceName: code-interpreter-headless
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: code-interpreter
+  template:
+    metadata:
+      labels:
+        app: code-interpreter
+        component: code-execution
+    spec:
+      nodeSelector:
+        firecracker: "true"
+      terminationGracePeriodSeconds: 60
+
+      containers:
+      - name: code-interpreter
+        image: code-interpreter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+
+        envFrom:
+        - configMapRef:
+            name: code-interpreter-config
+
+        env:
+        # Auth token from k8s secret (optional)
+        - name: CI_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: CI_AUTH_TOKEN
+              optional: true
+        # Pod identity via Downward API
+        - name: CI_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        securityContext:
+          privileged: true
+
+        volumeMounts:
+        - name: data
+          mountPath: /data
+          readOnly: true
+        - name: dev-kvm
+          mountPath: /dev/kvm
+        - name: dev-vsock
+          mountPath: /dev/vhost-vsock
+        - name: work
+          mountPath: /tmp/firecracker-vms
+
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "4000m"
+
+        startupProbe:
+          httpGet:
+            path: /v1/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 12          # 10 + 12*5 = 70s max startup
+
+        livenessProbe:
+          httpGet:
+            path: /v1/health
+            port: 8080
+          initialDelaySeconds: 45
+          periodSeconds: 15
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /v1/health/ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 2
+
+      volumes:
+      # Kernel + rootfs (read-only hostPath on KVM node)
+      - name: data
+        hostPath:
+          path: /opt/code-interpreter
+          type: Directory
+
+      # Firecracker needs /dev/kvm for hardware acceleration
+      - name: dev-kvm
+        hostPath:
+          path: /dev/kvm
+          type: CharDevice
+
+      # vsock device for host↔VM communication
+      - name: dev-vsock
+        hostPath:
+          path: /dev/vhost-vsock
+          type: CharDevice
+
+      # Ephemeral workspace for VM sockets and overlay rootfs copies
+      - name: work
+        emptyDir:
+          sizeLimit: 20Gi
+
+---
+# Headless Service — enables per-pod DNS for consistent-hash routing
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-interpreter-headless
+  namespace: agent-framework
+  labels:
+    app: code-interpreter
+spec:
+  clusterIP: None
+  selector:
+    app: code-interpreter
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+
+---
+# Regular ClusterIP Service — for load-balanced access + health probes
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-interpreter
+  namespace: agent-framework
+  labels:
+    app: code-interpreter
+spec:
+  type: ClusterIP
+  selector:
+    app: code-interpreter
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http

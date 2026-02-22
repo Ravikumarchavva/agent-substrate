@@ -12,9 +12,10 @@ Replaces the old ``main.py`` with proper:
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, logger
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
@@ -27,6 +28,7 @@ from agent_framework.observability.telemetry import (
 )
 from agent_framework.server.database import close_db, get_session_factory, init_db
 from agent_framework.server.routes.chat import router as chat_router
+from agent_framework.server.routes.code_interpreter import router as code_interpreter_router
 from agent_framework.server.routes.elements import router as elements_router
 from agent_framework.server.routes.feedback import router as feedback_router
 from agent_framework.server.routes.hitl import router as hitl_router
@@ -34,6 +36,8 @@ from agent_framework.server.routes.mcp_apps import router as mcp_apps_router
 from agent_framework.server.routes.spotify_oauth import router as spotify_oauth_router
 from agent_framework.server.routes.threads import router as threads_router
 from agent_framework.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from agent_framework.tools.code_interpreter import CodeInterpreterTool
+from agent_framework.tools.code_interpreter.http_client import CodeInterpreterClient
 from agent_framework.tools.mcp_app_tools import (
     ColorPaletteTool,
     DataVisualizerTool,
@@ -44,8 +48,7 @@ from agent_framework.tools.mcp_app_tools import (
 )
 from agent_framework.services.spotify import SpotifyService
 from agent_framework.web_hitl import WebHITLBridge
-
-
+    
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -86,6 +89,38 @@ async def lifespan(app: FastAPI):
             client_secret=settings.SPOTIFY_CLIENT_SECRET,
         )
 
+    # ── Code Interpreter (HTTP client → separate pod) ────────────────────
+    code_interpreter_tool: CodeInterpreterTool | None = None
+    ci_client: CodeInterpreterClient | None = None
+
+    ci_url = getattr(settings, "CODE_INTERPRETER_URL", "") or os.environ.get("CODE_INTERPRETER_URL", "")
+    if ci_url:
+        ci_client = CodeInterpreterClient(
+            base_url=ci_url,
+            auth_token=os.environ.get("CI_AUTH_TOKEN", ""),
+            replicas=int(os.environ.get("CI_REPLICAS", "1")),
+            headless_service=os.environ.get("CI_HEADLESS_SERVICE", ""),
+            namespace=os.environ.get("CI_NAMESPACE", "agent-framework"),
+        )
+        code_interpreter_tool = CodeInterpreterTool(http_client=ci_client)
+        app.state.ci_client = ci_client
+        logging.getLogger(__name__).info("Code interpreter connected → %s", ci_url)
+    else:
+        # Fallback: try local mode (direct Firecracker, for dev)
+        try:
+            code_interpreter_tool = CodeInterpreterTool()  # auto-detect from env
+            if code_interpreter_tool._mode != "none":
+                await code_interpreter_tool.start()
+                logging.getLogger(__name__).info("Code interpreter started (local mode)")
+            else:
+                code_interpreter_tool = None
+                logging.getLogger(__name__).info("Code interpreter disabled (no URL configured)")
+        except Exception as e:
+            logging.getLogger(__name__).warning("Code interpreter disabled: %s", e)
+            code_interpreter_tool = None
+
+    app.state.ci_client = ci_client
+
     app.state.tools = [
         ask_tool,
         CalculatorTool(),
@@ -96,6 +131,7 @@ async def lifespan(app: FastAPI):
         ColorPaletteTool(),
         KanbanBoardTool(),
         SpotifyPlayerTool(spotify_service=spotify_svc),
+        *([code_interpreter_tool] if code_interpreter_tool else []),
     ]
 
     # HITL configuration for the agent
@@ -151,6 +187,14 @@ async def lifespan(app: FastAPI):
     yield
 
     # ---------- SHUTDOWN ----------
+    if getattr(app.state, "ci_client", None):
+        await app.state.ci_client.close()
+    for tool in app.state.tools:
+        if hasattr(tool, "stop"):
+            try:
+                await tool.stop()
+            except Exception:
+                pass
     await close_db()
     shutdown_opentelemetry()
 
@@ -177,6 +221,7 @@ def create_app() -> FastAPI:
     # Mount routers
     app.include_router(threads_router)
     app.include_router(chat_router)
+    app.include_router(code_interpreter_router)
     app.include_router(hitl_router)
     app.include_router(elements_router)
     app.include_router(feedback_router)

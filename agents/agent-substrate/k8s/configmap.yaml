@@ -21,3 +21,9 @@ data:
   # Environment
   NODE_ENV: "production"
   PORT: "8000"
+  
+  # Code Interpreter service
+  CODE_INTERPRETER_URL: "http://code-interpreter-headless.agent-framework.svc.cluster.local:8080"
+  CI_REPLICAS: "2"
+  CI_HEADLESS_SERVICE: "code-interpreter-headless"
+  CI_NAMESPACE: "agent-framework"

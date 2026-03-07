@@ -6,11 +6,14 @@
 <title>Spotify Player (Web Playback SDK) – MCP App</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #121212;
     color: #e4e4e7;
-    overflow-x: hidden;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   /* ── Header ─────────────────────────────────────────────── */
@@ -147,7 +150,9 @@
 
   /* ── Track List ───────────────────────────────────────── */
   .track-list-container {
-    max-height: 400px; overflow-y: auto;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
     scrollbar-width: thin; scrollbar-color: #404040 #1a1a1a;
   }
   .track-list-container::-webkit-scrollbar { width: 6px; }
@@ -426,17 +431,28 @@
 
 
   async function refreshAccessToken() {
-    try {
-      const resp = await fetch("http://127.0.0.1:3001/api/spotify/refresh", { method: "POST", credentials: "include" });
-      if (resp.ok) {
-        const data = await resp.json();
-        saveTokens(data);
-        return data.access_token;
+    // The iframe is served from the backend (localhost:8000); direct fetch to
+    // the frontend token API would be cross-origin and lacks the session cookie.
+    // Instead, ask the parent window to fetch and relay a fresh token.
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        window.removeEventListener("message", onToken);
+        console.log("[Spotify] Token refresh timed out");
+        resolve(null);
+      }, 5000);
+
+      function onToken(e) {
+        if (e.data?.type === "spotify_token_from_parent" && e.data.access_token) {
+          clearTimeout(timeout);
+          window.removeEventListener("message", onToken);
+          saveTokens({ access_token: e.data.access_token, expires_in: 3600 });
+          resolve(e.data.access_token);
+        }
       }
-    } catch (e) {
-      console.log("[Spotify] Token refresh failed");
-    }
-    return null;
+
+      window.addEventListener("message", onToken);
+      window.parent.postMessage({ type: "spotify_token_refresh_request" }, "*");
+    });
   }
 
   // ── Spotify Web Playback SDK Initialization ─────────────
@@ -447,40 +463,20 @@
 
 
   async function checkAuthAndInitPlayer() {
-    // 1. Check localStorage for saved tokens
-    const saved = loadSavedTokens();
-    if (saved && saved.access_token) {
-      if (saved.expired) {
-        // Try server refresh
-        let newToken = await refreshAccessToken();
-        if (newToken) {
-          accessToken = newToken;
-          document.getElementById("auth-banner").classList.add("hidden");
-          initSpotifyPlayer();
-          return;
-        }
-      } else {
-        accessToken = saved.access_token;
-        refreshToken = saved.refresh_token;
-        tokenExpiresAt = saved.expires_at;
-        document.getElementById("auth-banner").classList.add("hidden");
-        initSpotifyPlayer();
-        return;
-      }
-    }
+    // Request token from parent window. The parent holds the token in
+    // sessionStorage (set when the OAuth popup posted it back via postMessage).
+    // We do NOT use localStorage here because the iframe (localhost:8000) and
+    // the parent (localhost:3000) are on different origins and have separate storage.
+    console.log("[Spotify] Requesting token from parent window...");
+    window.parent.postMessage({ type: "spotify_token_refresh_request" }, "*");
 
-    // 2. Request token from parent window (cross-origin fix)
-    // Parent window has access to cookies and will send token via postMessage
-    console.log("[Spotify] Waiting for token from parent window...");
-    
-    // Show auth banner for now - parent will send token if available
-    // If no token arrives within 2 seconds, show the login button
+    // Give the parent 3 seconds to respond, then show the login banner.
     setTimeout(() => {
       if (!accessToken) {
         console.log("[Spotify] No token received, showing login banner");
         document.getElementById("auth-banner").classList.remove("hidden");
       }
-    }, 2000);
+    }, 3000);
   }
 
   function initSpotifyPlayer() {
@@ -587,16 +583,10 @@
 
   // ── Authentication ──────────────────────────────────────
   window.loginSpotify = function() {
-    const authUrl = "http://127.0.0.1:3001/api/spotify/login";
-    const width = 500;
-    const height = 700;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-    window.open(
-      authUrl,
-      "spotify-auth",
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
+    // Ask the parent window (main app) to open the Spotify login popup.
+    // This ensures the OAuth callback cookie is set on the frontend origin
+    // (localhost:3000) rather than the backend origin (localhost:8000).
+    window.parent.postMessage({ type: "spotify_login_request" }, "*");
   };
 
   function handleAuthSuccess(tokens) {

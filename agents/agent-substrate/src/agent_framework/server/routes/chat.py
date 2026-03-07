@@ -94,6 +94,15 @@ async def chat(
 
     # 2. Build agent with restored memory + HITL support
     deps = _get_agent_deps(request)
+
+    # Append per-request custom instructions if provided by the frontend
+    if body.system_instructions and body.system_instructions.strip():
+        deps["system_instructions"] = (
+            deps["system_instructions"]
+            + "\n\n---\n**Additional instructions from user:**\n"
+            + body.system_instructions.strip()
+        )
+
     agent = await load_agent_for_thread(
         db,
         body.thread_id,
@@ -133,15 +142,23 @@ async def chat(
         # Merged queue: both agent chunks and HITL events flow through here
         merged_queue: asyncio.Queue = asyncio.Queue()
 
+        # Per-request cancel signal — set by POST /chat/{thread_id}/cancel
+        cancel_event: asyncio.Event = asyncio.Event()
+        request.app.state.cancel_registry[body.thread_id] = cancel_event
+
         async def agent_worker():
             """Run the agent stream and push chunks to the merged queue."""
             try:
                 async for chunk in agent.run_stream(user_content):
                     await merged_queue.put(("agent", chunk))
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                await merged_queue.put(("error", str(e)))
+                merged_queue.put_nowait(("error", str(e)))
             finally:
-                await merged_queue.put(("agent_done", None))
+                # Use put_nowait (non-blocking) so this is safe inside
+                # a finally block that runs during task cancellation.
+                merged_queue.put_nowait(("agent_done", None))
 
         async def hitl_worker():
             """Drain HITL events from the bridge and push to the merged queue."""
@@ -160,8 +177,35 @@ async def chat(
         hitl_task = asyncio.create_task(hitl_worker())
 
         try:
+            bridge_signaled = False
             while True:
-                source, data = await merged_queue.get()
+                # Poll with a short timeout so we can detect cancellation
+                # even while waiting for the next queue item.
+                try:
+                    source, data = await asyncio.wait_for(
+                        merged_queue.get(), timeout=0.2
+                    )
+                except asyncio.TimeoutError:
+                    if cancel_event.is_set():
+                        logger.info(
+                            "Cancellation detected for thread %s", body.thread_id
+                        )
+                        # Stop the agent task
+                        if not agent_task.done():
+                            agent_task.cancel()
+                            try:
+                                await asyncio.wait_for(
+                                    asyncio.shield(agent_task), timeout=3.0
+                                )
+                            except (asyncio.CancelledError, asyncio.TimeoutError):
+                                pass
+                        # Signal HITL bridge to stop
+                        if not bridge_signaled:
+                            bridge_signaled = True
+                            await bridge.signal_done()
+                        yield f"data: {json.dumps({'type': 'cancelled'})}\n\n"
+                        break
+                    continue
 
                 if source == "agent":
                     chunk = data
@@ -312,7 +356,9 @@ async def chat(
 
                 elif source == "agent_done":
                     # Signal the HITL worker to stop
-                    await bridge.signal_done()
+                    if not bridge_signaled:
+                        bridge_signaled = True
+                        await bridge.signal_done()
                     break
 
         except Exception as e:
@@ -320,6 +366,8 @@ async def chat(
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
         finally:
+            # Clean up cancel registry for this thread
+            request.app.state.cancel_registry.pop(body.thread_id, None)
             # Ensure tasks are cleaned up
             if not agent_task.done():
                 agent_task.cancel()

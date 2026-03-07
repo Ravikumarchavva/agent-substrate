@@ -118,22 +118,22 @@ class SpotifyService:
         Args:
             query: Search query string
             limit: Maximum number of tracks to return
-            market: ISO 3166-1 alpha-2 country code (e.g., "US", "IN", "GB"). 
-                    If None, Spotify auto-detects based on user's IP/location.
+            market: ISO 3166-1 alpha-2 country code (e.g., "US", "IN", "GB").
+                    Defaults to "US" to maximise preview_url availability.
             prefer_previews: If True, prioritize tracks with preview URLs
         """
         # Ensure limit is valid (Spotify requires 1-50)
         safe_limit = max(1, min(limit, 50))
-        
+
+        # Default to US market — Spotify returns more preview_urls for a known market
+        effective_market = market or "US"
+
         params: Dict[str, Any] = {
             "q": query,
             "type": "track",
             "limit": safe_limit,
+            "market": effective_market,
         }
-        
-        # Add market if explicitly specified
-        if market:
-            params["market"] = market
         
         data = await self._get("/search", params=params)
 
@@ -175,7 +175,7 @@ class SpotifyService:
             if with_preview:
                 logger.info(f"Found {len(with_preview)}/{len(tracks)} tracks with previews for query: {query}")
             else:
-                logger.warning(f"No preview URLs available for query: {query} (market: {market})")
+                logger.warning(f"No preview URLs available for query: {query} (market: {effective_market})")
 
         return tracks[:limit]
 

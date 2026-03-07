@@ -1,14 +1,15 @@
 export async function POST(req: Request) {
   const body = await req.json();
 
-  // Forward the request to FastAPI backend with thread_id and messages
+  // Forward the request to FastAPI backend with thread_id, messages and optional system_instructions
   const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const res = await fetch(`${BACKEND_URL}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       thread_id: body.thread_id,
-      messages: body.messages
+      messages: body.messages,
+      ...(body.system_instructions ? { system_instructions: body.system_instructions } : {}),
     }),
   });
 

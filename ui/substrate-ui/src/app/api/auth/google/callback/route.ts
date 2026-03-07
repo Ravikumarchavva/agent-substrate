@@ -4,6 +4,9 @@
  * Exchanges code for tokens, stores in httpOnly cookies
  */
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+const ADMIN_EMAILS = new Set(["chavvaravikumarreddy2004@gmail.com"]);
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
@@ -41,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID!;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || "http://127.0.0.1:3001/api/auth/google/callback";
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || "http://127.0.0.1:3000/api/auth/google/callback";
 
   try {
     // Exchange authorization code for tokens
@@ -81,11 +84,36 @@ export async function GET(req: NextRequest) {
       console.warn("[Google OAuth] Failed to fetch user info:", err);
     }
 
+    // Upsert user in Prisma database
+    const isAdmin = ADMIN_EMAILS.has(userInfo?.email ?? "");
+    if (userInfo?.email) {
+      try {
+        await prisma.user.upsert({
+          where: { email: userInfo.email },
+          update: {
+            name: userInfo.name ?? undefined,
+            avatarUrl: userInfo.picture ?? undefined,
+            isAdmin,
+          },
+          create: {
+            email: userInfo.email,
+            googleId: userInfo.id ?? undefined,
+            name: userInfo.name ?? undefined,
+            avatarUrl: userInfo.picture ?? undefined,
+            isAdmin,
+          },
+        });
+      } catch (err) {
+        console.error("[Google OAuth] Failed to upsert user:", err);
+      }
+    }
+
     // Build success response with cookies
     const html = buildCallbackHTML(true, undefined, {
       email: userInfo?.email,
       name: userInfo?.name,
       picture: userInfo?.picture,
+      isAdmin,
     });
 
     const res = new NextResponse(html, {
@@ -119,6 +147,7 @@ export async function GET(req: NextRequest) {
         email: userInfo.email,
         name: userInfo.name,
         picture: userInfo.picture,
+        isAdmin,
       }), {
         httpOnly: false,
         maxAge: 60 * 60 * 24 * 365,
@@ -144,7 +173,7 @@ export async function GET(req: NextRequest) {
 function buildCallbackHTML(
   success: boolean,
   error?: string,
-  user?: { email?: string; name?: string; picture?: string }
+  user?: { email?: string; name?: string; picture?: string; isAdmin?: boolean }
 ): string {
   if (!success) {
     return `<!DOCTYPE html>

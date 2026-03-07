@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Maximize2, Minimize2, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { X, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -26,21 +26,13 @@ type JsonRpcRequest = {
 };
 
 type Props = {
-  /** Currently active panel items */
   items: AppPanelItem[];
-  /** Active panel item ID */
   activeItemId: string | null;
-  /** Set active panel item */
   onSetActive: (id: string) => void;
-  /** Close a specific panel item */
   onClose: (id: string) => void;
-  /** Close the entire panel */
   onClosePanel: () => void;
-  /** Whether panel is collapsed */
   isCollapsed: boolean;
-  /** Toggle collapsed state */
   onToggleCollapse: () => void;
-  /** Called when an MCP App sends a context update */
   onResult?: (toolName: string, result: unknown) => void;
 };
 
@@ -54,165 +46,289 @@ export function AppPanel({
   onToggleCollapse,
   onResult,
 }: Props) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [isReady, setIsReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const prevArgsRef = useRef<string>("");
+  // ── Per-item iframe refs (never cleared — iframes stay mounted) ──
+  const iframeRefs = useRef<Map<string, HTMLIFrameElement | null>>(new Map());
 
-  const activeItem = items.find((i) => i.id === activeItemId) || items[items.length - 1];
+  // ── Per-item ready / error state ────────────────────────────────
+  const [readyMap, setReadyMap] = useState<Record<string, boolean>>({});
+  const [errorMap, setErrorMap] = useState<Record<string, string | null>>({});
 
-  // Build the full URL
-  const fullUrl = activeItem
-    ? activeItem.httpUrl.startsWith("http")
-      ? activeItem.httpUrl
-      : `${API_BASE}${activeItem.httpUrl}`
-    : "";
+  // Ref mirror of readyMap so timeout callbacks read the latest value without
+  // stale closures.
+  const readyMapRef = useRef<Record<string, boolean>>({});
+  useEffect(() => { readyMapRef.current = readyMap; }, [readyMap]);
 
-  // Reset state when active item changes
+  // ── Per-item last-pushed args snapshot (prevents duplicate pushes) ─
+  const prevArgsRef = useRef<Record<string, string>>({});
+
+  // ── Track which items already have a load timeout running ────────
+  const timerStartedRef = useRef<Set<string>>(new Set());
+
+  const activeItem = items.find((i) => i.id === activeItemId) ?? items[items.length - 1];
+
+  // ── Low-level send helper ────────────────────────────────────────
+  const sendToItem = useCallback((itemId: string, message: unknown) => {
+    iframeRefs.current.get(itemId)?.contentWindow?.postMessage(message, "*");
+  }, []);
+
+  // ── Spotify: broadcast token to every loaded iframe ─────────────
+  // Only the Spotify player HTML handles `spotify_token_from_parent`;
+  // all other iframes silently ignore it.
+  const fetchAndSendSpotifyToken = useCallback(async (knownToken?: string) => {
+    try {
+      let token = knownToken ?? null;
+
+      if (!token) {
+        try { token = sessionStorage.getItem("spotify_access_token"); } catch { /* no sessionStorage */ }
+      }
+      if (!token) {
+        const res = await fetch("/api/spotify/token");
+        if (res.ok) {
+          const data = await res.json() as { access_token?: string };
+          token = data.access_token ?? null;
+          if (token) {
+            try { sessionStorage.setItem("spotify_access_token", token); } catch { /* ignore */ }
+          }
+        }
+      }
+
+      if (token) {
+        iframeRefs.current.forEach((iframe) => {
+          iframe?.contentWindow?.postMessage(
+            { type: "spotify_token_from_parent", access_token: token },
+            "*"
+          );
+        });
+      }
+    } catch {
+      // Not connected — silent
+    }
+  }, []);
+
+  // ── Re-send token when switching to a Spotify tab ────────────────
+  // With persistent iframes the `ready` event only fires once on first load,
+  // so we push the token explicitly whenever the active tab is Spotify.
   useEffect(() => {
-    setIsReady(false);
-    setError(null);
-    prevArgsRef.current = "";
+    if (activeItem?.toolName?.includes("spotify") && readyMap[activeItem.id]) {
+      fetchAndSendSpotifyToken();
+    }
+    // Only re-run when the active item changes, not on every readyMap update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeItem?.id]);
 
-  // Push updated context to iframe when toolArguments change
+  // ── Push updated context to ready iframes when toolArguments change ─
   useEffect(() => {
-    if (!isReady || !iframeRef.current?.contentWindow || !activeItem) return;
-    const snapshot = JSON.stringify(activeItem.toolArguments);
-    if (snapshot === prevArgsRef.current) return;
-    prevArgsRef.current = snapshot;
-    iframeRef.current.contentWindow.postMessage(
-      {
+    for (const item of items) {
+      if (!readyMap[item.id]) continue;
+      const snapshot = JSON.stringify(item.toolArguments);
+      if (snapshot === (prevArgsRef.current[item.id] ?? "")) continue;
+      prevArgsRef.current[item.id] = snapshot;
+      sendToItem(item.id, {
         jsonrpc: "2.0",
         method: "ui/notifications/tool-input",
-        params: { arguments: activeItem.toolArguments },
-      },
-      "*"
-    );
-  }, [isReady, activeItem?.toolArguments]);
+        params: { arguments: item.toolArguments },
+      });
+    }
+  }, [items, readyMap, sendToItem]);
 
-  const sendResponse = useCallback(
-    (id: string | number | undefined, result: unknown) => {
-      if (!iframeRef.current?.contentWindow) return;
-      iframeRef.current.contentWindow.postMessage(
-        { jsonrpc: "2.0", id, result },
-        "*"
-      );
-    },
-    []
-  );
+  // ── Clean up state when items are removed ───────────────────────
+  useEffect(() => {
+    const ids = new Set(items.map((i) => i.id));
 
-  const sendError = useCallback(
-    (id: string | number | undefined, code: number, message: string) => {
-      if (!iframeRef.current?.contentWindow) return;
-      iframeRef.current.contentWindow.postMessage(
-        { jsonrpc: "2.0", id, error: { code, message } },
-        "*"
-      );
-    },
-    []
-  );
+    setReadyMap((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const id of Object.keys(next)) {
+        if (!ids.has(id)) { delete next[id]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
 
-  // Handle incoming postMessage from the iframe
+    setErrorMap((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const id of Object.keys(next)) {
+        if (!ids.has(id)) { delete next[id]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+
+    for (const id of Object.keys(prevArgsRef.current)) {
+      if (!ids.has(id)) delete prevArgsRef.current[id];
+    }
+    iframeRefs.current.forEach((_, id) => {
+      if (!ids.has(id)) iframeRefs.current.delete(id);
+    });
+    timerStartedRef.current.forEach((id) => {
+      if (!ids.has(id)) timerStartedRef.current.delete(id);
+    });
+  }, [items]);
+
+  // ── Load timeout: mark error if iframe doesn't signal ready in 10s ─
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const item of items) {
+      if (timerStartedRef.current.has(item.id) || readyMap[item.id]) continue;
+      timerStartedRef.current.add(item.id);
+      const t = setTimeout(() => {
+        if (!readyMapRef.current[item.id]) {
+          setErrorMap((prev) => ({ ...prev, [item.id]: "MCP App took too long to load" }));
+        }
+      }, 10000);
+      timers.push(t);
+    }
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+
+  // ── Main postMessage handler ─────────────────────────────────────
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      const data = event.data as JsonRpcRequest;
-      if (!data || data.jsonrpc !== "2.0") return;
-      if (iframeRef.current && event.source !== iframeRef.current.contentWindow) return;
+      const msg = event.data;
+      if (!msg || typeof msg !== "object") return;
+
+      // ── Spotify popup / token messages ─────────────────────────
+      if (msg.type === "spotify_login_request") {
+        const w = 500, h = 700;
+        const left = Math.round(window.screen.width / 2 - w / 2);
+        const top = Math.round(window.screen.height / 2 - h / 2);
+        const loginUrl =
+          window.location.href
+            .replace("localhost", "127.0.0.1")
+            .split("/")
+            .slice(0, 3)
+            .join("/") + "/api/spotify/login";
+        window.open(loginUrl, "spotify-auth", `width=${w},height=${h},left=${left},top=${top}`);
+        return;
+      }
+      if (msg.type === "spotify_auth_success") {
+        const token: string | undefined = (msg as { access_token?: string }).access_token;
+        if (token) {
+          try { sessionStorage.setItem("spotify_access_token", token); } catch { /* ignore */ }
+        }
+        fetchAndSendSpotifyToken(token);
+        return;
+      }
+      if (msg.type === "spotify_auth_changed" || msg.type === "spotify_token_refresh_request") {
+        fetchAndSendSpotifyToken();
+        return;
+      }
+
+      // ── JSON-RPC messages from a known iframe ───────────────────
+      const data = msg as JsonRpcRequest;
+      if (data.jsonrpc !== "2.0") return;
+
+      // Identify which item's iframe sent this message
+      let senderItemId: string | null = null;
+      iframeRefs.current.forEach((iframe, id) => {
+        if (iframe?.contentWindow === event.source) senderItemId = id;
+      });
+      if (!senderItemId) return;
+
+      const itemId = senderItemId;
+      const senderItem = items.find((i) => i.id === itemId);
+      if (!senderItem) return;
 
       switch (data.method) {
         case "ready":
-        case "ui/initialize":
-          setIsReady(true);
+        case "ui/initialize": {
+          setReadyMap((prev) => ({ ...prev, [itemId]: true }));
+
           if (data.method === "ui/initialize") {
-            sendResponse(data.id, {
-              protocolVersion: "2025-06-18",
-              hostInfo: { name: "agent-framework-ui", version: "1.0.0" },
-              hostCapabilities: {},
-              hostContext: {
-                theme: "dark",
-                toolInfo: { tool: { name: activeItem?.toolName || "" } },
+            sendToItem(itemId, {
+              jsonrpc: "2.0",
+              id: data.id,
+              result: {
+                protocolVersion: "2025-06-18",
+                hostInfo: { name: "agent-framework-ui", version: "1.0.0" },
+                hostCapabilities: {},
+                hostContext: {
+                  theme: "dark",
+                  toolInfo: { tool: { name: senderItem.toolName } },
+                },
               },
             });
-            if (iframeRef.current?.contentWindow && activeItem) {
-              iframeRef.current.contentWindow.postMessage(
-                {
-                  jsonrpc: "2.0",
-                  method: "ui/notifications/tool-input",
-                  params: { arguments: activeItem.toolArguments },
-                },
-                "*"
-              );
-            }
           } else {
-            sendResponse(data.id, { status: "ok" });
+            sendToItem(itemId, { jsonrpc: "2.0", id: data.id, result: { status: "ok" } });
+          }
+
+          // Push initial context immediately and record snapshot
+          const snapshot = JSON.stringify(senderItem.toolArguments);
+          prevArgsRef.current[itemId] = snapshot;
+          sendToItem(itemId, {
+            jsonrpc: "2.0",
+            method: "ui/notifications/tool-input",
+            params: { arguments: senderItem.toolArguments },
+          });
+
+          // Forward Spotify token if applicable
+          if (senderItem.toolName?.includes("spotify")) {
+            fetchAndSendSpotifyToken();
           }
           break;
+        }
 
         case "getContext":
-          sendResponse(data.id, {
-            toolName: activeItem?.toolName,
-            arguments: activeItem?.toolArguments,
+          sendToItem(itemId, {
+            jsonrpc: "2.0",
+            id: data.id,
+            result: { toolName: senderItem.toolName, arguments: senderItem.toolArguments },
           });
           break;
 
         case "submitResult":
         case "ui/update-model-context":
           onResult?.(
-            activeItem?.toolName || "",
+            senderItem.toolName,
             data.params?.result ?? data.params?.content ?? data.params
           );
-          sendResponse(data.id, { status: "received" });
+          sendToItem(itemId, { jsonrpc: "2.0", id: data.id, result: { status: "received" } });
           break;
 
         case "resize":
         case "ui/notifications/size-changed":
-          // In panel mode, we ignore resize — the panel controls size
-          if (data.id) sendResponse(data.id, { status: "ok" });
+          if (data.id !== undefined) {
+            sendToItem(itemId, { jsonrpc: "2.0", id: data.id, result: { status: "ok" } });
+          }
           break;
 
         case "ui/open-link":
           if (data.params?.url) {
             window.open(data.params.url as string, "_blank", "noopener");
           }
-          sendResponse(data.id, {});
+          sendToItem(itemId, { jsonrpc: "2.0", id: data.id, result: {} });
           break;
 
         case "ui/message":
-          onResult?.(activeItem?.toolName || "", {
+          onResult?.(senderItem.toolName, {
             type: "message",
             role: data.params?.role || "user",
             content: data.params?.content,
           });
-          sendResponse(data.id, {});
+          sendToItem(itemId, { jsonrpc: "2.0", id: data.id, result: {} });
           break;
 
         case "close":
-          if (activeItem) onClose(activeItem.id);
-          sendResponse(data.id, { status: "ok" });
+          onClose(senderItem.id);
+          sendToItem(itemId, { jsonrpc: "2.0", id: data.id, result: { status: "ok" } });
           break;
 
         default:
-          sendError(data.id, -32601, `Method not found: ${data.method}`);
+          sendToItem(itemId, {
+            jsonrpc: "2.0",
+            id: data.id,
+            error: { code: -32601, message: `Method not found: ${data.method}` },
+          });
       }
     };
 
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [activeItem, onResult, onClose, sendResponse, sendError]);
-
-  // Timeout for app loading
-  useEffect(() => {
-    if (!activeItem) return;
-    const timeout = setTimeout(() => {
-      if (!isReady) setError("MCP App took too long to load");
-    }, 10000);
-    return () => clearTimeout(timeout);
-  }, [isReady, activeItem?.id]);
+  }, [items, onResult, onClose, sendToItem, fetchAndSendSpotifyToken]);
 
   if (items.length === 0) return null;
 
-  // Collapsed: just show a small pill/tab
+  // ── Collapsed pill ───────────────────────────────────────────────
   if (isCollapsed) {
     return (
       <div className="fixed right-0 top-1/2 -translate-y-1/2 z-30">
@@ -222,7 +338,7 @@ export function AppPanel({
           title="Open app panel"
         >
           <PanelRightOpen className="w-4 h-4 text-zinc-300" />
-          <span className="text-xs text-zinc-400 font-medium writing-mode-vertical">
+          <span className="text-xs text-zinc-400 font-medium">
             {items.length} app{items.length !== 1 ? "s" : ""}
           </span>
         </button>
@@ -258,14 +374,26 @@ export function AppPanel({
         </div>
       </div>
 
-      {/* Tabs - when multiple apps are open */}
+      {/* Tabs — visible when more than one app is open.
+          Each tab is a <div role="tab"> rather than <button> to avoid
+          the React hydration error caused by nesting a close <button>
+          inside a tab <button>. */}
       {items.length > 1 && (
-        <div className="flex border-b border-(--border) bg-zinc-900/50 overflow-x-auto scrollbar-thin">
+        <div
+          className="flex border-b border-(--border) bg-zinc-900/50 overflow-x-auto scrollbar-thin"
+          role="tablist"
+        >
           {items.map((item) => (
-            <button
+            <div
               key={item.id}
+              role="tab"
+              tabIndex={0}
+              aria-selected={item.id === activeItem?.id}
               onClick={() => onSetActive(item.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors shrink-0 ${
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") onSetActive(item.id);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors shrink-0 cursor-pointer select-none ${
                 item.id === activeItem?.id
                   ? "border-emerald-500 text-emerald-400 bg-zinc-800/50"
                   : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30"
@@ -274,66 +402,84 @@ export function AppPanel({
               <span className="max-w-30 truncate">
                 {item.toolName.replace(/_/g, " ")}
               </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose(item.id);
+              {/* Close uses <span role="button"> — no nested <button> */}
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Close ${item.toolName}`}
+                onClick={(e) => { e.stopPropagation(); onClose(item.id); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    onClose(item.id);
+                  }
                 }}
-                className="ml-1 p-0.5 rounded hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300"
+                className="ml-1 p-0.5 rounded hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300 cursor-pointer"
               >
                 <X className="w-3 h-3" />
-              </button>
-            </button>
+              </span>
+            </div>
           ))}
         </div>
       )}
 
-      {/* App Content */}
-      <div className="flex-1 min-h-0">
-        {activeItem && (
-          <div className="h-full flex flex-col">
-            {/* App Header */}
-            <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-800/30 border-b border-zinc-800 text-xs">
-              <span className="flex items-center gap-1.5">
-                <span
-                  className="inline-block w-2 h-2 rounded-full"
-                  style={{ backgroundColor: isReady ? "#22c55e" : "#eab308" }}
-                />
-                <span className="font-medium text-zinc-300">
-                  {activeItem.toolName.replace(/_/g, " ")}
-                </span>
-                <span className="text-zinc-500">MCP App</span>
-              </span>
-            </div>
+      {/* Active app name bar */}
+      {activeItem && (
+        <div className="flex items-center px-3 py-1.5 bg-zinc-800/30 border-b border-zinc-800 text-xs shrink-0">
+          <span
+            className="inline-block w-2 h-2 rounded-full mr-1.5"
+            style={{ backgroundColor: readyMap[activeItem.id] ? "#22c55e" : "#eab308" }}
+          />
+          <span className="font-medium text-zinc-300">
+            {activeItem.toolName.replace(/_/g, " ")}
+          </span>
+          <span className="text-zinc-500 ml-1">MCP App</span>
+        </div>
+      )}
 
-            {/* Iframe */}
-            {error ? (
-              <div className="flex-1 flex items-center justify-center p-4 text-center text-sm text-zinc-500">
-                <div>
-                  <p>⚠️ {error}</p>
-                  <p className="text-xs mt-1">
-                    The interactive UI for <strong>{activeItem.toolName}</strong> could not be loaded.
-                  </p>
+      {/* All iframes rendered simultaneously.
+          Inactive ones are hidden with CSS `visibility: hidden` so they
+          stay alive (preserving Spotify auth, Kanban state, etc.) without
+          reloading when the user switches tabs. */}
+      <div className="flex-1 min-h-0 relative">
+        {items.map((item) => {
+          const isActive = item.id === activeItem?.id;
+          const itemError = errorMap[item.id];
+          const itemUrl = item.httpUrl.startsWith("http")
+            ? item.httpUrl
+            : `${API_BASE}${item.httpUrl}`;
+
+          return (
+            <div
+              key={item.id}
+              className="absolute inset-0 flex flex-col"
+              style={{ visibility: isActive ? "visible" : "hidden" }}
+            >
+              {itemError ? (
+                <div className="flex-1 flex items-center justify-center p-4 text-center text-sm text-zinc-500">
+                  <div>
+                    <p>⚠️ {itemError}</p>
+                    <p className="text-xs mt-1">
+                      The interactive UI for <strong>{item.toolName}</strong> could not be loaded.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <iframe
-                key={activeItem.id}
-                ref={iframeRef}
-                src={fullUrl}
-                sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-                allow="autoplay; encrypted-media"
-                style={{
-                  width: "100%",
-                  flex: 1,
-                  border: "none",
-                  display: "block",
-                }}
-                title={`${activeItem.toolName} MCP App`}
-              />
-            )}
-          </div>
-        )}
+              ) : (
+                <iframe
+                  ref={(el) => {
+                    if (el) iframeRefs.current.set(item.id, el);
+                    else iframeRefs.current.delete(item.id);
+                  }}
+                  src={itemUrl}
+                  sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                  allow="autoplay; encrypted-media"
+                  style={{ width: "100%", flex: 1, border: "none", display: "block" }}
+                  title={`${item.toolName} MCP App`}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

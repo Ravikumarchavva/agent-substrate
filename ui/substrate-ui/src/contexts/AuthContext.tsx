@@ -7,11 +7,13 @@ type User = {
   name?: string;
   picture?: string;
   provider: "google" | "spotify";
+  isAdmin?: boolean;
 };
 
 type AuthContextType = {
   user: User | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   isLoading: boolean;
   googleAuth: boolean;
   spotifyAuth: boolean;
@@ -165,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isAuthenticated: googleAuth || spotifyAuth,
+        isAdmin: !!(user?.isAdmin || user?.email === "chavvaravikumarreddy2004@gmail.com"),
         isLoading,
         googleAuth,
         spotifyAuth,

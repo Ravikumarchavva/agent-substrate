@@ -28,6 +28,7 @@ const NEXT: Record<TaskStatus, TaskStatus> = {
   todo: "in_progress",
   in_progress: "done",
   done: "todo",
+  failed: "todo",
 };
 
 // ---------------------------------------------------------------------------
@@ -47,19 +48,22 @@ function TaskRow({
 }) {
   const done = task.status === "done";
   const inProgress = task.status === "in_progress";
+  const failed = task.status === "failed";
 
   return (
     <div
       className="group flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-(--card-hover)"
       onClick={() => onStatusChange(taskListId, task.id, NEXT[task.status])}
       title={
-        done ? "Click to reset" : inProgress ? "Click to mark done" : "Click to start"
+        done ? "Click to reset" : failed ? "Click to retry" : inProgress ? "Click to mark done" : "Click to start"
       }
     >
       {/* Status icon */}
       <span className="shrink-0">
         {done ? (
           <CheckCircle2 className="w-4 h-4" style={{ color: "#22c55e" }} />
+        ) : failed ? (
+          <Circle className="w-4 h-4" style={{ color: "#ef4444" }} />
         ) : inProgress ? (
           <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#f59e0b" }} />
         ) : (
@@ -71,7 +75,7 @@ function TaskRow({
       <span
         className="flex-1 text-sm leading-snug"
         style={{
-          color: done ? "var(--muted)" : "var(--foreground)",
+          color: done ? "var(--muted)" : failed ? "#f87171" : "var(--foreground)",
           textDecoration: done ? "line-through" : "none",
         }}
       >

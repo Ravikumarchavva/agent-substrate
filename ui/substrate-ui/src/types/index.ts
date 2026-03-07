@@ -77,7 +77,7 @@ export type Element = {
 // Task Manager Types
 // ---------------------------------------------------------------------------
 
-export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskStatus = "todo" | "in_progress" | "done" | "failed";
 
 export type Task = {
   id: string;

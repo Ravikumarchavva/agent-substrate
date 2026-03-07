@@ -1,11 +1,10 @@
 /**
  * Spotify OAuth – Callback
  * GET /api/spotify/callback?code=...&state=...
- * Exchanges code for tokens, stores in database (encrypted), closes popup.
+ * Exchanges code for tokens, stores them as httpOnly cookies (cookie-based auth,
+ * consistent with Google OAuth flow — no Prisma session required).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, getOrCreateUser, createSession } from "@/lib/session";
-import { getCredentialManager } from "@/lib/credentials";
 
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 
@@ -40,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   const clientId = process.env.SPOTIFY_CLIENT_ID!;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET!;
-  const redirectUri = process.env.SPOTIFY_REDIRECT_URI || "http://127.0.0.1:3001/api/spotify/callback";
+  const redirectUri = process.env.SPOTIFY_REDIRECT_URI || "http://127.0.0.1:3000/api/spotify/callback";
 
   // Exchange code for tokens
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
@@ -70,41 +69,46 @@ export async function GET(req: NextRequest) {
   const tokens = await tokenRes.json();
   const expiresIn = tokens.expires_in || 3600;
 
-  // Get or create user session
-  let user = await getSession();
-  if (!user) {
-    // Create a temporary user (later we'll link with Google account)
-    user = await getOrCreateUser(`spotify_${tokens.profile?.id || Date.now()}@temp.local`);
-    await createSession(user);
-  }
-
-  // Store encrypted credentials in database
-  const credentialManager = getCredentialManager();
-  await credentialManager.storeCredential(
-    user.id,
-    'spotify',
-    tokens.access_token,
-    tokens.refresh_token,
-    expiresIn,
-    tokens.scope
-  );
-
-  // Build response
-  const html = buildCallbackHTML(true);
-
+  // Build response HTML that posts the token directly to the opener window.
+  // Cookies are also set as a same-origin fallback, but the primary token
+  // delivery is via postMessage — this bypasses the localhost/127.0.0.1
+  // cookie isolation that would otherwise cause a 401 on /api/spotify/token.
+  const html = buildCallbackHTML(true, undefined, tokens.access_token, expiresIn);
   const res = new NextResponse(html, {
     status: 200,
     headers: { "Content-Type": "text/html" },
   });
 
+  res.cookies.set("spotify_access_token", tokens.access_token, {
+    httpOnly: true,
+    maxAge: expiresIn,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+
+  if (tokens.refresh_token) {
+    res.cookies.set("spotify_refresh_token", tokens.refresh_token, {
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
+
   // Clear the state cookie
-  const cookieStore = await import('next/headers').then(m => m.cookies());
-  (await cookieStore).delete("spotify_oauth_state");
+  res.cookies.delete("spotify_oauth_state");
 
   return res;
 }
 
-function buildCallbackHTML(success: boolean, error?: string): string {
+function buildCallbackHTML(
+  success: boolean,
+  error?: string,
+  accessToken?: string,
+  expiresIn?: number,
+): string {
   if (!success) {
     return `<!DOCTYPE html><html><body>
       <h1>Spotify Authentication Failed</h1>
@@ -118,10 +122,17 @@ function buildCallbackHTML(success: boolean, error?: string): string {
 
   return `<!DOCTYPE html><html><body>
     <h1>Connected to Spotify!</h1>
-    <p>Credentials saved securely. You can close this window...</p>
+    <p>You can close this window...</p>
     <script>
-      window.opener?.postMessage({ type: "spotify_auth_success" }, "*");
-      setTimeout(() => window.close(), 1500);
+      // Deliver the token directly to the opener via postMessage.
+      // This works even when the popup and parent are on different origins
+      // (e.g. 127.0.0.1 vs localhost) because no cookies are involved.
+      window.opener?.postMessage({
+        type: "spotify_auth_success",
+        access_token: ${accessToken ? JSON.stringify(accessToken) : "null"},
+        expires_in: ${expiresIn ?? 3600}
+      }, "*");
+      setTimeout(() => window.close(), 1000);
     </script>
   </body></html>`;
 }

@@ -6,20 +6,32 @@ import { MessageBubble } from "@/components/MessageBubble";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
 import { AppPanel, AppPanelItem } from "@/components/AppPanel";
-import { KanbanPanel } from "@/components/KanbanPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
+import { SettingsPanel, SettingsTab } from "@/components/SettingsPanel";
 import { Thread, Message, Task, TaskList, TaskStatus } from "@/types";
 import { api } from "@/lib/api";
-import { Send, Plus, Mic, Music2, Music, Clock, BarChart2, type LucideIcon } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Send, Plus, Mic, Music2, ListTodo, Clock, BarChart2, StopCircle, Loader2, type LucideIcon } from "lucide-react";
 
 export default function ChatPage() {
+  const { isAuthenticated, isLoading: authLoading, loginWithGoogle } = useAuth();
+
   const [threads, setThreads] = useState<Thread[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // ── Settings Panel State ─────────────────────────────────
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+  const [settingsPanelTab, setSettingsPanelTab] = useState<SettingsTab>("general");
+
+  function openSettingsPanel(tab: SettingsTab = "general") {
+    setSettingsPanelTab(tab);
+    setSettingsPanelOpen(true);
+  }
 
   // ── App Panel State ──────────────────────────────────────
   const [panelItems, setPanelItems] = useState<AppPanelItem[]>([]);
@@ -31,18 +43,40 @@ export default function ChatPage() {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Tracks the AbortController for the current in-flight fetch so we can
+  // cancel the SSE stream when the user hits the stop button.
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Tracks which AppPanel item holds the Kanban board so task updates can
+  // patch its toolArguments and be pushed to the iframe via update_context.
+  const kanbanPanelIdRef = useRef<string | null>(null);
 
   // Load threads on mount
   useEffect(() => {
     loadThreads();
   }, []);
 
-  // Load messages when thread changes
+  // Load messages when thread changes, and reset panel/task state
   useEffect(() => {
     if (currentThreadId) {
       loadMessages(currentThreadId);
+      setPanelItems([]);
+      setActivePanelId(null);
+      setTaskList(null);
+      kanbanPanelIdRef.current = null;
     }
   }, [currentThreadId]);
+
+  // Keep the Kanban panel item's toolArguments in sync with taskList state so
+  // the iframe receives live update_context messages from AppPanel.
+  useEffect(() => {
+    const id = kanbanPanelIdRef.current;
+    if (!taskList || !id) return;
+    setPanelItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, toolArguments: { task_list: taskList } } : item
+      )
+    );
+  }, [taskList]);
 
   useEffect(() => {
     // Auto-scroll to bottom whenever messages change
@@ -185,6 +219,23 @@ export default function ChatPage() {
     setActivePanelId(null);
   }, []);
 
+  /** Stop the running agent and abort the SSE stream. */
+  async function handleStop() {
+    if (!currentThreadId) return;
+    // Signal the backend to cancel the running agent for this thread
+    try {
+      await fetch("/api/chat/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thread_id: currentThreadId }),
+      });
+    } catch (err) {
+      console.error("Failed to send cancel request:", err);
+    }
+    // Abort the local fetch reader so the SSE loop exits immediately
+    abortControllerRef.current?.abort();
+  }
+
   async function doSendMessage(text: string) {
     if (!text.trim() || loading) return;
 
@@ -233,13 +284,20 @@ export default function ChatPage() {
     setMessages((m) => [...m, assistantMessage]);
 
     try {
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           thread_id: threadId,
-          messages: [{ role: "user", content: currentInput }]
+          messages: [{ role: "user", content: currentInput }],
+          ...(localStorage.getItem("system_instructions_override")?.trim()
+            ? { system_instructions: localStorage.getItem("system_instructions_override")!.trim() }
+            : {}),
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -326,6 +384,8 @@ export default function ChatPage() {
 
                 // ── Tool result ──
                 if (data.type === "tool_result") {
+                  // Task management results are shown in the Kanban panel
+                  if (data.tool_name === "manage_tasks") continue;
                   // For MCP App tools with app_data, merge the data into
                   // the tool_call arguments so the iframe receives it
                   if (data.has_app && data.app_data) {
@@ -389,7 +449,19 @@ export default function ChatPage() {
 
                 // ── Task Board Events ──
                 if (data.type === "task_list_created") {
-                  setTaskList(data.task_list as TaskList);
+                  const tl = data.task_list as TaskList;
+                  setTaskList(tl);
+                  // Open the Kanban board in the App Panel (like Spotify)
+                  const kanbanId = `kanban-${tl.id}`;
+                  kanbanPanelIdRef.current = kanbanId;
+                  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                  openInPanel({
+                    id: kanbanId,
+                    httpUrl: `${apiBase}/ui/kanban_board`,
+                    toolName: "manage_tasks",
+                    toolArguments: { task_list: tl },
+                    timestamp: Date.now(),
+                  });
                   continue;
                 }
                 if (data.type === "task_updated") {
@@ -454,14 +526,16 @@ export default function ChatPage() {
                     : String(data.content || "");
                   const hasToolCalls = !!data.has_tool_calls;
                   
-                  // Parse tool calls if present
-                  const toolCalls = data.tool_calls?.map((tc: any) => ({
-                    id: tc.id,
-                    name: tc.name,
-                    arguments: tc.arguments,
-                    result: "Completed",
-                    _meta: tc._meta || undefined,
-                  })) || [];
+                  // Parse tool calls if present (exclude manage_tasks — shown in Kanban panel)
+                  const toolCalls = (data.tool_calls ?? [])
+                    .filter((tc: any) => tc.name !== 'manage_tasks')
+                    .map((tc: any) => ({
+                      id: tc.id,
+                      name: tc.name,
+                      arguments: tc.arguments,
+                      result: "Completed",
+                      _meta: tc._meta || undefined,
+                    }));
                   
                   setMessages((m) =>
                     m.map((msg) =>
@@ -485,6 +559,8 @@ export default function ChatPage() {
                     loadThreads();
                   }
                 } else if (data.type === 'tool_call') {
+                  // Task management is shown in the Kanban panel — skip chat clutter
+                  if (data.tool_name === 'manage_tasks') continue;
                   // Tool is being called - show it in UI
                   const toolCall = {
                     id: data.tool_call_id || nanoid(),
@@ -503,6 +579,16 @@ export default function ChatPage() {
                         : msg
                     )
                   );
+                } else if (data.type === 'cancelled') {
+                  // Agent was stopped by the user — finalise the current turn
+                  setMessages((m) =>
+                    m.map((msg) =>
+                      msg.id === assistantId
+                        ? { ...msg, isToolExecuting: false }
+                        : msg
+                    )
+                  );
+                  setLoading(false);
                 } else if (data.type === 'error') {
                   const errorMsg = String(data.error || "Unknown error");
                   setMessages((m) =>
@@ -524,6 +610,11 @@ export default function ChatPage() {
 
       setLoading(false);
     } catch (error) {
+      // An AbortError is expected when the user clicks stop — don't show an error.
+      if (error instanceof Error && error.name === 'AbortError') {
+        setLoading(false);
+        return;
+      }
       console.error("Stream error:", error);
       setMessages((m) =>
         m.map((msg) =>
@@ -576,8 +667,63 @@ export default function ChatPage() {
   }
   const currentThread = threads.find((t) => t.id === currentThreadId);
 
+  // ── Auth guards ───────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--muted)" }} />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background px-4">
+        <div className="text-center space-y-6 max-w-sm w-full">
+          <div
+            className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-2xl font-bold text-white"
+            style={{
+              background:
+                "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))",
+            }}
+          >
+            AI
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Welcome</h1>
+            <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>
+              Sign in to start chatting with your AI assistant
+            </p>
+          </div>
+          <button
+            onClick={loginWithGoogle}
+            className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-xl text-sm font-semibold hover:bg-gray-100 transition-colors shadow-lg"
+          >
+            {/* Google G */}
+            <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Continue with Google
+          </button>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Your conversations are private and secure
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-background text-foreground" suppressHydrationWarning>
+      {/* Settings Panel (portal-like overlay) */}
+      <SettingsPanel
+        isOpen={settingsPanelOpen}
+        initialTab={settingsPanelTab}
+        onClose={() => setSettingsPanelOpen(false)}
+      />
       {/* Sidebar */}
       <div
         className={`shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${
@@ -603,6 +749,7 @@ export default function ChatPage() {
           onToggleSidebar={sidebarOpen ? undefined : () => setSidebarOpen(true)}
           sidebarOpen={sidebarOpen}
           threadName={currentThread?.name}
+          onOpenSettings={openSettingsPanel}
         />
 
         {/* Messages Area */}
@@ -630,7 +777,7 @@ export default function ChatPage() {
                 <div className="grid grid-cols-2 gap-2 mt-4">
                   {([
                     { icon: Music2, text: "Play Despacito on Spotify" },
-                    { icon: Music, text: "Play some jazz music" },
+                    { icon: ListTodo, text: "Plan tasks to organise a birthday party" },
                     { icon: Clock, text: "What's the current time?" },
                     { icon: BarChart2, text: "Show a data visualisation" },
                   ] as { icon: LucideIcon, text: string }[]).map(({ icon: Icon, text }, idx) => (
@@ -739,7 +886,8 @@ export default function ChatPage() {
 
                 return null;
               })}
-              {loading && (
+{/* Only show bounce dots when loading but no assistant message exists yet */}
+              {loading && !messages.some((m) => m.role === 'assistant' && m.id === messages[messages.length - 1]?.id) && (
                 <div className="py-2">
                   <div className="flex gap-3">
                     <div
@@ -759,15 +907,6 @@ export default function ChatPage() {
             </div>
           )}
         </div>
-
-        {/* Kanban Task Board — above input */}
-        <KanbanPanel
-          taskList={taskList}
-          onTaskStatusChange={handleTaskStatusChange}
-          onTaskDelete={handleTaskDelete}
-          onTaskAdd={handleTaskAdd}
-          onDismiss={() => setTaskList(null)}
-        />
 
         {/* Input Area */}
         <div className="bg-background pb-4 pt-2">
@@ -815,18 +954,32 @@ export default function ChatPage() {
                     <Mic className="w-4 h-4" />
                   </button>
                 )}
-                <button
-                  type="submit"
-                  disabled={loading || !input.trim()}
-                  className="p-1.5 rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  style={{
-                    background: input.trim() ? "var(--accent)" : "var(--card)",
-                    color: input.trim() ? "#fff" : "var(--muted)",
-                  }}
-                  aria-label="Send"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
+                {loading ? (
+                  /* Stop button — visible while the agent is running */
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    className="p-1.5 rounded-full transition-colors"
+                    style={{ background: "var(--accent)", color: "#fff" }}
+                    aria-label="Stop"
+                  >
+                    <StopCircle className="w-4 h-4" />
+                  </button>
+                ) : (
+                  /* Send button — visible when idle */
+                  <button
+                    type="submit"
+                    disabled={!input.trim()}
+                    className="p-1.5 rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={{
+                      background: input.trim() ? "var(--accent)" : "var(--card)",
+                      color: input.trim() ? "#fff" : "var(--muted)",
+                    }}
+                    aria-label="Send"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </form>
             <p className="text-xs text-center mt-2" style={{ color: "var(--muted)" }}>

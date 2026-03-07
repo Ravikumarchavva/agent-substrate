@@ -16,7 +16,7 @@ const SCOPES = [
 
 export async function GET() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || "http://127.0.0.1:3001/api/auth/google/callback";
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || "http://127.0.0.1:3000/api/auth/google/callback";
 
   if (!clientId) {
     return NextResponse.json(

@@ -15,13 +15,13 @@ export function AuthModal({ isOpen, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl w-full max-w-md mx-4">
+      <div className="bg-(--card) border border-(--border) rounded-xl shadow-2xl w-full max-w-md mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[var(--border)]">
+        <div className="flex items-center justify-between p-6 border-b border-(--border)">
           <h2 className="text-xl font-semibold">Authentication</h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-[var(--card-hover)] rounded-lg transition-colors"
+            className="p-1 hover:bg-(--card-hover) rounded-lg transition-colors"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -39,7 +39,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
                   className="w-12 h-12 rounded-full"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold">
+                <div className="w-12 h-12 rounded-full bg-linear-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold">
                   {user.name?.charAt(0) || "U"}
                 </div>
               )}
@@ -112,7 +112,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
           {/* Logout */}
           {(googleAuth || spotifyAuth) && (
             <>
-              <div className="border-t border-[var(--border)] my-4" />
+              <div className="border-t border-(--border) my-4" />
               <button
                 onClick={async () => {
                   await logout();
@@ -127,7 +127,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-zinc-800/50 rounded-b-xl border-t border-[var(--border)]">
+        <div className="p-4 bg-zinc-800/50 rounded-b-xl border-t border-(--border)">
           <p className="text-xs text-center text-zinc-500">
             Your credentials are securely stored in httpOnly cookies
           </p>

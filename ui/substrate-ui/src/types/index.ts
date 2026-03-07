@@ -10,6 +10,7 @@ export type ToolCall = {
   name: string;
   arguments: string | Record<string, any>;
   result?: string;
+  isError?: boolean;
   _meta?: ToolCallMeta;
 };
 
@@ -71,3 +72,23 @@ export type Element = {
   for_id?: string;
   props?: Record<string, unknown>;
 };
+
+// ---------------------------------------------------------------------------
+// Task Manager Types
+// ---------------------------------------------------------------------------
+
+export type TaskStatus = "todo" | "in_progress" | "done";
+
+export type Task = {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  order: number;
+};
+
+export type TaskList = {
+  id: string;
+  conversation_id: string;
+  tasks: Task[];
+};
+

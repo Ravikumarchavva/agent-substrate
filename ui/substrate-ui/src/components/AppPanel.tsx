@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Maximize2, Minimize2, PanelRightClose, PanelRightOpen } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export type AppPanelItem = {
   /** Unique ID for this panel instance */
@@ -231,9 +231,9 @@ export function AppPanel({
   }
 
   return (
-    <div className="w-[480px] xl:w-[560px] 2xl:w-[640px] flex flex-col border-l border-[var(--border)] bg-[var(--background)] h-full shrink-0">
+    <div className="w-120 xl:w-140 2xl:w-160 flex flex-col border-l border-(--border) bg-background h-full shrink-0">
       {/* Panel Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)] bg-zinc-800/50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-(--border) bg-zinc-800/50">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Apps</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-400 border border-emerald-800 font-medium">
@@ -260,7 +260,7 @@ export function AppPanel({
 
       {/* Tabs - when multiple apps are open */}
       {items.length > 1 && (
-        <div className="flex border-b border-[var(--border)] bg-zinc-900/50 overflow-x-auto scrollbar-thin">
+        <div className="flex border-b border-(--border) bg-zinc-900/50 overflow-x-auto scrollbar-thin">
           {items.map((item) => (
             <button
               key={item.id}
@@ -271,7 +271,7 @@ export function AppPanel({
                   : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30"
               }`}
             >
-              <span className="max-w-[120px] truncate">
+              <span className="max-w-30 truncate">
                 {item.toolName.replace(/_/g, " ")}
               </span>
               <button

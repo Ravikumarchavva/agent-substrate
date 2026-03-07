@@ -138,7 +138,7 @@ class CredentialManager {
       where: { userId },
       select: { provider: true },
     });
-    return credentials.map((c) => c.provider);
+    return credentials.map((c: { provider: string }) => c.provider);
   }
 }
 

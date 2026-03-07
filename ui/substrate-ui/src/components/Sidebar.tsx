@@ -1,8 +1,11 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Thread } from "@/types";
-import { PlusIcon, MessageSquare, Pencil, Trash2, Check, X } from "lucide-react";
+import {
+  SquarePen, Pencil, Trash2,
+  Check, X, Search, PanelLeftClose
+} from "lucide-react";
 
 type Props = {
   threads: Thread[];
@@ -11,144 +14,207 @@ type Props = {
   onSelectThread: (threadId: string) => void;
   onDeleteThread: (threadId: string) => void;
   onRenameThread: (threadId: string, newName: string) => void;
+  onCollapse?: () => void;
 };
 
+function groupByDate(threads: Thread[]): Record<string, Thread[]> {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const week = new Date(today); week.setDate(today.getDate() - 7);
+  const month = new Date(today); month.setDate(today.getDate() - 30);
+
+  const groups: Record<string, Thread[]> = {
+    "Today": [], "Yesterday": [], "Last 7 days": [], "Last 30 days": [], "Older": []
+  };
+
+  for (const t of threads) {
+    const d = new Date(t.updated_at || t.created_at);
+    if (d >= today)     groups["Today"].push(t);
+    else if (d >= yesterday) groups["Yesterday"].push(t);
+    else if (d >= week)      groups["Last 7 days"].push(t);
+    else if (d >= month)     groups["Last 30 days"].push(t);
+    else                     groups["Older"].push(t);
+  }
+
+  return groups;
+}
+
 export function Sidebar({
-  threads,
-  currentThreadId,
-  onNewChat,
-  onSelectThread,
-  onDeleteThread,
-  onRenameThread,
+  threads, currentThreadId, onNewChat,
+  onSelectThread, onDeleteThread, onRenameThread, onCollapse,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [search, setSearch] = useState("");
 
-  const startEdit = (thread: Thread) => {
-    setEditingId(thread.id);
-    setEditName(thread.name);
-  };
+  const filtered = useMemo(() =>
+    search.trim() === ""
+      ? threads
+      : threads.filter(t => t.name.toLowerCase().includes(search.toLowerCase())),
+    [threads, search]
+  );
 
-  const saveEdit = (threadId: string) => {
-    if (editName.trim()) {
-      onRenameThread(threadId, editName.trim());
-    }
-    setEditingId(null);
-  };
+  const groups = useMemo(() => groupByDate(filtered), [filtered]);
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditName("");
-  };
+  const startEdit = (t: Thread) => { setEditingId(t.id); setEditName(t.name); };
+  const saveEdit  = (id: string) => { if (editName.trim()) onRenameThread(id, editName.trim()); setEditingId(null); };
+  const cancelEdit = () => { setEditingId(null); setEditName(""); };
 
   return (
-    <aside className="w-64 bg-[var(--sidebar-bg)] border-r border-[var(--border)] flex flex-col" suppressHydrationWarning>
-      {/* New Chat Button */}
-      <div className="p-3">
+    <aside className="w-64 h-full bg-(--sidebar-bg) flex flex-col overflow-hidden" suppressHydrationWarning>
+      {/*  Top: Logo + actions  */}
+      <div className="flex items-center justify-between px-3 py-3">
+        <div className="flex items-center gap-1">
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              title="Collapse sidebar"
+              className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors"
+            >
+              <PanelLeftClose className="w-4 h-4" style={{ color: "var(--muted)" }} />
+            </button>
+          )}
+          <span className="text-sm font-semibold tracking-tight px-1 opacity-80">Agent Chat</span>
+        </div>
         <button
           onClick={onNewChat}
-          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] hover:bg-[var(--card-hover)] transition-colors text-sm font-medium"
+          title="New chat"
+          className="p-2 rounded-lg hover:bg-(--card-hover) transition-colors"
         >
-          <PlusIcon className="w-4 h-4" />
-          New Chat
+          <SquarePen className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Threads List */}
-      <div className="flex-1 overflow-y-auto px-2">
-        <div className="text-xs font-semibold text-zinc-500 px-3 py-2">
-          Recent Chats
-        </div>
-        <div className="space-y-1">
-          {threads.map((thread) => (
-            <div
-              key={thread.id}
-              className={`group relative rounded-lg transition-colors ${
-                currentThreadId === thread.id
-                  ? "bg-[var(--card)]"
-                  : "hover:bg-[var(--card-hover)]"
-              }`}
-            >
-              {editingId === thread.id ? (
-                <div className="flex items-center gap-1 px-3 py-2">
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") saveEdit(thread.id);
-                      if (e.key === "Escape") cancelEdit();
-                    }}
-                    className="flex-1 bg-[var(--input-bg)] border border-[var(--border)] rounded px-2 py-1 text-xs outline-none focus:border-zinc-600"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => saveEdit(thread.id)}
-                    className="p-1 hover:bg-[var(--card-hover)] rounded"
-                  >
-                    <Check className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={cancelEdit}
-                    className="p-1 hover:bg-[var(--card-hover)] rounded"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => onSelectThread(thread.id)}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                >
-                  <MessageSquare className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                  <span className="flex-1 text-sm truncate">
-                    {thread.name}
-                  </span>
-                </button>
-              )}
-
-              {/* Actions (show on hover) */}
-              {editingId !== thread.id && (
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startEdit(thread);
-                    }}
-                    className="p-1 hover:bg-[var(--card-hover)] rounded"
-                    title="Rename"
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteThread(thread.id);
-                    }}
-                    className="p-1 hover:bg-red-900/50 rounded"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+      {/*  Search  */}
+      <div className="px-3 pb-2">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-(--card) text-sm text-(--muted)">
+          <Search className="w-3.5 h-3.5 shrink-0" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search chats"
+            className="flex-1 bg-transparent outline-none text-foreground placeholder:text-(--muted) text-xs"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="hover:opacity-70">
+              <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Bottom User Section */}
-      <div className="p-3 border-t border-[var(--border)]">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--card-hover)] cursor-pointer">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm font-semibold">
+      {/*  Thread list  */}
+      <div className="flex-1 overflow-y-auto px-2">
+        {threads.length === 0 ? (
+          <p className="text-xs text-(--muted) px-3 py-4 text-center">No conversations yet</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-xs text-(--muted) px-3 py-4 text-center">No results for &ldquo;{search}&rdquo;</p>
+        ) : (
+          Object.entries(groups).map(([label, items]) => {
+            if (items.length === 0) return null;
+            return (
+              <div key={label} className="mb-3">
+                <p className="text-xs font-semibold text-(--muted) px-3 pb-1 pt-1">{label}</p>
+                <div className="space-y-0.5">
+                  {items.map(thread => (
+                    <ThreadItem
+                      key={thread.id}
+                      thread={thread}
+                      isActive={thread.id === currentThreadId}
+                      isEditing={editingId === thread.id}
+                      editName={editName}
+                      onSelect={() => onSelectThread(thread.id)}
+                      onStartEdit={() => startEdit(thread)}
+                      onSaveEdit={() => saveEdit(thread.id)}
+                      onCancelEdit={cancelEdit}
+                      onDelete={() => onDeleteThread(thread.id)}
+                      onEditNameChange={setEditName}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/*  User Section  */}
+      <div className="p-2 border-t border-(--border)">
+        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-(--card-hover) cursor-pointer transition-colors">
+          <div className="w-7 h-7 rounded-full bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
             U
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium truncate">User</div>
-            <div className="text-xs text-zinc-500 truncate">user@example.com</div>
+            <p className="text-xs font-medium truncate">My Account</p>
           </div>
         </div>
       </div>
     </aside>
+  );
+}
+
+/*  Thread item sub-component  */
+interface ThreadItemProps {
+  thread: Thread;
+  isActive: boolean;
+  isEditing: boolean;
+  editName: string;
+  onSelect: () => void;
+  onStartEdit: () => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onDelete: () => void;
+  onEditNameChange: (v: string) => void;
+}
+
+function ThreadItem({
+  thread, isActive, isEditing, editName,
+  onSelect, onStartEdit, onSaveEdit, onCancelEdit, onDelete, onEditNameChange,
+}: ThreadItemProps) {
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-(--card)">
+        <input
+          value={editName}
+          onChange={e => onEditNameChange(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") onSaveEdit(); if (e.key === "Escape") onCancelEdit(); }}
+          className="flex-1 bg-transparent outline-none text-xs border-b border-(--border) pb-0.5"
+          autoFocus
+        />
+        <button onClick={onSaveEdit}  className="p-1 hover:bg-(--card-hover) rounded text-green-400"><Check className="w-3 h-3" /></button>
+        <button onClick={onCancelEdit} className="p-1 hover:bg-(--card-hover) rounded opacity-50"><X className="w-3 h-3" /></button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={"group relative flex items-center rounded-lg transition-colors cursor-pointer " +
+        (isActive ? "bg-(--card)" : "hover:bg-(--card-hover)")}
+      onClick={onSelect}
+    >
+      <div className="flex-1 min-w-0 px-3 py-2">
+        <p className="text-sm truncate leading-snug">{thread.name}</p>
+      </div>
+
+      {/* Hover actions */}
+      <div className="pr-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+        <button
+          onClick={e => { e.stopPropagation(); onStartEdit(); }}
+          className="p-1 rounded hover:bg-(--card-hover)"
+          title="Rename"
+        >
+          <Pencil className="w-3 h-3" />
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(); }}
+          className="p-1 rounded hover:bg-red-500/20 text-red-400"
+          title="Delete"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
   );
 }

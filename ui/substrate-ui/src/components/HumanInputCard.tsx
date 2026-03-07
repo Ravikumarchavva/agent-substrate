@@ -1,6 +1,8 @@
 ﻿"use client";
 
 import { useState } from "react";
+import { MessageCircleQuestion } from "lucide-react";
+import { PanelShell } from "@/components/PanelShell";
 
 type Option = {
   key: string;
@@ -50,24 +52,26 @@ export function HumanInputCard({
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] rounded-lg border border-blue-600/40 bg-zinc-900 p-4 text-sm">
-        {/* Header */}
-        <div className="mb-2 flex items-center gap-2">
-          <span className="rounded bg-blue-600/20 px-2 py-0.5 text-xs font-semibold text-blue-400">
-            🤔 Input Needed
-          </span>
-        </div>
+      <div className="max-w-[85%] w-full text-sm">
+        <PanelShell
+          icon={<MessageCircleQuestion className="w-4 h-4" style={{ color: "var(--accent)" }} />}
+          title="Input Needed"
+          collapsible={false}
+        >
 
         {context && (
-          <p className="mb-2 text-xs text-zinc-400">{context}</p>
+          <p className="mb-2 text-xs" style={{ color: "var(--muted)" }}>{context}</p>
         )}
 
-        <p className="mb-3 text-zinc-100">{question}</p>
+        <p className="mb-3 text-sm" style={{ color: "var(--foreground)" }}>{question}</p>
 
         {/* Answered state */}
         {answered ? (
-          <div className="inline-block rounded bg-blue-600/20 px-2 py-1 text-xs font-medium text-blue-400">
-            ✅ Answered: {selectedAnswer}
+          <div
+            className="inline-block rounded px-2 py-1 text-xs font-medium"
+            style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}
+          >
+            Answered: {selectedAnswer}
           </div>
         ) : (
           <div className="space-y-2">
@@ -77,15 +81,24 @@ export function HumanInputCard({
                 <button
                   key={opt.key}
                   onClick={() => handleSelectOption(opt)}
-                  className="group rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-left text-xs transition-colors hover:border-blue-500 hover:bg-zinc-700"
+                  className="rounded-md px-3 py-2 text-left text-xs transition-colors"
+                  style={{
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    color: "var(--foreground)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "var(--accent)";
+                    e.currentTarget.style.background = "var(--card-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border)";
+                    e.currentTarget.style.background = "var(--card)";
+                  }}
                 >
-                  <span className="font-medium text-zinc-200">
-                    {opt.label}
-                  </span>
+                  <span className="font-medium">{opt.label}</span>
                   {opt.description && (
-                    <span className="ml-1 text-zinc-400">
-                      — {opt.description}
-                    </span>
+                    <span className="ml-1" style={{ color: "var(--muted)" }}>— {opt.description}</span>
                   )}
                 </button>
               ))}
@@ -104,13 +117,21 @@ export function HumanInputCard({
                         if (e.key === "Enter") handleFreeformSubmit();
                       }}
                       placeholder="Type your answer..."
-                      className="flex-1 rounded bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-blue-500"
+                      className="flex-1 rounded px-2 py-1.5 text-xs outline-none"
+                      style={{
+                        background: "var(--code-bg)",
+                        color: "var(--foreground)",
+                        border: "1px solid var(--border)",
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
                       autoFocus
                     />
                     <button
                       onClick={handleFreeformSubmit}
                       disabled={!freeformText.trim()}
-                      className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors disabled:opacity-50"
+                      className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
+                      style={{ background: "var(--accent)" }}
                     >
                       Send
                     </button>
@@ -118,15 +139,19 @@ export function HumanInputCard({
                 ) : (
                   <button
                     onClick={() => setShowFreeform(true)}
-                    className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                    className="text-xs transition-colors"
+                    style={{ color: "var(--muted)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--foreground)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
                   >
-                    ✏️ Other — type your own answer
+                    Other — type your own answer
                   </button>
                 )}
               </div>
             )}
           </div>
         )}
+        </PanelShell>
       </div>
     </div>
   );

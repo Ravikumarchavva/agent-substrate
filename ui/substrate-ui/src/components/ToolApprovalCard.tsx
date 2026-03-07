@@ -1,6 +1,8 @@
 ﻿"use client";
 
 import { useState } from "react";
+import { ShieldAlert } from "lucide-react";
+import { PanelShell } from "@/components/PanelShell";
 
 type ToolApprovalCardProps = {
   requestId: string;
@@ -50,7 +52,7 @@ export function ToolApprovalCard({
         reason: reason || undefined,
       });
     } catch {
-      setJsonError("Invalid JSON ΓÇö please fix syntax errors");
+      setJsonError("Invalid JSON — please fix syntax errors");
     }
   }
 
@@ -64,24 +66,32 @@ export function ToolApprovalCard({
     pending: null,
   }[status];
 
+  const headerBadge = (
+    <span
+      className="rounded px-2 py-0.5 text-xs font-mono"
+      style={{ background: "color-mix(in srgb, #f59e0b 15%, transparent)", color: "#f59e0b" }}
+    >
+      {toolName}
+    </span>
+  );
+
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] rounded-lg border border-amber-600/40 bg-zinc-900 p-4 text-sm">
-        {/* Header */}
-        <div className="mb-2 flex items-center gap-2">
-          <span className="rounded bg-amber-600/20 px-2 py-0.5 text-xs font-semibold text-amber-400">
-            🔐 Tool Approval
-          </span>
-          <span className="font-mono text-xs text-zinc-400">{toolName}</span>
-        </div>
+      <div className="max-w-[85%] w-full text-sm">
+        <PanelShell
+          icon={<ShieldAlert className="w-4 h-4" style={{ color: "#f59e0b" }} />}
+          title="Tool Approval"
+          badge={headerBadge}
+          collapsible={false}
+        >
 
         {context && (
-          <p className="mb-2 text-xs text-zinc-400">{context}</p>
+          <p className="mb-2 text-xs" style={{ color: "var(--muted)" }}>{context}</p>
         )}
 
         {/* Arguments viewer */}
         <details className="mb-3" open>
-          <summary className="cursor-pointer text-xs font-medium text-zinc-300">
+          <summary className="cursor-pointer text-xs font-medium" style={{ color: "var(--foreground)" }}>
             Arguments
           </summary>
           {showModify && isPending ? (
@@ -92,15 +102,19 @@ export function ToolApprovalCard({
                   setEditedArgs(e.target.value);
                   setJsonError("");
                 }}
-                className="w-full rounded bg-zinc-800 p-2 font-mono text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-amber-500"
+                className="w-full rounded p-2 font-mono text-xs outline-none focus:ring-1"
+                style={{ background: "var(--code-bg)", color: "var(--foreground)", border: "1px solid var(--border)", resize: "vertical" }}
                 rows={Math.min(editedArgs.split("\n").length + 1, 10)}
               />
               {jsonError && (
-                <p className="mt-1 text-xs text-red-400">{jsonError}</p>
+                <p className="mt-1 text-xs" style={{ color: "#f87171" }}>{jsonError}</p>
               )}
             </div>
           ) : (
-            <pre className="mt-1 overflow-x-auto rounded bg-zinc-800 p-2 font-mono text-xs text-zinc-300">
+            <pre
+              className="mt-1 overflow-x-auto rounded p-2 font-mono text-xs"
+              style={{ background: "var(--code-bg)", color: "var(--muted)", border: "1px solid var(--border)" }}
+            >
               {JSON.stringify(toolArgs, null, 2)}
             </pre>
           )}
@@ -113,56 +127,75 @@ export function ToolApprovalCard({
           >
             {statusBadge.label}
             {reason && (
-              <span className="ml-1 text-zinc-400">ΓÇö {reason}</span>
+              <span className="ml-1" style={{ color: "var(--muted)" }}>— {reason}</span>
             )}
           </div>
         )}
 
         {/* Action buttons (only when pending) */}
         {isPending && (
-          <div className="space-y-2">
-            {/* Reason input (shared for deny/modify) */}
-            {(showModify || true) && (
-              <input
-                type="text"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Reason (optional)"
-                className="w-full rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none"
-              />
-            )}
+          <div className="space-y-2 mt-1">
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason (optional)"
+              className="w-full rounded px-2 py-1.5 text-xs outline-none"
+              style={{
+                background: "var(--code-bg)",
+                color: "var(--foreground)",
+                border: "1px solid var(--border)",
+              }}
+            />
 
             <div className="flex gap-2">
               <button
                 onClick={handleApprove}
-                className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500 transition-colors"
+                className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors"
+                style={{ background: "var(--accent)" }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
               >
-                ✅ Approve
+                Approve
               </button>
               <button
                 onClick={handleDeny}
-                className="rounded bg-red-600/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500 transition-colors"
+                className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors"
+                style={{ background: "#dc2626" }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
               >
-                ❌ Deny
+                Deny
               </button>
               {showModify ? (
                 <button
                   onClick={handleModifySubmit}
-                  className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"
+                  className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors"
+                  style={{ background: "#2563eb" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
                 >
-                  💾 Save & Approve
+                  Save & Approve
                 </button>
               ) : (
                 <button
                   onClick={() => setShowModify(true)}
-                  className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-600 transition-colors"
+                  className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
+                  style={{
+                    background: "var(--card-hover)",
+                    color: "var(--foreground)",
+                    border: "1px solid var(--border)",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.75")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
                 >
-                  ✏️ Modify
+                  Modify
                 </button>
               )}
             </div>
           </div>
         )}
+        </PanelShell>
       </div>
     </div>
   );

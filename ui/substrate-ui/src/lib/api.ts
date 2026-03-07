@@ -1,7 +1,7 @@
-import { Thread, BackendMessage, Message, ToolCall } from "@/types";
+import { Thread, BackendMessage, Message, ToolCall, TaskList, TaskStatus } from "@/types";
 
 // API service layer for backend communication
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export const api = {
   // Thread management
@@ -112,6 +112,43 @@ export const api = {
     if (!res.ok) {
       console.error("Failed to update MCP context");
     }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Task Manager API
+  // ---------------------------------------------------------------------------
+
+  async getTaskList(conversationId: string): Promise<TaskList | null> {
+    const res = await fetch(`${API_BASE}/tasks/${conversationId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.task_list ?? null;
+  },
+
+  async updateTask(
+    taskListId: string,
+    taskId: string,
+    update: { status?: TaskStatus; title?: string }
+  ): Promise<void> {
+    await fetch(`${API_BASE}/tasks/${taskListId}/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(update),
+    });
+  },
+
+  async addTasks(taskListId: string, tasks: string[]): Promise<void> {
+    await fetch(`${API_BASE}/tasks/${taskListId}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tasks }),
+    });
+  },
+
+  async deleteTask(taskListId: string, taskId: string): Promise<void> {
+    await fetch(`${API_BASE}/tasks/${taskListId}/${taskId}`, {
+      method: "DELETE",
+    });
   },
 
   // Chat streaming (handled separately in chat route)

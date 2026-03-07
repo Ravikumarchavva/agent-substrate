@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AI Chat Assistant",
   description: "Chat with AI assistant",
+  other: {
+    // Tell Dark Reader not to reprocess this page — we handle dark mode ourselves.
+    // Prevents hydration mismatches caused by data-darkreader-* attributes injected into SVGs.
+    "darkreader-lock": "",
+  },
 };
 
 export default function RootLayout({

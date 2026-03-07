@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { nanoid } from "nanoid";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
 import { AppPanel, AppPanelItem } from "@/components/AppPanel";
+import { KanbanPanel } from "@/components/KanbanPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
-import { Thread, Message } from "@/types";
+import { Thread, Message, Task, TaskList, TaskStatus } from "@/types";
 import { api } from "@/lib/api";
-import { Send } from "lucide-react";
+import { Send, Plus, Mic, Music2, Music, Clock, BarChart2, type LucideIcon } from "lucide-react";
 
 export default function ChatPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -24,6 +25,9 @@ export default function ChatPage() {
   const [panelItems, setPanelItems] = useState<AppPanelItem[]>([]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+
+  // ── Task Board State ─────────────────────────────────────
+  const [taskList, setTaskList] = useState<TaskList | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -93,6 +97,7 @@ export default function ChatPage() {
 
   const handleSelectThread = (threadId: string) => {
     setCurrentThreadId(threadId);
+    setTaskList(null); // clear board when switching conversations
   };
 
   const handleDeleteThread = async (threadId: string) => {
@@ -361,20 +366,63 @@ export default function ChatPage() {
                   // Skip rendering if an MCP App UI is already showing this tool's output
                   // (only skip if app_data was received; otherwise show text fallback)
                   if (data.has_app && !data.is_error) continue;
-                  const trId = nanoid();
-                  setMessages((m) => [
-                    ...m,
-                    {
-                      id: trId,
-                      role: "tool_result" as const,
-                      content: data.content || "",
-                      timestamp: new Date(),
-                      metadata: {
-                        toolName: data.tool_name,
-                        isError: data.is_error,
-                      },
-                    },
-                  ]);
+
+                  // Attach result back to the matching tool call in the assistant message
+                  setMessages((m) =>
+                    m.map((msg) => {
+                      if (msg.id !== assistantId || !msg.toolCalls) return msg;
+                      const updatedCalls = msg.toolCalls.map((tc) => {
+                        const matchById = data.tool_call_id && tc.id === data.tool_call_id;
+                        const matchByName = tc.name === data.tool_name;
+                        if (!matchById && !matchByName) return tc;
+                        return {
+                          ...tc,
+                          result: data.content || "",
+                          isError: !!data.is_error,
+                        };
+                      });
+                      return { ...msg, toolCalls: updatedCalls };
+                    })
+                  );
+                  continue;
+                }
+
+                // ── Task Board Events ──
+                if (data.type === "task_list_created") {
+                  setTaskList(data.task_list as TaskList);
+                  continue;
+                }
+                if (data.type === "task_updated") {
+                  const updatedTask = data.task as Task;
+                  setTaskList((prev) => {
+                    if (!prev || prev.id !== data.task_list_id) return prev;
+                    return {
+                      ...prev,
+                      tasks: prev.tasks.map((t) =>
+                        t.id === updatedTask.id ? { ...t, ...updatedTask } : t
+                      ),
+                    };
+                  });
+                  continue;
+                }
+                if (data.type === "task_added") {
+                  const newTask = data.task as Task;
+                  setTaskList((prev) => {
+                    if (!prev || prev.id !== data.task_list_id) return prev;
+                    // Avoid duplicates
+                    if (prev.tasks.find((t) => t.id === newTask.id)) return prev;
+                    return { ...prev, tasks: [...prev.tasks, newTask] };
+                  });
+                  continue;
+                }
+                if (data.type === "task_deleted") {
+                  setTaskList((prev) => {
+                    if (!prev || prev.id !== data.task_list_id) return prev;
+                    return {
+                      ...prev,
+                      tasks: prev.tasks.filter((t) => t.id !== data.task_id),
+                    };
+                  });
                   continue;
                 }
 
@@ -488,6 +536,40 @@ export default function ChatPage() {
     }
   }
 
+  // ── Task Board callbacks ─────────────────────────────
+  const handleTaskStatusChange = (_taskListId: string, taskId: string, status: TaskStatus) => {
+    setTaskList((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tasks: prev.tasks.map((t) =>
+          t.id === taskId ? { ...t, status } : t
+        ),
+      };
+    });
+  };
+
+  const handleTaskDelete = (_taskListId: string, taskId: string) => {
+    setTaskList((prev) => {
+      if (!prev) return prev;
+      return { ...prev, tasks: prev.tasks.filter((t) => t.id !== taskId) };
+    });
+  };
+
+  const handleTaskAdd = (_taskListId: string, title: string) => {
+    // Optimistic: will be confirmed by SSE task_added event
+    const tempTask: Task = {
+      id: `temp-${Date.now()}`,
+      title,
+      status: "todo",
+      order: taskList ? taskList.tasks.length : 0,
+    };
+    setTaskList((prev) => {
+      if (!prev) return prev;
+      return { ...prev, tasks: [...prev.tasks, tempTask] };
+    });
+  };
+
   function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     doSendMessage(input);
@@ -495,12 +577,12 @@ export default function ChatPage() {
   const currentThread = threads.find((t) => t.id === currentThreadId);
 
   return (
-    <div className="flex h-screen bg-[var(--background)] text-[var(--foreground)]" suppressHydrationWarning>
+    <div className="flex h-screen bg-background text-foreground" suppressHydrationWarning>
       {/* Sidebar */}
       <div
-        className={`${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } fixed lg:static inset-y-0 left-0 z-20 transition-transform duration-300 ease-in-out lg:translate-x-0`}
+        className={`shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${
+          sidebarOpen ? "w-64" : "w-0"
+        }`}
       >
         <Sidebar
           threads={threads}
@@ -509,6 +591,7 @@ export default function ChatPage() {
           onSelectThread={handleSelectThread}
           onDeleteThread={handleDeleteThread}
           onRenameThread={handleRenameThread}
+          onCollapse={() => setSidebarOpen(false)}
         />
       </div>
 
@@ -517,7 +600,8 @@ export default function ChatPage() {
         {/* Chat Area */}
         <div className="flex-1 flex flex-col min-w-0">
         <Header
-          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          onToggleSidebar={sidebarOpen ? undefined : () => setSidebarOpen(true)}
+          sidebarOpen={sidebarOpen}
           threadName={currentThread?.name}
         />
 
@@ -528,47 +612,49 @@ export default function ChatPage() {
         >
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center">
-              <div className="text-center space-y-6 max-w-2xl px-4">
-                <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl font-bold">
+              <div className="text-center space-y-6 w-full max-w-2xl px-4">
+                <div
+                  className="w-14 h-14 mx-auto rounded-full flex items-center justify-center text-xl font-bold text-white"
+                  style={{ background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))" }}
+                >
                   AI
                 </div>
-                <h2 className="text-2xl font-semibold">How can I help you today?</h2>
-                <p className="text-zinc-400">
-                  Ask me anything, and I'll do my best to assist you with thoughtful, detailed responses.
-                </p>
-                
+                <div>
+                  <h2 className="text-2xl font-semibold">How can I help you today?</h2>
+                  <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>
+                    Ask me anything — I&apos;ll respond thoughtfully.
+                  </p>
+                </div>
+
                 {/* Conversation Starters */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8">
-                  {[
-                    { icon: "🎵", text: "Play Despacito" },
-                    { icon: "🎷", text: "Play some jazz music" },
-                    { icon: "🎸", text: "Play top rock songs" },
-                    { icon: "🎼", text: "Play Hindi songs" },
-                    { icon: "📊", text: "Show me a data visualization" },
-                    { icon: "🌐", text: "What's the current time?" },
-                  ].map((starter, idx) => (
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  {([
+                    { icon: Music2, text: "Play Despacito on Spotify" },
+                    { icon: Music, text: "Play some jazz music" },
+                    { icon: Clock, text: "What's the current time?" },
+                    { icon: BarChart2, text: "Show a data visualisation" },
+                  ] as { icon: LucideIcon, text: string }[]).map(({ icon: Icon, text }, idx) => (
                     <button
                       key={idx}
-                      onClick={() => doSendMessage(starter.text)}
-                      className="flex items-center gap-3 p-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 border border-zinc-700 hover:border-zinc-600 transition-all text-left group"
+                      onClick={() => doSendMessage(text)}
+                      className="flex items-center gap-2.5 p-3 rounded-xl text-left text-sm transition-colors hover:bg-(--card-hover)"
+                      style={{ background: "var(--card)", color: "var(--muted)" }}
                     >
-                      <span className="text-2xl group-hover:scale-110 transition-transform">
-                        {starter.icon}
+                      <span style={{ color: "var(--accent)" }}>
+                        <Icon className="w-4 h-4 shrink-0" />
                       </span>
-                      <span className="text-sm text-zinc-300 group-hover:text-white">
-                        {starter.text}
-                      </span>
+                      <span>{text}</span>
                     </button>
                   ))}
                 </div>
               </div>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="max-w-3xl mx-auto w-full px-4 py-2 space-y-2">
               {messages.map((m) => {
                 if (m.role === "tool_approval" && m.metadata) {
                   return (
-                    <div key={m.id} className="px-4 py-3">
+                    <div key={m.id} className="py-1">
                       <ToolApprovalCard
                         requestId={m.metadata.requestId as string}
                         toolName={m.metadata.toolName as string}
@@ -582,7 +668,7 @@ export default function ChatPage() {
 
                 if (m.role === "human_input" && m.metadata) {
                   return (
-                    <div key={m.id} className="px-4 py-3">
+                    <div key={m.id} className="py-1">
                       <HumanInputCard
                         requestId={m.metadata.requestId as string}
                         question={m.metadata.question as string}
@@ -604,11 +690,12 @@ export default function ChatPage() {
                   return (
                     <div
                       key={m.id}
-                      className={`px-4 py-3 my-2 max-w-3xl mx-auto text-xs rounded-md border ${
+                      className={`py-2 px-3 my-1 text-xs rounded-md border ${
                         isErr
                           ? "border-red-700 bg-red-950/40 text-red-300"
-                          : "border-zinc-700 bg-zinc-900 text-zinc-400"
+                          : "text-zinc-400"
                       }`}
+                      style={isErr ? {} : { background: "var(--code-bg)", borderColor: "var(--border)" }}
                     >
                       <span className="font-semibold">
                         🔧 {(m.metadata.toolName as string) || "tool"}
@@ -653,17 +740,18 @@ export default function ChatPage() {
                 return null;
               })}
               {loading && (
-                <div className="px-4 py-6">
-                  <div className="max-w-3xl mx-auto flex gap-4">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-sm font-semibold">
+                <div className="py-2">
+                  <div className="flex gap-3">
+                    <div
+                      className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                      style={{ background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))" }}
+                    >
                       AI
                     </div>
-                    <div className="flex-1 pt-2">
-                      <div className="flex gap-1">
-                        <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                        <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                        <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                      </div>
+                    <div className="flex items-center gap-1 pt-2.5">
+                      <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "var(--muted)", animationDelay: "0ms" }} />
+                      <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "var(--muted)", animationDelay: "150ms" }} />
+                      <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "var(--muted)", animationDelay: "300ms" }} />
                     </div>
                   </div>
                 </div>
@@ -672,10 +760,33 @@ export default function ChatPage() {
           )}
         </div>
 
+        {/* Kanban Task Board — above input */}
+        <KanbanPanel
+          taskList={taskList}
+          onTaskStatusChange={handleTaskStatusChange}
+          onTaskDelete={handleTaskDelete}
+          onTaskAdd={handleTaskAdd}
+          onDismiss={() => setTaskList(null)}
+        />
+
         {/* Input Area */}
-        <div className="border-t border-[var(--border)] bg-[var(--background)]">
-          <div className="max-w-3xl mx-auto px-4 py-4">
-            <form onSubmit={sendMessage} className="relative">
+        <div className="bg-background pb-4 pt-2">
+          <div className="max-w-3xl mx-auto px-4">
+            <form
+              onSubmit={sendMessage}
+              className="flex items-end gap-2 rounded-3xl border border-(--border) bg-(--input-bg) px-3 py-2 shadow-sm"
+            >
+              {/* Left: attach/plus */}
+              <button
+                type="button"
+                className="shrink-0 mb-0.5 p-1.5 rounded-full hover:bg-(--card-hover) transition-colors self-end"
+                style={{ color: "var(--muted)" }}
+                aria-label="Attach"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+
+              {/* Textarea */}
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -687,21 +798,39 @@ export default function ChatPage() {
                   }
                 }}
                 rows={1}
-                className="w-full resize-none rounded-2xl bg-[var(--input-bg)] border border-[var(--border)] px-4 py-3 pr-12 text-sm outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
-                placeholder="Message AI assistant..."
+                className="flex-1 resize-none bg-transparent text-sm outline-none py-1.5 max-h-48 overflow-y-auto"
+                placeholder="Ask anything"
                 disabled={loading}
               />
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="absolute right-2 bottom-2 p-2 rounded-lg bg-[var(--card)] hover:bg-[var(--card-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                aria-label="Send message"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+
+              {/* Right: mic + send */}
+              <div className="flex items-center gap-1 shrink-0 self-end mb-0.5">
+                {!input.trim() && (
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-full hover:bg-(--card-hover) transition-colors"
+                    style={{ color: "var(--muted)" }}
+                    aria-label="Voice input"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="p-1.5 rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{
+                    background: input.trim() ? "var(--accent)" : "var(--card)",
+                    color: input.trim() ? "#fff" : "var(--muted)",
+                  }}
+                  aria-label="Send"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
             </form>
-            <p className="text-xs text-center text-zinc-500 mt-2">
-              AI can make mistakes. Consider checking important information.
+            <p className="text-xs text-center mt-2" style={{ color: "var(--muted)" }}>
+              AI can make mistakes. Verify important information.
             </p>
           </div>
         </div>
@@ -720,10 +849,10 @@ export default function ChatPage() {
         />
       </div>
 
-      {/* Overlay for mobile sidebar */}
+      {/* Overlay for mobile sidebar - kept for safety on narrow viewports */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-10 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-10 sm:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}

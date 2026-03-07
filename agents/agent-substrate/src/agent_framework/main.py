@@ -12,6 +12,8 @@ from agent_framework.messages import TextDeltaChunk, ReasoningDeltaChunk, Comple
 from agent_framework.messages.client_messages import ToolExecutionResultMessage
 from agent_framework.human_input import AskHumanTool
 from agent_framework.web_hitl import WebHITLBridge, _DONE
+from agent_framework.tools.task_manager_tool import TaskManagerTool
+from agent_framework.tasks.store import GlobalTaskStore
 
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 import asyncio
@@ -39,6 +41,10 @@ async def lifespan(app: FastAPI):
         max_requests_per_run=5,
     )
 
+    # Create TaskManagerTool wired to the bridge event queue
+    task_tool = TaskManagerTool(event_emitter=bridge.put_event)
+    app.state.task_tool = task_tool
+
     app.state.agent = ReActAgent(
         name="DemoBot",
         description="A helpful assistant.",
@@ -46,9 +52,15 @@ async def lifespan(app: FastAPI):
             model="gpt-5-mini",
             api_key=settings.OPENAI_API_KEY,
         ),
-        tools=[ask_tool, CalculatorTool(), GetCurrentTimeTool()],
+        tools=[ask_tool, task_tool, CalculatorTool(), GetCurrentTimeTool()],
         system_instructions="""
         You are a helpful AI assistant. Use tools when needed.
+
+        IMPORTANT — Task Board:
+        For ANY question that requires multiple steps or sub-tasks, you MUST:
+        1. Call manage_tasks with action=create_list listing ALL planned steps BEFORE starting.
+        2. For each step: call manage_tasks action=start_task, do the work, then action=complete_task.
+        This shows the user a live Kanban board with your progress.
 
         You MUST format all math using Markdown LaTeX.
 
@@ -60,8 +72,7 @@ async def lifespan(app: FastAPI):
         When the user asks for a table:
         - ALWAYS return a Markdown table
         - Use | pipes and a separator row
-        - Never use aligned text or bullet lists
-        - Do not explain the table before emitting it
+        - Never use bullet lists instead of a table
 
         When you need user preferences or confirmation, use the ask_human tool
         to present options and let them choose.
@@ -74,6 +85,8 @@ async def lifespan(app: FastAPI):
         tools_requiring_approval=["calculator", "get_current_time"],
         # Set tool timeout to match HITL bridge timeout (5 minutes)
         tool_timeout=300.0,
+        # Skills: load from project-level skills/ directory
+        skill_dirs=["./skills"],
     )
 
     yield
@@ -251,6 +264,130 @@ async def respond_to_hitl(request_id: str, resp: HITLResponse):
         return {"status": "error", "message": f"No pending request with id={request_id}"}
 
     return {"status": "ok", "request_id": request_id}
+
+
+# ---------------------------------------------------------------------------
+# Skills API - /skills
+# ---------------------------------------------------------------------------
+
+@app.get("/skills")
+async def list_skills():
+    """Return metadata for all discovered skills (progressive disclosure)."""
+    agent: ReActAgent = app.state.agent
+    if not agent.skill_manager:
+        return {"skills": []}
+    return {"skills": agent.skill_manager.to_dict()}
+
+
+@app.post("/skills/{name}/activate")
+async def activate_skill(name: str):
+    """Activate a skill by name (load full SKILL.md content)."""
+    agent: ReActAgent = app.state.agent
+    if not agent.skill_manager:
+        return {"status": "error", "detail": "No skill manager configured."}
+
+    skill = agent.skill_manager.activate(name)
+    if skill is None:
+        return {"status": "error", "detail": f"Skill {name!r} not found."}
+
+    return {
+        "status": "activated",
+        "name": skill.name,
+        "scripts": skill.list_scripts(),
+        "references": skill.list_references(),
+    }
+
+
+@app.delete("/skills/{name}/activate")
+async def deactivate_skill(name: str):
+    """Deactivate a skill (removes it from active context)."""
+    agent: ReActAgent = app.state.agent
+    if not agent.skill_manager:
+        return {"status": "error", "detail": "No skill manager configured."}
+
+    agent.skill_manager.deactivate(name)
+    return {"status": "deactivated", "name": name}
+
+
+# ---------------------------------------------------------------------------
+# Tasks API - /tasks
+# ---------------------------------------------------------------------------
+
+class TaskUpdateRequest(BaseModel):
+    status: Optional[str] = None   # "todo" | "in_progress" | "done"
+    title: Optional[str] = None
+
+
+class AddTaskRequest(BaseModel):
+    tasks: list[str]
+
+
+@app.get("/tasks/{conversation_id}")
+async def get_tasks(conversation_id: str):
+    """Get the active task list for a conversation."""
+    store = GlobalTaskStore.get()
+    task_list = store.get_by_conversation(conversation_id)
+    if not task_list:
+        return {"task_list": None}
+    return {"task_list": task_list.to_dict()}
+
+
+@app.patch("/tasks/{task_list_id}/{task_id}")
+async def update_task(task_list_id: str, task_id: str, req: TaskUpdateRequest):
+    """Update a task's status or title (called by frontend drag-drop or inline edit)."""
+    store = GlobalTaskStore.get()
+    bridge: WebHITLBridge = app.state.bridge
+
+    result = None
+    if req.status:
+        result = store.update_status(task_list_id, task_id, req.status)
+    if req.title:
+        result = store.update_task_title(task_list_id, task_id, req.title)
+
+    if not result:
+        return {"status": "error", "detail": "Task not found"}
+
+    # Broadcast the update to all connected SSE clients
+    await bridge.put_event({
+        "type": "task_updated",
+        "task_list_id": task_list_id,
+        "task": {"id": result.id, "title": result.title, "status": result.status, "order": result.order},
+    })
+    return {"status": "ok", "task": {"id": result.id, "title": result.title, "status": result.status}}
+
+
+@app.post("/tasks/{task_list_id}/tasks")
+async def add_task(task_list_id: str, req: AddTaskRequest):
+    """Add new tasks to an existing task list (user-initiated)."""
+    store = GlobalTaskStore.get()
+    bridge: WebHITLBridge = app.state.bridge
+
+    new_tasks = store.add_tasks(task_list_id, req.tasks)
+    for t in new_tasks:
+        await bridge.put_event({
+            "type": "task_added",
+            "task_list_id": task_list_id,
+            "task": {"id": t.id, "title": t.title, "status": t.status, "order": t.order},
+        })
+    return {"status": "ok", "added": len(new_tasks)}
+
+
+@app.delete("/tasks/{task_list_id}/{task_id}")
+async def delete_task(task_list_id: str, task_id: str):
+    """Delete a task (user-initiated)."""
+    store = GlobalTaskStore.get()
+    bridge: WebHITLBridge = app.state.bridge
+
+    deleted = store.delete_task(task_list_id, task_id)
+    if not deleted:
+        return {"status": "error", "detail": "Task not found"}
+
+    await bridge.put_event({
+        "type": "task_deleted",
+        "task_list_id": task_list_id,
+        "task_id": task_id,
+    })
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

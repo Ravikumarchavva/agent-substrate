@@ -68,6 +68,7 @@ from agent_framework.resilience import (
     _calculate_delay,
 )
 from agent_framework.tools.base_tool import BaseTool, ToolResult
+from agent_framework.skills import SkillManager
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +130,9 @@ class ReActAgent(BaseAgent):
         # HITL: Tool approval
         tool_approval_handler: Optional[ToolApprovalHandler] = None,
         tools_requiring_approval: Optional[List[str]] = None,
+        # Skills
+        skill_dirs: Optional[List[str]] = None,
+        skill_manager: Optional[SkillManager] = None,
     ):
         super().__init__(
             name=name,
@@ -139,6 +143,8 @@ class ReActAgent(BaseAgent):
             memory=memory or UnboundedMemory(),
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
+            skill_dirs=skill_dirs,
+            skill_manager=skill_manager,
         )
         self.max_iterations = max_iterations
         self.verbose = verbose
@@ -154,17 +160,23 @@ class ReActAgent(BaseAgent):
         self.tool_approval_handler = tool_approval_handler
         self.tools_requiring_approval = tools_requiring_approval  # None = all tools when handler set
 
+        # Build effective system prompt (base + skill context)
+        effective_system = self.skill_manager.inject_into_prompt(self.system_instructions) \
+            if self.skill_manager else self.system_instructions
+
         # Seed system prompt
         if len(self.memory.get_messages()) == 0:
-            self.memory.add_message(SystemMessage(content=self.system_instructions))
+            self.memory.add_message(SystemMessage(content=effective_system))
 
     # ── Core run ─────────────────────────────────────────────────────────────
 
     def reset(self) -> None:
         """Clear memory and return agent to initial state with system message."""
         super().reset()
-        # Re-add system message after clearing
-        self.memory.add_message(SystemMessage(content=self.system_instructions))
+        # Re-add system message (with skill context) after clearing
+        effective_system = self.skill_manager.inject_into_prompt(self.system_instructions) \
+            if self.skill_manager else self.system_instructions
+        self.memory.add_message(SystemMessage(content=effective_system))
         # Reset HITL tool counters
         self._reset_hitl_tools()
 

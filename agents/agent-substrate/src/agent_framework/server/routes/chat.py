@@ -30,6 +30,7 @@ from agent_framework.server.services.agent_service import (
     persist_user_message,
 )
 from agent_framework.server.routes.mcp_apps import resolve_ui_uri
+from agent_framework.tools.task_manager_tool import current_thread_id
 from agent_framework.tools.web_surfer import WebSurferTool
 from agent_framework.web_hitl import WebHITLBridge, _DONE
 
@@ -149,6 +150,10 @@ async def chat(
                 if event is _DONE:
                     break
                 await merged_queue.put(("hitl", event))
+
+        # Bind the task‑manager ContextVar so TaskManagerTool knows which
+        # conversation it belongs to (safe for concurrent requests).
+        current_thread_id.set(body.thread_id)
 
         # Start both workers
         agent_task = asyncio.create_task(agent_worker())

@@ -34,6 +34,7 @@ from agent_framework.server.routes.feedback import router as feedback_router
 from agent_framework.server.routes.hitl import router as hitl_router
 from agent_framework.server.routes.mcp_apps import router as mcp_apps_router
 from agent_framework.server.routes.spotify_oauth import router as spotify_oauth_router
+from agent_framework.server.routes.tasks import router as tasks_router
 from agent_framework.server.routes.threads import router as threads_router
 from agent_framework.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from agent_framework.tools.code_interpreter import CodeInterpreterTool
@@ -48,6 +49,7 @@ from agent_framework.tools.mcp_app_tools import (
 )
 from agent_framework.services.spotify import SpotifyService
 from agent_framework.web_hitl import WebHITLBridge
+from agent_framework.tools.task_manager_tool import TaskManagerTool
     
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
@@ -80,6 +82,10 @@ async def lifespan(app: FastAPI):
         handler=bridge.human_handler,
         max_requests_per_run=5,
     )
+
+    # TaskManagerTool — wired to the bridge so SSE events reach the frontend
+    task_tool = TaskManagerTool(event_emitter=bridge.put_event)
+    app.state.task_tool = task_tool
 
     # Spotify service (needs SPOTIFY_CLIENT_ID + SPOTIFY_CLIENT_SECRET)
     spotify_svc = None
@@ -123,6 +129,7 @@ async def lifespan(app: FastAPI):
 
     app.state.tools = [
         ask_tool,
+        task_tool,
         CalculatorTool(),
         GetCurrentTimeTool(),
         DataVisualizerTool(),
@@ -150,6 +157,11 @@ async def lifespan(app: FastAPI):
         "When the user asks for a table:\n"
         "- ALWAYS return a Markdown table\n"
         "- Use | pipes and a separator row\n\n"
+        "TASK BOARD (IMPORTANT):\n"
+        "For ANY request that requires multiple steps or research, you MUST:\n"
+        "1. Call manage_tasks action=create_list with ALL planned steps FIRST.\n"
+        "2. For each step: call manage_tasks action=start_task, do the work, then action=complete_task.\n"
+        "This gives the user a live Kanban board showing your progress in real-time.\n\n"
         "When you need user preferences or confirmation, use the ask_human tool\n"
         "to present options and let them choose.\n\n"
         "When the user asks you to visualize, chart, or plot data, use the\n"
@@ -227,6 +239,7 @@ def create_app() -> FastAPI:
     app.include_router(feedback_router)
     app.include_router(mcp_apps_router)
     app.include_router(spotify_oauth_router)
+    app.include_router(tasks_router)
 
     # Health check
     @app.get("/health", tags=["infra"])
@@ -247,4 +260,4 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

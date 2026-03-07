@@ -1,5 +1,6 @@
 import logging
 import sys
+import io
 from pythonjsonlogger import jsonlogger
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
@@ -28,7 +29,9 @@ def setup_logging(level=logging.INFO, service_name="agent-framework"):
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
         
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(
+        io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    )
     formatter = CustomJsonFormatter(
         '%(timestamp)s %(level)s %(name)s %(message)s',
         json_ensure_ascii=False

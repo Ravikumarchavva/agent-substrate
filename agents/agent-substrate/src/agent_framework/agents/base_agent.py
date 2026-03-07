@@ -8,7 +8,8 @@ The contract is deliberately minimal:
 """
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Dict, List, Optional
+from pathlib import Path
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from abc import ABC, abstractmethod
 
 from agent_framework.agents.agent_result import AgentRunResult
@@ -16,6 +17,7 @@ from agent_framework.tools.base_tool import BaseTool
 from agent_framework.model_clients.base_client import BaseModelClient
 from agent_framework.memory.base_memory import BaseMemory
 from agent_framework.guardrails.base_guardrail import BaseGuardrail
+from agent_framework.skills import SkillManager
 
 
 class BaseAgent(ABC):
@@ -32,6 +34,9 @@ class BaseAgent(ABC):
         memory: Optional[BaseMemory] = None,
         input_guardrails: Optional[List[BaseGuardrail]] = None,
         output_guardrails: Optional[List[BaseGuardrail]] = None,
+        # Skills
+        skill_dirs: Optional[List[Union[str, Path]]] = None,
+        skill_manager: Optional[SkillManager] = None,
     ):
         self.name = name
         self.description = description
@@ -41,6 +46,14 @@ class BaseAgent(ABC):
         self.memory = memory
         self.input_guardrails = input_guardrails or []
         self.output_guardrails = output_guardrails or []
+
+        # Skills: prefer an explicit manager; otherwise build one from dirs
+        if skill_manager is not None:
+            self.skill_manager: Optional[SkillManager] = skill_manager
+        elif skill_dirs:
+            self.skill_manager = SkillManager(skill_dirs=skill_dirs)
+        else:
+            self.skill_manager = None
 
     # -- Core lifecycle -------------------------------------------------------
 

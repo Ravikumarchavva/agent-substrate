@@ -68,6 +68,7 @@ class TaskManagerTool(BaseTool):
                             "create_list",
                             "start_task",
                             "complete_task",
+                            "fail_task",
                             "add_task",
                             "delete_task",
                             "update_title",
@@ -150,10 +151,11 @@ class TaskManagerTool(BaseTool):
                 "task_list": task_list.to_dict(),
             })
 
-            names = "\n".join(f"• {t}" for t in tasks)
+            names = "\n".join(f"  {i+1}. {t}" for i, t in enumerate(tasks))
             return _ok(
-                f"Created task list ({len(tasks)} tasks):\n{names}\n"
-                f"Task list ID: {task_list.id}"
+                f"Task list created ({len(tasks)} tasks):\n{names}\n\n"
+                f"Now call start_task (no task_id needed — auto-advances) "
+                f"before each step, and complete_task after."
             )
 
         # ── shared guard: need an active task list ────────────────────
@@ -170,13 +172,13 @@ class TaskManagerTool(BaseTool):
 
         # ── start_task ───────────────────────────────────────────────
         if action == "start_task":
-            task_id = task_id or self._first_with_status("todo", store, task_list_id)
-            if not task_id:
+            resolved = self._resolve_task_id(task_id, "todo", store, task_list_id)
+            if not resolved:
                 return _err("No todo tasks left to start.")
 
-            updated = store.update_status(task_list_id, task_id, "in_progress")
+            updated = store.update_status(task_list_id, resolved, "in_progress")
             if not updated:
-                return _err(f"Task {task_id!r} not found.")
+                return _err(f"Task not found after resolution (id={resolved!r}).")
 
             await self._fire({
                 "type": "task_updated",
@@ -187,13 +189,13 @@ class TaskManagerTool(BaseTool):
 
         # ── complete_task ─────────────────────────────────────────────
         if action == "complete_task":
-            task_id = task_id or self._first_with_status("in_progress", store, task_list_id)
-            if not task_id:
+            resolved = self._resolve_task_id(task_id, "in_progress", store, task_list_id)
+            if not resolved:
                 return _err("No in-progress tasks to complete.")
 
-            updated = store.update_status(task_list_id, task_id, "done")
+            updated = store.update_status(task_list_id, resolved, "done")
             if not updated:
-                return _err(f"Task {task_id!r} not found.")
+                return _err(f"Task not found after resolution (id={resolved!r}).")
 
             await self._fire({
                 "type": "task_updated",
@@ -201,7 +203,25 @@ class TaskManagerTool(BaseTool):
                 "task": _task_dict(updated),
             })
             return _ok(f"Completed: {updated.title}")
+        # ── fail_task ─────────────────────────────────────────────
+        if action == "fail_task":
+            resolved = self._resolve_task_id(task_id, "in_progress", store, task_list_id)
+            if not resolved:
+                # Fall back to any todo task if none is in progress
+                resolved = self._resolve_task_id(task_id, "todo", store, task_list_id)
+            if not resolved:
+                return _err("No in-progress or todo task to mark as failed.")
 
+            updated = store.update_status(task_list_id, resolved, "failed")
+            if not updated:
+                return _err(f"Task not found after resolution (id={resolved!r}).")
+
+            await self._fire({
+                "type": "task_updated",
+                "task_list_id": task_list_id,
+                "task": _task_dict(updated),
+            })
+            return _ok(f"Marked as failed: {updated.title}")
         # ── add_task ─────────────────────────────────────────────────
         if action == "add_task":
             if not tasks:
@@ -265,6 +285,56 @@ class TaskManagerTool(BaseTool):
             if task.status == status:
                 return task.id
         return None
+
+    def _resolve_task_id(
+        self,
+        task_id: Optional[str],
+        status: str,
+        store,
+        task_list_id: str,
+    ) -> Optional[str]:
+        """Resolve a task_id flexibly so the agent rarely fails.
+
+        Resolution order:
+          1. No task_id supplied          → auto-advance (first task with matching status)
+          2. Exact UUID match             → use it
+          3. 1-based integer ('1','2'…)  → nth task in the matching-status list
+          4. Case-insensitive title match → use that task's real id
+          5. Fallback                    → auto-advance regardless of supplied value
+        """
+        task_list = store.get_task_list(task_list_id)
+        if not task_list:
+            return None
+
+        # 1. No hint → auto-advance
+        if not task_id:
+            return self._first_with_status(status, store, task_list_id)
+
+        # 2. Exact UUID
+        for task in task_list.tasks:
+            if task.id == task_id:
+                return task.id
+
+        # 3. 1-based integer index into the status-matching subset
+        try:
+            idx = int(task_id) - 1
+            subset = [t for t in task_list.tasks if t.status == status]
+            if 0 <= idx < len(subset):
+                return subset[idx].id
+            # Also try global index (agent might count all tasks)
+            if 0 <= idx < len(task_list.tasks):
+                return task_list.tasks[idx].id
+        except (ValueError, TypeError):
+            pass
+
+        # 4. Title substring match (case-insensitive)
+        needle = task_id.lower()
+        for task in task_list.tasks:
+            if needle in task.title.lower():
+                return task.id
+
+        # 5. Ultimate fallback: advance to the next task in given status
+        return self._first_with_status(status, store, task_list_id)
 
     async def _fire(self, event: Dict[str, Any]) -> None:
         """Emit an SSE event to the frontend (non-blocking, swallows errors)."""

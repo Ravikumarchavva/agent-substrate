@@ -61,7 +61,7 @@ async def main():
     print("\nFlushing traces...")
     await asyncio.sleep(2)
 
-    print("\nTraces should now be visible in Grafana at http://localhost:3000")
+    print("\nTraces should now be visible in Grafana at http://localhost:3001")
     print("Go to Explore -> Tempo and search for the 'agent-framework-tempo-demo' service.")
 
 if __name__ == "__main__":

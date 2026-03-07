@@ -23,7 +23,7 @@ def _is_spotify_authenticated() -> bool:
     """
     try:
         import requests
-        resp = requests.get("http://127.0.0.1:3001/api/spotify/token", timeout=2)
+        resp = requests.get("http://127.0.0.1:3000/api/spotify/token", timeout=2)
         if resp.ok:
             data = resp.json()
             return bool(data.get("authenticated"))
@@ -490,7 +490,7 @@ class SpotifyPlayerTool(BaseTool):
         oauth_token = None
         try:
             import requests
-            resp = requests.get("http://127.0.0.1:3001/api/spotify/token", timeout=2)
+            resp = requests.get("http://127.0.0.1:3000/api/spotify/token", timeout=2)
             if resp.ok:
                 data = resp.json()
                 if data.get("access_token"):

@@ -487,10 +487,13 @@ class ReActAgent(BaseAgent):
                     messages = self.memory.get_messages()
 
                     with global_tracer.start_span("llm_generate_stream", {"msg_count": len(messages)}):
-                        from agent_framework.messages._types import CompletionChunk
+                        from agent_framework.messages._types import CompletionChunk, TextDeltaChunk
                         
                         llm_t0 = asyncio.get_event_loop().time()
                         final_response_obj = None
+                        # Accumulate partial text so we can persist it if cancelled
+                        # mid-stream before a CompletionChunk is received.
+                        partial_text: str = ""
 
                         try:
                             async for chunk in self.model_client.generate_stream(
@@ -502,8 +505,10 @@ class ReActAgent(BaseAgent):
                                 # Yield the chunk to user
                                 yield chunk
                                 
-                                # Track final completion
-                                if isinstance(chunk, CompletionChunk):
+                                # Track partial text and final completion
+                                if isinstance(chunk, TextDeltaChunk):
+                                    partial_text += chunk.text
+                                elif isinstance(chunk, CompletionChunk):
                                     final_response_obj = chunk.message
                             
                             # After stream completes, add final message to memory
@@ -515,6 +520,20 @@ class ReActAgent(BaseAgent):
                                 "llm_latency", llm_t1 - llm_t0,
                                 tags={"model": getattr(self.model_client, "model", "unknown")},
                             )
+                        except asyncio.CancelledError:
+                            # Agent task was cancelled — persist whatever content we
+                            # have so the conversation history stays coherent.
+                            if final_response_obj is not None:
+                                self.memory.add_message(final_response_obj)
+                            elif partial_text:
+                                self.memory.add_message(
+                                    AssistantMessage(
+                                        role="assistant",
+                                        content=[partial_text],
+                                        finish_reason="cancelled",
+                                    )
+                                )
+                            raise  # Must re-raise so the asyncio.Task is properly cancelled
                         except Exception as e:
                             global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
                             raise

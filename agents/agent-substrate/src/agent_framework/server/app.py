@@ -27,6 +27,8 @@ from agent_framework.observability.telemetry import (
     shutdown_opentelemetry,
 )
 from agent_framework.server.database import close_db, get_session_factory, init_db
+from agent_framework.server.routes.admin import router as admin_router
+from agent_framework.server.routes.cancel import router as cancel_router
 from agent_framework.server.routes.chat import router as chat_router
 from agent_framework.server.routes.code_interpreter import router as code_interpreter_router
 from agent_framework.server.routes.elements import router as elements_router
@@ -189,6 +191,10 @@ async def lifespan(app: FastAPI):
         "interactive widget.\n"
     )
 
+    # Cancel registry: maps thread_id → asyncio.Event so running streams can
+    # be aborted from the POST /chat/{thread_id}/cancel endpoint.
+    app.state.cancel_registry: dict[str, object] = {}
+
     # Expose session factory for routes that need a fresh DB session
     app.state.session_factory = get_session_factory()
 
@@ -231,8 +237,10 @@ def create_app() -> FastAPI:
     )
 
     # Mount routers
+    app.include_router(admin_router)
     app.include_router(threads_router)
     app.include_router(chat_router)
+    app.include_router(cancel_router)
     app.include_router(code_interpreter_router)
     app.include_router(hitl_router)
     app.include_router(elements_router)

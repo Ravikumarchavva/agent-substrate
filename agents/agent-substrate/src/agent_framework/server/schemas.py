@@ -70,6 +70,7 @@ class ChatRequest(BaseModel):
     """POST /chat – send a message."""
     thread_id: uuid.UUID
     messages: List[ChatMessage]
+    system_instructions: Optional[str] = None  # appended to base prompt when provided
 
 
 # ── Feedback schemas ─────────────────────────────────────────────────────────

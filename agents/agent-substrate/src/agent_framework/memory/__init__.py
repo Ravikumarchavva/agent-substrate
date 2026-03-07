@@ -1,5 +1,6 @@
 from .base_memory import BaseMemory
 from .unbounded_memory import UnboundedMemory
+from .memory_scope import MemoryScope
 from .message_serializer import (
     serialize_message,
     deserialize_message,
@@ -14,6 +15,8 @@ __all__ = [
     # Base
     "BaseMemory",
     "UnboundedMemory",
+    # Scope
+    "MemoryScope",
     # Serialization
     "serialize_message",
     "deserialize_message",

@@ -29,9 +29,13 @@ def setup_logging(level=logging.INFO, service_name="agent-framework"):
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
         
-    handler = logging.StreamHandler(
-        io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    )
+    # In Jupyter notebooks sys.stdout is an OutStream with no .buffer attribute;
+    # wrap only when the real binary buffer is available (normal terminal / server).
+    if hasattr(sys.stdout, "buffer"):
+        stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    else:
+        stream = sys.stdout
+    handler = logging.StreamHandler(stream)
     formatter = CustomJsonFormatter(
         '%(timestamp)s %(level)s %(name)s %(message)s',
         json_ensure_ascii=False

@@ -33,6 +33,7 @@ from agent_framework.agents.agent_result import (
     StepResult,
     ToolCallRecord,
 )
+from agent_framework.context.base_context import ModelContext
 from agent_framework.exceptions import GuardrailTripwireError
 from agent_framework.guardrails.base_guardrail import (
     BaseGuardrail,
@@ -43,6 +44,7 @@ from agent_framework.guardrails.base_guardrail import (
 from agent_framework.guardrails.runner import run_guardrails
 from agent_framework.hooks import HookEvent, HookManager
 from agent_framework.memory.base_memory import BaseMemory
+from agent_framework.memory.memory_scope import MemoryScope
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.base_message import UsageStats
 from agent_framework.messages.client_messages import (
@@ -117,6 +119,8 @@ class ReActAgent(BaseAgent):
             "the user's request. Think step-by-step."
         ),
         memory: Optional[BaseMemory] = None,
+        memory_scope: MemoryScope = MemoryScope.ISOLATED,
+        model_context: ModelContext,
         max_iterations: int = 10,
         verbose: bool = True,
         input_guardrails: Optional[List[BaseGuardrail]] = None,
@@ -138,9 +142,11 @@ class ReActAgent(BaseAgent):
             name=name,
             description=description,
             model_client=model_client,
+            model_context=model_context,
             tools=tools or [],
             system_instructions=system_instructions,
             memory=memory or UnboundedMemory(),
+            memory_scope=memory_scope,
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
             skill_dirs=skill_dirs,
@@ -264,7 +270,7 @@ class ReActAgent(BaseAgent):
                 with global_tracer.start_span(f"step_{step_num}", {"step": step_num}):
 
                     # A. THINK — call LLM
-                    response = await self._call_llm(**kwargs)
+                    response = await self._call_llm(current_input=input_text, **kwargs)
                     usage.add(response.usage)
                     self.memory.add_message(response)
 
@@ -484,7 +490,12 @@ class ReActAgent(BaseAgent):
                 with global_tracer.start_span(f"step_{step_num}", {"step": step_num}):
                     # THINK
                     tool_schemas = self._build_tool_schemas()
-                    messages = self.memory.get_messages()
+                    messages = await self.model_context.build(
+                        session_id=getattr(self, "_session_id", self.name),
+                        current_input=input_text,
+                        raw_messages=self.memory.get_messages(),
+                        model_client=self.model_client,
+                    )
 
                     with global_tracer.start_span("llm_generate_stream", {"msg_count": len(messages)}):
                         from agent_framework.messages._types import CompletionChunk, TextDeltaChunk
@@ -661,10 +672,15 @@ class ReActAgent(BaseAgent):
                 schemas.append(t)
         return schemas
 
-    async def _call_llm(self, **kwargs) -> AssistantMessage:
+    async def _call_llm(self, current_input: str = "", **kwargs) -> AssistantMessage:
         """Single LLM call with retry, hooks, and observability."""
         tool_schemas = self._build_tool_schemas()
-        messages = self.memory.get_messages()
+        messages = await self.model_context.build(
+            session_id=getattr(self, "_session_id", self.name),
+            current_input=current_input,
+            raw_messages=self.memory.get_messages(),
+            model_client=self.model_client,
+        )
 
         # ── LIFECYCLE HOOK: LLM_START ────────────────────────────────
         await self.hooks.dispatch(HookEvent.LLM_START, {

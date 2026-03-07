@@ -13,9 +13,11 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from abc import ABC, abstractmethod
 
 from agent_framework.agents.agent_result import AgentRunResult
+from agent_framework.context.base_context import ModelContext
 from agent_framework.tools.base_tool import BaseTool
 from agent_framework.model_clients.base_client import BaseModelClient
 from agent_framework.memory.base_memory import BaseMemory
+from agent_framework.memory.memory_scope import MemoryScope
 from agent_framework.guardrails.base_guardrail import BaseGuardrail
 from agent_framework.skills import SkillManager
 
@@ -29,9 +31,11 @@ class BaseAgent(ABC):
         description: str,
         *,
         model_client: BaseModelClient,
+        model_context: ModelContext,
         tools: Optional[List[BaseTool]] = None,
         system_instructions: str = "You are a helpful assistant.",
         memory: Optional[BaseMemory] = None,
+        memory_scope: MemoryScope = MemoryScope.ISOLATED,
         input_guardrails: Optional[List[BaseGuardrail]] = None,
         output_guardrails: Optional[List[BaseGuardrail]] = None,
         # Skills
@@ -41,9 +45,11 @@ class BaseAgent(ABC):
         self.name = name
         self.description = description
         self.model_client = model_client
+        self.model_context = model_context
         self.tools = tools or []
         self.system_instructions = system_instructions
         self.memory = memory
+        self.memory_scope = memory_scope
         self.input_guardrails = input_guardrails or []
         self.output_guardrails = output_guardrails or []
 

@@ -13,6 +13,9 @@ Events:
   - on_tool_start     — before executing a tool
   - on_tool_end       — after tool execution completes
   - on_guardrail_trip — a guardrail triggered a hard stop
+  - on_handoff        — an orchestrator delegates to a sub-agent
+  - on_flow_start     — a Flow begins execution
+  - on_flow_end       — a Flow finishes execution
 
 Design decisions:
   - Hooks are async to support I/O (logging to DB, sending webhooks).
@@ -47,6 +50,10 @@ class HookEvent(str, Enum):
     TOOL_START = "on_tool_start"
     TOOL_END = "on_tool_end"
     GUARDRAIL_TRIP = "on_guardrail_trip"
+    # Multi-agent flow events
+    HANDOFF = "on_handoff"       # Orchestrator delegates to a sub-agent
+    FLOW_START = "on_flow_start" # A Flow begins execution
+    FLOW_END = "on_flow_end"     # A Flow finishes execution
 
 
 # Type alias for hook callbacks

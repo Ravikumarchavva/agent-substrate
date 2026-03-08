@@ -22,6 +22,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from agent_framework.configs.settings import settings
 from agent_framework.human_input import AskHumanTool
 from agent_framework.model_clients.openai.openai_client import OpenAIClient
+from agent_framework.audio_clients.openai import OpenAIAudioClient
 from agent_framework.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
@@ -33,6 +34,8 @@ from agent_framework.server.routes.chat import router as chat_router
 from agent_framework.server.routes.code_interpreter import router as code_interpreter_router
 from agent_framework.server.routes.elements import router as elements_router
 from agent_framework.server.routes.feedback import router as feedback_router
+from agent_framework.server.routes.audio import router as audio_router
+from agent_framework.server.routes.files import router as files_router
 from agent_framework.server.routes.hitl import router as hitl_router
 from agent_framework.server.routes.mcp_apps import router as mcp_apps_router
 from agent_framework.server.routes.spotify_oauth import router as spotify_oauth_router
@@ -72,6 +75,11 @@ async def lifespan(app: FastAPI):
     # Shared agent dependencies (injected into routes via app.state)
     app.state.model_client = OpenAIClient(
         model="gpt-4o-mini",
+        api_key=settings.OPENAI_API_KEY,
+    )
+
+    # Provider-agnostic audio client (transcription, TTS, realtime)
+    app.state.audio_client = OpenAIAudioClient(
         api_key=settings.OPENAI_API_KEY,
     )
 
@@ -245,6 +253,8 @@ def create_app() -> FastAPI:
     app.include_router(hitl_router)
     app.include_router(elements_router)
     app.include_router(feedback_router)
+    app.include_router(audio_router)
+    app.include_router(files_router)
     app.include_router(mcp_apps_router)
     app.include_router(spotify_oauth_router)
     app.include_router(tasks_router)

@@ -29,6 +29,11 @@ from agent_framework.server.services.agent_service import (
     persist_tool_result,
     persist_user_message,
 )
+from agent_framework.server.services.file_service import (
+    extract_text,
+    get_files_by_ids,
+    to_vision_image_block,
+)
 from agent_framework.server.routes.mcp_apps import resolve_ui_uri
 from agent_framework.tools.task_manager_tool import current_thread_id
 from agent_framework.tools.web_surfer import WebSurferTool
@@ -66,6 +71,83 @@ def _build_tool_meta_map(tools: list) -> dict:
         except Exception as e:
             logger.warning(f"Failed to get schema for tool {getattr(tool, 'name', 'unknown')}: {e}")
     return meta_map
+
+
+async def _build_file_context(
+    db: AsyncSession,
+    body: ChatRequest,
+    request: Request,
+) -> tuple[str, list[str]]:
+    """Load file IDs from the request, extract text and push to CI VM.
+
+    Returns:
+        (file_context_block, image_descriptions) where
+        - file_context_block is a formatted string to prepend to the user
+          message (empty string when no files were requested), and
+        - image_descriptions is a list of human-readable image annotations
+          (e.g. '[Image: photo.png is available at /data/photo.png]').
+    """
+    if not body.file_ids:
+        return "", []
+
+    elements = await get_files_by_ids(db, body.file_ids, body.thread_id)
+    if not elements:
+        return "", []
+
+    text_parts: list[str] = []
+    image_notes: list[str] = []
+
+    for el in elements:
+        extracted = extract_text(el)
+        if extracted is not None:
+            text_parts.append(
+                f"### File: {el.name}\n"
+                f"```\n{extracted}\n```"
+            )
+        elif (el.mime or "").startswith("image/"):
+            image_notes.append(
+                f"[Image attached: {el.name} — "
+                f"available at /data/{el.name} in the code interpreter]"
+            )
+        else:
+            # Unknown binary — just note it exists in the CI VM
+            text_parts.append(
+                f"### File: {el.name} ({el.mime or 'binary'})\n"
+                f"(Binary file — available at /data/{el.name} in the code interpreter)"
+            )
+
+    # Push every file to the code-interpreter VM so the agent can
+    # use pandas, PIL, etc. to work with them programmatically.
+    ci_client = getattr(request.app.state, "ci_client", None)
+    if ci_client:
+        import base64 as _b64
+        session_id = str(body.thread_id)
+        for el in elements:
+            if not el.content:
+                continue
+            try:
+                b64 = _b64.b64encode(el.content).decode()
+                await ci_client.write_file(
+                    session_id,
+                    path=f"/data/{el.name}",
+                    content=b64,
+                    encoding="base64",
+                )
+                logger.info("Pushed file %s (%d bytes) to CI session %s",
+                            el.name, len(el.content), session_id)
+            except Exception as exc:
+                logger.warning("Failed to push %s to CI VM: %s", el.name, exc)
+
+    if not text_parts and not image_notes:
+        return "", image_notes
+
+    names = ", ".join(el.name for el in elements)
+    sections = "\n\n".join(text_parts)
+    block = (
+        f"The user has attached {len(elements)} file(s): {names}.\n"
+        f"File contents:\n\n{sections}"
+    )
+    return block, image_notes
 
 
 @router.post("/chat")
@@ -116,6 +198,13 @@ async def chat(
 
     # 3. Extract user content from last message
     user_content = body.messages[-1].content
+
+    # 3a. Inject attached file context (text extraction + CI VM push)
+    file_block, image_notes = await _build_file_context(db, body, request)
+    if file_block:
+        user_content = f"{file_block}\n\n---\n\n{user_content}"
+    if image_notes:
+        user_content = "\n".join(image_notes) + "\n\n" + user_content
 
     # 4. Fire on_message hook
     ctx = ChatContext(

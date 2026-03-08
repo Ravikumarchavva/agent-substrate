@@ -264,47 +264,81 @@ class PromptInjectionGuardrail(BaseGuardrail):
 # ---------------------------------------------------------------------------
 
 class MaxTokenGuardrail(BaseGuardrail):
-    """Reject input that exceeds a token limit (estimated by char count).
+    """Reject input that exceeds a token limit.
 
-    Uses a configurable chars-per-token ratio for estimation.  For exact
-    counts, use tiktoken directly or subclass and override.
+    Uses **tiktoken** for accurate token counting when available, falling back
+    to a configurable chars-per-token ratio so the guardrail always works even
+    if tiktoken is not installed.
 
     Args:
-        max_tokens: Maximum allowed tokens.
-        chars_per_token: Approximate characters per token (default: 4).
-        tripwire: Hard stop when exceeded.
+        max_tokens:       Maximum allowed input tokens (default: 4 096).
+        model:            Tiktoken encoding model name (default: ``"gpt-4o"``).
+                          Any model name recognised by tiktoken is valid.
+        chars_per_token:  Fallback chars-per-token ratio used when tiktoken
+                          cannot load the encoding (default: 4.0).
+        tripwire:         Hard-stop the agent when the limit is exceeded
+                          (default: ``True`` — blocks oversized inputs).
     """
 
     name = "max_token"
-    description = "Rejects input exceeding configurable token limit"
+    description = "Rejects input exceeding configurable token limit (tiktoken-accurate)"
     guardrail_type = GuardrailType.INPUT
 
     def __init__(
         self,
         *,
         max_tokens: int = 4096,
+        model: str = "gpt-4o",
         chars_per_token: float = 4.0,
-        tripwire: bool = False,
+        tripwire: bool = True,
     ):
         self.max_tokens = max_tokens
         self.chars_per_token = chars_per_token
         self.tripwire = tripwire
+        self._model = model
+
+        # Try to load tiktoken encoding once at construction time.
+        # If it fails (unknown model, missing package), we fall back to the
+        # char-ratio estimator — no hard error at instantiation.
+        self._encoding = None
+        try:
+            import tiktoken
+            try:
+                self._encoding = tiktoken.encoding_for_model(model)
+            except KeyError:
+                # Unknown model — try the base cl100k_base encoding
+                try:
+                    self._encoding = tiktoken.get_encoding("cl100k_base")
+                except Exception:
+                    pass  # genuine failure → char fallback
+        except ImportError:
+            pass  # tiktoken not installed → char fallback
+
+    def _count_tokens(self, text: str) -> int:
+        """Return an accurate (tiktoken) or estimated (char-ratio) token count."""
+        if self._encoding is not None:
+            return len(self._encoding.encode(text))
+        return int(len(text) / self.chars_per_token)
 
     async def check(self, ctx: GuardrailContext) -> GuardrailResult:
         text = ctx.input_text or ""
-        estimated_tokens = int(len(text) / self.chars_per_token)
+        token_count = self._count_tokens(text)
+        method = "tiktoken" if self._encoding is not None else "estimated"
 
-        if estimated_tokens > self.max_tokens:
+        if token_count > self.max_tokens:
             return self._fail(
-                f"Input too long: ~{estimated_tokens} tokens (max {self.max_tokens})",
+                f"Input too long: {token_count} tokens ({method}) — limit is {self.max_tokens}",
                 tripwire=self.tripwire,
-                estimated_tokens=estimated_tokens,
+                token_count=token_count,
                 max_tokens=self.max_tokens,
+                counting_method=method,
             )
 
         return self._pass(
-            f"Token count OK: ~{estimated_tokens}/{self.max_tokens}",
-            estimated_tokens=estimated_tokens,
+            f"Token count OK: {token_count}/{self.max_tokens} ({method})",
+            token_count=token_count,
+            max_tokens=self.max_tokens,
+            counting_method=method,
         )
 
 

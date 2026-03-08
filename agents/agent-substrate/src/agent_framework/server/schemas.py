@@ -71,6 +71,7 @@ class ChatRequest(BaseModel):
     thread_id: uuid.UUID
     messages: List[ChatMessage]
     system_instructions: Optional[str] = None  # appended to base prompt when provided
+    file_ids: Optional[List[uuid.UUID]] = None  # IDs of files to inject for this turn
 
 
 # ── Feedback schemas ─────────────────────────────────────────────────────────
@@ -90,6 +91,19 @@ class FeedbackOut(BaseModel):
     thread_id: uuid.UUID
     value: int
     comment: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── File schemas ────────────────────────────────────────────────────────────
+
+class FileOut(BaseModel):
+    """Uploaded file metadata returned after upload or listing."""
+    id: uuid.UUID
+    thread_id: Optional[uuid.UUID] = None
+    name: str
+    mime: Optional[str] = None
+    size: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -132,6 +146,29 @@ class ElementOut(BaseModel):
     props: Optional[Dict[str, Any]] = None
 
     model_config = {"from_attributes": True}
+
+
+# ── Audio schemas ────────────────────────────────────────────────────────────
+
+class TranscribeResponse(BaseModel):
+    """Response from POST /audio/transcribe."""
+    text: str
+
+
+class TTSRequest(BaseModel):
+    """Request body for POST /audio/tts."""
+    text: str
+    model: Optional[str] = "gpt-4o-mini-tts"   # gpt-4o-mini-tts | tts-1 | tts-1-hd
+    voice: Optional[str] = "coral"              # alloy | ash | coral | nova | …
+    response_format: Optional[str] = "mp3"      # mp3 | opus | aac | flac | wav | pcm
+    instructions: Optional[str] = None          # style hint (gpt-4o-mini-tts only)
+
+
+class RealtimeTokenResponse(BaseModel):
+    """Response from GET /audio/realtime-token."""
+    client_secret: str
+    expires_at: int
+    session_id: str
 
 
 # ── User schemas ─────────────────────────────────────────────────────────────

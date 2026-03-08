@@ -16,6 +16,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_framework.agents.react_agent import ReActAgent
+from agent_framework.guardrails.prebuilt import MaxTokenGuardrail
 from agent_framework.human_input import ToolApprovalHandler
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.client_messages import (
@@ -120,8 +121,23 @@ def create_agent_for_thread(
     tool_approval_handler: Optional[ToolApprovalHandler] = None,
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
+    max_input_tokens: int = 16_000,
 ) -> ReActAgent:
-    """Create a ReActAgent with pre-loaded per-session memory."""
+    """Create a ReActAgent with pre-loaded per-session memory.
+
+    A ``MaxTokenGuardrail`` is always installed as a default input guardrail
+    to prevent runaway context costs and prompt injection via oversized inputs.
+    The limit can be tuned via ``max_input_tokens`` (default: 16 000 tokens).
+    """
+    # Default input guardrail — accurate token counting via tiktoken
+    default_input_guardrails = [
+        MaxTokenGuardrail(
+            max_tokens=max_input_tokens,
+            model="gpt-4o",
+            tripwire=True,
+        )
+    ]
+
     kwargs: Dict[str, Any] = dict(
         name="ChatBot",
         description="A helpful AI assistant with tool access.",
@@ -131,6 +147,7 @@ def create_agent_for_thread(
         memory=memory,
         max_iterations=max_iterations,
         verbose=verbose,
+        input_guardrails=default_input_guardrails,
     )
     if tool_approval_handler is not None:
         kwargs["tool_approval_handler"] = tool_approval_handler
@@ -153,6 +170,7 @@ async def load_agent_for_thread(
     tool_approval_handler: Optional[ToolApprovalHandler] = None,
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
+    max_input_tokens: int = 16_000,
 ) -> ReActAgent:
     """Load persisted conversation into an agent for the given thread."""
     step_rows = await load_messages_for_memory(db, thread_id)
@@ -167,6 +185,7 @@ async def load_agent_for_thread(
         tool_approval_handler=tool_approval_handler,
         tools_requiring_approval=tools_requiring_approval,
         tool_timeout=tool_timeout,
+        max_input_tokens=max_input_tokens,
     )
 
 

@@ -7,6 +7,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Copy, Check, RotateCw, ChevronDown, ChevronRight, Loader2, PanelRightOpen, WrenchIcon } from "lucide-react";
 import { ToolCall } from "@/types";
+import { AudioPlayer } from "@/components/AudioPlayer";
 
 type Props = {
   role: "user" | "assistant";
@@ -234,6 +235,8 @@ export function MessageBubble({
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
+              {/* TTS listen button */}
+              <AudioPlayer text={safeContent} />
               {onRegenerate && (
                 <button
                   onClick={onRegenerate}

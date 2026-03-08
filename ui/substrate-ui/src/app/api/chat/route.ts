@@ -10,6 +10,7 @@ export async function POST(req: Request) {
       thread_id: body.thread_id,
       messages: body.messages,
       ...(body.system_instructions ? { system_instructions: body.system_instructions } : {}),
+      ...(body.file_ids?.length ? { file_ids: body.file_ids } : {}),
     }),
   });
 

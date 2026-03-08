@@ -9,10 +9,12 @@ import { AppPanel, AppPanelItem } from "@/components/AppPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { SettingsPanel, SettingsTab } from "@/components/SettingsPanel";
-import { Thread, Message, Task, TaskList, TaskStatus } from "@/types";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
+import { Thread, Message, Task, TaskList, TaskStatus, UploadedFile } from "@/types";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { Send, Plus, Mic, Music2, ListTodo, Clock, BarChart2, StopCircle, Loader2, type LucideIcon } from "lucide-react";
+import { Send, Plus, Mic, Music2, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, type LucideIcon } from "lucide-react";
 
 export default function ChatPage() {
   const { isAuthenticated, isLoading: authLoading, loginWithGoogle } = useAuth();
@@ -49,6 +51,14 @@ export default function ChatPage() {
   // Tracks which AppPanel item holds the Kanban board so task updates can
   // patch its toolArguments and be pushed to the iframe via update_context.
   const kanbanPanelIdRef = useRef<string | null>(null);
+
+  // ── File attachment state ────────────────────────────────
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  // ── Realtime speech-to-speech panel ────────────────────────────────
+  const [realtimeOpen, setRealtimeOpen] = useState(false);
 
   // Load threads on mount
   useEffect(() => {
@@ -236,6 +246,51 @@ export default function ChatPage() {
     abortControllerRef.current?.abort();
   }
 
+  // ── File attachment handlers ─────────────────────────────────────────────
+
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    // Reset so the same file can be re-selected
+    e.target.value = "";
+
+    // Ensure we have a thread before uploading
+    let threadId = currentThreadId;
+    if (!threadId) {
+      try {
+        const newThread = await api.createThread("New Chat");
+        setThreads([newThread]);
+        setCurrentThreadId(newThread.id);
+        threadId = newThread.id;
+      } catch {
+        console.error("Failed to create thread for file upload");
+        return;
+      }
+    }
+
+    setUploadingFile(true);
+    try {
+      const uploaded = await Promise.all(
+        files.map((f) => api.uploadFile(threadId!, f))
+      );
+      setAttachedFiles((prev) => [...prev, ...uploaded]);
+    } catch (err) {
+      console.error("File upload failed:", err);
+    } finally {
+      setUploadingFile(false);
+    }
+  }
+
+  async function handleRemoveFile(fileId: string) {
+    if (!currentThreadId) return;
+    try {
+      await api.deleteFile(currentThreadId, fileId);
+    } catch {
+      // Best-effort — remove from local state regardless
+    }
+    setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
+  }
+
   async function doSendMessage(text: string) {
     if (!text.trim() || loading) return;
 
@@ -264,6 +319,8 @@ export default function ChatPage() {
     setMessages(nextMessages);
     const currentInput = text;
     setInput("");
+    const currentFileIds = attachedFiles.map((f) => f.id);
+    setAttachedFiles([]);
     setLoading(true);
 
     // Update thread name if it's the first message
@@ -293,6 +350,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           thread_id: threadId,
           messages: [{ role: "user", content: currentInput }],
+          ...(currentFileIds.length ? { file_ids: currentFileIds } : {}),
           ...(localStorage.getItem("system_instructions_override")?.trim()
             ? { system_instructions: localStorage.getItem("system_instructions_override")!.trim() }
             : {}),
@@ -913,16 +971,56 @@ export default function ChatPage() {
           <div className="max-w-3xl mx-auto px-4">
             <form
               onSubmit={sendMessage}
-              className="flex items-end gap-2 rounded-3xl border border-(--border) bg-(--input-bg) px-3 py-2 shadow-sm"
+              className="flex flex-col rounded-3xl border border-(--border) bg-(--input-bg) px-3 py-2 shadow-sm"
             >
+              {/* File chips row — shown when files are attached */}
+              {attachedFiles.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pb-2">
+                  {attachedFiles.map((f) => (
+                    <span
+                      key={f.id}
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-(--border) bg-(--card)"
+                      style={{ color: "var(--foreground)" }}
+                    >
+                      <span className="max-w-32 truncate">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFile(f.id)}
+                        className="shrink-0 hover:opacity-70 transition-opacity"
+                        aria-label={`Remove ${f.name}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-end gap-2">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileSelected}
+                aria-hidden="true"
+              />
+
               {/* Left: attach/plus */}
               <button
                 type="button"
-                className="shrink-0 mb-0.5 p-1.5 rounded-full hover:bg-(--card-hover) transition-colors self-end"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingFile}
+                className="shrink-0 mb-0.5 p-1.5 rounded-full hover:bg-(--card-hover) transition-colors self-end disabled:opacity-40"
                 style={{ color: "var(--muted)" }}
-                aria-label="Attach"
+                aria-label="Attach file"
               >
-                <Plus className="w-4 h-4" />
+                {uploadingFile ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4" />
+                )}
               </button>
 
               {/* Textarea */}
@@ -942,16 +1040,26 @@ export default function ChatPage() {
                 disabled={loading}
               />
 
-              {/* Right: mic + send */}
+              {/* Right: voice + send */}
               <div className="flex items-center gap-1 shrink-0 self-end mb-0.5">
-                {!input.trim() && (
+                {/* STT mic — transcribes speech into the text input */}
+                {!loading && (
+                  <VoiceRecorder
+                    onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
+                    disabled={loading}
+                  />
+                )}
+                {/* Realtime speech-to-speech button — separate, opens full-duplex panel */}
+                {!loading && (
                   <button
                     type="button"
+                    onClick={() => setRealtimeOpen(true)}
                     className="p-1.5 rounded-full hover:bg-(--card-hover) transition-colors"
                     style={{ color: "var(--muted)" }}
-                    aria-label="Voice input"
+                    aria-label="Start speech-to-speech conversation"
+                    title="Live voice conversation"
                   >
-                    <Mic className="w-4 h-4" />
+                    <Radio className="w-4 h-4" />
                   </button>
                 )}
                 {loading ? (
@@ -981,7 +1089,13 @@ export default function ChatPage() {
                   </button>
                 )}
               </div>
+              </div>
             </form>
+            {/* Realtime speech-to-speech modal */}
+            <RealtimeVoicePanel
+              isOpen={realtimeOpen}
+              onClose={() => setRealtimeOpen(false)}
+            />
             <p className="text-xs text-center mt-2" style={{ color: "var(--muted)" }}>
               AI can make mistakes. Verify important information.
             </p>

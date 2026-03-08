@@ -1,4 +1,4 @@
-import { Thread, BackendMessage, Message, ToolCall, TaskList, TaskStatus } from "@/types";
+import { Thread, BackendMessage, Message, ToolCall, TaskList, TaskStatus, UploadedFile, TranscribeResult, RealtimeToken, TTSVoice } from "@/types";
 
 // API service layer for backend communication
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -151,5 +151,74 @@ export const api = {
     });
   },
 
+  // ---------------------------------------------------------------------------
+  // File Management API
+  // ---------------------------------------------------------------------------
+
+  async uploadFile(threadId: string, file: File): Promise<UploadedFile> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/threads/${threadId}/files`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) throw new Error(`Failed to upload file: ${res.statusText}`);
+    return res.json();
+  },
+
+  async listFiles(threadId: string): Promise<UploadedFile[]> {
+    const res = await fetch(`${API_BASE}/threads/${threadId}/files`);
+    if (!res.ok) throw new Error("Failed to list files");
+    return res.json();
+  },
+
+  async deleteFile(threadId: string, fileId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/threads/${threadId}/files/${fileId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete file");
+  },
+
+  // ---------------------------------------------------------------------------
+  // Audio / Voice API
+  // ---------------------------------------------------------------------------
+
+  /** Send recorded audio blob to Whisper for transcription. */
+  async transcribeAudio(blob: Blob, mimeType: string): Promise<TranscribeResult> {
+    const ext = mimeType.includes("ogg") ? "ogg"
+      : mimeType.includes("mp4") ? "mp4"
+      : mimeType.includes("wav") ? "wav"
+      : "webm";
+    const form = new FormData();
+    form.append("file", blob, `recording.${ext}`);
+    const res = await fetch("/api/audio/transcribe", { method: "POST", body: form });
+    if (!res.ok) throw new Error(`Transcription failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  /** Fetch TTS audio as a Blob, ready for playback. */
+  async textToSpeech(
+    text: string,
+    voice: TTSVoice = "coral",
+    model = "gpt-4o-mini-tts",
+  ): Promise<Blob> {
+    const res = await fetch("/api/audio/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice, model }),
+    });
+    if (!res.ok) throw new Error(`TTS failed: ${res.statusText}`);
+    return res.blob();
+  },
+
+  /** Get a short-lived ephemeral Realtime session token from the backend. */
+  async getRealtimeToken(): Promise<RealtimeToken> {
+    const res = await fetch("/api/audio/realtime-token");
+    if (!res.ok) throw new Error(`Failed to get realtime token: ${res.statusText}`);
+    return res.json();
+  },
+
   // Chat streaming (handled separately in chat route)
 };
+
+

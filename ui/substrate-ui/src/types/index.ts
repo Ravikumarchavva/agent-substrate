@@ -73,6 +73,36 @@ export type Element = {
   props?: Record<string, unknown>;
 };
 
+export type UploadedFile = {
+  id: string;
+  thread_id?: string;
+  name: string;
+  mime?: string;
+  size?: number;
+};
+
+// ---------------------------------------------------------------------------
+// Audio / Voice Types
+// ---------------------------------------------------------------------------
+
+/** Available TTS voices from the OpenAI TTS API. */
+export type TTSVoice =
+  | "alloy" | "ash" | "ballad" | "coral" | "echo"
+  | "fable" | "nova" | "onyx" | "sage" | "shimmer"
+  | "verse" | "marin" | "cedar";
+
+/** Response from POST /api/audio/transcribe */
+export type TranscribeResult = {
+  text: string;
+};
+
+/** Response from GET /api/audio/realtime-token */
+export type RealtimeToken = {
+  client_secret: string;
+  expires_at: number;
+  session_id: string;
+};
+
 // ---------------------------------------------------------------------------
 // Task Manager Types
 // ---------------------------------------------------------------------------

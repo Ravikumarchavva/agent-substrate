@@ -1,0 +1,141 @@
+<svg width="1300" height="620" viewBox="0 0 1300 620" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 Z" fill="#374151"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1300" height="620" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="650" y="38" font-size="22" font-weight="700" fill="#0f172a" text-anchor="middle">ParallelFlow Architecture</text>
+  <text x="650" y="60" font-size="13" fill="#64748b" text-anchor="middle">Concurrent Execution Pattern · All agents run simultaneously, results merged</text>
+
+  <!-- ── INPUT NODE ── -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="255" width="140" height="90" rx="14" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  </g>
+  <text x="110" y="295" font-size="30" text-anchor="middle">📥</text>
+  <text x="110" y="323" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">Code Input</text>
+  <text x="110" y="337" font-size="9.5" fill="#94a3b8" text-anchor="middle">(same input to all)</text>
+
+  <!-- Fan-out lines to all 3 agents -->
+  <!-- to Agent 1 (top) -->
+  <path d="M180,300 L220,300 L220,145 L280,145" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+  <!-- to Agent 2 (middle) -->
+  <path d="M180,300 L250,300 L280,300" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+  <!-- to Agent 3 (bottom) -->
+  <path d="M180,300 L220,300 L220,455 L280,455" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+
+  <!-- Concurrent label -->
+  <rect x="190" y="340" width="80" height="22" rx="6" fill="#fef9c3" stroke="#fde047" stroke-width="1.5"/>
+  <text x="230" y="355" font-size="9.5" fill="#854d0e" text-anchor="middle">⚡ Concurrent</text>
+
+  <!-- ── AGENT 1: Code Reviewer (top) ── -->
+  <g filter="url(#shadow)">
+    <rect x="280" y="80" width="250" height="200" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+  </g>
+  <rect x="280" y="80" width="250" height="38" rx="14" fill="#f97316"/>
+  <rect x="280" y="100" width="250" height="18" fill="#f97316"/>
+  <text x="405" y="105" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">CODE REVIEWER</text>
+  <text x="405" y="150" font-size="30" text-anchor="middle">🔍</text>
+  <text x="405" y="178" font-size="11" fill="#9a3412" text-anchor="middle">ReActAgent</text>
+  <text x="405" y="194" font-size="10" fill="#c2410c" text-anchor="middle">Reviews code quality</text>
+  <text x="405" y="210" font-size="9.5" fill="#ea580c" text-anchor="middle">TokenBudgetContext(5000)</text>
+  <rect x="296" y="222" width="64" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="328" y="239" font-size="9.5" fill="#9a3412" text-anchor="middle">🤖 LLM</text>
+  <rect x="372" y="222" width="64" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="404" y="239" font-size="9.5" fill="#9a3412" text-anchor="middle">🔧 Tools</text>
+  <rect x="448" y="222" width="68" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="482" y="239" font-size="9.5" fill="#9a3412" text-anchor="middle">🧠 Memory</text>
+  <rect x="296" y="254" width="218" height="18" rx="5" fill="#ffedd5" stroke="#fed7aa" stroke-width="1"/>
+  <text x="405" y="267" font-size="9.5" fill="#9a3412" text-anchor="middle">output → quality report</text>
+
+  <!-- ── AGENT 2: Security Auditor (middle) ── -->
+  <g filter="url(#shadow)">
+    <rect x="280" y="215" width="250" height="200" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+  </g>
+  <rect x="280" y="215" width="250" height="38" rx="14" fill="#f97316"/>
+  <rect x="280" y="235" width="250" height="18" fill="#f97316"/>
+  <text x="405" y="240" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">SECURITY AUDITOR</text>
+  <text x="405" y="285" font-size="30" text-anchor="middle">🔒</text>
+  <text x="405" y="313" font-size="11" fill="#9a3412" text-anchor="middle">ReActAgent</text>
+  <text x="405" y="329" font-size="10" fill="#c2410c" text-anchor="middle">Audits vulnerabilities</text>
+  <text x="405" y="345" font-size="9.5" fill="#ea580c" text-anchor="middle">TokenBudgetContext(5000)</text>
+  <rect x="296" y="357" width="64" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="328" y="374" font-size="9.5" fill="#9a3412" text-anchor="middle">🤖 LLM</text>
+  <rect x="372" y="357" width="64" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="404" y="374" font-size="9.5" fill="#9a3412" text-anchor="middle">🔧 Tools</text>
+  <rect x="448" y="357" width="68" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="482" y="374" font-size="9.5" fill="#9a3412" text-anchor="middle">🧠 Memory</text>
+  <rect x="296" y="389" width="218" height="18" rx="5" fill="#ffedd5" stroke="#fed7aa" stroke-width="1"/>
+  <text x="405" y="402" font-size="9.5" fill="#9a3412" text-anchor="middle">output → security report</text>
+
+  <!-- ── AGENT 3: Performance Analyzer (bottom) ── -->
+  <g filter="url(#shadow)">
+    <rect x="280" y="350" width="250" height="200" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+  </g>
+  <rect x="280" y="350" width="250" height="38" rx="14" fill="#f97316"/>
+  <rect x="280" y="370" width="250" height="18" fill="#f97316"/>
+  <text x="405" y="375" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">PERF ANALYZER</text>
+  <text x="405" y="420" font-size="30" text-anchor="middle">⚡</text>
+  <text x="405" y="448" font-size="11" fill="#9a3412" text-anchor="middle">ReActAgent</text>
+  <text x="405" y="464" font-size="10" fill="#c2410c" text-anchor="middle">Analyzes performance</text>
+  <text x="405" y="480" font-size="9.5" fill="#ea580c" text-anchor="middle">TokenBudgetContext(5000)</text>
+  <rect x="296" y="492" width="64" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="328" y="509" font-size="9.5" fill="#9a3412" text-anchor="middle">🤖 LLM</text>
+  <rect x="372" y="492" width="64" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="404" y="509" font-size="9.5" fill="#9a3412" text-anchor="middle">🔧 Tools</text>
+  <rect x="448" y="492" width="68" height="26" rx="6" fill="#fed7aa" stroke="#fdba74" stroke-width="1.5"/>
+  <text x="482" y="509" font-size="9.5" fill="#9a3412" text-anchor="middle">🧠 Memory</text>
+  <rect x="296" y="524" width="218" height="18" rx="5" fill="#ffedd5" stroke="#fed7aa" stroke-width="1"/>
+  <text x="405" y="537" font-size="9.5" fill="#9a3412" text-anchor="middle">output → perf report</text>
+
+  <!-- Fan-in lines from all 3 agents to MERGE -->
+  <path d="M530,180 L870,180 L870,305" stroke="#374151" stroke-width="2" fill="none"/>
+  <path d="M530,315 L870,315" stroke="#374151" stroke-width="2" fill="none"/>
+  <path d="M530,450 L870,450 L870,325" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+  <line x1="870" y1="180" x2="870" y2="305" stroke="#374151" stroke-width="2"/>
+  <line x1="870" y1="315" x2="870" y2="325" stroke="#374151" stroke-width="2"/>
+
+  <!-- ── MERGE NODE ── -->
+  <g filter="url(#shadow)">
+    <rect x="780" y="250" width="180" height="130" rx="14" fill="#faf5ff" stroke="#a855f7" stroke-width="2.5"/>
+  </g>
+  <rect x="780" y="250" width="180" height="36" rx="14" fill="#a855f7"/>
+  <rect x="780" y="268" width="180" height="18" fill="#a855f7"/>
+  <text x="870" y="273" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">MERGE</text>
+  <text x="870" y="308" font-size="26" text-anchor="middle">🔀</text>
+  <text x="870" y="334" font-size="11" fill="#6b21a8" text-anchor="middle">strategy: concat</text>
+  <text x="870" y="350" font-size="10" fill="#7c3aed" text-anchor="middle">combines all outputs</text>
+  <text x="870" y="368" font-size="10" fill="#7c3aed" text-anchor="middle">preserving order</text>
+
+  <!-- Arrow: Merge → Output -->
+  <line x1="960" y1="315" x2="1000" y2="315" stroke="#374151" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <!-- ── OUTPUT NODE ── -->
+  <g filter="url(#shadow)">
+    <rect x="1005" y="265" width="200" height="100" rx="14" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+  </g>
+  <text x="1105" y="305" font-size="30" text-anchor="middle">📋</text>
+  <text x="1105" y="333" font-size="12" font-weight="600" fill="#15803d" text-anchor="middle">Code Review Report</text>
+  <text x="1105" y="350" font-size="10" fill="#16a34a" text-anchor="middle">(merged, comprehensive)</text>
+
+  <!-- Merge strategy note -->
+  <rect x="780" y="404" width="180" height="44" rx="8" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="870" y="422" font-size="9.5" fill="#64748b" text-anchor="middle">Merge strategies:</text>
+  <text x="870" y="438" font-size="9.5" fill="#64748b" text-anchor="middle">"concat" | "vote" | custom fn</text>
+
+  <!-- ── LEGEND ── -->
+  <rect x="28" y="562" width="440" height="36" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+  <rect x="44" y="574" width="13" height="13" rx="3" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="62" y="585" font-size="10" fill="#374151">Parallel branch (ReActAgent)</text>
+  <rect x="222" y="574" width="13" height="13" rx="3" fill="#faf5ff" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="240" y="585" font-size="10" fill="#374151">Merge node</text>
+  <line x1="330" y1="581" x2="368" y2="581" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="373" y="585" font-size="10" fill="#374151">Data flow</text>
+</svg>

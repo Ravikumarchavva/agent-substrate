@@ -1,4 +1,4 @@
-# Agent Framework
+<center><h1>Agent Framework</h1></center>
 
 **A production-ready Python framework for building autonomous AI agents with tool calling, memory management, and observability.**
 
@@ -31,6 +31,7 @@
 - [Examples](#examples)
 - [Documentation](#documentation)
 - [Architecture](#architecture)
+- [Multi-Agent Architectures](#multi-agent-architectures)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -248,27 +249,11 @@ Check the `examples/` directory for complete examples:
 
 ## 🏛️ Architecture
 
-```
-User Input
-    ↓
-┌─────────────────────────────────────┐
-│         Agent                        │
-│  ┌──────────┐      ┌─────────────┐ │
-│  │  Memory  │←────→│   Messages  │ │
-│  └──────────┘      └─────────────┘ │
-│       ↓                   ↓         │
-│  ┌──────────────────────────────┐  │
-│  │     Model Client             │  │
-│  │  (OpenAI/Anthropic/Gemini)   │  │
-│  └──────────────────────────────┘  │
-│       ↓                             │
-│  ┌──────────┐                       │
-│  │  Tools   │                       │
-│  └──────────┘                       │
-└─────────────────────────────────────┘
-    ↓
-Response
-```
+### Single-Agent Architecture
+
+![Single-Agent Architecture](public/diagrams/single-agent.svg)
+
+Editable source: [agent-architectures.drawio](public/diagrams/agent-architectures.drawio) (page: "Single Agent")
 
 **Key Design Principles:**
 
@@ -277,6 +262,90 @@ Response
 3. **Async-First** - Efficient I/O operations
 4. **Production-Ready** - Error handling, observability, testing
 5. **Extensible** - Easy to add providers, tools, agents
+
+---
+
+## 🕸️ Multi-Agent Architectures
+
+The framework supports four first-class multi-agent composition patterns.
+Each pattern is a first-class Python class — compose them freely and nest arbitrarily.
+
+Editable source for all diagrams: [agent-architectures.drawio](public/diagrams/agent-architectures.drawio)
+
+### OrchestratorAgent — Hub & Spoke
+
+An `OrchestratorAgent` routes tasks to specialised sub-agents and aggregates their results.
+Ideal for workflows that require multiple domain experts working under a single coordinator.
+
+![OrchestratorAgent Architecture](public/diagrams/multi-agent-orchestrator.svg)
+
+```python
+from agent_framework import OrchestratorAgent, ReActAgent
+
+orchestrator = OrchestratorAgent(
+    name="coordinator",
+    model_client=client,
+    model_context=UnboundedContext(),
+    sub_agents=[researcher, writer, reviewer],
+)
+```
+
+---
+
+### SequentialFlow — Linear Pipeline
+
+Agents execute one after another; each agent receives the output of the previous step.
+Perfect for ETL pipelines, report generation, and multi-stage transformation workflows.
+
+![SequentialFlow Architecture](public/diagrams/multi-agent-sequential.svg)
+
+```python
+from agent_framework import SequentialFlow
+
+pipeline = SequentialFlow(
+    name="etl_pipeline",
+    steps=[extractor, transformer, formatter],
+)
+```
+
+---
+
+### ParallelFlow — Concurrent Execution
+
+All branch agents run simultaneously; results are merged according to a configurable strategy.
+Ideal for independent analyses, multi-perspective reviews, and latency-critical workflows.
+
+![ParallelFlow Architecture](public/diagrams/multi-agent-parallel.svg)
+
+```python
+from agent_framework import ParallelFlow
+
+reviewer = ParallelFlow(
+    name="code_review",
+    branches=[code_reviewer, security_auditor, perf_analyzer],
+    merge_strategy="concat",   # or "vote" or custom callable
+)
+```
+
+---
+
+### ConditionalFlow — Decision Routing
+
+A predicate function inspects the input and routes execution to either `if_true` or `if_false`.
+Branches can themselves be any agent or flow, enabling arbitrarily deep decision trees.
+
+![ConditionalFlow Architecture](public/diagrams/multi-agent-conditional.svg)
+
+```python
+from agent_framework import ConditionalFlow
+
+router = ConditionalFlow(
+    name="smart_router",
+    predicate=lambda ctx: "code" in ctx.last_message.lower(),
+    if_true=code_gen_agent,
+    if_false=ParallelFlow(branches=[qa_agent, creative_agent]),
+)
+```
 
 ---
 

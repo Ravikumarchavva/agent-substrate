@@ -1,0 +1,132 @@
+<svg width="1300" height="480" viewBox="0 0 1300 480" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 Z" fill="#374151"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1300" height="480" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="650" y="38" font-size="22" font-weight="700" fill="#0f172a" text-anchor="middle">SequentialFlow Architecture</text>
+  <text x="650" y="60" font-size="13" fill="#64748b" text-anchor="middle">Linear Pipeline Pattern · Each agent's output feeds the next agent</text>
+
+  <!-- Step labels above -->
+  <text x="82" y="100" font-size="11" fill="#94a3b8" text-anchor="middle">INPUT</text>
+  <text x="300" y="100" font-size="11" fill="#6366f1" text-anchor="middle" font-weight="600">STEP 1</text>
+  <text x="560" y="100" font-size="11" fill="#6366f1" text-anchor="middle" font-weight="600">STEP 2</text>
+  <text x="820" y="100" font-size="11" fill="#6366f1" text-anchor="middle" font-weight="600">STEP 3</text>
+  <text x="1090" y="100" font-size="11" fill="#94a3b8" text-anchor="middle">OUTPUT</text>
+
+  <!-- ── INPUT NODE ── -->
+  <g filter="url(#shadow)">
+    <rect x="22" y="112" width="120" height="90" rx="14" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  </g>
+  <text x="82" y="152" font-size="30" text-anchor="middle">📥</text>
+  <text x="82" y="178" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">User Query</text>
+  <text x="82" y="192" font-size="9.5" fill="#94a3b8" text-anchor="middle">(raw input)</text>
+
+  <!-- Arrow 1 -->
+  <line x1="142" y1="157" x2="175" y2="157" stroke="#374151" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <!-- ── AGENT 1: Analyst ── -->
+  <g filter="url(#shadow)">
+    <rect x="180" y="112" width="240" height="220" rx="14" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  </g>
+  <rect x="180" y="112" width="240" height="38" rx="14" fill="#6366f1"/>
+  <rect x="180" y="132" width="240" height="18" fill="#6366f1"/>
+  <text x="300" y="137" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">ANALYST</text>
+  <text x="300" y="185" font-size="30" text-anchor="middle">📊</text>
+  <text x="300" y="213" font-size="11" fill="#3730a3" text-anchor="middle">ReActAgent</text>
+  <text x="300" y="229" font-size="10" fill="#4f46e5" text-anchor="middle">Analyzes raw data</text>
+  <text x="300" y="245" font-size="9.5" fill="#6366f1" text-anchor="middle">SlidingWindowContext(15)</text>
+  <!-- Internal components -->
+  <rect x="196" y="258" width="64" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="228" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🤖 LLM</text>
+  <rect x="272" y="258" width="64" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="304" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🔧 Tools</text>
+  <rect x="348" y="258" width="60" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="378" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🧠 Mem</text>
+  <!-- Output label -->
+  <rect x="210" y="294" width="160" height="24" rx="6" fill="#e0e7ff" stroke="#c7d2fe" stroke-width="1"/>
+  <text x="290" y="310" font-size="9.5" fill="#3730a3" text-anchor="middle">output → analysis report</text>
+
+  <!-- Arrow 2 -->
+  <line x1="420" y1="222" x2="435" y2="222" stroke="#374151" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="428" y="215" font-size="9" fill="#64748b" text-anchor="middle">passes</text>
+  <text x="428" y="238" font-size="9" fill="#64748b" text-anchor="middle">output</text>
+
+  <!-- ── AGENT 2: Visualizer ── -->
+  <g filter="url(#shadow)">
+    <rect x="440" y="112" width="240" height="220" rx="14" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  </g>
+  <rect x="440" y="112" width="240" height="38" rx="14" fill="#6366f1"/>
+  <rect x="440" y="132" width="240" height="18" fill="#6366f1"/>
+  <text x="560" y="137" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">VISUALIZER</text>
+  <text x="560" y="185" font-size="30" text-anchor="middle">📈</text>
+  <text x="560" y="213" font-size="11" fill="#3730a3" text-anchor="middle">ReActAgent</text>
+  <text x="560" y="229" font-size="10" fill="#4f46e5" text-anchor="middle">Creates visualizations</text>
+  <text x="560" y="245" font-size="9.5" fill="#6366f1" text-anchor="middle">SlidingWindowContext(15)</text>
+  <rect x="456" y="258" width="64" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="488" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🤖 LLM</text>
+  <rect x="532" y="258" width="64" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="564" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🔧 Tools</text>
+  <rect x="608" y="258" width="60" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="638" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🧠 Mem</text>
+  <rect x="470" y="294" width="160" height="24" rx="6" fill="#e0e7ff" stroke="#c7d2fe" stroke-width="1"/>
+  <text x="550" y="310" font-size="9.5" fill="#3730a3" text-anchor="middle">output → charts + data</text>
+
+  <!-- Arrow 3 -->
+  <line x1="680" y1="222" x2="695" y2="222" stroke="#374151" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="688" y="215" font-size="9" fill="#64748b" text-anchor="middle">passes</text>
+  <text x="688" y="238" font-size="9" fill="#64748b" text-anchor="middle">output</text>
+
+  <!-- ── AGENT 3: Formatter ── -->
+  <g filter="url(#shadow)">
+    <rect x="700" y="112" width="240" height="220" rx="14" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  </g>
+  <rect x="700" y="112" width="240" height="38" rx="14" fill="#6366f1"/>
+  <rect x="700" y="132" width="240" height="18" fill="#6366f1"/>
+  <text x="820" y="137" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">FORMATTER</text>
+  <text x="820" y="185" font-size="30" text-anchor="middle">📝</text>
+  <text x="820" y="213" font-size="11" fill="#3730a3" text-anchor="middle">ReActAgent</text>
+  <text x="820" y="229" font-size="10" fill="#4f46e5" text-anchor="middle">Formats final report</text>
+  <text x="820" y="245" font-size="9.5" fill="#6366f1" text-anchor="middle">SlidingWindowContext(15)</text>
+  <rect x="716" y="258" width="64" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="748" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🤖 LLM</text>
+  <rect x="792" y="258" width="64" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="824" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🔧 Tools</text>
+  <rect x="868" y="258" width="60" height="26" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="898" y="275" font-size="9.5" fill="#3730a3" text-anchor="middle">🧠 Mem</text>
+  <rect x="730" y="294" width="160" height="24" rx="6" fill="#e0e7ff" stroke="#c7d2fe" stroke-width="1"/>
+  <text x="810" y="310" font-size="9.5" fill="#3730a3" text-anchor="middle">output → final report</text>
+
+  <!-- Arrow 4 -->
+  <line x1="940" y1="222" x2="975" y2="222" stroke="#374151" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <!-- ── OUTPUT NODE ── -->
+  <g filter="url(#shadow)">
+    <rect x="980" y="172" width="220" height="90" rx="14" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+  </g>
+  <text x="1090" y="212" font-size="30" text-anchor="middle">📤</text>
+  <text x="1090" y="240" font-size="12" font-weight="600" fill="#15803d" text-anchor="middle">Final Report</text>
+  <text x="1090" y="256" font-size="10" fill="#16a34a" text-anchor="middle">(formatted, structured)</text>
+
+  <!-- ── SHARED MEMORY indicator ── -->
+  <rect x="180" y="360" width="780" height="52" rx="10" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="570" y="382" font-size="11" fill="#94a3b8" text-anchor="middle">optional: shared_memory_scope=SHARED (agents share conversation context)</text>
+  <text x="570" y="400" font-size="10" fill="#cbd5e1" text-anchor="middle">default: ISOLATED (each agent keeps its own context)</text>
+
+  <!-- ── LEGEND ── -->
+  <rect x="28" y="428" width="420" height="36" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+  <rect x="44" y="440" width="13" height="13" rx="3" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="62" y="451" font-size="10" fill="#374151">SequentialFlow step (ReActAgent)</text>
+  <rect x="220" y="440" width="13" height="13" rx="3" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="238" y="451" font-size="10" fill="#374151">Final output</text>
+  <line x1="330" y1="447" x2="368" y2="447" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="373" y="451" font-size="10" fill="#374151">Data flow</text>
+</svg>

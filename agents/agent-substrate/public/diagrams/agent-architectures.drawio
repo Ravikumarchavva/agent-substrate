@@ -1,0 +1,285 @@
+<mxfile host="65bd71144e">
+    <diagram id="single-agent" name="Single Agent">
+        <mxGraphModel dx="1144" dy="1141" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="uIn" value="User Input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="380" width="140" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="inGuard" value="Input Guardrails\nContent / PII / Injection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef2f2;strokeColor=#ef4444;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="240" y="360" width="190" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="agent" value="ReActAgent\nThink → Act → Observe → Respond" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef2ff;strokeColor=#6366f1;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="340" width="320" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="memory" value="Memory Layer\nRedis + Postgres + SessionManager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#8b5cf6;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="550" width="230" height="95" as="geometry"/>
+                </mxCell>
+                <mxCell id="llm" value="LLM Runtime\nOpenAI / Anthropic / Gemini / Ollama" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#3b82f6;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="550" width="250" height="95" as="geometry"/>
+                </mxCell>
+                <mxCell id="toolGuard" value="Tool-Call Guardrails" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef2f2;strokeColor=#ef4444;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="700" width="210" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="tools" value="Toolbox\nBuilt-in / MCP / WebSurfer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="690" width="250" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="outGuard" value="Output Guardrails\nContent / PII / Judge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef2f2;strokeColor=#ef4444;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1080" y="360" width="190" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="uOut" value="User Output" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1320" y="380" width="140" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="obs" value="Observability (Tracing / Metrics / Logs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="140" width="480" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" style="endArrow=classic;html=1;rounded=0;" parent="1" source="uIn" target="inGuard" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" style="endArrow=classic;html=1;rounded=0;" parent="1" source="inGuard" target="agent" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" style="endArrow=classic;html=1;rounded=0;" parent="1" source="agent" target="outGuard" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" style="endArrow=classic;html=1;rounded=0;" parent="1" source="outGuard" target="uOut" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" style="endArrow=classic;html=1;" parent="1" source="agent" target="memory" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6" style="endArrow=classic;html=1;" parent="1" source="memory" target="agent" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" style="endArrow=classic;html=1;" parent="1" source="agent" target="llm" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" style="endArrow=classic;html=1;" parent="1" source="llm" target="agent" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9" value="tool calls" style="endArrow=classic;html=1;dashed=1;" parent="1" source="agent" target="toolGuard" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e10" style="endArrow=classic;html=1;" parent="1" source="toolGuard" target="tools" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e11" value="tool results" style="endArrow=classic;html=1;dashed=1;" parent="1" source="tools" target="agent" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e12" style="endArrow=classic;html=1;dashed=1;strokeColor=#94a3b8;" parent="1" source="inGuard" target="obs" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e13" style="endArrow=classic;html=1;dashed=1;strokeColor=#94a3b8;" parent="1" source="agent" target="obs" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e14" style="endArrow=classic;html=1;dashed=1;strokeColor=#94a3b8;" parent="1" source="outGuard" target="obs" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="orchestrator" name="OrchestratorAgent">
+        <mxGraphModel dx="1144" dy="1141" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="o_uin" value="User Input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="360" width="140" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_guard_in" value="Input Guardrails" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef2f2;strokeColor=#ef4444;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="340" width="180" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_orch" value="OrchestratorAgent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#3b82f6;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="330" width="250" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_a1" value="Researcher Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="200" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_a2" value="Writer Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="350" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_a3" value="Reviewer Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="500" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_guard_out" value="Output Guardrails" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef2f2;strokeColor=#ef4444;" parent="1" vertex="1">
+                    <mxGeometry x="1180" y="340" width="180" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_uout" value="User Output" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;" parent="1" vertex="1">
+                    <mxGeometry x="1410" y="360" width="140" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e1" style="endArrow=classic;html=1;" parent="1" source="o_uin" target="o_guard_in" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e2" style="endArrow=classic;html=1;" parent="1" source="o_guard_in" target="o_orch" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e3" style="endArrow=classic;html=1;" parent="1" source="o_orch" target="o_a1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e4" style="endArrow=classic;html=1;" parent="1" source="o_orch" target="o_a2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e5" style="endArrow=classic;html=1;" parent="1" source="o_orch" target="o_a3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e6" style="endArrow=classic;html=1;dashed=1;strokeColor=#94a3b8;" parent="1" source="o_a1" target="o_orch" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e7" style="endArrow=classic;html=1;dashed=1;strokeColor=#94a3b8;" parent="1" source="o_a2" target="o_orch" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e8" style="endArrow=classic;html=1;dashed=1;strokeColor=#94a3b8;" parent="1" source="o_a3" target="o_orch" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e9" style="endArrow=classic;html=1;" parent="1" source="o_orch" target="o_guard_out" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="o_e10" style="endArrow=classic;html=1;" parent="1" source="o_guard_out" target="o_uout" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="sequential" name="SequentialFlow">
+        <mxGraphModel dx="1620" dy="920" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="700" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="s_in" value="Input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="270" width="120" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="s_1" value="Step 1\nAnalyst" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef2ff;strokeColor=#6366f1;" vertex="1" parent="1">
+                    <mxGeometry x="240" y="250" width="210" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="s_2" value="Step 2\nVisualizer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef2ff;strokeColor=#6366f1;" vertex="1" parent="1">
+                    <mxGeometry x="540" y="250" width="210" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="s_3" value="Step 3\nFormatter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef2ff;strokeColor=#6366f1;" vertex="1" parent="1">
+                    <mxGeometry x="840" y="250" width="210" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="s_out" value="Output" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;" vertex="1" parent="1">
+                    <mxGeometry x="1140" y="270" width="120" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="s_e1" edge="1" parent="1" source="s_in" target="s_1" style="endArrow=classic;html=1;">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="s_e2" edge="1" parent="1" source="s_1" target="s_2" style="endArrow=classic;html=1;">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="s_e3" edge="1" parent="1" source="s_2" target="s_3" style="endArrow=classic;html=1;">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="s_e4" edge="1" parent="1" source="s_3" target="s_out" style="endArrow=classic;html=1;">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="parallel" name="ParallelFlow">
+        <mxGraphModel dx="1144" dy="1141" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p_in" value="Input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="390" width="120" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_split" value="Parallel Dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#f59e0b;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="260" y="380" width="170" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_a" value="Code Reviewer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#f97316;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="210" width="220" height="85" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_b" value="Security Auditor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#f97316;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="390" width="220" height="85" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_c" value="Performance Analyzer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#f97316;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="570" width="220" height="85" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_merge" value="Merge\nconcat / vote / custom" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faf5ff;strokeColor=#a855f7;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="380" width="200" height="95" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_out" value="Merged Output" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;" parent="1" vertex="1">
+                    <mxGeometry x="1210" y="390" width="160" height="75" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_e1" style="endArrow=classic;html=1;" parent="1" source="p_in" target="p_split" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_e2" style="endArrow=classic;html=1;" parent="1" source="p_split" target="p_a" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_e3" style="endArrow=classic;html=1;" parent="1" source="p_split" target="p_b" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_e4" style="endArrow=classic;html=1;" parent="1" source="p_split" target="p_c" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_e5" style="endArrow=classic;html=1;" parent="1" source="p_a" target="p_merge" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_e6" style="endArrow=classic;html=1;" parent="1" source="p_b" target="p_merge" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_e7" style="endArrow=classic;html=1;" parent="1" source="p_c" target="p_merge" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_e8" style="endArrow=classic;html=1;" parent="1" source="p_merge" target="p_out" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="conditional" name="ConditionalFlow">
+        <mxGraphModel dx="1144" dy="1141" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="c_in" value="Input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="390" width="120" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_cond" value="predicate()" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#f59e0b;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="355" width="170" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_true" value="if_true\nCode Generation Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="190" width="260" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_falseA" value="if_false branch A\nQA Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#3b82f6;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="420" width="240" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_falseB" value="if_false branch B\nCreative Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#3b82f6;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="560" width="240" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_falseMerge" value="Nested Merge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faf5ff;strokeColor=#a855f7;" parent="1" vertex="1">
+                    <mxGeometry x="940" y="490" width="170" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_out" value="Output" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fefce8;strokeColor=#eab308;" parent="1" vertex="1">
+                    <mxGeometry x="1230" y="390" width="140" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_e1" style="endArrow=classic;html=1;" parent="1" source="c_in" target="c_cond" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_e2" value="true" style="endArrow=classic;html=1;strokeColor=#22c55e;fontColor=#16a34a;" parent="1" source="c_cond" target="c_true" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_e3" value="false" style="endArrow=classic;html=1;strokeColor=#ef4444;fontColor=#dc2626;" parent="1" source="c_cond" target="c_falseA" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_e4" style="endArrow=classic;html=1;strokeColor=#ef4444;" parent="1" source="c_cond" target="c_falseB" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_e5" style="endArrow=classic;html=1;" parent="1" source="c_falseA" target="c_falseMerge" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_e6" style="endArrow=classic;html=1;" parent="1" source="c_falseB" target="c_falseMerge" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_e7" style="endArrow=classic;html=1;strokeColor=#22c55e;" parent="1" source="c_true" target="c_out" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_e8" style="endArrow=classic;html=1;strokeColor=#ef4444;" parent="1" source="c_falseMerge" target="c_out" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

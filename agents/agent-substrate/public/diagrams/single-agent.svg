@@ -1,0 +1,298 @@
+<svg width="1400" height="800" viewBox="0 0 1400 800" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 Z" fill="#374151"/>
+    </marker>
+    <marker id="arr-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 Z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 Z" fill="#ef4444"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1400" height="800" fill="#f8fafc"/>
+
+  <!-- ══ TITLE ══ -->
+  <text x="700" y="38" font-size="22" font-weight="700" fill="#0f172a" text-anchor="middle">ReActAgent Architecture</text>
+  <text x="700" y="60" font-size="13" fill="#64748b" text-anchor="middle">Single-Agent Pattern · ReAct reasoning loop with Tools, Memory &amp; Guardrails</text>
+
+  <!-- ══ MONITORING ROW ══ -->
+  <!-- Skills -->
+  <g filter="url(#shadow)">
+    <rect x="62" y="78" width="162" height="76" rx="12" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+  </g>
+  <text x="143" y="113" font-size="28" text-anchor="middle">📚</text>
+  <text x="143" y="136" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">Skills</text>
+  <text x="143" y="150" font-size="9.5" fill="#64748b" text-anchor="middle">MCP &amp; Built-In Skills</text>
+
+  <!-- Observability -->
+  <g filter="url(#shadow)">
+    <rect x="549" y="78" width="302" height="76" rx="12" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+  </g>
+  <text x="700" y="113" font-size="28" text-anchor="middle">⚙️</text>
+  <text x="700" y="136" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">Observability</text>
+  <text x="700" y="150" font-size="9.5" fill="#64748b" text-anchor="middle">Tracing · Metrics · Logs → Tempo</text>
+
+  <!-- Evals -->
+  <g filter="url(#shadow)">
+    <rect x="1176" y="78" width="162" height="76" rx="12" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+  </g>
+  <text x="1257" y="113" font-size="28" text-anchor="middle">📊</text>
+  <text x="1257" y="136" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">Evals</text>
+  <text x="1257" y="150" font-size="9.5" fill="#64748b" text-anchor="middle">LLM-as-Judge</text>
+
+  <!-- ══ OBSERVABILITY DASHED CONNECTIONS ══ -->
+  <line x1="700" y1="210" x2="700" y2="154" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-gray)"/>
+  <path d="M235,267 V154 H549" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arr-gray)"/>
+  <path d="M1162,267 V154 H851" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arr-gray)"/>
+  <text x="556" y="183" font-size="9" fill="#94a3b8">spans / metrics</text>
+
+  <!-- ══ USER INPUT ══ -->
+  <g filter="url(#shadow)">
+    <rect x="18" y="320" width="115" height="88" rx="14" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  </g>
+  <text x="75" y="358" font-size="28" text-anchor="middle">👤</text>
+  <text x="75" y="383" font-size="11" font-weight="600" fill="#475569" text-anchor="middle">User</text>
+  <text x="75" y="397" font-size="9.5" fill="#94a3b8" text-anchor="middle">Input</text>
+
+  <!-- ══ INPUT GUARDRAILS ══ -->
+  <g filter="url(#shadow)">
+    <rect x="157" y="267" width="157" height="155" rx="14" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+  </g>
+  <rect x="157" y="267" width="157" height="36" rx="14" fill="#ef4444"/>
+  <rect x="157" y="285" width="157" height="18" fill="#ef4444"/>
+  <text x="235" y="291" font-size="9" font-weight="700" fill="#fff" text-anchor="middle">INPUT GUARDRAILS</text>
+  <text x="235" y="332" font-size="22" text-anchor="middle">🛡️</text>
+  <text x="235" y="356" font-size="10" fill="#9f1239" text-anchor="middle">Content / PII</text>
+  <text x="235" y="370" font-size="10" fill="#b91c1c" text-anchor="middle">Injection / Token</text>
+  <text x="235" y="388" font-size="9.5" fill="#dc2626" text-anchor="middle">GuardrailRunner</text>
+  <text x="235" y="404" font-size="9" fill="#ef4444" text-anchor="middle">.run_input_guards()</text>
+
+  <!-- ══ BLOCKED REQUEST ══ -->
+  <g filter="url(#shadow)">
+    <rect x="157" y="449" width="157" height="48" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5,3"/>
+  </g>
+  <text x="235" y="469" font-size="12" text-anchor="middle">🚫</text>
+  <text x="235" y="487" font-size="10" font-weight="600" fill="#b91c1c" text-anchor="middle">Blocked Request</text>
+
+  <!-- ══ SYSTEM BOUNDARY ══ -->
+  <rect x="333" y="190" width="736" height="530" rx="16" fill="rgba(241,245,249,0.35)" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8,5"/>
+  <text x="345" y="207" font-size="9.5" fill="#94a3b8" font-weight="600">System Boundary</text>
+
+  <!-- ══ REACT AGENT BOX ══ -->
+  <g filter="url(#shadow)">
+    <rect x="353" y="210" width="696" height="200" rx="14" fill="#eef2ff" stroke="#6366f1" stroke-width="2.5"/>
+  </g>
+  <rect x="353" y="210" width="696" height="38" rx="14" fill="#6366f1"/>
+  <rect x="353" y="228" width="696" height="20" fill="#6366f1"/>
+  <text x="701" y="234" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">ReActAgent</text>
+  <text x="701" y="248" font-size="9.5" fill="#c7d2fe" text-anchor="middle">run() / run_stream() — ReAct Reasoning Loop</text>
+
+  <!-- ReAct loop pills -->
+  <!-- Think -->
+  <rect x="373" y="263" width="110" height="36" rx="8" fill="#fef9c3" stroke="#facc15" stroke-width="1.5"/>
+  <text x="428" y="276" font-size="12" text-anchor="middle">🤔</text>
+  <text x="428" y="292" font-size="9.5" font-weight="600" fill="#713f12" text-anchor="middle">Think</text>
+  <line x1="483" y1="281" x2="505" y2="281" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- Act -->
+  <rect x="505" y="263" width="110" height="36" rx="8" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+  <text x="560" y="276" font-size="12" text-anchor="middle">🔧</text>
+  <text x="560" y="292" font-size="9.5" font-weight="600" fill="#7c2d12" text-anchor="middle">Act</text>
+  <line x1="615" y1="281" x2="637" y2="281" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- Observe -->
+  <rect x="637" y="263" width="115" height="36" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="694" y="276" font-size="12" text-anchor="middle">👁️</text>
+  <text x="694" y="292" font-size="9.5" font-weight="600" fill="#1e3a8a" text-anchor="middle">Observe</text>
+  <line x1="752" y1="281" x2="774" y2="281" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- Respond -->
+  <rect x="774" y="263" width="115" height="36" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="831" y="276" font-size="12" text-anchor="middle">✅</text>
+  <text x="831" y="292" font-size="9.5" font-weight="600" fill="#14532d" text-anchor="middle">Respond</text>
+
+  <!-- Loop arc (Observe back to Think, if more steps needed) -->
+  <path d="M 752,299 C 752,324 373,324 373,299" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-dasharray="5,3" marker-end="url(#arr-gray)"/>
+  <text x="562" y="338" font-size="9" fill="#94a3b8" text-anchor="middle">↺ loop (if more steps needed)</text>
+
+  <!-- Capability badges row -->
+  <rect x="373" y="350" width="130" height="28" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="438" y="368" font-size="9.5" fill="#3730a3" text-anchor="middle">🧩 ModelContext</text>
+  <rect x="513" y="350" width="110" height="28" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="568" y="368" font-size="9.5" fill="#3730a3" text-anchor="middle">📚 Skills</text>
+  <rect x="633" y="350" width="115" height="28" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="690" y="368" font-size="9.5" fill="#3730a3" text-anchor="middle">🔔 HITL Hooks</text>
+  <rect x="758" y="350" width="110" height="28" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="813" y="368" font-size="9.5" fill="#3730a3" text-anchor="middle">📡 SSE Stream</text>
+  <rect x="878" y="350" width="110" height="28" rx="6" fill="#c7d2fe" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="933" y="368" font-size="9.5" fill="#3730a3" text-anchor="middle">🔒 Resilience</text>
+
+  <!-- ══ MEMORY LAYER ══ -->
+  <g filter="url(#shadow)">
+    <rect x="353" y="435" width="280" height="148" rx="14" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+  </g>
+  <rect x="353" y="435" width="280" height="34" rx="14" fill="#8b5cf6"/>
+  <rect x="353" y="451" width="280" height="18" fill="#8b5cf6"/>
+  <text x="493" y="457" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">MEMORY LAYER</text>
+  <text x="493" y="493" font-size="22" text-anchor="middle">🧠</text>
+  <rect x="366" y="508" width="118" height="26" rx="6" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="425" y="525" font-size="9.5" fill="#5b21b6" text-anchor="middle">⚡ STM · Redis</text>
+  <rect x="495" y="508" width="125" height="26" rx="6" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="557" y="525" font-size="9" fill="#5b21b6" text-anchor="middle">💾 LTM · Postgres</text>
+  <rect x="366" y="541" width="254" height="24" rx="6" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="493" y="557" font-size="9" fill="#5b21b6" text-anchor="middle">SessionManager — checkpoint / resume / close</text>
+
+  <!-- ══ LLM RUNTIME ══ -->
+  <g filter="url(#shadow)">
+    <rect x="653" y="435" width="266" height="148" rx="14" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+  </g>
+  <rect x="653" y="435" width="266" height="34" rx="14" fill="#3b82f6"/>
+  <rect x="653" y="451" width="266" height="18" fill="#3b82f6"/>
+  <text x="786" y="457" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">LLM RUNTIME</text>
+  <text x="786" y="490" font-size="9.5" fill="#1e40af" text-anchor="middle">BaseModelClient + streaming</text>
+  <rect x="665" y="500" width="110" height="26" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="720" y="517" font-size="9.5" fill="#1e40af" text-anchor="middle">🤖 OpenAI</text>
+  <rect x="797" y="500" width="110" height="26" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="852" y="517" font-size="9.5" fill="#1e40af" text-anchor="middle">🤖 Anthropic</text>
+  <rect x="665" y="534" width="110" height="26" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="720" y="551" font-size="9.5" fill="#1e40af" text-anchor="middle">🤖 Gemini</text>
+  <rect x="797" y="534" width="110" height="26" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="852" y="551" font-size="9.5" fill="#1e40af" text-anchor="middle">🤖 Ollama</text>
+  <text x="786" y="573" font-size="9" fill="#2563eb" text-anchor="middle">via BaseModelClient ABC</text>
+
+  <!-- ══ TOOL-CALL GUARDRAILS ══ -->
+  <g filter="url(#shadow)">
+    <rect x="353" y="607" width="190" height="88" rx="14" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+  </g>
+  <rect x="353" y="607" width="190" height="30" rx="14" fill="#ef4444"/>
+  <rect x="353" y="621" width="190" height="16" fill="#ef4444"/>
+  <text x="448" y="627" font-size="9.5" font-weight="700" fill="#fff" text-anchor="middle">TOOL-CALL GUARD</text>
+  <text x="448" y="655" font-size="20" text-anchor="middle">🛡️</text>
+  <text x="448" y="675" font-size="9.5" fill="#9f1239" text-anchor="middle">allow/block + arg regex</text>
+  <text x="448" y="688" font-size="9" fill="#b91c1c" text-anchor="middle">.run_tool_guards()</text>
+
+  <!-- ══ TOOLBOX ══ -->
+  <g filter="url(#shadow)">
+    <rect x="563" y="602" width="490" height="95" rx="14" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+  </g>
+  <rect x="563" y="602" width="490" height="30" rx="14" fill="#475569"/>
+  <rect x="563" y="616" width="490" height="16" fill="#475569"/>
+  <text x="808" y="622" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">TOOLBOX</text>
+  <rect x="572" y="638" width="148" height="52" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="646" y="657" font-size="12" text-anchor="middle">🔧</text>
+  <text x="646" y="671" font-size="9.5" font-weight="600" fill="#334155" text-anchor="middle">Built-in Tools</text>
+  <text x="646" y="683" font-size="8.5" fill="#64748b" text-anchor="middle">Calculator · Time · WebSearch</text>
+  <rect x="730" y="638" width="148" height="52" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="804" y="657" font-size="12" text-anchor="middle">🔌</text>
+  <text x="804" y="671" font-size="9.5" font-weight="600" fill="#334155" text-anchor="middle">MCP Tools</text>
+  <text x="804" y="683" font-size="8.5" fill="#64748b" text-anchor="middle">MCPClient + MCPTool</text>
+  <rect x="888" y="638" width="157" height="52" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="966" y="657" font-size="12" text-anchor="middle">🌐</text>
+  <text x="966" y="671" font-size="9.5" font-weight="600" fill="#334155" text-anchor="middle">WebSurferTool</text>
+  <text x="966" y="683" font-size="8.5" fill="#64748b" text-anchor="middle">Playwright Browser</text>
+
+  <!-- ══ BLOCKED TOOL CALL ══ -->
+  <g filter="url(#shadow)">
+    <rect x="353" y="730" width="190" height="46" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5,3"/>
+  </g>
+  <text x="448" y="750" font-size="12" text-anchor="middle">🚫</text>
+  <text x="448" y="768" font-size="10" font-weight="600" fill="#b91c1c" text-anchor="middle">Blocked Tool Call</text>
+
+  <!-- ══ OUTPUT GUARDRAILS ══ -->
+  <g filter="url(#shadow)">
+    <rect x="1084" y="267" width="157" height="155" rx="14" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+  </g>
+  <rect x="1084" y="267" width="157" height="36" rx="14" fill="#ef4444"/>
+  <rect x="1084" y="285" width="157" height="18" fill="#ef4444"/>
+  <text x="1162" y="291" font-size="9" font-weight="700" fill="#fff" text-anchor="middle">OUTPUT GUARDRAILS</text>
+  <text x="1162" y="332" font-size="22" text-anchor="middle">🛡️</text>
+  <text x="1162" y="356" font-size="10" fill="#9f1239" text-anchor="middle">Content / PII</text>
+  <text x="1162" y="370" font-size="10" fill="#b91c1c" text-anchor="middle">LLM-as-Judge</text>
+  <text x="1162" y="388" font-size="9.5" fill="#dc2626" text-anchor="middle">GuardrailRunner</text>
+  <text x="1162" y="404" font-size="9" fill="#ef4444" text-anchor="middle">.run_output_guards()</text>
+
+  <!-- ══ BLOCKED OUTPUT ══ -->
+  <g filter="url(#shadow)">
+    <rect x="1084" y="449" width="157" height="48" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5,3"/>
+  </g>
+  <text x="1162" y="469" font-size="12" text-anchor="middle">🚫</text>
+  <text x="1162" y="487" font-size="10" font-weight="600" fill="#b91c1c" text-anchor="middle">Blocked Output</text>
+
+  <!-- ══ USER OUTPUT ══ -->
+  <g filter="url(#shadow)">
+    <rect x="1265" y="320" width="115" height="88" rx="14" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+  </g>
+  <text x="1322" y="358" font-size="28" text-anchor="middle">👤</text>
+  <text x="1322" y="383" font-size="11" font-weight="600" fill="#166534" text-anchor="middle">User</text>
+  <text x="1322" y="397" font-size="9.5" fill="#16a34a" text-anchor="middle">Output</text>
+
+  <!-- ══ MAIN FLOW ARROWS ══ -->
+
+  <!-- 1. User Input → Input Guard -->
+  <line x1="133" y1="364" x2="157" y2="364" stroke="#374151" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- 2. Input Guard → ReActAgent (pass) -->
+  <line x1="314" y1="320" x2="353" y2="320" stroke="#374151" stroke-width="2.5" marker-end="url(#arr)"/>
+  <rect x="316" y="306" width="28" height="13" rx="3" fill="#f0fdf4"/>
+  <text x="330" y="316" font-size="9" fill="#16a34a" text-anchor="middle">pass</text>
+
+  <!-- 3. Input Guard → Blocked (tripwire) -->
+  <line x1="235" y1="422" x2="235" y2="449" stroke="#ef4444" stroke-width="1.5" marker-end="url(#arr-red)"/>
+  <text x="248" y="440" font-size="9" fill="#ef4444">tripwire</text>
+
+  <!-- 4. ReActAgent → Output Guard (response) -->
+  <line x1="1049" y1="310" x2="1084" y2="310" stroke="#374151" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="1065" y="305" font-size="9" fill="#374151" text-anchor="middle">→</text>
+
+  <!-- 5. Output Guard → User Output (pass) -->
+  <line x1="1241" y1="364" x2="1265" y2="364" stroke="#374151" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="1243" y="350" width="28" height="13" rx="3" fill="#f0fdf4"/>
+  <text x="1257" y="360" font-size="9" fill="#16a34a" text-anchor="middle">pass</text>
+
+  <!-- 6. Output Guard → Blocked (tripwire) -->
+  <line x1="1162" y1="422" x2="1162" y2="449" stroke="#ef4444" stroke-width="1.5" marker-end="url(#arr-red)"/>
+  <text x="1175" y="440" font-size="9" fill="#ef4444">tripwire</text>
+
+  <!-- 7. ReActAgent ↔ Memory (bidirectional) -->
+  <line x1="483" y1="410" x2="483" y2="435" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="497" y1="435" x2="497" y2="410" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 8. ReActAgent ↔ LLM (bidirectional) -->
+  <line x1="779" y1="410" x2="779" y2="435" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="793" y1="435" x2="793" y2="410" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 9. Tool calls: ReActAgent left edge → Tool Guard (left side routing) -->
+  <path d="M353,370 H338 V648 H353" stroke="#374151" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+  <text x="326" y="512" font-size="9" fill="#374151" text-anchor="middle" transform="rotate(-90,326,512)">tool calls</text>
+
+  <!-- 10. Tool Guard → Toolbox (pass) -->
+  <line x1="543" y1="648" x2="563" y2="648" stroke="#374151" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="543" y="635" width="28" height="13" rx="3" fill="#f0fdf4"/>
+  <text x="557" y="645" font-size="9" fill="#16a34a" text-anchor="middle">pass</text>
+
+  <!-- 11. Tool Guard → Blocked Tool (tripwire) -->
+  <line x1="448" y1="695" x2="448" y2="730" stroke="#ef4444" stroke-width="1.5" marker-end="url(#arr-red)"/>
+  <text x="461" y="717" font-size="9" fill="#ef4444">tripwire</text>
+
+  <!-- 12. Tool results: Toolbox right → ReActAgent (right side routing) -->
+  <path d="M1053,648 H1068 V370 H1049" stroke="#374151" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+  <text x="1083" y="510" font-size="9" fill="#374151" text-anchor="middle" transform="rotate(-90,1083,510)">tool results</text>
+
+  <!-- ══ LEGEND ══ -->
+  <rect x="18" y="756" width="620" height="32" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+  <rect x="33" y="766" width="13" height="13" rx="3" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="51" y="777" font-size="9.5" fill="#374151">ReActAgent</text>
+  <rect x="140" y="766" width="13" height="13" rx="3" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="158" y="777" font-size="9.5" fill="#374151">Memory</text>
+  <rect x="225" y="766" width="13" height="13" rx="3" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="243" y="777" font-size="9.5" fill="#374151">LLM Runtime</text>
+  <rect x="340" y="766" width="13" height="13" rx="3" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="358" y="777" font-size="9.5" fill="#374151">Guardrails</text>
+  <rect x="430" y="766" width="13" height="13" rx="3" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/>
+  <text x="448" y="777" font-size="9.5" fill="#374151">Toolbox</text>
+  <line x1="515" y1="773" x2="540" y2="773" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="545" y="777" font-size="9.5" fill="#374151">Observability</text>
+</svg>

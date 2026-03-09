@@ -21,7 +21,7 @@
 
 ![Architecture Diagram](public/diagrams/architecture.drawio.png)
 
----
+![Kubernetes-Architecture Diagram](public/diagrams/production-system.drawio.png)
 
 ## 📋 Table of Contents
 

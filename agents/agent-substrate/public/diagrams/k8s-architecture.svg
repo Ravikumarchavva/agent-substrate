@@ -1,0 +1,764 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1320" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <!-- K8s Pod icon (hexagon) -->
+    <symbol id="pod-icon" viewBox="0 0 40 40">
+      <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <text x="20" y="24" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">Pod</text>
+    </symbol>
+    <!-- K8s Deployment icon -->
+    <symbol id="deploy-icon" viewBox="0 0 44 44">
+      <circle cx="22" cy="22" r="20" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <path d="M22 8 L22 14 M22 30 L22 36 M8 22 L14 22 M30 22 L36 22" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="22" cy="22" r="8" fill="none" stroke="#fff" stroke-width="2"/>
+      <path d="M17.5 14 A12 12 0 0 1 30 17.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" marker-end="url(#arrow-w)"/>
+    </symbol>
+    <!-- K8s Service icon -->
+    <symbol id="svc-icon" viewBox="0 0 44 44">
+      <polygon points="22,2 42,22 22,42 2,22" fill="#326ce5" stroke="#fff" stroke-width="1.5" rx="2"/>
+      <circle cx="22" cy="17" r="3" fill="#fff"/>
+      <circle cx="15" cy="26" r="3" fill="#fff"/>
+      <circle cx="29" cy="26" r="3" fill="#fff"/>
+    </symbol>
+    <!-- K8s Ingress icon -->
+    <symbol id="ing-icon" viewBox="0 0 44 44">
+      <polygon points="22,2 42,22 22,42 2,22" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <path d="M12 22 L32 22 M22 12 L22 32 M28 16 L32 22 L28 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <!-- K8s StatefulSet icon -->
+    <symbol id="sts-icon" viewBox="0 0 44 44">
+      <circle cx="22" cy="22" r="20" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <rect x="12" y="12" width="8" height="20" rx="1" fill="#fff"/>
+      <rect x="24" y="12" width="8" height="20" rx="1" fill="#fff"/>
+    </symbol>
+    <!-- K8s ConfigMap icon -->
+    <symbol id="cm-icon" viewBox="0 0 40 40">
+      <rect x="4" y="2" width="32" height="36" rx="3" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <line x1="10" y1="11" x2="30" y2="11" stroke="#fff" stroke-width="2"/>
+      <line x1="10" y1="18" x2="30" y2="18" stroke="#fff" stroke-width="2"/>
+      <line x1="10" y1="25" x2="24" y2="25" stroke="#fff" stroke-width="2"/>
+    </symbol>
+    <!-- K8s Secret icon -->
+    <symbol id="secret-icon" viewBox="0 0 40 40">
+      <rect x="4" y="2" width="32" height="36" rx="3" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <circle cx="20" cy="17" r="6" fill="none" stroke="#fff" stroke-width="2"/>
+      <rect x="18" y="22" width="4" height="10" rx="1" fill="#fff"/>
+    </symbol>
+    <!-- PVC (cylinder) -->
+    <symbol id="pvc-icon" viewBox="0 0 40 44">
+      <ellipse cx="20" cy="8" rx="16" ry="6" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <rect x="4" y="8" width="32" height="28" fill="#326ce5"/>
+      <line x1="4" y1="8" x2="4" y2="36" stroke="#fff" stroke-width="1.5"/>
+      <line x1="36" y1="8" x2="36" y2="36" stroke="#fff" stroke-width="1.5"/>
+      <ellipse cx="20" cy="36" rx="16" ry="6" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+    </symbol>
+    <!-- HPA icon -->
+    <symbol id="hpa-icon" viewBox="0 0 40 40">
+      <rect x="2" y="2" width="36" height="36" rx="5" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <path d="M10 28 L10 16 L16 16 M24 12 L30 12 L30 24" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <polygon points="14,12 20,16 14,20" fill="#fff"/>
+      <polygon points="34,22 28,28 28,16" fill="#fff" transform="rotate(180,30,22)"/>
+    </symbol>
+    <!-- Network Policy icon -->
+    <symbol id="netpol-icon" viewBox="0 0 40 40">
+      <rect x="2" y="2" width="36" height="36" rx="5" fill="#326ce5" stroke="#fff" stroke-width="1.5"/>
+      <path d="M20 8 L20 32 M12 14 L28 26 M28 14 L12 26" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="20" cy="20" r="4" fill="#fff"/>
+    </symbol>
+    <!-- K8s wheel logo -->
+    <symbol id="k8s-logo" viewBox="0 0 50 50">
+      <circle cx="25" cy="25" r="23" fill="#326ce5"/>
+      <g fill="#fff">
+        <circle cx="25" cy="25" r="4"/>
+        <g stroke="#fff" stroke-width="2.5" stroke-linecap="round">
+          <line x1="25" y1="8" x2="25" y2="14"/>
+          <line x1="25" y1="36" x2="25" y2="42"/>
+          <line x1="8.7" y1="15.5" x2="14" y2="19"/>
+          <line x1="36" y1="31" x2="41.3" y2="34.5"/>
+          <line x1="8.7" y1="34.5" x2="14" y2="31"/>
+          <line x1="36" y1="19" x2="41.3" y2="15.5"/>
+        </g>
+        <circle cx="25" cy="10" r="2.5"/>
+        <circle cx="25" cy="40" r="2.5"/>
+        <circle cx="11" cy="16.5" r="2.5"/>
+        <circle cx="39" cy="33.5" r="2.5"/>
+        <circle cx="11" cy="33.5" r="2.5"/>
+        <circle cx="39" cy="16.5" r="2.5"/>
+      </g>
+    </symbol>
+    <!-- User icon -->
+    <symbol id="user-icon" viewBox="0 0 32 32">
+      <circle cx="16" cy="11" r="6" fill="#5c6bc0" stroke="#3949ab" stroke-width="1"/>
+      <path d="M4 30 Q4 20 16 20 Q28 20 28 30" fill="#5c6bc0" stroke="#3949ab" stroke-width="1"/>
+    </symbol>
+    <!-- Cloud icon -->
+    <symbol id="cloud-icon" viewBox="0 0 48 32">
+      <path d="M12 28 Q2 28 2 20 Q2 13 10 12 Q12 4 22 4 Q30 4 33 10 Q44 10 44 20 Q44 28 34 28 Z" fill="#78909c" stroke="#546e7a" stroke-width="1.5"/>
+    </symbol>
+    <marker id="arrow-b" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#546e7a"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#326ce5"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#e65100"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#2e7d32"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#c62828"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="#6a1b9a"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1800" height="1320" fill="#fafbfc" rx="8"/>
+
+  <!-- Title bar -->
+  <rect x="0" y="0" width="1800" height="52" fill="#326ce5" rx="8"/>
+  <rect x="0" y="20" width="1800" height="32" fill="#326ce5"/>
+  <use href="#k8s-logo" x="16" y="4" width="44" height="44"/>
+  <text x="70" y="33" fill="#fff" font-size="20" font-weight="700">Agent Framework — Kubernetes Production Architecture</text>
+  <text x="1640" y="33" fill="#b3d4fc" font-size="12">March 2026</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!--  INTERNET / EXTERNAL                           -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="20" y="68" width="200" height="190" rx="10" fill="#e8eaf6" stroke="#9fa8da" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="120" y="88" text-anchor="middle" fill="#3949ab" font-size="12" font-weight="700">External / Internet</text>
+
+  <use href="#user-icon" x="38" y="100" width="32" height="32"/>
+  <use href="#user-icon" x="58" y="100" width="32" height="32"/>
+  <use href="#user-icon" x="78" y="100" width="32" height="32"/>
+  <text x="73" y="150" text-anchor="middle" fill="#3949ab" font-size="10" font-weight="600">Users (Browser)</text>
+
+  <use href="#cloud-icon" x="130" y="100" width="42" height="28"/>
+  <text x="151" y="140" text-anchor="middle" fill="#546e7a" font-size="9" font-weight="600">OpenAI API</text>
+
+  <use href="#cloud-icon" x="130" y="155" width="42" height="28"/>
+  <text x="151" y="195" text-anchor="middle" fill="#546e7a" font-size="9" font-weight="600">Spotify API</text>
+
+  <use href="#cloud-icon" x="40" y="165" width="42" height="28"/>
+  <text x="61" y="205" text-anchor="middle" fill="#546e7a" font-size="9" font-weight="600">Google OAuth</text>
+
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- NAMESPACE: ingress-nginx                              -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="240" y="68" width="540" height="190" rx="10" fill="#e3f2fd" stroke="#64b5f6" stroke-width="2"/>
+  <rect x="240" y="68" width="540" height="26" rx="10" fill="#42a5f5"/>
+  <rect x="240" y="84" width="540" height="10" fill="#42a5f5"/>
+  <text x="510" y="87" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">namespace: ingress-nginx</text>
+
+  <!-- Ingress resource -->
+  <g transform="translate(265, 108)">
+    <use href="#ing-icon" width="40" height="40"/>
+    <text x="20" y="52" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">Ingress</text>
+    <text x="20" y="62" text-anchor="middle" fill="#546e7a" font-size="8">chat.example.com</text>
+  </g>
+
+  <!-- Ingress Rules detail -->
+  <rect x="320" y="105" width="210" height="65" rx="6" fill="#e8f4fd" stroke="#90caf9" stroke-width="1"/>
+  <text x="328" y="120" fill="#1565c0" font-size="9" font-weight="700">Routing Rules:</text>
+  <text x="328" y="133" fill="#37474f" font-size="9" font-family="monospace">/              → next-js-svc:3000</text>
+  <text x="328" y="146" fill="#37474f" font-size="9" font-family="monospace">/api/*         → agent-api-svc:8000</text>
+  <text x="328" y="159" fill="#37474f" font-size="9" font-family="monospace">TLS: Let's Encrypt (cert-manager)</text>
+
+  <!-- NGINX Controller deployment -->
+  <g transform="translate(558, 108)">
+    <use href="#deploy-icon" width="40" height="40"/>
+    <text x="20" y="52" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">Deployment</text>
+    <text x="20" y="62" text-anchor="middle" fill="#546e7a" font-size="8">nginx-controller</text>
+    <text x="20" y="72" text-anchor="middle" fill="#546e7a" font-size="8">replicas: 2</text>
+  </g>
+
+  <!-- Ingress Service LB -->
+  <g transform="translate(640, 108)">
+    <use href="#svc-icon" width="40" height="40"/>
+    <text x="20" y="52" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">Service</text>
+    <text x="20" y="62" text-anchor="middle" fill="#546e7a" font-size="8">LoadBalancer</text>
+    <text x="20" y="72" text-anchor="middle" fill="#546e7a" font-size="8">80 / 443</text>
+  </g>
+
+  <!-- ingress pods -->
+  <g transform="translate(708, 108)">
+    <use href="#pod-icon" width="32" height="32"/>
+  </g>
+  <g transform="translate(740, 108)">
+    <use href="#pod-icon" width="32" height="32"/>
+  </g>
+  <text x="740" y="155" text-anchor="middle" fill="#546e7a" font-size="8">NGINX pods</text>
+
+  <!-- ════════════════════════════════════════════════════════ -->
+  <!-- NAMESPACE: agent-framework (main)                       -->
+  <!-- ════════════════════════════════════════════════════════ -->
+  <rect x="20" y="280" width="1760" height="700" rx="10" fill="#e8f5e9" stroke="#66bb6a" stroke-width="2"/>
+  <rect x="20" y="280" width="1760" height="28" rx="10" fill="#43a047"/>
+  <rect x="20" y="298" width="1760" height="10" fill="#43a047"/>
+  <text x="900" y="300" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">namespace: agent-framework</text>
+
+  <!-- ──────────────────────────────── -->
+  <!--  NEXT.JS FRONTEND GROUP          -->
+  <!-- ──────────────────────────────── -->
+  <rect x="40" y="320" width="530" height="380" rx="8" fill="#fff8e1" stroke="#ffb300" stroke-width="1.5"/>
+  <text x="305" y="342" text-anchor="middle" fill="#e65100" font-size="13" font-weight="700">Next.js 16 Frontend (chatbot-ui)</text>
+
+  <!-- FE Deployment -->
+  <g transform="translate(60, 358)">
+    <use href="#deploy-icon" width="44" height="44"/>
+    <text x="22" y="56" text-anchor="middle" fill="#1a237e" font-size="10" font-weight="700">Deployment</text>
+    <text x="22" y="68" text-anchor="middle" fill="#37474f" font-size="9">next-js-app</text>
+    <text x="22" y="79" text-anchor="middle" fill="#546e7a" font-size="8">replicas: 2</text>
+    <text x="22" y="89" text-anchor="middle" fill="#546e7a" font-size="8">image: chatbot-ui:latest</text>
+  </g>
+
+  <!-- FE Service -->
+  <g transform="translate(165, 360)">
+    <use href="#svc-icon" width="42" height="42"/>
+    <text x="21" y="55" text-anchor="middle" fill="#1a237e" font-size="10" font-weight="700">Service</text>
+    <text x="21" y="67" text-anchor="middle" fill="#37474f" font-size="9">next-js-svc</text>
+    <text x="21" y="78" text-anchor="middle" fill="#546e7a" font-size="8">ClusterIP :3000</text>
+  </g>
+
+  <!-- FE Pods -->
+  <g transform="translate(275, 355)">
+    <use href="#pod-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#37474f" font-size="8" font-weight="600">next-js-app-aaa</text>
+    <text x="19" y="60" text-anchor="middle" fill="#78909c" font-size="7">:3000</text>
+  </g>
+  <g transform="translate(350, 355)">
+    <use href="#pod-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#37474f" font-size="8" font-weight="600">next-js-app-bbb</text>
+    <text x="19" y="60" text-anchor="middle" fill="#78909c" font-size="7">:3000</text>
+  </g>
+
+  <!-- Pod internals legend for FE -->
+  <rect x="410" y="355" width="145" height="85" rx="5" fill="#fff3e0" stroke="#ffb74d" stroke-width="1"/>
+  <text x="418" y="370" fill="#e65100" font-size="8" font-weight="700">Inside each pod:</text>
+  <text x="418" y="383" fill="#37474f" font-size="8">• page.tsx (SSE client loop)</text>
+  <text x="418" y="395" fill="#37474f" font-size="8">• /api/chat proxy route</text>
+  <text x="418" y="407" fill="#37474f" font-size="8">• /api/auth/* (Google OAuth)</text>
+  <text x="418" y="419" fill="#37474f" font-size="8">• /api/spotify/* (token relay)</text>
+  <text x="418" y="431" fill="#37474f" font-size="8">• Prisma Client (sessions)</text>
+
+  <!-- HPA -->
+  <g transform="translate(60, 462)">
+    <use href="#hpa-icon" width="34" height="34"/>
+    <text x="17" y="46" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">HPA</text>
+    <text x="17" y="57" text-anchor="middle" fill="#546e7a" font-size="8">2→8 (CPU 70%)</text>
+  </g>
+
+  <!-- PDB -->
+  <rect x="140" y="468" width="100" height="32" rx="5" fill="#e8eaf6" stroke="#7986cb" stroke-width="1"/>
+  <text x="190" y="483" text-anchor="middle" fill="#283593" font-size="9" font-weight="600">PDB</text>
+  <text x="190" y="495" text-anchor="middle" fill="#546e7a" font-size="8">minAvailable: 1</text>
+
+  <!-- FE ConfigMap -->
+  <g transform="translate(60, 520)">
+    <use href="#cm-icon" width="34" height="34"/>
+    <text x="17" y="46" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="700">ConfigMap</text>
+    <text x="17" y="57" text-anchor="middle" fill="#37474f" font-size="8">fe-config</text>
+  </g>
+  <rect x="105" y="522" width="170" height="38" rx="4" fill="#f5f5f5" stroke="#bdbdbd" stroke-width="0.8"/>
+  <text x="112" y="536" fill="#37474f" font-size="8" font-family="monospace">NEXT_PUBLIC_API_URL</text>
+  <text x="112" y="548" fill="#37474f" font-size="8" font-family="monospace">NEXT_PUBLIC_BASE_URL</text>
+
+  <!-- FE Secret -->
+  <g transform="translate(60, 575)">
+    <use href="#secret-icon" width="34" height="34"/>
+    <text x="17" y="46" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="700">Secret</text>
+    <text x="17" y="57" text-anchor="middle" fill="#37474f" font-size="8">fe-secrets</text>
+  </g>
+  <rect x="105" y="577" width="170" height="50" rx="4" fill="#fff3e0" stroke="#ffb74d" stroke-width="0.8"/>
+  <text x="112" y="591" fill="#e65100" font-size="8" font-family="monospace">GOOGLE_CLIENT_ID</text>
+  <text x="112" y="603" fill="#e65100" font-size="8" font-family="monospace">GOOGLE_CLIENT_SECRET</text>
+  <text x="112" y="615" fill="#e65100" font-size="8" font-family="monospace">DATABASE_URL (Prisma)</text>
+
+  <!-- FE ServiceAccount -->
+  <rect x="300" y="575" width="160" height="28" rx="5" fill="#eceff1" stroke="#90a4ae" stroke-width="1"/>
+  <text x="380" y="594" text-anchor="middle" fill="#37474f" font-size="9">ServiceAccount: <tspan font-weight="700">fe-sa</tspan></text>
+
+  <!-- ──────────────────────────────── -->
+  <!-- AGENT FRAMEWORK BACKEND GROUP   -->
+  <!-- ──────────────────────────────── -->
+  <rect x="600" y="320" width="580" height="380" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="890" y="342" text-anchor="middle" fill="#1b5e20" font-size="13" font-weight="700">FastAPI Backend (agent-framework)</text>
+
+  <!-- BE Deployment -->
+  <g transform="translate(620, 358)">
+    <use href="#deploy-icon" width="44" height="44"/>
+    <text x="22" y="56" text-anchor="middle" fill="#1a237e" font-size="10" font-weight="700">Deployment</text>
+    <text x="22" y="68" text-anchor="middle" fill="#37474f" font-size="9">agent-framework</text>
+    <text x="22" y="79" text-anchor="middle" fill="#546e7a" font-size="8">replicas: 2</text>
+    <text x="22" y="89" text-anchor="middle" fill="#546e7a" font-size="8">image: agent-runtime:latest</text>
+  </g>
+
+  <!-- BE Service -->
+  <g transform="translate(725, 360)">
+    <use href="#svc-icon" width="42" height="42"/>
+    <text x="21" y="55" text-anchor="middle" fill="#1a237e" font-size="10" font-weight="700">Service</text>
+    <text x="21" y="67" text-anchor="middle" fill="#37474f" font-size="9">agent-api-svc</text>
+    <text x="21" y="78" text-anchor="middle" fill="#546e7a" font-size="8">ClusterIP :8000</text>
+  </g>
+
+  <!-- BE Pods -->
+  <g transform="translate(830, 355)">
+    <use href="#pod-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#37474f" font-size="8" font-weight="600">agent-runtime-xxx</text>
+    <text x="19" y="60" text-anchor="middle" fill="#78909c" font-size="7">:8000</text>
+  </g>
+  <g transform="translate(915, 355)">
+    <use href="#pod-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#37474f" font-size="8" font-weight="600">agent-runtime-yyy</text>
+    <text x="19" y="60" text-anchor="middle" fill="#78909c" font-size="7">:8000</text>
+  </g>
+
+  <!-- Pod internals legend for BE -->
+  <rect x="970" y="355" width="195" height="105" rx="5" fill="#e8f5e9" stroke="#81c784" stroke-width="1"/>
+  <text x="978" y="370" fill="#1b5e20" font-size="8" font-weight="700">Inside each pod:</text>
+  <text x="978" y="383" fill="#37474f" font-size="8">• ReActAgent (Think→Act→Observe)</text>
+  <text x="978" y="395" fill="#37474f" font-size="8">• POST /chat SSE streaming</text>
+  <text x="978" y="407" fill="#37474f" font-size="8">• WebHITLBridge → Redis pub/sub</text>
+  <text x="978" y="419" fill="#37474f" font-size="8">• Tools: 12 built-in + WebSurfer</text>
+  <text x="978" y="431" fill="#37474f" font-size="8">• RedisMemory (session store)</text>
+  <text x="978" y="443" fill="#37474f" font-size="8">• SQLAlchemy async (asyncpg)</text>
+  <text x="978" y="455" fill="#37474f" font-size="8">• OTel Instrumentation → Tempo</text>
+
+  <!-- HPA -->
+  <g transform="translate(620, 462)">
+    <use href="#hpa-icon" width="34" height="34"/>
+    <text x="17" y="46" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">HPA</text>
+    <text x="17" y="57" text-anchor="middle" fill="#546e7a" font-size="8">2→10 (CPU 60%)</text>
+  </g>
+
+  <!-- PDB -->
+  <rect x="700" y="468" width="100" height="32" rx="5" fill="#e8eaf6" stroke="#7986cb" stroke-width="1"/>
+  <text x="750" y="483" text-anchor="middle" fill="#283593" font-size="9" font-weight="600">PDB</text>
+  <text x="750" y="495" text-anchor="middle" fill="#546e7a" font-size="8">minAvailable: 1</text>
+
+  <!-- BE ConfigMap -->
+  <g transform="translate(620, 520)">
+    <use href="#cm-icon" width="34" height="34"/>
+    <text x="17" y="46" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="700">ConfigMap</text>
+    <text x="17" y="57" text-anchor="middle" fill="#37474f" font-size="8">agent-config</text>
+  </g>
+  <rect x="665" y="522" width="185" height="50" rx="4" fill="#f5f5f5" stroke="#bdbdbd" stroke-width="0.8"/>
+  <text x="672" y="536" fill="#37474f" font-size="8" font-family="monospace">OTLP_TRACE_ENDPOINT</text>
+  <text x="672" y="548" fill="#37474f" font-size="8" font-family="monospace">SESSION_MAX_MESSAGES=200</text>
+  <text x="672" y="560" fill="#37474f" font-size="8" font-family="monospace">SESSION_AUTO_CHECKPOINT=50</text>
+
+  <!-- BE Secret -->
+  <g transform="translate(620, 585)">
+    <use href="#secret-icon" width="34" height="34"/>
+    <text x="17" y="46" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="700">Secret</text>
+    <text x="17" y="57" text-anchor="middle" fill="#37474f" font-size="8">agent-secrets</text>
+  </g>
+  <rect x="665" y="585" width="185" height="65" rx="4" fill="#fff3e0" stroke="#ffb74d" stroke-width="0.8"/>
+  <text x="672" y="599" fill="#e65100" font-size="8" font-family="monospace">OPENAI_API_KEY</text>
+  <text x="672" y="611" fill="#e65100" font-size="8" font-family="monospace">DATABASE_URL</text>
+  <text x="672" y="623" fill="#e65100" font-size="8" font-family="monospace">REDIS_URL</text>
+  <text x="672" y="635" fill="#e65100" font-size="8" font-family="monospace">SPOTIFY_CLIENT_SECRET</text>
+  <text x="672" y="647" fill="#e65100" font-size="8" font-family="monospace">CI_AUTH_TOKEN</text>
+
+  <!-- NetworkPolicy -->
+  <g transform="translate(870, 520)">
+    <use href="#netpol-icon" width="34" height="34"/>
+    <text x="17" y="46" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="700">NetworkPolicy</text>
+    <text x="17" y="57" text-anchor="middle" fill="#37474f" font-size="8">agent-netpol</text>
+  </g>
+  <rect x="920" y="522" width="240" height="40" rx="4" fill="#e8f5e9" stroke="#81c784" stroke-width="0.8"/>
+  <text x="928" y="536" fill="#2e7d32" font-size="8">ingress: from ingress-nginx, next-js pods</text>
+  <text x="928" y="548" fill="#2e7d32" font-size="8">egress: postgres, redis, OpenAI, Spotify</text>
+
+  <!-- BE ServiceAccount -->
+  <rect x="870" y="575" width="290" height="28" rx="5" fill="#eceff1" stroke="#90a4ae" stroke-width="1"/>
+  <text x="1015" y="594" text-anchor="middle" fill="#37474f" font-size="9">ServiceAccount: <tspan font-weight="700">agent-sa</tspan> (RBAC: pods/services read)</text>
+
+
+  <!-- ──────────────────────────────── -->
+  <!--  CODE INTERPRETER (sandboxed)   -->
+  <!-- ──────────────────────────────── -->
+  <rect x="1210" y="320" width="310" height="215" rx="8" fill="#fce4ec" stroke="#c62828" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="1365" y="342" text-anchor="middle" fill="#b71c1c" font-size="12" font-weight="700">Code Interpreter (sandboxed)</text>
+
+  <g transform="translate(1230, 358)">
+    <use href="#deploy-icon" width="40" height="40"/>
+    <text x="20" y="52" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="700">Deployment</text>
+    <text x="20" y="63" text-anchor="middle" fill="#37474f" font-size="8">code-interpreter</text>
+    <text x="20" y="73" text-anchor="middle" fill="#546e7a" font-size="8">replicas: 1-3</text>
+  </g>
+
+  <g transform="translate(1330, 360)">
+    <use href="#svc-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">Service</text>
+    <text x="19" y="61" text-anchor="middle" fill="#37474f" font-size="8">code-interpreter-svc</text>
+    <text x="19" y="71" text-anchor="middle" fill="#546e7a" font-size="8">ClusterIP :8080</text>
+  </g>
+
+  <g transform="translate(1430, 362)">
+    <use href="#pod-icon" width="34" height="34"/>
+    <text x="17" y="48" text-anchor="middle" fill="#37474f" font-size="7" font-weight="600">sandbox pod</text>
+  </g>
+  <g transform="translate(1468, 362)">
+    <use href="#pod-icon" width="34" height="34"/>
+  </g>
+
+  <!-- Sandbox NetworkPolicy -->
+  <g transform="translate(1230, 450)">
+    <use href="#netpol-icon" width="32" height="32"/>
+    <text x="16" y="45" text-anchor="middle" fill="#c62828" font-size="8" font-weight="700">NetworkPolicy</text>
+  </g>
+  <rect x="1280" y="450" width="220" height="35" rx="4" fill="#ffebee" stroke="#ef9a9a" stroke-width="0.8"/>
+  <text x="1288" y="465" fill="#c62828" font-size="8" font-weight="600">egress: DENY ALL (fully sandboxed)</text>
+  <text x="1288" y="477" fill="#c62828" font-size="8">ingress: from agent-runtime pods only</text>
+
+  <!-- Sandbox HPA -->
+  <g transform="translate(1230, 498)">
+    <use href="#hpa-icon" width="28" height="28"/>
+    <text x="14" y="38" text-anchor="middle" fill="#546e7a" font-size="8">HPA 1→3</text>
+  </g>
+
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!--  DATA LAYER                                            -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="40" y="720" width="1120" height="235" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="600" y="742" text-anchor="middle" fill="#0d47a1" font-size="13" font-weight="700">Data Layer (Persistent Storage)</text>
+
+  <!-- PostgreSQL -->
+  <g transform="translate(60, 760)">
+    <use href="#sts-icon" width="44" height="44"/>
+    <text x="22" y="56" text-anchor="middle" fill="#1a237e" font-size="10" font-weight="700">StatefulSet</text>
+    <text x="22" y="68" text-anchor="middle" fill="#37474f" font-size="9">postgres</text>
+    <text x="22" y="79" text-anchor="middle" fill="#546e7a" font-size="8">replicas: 1 (primary)</text>
+    <text x="22" y="89" text-anchor="middle" fill="#546e7a" font-size="8">postgres:16-alpine</text>
+  </g>
+
+  <g transform="translate(160, 762)">
+    <use href="#svc-icon" width="40" height="40"/>
+    <text x="20" y="53" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">Service</text>
+    <text x="20" y="64" text-anchor="middle" fill="#37474f" font-size="8">postgres-svc</text>
+    <text x="20" y="74" text-anchor="middle" fill="#546e7a" font-size="8">ClusterIP :5432</text>
+  </g>
+
+  <g transform="translate(258, 766)">
+    <use href="#pod-icon" width="35" height="35"/>
+    <text x="17" y="48" text-anchor="middle" fill="#37474f" font-size="7" font-weight="600">postgres-0</text>
+  </g>
+
+  <g transform="translate(160, 840)">
+    <use href="#pvc-icon" width="36" height="40"/>
+    <text x="18" y="50" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">PVC</text>
+    <text x="18" y="62" text-anchor="middle" fill="#37474f" font-size="8">postgres-pvc</text>
+    <text x="18" y="73" text-anchor="middle" fill="#546e7a" font-size="8">20Gi (ssd)</text>
+  </g>
+
+  <!-- Headless service -->
+  <rect x="60" y="860" width="90" height="28" rx="4" fill="#bbdefb" stroke="#64b5f6" stroke-width="0.8"/>
+  <text x="105" y="873" text-anchor="middle" fill="#1565c0" font-size="8" font-weight="600">Headless Svc</text>
+  <text x="105" y="884" text-anchor="middle" fill="#546e7a" font-size="7">postgres-headless</text>
+
+  <!-- DB contents note -->
+  <rect x="60" y="900" width="240" height="38" rx="4" fill="#e3f2fd" stroke="#90caf9" stroke-width="0.8"/>
+  <text x="68" y="914" fill="#0d47a1" font-size="8" font-weight="700">Schema: agentdb</text>
+  <text x="68" y="926" fill="#37474f" font-size="8">tables: threads, messages, files, token_ledger, spotify_tokens</text>
+  <text x="68" y="914" fill="#0d47a1" font-size="8" font-weight="700" dx="0" dy="24">Schema: chatui (Prisma) — sessions, accounts</text>
+
+  <!-- Redis -->
+  <g transform="translate(420, 760)">
+    <use href="#deploy-icon" width="44" height="44"/>
+    <text x="22" y="56" text-anchor="middle" fill="#c62828" font-size="10" font-weight="700">Deployment</text>
+    <text x="22" y="68" text-anchor="middle" fill="#37474f" font-size="9">redis</text>
+    <text x="22" y="79" text-anchor="middle" fill="#546e7a" font-size="8">replicas: 1</text>
+    <text x="22" y="89" text-anchor="middle" fill="#546e7a" font-size="8">redis:7-alpine</text>
+  </g>
+
+  <g transform="translate(520, 762)">
+    <use href="#svc-icon" width="40" height="40"/>
+    <text x="20" y="53" text-anchor="middle" fill="#c62828" font-size="9" font-weight="600">Service</text>
+    <text x="20" y="64" text-anchor="middle" fill="#37474f" font-size="8">redis-svc</text>
+    <text x="20" y="74" text-anchor="middle" fill="#546e7a" font-size="8">ClusterIP :6379</text>
+  </g>
+
+  <g transform="translate(615, 766)">
+    <use href="#pod-icon" width="35" height="35"/>
+    <text x="17" y="48" text-anchor="middle" fill="#37474f" font-size="7" font-weight="600">redis-0</text>
+  </g>
+
+  <g transform="translate(520, 840)">
+    <use href="#pvc-icon" width="36" height="40"/>
+    <text x="18" y="50" text-anchor="middle" fill="#1a237e" font-size="9" font-weight="600">PVC</text>
+    <text x="18" y="62" text-anchor="middle" fill="#37474f" font-size="8">redis-pvc</text>
+    <text x="18" y="73" text-anchor="middle" fill="#546e7a" font-size="8">4Gi</text>
+  </g>
+
+  <!-- Redis usage detail -->
+  <rect x="420" y="900" width="270" height="38" rx="4" fill="#ffebee" stroke="#ef9a9a" stroke-width="0.8"/>
+  <text x="428" y="914" fill="#c62828" font-size="8" font-weight="700">Redis responsibilities:</text>
+  <text x="428" y="926" fill="#37474f" font-size="8">HITL pub/sub | Session memory | Rate limiting | OAuth token cache</text>
+
+  <!-- Prisma note -->
+  <rect x="740" y="770" width="400" height="80" rx="6" fill="#f5f5f5" stroke="#bdbdbd" stroke-width="1"/>
+  <text x="748" y="788" fill="#37474f" font-size="9" font-weight="700">Connection Map:</text>
+  <text x="748" y="803" fill="#2e7d32" font-size="8">• agent-runtime pods → postgres-svc (asyncpg) → threads, messages</text>
+  <text x="748" y="816" fill="#e65100" font-size="8">• next-js-app pods → postgres-svc (Prisma) → sessions, accounts</text>
+  <text x="748" y="829" fill="#c62828" font-size="8">• agent-runtime pods → redis-svc → pub/sub + cache + memory</text>
+  <text x="748" y="842" fill="#6a1b9a" font-size="8">• agent-runtime pods → tempo-svc:4318 → OTLP traces</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!--              MONITORING NAMESPACE                      -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="1210" y="555" width="560" height="400" rx="10" fill="#f3e5f5" stroke="#8e24aa" stroke-width="2"/>
+  <rect x="1210" y="555" width="560" height="26" rx="10" fill="#8e24aa"/>
+  <rect x="1210" y="571" width="560" height="10" fill="#8e24aa"/>
+  <text x="1490" y="574" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">namespace: monitoring</text>
+
+  <!-- Tempo -->
+  <g transform="translate(1230, 598)">
+    <use href="#deploy-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#4a148c" font-size="9" font-weight="600">Deployment</text>
+    <text x="19" y="61" text-anchor="middle" fill="#37474f" font-size="8">grafana-tempo</text>
+  </g>
+  <g transform="translate(1320, 600)">
+    <use href="#svc-icon" width="36" height="36"/>
+    <text x="18" y="48" text-anchor="middle" fill="#4a148c" font-size="8" font-weight="600">tempo-svc</text>
+    <text x="18" y="58" text-anchor="middle" fill="#546e7a" font-size="7">:3200 :4317 :4318</text>
+  </g>
+  <text x="1416" y="620" fill="#4a148c" font-size="9" font-weight="600">Distributed Traces</text>
+  <text x="1416" y="632" fill="#78909c" font-size="8">OTLP HTTP/gRPC receiver</text>
+
+  <!-- Loki -->
+  <g transform="translate(1230, 668)">
+    <use href="#deploy-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#4a148c" font-size="9" font-weight="600">Deployment</text>
+    <text x="19" y="61" text-anchor="middle" fill="#37474f" font-size="8">grafana-loki</text>
+  </g>
+  <g transform="translate(1320, 670)">
+    <use href="#svc-icon" width="36" height="36"/>
+    <text x="18" y="48" text-anchor="middle" fill="#4a148c" font-size="8" font-weight="600">loki-svc</text>
+    <text x="18" y="58" text-anchor="middle" fill="#546e7a" font-size="7">:3100</text>
+  </g>
+  <text x="1416" y="690" fill="#4a148c" font-size="9" font-weight="600">Log Aggregation</text>
+  <text x="1416" y="702" fill="#78909c" font-size="8">JSON structured logs from Promtail</text>
+
+  <!-- Prometheus -->
+  <g transform="translate(1230, 738)">
+    <use href="#deploy-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#4a148c" font-size="9" font-weight="600">Deployment</text>
+    <text x="19" y="61" text-anchor="middle" fill="#37474f" font-size="8">prometheus</text>
+  </g>
+  <g transform="translate(1320, 740)">
+    <use href="#svc-icon" width="36" height="36"/>
+    <text x="18" y="48" text-anchor="middle" fill="#4a148c" font-size="8" font-weight="600">prom-svc</text>
+    <text x="18" y="58" text-anchor="middle" fill="#546e7a" font-size="7">:9090</text>
+  </g>
+  <text x="1416" y="760" fill="#4a148c" font-size="9" font-weight="600">Metrics</text>
+  <text x="1416" y="772" fill="#78909c" font-size="8">Scrapes: kube-state, node-exporter, /metrics</text>
+
+  <!-- Grafana -->
+  <g transform="translate(1230, 808)">
+    <use href="#deploy-icon" width="38" height="38"/>
+    <text x="19" y="50" text-anchor="middle" fill="#4a148c" font-size="9" font-weight="600">Deployment</text>
+    <text x="19" y="61" text-anchor="middle" fill="#37474f" font-size="8">grafana</text>
+  </g>
+  <g transform="translate(1320, 810)">
+    <use href="#svc-icon" width="36" height="36"/>
+    <text x="18" y="48" text-anchor="middle" fill="#4a148c" font-size="8" font-weight="600">grafana-svc</text>
+    <text x="18" y="58" text-anchor="middle" fill="#546e7a" font-size="7">LoadBalancer :3000</text>
+  </g>
+
+  <rect x="1416" y="822" width="335" height="42" rx="4" fill="#f3e5f5" stroke="#ce93d8" stroke-width="0.8"/>
+  <text x="1424" y="836" fill="#4a148c" font-size="8" font-weight="700">Datasources:</text>
+  <text x="1424" y="848" fill="#37474f" font-size="8">Tempo (traces) | Loki (logs) | Prometheus (metrics)</text>
+  <text x="1424" y="860" fill="#37474f" font-size="8">Unified dashboards: cost, latency, errors, agent runs</text>
+
+  <!-- DaemonSet: Promtail -->
+  <rect x="1230" y="880" width="170" height="50" rx="5" fill="#e1bee7" stroke="#ab47bc" stroke-width="1"/>
+  <text x="1315" y="898" text-anchor="middle" fill="#4a148c" font-size="9" font-weight="700">DaemonSet</text>
+  <text x="1315" y="912" text-anchor="middle" fill="#37474f" font-size="9">promtail</text>
+  <text x="1315" y="924" text-anchor="middle" fill="#78909c" font-size="8">ships logs → loki-svc</text>
+
+  <!-- DaemonSet: node-exporter -->
+  <rect x="1420" y="880" width="170" height="50" rx="5" fill="#e1bee7" stroke="#ab47bc" stroke-width="1"/>
+  <text x="1505" y="898" text-anchor="middle" fill="#4a148c" font-size="9" font-weight="700">DaemonSet</text>
+  <text x="1505" y="912" text-anchor="middle" fill="#37474f" font-size="9">node-exporter</text>
+  <text x="1505" y="924" text-anchor="middle" fill="#78909c" font-size="8">host metrics → prom</text>
+
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!--       CLUSTER-LEVEL RESOURCES                          -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="40" y="992" width="1730" height="80" rx="8" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
+  <use href="#k8s-logo" x="50" y="998" width="34" height="34"/>
+  <text x="92" y="1020" fill="#37474f" font-size="12" font-weight="700">Cluster-Level Resources</text>
+
+  <rect x="60" y="1035" width="135" height="28" rx="4" fill="#cfd8dc" stroke="#90a4ae" stroke-width="0.8"/>
+  <text x="128" y="1054" text-anchor="middle" fill="#37474f" font-size="9" font-weight="600">cert-manager</text>
+
+  <rect x="205" y="1035" width="155" height="28" rx="4" fill="#cfd8dc" stroke="#90a4ae" stroke-width="0.8"/>
+  <text x="283" y="1054" text-anchor="middle" fill="#37474f" font-size="9" font-weight="600">ClusterIssuer (LE)</text>
+
+  <rect x="370" y="1035" width="130" height="28" rx="4" fill="#cfd8dc" stroke="#90a4ae" stroke-width="0.8"/>
+  <text x="435" y="1054" text-anchor="middle" fill="#37474f" font-size="9" font-weight="600">metrics-server</text>
+
+  <rect x="510" y="1035" width="155" height="28" rx="4" fill="#cfd8dc" stroke="#90a4ae" stroke-width="0.8"/>
+  <text x="588" y="1054" text-anchor="middle" fill="#37474f" font-size="9" font-weight="600">kube-state-metrics</text>
+
+  <rect x="675" y="1035" width="140" height="28" rx="4" fill="#cfd8dc" stroke="#90a4ae" stroke-width="0.8"/>
+  <text x="745" y="1054" text-anchor="middle" fill="#37474f" font-size="9" font-weight="600">StorageClass: ssd</text>
+
+  <rect x="825" y="1035" width="155" height="28" rx="4" fill="#cfd8dc" stroke="#90a4ae" stroke-width="0.8"/>
+  <text x="903" y="1054" text-anchor="middle" fill="#37474f" font-size="9" font-weight="600">RBAC (ClusterRoles)</text>
+
+  <rect x="990" y="1035" width="165" height="28" rx="4" fill="#cfd8dc" stroke="#90a4ae" stroke-width="0.8"/>
+  <text x="1073" y="1054" text-anchor="middle" fill="#37474f" font-size="9" font-weight="600">CoreDNS (service mesh)</text>
+
+  <rect x="1165" y="1035" width="185" height="28" rx="4" fill="#cfd8dc" stroke="#90a4ae" stroke-width="0.8"/>
+  <text x="1258" y="1054" text-anchor="middle" fill="#37474f" font-size="9" font-weight="600">PriorityClass: agent-critical</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!--     TRAFFIC FLOW ARROWS                                -->
+  <!-- ══════════════════════════════════════════════════════ -->
+
+  <!-- Users → Ingress LB (HTTPS) -->
+  <line x1="120" y1="128" x2="647" y2="128" stroke="#0d47a1" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <text x="350" y="122" fill="#0d47a1" font-size="9" font-weight="600">HTTPS :443</text>
+
+  <!-- Ingress → FE Service -->
+  <path d="M380 197 L380 250 Q380 260 390 260 L400 260 L400 375" stroke="#e65100" stroke-width="2" fill="none" marker-end="url(#arrow-orange)" stroke-dasharray="4,2"/>
+  <text x="345" y="242" fill="#e65100" font-size="8" font-weight="600">/ routes</text>
+
+  <!-- Ingress → BE Service -->
+  <path d="M500 197 L500 250 Q500 260 510 260 L740 260 L740 372" stroke="#2e7d32" stroke-width="2" fill="none" marker-end="url(#arrow-green)" stroke-dasharray="4,2"/>
+  <text x="625" y="248" fill="#2e7d32" font-size="8" font-weight="600">/api/* routes</text>
+
+  <!-- FE pods → Agent API (SSE proxy call, internal) -->
+  <path d="M408 393 L600 393 L600 382 L730 382" stroke="#e65100" stroke-width="1.8" fill="none" marker-end="url(#arrow-orange)"/>
+  <text x="510" y="386" fill="#e65100" font-size="8" font-weight="600">SSE proxy POST /chat</text>
+
+  <!-- Agent pods → PostgreSQL -->
+  <path d="M868 415 L750 500 Q740 510 730 520 L350 720 L200 770" stroke="#1565c0" stroke-width="1.8" fill="none" marker-end="url(#arrow-blue)"/>
+  <text x="440" y="695" fill="#1565c0" font-size="8" font-weight="600">asyncpg</text>
+
+  <!-- Agent pods → Redis -->
+  <path d="M868 425 L750 530 Q740 540 600 640 L540 770" stroke="#c62828" stroke-width="1.8" fill="none" marker-end="url(#arrow-red)"/>
+  <text x="640" y="660" fill="#c62828" font-size="8" font-weight="600">pub/sub + memory</text>
+
+  <!-- FE pods → PostgreSQL (Prisma) -->
+  <path d="M314 415 L280 500 L200 720 L200 770" stroke="#1565c0" stroke-width="1.2" fill="none" marker-end="url(#arrow-blue)" stroke-dasharray="6,3"/>
+  <text x="225" y="585" fill="#1565c0" font-size="8">Prisma</text>
+
+  <!-- Agent pods → Tempo (OTLP traces) -->
+  <path d="M953 405 L1100 445 L1200 530 L1270 598" stroke="#6a1b9a" stroke-width="1.5" fill="none" marker-end="url(#arrow-purple)"/>
+  <text x="1110" y="495" fill="#6a1b9a" font-size="8" font-weight="600">OTLP traces</text>
+
+  <!-- Agent pods → Code Interpreter -->
+  <path d="M953 395 L1080 395 L1200 395 L1320 395" stroke="#c62828" stroke-width="1.5" fill="none" marker-end="url(#arrow-red)" stroke-dasharray="4,2"/>
+  <text x="1105" y="388" fill="#c62828" font-size="8" font-weight="600">HTTP (sandboxed exec)</text>
+
+  <!-- Agent Pods → OpenAI (external) -->
+  <path d="M953 380 L1100 340 L1200 280 Q1220 268 1100 185 L180 135" stroke="#546e7a" stroke-width="1.5" fill="none" marker-end="url(#arrow-b)" stroke-dasharray="8,3"/>
+  <text x="1050" y="265" fill="#546e7a" font-size="8" font-weight="600">HTTPS → OpenAI API</text>
+
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!--                    LEGEND                              -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="40" y="1090" width="1730" height="215" rx="8" fill="#fff" stroke="#e0e0e0" stroke-width="1.5"/>
+  <text x="900" y="1115" text-anchor="middle" fill="#37474f" font-size="14" font-weight="700">Legend — Kubernetes Resource Types</text>
+
+  <!-- Row 1 -->
+  <g transform="translate(80, 1130)">
+    <use href="#deploy-icon" width="36" height="36"/>
+    <text x="44" y="22" fill="#37474f" font-size="10" font-weight="600">Deployment</text>
+    <text x="44" y="34" fill="#78909c" font-size="9">Stateless, horizontally scalable pods</text>
+  </g>
+
+  <g transform="translate(330, 1130)">
+    <use href="#sts-icon" width="36" height="36"/>
+    <text x="44" y="22" fill="#37474f" font-size="10" font-weight="600">StatefulSet</text>
+    <text x="44" y="34" fill="#78909c" font-size="9">Ordered pods with persistent identity</text>
+  </g>
+
+  <g transform="translate(600, 1130)">
+    <use href="#svc-icon" width="36" height="36"/>
+    <text x="44" y="22" fill="#37474f" font-size="10" font-weight="600">Service</text>
+    <text x="44" y="34" fill="#78909c" font-size="9">ClusterIP / LoadBalancer endpoint</text>
+  </g>
+
+  <g transform="translate(850, 1130)">
+    <use href="#ing-icon" width="36" height="36"/>
+    <text x="44" y="22" fill="#37474f" font-size="10" font-weight="600">Ingress</text>
+    <text x="44" y="34" fill="#78909c" font-size="9">L7 routing with TLS termination</text>
+  </g>
+
+  <g transform="translate(1100, 1130)">
+    <use href="#pod-icon" width="36" height="36"/>
+    <text x="44" y="22" fill="#37474f" font-size="10" font-weight="600">Pod</text>
+    <text x="44" y="34" fill="#78909c" font-size="9">Smallest deployable unit</text>
+  </g>
+
+  <g transform="translate(1350, 1130)">
+    <use href="#pvc-icon" width="34" height="38"/>
+    <text x="42" y="22" fill="#37474f" font-size="10" font-weight="600">PersistentVolumeClaim</text>
+    <text x="42" y="34" fill="#78909c" font-size="9">Durable block storage</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g transform="translate(80, 1188)">
+    <use href="#cm-icon" width="34" height="34"/>
+    <text x="42" y="18" fill="#37474f" font-size="10" font-weight="600">ConfigMap</text>
+    <text x="42" y="30" fill="#78909c" font-size="9">Non-sensitive configuration</text>
+  </g>
+
+  <g transform="translate(330, 1188)">
+    <use href="#secret-icon" width="34" height="34"/>
+    <text x="42" y="18" fill="#37474f" font-size="10" font-weight="600">Secret</text>
+    <text x="42" y="30" fill="#78909c" font-size="9">Encrypted credentials (API keys, DB URLs)</text>
+  </g>
+
+  <g transform="translate(600, 1188)">
+    <use href="#hpa-icon" width="34" height="34"/>
+    <text x="42" y="18" fill="#37474f" font-size="10" font-weight="600">HorizontalPodAutoscaler</text>
+    <text x="42" y="30" fill="#78909c" font-size="9">Auto-scale on CPU / custom metrics</text>
+  </g>
+
+  <g transform="translate(850, 1188)">
+    <use href="#netpol-icon" width="34" height="34"/>
+    <text x="42" y="18" fill="#37474f" font-size="10" font-weight="600">NetworkPolicy</text>
+    <text x="42" y="30" fill="#78909c" font-size="9">Ingress/egress firewall rules</text>
+  </g>
+
+  <!-- Color key -->
+  <g transform="translate(1100, 1188)">
+    <rect width="14" height="14" rx="3" fill="#fff9c4" stroke="#ffb300" stroke-width="1"/>
+    <text x="20" y="12" fill="#37474f" font-size="9">Next.js Frontend</text>
+    <rect y="20" width="14" height="14" rx="3" fill="#c8e6c9" stroke="#2e7d32" stroke-width="1"/>
+    <text x="20" y="32" fill="#37474f" font-size="9">Agent Backend</text>
+  </g>
+
+  <g transform="translate(1280, 1188)">
+    <rect width="14" height="14" rx="3" fill="#bbdefb" stroke="#1565c0" stroke-width="1"/>
+    <text x="20" y="12" fill="#37474f" font-size="9">Data Layer</text>
+    <rect y="20" width="14" height="14" rx="3" fill="#e1bee7" stroke="#8e24aa" stroke-width="1"/>
+    <text x="20" y="32" fill="#37474f" font-size="9">Monitoring Stack</text>
+  </g>
+
+  <g transform="translate(1440, 1188)">
+    <rect width="14" height="14" rx="3" fill="#ffcdd2" stroke="#c62828" stroke-width="1" stroke-dasharray="3,2"/>
+    <text x="20" y="12" fill="#37474f" font-size="9">Sandboxed (code-interpreter)</text>
+    <rect y="20" width="14" height="14" rx="3" fill="#eceff1" stroke="#78909c" stroke-width="1"/>
+    <text x="20" y="32" fill="#37474f" font-size="9">Cluster-level resources</text>
+  </g>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!--  Namespace summary boxes at bottom                     -->
+  <!-- ══════════════════════════════════════════════════════ -->
+
+  <text x="900" y="1285" text-anchor="middle" fill="#546e7a" font-size="10">
+    4 Namespaces  •  ~20 Kubernetes resources  •  6 Deployments  •  1 StatefulSet  •  6 Services  •  1 Ingress  •  3 HPAs  •  2 DaemonSets  •  2 PVCs  •  4 Secrets  •  3 ConfigMaps  •  3 NetworkPolicies
+  </text>
+</svg>

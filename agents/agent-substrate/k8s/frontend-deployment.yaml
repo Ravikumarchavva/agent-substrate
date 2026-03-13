@@ -13,6 +13,7 @@ spec:
       labels:
         app: agent-frontend
     spec:
+      serviceAccountName: agent-frontend
       containers:
       - name: frontend
         image: agent-frontend:latest

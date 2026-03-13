@@ -13,6 +13,7 @@ spec:
       labels:
         app: agent-backend
     spec:
+      serviceAccountName: agent-backend   # grants pod-list access for CI discovery (see rbac.yaml)
       containers:
       - name: backend
         image: agent-backend:latest

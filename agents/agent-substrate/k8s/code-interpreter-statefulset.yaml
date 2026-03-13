@@ -31,9 +31,13 @@ spec:
         app: code-interpreter
         component: code-execution
     spec:
+      serviceAccountName: agent-code-interpreter
       nodeSelector:
         firecracker: "true"
-      terminationGracePeriodSeconds: 60
+      # Must be > CI_SESSION_TIMEOUT (1800s) ideally, but that stalls rollouts.
+      # Compromise: 300s — preStop hook drains active sessions first;
+      # new sessions are rejected as soon as the pod enters Terminating.
+      terminationGracePeriodSeconds: 300
 
       containers:
       - name: code-interpreter
@@ -43,6 +47,28 @@ spec:
         - containerPort: 8080
           name: http
           protocol: TCP
+
+        lifecycle:
+          preStop:
+            # Tell the CI server to stop accepting new sessions and wait for
+            # running VMs to finish (up to 240s; k8s sends SIGTERM after
+            # terminationGracePeriodSeconds=300, so we have 60s of headroom).
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "draining code-interpreter pod..."
+                # Signal app to reject new work
+                wget -q -O- http://localhost:8080/v1/drain || true
+                # Poll until 0 active sessions or 240s elapsed
+                for i in $(seq 1 48); do
+                  active=$(wget -q -O- http://localhost:8080/v1/sessions/active-count 2>/dev/null || echo 0)
+                  [ "$active" = "0" ] && echo "drained" && exit 0
+                  echo "waiting: $active active session(s)..."
+                  sleep 5
+                done
+                echo "drain timeout, proceeding"
 
         envFrom:
         - configMapRef:
@@ -152,6 +178,9 @@ spec:
 
 ---
 # Regular ClusterIP Service — for load-balanced access + health probes
+# sessionAffinity pins a given client IP (backend pod) to one CI pod.
+# This is a SECONDARY safety net — the backend should use per-pod DNS
+# (code-interpreter-{N}.code-interpreter-headless...) for session routing.
 apiVersion: v1
 kind: Service
 metadata:
@@ -163,6 +192,10 @@ spec:
   type: ClusterIP
   selector:
     app: code-interpreter
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 1800   # matches CI_SESSION_TIMEOUT
   ports:
   - port: 8080
     targetPort: 8080

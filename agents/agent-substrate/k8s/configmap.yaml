@@ -23,7 +23,11 @@ data:
   PORT: "8000"
   
   # Code Interpreter service
+  # Backend constructs per-pod URLs using CI_HEADLESS_SERVICE:
+  #   http://code-interpreter-{N}.code-interpreter-headless.agent-framework.svc.cluster.local:8080
+  # N is resolved dynamically via k8s API (see rbac.yaml ServiceAccount).
+  # CI_REPLICAS is kept as a FALLBACK only — the backend should prefer k8s API discovery.
   CODE_INTERPRETER_URL: "http://code-interpreter-headless.agent-framework.svc.cluster.local:8080"
-  CI_REPLICAS: "2"
+  CI_REPLICAS: "2"                            # fallback; k8s API gives the live count
   CI_HEADLESS_SERVICE: "code-interpreter-headless"
   CI_NAMESPACE: "agent-framework"

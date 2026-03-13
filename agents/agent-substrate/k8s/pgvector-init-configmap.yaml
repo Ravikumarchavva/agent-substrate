@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: agent-framework
+data:
+  # This script only runs on a FRESH database (first start).
+  # For existing databases, run:  kubectl exec -it postgres-0 -- psql -U agent -d agent_framework -c "CREATE EXTENSION IF NOT EXISTS vector;"
+  01-pgvector.sql: |
+    -- Enable pgvector for agent memory / RAG embeddings
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    -- Enable fuzzy text search (useful for skill / tool lookup)
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+    -- Enable UUID generation
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+  02-vector-tables.sql: |
+    -- Example: embeddings table for agent memory
+    -- Your Alembic migrations will own the real DDL;
+    -- this just pre-creates the extension so Alembic doesn't fail.
+    -- Uncomment if you want a quick sanity-check table here:
+    --
+    -- CREATE TABLE IF NOT EXISTS agent_memory_embeddings (
+    --   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    --   thread_id   TEXT NOT NULL,
+    --   content     TEXT NOT NULL,
+    --   embedding   vector(1536),        -- OpenAI text-embedding-3-small dim
+    --   created_at  TIMESTAMPTZ DEFAULT now()
+    -- );
+    -- CREATE INDEX IF NOT EXISTS idx_memory_embedding
+    --   ON agent_memory_embeddings USING ivfflat (embedding vector_cosine_ops)
+    --   WITH (lists = 100);
+    SELECT 'pgvector ready' AS status;

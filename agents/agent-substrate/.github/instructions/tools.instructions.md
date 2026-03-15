@@ -40,6 +40,15 @@ Set it in `server/routes/chat.py` before `agent.run_stream()`.
 Add the tool instance to `app.state.tools` in `server/app.py` lifespan.
 Tool names must be lowercase snake_case and globally unique.
 
+## MCPTool schema methods
+`MCPTool` (from `agent_framework.extensions.mcp`) exposes three schema formats:
+```python
+tool.get_schema()         # → Tool (internal object) — pass to ReActAgent(tools=[...])
+tool.get_openai_schema()  # → dict (OpenAI function format) — pass to client.generate(tools=[...])
+tool.get_mcp_schema()     # → dict (MCP wire format) — for MCP protocol / debugging
+```
+**Always use `get_openai_schema()`** when calling `client.generate()` directly without an agent.
+
 ## Testing
 Test tools by calling `await tool.execute(**params)` directly in pytest-asyncio tests.
 No need to spin up FastAPI for tool unit tests.

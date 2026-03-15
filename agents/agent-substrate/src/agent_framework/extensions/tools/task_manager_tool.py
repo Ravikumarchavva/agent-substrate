@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import contextvars
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, ClassVar, Dict, List, Optional
 
-from agent_framework.extensions.tools.base_tool import BaseTool, ToolResult
+from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
 from agent_framework.runtime.tasks.store import GlobalTaskStore, Task, TaskList
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ class TaskManagerTool(BaseTool):
     1. create_list with all planned steps
     2. start_task  → do the work → complete_task  (repeat per step)
     """
+    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # writes task state, fires SSE events
 
     def __init__(self, event_emitter: Optional[EventEmitter] = None) -> None:
         super().__init__(

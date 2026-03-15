@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 
 from agent_framework.core.agents.agent_result import AgentRunResult
 from agent_framework.core.context.base_context import ModelContext
-from agent_framework.extensions.tools.base_tool import BaseTool
+from agent_framework.core.tools.base_tool import BaseTool
 from agent_framework.providers.llm.base_client import BaseModelClient
 from agent_framework.core.memory.base_memory import BaseMemory
 from agent_framework.core.memory.memory_scope import MemoryScope
@@ -53,11 +53,17 @@ class BaseAgent(ABC):
         self.input_guardrails = input_guardrails or []
         self.output_guardrails = output_guardrails or []
 
+        # Normalise skill_dirs to List[Path] at construction time so downstream
+        # code never has to deal with str vs Path heterogeneity.
+        normalised_dirs: Optional[List[Path]] = (
+            [Path(d) for d in skill_dirs] if skill_dirs else None
+        )
+
         # Skills: prefer an explicit manager; otherwise build one from dirs
         if skill_manager is not None:
             self.skill_manager: Optional[SkillManager] = skill_manager
-        elif skill_dirs:
-            self.skill_manager = SkillManager(skill_dirs=skill_dirs)
+        elif normalised_dirs:
+            self.skill_manager = SkillManager(skill_dirs=normalised_dirs)
         else:
             self.skill_manager = None
 
@@ -76,7 +82,7 @@ class BaseAgent(ABC):
     # -- State management (checkpoint / resume) -------------------------------
 
     @abstractmethod
-    def save_state(self) -> Dict[str, Any]:
+    async def save_state(self) -> Dict[str, Any]:
         """Serialize agent state for persistence / checkpointing."""
         ...
 
@@ -87,10 +93,10 @@ class BaseAgent(ABC):
 
     # -- Helpers --------------------------------------------------------------
 
-    def reset(self) -> None:
+    async def reset(self) -> None:
         """Clear memory and return agent to initial state."""
         if self.memory:
-            self.memory.clear()
+            await self.memory.clear()
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}(name={self.name!r}, tools={len(self.tools)})>"

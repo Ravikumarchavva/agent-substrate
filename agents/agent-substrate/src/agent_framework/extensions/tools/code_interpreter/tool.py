@@ -34,9 +34,9 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
-from agent_framework.extensions.tools.base_tool import BaseTool, ToolResult
+from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class CodeInterpreterTool(BaseTool):
       - **HTTP mode**: routes to the code-interpreter service via HTTP
       - **Direct mode**: uses a local SessionManager (testing only)
     """
+    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # executes arbitrary code
 
     def __init__(
         self,

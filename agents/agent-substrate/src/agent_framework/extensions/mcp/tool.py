@@ -2,8 +2,8 @@
 from typing import Any
 import json
 
-from .base_tool import BaseTool, ToolResult
-from .mcp_client import MCPClient
+from agent_framework.core.tools.base_tool import BaseTool, ToolResult
+from agent_framework.extensions.mcp.client import MCPClient
 
 
 class MCPTool(BaseTool):

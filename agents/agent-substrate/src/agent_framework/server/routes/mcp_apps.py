@@ -12,7 +12,7 @@ import logging
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
-from agent_framework.extensions.tools.base_tool import BaseTool
+from agent_framework.core.tools.base_tool import BaseTool
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -162,8 +162,12 @@ async def update_mcp_context(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    # Serialize the context to a human-readable string for the LLM
-    context_str = json.dumps(body.context, indent=2) if not isinstance(body.context, str) else body.context
+    # Serialize the context to a human-readable string for the LLM.
+    # body.context can be a dict, list, str, or a Pydantic model (McpAppContextPayload).
+    raw = body.context
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    context_str = json.dumps(raw, indent=2) if not isinstance(raw, str) else raw
 
     await create_step(
         db,

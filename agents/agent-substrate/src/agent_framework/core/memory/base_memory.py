@@ -1,42 +1,49 @@
+"""Memory ABC — single async interface.
+
+This project is async-first from the start.  There is no separate sync /
+async split: all memory implementations use ``async def`` methods.
+In-process stores (``UnboundedMemory``) are trivially async (no I/O);
+remote stores (``RedisMemory``) are properly async.
+"""
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import List, Optional
+
 from agent_framework.core.messages.base_message import BaseClientMessage
 
 
 class BaseMemory(ABC):
-    """Base class for conversation memory management."""
-    
-    @abstractmethod
-    def add_message(self, message: BaseClientMessage) -> None:
-        """Add a message to memory.
-        
-        Args:
-            message: Message to store
-        """
-        pass
+    """Async memory interface for all agent memory implementations."""
 
     @abstractmethod
-    def get_messages(self, limit: Optional[int] = None) -> list[BaseClientMessage]:
-        """Retrieve messages from memory.
-        
+    async def add_message(self, message: BaseClientMessage) -> None:
+        """Persist *message* to the backing store."""
+        ...
+
+    @abstractmethod
+    async def get_messages(
+        self, limit: Optional[int] = None
+    ) -> List[BaseClientMessage]:
+        """Retrieve messages.
+
         Args:
-            limit: Optional limit on number of messages to return
-            
+            limit: If provided, return only the last *limit* messages.
         Returns:
-            List of messages
+            List of stored messages (oldest first).
         """
-        pass
-    
+        ...
+
     @abstractmethod
-    def clear(self) -> None:
-        """Clear all messages from memory."""
-        pass
-    
+    async def clear(self) -> None:
+        """Erase all stored messages."""
+        ...
+
     @abstractmethod
-    def get_token_count(self) -> int:
-        """Get approximate token count of stored messages."""
-        pass
-    
-    def __len__(self) -> int:
-        """Return number of messages in memory."""
-        return len(self.get_messages())
+    async def get_token_count(self) -> int:
+        """Return approximate token count of stored messages."""
+        ...
+
+    async def size(self) -> int:
+        """Return message count."""
+        return len(await self.get_messages())

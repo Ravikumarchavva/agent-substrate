@@ -148,7 +148,7 @@ class SessionManager:
             metadata=meta,
         )
         # Mirror metadata to Redis for fast reads
-        await self._redis.set_metadata(sid, meta)
+        await self._redis.set_metadata(sid, meta)  # multi-session call
 
         self._dirty_counts[sid] = 0
 
@@ -178,7 +178,7 @@ class SessionManager:
         # Check Redis first
         if await self._redis.exists(session_id):
             meta = await self._redis.get_metadata(session_id)
-            count = await self._redis.get_message_count(session_id)
+            count = await self._redis.count(session_id)
             logger.info("Resumed hot session %s (%d messages)", session_id, count)
             return SessionState(
                 session_id=session_id,
@@ -198,7 +198,7 @@ class SessionManager:
         # Reload messages into Redis
         messages = await self._postgres.load_messages(session_id)
         if messages:
-            await self._redis.add_messages(session_id, messages)
+            await self._redis.store_many(session_id, messages)
 
         # Restore metadata
         meta = pg_session.metadata_ or {}
@@ -238,7 +238,7 @@ class SessionManager:
         Automatically checkpoints to Postgres when the dirty count exceeds
         ``auto_checkpoint_threshold``.
         """
-        await self._redis.add_message(session_id, message)
+        await self._redis.store(session_id, message)
 
         dirty = self._dirty_counts.get(session_id, 0) + 1
         self._dirty_counts[session_id] = dirty
@@ -259,7 +259,7 @@ class SessionManager:
         """Add multiple messages at once."""
         if not messages:
             return
-        await self._redis.add_messages(session_id, messages)
+        await self._redis.store_many(session_id, messages)
 
         dirty = self._dirty_counts.get(session_id, 0) + len(messages)
         self._dirty_counts[session_id] = dirty
@@ -278,7 +278,7 @@ class SessionManager:
         Reads from Redis if hot; falls back to Postgres.
         """
         if await self._redis.exists(session_id):
-            return await self._redis.get_messages(session_id, limit=limit)
+            return await self._redis.fetch(session_id, limit=limit)
 
         # Session expired from Redis — try Postgres
         return await self._postgres.load_messages(session_id, limit=limit)
@@ -286,7 +286,7 @@ class SessionManager:
     async def get_message_count(self, session_id: str) -> int:
         """Return message count (Redis if hot, else Postgres)."""
         if await self._redis.exists(session_id):
-            return await self._redis.get_message_count(session_id)
+            return await self._redis.count(session_id)
         return await self._postgres.get_message_count(session_id)
 
     # -- Checkpointing --------------------------------------------------------
@@ -305,7 +305,7 @@ class SessionManager:
         """
         lock = self._get_lock(session_id)
         async with lock:
-            messages = await self._redis.get_messages(session_id)
+            messages = await self._redis.fetch(session_id)
             if not messages:
                 self._dirty_counts[session_id] = 0
                 return 0
@@ -357,7 +357,7 @@ class SessionManager:
 
         is_hot = await self._redis.exists(session_id)
         count = (
-            await self._redis.get_message_count(session_id)
+            await self._redis.count(session_id)
             if is_hot
             else pg_session.message_count
         )

@@ -1,0 +1,308 @@
+{
+  "report_id": "7d9c8abb-aa9b-4936-b205-9719298268de",
+  "dataset_name": "basic_math_qa",
+  "agent_name": "eval-agent",
+  "model": "gpt-4.1-nano",
+  "results": [
+    {
+      "case_id": "6e69da45-2afe-4edf-8996-d0a9a29186e1",
+      "input": "What is 15 * 7?",
+      "expected_output": "105",
+      "actual_output": "The result of 15 multiplied by 7 is 105.",
+      "scores": [
+        {
+          "criterion": "correctness",
+          "score": 0.75,
+          "passed": true,
+          "reasoning": "The actual output provides the correct answer '105' but includes additional wording that was not requested in the expected output.",
+          "raw_score": 4.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "helpfulness",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The output directly answers the question with the correct multiplication result clearly stated.",
+          "raw_score": 5.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "safety",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The output provides a correct and straightforward mathematical answer without any harmful or inappropriate content.",
+          "raw_score": 5.0,
+          "threshold": 0.8
+        },
+        {
+          "criterion": "conciseness",
+          "score": 0.75,
+          "passed": true,
+          "reasoning": "The response clearly provides the answer with minimal extra wording, but 'The result of 15 multiplied by 7 is' could be shortened to just '15 * 7 is' or simply '105' for perfect conciseness.",
+          "raw_score": 4.0,
+          "threshold": 0.6
+        }
+      ],
+      "run_id": "8af41efd-ff83-4343-ab02-c5b2d7819720",
+      "status": "completed",
+      "steps_used": 2,
+      "tool_calls_total": 1,
+      "tool_calls_by_name": {
+        "calculator": 1
+      },
+      "tokens_used": 384,
+      "duration_seconds": 3.043144,
+      "error": null,
+      "timestamp": "2026-03-15T19:11:10.553806",
+      "tags": [
+        "math"
+      ],
+      "passed": true,
+      "avg_score": 0.875
+    },
+    {
+      "case_id": "0553c621-6804-473d-b869-69a648358346",
+      "input": "Calculate the square root of 144",
+      "expected_output": "12",
+      "actual_output": "The square root of 144 is 12.",
+      "scores": [
+        {
+          "criterion": "correctness",
+          "score": 0.75,
+          "passed": true,
+          "reasoning": "The actual output correctly provides the square root of 144 as 12, matching the expected result. However, it includes additional wording beyond the exact expected output.",
+          "raw_score": 4.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "helpfulness",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The output directly answers the question by providing the correct square root of 144, which is 12. It is clear, accurate, and fully addresses the user's request.",
+          "raw_score": 5.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "safety",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The output correctly answers the user's question without any harmful, biased, or inappropriate content.",
+          "raw_score": 5.0,
+          "threshold": 0.8
+        },
+        {
+          "criterion": "conciseness",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The response is perfectly concise, directly providing the answer without any unnecessary words.",
+          "raw_score": 5.0,
+          "threshold": 0.6
+        }
+      ],
+      "run_id": "7172072c-5395-4b3e-9327-8ac80b232a64",
+      "status": "completed",
+      "steps_used": 3,
+      "tool_calls_total": 2,
+      "tool_calls_by_name": {
+        "calculator": 2
+      },
+      "tokens_used": 730,
+      "duration_seconds": 3.882395,
+      "error": null,
+      "timestamp": "2026-03-15T19:11:15.910971",
+      "tags": [
+        "math"
+      ],
+      "passed": true,
+      "avg_score": 0.9375
+    },
+    {
+      "case_id": "a31bf681-88af-4776-9279-df4bd9d1ed98",
+      "input": "What is 2^10?",
+      "expected_output": "1024",
+      "actual_output": "2^10 is equal to 1024.",
+      "scores": [
+        {
+          "criterion": "correctness",
+          "score": 0.75,
+          "passed": true,
+          "reasoning": "The output provides the correct answer 1024 with additional context, which is mostly correct but does not exactly match the expected output format.",
+          "raw_score": 4.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "helpfulness",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The output correctly answers the user's question by providing the exact value of 2^10, which is 1024, making it extremely helpful and complete.",
+          "raw_score": 5.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "safety",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The response is accurate, safe, and appropriate with no harmful or inappropriate content.",
+          "raw_score": 5.0,
+          "threshold": 0.8
+        },
+        {
+          "criterion": "conciseness",
+          "score": 0.75,
+          "passed": true,
+          "reasoning": "The response is clear and mostly concise, providing the answer directly. However, it could be slightly more concise by just stating '1024' without the extra phrase.",
+          "raw_score": 4.0,
+          "threshold": 0.6
+        }
+      ],
+      "run_id": "b84f378e-9fbc-4e4a-97e6-cb214b21ad2a",
+      "status": "completed",
+      "steps_used": 2,
+      "tool_calls_total": 1,
+      "tool_calls_by_name": {
+        "calculator": 1
+      },
+      "tokens_used": 377,
+      "duration_seconds": 1.377561,
+      "error": null,
+      "timestamp": "2026-03-15T19:11:19.056611",
+      "tags": [
+        "math"
+      ],
+      "passed": true,
+      "avg_score": 0.875
+    },
+    {
+      "case_id": "134136b0-8247-4243-85a6-c06917d3ee54",
+      "input": "What is the current time?",
+      "expected_output": null,
+      "actual_output": "The current time in Coordinated Universal Time (UTC) is 19:11 on March 15, 2026.",
+      "scores": [
+        {
+          "criterion": "correctness",
+          "score": 0.5,
+          "passed": false,
+          "reasoning": "The response provides a specific time and date in UTC, which is relevant to the user's question about the current time. However, the expected output is not provided, so it is unclear if the format or time zone matches the user's preference. Therefore, the answer is partially correct but may be missing key information or context.",
+          "raw_score": 3.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "helpfulness",
+          "score": 0.75,
+          "passed": true,
+          "reasoning": "The output provides the current time in UTC, which answers the user's question about the current time, but it does not specify the user's local timezone or offer guidance on how to convert the time, making it mostly complete but not fully thorough.",
+          "raw_score": 4.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "safety",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The response is completely safe, appropriate, and responsible; it provides the requested information without any harmful or inappropriate content.",
+          "raw_score": 5.0,
+          "threshold": 0.8
+        },
+        {
+          "criterion": "conciseness",
+          "score": 0.75,
+          "passed": true,
+          "reasoning": "The response is mostly concise and provides the requested information clearly. However, mentioning 'Coordinated Universal Time (UTC)' might be more detail than necessary depending on context, so it could be slightly shorter.",
+          "raw_score": 4.0,
+          "threshold": 0.6
+        }
+      ],
+      "run_id": "e0e229dd-0d4a-4e6f-b45d-a2f1408033e3",
+      "status": "completed",
+      "steps_used": 2,
+      "tool_calls_total": 1,
+      "tool_calls_by_name": {
+        "get_current_time": 1
+      },
+      "tokens_used": 428,
+      "duration_seconds": 2.067366,
+      "error": null,
+      "timestamp": "2026-03-15T19:11:23.006676",
+      "tags": [
+        "tools"
+      ],
+      "passed": false,
+      "avg_score": 0.75
+    },
+    {
+      "case_id": "d3081135-8139-453c-aa10-bcf5f3e93d30",
+      "input": "If a train travels 60 mph for 2.5 hours, how far does it go?",
+      "expected_output": "150 miles",
+      "actual_output": "The train travels 150 miles in 2.5 hours at a speed of 60 mph.",
+      "scores": [
+        {
+          "criterion": "correctness",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The actual output correctly calculates and states the distance as 150 miles, matching the expected output and providing additional context without contradicting the answer.",
+          "raw_score": 5.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "helpfulness",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The output directly answers the question by calculating the distance traveled, providing both the numerical value and the context of speed and time, making it clear and complete.",
+          "raw_score": 5.0,
+          "threshold": 0.7
+        },
+        {
+          "criterion": "safety",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The response is a straightforward, accurate mathematical calculation with no harmful, dangerous, or inappropriate content.",
+          "raw_score": 5.0,
+          "threshold": 0.8
+        },
+        {
+          "criterion": "conciseness",
+          "score": 1.0,
+          "passed": true,
+          "reasoning": "The output is perfectly concise, directly answering the question with no unnecessary words or repetition.",
+          "raw_score": 5.0,
+          "threshold": 0.6
+        }
+      ],
+      "run_id": "b17cc78d-400f-4c5e-b744-c04f305f7dd0",
+      "status": "completed",
+      "steps_used": 2,
+      "tool_calls_total": 2,
+      "tool_calls_by_name": {
+        "calculator": 1,
+        "get_current_time": 1
+      },
+      "tokens_used": 515,
+      "duration_seconds": 3.051195,
+      "error": null,
+      "timestamp": "2026-03-15T19:11:28.230894",
+      "tags": [
+        "word_problem"
+      ],
+      "passed": true,
+      "avg_score": 1.0
+    }
+  ],
+  "start_time": "2026-03-15T19:11:05.423607",
+  "end_time": "2026-03-15T19:11:28.231635",
+  "total_duration_seconds": 22.80802729993593,
+  "criteria_names": [
+    "correctness",
+    "helpfulness",
+    "safety",
+    "conciseness"
+  ],
+  "metadata": {},
+  "total_cases": 5,
+  "passed_cases": 4,
+  "failed_cases": 1,
+  "error_cases": 0,
+  "pass_rate": 0.8,
+  "avg_score": 0.8875,
+  "avg_latency": 2.6843322,
+  "avg_tokens": 486.8,
+  "total_tokens": 2434
+}

@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, Field
-from typing import Literal, Any, Optional, Dict
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any, Dict, Literal, Optional
 from uuid import uuid4
+
+from pydantic import BaseModel, Field
 
 CLIENT_ROLES = Literal["system", "user", "assistant", "tool_call", "tool_response"]
 SOURCE_ROLES = Literal["user", "agent"]
@@ -49,7 +52,7 @@ class BaseAgentMessage(BaseModel, ABC):
     source: SOURCE_ROLES
     model_usage: Optional[UsageStats] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @abstractmethod
     def to_model_client_message(self):
@@ -74,4 +77,4 @@ class BaseAgentEvent(BaseModel, ABC):
     id: str = Field(default_factory=lambda: str(uuid4()))
     source: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

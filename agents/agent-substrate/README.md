@@ -506,18 +506,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## 🙏 Acknowledgments
 
 Inspired by:
-- [OpenAI Assistant API](https://platform.openai.com/docs/assistants)
 - [LangChain](https://github.com/langchain-ai/langchain)
 - [AutoGen](https://github.com/microsoft/autogen)
-- [Semantic Kernel](https://github.com/microsoft/semantic-kernel)
-
----
-
-## 📞 Contact
-
-- **Author**: Ravikumar Chavva
-- **Email**: chavvaravikumarreddy2004@gmail.com
-- **GitHub**: [github.com/Ravikumarchavva/agent-framework](https://github.com/Ravikumarchavva/agent-framework)
 
 ---
 

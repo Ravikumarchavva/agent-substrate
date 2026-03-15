@@ -47,12 +47,12 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, ClassVar
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from agent_framework.extensions.tools.base_tool import BaseTool, Tool, ToolResult
+from agent_framework.core.tools.base_tool import BaseTool, Tool, ToolResult, ToolRisk
 
 logger = logging.getLogger("agent_framework.hitl")
 
@@ -298,6 +298,7 @@ class AskHumanTool(BaseTool):
             tools=[ask_tool],
         )
     """
+    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # interrupts workflow, demands user action
 
     def __init__(
         self,
@@ -501,7 +502,9 @@ class ToolApprovalRequest(BaseModel):
     call_id: str = ""
     arguments: Dict[str, Any] = Field(default_factory=dict)
     context: str = ""
-    timeout_seconds: float = 0.0
+    # HITL behaviour declared on the tool — read by WebHITLBridge
+    hitl_mode: str = "blocking"          # HitlMode value
+    hitl_timeout_seconds: Optional[float] = None  # only used in continue_on_timeout
 
 
 class ToolApprovalResponse(BaseModel):

@@ -39,11 +39,11 @@ dependencies = [
     "pypdf>=4.0.0",
     "openpyxl>=3.1.0",
     "python-multipart>=0.0.9",
-    "websockets>=12.0",
+    "rich>=14.3.2",
 ]
 
 [project.scripts]
-agent-framework = "agent_framework:main"
+agent-framework = "agent_framework.cli:main"
 
 [build-system]
 requires = ["hatchling"]

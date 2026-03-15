@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "5434:5432"
+      - "5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -50,6 +50,19 @@ services:
       - GF_AUTH_DISABLE_LOGIN_FORM=true
     depends_on:
       - tempo
+
+  mcp-server:
+    build:
+      context: ./docker/mcp_server
+      dockerfile: Dockerfile
+    ports:
+      - "9000:9000"
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=9000
+    profiles:
+      - mcp
+    restart: unless-stopped
 
 volumes:
   pgdata:

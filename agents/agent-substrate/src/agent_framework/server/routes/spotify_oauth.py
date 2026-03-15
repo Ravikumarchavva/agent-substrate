@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from agent_framework.configs.settings import settings
-from agent_framework.services.spotify_auth import SpotifyAuthService
+from agent_framework.providers.integrations.spotify_auth import SpotifyAuthService
 
 logger = logging.getLogger(__name__)
 

@@ -21,8 +21,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agent_framework.tools.code_interpreter.config import CodeInterpreterConfig
-from agent_framework.tools.code_interpreter.session_manager import SessionManager
+from agent_framework.extensions.tools.code_interpreter.config import CodeInterpreterConfig
+from agent_framework.extensions.tools.code_interpreter.session_manager import SessionManager
 
 from .config import ServiceConfig
 from .routes import router

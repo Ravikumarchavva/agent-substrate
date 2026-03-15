@@ -60,7 +60,7 @@ export OPENAI_API_KEY="sk-your-key-here"
 
 ```python
 import asyncio
-from agent_framework.model_clients.openai_client import OpenAIClient
+from agent_framework.providers.llm.openai.openai_client import OpenAIClient
 from agent_framework.memory.unbounded_memory import UnboundedMemory
 from agent_framework.messages.agent_messages import UserMessage, SystemMessage
 
@@ -248,6 +248,63 @@ Check the `examples/` directory for complete examples:
 ---
 
 ## 🏛️ Architecture
+
+> **Full details, extension guides, and data-flow diagrams:**
+> [`ARCHITECTURE.md`](ARCHITECTURE.md)
+
+### Codebase layers
+
+The codebase is structured as five dependency layers.  Dependencies flow strictly
+downward — lower layers never import from higher ones:
+
+```
+server        ← FastAPI routes, DB models, DI wiring
+  runtime     ← HITL bridge, tasks, credentials, telemetry
+    extensions← tools, MCP, skills, guardrails (plug-ins)
+      providers← LLM clients, audio clients, third-party API adapters
+        core  ← agents, base classes, pure logic (no I/O)
+```
+
+**Import paths** (files are physically in these locations):
+
+```python
+# Core — agents, base classes, memory
+from agent_framework.core.agents.react_agent import ReActAgent
+from agent_framework.core.agents.orchestrator_agent import OrchestratorAgent
+from agent_framework.core.memory.unbounded_memory import UnboundedMemory
+from agent_framework.core.memory.session_manager import SessionManager
+from agent_framework.core.guardrails.base_guardrail import BaseGuardrail
+
+# Providers — LLM clients, audio, third-party APIs
+from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.providers.audio import BaseAudioClient
+from agent_framework.providers.integrations.spotify import SpotifyService
+
+# Extensions — tools, MCP, skills
+from agent_framework.extensions.tools.base_tool import BaseTool, ToolResult
+from agent_framework.extensions.tools.web_surfer import WebSurferTool
+from agent_framework.extensions.tools.human_input import AskHumanTool
+from agent_framework.extensions.tools.mcp_client import MCPClient
+from agent_framework.extensions.skills import SkillManager
+
+# Runtime — HITL, tasks, credentials, telemetry
+from agent_framework.runtime.hitl import WebHITLBridge
+from agent_framework.runtime.tasks.store import TaskStore
+from agent_framework.runtime.observability import configure_opentelemetry
+```
+
+### Common extension tasks — quick reference
+
+| Task | Guide in ARCHITECTURE.md |
+|---|---|
+| Add a new tool | [→ How to add a new tool](ARCHITECTURE.md#how-to-add-a-new-tool) |
+| Add a new LLM provider | [→ How to add a new LLM provider](ARCHITECTURE.md#how-to-add-a-new-llm-provider) |
+| Add a new agent type | [→ How to add a new agent type](ARCHITECTURE.md#how-to-add-a-new-agent-type) |
+| Add a new guardrail | [→ How to add a new guardrail](ARCHITECTURE.md#how-to-add-a-new-guardrail) |
+| Add a new skill | [→ How to add a new skill](ARCHITECTURE.md#how-to-add-a-new-skill) |
+| Add a new API route | [→ How to add a new API route](ARCHITECTURE.md#how-to-add-a-new-api-route) |
+| Emit a real-time SSE event | [→ How to emit a real-time event](ARCHITECTURE.md#how-to-emit-a-real-time-event-to-the-frontend) |
+| Add an MCP App UI widget | [→ How to add a new MCP App](ARCHITECTURE.md#how-to-add-a-new-mcp-app-ui-widget) |
 
 ### Single-Agent Architecture
 

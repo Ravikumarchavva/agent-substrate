@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from agent_framework.agents.base_agent import BaseAgent
+from agent_framework.core.agents.base_agent import BaseAgent
 from agent_framework.evals.judge import LLMJudge
 from agent_framework.evals.models import (
     EvalCase,

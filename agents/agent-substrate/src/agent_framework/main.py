@@ -2,18 +2,18 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
 
-from agent_framework.agents.react_agent import ReActAgent
-from agent_framework.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_framework.model_clients.openai.openai_client import OpenAIClient
-from agent_framework.memory.unbounded_memory import UnboundedMemory
-from agent_framework.observability.telemetry import configure_opentelemetry, shutdown_opentelemetry
+from agent_framework.core.agents.react_agent import ReActAgent
+from agent_framework.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.core.memory.unbounded_memory import UnboundedMemory
+from agent_framework.runtime.observability.telemetry import configure_opentelemetry, shutdown_opentelemetry
 from agent_framework.configs.settings import settings
-from agent_framework.messages import TextDeltaChunk, ReasoningDeltaChunk, CompletionChunk
-from agent_framework.messages.client_messages import ToolExecutionResultMessage
-from agent_framework.human_input import AskHumanTool
-from agent_framework.web_hitl import WebHITLBridge, _DONE
-from agent_framework.tools.task_manager_tool import TaskManagerTool
-from agent_framework.tasks.store import GlobalTaskStore
+from agent_framework.core.messages import TextDeltaChunk, ReasoningDeltaChunk, CompletionChunk
+from agent_framework.core.messages.client_messages import ToolExecutionResultMessage
+from agent_framework.extensions.tools.human_input import AskHumanTool
+from agent_framework.runtime.hitl import WebHITLBridge, _DONE
+from agent_framework.extensions.tools.task_manager_tool import TaskManagerTool
+from agent_framework.runtime.tasks.store import GlobalTaskStore
 
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 import asyncio

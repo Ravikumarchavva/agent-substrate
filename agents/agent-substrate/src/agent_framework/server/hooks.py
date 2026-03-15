@@ -19,7 +19,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_framework.agents.react_agent import ReActAgent
+from agent_framework.core.agents.react_agent import ReActAgent
 
 
 # ── Context objects passed to hooks ──────────────────────────────────────────

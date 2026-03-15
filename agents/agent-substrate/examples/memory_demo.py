@@ -10,10 +10,10 @@ import asyncio
 import os
 from datetime import datetime
 
-from agent_framework.memory.redis_memory import RedisMemory
-from agent_framework.memory.postgres_memory import PostgresMemory
-from agent_framework.memory.session_manager import SessionManager
-from agent_framework.messages.client_messages import (
+from agent_framework.core.memory.redis_memory import RedisMemory
+from agent_framework.core.memory.postgres_memory import PostgresMemory
+from agent_framework.core.memory.session_manager import SessionManager
+from agent_framework.core.messages.client_messages import (
     SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, ToolExecutionResultMessage,
 )
 

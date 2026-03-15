@@ -21,7 +21,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 
-from agent_framework.audio_clients import BaseAudioClient
+from agent_framework.providers.audio import BaseAudioClient
 from agent_framework.server.schemas import (
     RealtimeTokenResponse,
     TranscribeResponse,

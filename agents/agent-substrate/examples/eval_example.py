@@ -16,10 +16,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agent_framework.agents.react_agent import ReActAgent
-from agent_framework.model_clients.openai.openai_client import OpenAIClient
-from agent_framework.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_framework.hooks import HookEvent, HookManager, CostTracker
+from agent_framework.core.agents.react_agent import ReActAgent
+from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from agent_framework.core.hooks import HookEvent, HookManager, CostTracker
 
 # Evals
 from agent_framework.evals import (

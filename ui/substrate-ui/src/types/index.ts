@@ -12,6 +12,10 @@ export type ToolCall = {
   result?: string;
   isError?: boolean;
   _meta?: ToolCallMeta;
+  /** Risk tier — matches Python ToolRisk.value */
+  risk?: "safe" | "sensitive" | "critical";
+  /** Colour badge to show in the UI: green | yellow | red */
+  color?: "green" | "yellow" | "red";
 };
 
 export type Message = {

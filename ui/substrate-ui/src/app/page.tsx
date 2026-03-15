@@ -45,9 +45,9 @@ export default function ChatPage() {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  // Tracks the AbortController for the current in-flight fetch so we can
-  // cancel the SSE stream when the user hits the stop button.
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Tracks the active AbortController for the current SSE fetch so we can
+  // cancel the stream when the user clicks Stop.
+  const wsRef = useRef<AbortController | null>(null);
   // Tracks which AppPanel item holds the Kanban board so task updates can
   // patch its toolArguments and be pushed to the iframe via update_context.
   const kanbanPanelIdRef = useRef<string | null>(null);
@@ -170,20 +170,17 @@ export default function ChatPage() {
     }
   };
 
-  // HITL: respond to a tool approval or human input request
-  async function respondToHITL(
+  // HITL: respond to a tool approval or human input request via HTTP POST.
+  // The Next.js route at /api/chat/respond/[requestId] proxies to the backend.
+  function respondToHITL(
     requestId: string,
     data: Record<string, unknown>
   ) {
-    try {
-      await fetch(`/api/chat/respond/${requestId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-    } catch (err) {
-      console.error("Failed to send HITL response:", err);
-    }
+    fetch(`/api/chat/respond/${requestId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }).catch((err) => console.error("HITL respond failed:", err));
   }
 
   // MCP App: handle context updates from interactive widgets
@@ -229,21 +226,16 @@ export default function ChatPage() {
     setActivePanelId(null);
   }, []);
 
-  /** Stop the running agent and abort the SSE stream. */
-  async function handleStop() {
-    if (!currentThreadId) return;
-    // Signal the backend to cancel the running agent for this thread
-    try {
-      await fetch("/api/chat/cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thread_id: currentThreadId }),
-      });
-    } catch (err) {
-      console.error("Failed to send cancel request:", err);
+  /** Abort the active SSE stream and signal the backend to stop the agent. */
+  function handleStop() {
+    if (wsRef.current) {
+      wsRef.current.abort();
+      wsRef.current = null;
     }
-    // Abort the local fetch reader so the SSE loop exits immediately
-    abortControllerRef.current?.abort();
+    if (currentThreadId) {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+      fetch(`${apiBase}/chat/${currentThreadId}/cancel`, { method: "POST" }).catch(() => {});
+    }
   }
 
   // ── File attachment handlers ─────────────────────────────────────────────
@@ -340,13 +332,275 @@ export default function ChatPage() {
     };
     setMessages((m) => [...m, assistantMessage]);
 
-    try {
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+    // ── Start SSE stream from backend ────────────────────────────────────
+    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+    const abortController = new AbortController();
+    wsRef.current = abortController;
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+    // processEvent handles every server-sent event type.
+    // Defined as a nested function so it closes over assistantId, setMessages, etc.
+    const processEvent = (data: Record<string, unknown>) => {
+      // ── Keepalive / end marker ────────────────────────────────────────
+      if (data.type === "pong" || data.type === "done") return;
+
+      // ── HITL: Tool Approval Request ─────────────────────────────────
+      if (data.type === "tool_approval_request") {
+        const hitlId = nanoid();
+        setMessages((m) => [
+          ...m,
+          {
+            id: hitlId,
+            role: "tool_approval" as const,
+            content: "",
+            timestamp: new Date(),
+            metadata: {
+              requestId: data.request_id,
+              toolName: data.tool_name,
+              arguments: data.arguments,
+              context: data.context,
+            },
+          },
+        ]);
+        return;
+      }
+
+      // ── HITL: Human Input Request ───────────────────────────────────
+      if (data.type === "human_input_request") {
+        const hitlId = nanoid();
+        setMessages((m) => [
+          ...m,
+          {
+            id: hitlId,
+            role: "human_input" as const,
+            content: "",
+            timestamp: new Date(),
+            metadata: {
+              requestId: data.request_id,
+              question: data.question,
+              context: data.context,
+              options: data.options,
+              allowFreeform: data.allow_freeform,
+            },
+          },
+        ]);
+        return;
+      }
+
+      // ── Tool result ─────────────────────────────────────────────────
+      if (data.type === "tool_result") {
+        // Task management results are shown in the Kanban panel
+        if (data.tool_name === "manage_tasks") return;
+
+        // For MCP App tools with app_data, merge the data into
+        // the tool_call arguments so the iframe receives it
+        if (data.has_app && data.app_data) {
+          const panelId = (data.tool_call_id as string) || nanoid();
+          const httpUrl = (data.http_url as string) || `/ui/${data.tool_name as string}`;
+          openInPanel({
+            id: panelId,
+            httpUrl,
+            toolName: data.tool_name as string,
+            toolArguments: data.app_data as Record<string, unknown>,
+            timestamp: Date.now(),
+          });
+          setMessages((m) =>
+            m.map((msg) => {
+              if (msg.role !== "assistant" || !msg.toolCalls) return msg;
+              const updatedCalls = msg.toolCalls.map((tc) => {
+                const matchById = data.tool_call_id && tc.id === data.tool_call_id;
+                const matchByName = tc.name === data.tool_name;
+                if (!matchById && !matchByName) return tc;
+                const existingArgs =
+                  typeof tc.arguments === "string" ? JSON.parse(tc.arguments) : tc.arguments;
+                return {
+                  ...tc,
+                  arguments: { ...existingArgs, ...(data.app_data as object) },
+                  result: (data.content as string) || tc.result,
+                };
+              });
+              return { ...msg, toolCalls: updatedCalls };
+            })
+          );
+          return;
+        }
+
+        // Skip rendering if an MCP App UI is already showing this tool's output
+        if (data.has_app && !data.is_error) return;
+
+        // Attach result back to the matching tool call in the assistant message
+        setMessages((m) =>
+          m.map((msg) => {
+            if (msg.id !== assistantId || !msg.toolCalls) return msg;
+            const updatedCalls = msg.toolCalls.map((tc) => {
+              const matchById = data.tool_call_id && tc.id === data.tool_call_id;
+              const matchByName = tc.name === data.tool_name;
+              if (!matchById && !matchByName) return tc;
+              return { ...tc, result: (data.content as string) || "", isError: !!data.is_error };
+            });
+            return { ...msg, toolCalls: updatedCalls };
+          })
+        );
+        return;
+      }
+
+      // ── Task Board Events ───────────────────────────────────────────
+      if (data.type === "task_list_created") {
+        const tl = data.task_list as TaskList;
+        setTaskList(tl);
+        const kanbanId = `kanban-${tl.id}`;
+        kanbanPanelIdRef.current = kanbanId;
+        openInPanel({
+          id: kanbanId,
+          httpUrl: `${apiBase}/ui/kanban_board`,
+          toolName: "manage_tasks",
+          toolArguments: { task_list: tl },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+      if (data.type === "task_updated") {
+        const updatedTask = data.task as Task;
+        setTaskList((prev) => {
+          if (!prev || prev.id !== data.task_list_id) return prev;
+          return {
+            ...prev,
+            tasks: prev.tasks.map((t) => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t)),
+          };
+        });
+        return;
+      }
+      if (data.type === "task_added") {
+        const newTask = data.task as Task;
+        setTaskList((prev) => {
+          if (!prev || prev.id !== data.task_list_id) return prev;
+          if (prev.tasks.find((t) => t.id === newTask.id)) return prev;
+          return { ...prev, tasks: [...prev.tasks, newTask] };
+        });
+        return;
+      }
+      if (data.type === "task_deleted") {
+        setTaskList((prev) => {
+          if (!prev || prev.id !== data.task_list_id) return prev;
+          return { ...prev, tasks: prev.tasks.filter((t) => t.id !== data.task_id) };
+        });
+        return;
+      }
+
+      // ── Streaming text ──────────────────────────────────────────────
+      if (data.type === "text_delta") {
+        const textContent = String(data.content || "");
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: msg.content + textContent, isToolExecuting: false }
+              : msg
+          )
+        );
+        return;
+      }
+
+      if (data.type === "reasoning_delta") {
+        const reasoningContent = String(data.content || "");
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, reasoning: (msg.reasoning || "") + reasoningContent }
+              : msg
+          )
+        );
+        return;
+      }
+
+      if (data.type === "completion") {
+        const finalContent = Array.isArray(data.content)
+          ? (data.content as string[]).join("")
+          : String(data.content || "");
+        const hasToolCalls = !!data.has_tool_calls;
+
+        const toolCalls: import("@/types").ToolCall[] = ((data.tool_calls as unknown[]) ?? [])
+          .filter((tc) => (tc as { name: string }).name !== "manage_tasks")
+          .map((tc) => {
+            const t = tc as { id: string; name: string; arguments: unknown; _meta?: import("@/types").ToolCallMeta; risk?: "safe" | "sensitive" | "critical"; color?: "green" | "yellow" | "red" };
+            return {
+              id: t.id,
+              name: t.name,
+              arguments: t.arguments as string | Record<string, unknown>,
+              result: "Completed",
+              _meta: t._meta,
+              risk: t.risk,
+              color: t.color,
+            };
+          });
+
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? {
+                  ...msg,
+                  content: finalContent || msg.content,
+                  role: (data.role as Message["role"]) ?? "assistant",
+                  toolCalls: toolCalls.length > 0 ? toolCalls : msg.toolCalls,
+                  isToolExecuting: hasToolCalls,
+                }
+              : msg
+          )
+        );
+
+        if (!hasToolCalls) {
+          setLoading(false);
+          loadThreads();
+        }
+        return;
+      }
+
+      if (data.type === "tool_call") {
+        if (data.tool_name === "manage_tasks") return;
+        const toolCall = {
+          id: (data.tool_call_id as string) || nanoid(),
+          name: (data.tool_name as string) || "tool",
+          arguments: JSON.stringify(data.arguments || {}),
+          risk:  data.risk  as "safe" | "sensitive" | "critical" | undefined,
+          color: data.color as "green" | "yellow" | "red" | undefined,
+        };
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, toolCalls: [...(msg.toolCalls || []), toolCall], isToolExecuting: true }
+              : msg
+          )
+        );
+        return;
+      }
+
+      if (data.type === "cancelled") {
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId ? { ...msg, isToolExecuting: false } : msg
+          )
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (data.type === "error") {
+        const errorMsg = String(data.error || "Unknown error");
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: msg.content + "\n\n⚠️ " + errorMsg, isToolExecuting: false }
+              : msg
+          )
+        );
+        setLoading(false);
+        return;
+      }
+    }; // end processEvent
+
+    // ── Fetch SSE and feed each event line into processEvent ──────────
+    try {
+      const response = await fetch(`${apiBase}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify({
           thread_id: threadId,
           messages: [{ role: "user", content: currentInput }],
@@ -358,330 +612,40 @@ export default function ChatPage() {
         signal: abortController.signal,
       });
 
-      if (!response.ok) {
-        throw new Error("Request failed");
-      }
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
 
-      if (!response.body) {
-        throw new Error("No stream");
-      }
-
-      // Read SSE stream manually
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (true) {
+      outer: while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
-
-        // SSE frames are separated by double newlines
-        const parts = buffer.split(/\n\n/);
-        // Keep the last (possibly partial) part in the buffer
-        buffer = parts.pop() || "";
-
-        for (const part of parts) {
-          if (!part.trim()) continue;
-
-          // Parse SSE format: "data: {...}"
-          const lines = part.split(/\n/);
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const jsonStr = line.slice(6); // Remove "data: " prefix
-              
-              // Skip [DONE] message
-              if (jsonStr === "[DONE]") continue;
-              
-              try {
-                const data = JSON.parse(jsonStr);
-
-                // ── HITL: Tool Approval Request ──
-                if (data.type === "tool_approval_request") {
-                  const hitlId = nanoid();
-                  setMessages((m) => [
-                    ...m,
-                    {
-                      id: hitlId,
-                      role: "tool_approval" as const,
-                      content: "",
-                      timestamp: new Date(),
-                      metadata: {
-                        requestId: data.request_id,
-                        toolName: data.tool_name,
-                        arguments: data.arguments,
-                        context: data.context,
-                      },
-                    },
-                  ]);
-                  continue;
-                }
-
-                // ── HITL: Human Input Request ──
-                if (data.type === "human_input_request") {
-                  const hitlId = nanoid();
-                  setMessages((m) => [
-                    ...m,
-                    {
-                      id: hitlId,
-                      role: "human_input" as const,
-                      content: "",
-                      timestamp: new Date(),
-                      metadata: {
-                        requestId: data.request_id,
-                        question: data.question,
-                        context: data.context,
-                        options: data.options,
-                        allowFreeform: data.allow_freeform,
-                      },
-                    },
-                  ]);
-                  continue;
-                }
-
-                // ── Tool result ──
-                if (data.type === "tool_result") {
-                  // Task management results are shown in the Kanban panel
-                  if (data.tool_name === "manage_tasks") continue;
-                  // For MCP App tools with app_data, merge the data into
-                  // the tool_call arguments so the iframe receives it
-                  if (data.has_app && data.app_data) {
-                    // Auto-open in side panel
-                    const panelId = data.tool_call_id || nanoid();
-                    const httpUrl = data.http_url || `/ui/${data.tool_name}`;
-                    openInPanel({
-                      id: panelId,
-                      httpUrl,
-                      toolName: data.tool_name,
-                      toolArguments: data.app_data,
-                      timestamp: Date.now(),
-                    });
-
-                    setMessages((m) =>
-                      m.map((msg) => {
-                        if (msg.role !== "assistant" || !msg.toolCalls) return msg;
-                        const updatedCalls = msg.toolCalls.map((tc) => {
-                          // Match by tool_call_id or tool name
-                          const matchById = data.tool_call_id && tc.id === data.tool_call_id;
-                          const matchByName = tc.name === data.tool_name;
-                          if (!matchById && !matchByName) return tc;
-                          const existingArgs =
-                            typeof tc.arguments === "string"
-                              ? JSON.parse(tc.arguments)
-                              : tc.arguments;
-                          return {
-                            ...tc,
-                            arguments: { ...existingArgs, ...data.app_data },
-                            result: data.content || tc.result,
-                          };
-                        });
-                        return { ...msg, toolCalls: updatedCalls };
-                      })
-                    );
-                    continue;
-                  }
-                  // Skip rendering if an MCP App UI is already showing this tool's output
-                  // (only skip if app_data was received; otherwise show text fallback)
-                  if (data.has_app && !data.is_error) continue;
-
-                  // Attach result back to the matching tool call in the assistant message
-                  setMessages((m) =>
-                    m.map((msg) => {
-                      if (msg.id !== assistantId || !msg.toolCalls) return msg;
-                      const updatedCalls = msg.toolCalls.map((tc) => {
-                        const matchById = data.tool_call_id && tc.id === data.tool_call_id;
-                        const matchByName = tc.name === data.tool_name;
-                        if (!matchById && !matchByName) return tc;
-                        return {
-                          ...tc,
-                          result: data.content || "",
-                          isError: !!data.is_error,
-                        };
-                      });
-                      return { ...msg, toolCalls: updatedCalls };
-                    })
-                  );
-                  continue;
-                }
-
-                // ── Task Board Events ──
-                if (data.type === "task_list_created") {
-                  const tl = data.task_list as TaskList;
-                  setTaskList(tl);
-                  // Open the Kanban board in the App Panel (like Spotify)
-                  const kanbanId = `kanban-${tl.id}`;
-                  kanbanPanelIdRef.current = kanbanId;
-                  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-                  openInPanel({
-                    id: kanbanId,
-                    httpUrl: `${apiBase}/ui/kanban_board`,
-                    toolName: "manage_tasks",
-                    toolArguments: { task_list: tl },
-                    timestamp: Date.now(),
-                  });
-                  continue;
-                }
-                if (data.type === "task_updated") {
-                  const updatedTask = data.task as Task;
-                  setTaskList((prev) => {
-                    if (!prev || prev.id !== data.task_list_id) return prev;
-                    return {
-                      ...prev,
-                      tasks: prev.tasks.map((t) =>
-                        t.id === updatedTask.id ? { ...t, ...updatedTask } : t
-                      ),
-                    };
-                  });
-                  continue;
-                }
-                if (data.type === "task_added") {
-                  const newTask = data.task as Task;
-                  setTaskList((prev) => {
-                    if (!prev || prev.id !== data.task_list_id) return prev;
-                    // Avoid duplicates
-                    if (prev.tasks.find((t) => t.id === newTask.id)) return prev;
-                    return { ...prev, tasks: [...prev.tasks, newTask] };
-                  });
-                  continue;
-                }
-                if (data.type === "task_deleted") {
-                  setTaskList((prev) => {
-                    if (!prev || prev.id !== data.task_list_id) return prev;
-                    return {
-                      ...prev,
-                      tasks: prev.tasks.filter((t) => t.id !== data.task_id),
-                    };
-                  });
-                  continue;
-                }
-
-                if (data.type === 'text_delta') {
-                  // Append incremental text to the assistant message
-                  const textContent = String(data.content || "");
-                  setMessages((m) =>
-                    m.map((msg) =>
-                      msg.id === assistantId
-                        ? { ...msg, content: msg.content + textContent, isToolExecuting: false }
-                        : msg
-                    )
-                  );
-                } else if (data.type === 'reasoning_delta') {
-                  // Append thinking/reasoning process
-                  const reasoningContent = String(data.content || "");
-                  setMessages((m) =>
-                    m.map((msg) =>
-                      msg.id === assistantId
-                        ? { ...msg, reasoning: (msg.reasoning || "") + reasoningContent }
-                        : msg
-                    )
-                  );
-                } else if (data.type === 'completion') {
-                  // Completion event — may be intermediate (with tool_calls)
-                  // or final (text response, no tool_calls).
-                  const finalContent = Array.isArray(data.content) 
-                    ? data.content.join("") 
-                    : String(data.content || "");
-                  const hasToolCalls = !!data.has_tool_calls;
-                  
-                  // Parse tool calls if present (exclude manage_tasks — shown in Kanban panel)
-                  const toolCalls = (data.tool_calls ?? [])
-                    .filter((tc: any) => tc.name !== 'manage_tasks')
-                    .map((tc: any) => ({
-                      id: tc.id,
-                      name: tc.name,
-                      arguments: tc.arguments,
-                      result: "Completed",
-                      _meta: tc._meta || undefined,
-                    }));
-                  
-                  setMessages((m) =>
-                    m.map((msg) =>
-                      msg.id === assistantId
-                        ? { 
-                            ...msg, 
-                            // Only replace content if there IS content (avoid clearing on tool-call-only completions)
-                            content: finalContent || msg.content, 
-                            role: data.role,
-                            toolCalls: toolCalls.length > 0 ? toolCalls : msg.toolCalls,
-                            // Keep executing flag while tools are running
-                            isToolExecuting: hasToolCalls
-                          }
-                        : msg
-                    )
-                  );
-
-                  // Only stop loading on the final completion (no tool calls)
-                  if (!hasToolCalls) {
-                    setLoading(false);
-                    loadThreads();
-                  }
-                } else if (data.type === 'tool_call') {
-                  // Task management is shown in the Kanban panel — skip chat clutter
-                  if (data.tool_name === 'manage_tasks') continue;
-                  // Tool is being called - show it in UI
-                  const toolCall = {
-                    id: data.tool_call_id || nanoid(),
-                    name: data.tool_name || "tool",
-                    arguments: JSON.stringify(data.arguments || {}),
-                  };
-                  
-                  setMessages((m) =>
-                    m.map((msg) =>
-                      msg.id === assistantId
-                        ? { 
-                            ...msg, 
-                            toolCalls: [...(msg.toolCalls || []), toolCall],
-                            isToolExecuting: true
-                          }
-                        : msg
-                    )
-                  );
-                } else if (data.type === 'cancelled') {
-                  // Agent was stopped by the user — finalise the current turn
-                  setMessages((m) =>
-                    m.map((msg) =>
-                      msg.id === assistantId
-                        ? { ...msg, isToolExecuting: false }
-                        : msg
-                    )
-                  );
-                  setLoading(false);
-                } else if (data.type === 'error') {
-                  const errorMsg = String(data.error || "Unknown error");
-                  setMessages((m) =>
-                    m.map((msg) =>
-                      msg.id === assistantId
-                        ? { ...msg, content: msg.content + "\n\n⚠️ " + errorMsg, isToolExecuting: false }
-                        : msg
-                    )
-                  );
-                  setLoading(false);
-                }
-              } catch (err) {
-                console.error("Failed to parse SSE message:", err);
-              }
-            }
-          }
+        const lines = buffer.split("\n");
+        buffer = lines.pop()!;
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const text = line.slice(6).trim();
+          if (text === "[DONE]") { reader.cancel(); break outer; }
+          let parsed: Record<string, unknown>;
+          try { parsed = JSON.parse(text); } catch { continue; }
+          processEvent(parsed);
         }
       }
-
-      setLoading(false);
-    } catch (error) {
-      // An AbortError is expected when the user clicks stop — don't show an error.
-      if (error instanceof Error && error.name === 'AbortError') {
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name !== "AbortError") {
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: msg.content + "\n\n⚠️ Connection error.", isToolExecuting: false }
+              : msg
+          )
+        );
         setLoading(false);
-        return;
       }
-      console.error("Stream error:", error);
-      setMessages((m) =>
-        m.map((msg) =>
-          msg.id === assistantId
-            ? { ...msg, content: msg.content + "\n\n⚠️ Connection error." }
-            : msg
-        )
-      );
-      setLoading(false);
+    } finally {
+      wsRef.current = null;
     }
   }
 

@@ -154,8 +154,15 @@ export function McpAppRenderer({
           break;
 
         case "submitResult":
-        case "ui/update-model-context":
           onResult?.(data.params?.result ?? data.params?.content ?? data.params);
+          sendResponse(data.id, { status: "received" });
+          break;
+
+        case "ui/update-model-context":
+          // MCP Apps spec: params.context holds the app-specific state payload.
+          // Extract it so the backend receives { tool_name, context: <state> }
+          // not the double-nested { tool_name, context: { context: <state> } }.
+          onResult?.(data.params?.context ?? data.params?.result ?? data.params?.content ?? data.params);
           sendResponse(data.id, { status: "received" });
           break;
 

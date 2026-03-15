@@ -124,6 +124,13 @@ export function MessageBubble({
                   const hasApp = tool._meta?.ui?.httpUrl;
                   const isDone = tool.result !== undefined;
                   const isErr = tool.isError;
+                  // Risk colour badge  (green=safe, yellow=sensitive, red=critical)
+                  const riskColors: Record<string, string> = {
+                    safe:      "#34d399", // emerald-400
+                    sensitive: "#fbbf24", // amber-400
+                    critical:  "#f87171", // red-400
+                  };
+                  const riskColor = riskColors[tool.color ?? tool.risk ?? "safe"] ?? "#34d399";
                   return (
                     <div key={tool.id}>
                       {idx > 0 && <div style={{ borderTop: "1px solid var(--border)" }} />}
@@ -138,6 +145,12 @@ export function MessageBubble({
                               <span className="text-emerald-400 text-[11px] leading-none">✓</span>
                             )}
                           </span>
+                          {/* Risk tier dot */}
+                          <span
+                            title={`Risk: ${tool.risk ?? "safe"}`}
+                            className="shrink-0 w-2 h-2 rounded-full"
+                            style={{ background: riskColor }}
+                          />
                           <span className="text-xs font-medium flex-1" style={{ color: "var(--foreground)" }}>
                             {tool.name.replace(/_/g, " ")}
                           </span>

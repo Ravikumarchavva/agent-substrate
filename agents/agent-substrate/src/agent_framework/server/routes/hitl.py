@@ -11,7 +11,7 @@ import logging
 from fastapi import APIRouter, Request
 
 from agent_framework.server.schemas import HITLResponse
-from agent_framework.web_hitl import WebHITLBridge
+from agent_framework.runtime.hitl import WebHITLBridge
 
 logger = logging.getLogger(__name__)
 

@@ -19,11 +19,11 @@ import os
 # ---------------------------------------------------------------------------
 
 def test_serializer():
-    from agent_framework.memory.message_serializer import (
+    from agent_framework.core.memory.message_serializer import (
         serialize_message, deserialize_message,
         serialize_messages, deserialize_messages,
     )
-    from agent_framework.messages.client_messages import (
+    from agent_framework.core.messages.client_messages import (
         SystemMessage, UserMessage, AssistantMessage,
         ToolCallMessage, ToolExecutionResultMessage,
     )
@@ -76,8 +76,8 @@ def test_serializer():
 # ---------------------------------------------------------------------------
 
 async def test_redis_memory():
-    from agent_framework.memory.redis_memory import RedisMemory
-    from agent_framework.messages.client_messages import (
+    from agent_framework.core.memory.redis_memory import RedisMemory
+    from agent_framework.core.messages.client_messages import (
         SystemMessage, UserMessage, AssistantMessage,
     )
 
@@ -165,8 +165,8 @@ async def test_redis_memory():
 # ---------------------------------------------------------------------------
 
 async def test_postgres_memory():
-    from agent_framework.memory.postgres_memory import PostgresMemory
-    from agent_framework.messages.client_messages import (
+    from agent_framework.core.memory.postgres_memory import PostgresMemory
+    from agent_framework.core.messages.client_messages import (
         SystemMessage, UserMessage, AssistantMessage,
     )
 
@@ -247,12 +247,12 @@ async def test_postgres_memory():
 # ---------------------------------------------------------------------------
 
 async def test_session_manager():
-    from agent_framework.memory.redis_memory import RedisMemory
-    from agent_framework.memory.postgres_memory import PostgresMemory
-    from agent_framework.memory.session_manager import (
+    from agent_framework.core.memory.redis_memory import RedisMemory
+    from agent_framework.core.memory.postgres_memory import PostgresMemory
+    from agent_framework.core.memory.session_manager import (
         SessionManager, SessionStatus,
     )
-    from agent_framework.messages.client_messages import (
+    from agent_framework.core.messages.client_messages import (
         SystemMessage, UserMessage, AssistantMessage,
     )
 

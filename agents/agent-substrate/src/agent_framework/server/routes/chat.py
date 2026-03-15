@@ -16,9 +16,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_framework.agents.react_agent import ReActAgent
-from agent_framework.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
-from agent_framework.messages.client_messages import AssistantMessage, ToolExecutionResultMessage
+from agent_framework.core.agents.react_agent import ReActAgent
+from agent_framework.core.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
+from agent_framework.core.messages.client_messages import AssistantMessage, ToolExecutionResultMessage
 from agent_framework.server.database import get_db
 from agent_framework.server.hooks import ChatContext, hooks
 from agent_framework.server.schemas import ChatRequest
@@ -35,9 +35,9 @@ from agent_framework.server.services.file_service import (
     to_vision_image_block,
 )
 from agent_framework.server.routes.mcp_apps import resolve_ui_uri
-from agent_framework.tools.task_manager_tool import current_thread_id
-from agent_framework.tools.web_surfer import WebSurferTool
-from agent_framework.web_hitl import WebHITLBridge, _DONE
+from agent_framework.extensions.tools.task_manager_tool import current_thread_id
+from agent_framework.extensions.tools.web_surfer import WebSurferTool
+from agent_framework.runtime.hitl import WebHITLBridge, _DONE
 
 logger = logging.getLogger(__name__)
 

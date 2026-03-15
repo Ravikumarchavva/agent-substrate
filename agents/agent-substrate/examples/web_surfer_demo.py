@@ -1,6 +1,6 @@
 """Example demonstrating WebSurferTool for agentic web browsing."""
 import asyncio
-from agent_framework.tools.web_surfer import WebSurferTool
+from agent_framework.extensions.tools.web_surfer import WebSurferTool
 import time
 
 async def main():

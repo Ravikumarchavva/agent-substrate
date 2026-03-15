@@ -15,20 +15,20 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_framework.agents.react_agent import ReActAgent
-from agent_framework.guardrails.prebuilt import MaxTokenGuardrail
-from agent_framework.human_input import ToolApprovalHandler
-from agent_framework.memory.unbounded_memory import UnboundedMemory
-from agent_framework.messages.client_messages import (
+from agent_framework.core.agents.react_agent import ReActAgent
+from agent_framework.core.guardrails.prebuilt import MaxTokenGuardrail
+from agent_framework.extensions.tools.human_input import ToolApprovalHandler
+from agent_framework.core.memory.unbounded_memory import UnboundedMemory
+from agent_framework.core.messages.client_messages import (
     AssistantMessage,
     SystemMessage,
     ToolCallMessage,
     ToolExecutionResultMessage,
     UserMessage,
 )
-from agent_framework.messages.base_message import BaseClientMessage
-from agent_framework.model_clients.base_client import BaseModelClient
-from agent_framework.tools.base_tool import BaseTool
+from agent_framework.core.messages.base_message import BaseClientMessage
+from agent_framework.providers.llm.base_client import BaseModelClient
+from agent_framework.extensions.tools.base_tool import BaseTool
 
 from agent_framework.server.services import (
     create_step,

@@ -7,10 +7,10 @@ instead of stdio. This is useful for:
 - Production deployments where servers run independently
 """
 import asyncio
-from agent_framework.tools import MCPClient, MCPTool
-from agent_framework.model_clients.openai.openai_client import OpenAIClient
-from agent_framework.memory.unbounded_memory import UnboundedMemory
-from agent_framework.messages.agent_messages import UserMessage, SystemMessage
+from agent_framework.extensions.tools import MCPClient, MCPTool
+from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.core.memory.unbounded_memory import UnboundedMemory
+from agent_framework.core.messages.agent_messages import UserMessage, SystemMessage
 
 
 async def main():

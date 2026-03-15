@@ -6,8 +6,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from agent_framework.tasks.store import GlobalTaskStore
-from agent_framework.web_hitl import WebHITLBridge
+from agent_framework.runtime.tasks.store import GlobalTaskStore
+from agent_framework.runtime.hitl import WebHITLBridge
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 

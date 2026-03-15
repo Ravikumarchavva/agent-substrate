@@ -20,10 +20,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from agent_framework.configs.settings import settings
-from agent_framework.human_input import AskHumanTool
-from agent_framework.model_clients.openai.openai_client import OpenAIClient
-from agent_framework.audio_clients.openai import OpenAIAudioClient
-from agent_framework.observability.telemetry import (
+from agent_framework.extensions.tools.human_input import AskHumanTool
+from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.providers.audio.openai import OpenAIAudioClient
+from agent_framework.runtime.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
 )
@@ -41,10 +41,10 @@ from agent_framework.server.routes.mcp_apps import router as mcp_apps_router
 from agent_framework.server.routes.spotify_oauth import router as spotify_oauth_router
 from agent_framework.server.routes.tasks import router as tasks_router
 from agent_framework.server.routes.threads import router as threads_router
-from agent_framework.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_framework.tools.code_interpreter import CodeInterpreterTool
-from agent_framework.tools.code_interpreter.http_client import CodeInterpreterClient
-from agent_framework.tools.mcp_app_tools import (
+from agent_framework.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from agent_framework.extensions.tools.code_interpreter import CodeInterpreterTool
+from agent_framework.extensions.tools.code_interpreter.http_client import CodeInterpreterClient
+from agent_framework.extensions.tools.mcp_app_tools import (
     ColorPaletteTool,
     DataVisualizerTool,
     JsonExplorerTool,
@@ -52,9 +52,9 @@ from agent_framework.tools.mcp_app_tools import (
     MarkdownPreviewerTool,
     SpotifyPlayerTool,
 )
-from agent_framework.services.spotify import SpotifyService
-from agent_framework.web_hitl import WebHITLBridge
-from agent_framework.tools.task_manager_tool import TaskManagerTool
+from agent_framework.providers.integrations.spotify import SpotifyService
+from agent_framework.runtime.hitl import WebHITLBridge
+from agent_framework.extensions.tools.task_manager_tool import TaskManagerTool
     
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 

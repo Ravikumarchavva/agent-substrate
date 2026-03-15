@@ -21,8 +21,8 @@ from typing import List, Optional
 
 from agent_framework.evals.criteria import EvalCriterion
 from agent_framework.evals.models import EvalScore
-from agent_framework.model_clients.base_client import BaseModelClient
-from agent_framework.messages.client_messages import SystemMessage, UserMessage, AssistantMessage
+from agent_framework.providers.llm.base_client import BaseModelClient
+from agent_framework.core.messages.client_messages import SystemMessage, UserMessage, AssistantMessage
 
 logger = logging.getLogger("agent_framework.evals")
 

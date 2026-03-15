@@ -1,0 +1,482 @@
+"""OpenAI model client implementation."""
+from typing import Any, AsyncIterator, Optional
+import json
+from openai import AsyncOpenAI
+from openai.types.shared_params.reasoning import Reasoning
+from openai.types.responses.response_completed_event import ResponseCompletedEvent
+from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
+from openai.types.responses.response_reasoning_summary_text_delta_event import ResponseReasoningSummaryTextDeltaEvent
+from openai.types.responses.response_function_call_arguments_done_event import ResponseFunctionCallArgumentsDoneEvent
+from openai.types.responses import Response
+import tiktoken
+
+from agent_framework.core.messages.client_messages import ToolExecutionResultMessage, ToolCallMessage, AssistantMessage, SystemMessage, UserMessage
+
+from ..base_client import BaseModelClient
+from agent_framework.core.messages.base_message import BaseClientMessage
+
+class OpenAIClient(BaseModelClient):
+    """OpenAI API client with support for chat completions and tool calling."""
+    
+    def __init__(
+        self,
+        model: str = "gpt-5-mini",
+        api_key: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **kwargs
+    ):
+        super().__init__(model, temperature, max_tokens, **kwargs)
+        self.client = AsyncOpenAI(api_key=api_key)
+        self._encoding = None
+    
+    def _get_encoding(self):
+        """Lazy load tiktoken encoding."""
+        if self._encoding is None:
+            try:
+                self._encoding = tiktoken.encoding_for_model(self.model)
+            except KeyError:
+                self._encoding = tiktoken.get_encoding("cl100k_base")
+        return self._encoding
+    
+    def _messages_to_openai_format(self, messages: list[BaseClientMessage]) -> list[dict]:
+        """Convert framework messages to OpenAI API format."""
+        return [msg.to_dict() for msg in messages]
+    
+    def _tools_to_openai_format(self, tools: Optional[list[dict]]) -> Optional[list[dict]]:
+        """Convert tools to OpenAI function calling format."""
+        if not tools:
+            return None
+        return tools
+    
+    async def generate(
+        self,
+        messages: list[BaseClientMessage],
+        tools: Optional[list[dict]] = None,
+        tool_choice: Optional[str | dict] = None,
+        **kwargs
+    ) -> AssistantMessage:
+        """Generate a single response from OpenAI using Responses API."""
+        # Separate system instructions from other messages
+        instructions = ""
+        conversation_input = []
+        
+        for msg in messages:
+            if msg.role == "system":
+                # For Responses API, instructions are typically passed as a separate param
+                # But if we have multiple, we can append them.
+                instructions += f"{msg.content}\n"
+            elif msg.role == "user":
+                # Get the properly serialized content from the message
+                msg_dict = msg.to_dict()
+                conversation_input.append({
+                    "type": "message",
+                    "role": "user",
+                    "content": msg_dict.get("content", [])
+                })
+            elif msg.role == "assistant":
+                # Assistant message might have content OR tool_calls or both
+                msg_dict = msg.to_dict()
+                if msg.content:
+                    # Serialize content properly
+                    serialized_content = msg_dict.get("content", [])
+                    if serialized_content:
+                        conversation_input.append({
+                            "type": "message",
+                            "role": "assistant",
+                            "content": serialized_content
+                        })
+                
+                # Check for tool_calls (AssistantMessage format)
+                tool_calls = getattr(msg, "tool_calls", None)
+                if tool_calls:
+                    for tc in tool_calls:
+                        # Handle both ToolCallMessage and legacy formats
+                        if hasattr(tc, 'name') and hasattr(tc, 'arguments'):
+                            # ToolCallMessage has name and arguments directly
+                            tc_name = tc.name
+                            tc_args = tc.arguments
+                            tc_id = tc.id
+                        elif hasattr(tc, 'function') and isinstance(tc.function, dict):
+                            # Legacy format with function dict
+                            tc_name = tc.function["name"]
+                            tc_args = tc.function["arguments"]
+                            tc_id = tc.id
+                        else:
+                            # Skip unknown format
+                            continue
+                        
+                        # Convert arguments to JSON string if it's a dict
+                        if isinstance(tc_args, dict):
+                            tc_args = json.dumps(tc_args)
+                        
+                        conversation_input.append({
+                            "type": "function_call",
+                            "call_id": tc_id,
+                            "name": tc_name,
+                            "arguments": tc_args
+                        })
+            elif msg.role == "tool_response" or msg.role == "tool":
+                # ToolExecutionResultMessage maps to function_call_output
+                # Content is a list of MCP content blocks - convert to string
+                content_str = ""
+                if hasattr(msg, 'content') and msg.content:
+                    if isinstance(msg.content, list):
+                        # MCP format: list of content blocks
+                        text_parts = []
+                        for block in msg.content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text_parts.append(block.get("text", ""))
+                        content_str = "\n".join(text_parts)
+                    elif isinstance(msg.content, str):
+                        content_str = msg.content
+                
+                conversation_input.append({
+                    "type": "function_call_output",
+                    "call_id": getattr(msg, "tool_call_id", None),
+                    "output": content_str
+                })
+
+        params = {
+            "model": self.model,
+            "input": conversation_input,
+        }
+        
+        # Only add temperature if explicitly passed or if the model supports it
+        # GPT-5 models don't support temperature parameter
+        if "temperature" in kwargs:
+            params["temperature"] = kwargs["temperature"]
+        elif not self.model.startswith("gpt-5"):
+            params["temperature"] = self.temperature
+        
+        if instructions:
+             params["instructions"] = instructions.strip()
+        
+        if self.max_tokens:
+            params["max_tokens"] = kwargs.get("max_tokens", self.max_tokens)
+        
+        if tools:
+            # Transform tools to Responses API format (flattened)
+            # The Responses API expects { "type": "function", "name": "...", "description": "...", "parameters": ... }
+            # Input can be:
+            # 1. OpenAI format: { "type": "function", "function": { "name": "...", "description": "...", "parameters": {...} } }
+            # 2. MCP format: { "name": "...", "description": "...", "inputSchema": {...} }
+            # 3. Already flattened: { "type": "function", "name": "...", "description": "...", "parameters": {...} }
+            
+            transformed_tools = []
+            for tool in tools:
+                # Check if it's already in the flattened Responses API format
+                if "type" in tool and "name" in tool and "parameters" in tool:
+                    transformed_tools.append(tool)
+                # OpenAI nested format
+                elif tool.get("type") == "function" and "function" in tool:
+                    fn_def = tool["function"]
+                    new_tool = {
+                        "type": "function",
+                        "name": fn_def.get("name"),
+                        "description": fn_def.get("description", ""),
+                        "parameters": fn_def.get("parameters", {"type": "object", "properties": {}}),
+                    }
+                    transformed_tools.append(new_tool)
+                # MCP format (has inputSchema instead of parameters)
+                elif "name" in tool and "inputSchema" in tool:
+                    new_tool = {
+                        "type": "function",
+                        "name": tool.get("name"),
+                        "description": tool.get("description", ""),
+                        "parameters": tool.get("inputSchema", {"type": "object", "properties": {}}),
+                    }
+                    transformed_tools.append(new_tool)
+                # MCP format without explicit inputSchema (use default)
+                elif "name" in tool:
+                    new_tool = {
+                        "type": "function",
+                        "name": tool.get("name"),
+                        "description": tool.get("description", ""),
+                        "parameters": tool.get("parameters") or tool.get("inputSchema") or {"type": "object", "properties": {}},
+                    }
+                    transformed_tools.append(new_tool)
+                else:
+                    # Unknown format - pass through and let API handle it
+                    transformed_tools.append(tool)
+            
+            params["tools"] = transformed_tools
+            if tool_choice:
+                params["tool_choice"] = tool_choice
+        
+        # Add any additional kwargs
+        params.update({k: v for k, v in kwargs.items() if k not in params})
+        
+        # Use new Responses API
+        response = await self.client.responses.create(**params)
+        
+        # Convert to framework format
+        # The Responses API has a convenience property for text
+        final_content_text = response.output_text if hasattr(response, "output_text") else ""
+        
+        # Convert string content to List[MediaType] format
+        final_content = [final_content_text] if final_content_text else None
+        
+        tool_calls_obj = None
+        
+        # Iterate through output items to find tool calls
+        if response.output:
+            for item in response.output:
+                # Based on SDK, tool calls have types like "function_call"
+                if item.type == "function_call":
+                    if tool_calls_obj is None:
+                        tool_calls_obj = []
+                    
+                    # SDK: ResponseFunctionToolCallMessage has fields: name, arguments, call_id
+                    tool_calls_obj.append(
+                        ToolCallMessage(
+                            id=getattr(item, "call_id", getattr(item, "id", None)),
+                            name=item.name,
+                            arguments=item.arguments
+                        )
+                    )
+                # Handle other tool call types if necessary (mcp_call, etc.) in the future
+        
+        # Usage mapping
+        usage_dict = None
+        if hasattr(response, "usage") and response.usage:
+            from agent_framework.core.messages.base_message import UsageStats
+            usage_dict = UsageStats(
+                prompt_tokens=response.usage.input_tokens,
+                completion_tokens=response.usage.output_tokens,
+                total_tokens=response.usage.total_tokens,
+            )
+        
+        # Determine finish reason
+        finish_reason = "stop"
+        if tool_calls_obj:
+            finish_reason = "tool_calls"
+        elif hasattr(response, "finish_reason") and response.finish_reason:
+            finish_reason = response.finish_reason
+
+        return AssistantMessage(
+            role="assistant",
+            content=final_content,
+            tool_calls=tool_calls_obj,
+            usage=usage_dict,
+            finish_reason=finish_reason,
+        )
+    
+    async def generate_stream(
+        self,
+        messages: list[BaseClientMessage],
+        tools: Optional[list[dict]] = None,
+        tool_choice: Optional[str | dict] = None,
+        **kwargs
+    ) -> AsyncIterator[Any]:
+        """Generate a streaming response from OpenAI using Responses API.
+        
+        Yields StreamChunk objects:
+        - TextDeltaChunk: Incremental text content
+        - ReasoningDeltaChunk: Incremental reasoning (o1/o3 models)
+        - CompletionChunk: Final response with complete AssistantMessage (includes tool calls)
+        """
+        from agent_framework.core.messages._types import (
+            TextDeltaChunk,
+            ReasoningDeltaChunk,
+            CompletionChunk,
+        )
+        
+        instructions = ""
+        conversation_input = []
+        for msg in messages:
+            if msg.role == "system":
+                instructions += f"{msg.content}\n"
+            elif msg.role == "user":
+                msg_dict = msg.to_dict()
+                conversation_input.append({
+                    "type": "message",
+                    "role": "user",
+                    "content": msg_dict.get("content", [])
+                })
+            elif msg.role == "assistant":
+                msg_dict = msg.to_dict()
+                if msg.content:
+                    serialized_content = msg_dict.get("content", [])
+                    if serialized_content:
+                        conversation_input.append({
+                            "type": "message",
+                            "role": "assistant",
+                            "content": serialized_content
+                        })
+                tool_calls = getattr(msg, "tool_calls", None)
+                if tool_calls:
+                    for tc in tool_calls:
+                        if hasattr(tc, 'name') and hasattr(tc, 'arguments'):
+                            tc_name = tc.name
+                            tc_args = tc.arguments
+                            tc_id = tc.id
+                        elif hasattr(tc, 'function') and isinstance(tc.function, dict):
+                            tc_name = tc.function["name"]
+                            tc_args = tc.function["arguments"]
+                            tc_id = tc.id
+                        else:
+                            continue
+                        
+                        if isinstance(tc_args, dict):
+                            tc_args = json.dumps(tc_args)
+                        
+                        conversation_input.append({
+                            "type": "function_call",
+                            "call_id": tc_id,
+                            "name": tc_name,
+                            "arguments": tc_args
+                        })
+            elif msg.role == "tool_response" or msg.role == "tool":
+                content_str = ""
+                if hasattr(msg, 'content') and msg.content:
+                    if isinstance(msg.content, list):
+                        text_parts = []
+                        for block in msg.content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text_parts.append(block.get("text", ""))
+                        content_str = "\n".join(text_parts)
+                    elif isinstance(msg.content, str):
+                        content_str = msg.content
+                
+                conversation_input.append({
+                    "type": "function_call_output",
+                    "call_id": getattr(msg, "tool_call_id", None),
+                    "output": content_str
+                })
+
+        params = {
+            "model": self.model,
+            "input": conversation_input,
+            "stream": True,
+        }
+        
+        # Only add temperature if explicitly passed or if the model supports it
+        # GPT-5 models don't support temperature parameter
+        if "temperature" in kwargs:
+            params["temperature"] = kwargs["temperature"]
+        elif not self.model.startswith("gpt-5"):
+            params["temperature"] = self.temperature
+        
+        if instructions:
+            params["instructions"] = instructions.strip()
+        if self.max_tokens:
+            params["max_tokens"] = kwargs.get("max_tokens", self.max_tokens)
+        if tools:
+            transformed_tools = []
+            for tool in tools:
+                if tool.get("type") == "function" and "function" in tool:
+                    fn_def = tool["function"]
+                    new_tool = {
+                        "type": "function",
+                        "name": fn_def.get("name"),
+                        "description": fn_def.get("description"),
+                        "parameters": fn_def.get("parameters"),
+                    }
+                    transformed_tools.append(new_tool)
+                else:
+                    transformed_tools.append(tool)
+            params["tools"] = transformed_tools
+            if tool_choice:
+                params["tool_choice"] = tool_choice
+        params.update({k: v for k, v in kwargs.items() if k not in params})
+
+        # Stream and yield deltas, collect final Response object
+        final_response = None
+        
+        stream = await self.client.responses.create(**params)
+        async for event in stream:
+            # Yield incremental text deltas
+            if isinstance(event, ResponseTextDeltaEvent):
+                text = event.delta if hasattr(event, 'delta') else ""
+                if text:
+                    yield TextDeltaChunk(text=text)
+            
+            # Yield incremental reasoning deltas (o1/o3 models)
+            elif isinstance(event, ResponseReasoningSummaryTextDeltaEvent):
+                reasoning = event.delta if hasattr(event, 'delta') else ""
+                if reasoning:
+                    yield ReasoningDeltaChunk(text=reasoning)
+            
+            # Capture final Response object
+            elif isinstance(event, ResponseCompletedEvent):
+                if hasattr(event, 'response'):
+                    final_response = event.response
+
+        # Use the Response object to build final message (same as generate())
+        if final_response is None:
+            # Fallback if no completion event
+            final_message = AssistantMessage(
+                role="assistant",
+                content=None,
+                tool_calls=None,
+                usage=None,
+                finish_reason="error",
+            )
+        else:
+            # Extract content text
+            final_content_text = final_response.output_text if hasattr(final_response, "output_text") else ""
+            final_content = [final_content_text] if final_content_text else None
+            
+            # Extract tool calls from output
+            tool_calls_obj = None
+            if final_response.output:
+                for item in final_response.output:
+                    if item.type == "function_call":
+                        if tool_calls_obj is None:
+                            tool_calls_obj = []
+                        tool_calls_obj.append(
+                            ToolCallMessage(
+                                id=getattr(item, "call_id", getattr(item, "id", None)),
+                                name=item.name,
+                                arguments=item.arguments
+                            )
+                        )
+            
+            # Extract usage
+            usage_dict = None
+            if hasattr(final_response, "usage") and final_response.usage:
+                from agent_framework.core.messages.base_message import UsageStats
+                usage_dict = UsageStats(
+                    prompt_tokens=final_response.usage.input_tokens,
+                    completion_tokens=final_response.usage.output_tokens,
+                    total_tokens=final_response.usage.total_tokens,
+                )
+            
+            # Determine finish reason
+            finish_reason = "stop"
+            if tool_calls_obj:
+                finish_reason = "tool_calls"
+            elif hasattr(final_response, "finish_reason") and final_response.finish_reason:
+                finish_reason = final_response.finish_reason
+            
+            final_message = AssistantMessage(
+                role="assistant",
+                content=final_content,
+                tool_calls=tool_calls_obj,
+                usage=usage_dict,
+                finish_reason=finish_reason,
+            )
+        
+        # Yield final completion
+        yield CompletionChunk(message=final_message)
+    
+    def count_tokens(self, messages: list[BaseClientMessage]) -> int:
+        """Count tokens using tiktoken."""
+        encoding = self._get_encoding()
+        num_tokens = 0
+        
+        for message in messages:
+            # Every message follows <im_start>{role/name}\n{content}<im_end>\n
+            num_tokens += 4
+            msg_dict = message.to_dict()
+            
+            for key, value in msg_dict.items():
+                if isinstance(value, str):
+                    num_tokens += len(encoding.encode(value))
+                elif key == "tool_calls" and value:
+                    # Approximate tool calls
+                    num_tokens += len(encoding.encode(json.dumps(value)))
+        
+        num_tokens += 2  # Every reply is primed with <im_start>assistant
+        return num_tokens

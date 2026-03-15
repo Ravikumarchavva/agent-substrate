@@ -12,7 +12,7 @@ import logging
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
-from agent_framework.tools.base_tool import BaseTool
+from agent_framework.extensions.tools.base_tool import BaseTool
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse

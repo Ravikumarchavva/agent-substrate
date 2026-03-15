@@ -1,8 +1,8 @@
 """Test MCP-native tool architecture."""
 import asyncio
 import json
-from agent_framework.tools.base_tool import BaseTool, Tool, ToolResult
-from agent_framework.messages.client_messages import ToolExecutionResultMessage
+from agent_framework.extensions.tools.base_tool import BaseTool, Tool, ToolResult
+from agent_framework.core.messages.client_messages import ToolExecutionResultMessage
 
 class SimpleTool(BaseTool):
     """A simple test tool."""

@@ -106,6 +106,10 @@ Each action fires an SSE event → `KanbanPanel` in the UI updates live.
 # 1. Start infrastructure
 docker compose up -d postgres redis
 
+# 1b. Start MCP SSE demo server (optional — needed for notebooks 04/05/06)
+docker compose --profile mcp up -d mcp-server
+# → available at http://localhost:9000/sse
+
 # 2. Start backend (port 8001)
 uv run uvicorn agent_framework.server.app:app --port 8001 --reload
 
@@ -119,15 +123,105 @@ uv run ruff check .
 
 ---
 
+## Docker Port Mapping
+| Service  | Host port | Container port | Notes |
+|---|---|---|---|
+| PostgreSQL | 5432 | 5432 | `DATABASE_URL` uses `localhost:5432` |
+| Redis | 6379 | 6379 | `REDIS_URL` uses `localhost:6379` |
+| MCP server | 9000 | 9000 | SSE at `localhost:9000/sse` (profile: `mcp`) |
+| Tempo | 4318 | 4318 | OTLP HTTP |
+| Grafana | 3001 | 3000 | |
+
+---
+
 ## Environment Variables (`.env` at repo root)
 ```
 OPENAI_API_KEY=...
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
 REDIS_URL=redis://localhost:6379/0
+REDIS_SESSION_TTL=3600
+SESSION_MAX_MESSAGES=200
+SESSION_AUTO_CHECKPOINT=50
 SPOTIFY_CLIENT_ID=...        # optional
 SPOTIFY_CLIENT_SECRET=...    # optional
 CODE_INTERPRETER_URL=...     # optional
 ```
+
+> **`.env` rule:** Never put inline comments after integer values — `python-dotenv`
+> passes the entire string (including `# comment`) to Pydantic, causing `ValidationError`.
+> ✅ `REDIS_SESSION_TTL=3600`   ❌ `REDIS_SESSION_TTL=3600  # seconds`
+
+---
+
+## Message Content Formats
+The framework message types have different `content` constraints:
+
+| Message type | `content` type | Example |
+|---|---|---|
+| `SystemMessage` | `str` | `SystemMessage(content='You are helpful.')` |
+| `UserMessage` | `list[ContentPart]` | `UserMessage(content=[{'type': 'text', 'text': 'Hello'}])` |
+| `AssistantMessage` | `Optional[list[MediaType]]` | `AssistantMessage(content=['Hi there'], finish_reason='stop')` |
+| `ToolExecutionResultMessage` | `str` | `ToolExecutionResultMessage(content=text, tool_call_id=id, name=name)` |
+
+> **`AssistantMessage.content` is a list, not a string.**  Pass a list of strings or
+> dicts (`MediaType`).  `None` is allowed when the message only carries tool calls.
+
+`ToolCallMessage` fields (from `response.tool_calls`): `id`, `name`, `arguments` (dict).
+Access as `tc.name` and `tc.arguments` — **not** `tc.function['name']`.
+
+## MCPTool Schema Methods
+| Method | Returns | Use when |
+|---|---|---|
+| `tool.get_schema()` | `Tool` (internal framework object) | Pass to `ReActAgent(tools=[...])` |
+| `tool.get_openai_schema()` | `dict` (OpenAI function-calling format) | Pass to `client.generate(tools=[...])` directly |
+| `tool.get_mcp_schema()` | `dict` (MCP wire format) | MCP protocol / debugging |
+
+---
+
+## Stateless Agent Pattern (Redis-backed)
+Use `RedisMemory` + `RedisModelContext` to make an agent fully stateless:
+only the `session_id` is needed to restore the full conversation context.
+
+```python
+from agent_framework.core.memory import RedisMemory
+from agent_framework.core.context import RedisModelContext
+
+# Create memory with a stable session ID
+mem = RedisMemory(session_id="conv-abc-123", redis_url=REDIS_URL)
+await mem.connect()
+await mem.restore()   # reload prior history from Redis (0 on first run)
+
+agent = ReActAgent(
+    ...
+    memory=mem,
+    model_context=RedisModelContext(mem, recent_n=10),
+)
+result = await agent.run("Hello!")
+
+# === Stateless restore: recreate agent with SAME session_id ===
+mem2 = RedisMemory(session_id="conv-abc-123", redis_url=REDIS_URL)
+await mem2.connect()
+await mem2.restore()              # reloads full history from Redis
+# new agent continues from exactly the same point
+```
+
+Key behaviours:
+- `add_message()` (**async**, called with `await` everywhere) appends to local list **and** schedules a background Redis write via `asyncio.get_running_loop().create_task()`.
+- `restore()` loads the full conversation from Redis into the local list at startup.
+- `RedisModelContext.build()` reads from `await redis_memory.get_messages()` — **ignores** the `raw_messages` in-process argument — so context never depends on per-instance RAM.
+- Pass `session_manager=...` to enable automatic Postgres checkpointing every `auto_checkpoint_every` messages (default 50).
+
+---
+
+## Memory Architecture — CRITICAL RULES
+**This is a v1 async-first project. Never split sync and async memory interfaces.**
+
+- The single source of truth for memory is the `Memory` ABC in `core/memory/base_memory.py`.
+  All methods are `async def`. There is **no** separate sync `BaseMemory` + async `AsyncMemory` split.
+- **Never** add `add_message_sync()` / `add_message_async()` pairs or any backward-compat shims.
+- **Always** `await` every memory call: `await self.memory.add_message(msg)`, `await self.memory.get_messages()`, etc.
+- There is one Redis memory class: `RedisMemory`. Do **not** create a `RedisBackedMemory` wrapper.
+  Use `RedisMemory(session_id=...)` for the per-session Memory ABC API.
 
 ---
 
@@ -140,3 +234,4 @@ CODE_INTERPRETER_URL=...     # optional
 - Do NOT modify `main.py` (legacy dev file) — all changes go into `server/`.
 - New DB models go in `server/models/`, new schemas in `server/schemas.py`.
 - Add built-in skills as `skills/<name>/SKILL.md` with YAML frontmatter.
+- MCP SSE server source lives in `docker/mcp_server/server.py` (FastMCP 2.x, pinned).

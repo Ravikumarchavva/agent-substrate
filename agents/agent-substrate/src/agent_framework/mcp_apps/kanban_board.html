@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kanban Board</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#0f0f0f;color:#e5e7eb;min-height:80px}
+  .toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #1f2937}
+  .title{font-size:12px;font-weight:600;color:#9ca3af}
+  #summary{font-size:11px;color:#6b7280;margin-left:auto}
+  .board{display:flex;gap:10px;padding:10px;overflow-x:auto;min-height:80px}
+  .column{flex:0 0 160px;background:#111827;border-radius:8px;border:1px solid #1f2937;display:flex;flex-direction:column}
+  .col-header{padding:7px 10px;font-size:11px;font-weight:600;color:#f3f4f6;border-bottom:1px solid #1f2937;display:flex;justify-content:space-between;align-items:center}
+  .col-count{font-size:10px;color:#6b7280;background:#1f2937;border-radius:10px;padding:0 6px}
+  .col-body{padding:6px;display:flex;flex-direction:column;gap:5px;min-height:40px;flex:1}
+  .col-body.drag-over{background:#1f293780;border-radius:6px}
+  .card{background:#1e293b;border:1px solid #374151;border-radius:6px;padding:7px 9px;cursor:grab;font-size:11px;color:#e5e7eb;user-select:none;transition:opacity .15s}
+  .card.dragging{opacity:.4}
+  .card-title{font-weight:500;line-height:1.3;margin-bottom:3px}
+  .card-desc{font-size:10px;color:#9ca3af;line-height:1.3;margin-bottom:4px}
+  .tags{display:flex;flex-wrap:wrap;gap:3px}
+  .tag{font-size:9px;padding:1px 5px;border-radius:3px;background:#374151;color:#9ca3af}
+  .badge{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600;margin-bottom:3px;display:inline-block}
+  .p-low{background:#14532d;color:#86efac}
+  .p-medium{background:#78350f;color:#fde68a}
+  .p-high{background:#7f1d1d;color:#fca5a5}
+  .empty{color:#6b7280;font-size:12px;padding:16px;text-align:center;width:100%}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span class="title">Kanban Board</span>
+  <span id="summary"></span>
+</div>
+<div class="board" id="board"><div class="empty">Waiting for tasks…</div></div>
+
+<script>
+let boardState = {columns:[], tasks:[]};
+let draggingId = null;
+
+function render(data) {
+  const cols = data.columns || ["To Do", "In Progress", "Done"];
+  const tasks = (data.tasks || []).map((t,i) => ({...t, _id: t.id ?? i}));
+  boardState = {columns: cols, tasks};
+
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  document.getElementById("summary").textContent = tasks.length + " tasks";
+
+  cols.forEach(col => {
+    const colEl = document.createElement("div");
+    colEl.className = "column";
+    colEl.dataset.col = col;
+
+    const colTasks = tasks.filter(t => t.column === col || t.status === col);
+    colEl.innerHTML = `<div class="col-header">
+      <span>${col}</span><span class="col-count">${colTasks.length}</span>
+    </div>`;
+
+    const body = document.createElement("div");
+    body.className = "col-body";
+    body.dataset.col = col;
+
+    colTasks.forEach(t => body.appendChild(makeCard(t)));
+    setupDrop(body);
+    colEl.appendChild(body);
+    board.appendChild(colEl);
+  });
+
+  notifySize();
+}
+
+function makeCard(t) {
+  const el = document.createElement("div");
+  el.className = "card";
+  el.draggable = true;
+  el.dataset.id = t._id;
+
+  const pBadge = t.priority
+    ? `<span class="badge p-${t.priority.toLowerCase()}">${t.priority}</span><br>` : "";
+  const desc = t.description ? `<div class="card-desc">${esc(t.description)}</div>` : "";
+  const tags = (t.tags||[]).map(g=>`<span class="tag">${esc(g)}</span>`).join("");
+
+  el.innerHTML = `${pBadge}<div class="card-title">${esc(t.title||t.name||"Untitled")}</div>
+    ${desc}${tags ? `<div class="tags">${tags}</div>` : ""}`;
+
+  el.addEventListener("dragstart", e => {
+    draggingId = t._id;
+    setTimeout(() => el.classList.add("dragging"), 0);
+    e.dataTransfer.effectAllowed = "move";
+  });
+  el.addEventListener("dragend", () => { el.classList.remove("dragging"); draggingId = null; });
+  return el;
+}
+
+function setupDrop(body) {
+  body.addEventListener("dragover", e => { e.preventDefault(); body.classList.add("drag-over"); });
+  body.addEventListener("dragleave", () => body.classList.remove("drag-over"));
+  body.addEventListener("drop", async e => {
+    e.preventDefault();
+    body.classList.remove("drag-over");
+    if (draggingId === null) return;
+    const newCol = body.dataset.col;
+    const task = boardState.tasks.find(t => String(t._id) === String(draggingId));
+    if (!task) return;
+    const oldCol = task.column || task.status;
+    if (oldCol === newCol) return;
+    task.column = newCol; task.status = newCol;
+    render(boardState);
+    await sendRpc("ui/update-model-context", {
+      context: { board: boardState, moved_task: { id: task._id, title: task.title, from: oldCol, to: newCol } }
+    });
+  });
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function notifySize() {
+  setTimeout(() => parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/size-changed",
+    params:{height: document.body.scrollHeight + 16}}, "*"), 0);
+}
+
+// ── MCP bridge ───────────────────────────────────────────────────────────────
+let _msgId = 1;
+const _pending = new Map();
+
+function sendRpc(method, params={}) {
+  return new Promise(resolve => {
+    const id = _msgId++;
+    _pending.set(id, resolve);
+    parent.postMessage({jsonrpc:"2.0", id, method, params}, "*");
+  });
+}
+
+window.addEventListener("message", e => {
+  const d = e.data;
+  if (!d || d.jsonrpc !== "2.0") return;
+  if (d.id != null && _pending.has(d.id)) { _pending.get(d.id)(d.result); _pending.delete(d.id); }
+  if (d.method === "ui/notifications/tool-input") {
+    const args = d.params?.arguments || {};
+    render(args);
+  }
+});
+
+async function init() { await sendRpc("ui/initialize"); }
+init();
+</script>
+</body>
+</html>

@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_framework.core.agents.react_agent import ReActAgent
+from agent_framework.configs.settings import settings
 from agent_framework.core.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
 from agent_framework.core.messages.client_messages import AssistantMessage, ToolExecutionResultMessage
 from agent_framework.server.database import get_db
@@ -28,6 +29,7 @@ from agent_framework.server.services.agent_service import (
     persist_assistant_message,
     persist_tool_result,
     persist_user_message,
+    sync_new_messages_to_redis,
 )
 from agent_framework.server.services.file_service import (
     extract_text,
@@ -61,15 +63,20 @@ def _get_agent_deps(request: Request):
 
 
 def _build_tool_meta_map(tools: list) -> dict:
-    """Build a mapping of tool_name → _meta dict for tools that have UI metadata."""
+    """Build a mapping of tool_name → { risk, color, ui? } for event enrichment."""
     meta_map: dict = {}
     for tool in tools:
         try:
             schema = tool.get_schema()
+            entry: dict = {
+                "risk": schema.risk,
+                "color": getattr(tool, "risk", None) and tool.risk.color or "green",
+            }
             if schema.meta and schema.meta.get("ui"):
-                meta_map[schema.name] = schema.meta
+                entry["ui"] = schema.meta["ui"]
+            meta_map[schema.name] = entry
         except Exception as e:
-            logger.warning(f"Failed to get schema for tool {getattr(tool, 'name', 'unknown')}: {e}")
+            logger.warning("Failed to get schema for tool %s: %s", getattr(tool, "name", "unknown"), e)
     return meta_map
 
 
@@ -185,12 +192,14 @@ async def chat(
             + body.system_instructions.strip()
         )
 
-    agent = await load_agent_for_thread(
+    agent, snapshot_count = await load_agent_for_thread(
         db,
         body.thread_id,
         model_client=deps["model_client"],
         tools=deps["tools"],
         system_instructions=deps["system_instructions"],
+        redis_memory=getattr(request.app.state, "redis_memory", None),
+        model_context_window=settings.MODEL_CONTEXT_WINDOW,
         tool_approval_handler=deps["tool_approval_handler"],
         tools_requiring_approval=deps["tools_requiring_approval"],
         tool_timeout=deps["tool_timeout"],
@@ -330,18 +339,21 @@ async def chat(
                                         "name": tc.name,
                                         "arguments": tc.arguments,
                                     }
-                                    # Attach _meta.ui if this tool has an MCP App
+                                    # Attach risk colour badge + MCP App _meta if present
                                     meta = tool_meta_map.get(tc.name)
                                     if meta:
-                                        ui_info = meta.get("ui", {})
-                                        resource_uri = ui_info.get("resourceUri", "")
-                                        http_url = resolve_ui_uri(resource_uri) if resource_uri else None
-                                        tc_data["_meta"] = {
-                                            "ui": {
-                                                "resourceUri": resource_uri,
-                                                "httpUrl": http_url or resource_uri,
+                                        tc_data["risk"]  = meta.get("risk", "safe")
+                                        tc_data["color"] = meta.get("color", "green")
+                                        ui_info = meta.get("ui")
+                                        if ui_info:
+                                            resource_uri = ui_info.get("resourceUri", "")
+                                            http_url = resolve_ui_uri(resource_uri) if resource_uri else None
+                                            tc_data["_meta"] = {
+                                                "ui": {
+                                                    "resourceUri": resource_uri,
+                                                    "httpUrl": http_url or resource_uri,
+                                                }
                                             }
-                                        }
                                     serialized_tool_calls.append(tc_data)
 
                             payload = {
@@ -391,10 +403,10 @@ async def chat(
                                 content_text = "\n".join(parts)
 
                             tool_name = getattr(chunk, "name", "unknown")
+                            tool_meta = tool_meta_map.get(tool_name, {})
                             tool_http_url = ""
-                            if tool_name in tool_meta_map:
-                                meta_info = tool_meta_map[tool_name]
-                                ui_info = meta_info.get("ui", {})
+                            if "ui" in tool_meta:
+                                ui_info = tool_meta["ui"]
                                 resource_uri = ui_info.get("resourceUri", "")
                                 tool_http_url = resolve_ui_uri(resource_uri) if resource_uri else f"/ui/{tool_name}"
                             payload = {
@@ -403,9 +415,11 @@ async def chat(
                                 "tool_call_id": getattr(chunk, "tool_call_id", ""),
                                 "content": content_text,
                                 "is_error": getattr(chunk, "isError", False),
-                                "has_app": tool_name in tool_meta_map,
+                                "has_app": "ui" in tool_meta,
                                 "http_url": tool_http_url,
                                 "app_data": getattr(chunk, "app_data", None),
+                                "risk":  tool_meta.get("risk", "safe"),
+                                "color": tool_meta.get("color", "green"),
                                 "partial": False,
                             }
                             yield f"data: {json.dumps(payload, default=str)}\n\n"
@@ -448,6 +462,15 @@ async def chat(
                     if not bridge_signaled:
                         bridge_signaled = True
                         await bridge.signal_done()
+                    # Sync new messages from this turn back to Redis
+                    redis_mem = getattr(request.app.state, "redis_memory", None)
+                    if redis_mem is not None:
+                        await sync_new_messages_to_redis(
+                            redis_mem,
+                            str(body.thread_id),
+                            agent,
+                            snapshot_count,
+                        )
                     break
 
         except Exception as e:

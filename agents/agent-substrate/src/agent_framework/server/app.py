@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from agent_framework.configs.settings import settings
+from agent_framework.core.memory.redis_memory import RedisMemory
 from agent_framework.extensions.tools.human_input import AskHumanTool
 from agent_framework.providers.llm.openai.openai_client import OpenAIClient
 from agent_framework.providers.audio.openai import OpenAIAudioClient
@@ -41,10 +42,10 @@ from agent_framework.server.routes.mcp_apps import router as mcp_apps_router
 from agent_framework.server.routes.spotify_oauth import router as spotify_oauth_router
 from agent_framework.server.routes.tasks import router as tasks_router
 from agent_framework.server.routes.threads import router as threads_router
-from agent_framework.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from agent_framework.extensions.tools.code_interpreter import CodeInterpreterTool
 from agent_framework.extensions.tools.code_interpreter.http_client import CodeInterpreterClient
-from agent_framework.extensions.tools.mcp_app_tools import (
+from agent_framework.extensions.mcp.app_tools import (
     ColorPaletteTool,
     DataVisualizerTool,
     JsonExplorerTool,
@@ -71,6 +72,15 @@ async def lifespan(app: FastAPI):
 
     # Database
     await init_db(settings.DATABASE_URL, echo=False)
+
+    # Redis — primary session store for stateless agents
+    redis_memory = RedisMemory(
+        redis_url=settings.REDIS_URL,
+        default_ttl=settings.REDIS_SESSION_TTL,
+        max_messages=settings.SESSION_MAX_MESSAGES,
+    )
+    await redis_memory.connect()
+    app.state.redis_memory = redis_memory
 
     # Shared agent dependencies (injected into routes via app.state)
     app.state.model_client = OpenAIClient(
@@ -215,6 +225,8 @@ async def lifespan(app: FastAPI):
     # ---------- SHUTDOWN ----------
     if getattr(app.state, "ci_client", None):
         await app.state.ci_client.close()
+    if getattr(app.state, "redis_memory", None):
+        await app.state.redis_memory.disconnect()
     for tool in app.state.tools:
         if hasattr(tool, "stop"):
             try:

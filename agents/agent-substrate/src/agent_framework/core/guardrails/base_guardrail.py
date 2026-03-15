@@ -18,13 +18,17 @@ Design decisions:
 """
 from __future__ import annotations
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+
+from agent_framework.core.messages.base_message import BaseClientMessage
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +68,7 @@ class GuardrailContext(BaseModel):
     tool_arguments: Optional[Dict[str, Any]] = None
 
     # Full message (for advanced guardrails that inspect raw message)
-    raw_message: Optional[Any] = None
+    raw_message: Optional[BaseClientMessage] = None
 
     model_config = {"frozen": True}
 
@@ -81,7 +85,7 @@ class GuardrailResult(BaseModel):
     tripwire: bool = False        # True → hard stop, agent loop aborts
     message: str = ""             # Human-readable explanation
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = {"frozen": False}
 
@@ -118,9 +122,24 @@ class BaseGuardrail(ABC):
                 )
     """
 
-    name: str = "base_guardrail"
+    name: str
     description: str = ""
-    guardrail_type: GuardrailType = GuardrailType.INPUT
+    guardrail_type: GuardrailType
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:  # type: ignore[override]
+        super().__init_subclass__(**kwargs)
+        # Only enforce the class-level `name` constant — it must be stable for
+        # audit logs and cannnot change per-instance.
+        # `guardrail_type` is intentionally allowed as an instance attribute
+        # because many guardrails (e.g. ContentFilterGuardrail) support both
+        # INPUT and OUTPUT positions via a constructor argument.
+        if ABC in cls.__bases__:
+            return
+        if not hasattr(cls, "name") or cls.__dict__.get("name") is None:
+            raise TypeError(
+                f"{cls.__qualname__} must declare a class-level `name` attribute "
+                "so guardrail audit logs remain unambiguous."
+            )
 
     @abstractmethod
     async def check(self, ctx: GuardrailContext) -> GuardrailResult:

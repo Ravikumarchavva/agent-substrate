@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -62,7 +62,7 @@ class StepOut(BaseModel):
 
 class ChatMessage(BaseModel):
     """Single message in a chat request."""
-    role: str = "user"
+    role: Literal["user", "assistant", "system"] = "user"
     content: str
 
 
@@ -103,7 +103,7 @@ class FileOut(BaseModel):
     thread_id: Optional[uuid.UUID] = None
     name: str
     mime: Optional[str] = None
-    size: Optional[str] = None
+    size: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
@@ -113,7 +113,7 @@ class FileOut(BaseModel):
 class HITLResponse(BaseModel):
     """POST /chat/respond/{request_id} – resolve a pending HITL request."""
     # For tool approval
-    action: Optional[str] = None          # "approve" | "deny" | "modify"
+    action: Optional[Literal["approve", "deny", "modify"]] = None
     modified_arguments: Optional[Dict[str, Any]] = None
     reason: Optional[str] = None
     # For human input
@@ -124,10 +124,25 @@ class HITLResponse(BaseModel):
 
 # ── MCP App schemas ──────────────────────────────────────────────────────────
 
+class McpAppContextPayload(BaseModel):
+    """Typed payload for MCP App context updates.
+
+    The ``data`` field carries the app-specific structured context
+    (e.g. the current board state, playlist, selected item).
+    """
+    app_uri: str = Field(..., description="ui:// URI of the source MCP App")
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
 class McpContextUpdate(BaseModel):
-    """POST /threads/{id}/mcp-context – update model context from MCP App."""
+    """POST /threads/{id}/mcp-context – update model context from MCP App.
+
+    ``context`` is intentionally typed as ``Any`` because each MCP App sends
+    an app-specific state payload (e.g. current playback, board state, selected
+    colour).  The backend serialises it as JSON for the LLM to read.
+    """
     tool_name: str
-    context: Any  # Structured data from the app (e.g., current board state)
+    context: Any  # arbitrary app-state dict from the MCP App iframe
 
 
 # ── Element schemas ──────────────────────────────────────────────────────────
@@ -139,7 +154,7 @@ class ElementOut(BaseModel):
     type: Optional[str] = None
     name: str
     mime: Optional[str] = None
-    size: Optional[str] = None
+    size: Optional[int] = None
     display: Optional[str] = None
     url: Optional[str] = None
     for_id: Optional[uuid.UUID] = None

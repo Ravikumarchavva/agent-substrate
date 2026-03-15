@@ -1,7 +1,7 @@
 """Web Surfer Tool - Agentic web browsing with Playwright."""
 import asyncio
 import base64
-from typing import Any, Optional, Literal
+from typing import Any, ClassVar, Optional, Literal
 from datetime import datetime
 
 try:
@@ -10,7 +10,7 @@ try:
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
 
-from .base_tool import BaseTool, Tool, ToolResult
+from agent_framework.core.tools.base_tool import BaseTool, Tool, ToolResult, ToolRisk
 
 
 class WebSurferTool(BaseTool):
@@ -29,7 +29,8 @@ class WebSurferTool(BaseTool):
     Uses Playwright for reliable browser automation.
     Maintains browser session for multi-step workflows.
     """
-    
+    risk: ClassVar[ToolRisk] = ToolRisk.SENSITIVE  # external network reads
+
     def __init__(self, headless: bool = True, browser_type: Literal["chromium", "firefox", "webkit"] = "chromium"):
         """Initialize web surfer tool.
         

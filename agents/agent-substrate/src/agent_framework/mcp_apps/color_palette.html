@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Color Palette</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#0f0f0f;color:#e5e7eb;min-height:60px}
+  .toolbar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #1f2937}
+  .title{font-size:12px;font-weight:600;color:#9ca3af}
+  .info{font-size:11px;color:#6b7280}
+  .grid{display:flex;flex-wrap:wrap;gap:10px;padding:12px}
+  .card{width:80px;cursor:pointer;border-radius:8px;overflow:hidden;border:1px solid #1f2937;transition:transform .1s,box-shadow .1s}
+  .card:hover{transform:scale(1.05);box-shadow:0 4px 16px rgba(0,0,0,.5)}
+  .swatch{height:54px}
+  .meta{padding:5px;background:#111827}
+  .hex{font-size:10px;font-weight:600;color:#f3f4f6;font-family:monospace}
+  .name{font-size:9px;color:#9ca3af;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rgb-row{font-size:9px;color:#6b7280;margin-top:2px;font-family:monospace}
+  .toast{position:fixed;bottom:12px;right:12px;background:#22c55e;color:#fff;padding:5px 12px;border-radius:6px;font-size:11px;opacity:0;transition:opacity .3s;pointer-events:none}
+  .empty{color:#6b7280;font-size:12px;padding:16px;text-align:center}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span class="title">Color Palette</span>
+  <span class="info" id="info"></span>
+</div>
+<div class="grid" id="grid"><div class="empty">Waiting for colors…</div></div>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+function hexToRgb(hex) {
+  const h = hex.replace("#","");
+  const n = parseInt(h,16);
+  return { r: (n>>16)&255, g: (n>>8)&255, b: n&255 };
+}
+
+function rgbToHsl(r,g,b) {
+  r/=255;g/=255;b/=255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h,s,l=(max+min)/2;
+  if(max===min){h=s=0;}else{
+    const d=max-min; s=l>.5?d/(2-max-min):d/(max+min);
+    switch(max){case r:h=((g-b)/d+(g<b?6:0))/6;break;case g:h=((b-r)/d+2)/6;break;default:h=((r-g)/d+4)/6;}
+  }
+  return {h:Math.round(h*360),s:Math.round(s*100),l:Math.round(l*100)};
+}
+
+function luminance(r,g,b){
+  const s=[r,g,b].map(v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});
+  return .2126*s[0]+.7152*s[1]+.0722*s[2];
+}
+
+function contrast(hex1,hex2="#ffffff"){
+  const c1=hexToRgb(hex1),c2=hexToRgb(hex2);
+  const l1=luminance(c1.r,c1.g,c1.b)+.05, l2=luminance(c2.r,c2.g,c2.b)+.05;
+  return Math.max(l1,l2)/Math.min(l1,l2);
+}
+
+function showToast(msg="Copied!") {
+  const t=document.getElementById("toast"); t.textContent=msg; t.style.opacity="1";
+  setTimeout(()=>t.style.opacity="0", 1200);
+}
+
+async function copyHex(hex) {
+  try{ await navigator.clipboard.writeText(hex); }catch(e){}
+  showToast(`${hex} copied!`);
+  await sendRpc("ui/update-model-context", {context:{selected_color:hex}});
+}
+
+function normalizeColor(c) {
+  if (typeof c === "string") return {hex: c.startsWith("#") ? c : "#"+c, name:""};
+  if (c.hex) return {hex: c.hex.startsWith("#") ? c.hex : "#"+c.hex, name: c.name||""};
+  if (c.value) return {hex: c.value.startsWith("#") ? c.value : "#"+c.value, name: c.name||""};
+  return {hex:"#888888", name:"unknown"};
+}
+
+function render(colors) {
+  const grid = document.getElementById("grid");
+  const info = document.getElementById("info");
+  grid.innerHTML = "";
+  if (!colors.length) { grid.innerHTML='<div class="empty">No colors provided.</div>'; return; }
+  info.textContent = colors.length + " colors";
+
+  colors.forEach(raw => {
+    const {hex, name} = normalizeColor(raw);
+    const {r,g,b} = hexToRgb(hex);
+    const {h,s,l} = rgbToHsl(r,g,b);
+    const ratio = contrast(hex).toFixed(1);
+    const textCol = luminance(r,g,b) > 0.179 ? "#000" : "#fff";
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.title = `Click to copy\nRGB(${r},${g},${b})\nHSL(${h},${s}%,${l}%)\nContrast vs white: ${ratio}:1`;
+    card.onclick = () => copyHex(hex);
+    card.innerHTML = `<div class="swatch" style="background:${hex}"></div>
+      <div class="meta">
+        <div class="hex">${hex.toUpperCase()}</div>
+        ${name ? `<div class="name">${name}</div>` : ""}
+        <div class="rgb-row">${r},${g},${b}</div>
+      </div>`;
+    grid.appendChild(card);
+  });
+  notifySize();
+}
+
+function notifySize() {
+  setTimeout(() => parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/size-changed",
+    params:{height: document.body.scrollHeight + 16}}, "*"), 0);
+}
+
+// ── MCP bridge ───────────────────────────────────────────────────────────────
+let _msgId = 1;
+const _pending = new Map();
+
+function sendRpc(method, params={}) {
+  return new Promise(resolve => {
+    const id = _msgId++;
+    _pending.set(id, resolve);
+    parent.postMessage({jsonrpc:"2.0", id, method, params}, "*");
+  });
+}
+
+window.addEventListener("message", e => {
+  const d = e.data;
+  if (!d || d.jsonrpc !== "2.0") return;
+  if (d.id != null && _pending.has(d.id)) { _pending.get(d.id)(d.result); _pending.delete(d.id); }
+  if (d.method === "ui/notifications/tool-input") {
+    const args = d.params?.arguments || {};
+    const colors = args.colors || args.palette || args.values || [];
+    render(Array.isArray(colors) ? colors : Object.values(colors));
+  }
+});
+
+async function init() { await sendRpc("ui/initialize"); }
+init();
+</script>
+</body>
+</html>

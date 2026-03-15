@@ -27,10 +27,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, Deque, List, Optional, Union
 
 logger = logging.getLogger("agent_framework.hooks")
 
@@ -56,8 +56,12 @@ class HookEvent(str, Enum):
     FLOW_END = "on_flow_end"     # A Flow finishes execution
 
 
-# Type alias for hook callbacks
-HookCallback = Callable[[Dict[str, Any]], Awaitable[None]]
+# Type alias for hook callbacks — both async and sync callables are accepted;
+# sync callables are wrapped in asyncio.to_thread before dispatch.
+HookCallback = Union[
+    Callable[[Dict[str, Any]], Awaitable[None]],
+    Callable[[Dict[str, Any]], None],
+]
 
 
 # ---------------------------------------------------------------------------
@@ -131,10 +135,15 @@ class HookManager:
 
         async def _safe_call(cb: HookCallback) -> None:
             try:
-                await cb(context)
+                result = cb(context)
+                if asyncio.iscoroutine(result):
+                    await result
             except Exception as e:
                 logger.error(
-                    f"Hook error in {cb.__name__} for {event.value}: {e}",
+                    "Hook error in %s for %s: %s",
+                    getattr(cb, "__qualname__", repr(cb)),
+                    event.value,
+                    e,
                     exc_info=True,
                 )
 
@@ -245,9 +254,10 @@ class RunLogger:
             hooks.register(event, run_logger.log)
     """
 
-    def __init__(self, level: int = logging.DEBUG):
+    def __init__(self, level: int = logging.DEBUG, maxlen: int = 500):
         self.level = level
-        self.events: List[Dict[str, Any]] = []
+        # Bounded deque prevents unbounded memory growth on long-running agents.
+        self.events: Deque[Dict[str, Any]] = deque(maxlen=maxlen)
 
     async def log(self, ctx: Dict[str, Any]) -> None:
         event = ctx.get("event", "unknown")

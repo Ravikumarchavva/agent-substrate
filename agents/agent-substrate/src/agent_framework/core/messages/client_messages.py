@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Union, Literal
 from pydantic import ConfigDict, field_validator, model_serializer, Field
 from .base_message import BaseClientMessage, CLIENT_ROLES, UsageStats
-from agent_framework.extensions.tools.base_tool import ToolCall as ToolCallDataclass, ToolResult
+from agent_framework.core.tools.base_tool import ToolCall as ToolCallDataclass, ToolResult
 import json
 from uuid import uuid4
 
@@ -141,7 +141,7 @@ class AssistantMessage(BaseClientMessage):
     content: Optional[List[MediaType]] = None
     tool_calls: Optional[List[ToolCallMessage]] = None
     finish_reason: str = "stop"  # e.g., "stop", "tool_call", etc.
-    usage: UsageStats = None
+    usage: Optional[UsageStats] = None
     cached: bool = False # Indicates if response used input caching or not
 
     @model_serializer
@@ -166,18 +166,15 @@ class AssistantMessage(BaseClientMessage):
             for tc in self.tool_calls:
                 if isinstance(tc, ToolCallMessage):
                     serialized_tool_calls.append(tc.ser_model())
-                elif isinstance(tc, ToolCallDataclass):
-                    # ToolCallDataclass is a Pydantic BaseModel
-                    if hasattr(tc, "model_dump"):
-                        serialized_tool_calls.append(tc.model_dump())
-                    else:
-                        serialized_tool_calls.append(vars(tc))
+                elif hasattr(tc, "model_dump"):
+                    # ToolCallDataclass or any other Pydantic model
+                    serialized_tool_calls.append(tc.model_dump())
                 elif isinstance(tc, dict):
                     serialized_tool_calls.append(tc)
-                elif hasattr(tc, "model_dump"):
-                    serialized_tool_calls.append(tc.model_dump())
                 else:
-                    serialized_tool_calls.append({"name": getattr(tc, "name", None), "arguments": getattr(tc, "arguments", None)})
+                    serialized_tool_calls.append(
+                        {"name": getattr(tc, "name", None), "arguments": getattr(tc, "arguments", None)}
+                    )
             msg["tool_calls"] = serialized_tool_calls
         if self.usage is not None:
             msg["usage"] = self.usage.model_dump() if hasattr(self.usage, 'model_dump') else {
@@ -268,7 +265,7 @@ class ToolExecutionResultMessage(BaseClientMessage):
             tool_call_id=tool_call_id,
             name=tool_name,
             content=tool_result.content,
-            isError=tool_result.isError,
+            isError=tool_result.is_error,
             app_data=tool_result.app_data,
         )
     

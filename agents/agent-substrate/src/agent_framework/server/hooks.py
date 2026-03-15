@@ -13,13 +13,17 @@ Hooks:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_framework.core.agents.react_agent import ReActAgent
+from agent_framework.core.agents.base_agent import BaseAgent
+
+logger = logging.getLogger("agent_framework.server.hooks")
 
 
 # ── Context objects passed to hooks ──────────────────────────────────────────
@@ -30,7 +34,7 @@ class ChatContext:
 
     thread_id: uuid.UUID
     db: AsyncSession
-    agent: ReActAgent
+    agent: BaseAgent      # decoupled from concrete ReActAgent
     user_id: Optional[uuid.UUID] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -91,21 +95,40 @@ class HookRegistry:
 
     # ── Dispatch ─────────────────────────────────────────────────────────
 
+    @staticmethod
+    async def _safe_call(fn: Callable, *args: Any) -> None:
+        """Invoke *fn* and swallow exceptions so one bad hook can't crash chat."""
+        try:
+            await fn(*args)
+        except Exception:
+            logger.exception(
+                "Unhandled exception in hook %s",
+                getattr(fn, "__qualname__", repr(fn)),
+            )
+
     async def fire_chat_start(self, ctx: ChatContext) -> None:
-        for hook in self._on_chat_start:
-            await hook(ctx)
+        await asyncio.gather(
+            *[self._safe_call(hook, ctx) for hook in self._on_chat_start],
+            return_exceptions=True,
+        )
 
     async def fire_message(self, ctx: ChatContext, content: str) -> None:
-        for hook in self._on_message:
-            await hook(ctx, content)
+        await asyncio.gather(
+            *[self._safe_call(hook, ctx, content) for hook in self._on_message],
+            return_exceptions=True,
+        )
 
     async def fire_chat_end(self, ctx: ChatContext) -> None:
-        for hook in self._on_chat_end:
-            await hook(ctx)
+        await asyncio.gather(
+            *[self._safe_call(hook, ctx) for hook in self._on_chat_end],
+            return_exceptions=True,
+        )
 
     async def fire_chat_resume(self, ctx: ChatContext) -> None:
-        for hook in self._on_chat_resume:
-            await hook(ctx)
+        await asyncio.gather(
+            *[self._safe_call(hook, ctx) for hook in self._on_chat_resume],
+            return_exceptions=True,
+        )
 
 
 # Global default registry

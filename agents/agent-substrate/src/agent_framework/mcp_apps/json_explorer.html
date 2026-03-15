@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JSON Explorer</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:monospace;background:#0f0f0f;color:#e5e7eb;min-height:60px}
+  .toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #1f2937}
+  .title{font-size:12px;font-weight:600;color:#9ca3af;white-space:nowrap}
+  #search{flex:1;padding:3px 8px;font-size:11px;border:1px solid #374151;border-radius:4px;background:#1f2937;color:#e5e7eb;outline:none}
+  #search::placeholder{color:#6b7280}
+  .tree{padding:10px 14px;font-size:12px;line-height:1.7;overflow:auto}
+  .node{cursor:default}
+  .toggle{cursor:pointer;user-select:none;color:#6b7280;font-size:10px;margin-right:4px;display:inline-block;width:10px}
+  .key{color:#93c5fd}
+  .str{color:#86efac}
+  .num{color:#67e8f9}
+  .bool{color:#d8b4fe}
+  .null{color:#9ca3af;font-style:italic}
+  .brace{color:#f9a8d4}
+  .count{font-size:10px;color:#6b7280;margin-left:4px}
+  .hidden{display:none}
+  .search-highlight{background:#854d0e;border-radius:2px}
+  .empty{color:#6b7280;font-size:12px;padding:16px;text-align:center;font-family:system-ui}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span class="title">JSON Explorer</span>
+  <input id="search" type="text" placeholder="Search keys and values…" oninput="doSearch(this.value)">
+</div>
+<div class="tree" id="tree"><div class="empty">Waiting for data…</div></div>
+
+<script>
+let rootData = null;
+
+function render(data) {
+  rootData = data;
+  const tree = document.getElementById("tree");
+  tree.innerHTML = "";
+  tree.appendChild(buildNode(data, null, 0));
+  notifySize();
+}
+
+function buildNode(val, key, depth) {
+  const frag = document.createDocumentFragment();
+  const wrap = document.createElement("div");
+  wrap.className = "node";
+  wrap.style.paddingLeft = depth * 14 + "px";
+
+  const keySpan = key !== null
+    ? `<span class="key">"${esc(key)}"</span><span style="color:#6b7280">: </span>` : "";
+
+  if (val === null) {
+    wrap.innerHTML = keySpan + `<span class="null">null</span>`;
+  } else if (typeof val === "boolean") {
+    wrap.innerHTML = keySpan + `<span class="bool">${val}</span>`;
+  } else if (typeof val === "number") {
+    wrap.innerHTML = keySpan + `<span class="num">${val}</span>`;
+  } else if (typeof val === "string") {
+    wrap.innerHTML = keySpan + `<span class="str">"${esc(val)}"</span>`;
+  } else if (Array.isArray(val)) {
+    const tgl = document.createElement("span");
+    tgl.className = "toggle";
+    tgl.textContent = "▾";
+    const cnt = document.createElement("span");
+    cnt.innerHTML = keySpan + `<span class="brace">[</span><span class="count">${val.length} items</span>`;
+    wrap.appendChild(tgl);
+    wrap.appendChild(cnt);
+
+    const children = document.createElement("div");
+    val.forEach((item, i) => children.appendChild(buildNode(item, i, depth + 1)));
+    const close = document.createElement("div");
+    close.style.paddingLeft = depth * 14 + "px";
+    close.innerHTML = `<span class="brace">]</span>`;
+
+    tgl.onclick = () => toggleNode(tgl, children, close);
+    frag.appendChild(wrap); frag.appendChild(children); frag.appendChild(close);
+    return frag;
+  } else if (typeof val === "object") {
+    const keys = Object.keys(val);
+    const tgl = document.createElement("span");
+    tgl.className = "toggle";
+    tgl.textContent = "▾";
+    const cnt = document.createElement("span");
+    cnt.innerHTML = keySpan + `<span class="brace">{</span><span class="count">${keys.length} keys</span>`;
+    wrap.appendChild(tgl);
+    wrap.appendChild(cnt);
+
+    const children = document.createElement("div");
+    keys.forEach(k => children.appendChild(buildNode(val[k], k, depth + 1)));
+    const close = document.createElement("div");
+    close.style.paddingLeft = depth * 14 + "px";
+    close.innerHTML = `<span class="brace">}</span>`;
+
+    tgl.onclick = () => toggleNode(tgl, children, close);
+    frag.appendChild(wrap); frag.appendChild(children); frag.appendChild(close);
+    return frag;
+  }
+
+  frag.appendChild(wrap);
+  return frag;
+}
+
+function toggleNode(tgl, children, close) {
+  const collapsed = children.classList.contains("hidden");
+  children.classList.toggle("hidden", !collapsed);
+  close.classList.toggle("hidden", !collapsed);
+  tgl.textContent = collapsed ? "▾" : "▸";
+}
+
+function doSearch(q) {
+  if (!rootData) return;
+  const tree = document.getElementById("tree");
+  tree.innerHTML = "";
+  if (!q.trim()) { tree.appendChild(buildNode(rootData, null, 0)); notifySize(); return; }
+  const filtered = filterData(rootData, q.toLowerCase());
+  if (filtered === undefined) {
+    tree.innerHTML = '<div class="empty">No matches found.</div>';
+  } else {
+    tree.appendChild(buildNode(filtered, null, 0));
+  }
+  notifySize();
+}
+
+function filterData(val, q) {
+  if (val === null || typeof val !== "object") {
+    return String(val).toLowerCase().includes(q) ? val : undefined;
+  }
+  if (Array.isArray(val)) {
+    const r = val.map(v => filterData(v, q)).filter(v => v !== undefined);
+    return r.length ? r : undefined;
+  }
+  const r = {};
+  for (const [k, v] of Object.entries(val)) {
+    if (k.toLowerCase().includes(q)) { r[k] = v; continue; }
+    const fv = filterData(v, q);
+    if (fv !== undefined) r[k] = fv;
+  }
+  return Object.keys(r).length ? r : undefined;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function notifySize() {
+  setTimeout(() => parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/size-changed",
+    params:{height: document.body.scrollHeight + 16}}, "*"), 0);
+}
+
+// ── MCP bridge ───────────────────────────────────────────────────────────────
+let _msgId = 1;
+const _pending = new Map();
+
+function sendRpc(method, params={}) {
+  return new Promise(resolve => {
+    const id = _msgId++;
+    _pending.set(id, resolve);
+    parent.postMessage({jsonrpc:"2.0", id, method, params}, "*");
+  });
+}
+
+window.addEventListener("message", e => {
+  const d = e.data;
+  if (!d || d.jsonrpc !== "2.0") return;
+  if (d.id != null && _pending.has(d.id)) { _pending.get(d.id)(d.result); _pending.delete(d.id); }
+  if (d.method === "ui/notifications/tool-input") {
+    const args = d.params?.arguments || {};
+    const data = args.data !== undefined ? args.data
+                : args.json  !== undefined ? args.json
+                : args.content !== undefined ? (typeof args.content === "string" ? JSON.parse(args.content) : args.content)
+                : args;
+    render(data);
+  }
+});
+
+async function init() { await sendRpc("ui/initialize"); }
+init();
+</script>
+</body>
+</html>

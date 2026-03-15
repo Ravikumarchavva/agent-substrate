@@ -201,12 +201,26 @@ class CircuitBreaker:
 
     @property
     def state(self) -> CircuitState:
-        if self._state == CircuitState.OPEN:
-            # Check if recovery timeout has elapsed
-            if time.monotonic() - self._last_failure_time >= self.recovery_timeout:
-                self._state = CircuitState.HALF_OPEN
-                logger.info("Circuit breaker → HALF_OPEN (testing recovery)")
+        """Return current circuit state (pure read — no side effects).
+
+        Callers that need the OPEN → HALF_OPEN transition to be considered
+        should use ``_maybe_transition()`` explicitly before reading this.
+        The context manager ``__aenter__`` does this automatically.
+        """
         return self._state
+
+    def _maybe_transition(self) -> None:
+        """Transition OPEN → HALF_OPEN when the recovery timeout has elapsed.
+
+        Extracted from ``.state`` so the property is a pure getter
+        (GoF principle of least surprise; eliminates hidden side effects).
+        """
+        if (
+            self._state == CircuitState.OPEN
+            and time.monotonic() - self._last_failure_time >= self.recovery_timeout
+        ):
+            self._state = CircuitState.HALF_OPEN
+            logger.info("Circuit breaker → HALF_OPEN (testing recovery)")
 
     def record_success(self) -> None:
         """Record a successful call."""
@@ -232,6 +246,7 @@ class CircuitBreaker:
             )
 
     async def __aenter__(self):
+        self._maybe_transition()
         if self.state == CircuitState.OPEN:
             raise CircuitBreakerOpenError(
                 f"Circuit breaker is OPEN (failed {self._failure_count} times). "

@@ -1,13 +1,16 @@
 """Built-in tool implementations."""
-from typing import Any
+from __future__ import annotations
+
 import json
 from datetime import datetime
+from typing import Any, ClassVar
 
-from .base_tool import BaseTool, Tool, ToolResult
+from .base_tool import BaseTool, ToolResult, ToolRisk
 
 
 class CalculatorTool(BaseTool):
     """Simple calculator tool for basic math operations."""
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # deterministic, no I/O
     
     def __init__(self):
         super().__init__(
@@ -56,6 +59,7 @@ class CalculatorTool(BaseTool):
 
 class GetCurrentTimeTool(BaseTool):
     """Tool to get the current time."""
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only, deterministic
     
     def __init__(self):
         super().__init__(
@@ -100,6 +104,7 @@ class GetCurrentTimeTool(BaseTool):
 
 class WebSearchTool(BaseTool):
     """Placeholder for web search tool (you'd integrate with real API)."""
+    risk: ClassVar[ToolRisk] = ToolRisk.SENSITIVE  # external network request
     
     def __init__(self):
         super().__init__(

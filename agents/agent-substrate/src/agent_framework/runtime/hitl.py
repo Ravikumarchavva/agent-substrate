@@ -126,9 +126,11 @@ class WebHITLBridge:
     # -- Internal: request-and-wait pattern ----------------------------------
 
     async def _request_and_wait(
-        self, event_type: str, payload: Dict[str, Any], request_id: str
+        self, event_type: str, payload: Dict[str, Any], request_id: str,
+        timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Put an event on the outgoing queue and wait for the response."""
+        effective_timeout = timeout if timeout is not None else self._response_timeout
         loop = asyncio.get_running_loop()
         future: asyncio.Future[Dict[str, Any]] = loop.create_future()
         self._pending[request_id] = future
@@ -141,12 +143,12 @@ class WebHITLBridge:
 
         logger.info(
             f"HITL {event_type} sent (id={request_id}), "
-            f"waiting up to {self._response_timeout}s"
+            f"waiting up to {effective_timeout}s"
         )
 
         try:
             result = await asyncio.wait_for(
-                future, timeout=self._response_timeout
+                future, timeout=effective_timeout
             )
             return result
         except asyncio.TimeoutError:
@@ -159,20 +161,67 @@ class WebHITLBridge:
     async def _handle_approval(
         self, request: ToolApprovalRequest
     ) -> ToolApprovalResponse:
-        """Called when the agent needs tool approval — routes through SSE."""
+        """Called when the agent needs tool approval — routes through SSE.
+
+        Behaviour is driven by ``request.hitl_mode``:
+
+        FIRE_AND_CONTINUE
+            Puts the event on the outgoing SSE queue and immediately returns
+            APPROVE.  The agent does not wait for the user at all.
+
+        CONTINUE_ON_TIMEOUT
+            Waits up to ``request.hitl_timeout_seconds`` (default 30s).
+            If the user responds in time their decision is applied;
+            on timeout the tool is auto-approved with original arguments.
+
+        BLOCKING  (default)
+            Waits up to the bridge-wide ``response_timeout``.  On timeout
+            the tool is DENIED — missing a response is treated as a veto.
+        """
         payload = {
             "request_id": request.request_id,
             "tool_name": request.tool_name,
             "call_id": request.call_id,
             "arguments": request.arguments,
             "context": request.context,
+            "hitl_mode": request.hitl_mode,
         }
 
+        # ── FIRE_AND_CONTINUE: publish event, never wait ───────────────────
+        if request.hitl_mode == "fire_and_continue":
+            await self._outgoing.put({"type": "tool_approval_request", **payload})
+            logger.info(
+                "HITL fire_and_continue: sent event for %s, not waiting",
+                request.tool_name,
+            )
+            return ToolApprovalResponse(
+                request_id=request.request_id,
+                action=ToolApprovalAction.APPROVE,
+                reason="Auto-approved (fire_and_continue mode)",
+            )
+
+        # ── CONTINUE_ON_TIMEOUT / BLOCKING: send event and wait ───────────
+        timeout = (
+            request.hitl_timeout_seconds or 30.0
+            if request.hitl_mode == "continue_on_timeout"
+            else self._response_timeout
+        )
         data = await self._request_and_wait(
-            "tool_approval_request", payload, request.request_id
+            "tool_approval_request", payload, request.request_id, timeout=timeout
         )
 
         if data.get("timed_out"):
+            if request.hitl_mode == "continue_on_timeout":
+                logger.info(
+                    "HITL continue_on_timeout: timed out for %s, auto-approving",
+                    request.tool_name,
+                )
+                return ToolApprovalResponse(
+                    request_id=request.request_id,
+                    action=ToolApprovalAction.APPROVE,
+                    reason="Auto-approved after timeout (continue_on_timeout mode)",
+                )
+            # BLOCKING mode: timeout → deny
             return ToolApprovalResponse(
                 request_id=request.request_id,
                 action=ToolApprovalAction.DENY,

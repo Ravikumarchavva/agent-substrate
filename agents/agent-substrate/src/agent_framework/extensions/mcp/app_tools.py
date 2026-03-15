@@ -8,25 +8,30 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
-from agent_framework.extensions.tools.base_tool import BaseTool, ToolResult
+import httpx
+
+from agent_framework.configs.settings import settings
+from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
 
 logger = logging.getLogger(__name__)
 
+_SPOTIFY_TOKEN_PATH = "/api/spotify/token"
 
-# Helper to check Spotify OAuth authentication status
-def _is_spotify_authenticated() -> bool:
-    """Check if user has authenticated with Spotify OAuth.
-    
-    Returns True if user has valid OAuth tokens for the Web Playback SDK.
+
+async def _is_spotify_authenticated_async() -> bool:
+    """Check asynchronously if the user has authenticated with Spotify OAuth.
+
+    Replaces the blocking ``requests.get`` with an ``httpx.AsyncClient`` call
+    so it is safe to call from the asyncio event loop.
     """
+    url = settings.FRONTEND_URL.rstrip("/") + _SPOTIFY_TOKEN_PATH
     try:
-        import requests
-        resp = requests.get("http://127.0.0.1:3000/api/spotify/token", timeout=2)
-        if resp.ok:
-            data = resp.json()
-            return bool(data.get("authenticated"))
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(url)
+            if resp.is_success:
+                return bool(resp.json().get("authenticated"))
         return False
     except Exception:
         return False
@@ -38,6 +43,7 @@ def _is_spotify_authenticated() -> bool:
 
 class DataVisualizerTool(BaseTool):
     """Visualise structured data as interactive bar / line / pie charts."""
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only data rendering
 
     def __init__(self) -> None:
         super().__init__(
@@ -116,6 +122,7 @@ class DataVisualizerTool(BaseTool):
 
 class MarkdownPreviewerTool(BaseTool):
     """Render markdown content with a live preview / source toggle."""
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # rendering only, no I/O
 
     def __init__(self) -> None:
         super().__init__(
@@ -179,6 +186,7 @@ class MarkdownPreviewerTool(BaseTool):
 
 class JsonExplorerTool(BaseTool):
     """Display structured data in an interactive collapsible tree."""
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only display
 
     def __init__(self) -> None:
         super().__init__(
@@ -249,6 +257,7 @@ class JsonExplorerTool(BaseTool):
 
 class ColorPaletteTool(BaseTool):
     """Generate and explore colour palettes with harmonies & contrast info."""
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only generation
 
     def __init__(self) -> None:
         super().__init__(
@@ -320,6 +329,7 @@ class ColorPaletteTool(BaseTool):
 
 class KanbanBoardTool(BaseTool):
     """Render a drag-and-drop Kanban board for task management."""
+    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # writes persistent task data
 
     def __init__(self) -> None:
         super().__init__(
@@ -414,6 +424,7 @@ class SpotifyPlayerTool(BaseTool):
     Uses Spotify Web Playback SDK to play FULL TRACKS (not just previews).
     Requires user to log in with Spotify Premium account.
     """
+    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # external service, acts on behalf of user
 
     def __init__(self, spotify_service: Any = None) -> None:
         self._spotify = spotify_service
@@ -489,15 +500,16 @@ class SpotifyPlayerTool(BaseTool):
         # Try to use OAuth token from Next.js API if user is authenticated
         oauth_token = None
         try:
-            import requests
-            resp = requests.get("http://127.0.0.1:3000/api/spotify/token", timeout=2)
-            if resp.ok:
-                data = resp.json()
-                if data.get("access_token"):
-                    oauth_token = data["access_token"]
-                    logger.info("Using OAuth token from Next.js for Spotify search")
+            url = settings.FRONTEND_URL.rstrip("/") + _SPOTIFY_TOKEN_PATH
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                resp = await client.get(url)
+                if resp.is_success:
+                    data = resp.json()
+                    if data.get("access_token"):
+                        oauth_token = data["access_token"]
+                        logger.info("Using OAuth token from Next.js for Spotify search")
         except Exception as e:
-            logger.debug(f"No OAuth token available from Next.js: {e}")
+            logger.debug("No OAuth token available from Next.js: %s", e)
 
         from agent_framework.providers.integrations.spotify import SpotifyService
         if oauth_token:
@@ -562,7 +574,7 @@ class SpotifyPlayerTool(BaseTool):
         all_tracks = tracks
         
         # Check Spotify OAuth authentication status
-        is_authenticated = _is_spotify_authenticated()
+        is_authenticated = await _is_spotify_authenticated_async()
 
         # Build text summary for the LLM
         track_list = []

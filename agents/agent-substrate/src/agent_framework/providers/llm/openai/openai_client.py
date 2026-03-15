@@ -262,6 +262,134 @@ class OpenAIClient(BaseModelClient):
             finish_reason=finish_reason,
         )
     
+    # ------------------------------------------------------------------
+    # Structured outputs
+    # ------------------------------------------------------------------
+
+    async def generate_structured(
+        self,
+        messages: list[BaseClientMessage],
+        response_schema: type,
+        **kwargs,
+    ):
+        """Generate a response that strictly conforms to ``response_schema``.
+
+        Uses ``client.responses.parse(text_format=response_schema)`` which
+        is the OpenAI Responses-API structured-output primitive.  The SDK
+        validates the response against the Pydantic model and surfaces any
+        safety refusal via ``output[0].refusal``.
+
+        Returns:
+            ``StructuredOutputResult`` with ``parsed``, ``raw_text``, and
+            ``refusal`` populated.
+
+        Raises:
+            ``StructuredOutputError`` on API / parse failure.
+        """
+        import openai
+        from agent_framework.core.structured.result import (
+            StructuredOutputError,
+            StructuredOutputResult,
+        )
+
+        # Reuse the same message-conversion path as generate()
+        instructions = ""
+        conversation_input = []
+
+        for msg in messages:
+            if msg.role == "system":
+                instructions += f"{msg.content}\n"
+            elif msg.role == "user":
+                msg_dict = msg.to_dict()
+                conversation_input.append({
+                    "type": "message",
+                    "role": "user",
+                    "content": msg_dict.get("content", []),
+                })
+            elif msg.role == "assistant":
+                msg_dict = msg.to_dict()
+                serialized_content = msg_dict.get("content", [])
+                if serialized_content:
+                    conversation_input.append({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": serialized_content,
+                    })
+            elif msg.role in ("tool_response", "tool"):
+                content_str = ""
+                if hasattr(msg, "content") and msg.content:
+                    if isinstance(msg.content, list):
+                        text_parts = [
+                            b.get("text", "") for b in msg.content
+                            if isinstance(b, dict) and b.get("type") == "text"
+                        ]
+                        content_str = "\n".join(text_parts)
+                    elif isinstance(msg.content, str):
+                        content_str = msg.content
+                conversation_input.append({
+                    "type": "function_call_output",
+                    "call_id": getattr(msg, "tool_call_id", None),
+                    "output": content_str,
+                })
+
+        params: dict = {
+            "model": kwargs.get("model", self.model),
+            "input": conversation_input,
+            "text": {"format": {"type": "json_schema", "strict": True}},
+        }
+        # text_format is the Pydantic-aware helper — pass the class directly
+        # and pass instructions if present
+        if instructions:
+            params["instructions"] = instructions.strip()
+        if self.max_tokens:
+            params["max_output_tokens"] = kwargs.get("max_tokens", self.max_tokens)
+
+        try:
+            response = await self.client.responses.parse(
+                text_format=response_schema,
+                **{k: v for k, v in params.items() if k != "text"},
+            )
+        except openai.APIError as exc:
+            raise StructuredOutputError(f"OpenAI API error during structured parse: {exc}") from exc
+        except Exception as exc:
+            raise StructuredOutputError(f"Unexpected error during structured parse: {exc}") from exc
+
+        # Check for refusal in output items
+        refusal: Optional[str] = None
+        raw_text: str = ""
+        parsed = None
+
+        if response.output:
+            for item in response.output:
+                # output_parsed is set on the response object by the SDK
+                pass
+
+        # The SDK sets response.output_parsed when using responses.parse()
+        parsed = getattr(response, "output_parsed", None)
+        raw_text = getattr(response, "output_text", "") or ""
+
+        # Check each output item for refusal
+        if response.output:
+            for item in response.output:
+                item_refusal = getattr(item, "refusal", None)
+                if item_refusal:
+                    refusal = item_refusal
+                    parsed = None
+                    break
+                # Also check nested content blocks
+                for block in getattr(item, "content", []):
+                    if getattr(block, "type", None) == "refusal":
+                        refusal = getattr(block, "refusal", str(block))
+                        parsed = None
+                        break
+
+        return StructuredOutputResult(
+            parsed=parsed,
+            raw_text=raw_text,
+            refusal=refusal,
+            model=self.model,
+        )
+
     async def generate_stream(
         self,
         messages: list[BaseClientMessage],

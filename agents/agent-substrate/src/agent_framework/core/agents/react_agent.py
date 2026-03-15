@@ -47,6 +47,7 @@ from agent_framework.core.memory.base_memory import BaseMemory
 from agent_framework.core.memory.memory_scope import MemoryScope
 from agent_framework.core.memory.unbounded_memory import UnboundedMemory
 from agent_framework.core.messages.base_message import UsageStats
+from agent_framework.core.structured import StructuredOutputResult, StructuredOutputError
 from agent_framework.core.messages.client_messages import (
     AssistantMessage,
     SystemMessage,
@@ -69,7 +70,7 @@ from agent_framework.core.resilience import (
     TOOL_RETRY_POLICY,
     _calculate_delay,
 )
-from agent_framework.extensions.tools.base_tool import BaseTool, ToolResult
+from agent_framework.core.tools.base_tool import BaseTool, HitlMode, ToolResult
 from agent_framework.extensions.skills import SkillManager
 
 
@@ -166,23 +167,24 @@ class ReActAgent(BaseAgent):
         self.tool_approval_handler = tool_approval_handler
         self.tools_requiring_approval = tools_requiring_approval  # None = all tools when handler set
 
-        # Build effective system prompt (base + skill context)
-        effective_system = self.skill_manager.inject_into_prompt(self.system_instructions) \
-            if self.skill_manager else self.system_instructions
-
-        # Seed system prompt
-        if len(self.memory.get_messages()) == 0:
-            self.memory.add_message(SystemMessage(content=effective_system))
-
     # ── Core run ─────────────────────────────────────────────────────────────
 
-    def reset(self) -> None:
+    async def _seed_system_message(self) -> None:
+        """Seed the system prompt into memory if it is empty (lazy, async-safe)."""
+        effective_system = (
+            self.skill_manager.inject_into_prompt(self.system_instructions)
+            if self.skill_manager else self.system_instructions
+        )
+        if await self.memory.size() == 0:
+            await self.memory.add_message(SystemMessage(content=effective_system))
+
+    async def reset(self) -> None:
         """Clear memory and return agent to initial state with system message."""
-        super().reset()
+        await super().reset()
         # Re-add system message (with skill context) after clearing
         effective_system = self.skill_manager.inject_into_prompt(self.system_instructions) \
             if self.skill_manager else self.system_instructions
-        self.memory.add_message(SystemMessage(content=effective_system))
+        await self.memory.add_message(SystemMessage(content=effective_system))
         # Reset HITL tool counters
         self._reset_hitl_tools()
 
@@ -229,8 +231,11 @@ class ReActAgent(BaseAgent):
                 "input_text": input_text,
             })
 
+            # Ensure system prompt is loaded (lazy seed for async memory)
+            await self._seed_system_message()
+
             # 1. Add user message
-            self.memory.add_message(UserMessage(content=[input_text]))
+            await self.memory.add_message(UserMessage(content=[input_text]))
 
             # ── INPUT GUARDRAILS ─────────────────────────────────────────
             try:
@@ -272,7 +277,7 @@ class ReActAgent(BaseAgent):
                     # A. THINK — call LLM
                     response = await self._call_llm(current_input=input_text, **kwargs)
                     usage.add(response.usage)
-                    self.memory.add_message(response)
+                    await self.memory.add_message(response)
 
                     # Extract content (can be multimodal)
                     thought_content = response.content if response.content else None
@@ -367,7 +372,7 @@ class ReActAgent(BaseAgent):
                                 name=parsed.name,
                                 isError=True,
                             )
-                            self.memory.add_message(tool_msg)
+                            await self.memory.add_message(tool_msg)
                             tool_records.append(ToolCallRecord(
                                 tool_name=parsed.name,
                                 call_id=parsed.call_id,
@@ -381,7 +386,7 @@ class ReActAgent(BaseAgent):
 
                         if not tool_blocked:
                             record, tool_msg = await self._execute_tool(parsed, step_num)
-                            self.memory.add_message(tool_msg)
+                            await self.memory.add_message(tool_msg)
                             tool_records.append(record)
 
                         # Tally
@@ -440,6 +445,83 @@ class ReActAgent(BaseAgent):
 
             return result
 
+    # ── Structured-output run ────────────────────────────────────────────────
+
+    async def run_structured(
+        self,
+        input_text: str,
+        schema: "type",
+        *,
+        max_iterations: Optional[int] = None,
+        **kwargs,
+    ) -> "StructuredOutputResult":
+        """Run the full ReAct loop and then emit a typed final answer.
+
+        Combines tool use, memory, and guardrails with a structured final
+        extraction step.  The agent reasons freely (with tool calls if
+        needed) for up to ``max_iterations`` steps, then one additional
+        ``generate_structured()`` call is made with the accumulated
+        conversation context so the final answer is validated against
+        ``schema``.
+
+        This lets you write deterministic workflows on top of a reasoning
+        agent::
+
+            class BookingDecision(BaseModel):
+                approved: bool
+                reason: str
+                suggested_date: Optional[str] = None
+
+            result = await agent.run_structured(
+                'Book a flight from NYC to London for next Friday',
+                schema=BookingDecision,
+            )
+            if result.ok:
+                decision = result.parsed
+                if decision.approved:
+                    await confirm_booking(decision.suggested_date)
+
+        Args:
+            input_text: User input to process.
+            schema: Pydantic ``BaseModel`` subclass for the final answer.
+            max_iterations: Override the agent's default ``max_iterations``.
+            **kwargs: Passed to the underlying ``_run_inner()`` call.
+
+        Returns:
+            ``StructuredOutputResult[schema]`` with the typed final answer.
+
+        Raises:
+            ``StructuredOutputError`` if the model cannot produce a valid
+            structured output after the ReAct loop.
+        """
+
+        # Run the full ReAct loop (with tools, memory, guardrails)
+        _saved_max = self.max_iterations
+        if max_iterations is not None:
+            self.max_iterations = max_iterations
+        try:
+            await self._run_inner(input_text, **kwargs)
+        finally:
+            self.max_iterations = _saved_max
+
+        # Collect the conversation window built by the loop
+        context_messages = await self.model_context.build(
+            session_id=getattr(self, "_session_id", self.name),
+            current_input=input_text,
+            raw_messages=await self.memory.get_messages(),
+        )
+
+        # One final structured-output call to extract the typed answer
+        structured_result: StructuredOutputResult = (
+            await self.model_client.generate_structured(
+                context_messages,
+                schema,
+                **{k: v for k, v in kwargs.items()
+                   if k not in ("temperature", "tools", "tool_choice")},
+            )
+        )
+        return structured_result
+
     # ── Streaming run ────────────────────────────────────────────────────────
 
     async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
@@ -459,7 +541,9 @@ class ReActAgent(BaseAgent):
             if self.verbose:
                 logger.info(f"[{self.name}] Starting streaming run: {input_text[:80]}...")
 
-            self.memory.add_message(UserMessage(content=[input_text]))
+            # Ensure system prompt is loaded (lazy seed for async memory)
+            await self._seed_system_message()
+            await self.memory.add_message(UserMessage(content=[input_text]))
 
             # ── INPUT GUARDRAILS ─────────────────────────────────────────
             try:
@@ -493,7 +577,7 @@ class ReActAgent(BaseAgent):
                     messages = await self.model_context.build(
                         session_id=getattr(self, "_session_id", self.name),
                         current_input=input_text,
-                        raw_messages=self.memory.get_messages(),
+                        raw_messages=await self.memory.get_messages(),
                         model_client=self.model_client,
                     )
 
@@ -524,7 +608,7 @@ class ReActAgent(BaseAgent):
                             
                             # After stream completes, add final message to memory
                             if final_response_obj:
-                                self.memory.add_message(final_response_obj)
+                                await self.memory.add_message(final_response_obj)
                             
                             llm_t1 = asyncio.get_event_loop().time()
                             global_metrics.record_histogram(
@@ -535,9 +619,9 @@ class ReActAgent(BaseAgent):
                             # Agent task was cancelled — persist whatever content we
                             # have so the conversation history stays coherent.
                             if final_response_obj is not None:
-                                self.memory.add_message(final_response_obj)
+                                await self.memory.add_message(final_response_obj)
                             elif partial_text:
-                                self.memory.add_message(
+                                await self.memory.add_message(
                                     AssistantMessage(
                                         role="assistant",
                                         content=[partial_text],
@@ -624,23 +708,23 @@ class ReActAgent(BaseAgent):
                                     name=parsed.name,
                                     isError=True,
                                 )
-                                self.memory.add_message(tool_msg)
+                                await self.memory.add_message(tool_msg)
                                 yield tool_msg
 
                             if not tool_blocked:
                                 _, tool_msg = await self._execute_tool(parsed, step_num)
-                                self.memory.add_message(tool_msg)
+                                await self.memory.add_message(tool_msg)
                                 yield tool_msg
 
     # ── State management ─────────────────────────────────────────────────────
 
-    def save_state(self) -> Dict[str, Any]:
+    async def save_state(self) -> Dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
             "system_instructions": self.system_instructions,
             "max_iterations": self.max_iterations,
-            "messages": [m.to_dict() for m in self.memory.get_messages()],
+            "messages": [m.to_dict() for m in await self.memory.get_messages()],
         }
 
     def load_state(self, state: Dict[str, Any]) -> None:
@@ -678,7 +762,7 @@ class ReActAgent(BaseAgent):
         messages = await self.model_context.build(
             session_id=getattr(self, "_session_id", self.name),
             current_input=current_input,
-            raw_messages=self.memory.get_messages(),
+            raw_messages=await self.memory.get_messages(),
             model_client=self.model_client,
         )
 
@@ -856,11 +940,15 @@ class ReActAgent(BaseAgent):
 
             # ── HITL: TOOL APPROVAL GATE ─────────────────────────
             if self.tool_approval_handler and self._tool_needs_approval(parsed.name):
+                # Read the HITL mode declared on the tool instance
+                _hitl_mode: HitlMode = getattr(tool, "hitl_mode", HitlMode.BLOCKING)
                 approval_request = ToolApprovalRequest(
                     tool_name=parsed.name,
                     call_id=parsed.call_id,
                     arguments=parsed.arguments,
                     context=f"Agent wants to call '{parsed.name}' at step {step_num}",
+                    hitl_mode=_hitl_mode.value if hasattr(_hitl_mode, "value") else str(_hitl_mode),
+                    hitl_timeout_seconds=getattr(tool, "hitl_timeout_seconds", None),
                 )
                 try:
                     approval = await self.tool_approval_handler.request_approval(
@@ -980,6 +1068,7 @@ class ReActAgent(BaseAgent):
 
                 except Exception as e:
                     last_error = e
+                    break  # Non-retryable — do not keep trying
 
             # All retries exhausted
             error_msg = str(last_error) if last_error else "Unknown tool error"

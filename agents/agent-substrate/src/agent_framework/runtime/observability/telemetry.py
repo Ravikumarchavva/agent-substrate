@@ -24,10 +24,10 @@ from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExp
 from agent_framework.core.logger import setup_logging
 
 # ------------------------------------------------------------------------------
-# Logging
+# Logging — auto-detects JSON (server) vs pretty (notebook / CLI)
 # ------------------------------------------------------------------------------
 
-setup_logging()
+setup_logging(mode="auto")
 logger = logging.getLogger("agent_framework")
 
 # ------------------------------------------------------------------------------

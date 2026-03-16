@@ -230,3 +230,63 @@ class Feedback(Base):
 
     def __repr__(self) -> str:
         return f"<Feedback(id={self.id}, value={self.value})>"
+
+
+# ── Pipelines (Visual Builder) ──────────────────────────────────────────────
+
+class Pipeline(Base):
+    """A visual-builder pipeline graph (JSON config stored in JSONB)."""
+    __tablename__ = "pipelines"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False, default="Untitled Pipeline")
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    config: Mapped[Dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    runs: Mapped[List["PipelineRun"]] = relationship(
+        back_populates="pipeline", cascade="all, delete-orphan",
+        order_by="PipelineRun.started_at.desc()",
+    )
+
+    def __repr__(self) -> str:
+        return f"<Pipeline(id={self.id}, name={self.name!r})>"
+
+
+class PipelineRun(Base):
+    """A single execution of a pipeline (tracks status and result)."""
+    __tablename__ = "pipeline_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    pipeline_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pipelines.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="pending"
+    )
+    input_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    result: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    pipeline: Mapped["Pipeline"] = relationship(back_populates="runs")
+
+    def __repr__(self) -> str:
+        return f"<PipelineRun(id={self.id}, status={self.status!r})>"

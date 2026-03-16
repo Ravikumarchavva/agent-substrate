@@ -27,6 +27,7 @@ class OpenAIClient(BaseModelClient):
         **kwargs
     ):
         super().__init__(model, temperature, max_tokens, **kwargs)
+        self.api_key = api_key  # stored so PipelineRunner can build sibling clients
         self.client = AsyncOpenAI(api_key=api_key)
         self._encoding = None
     

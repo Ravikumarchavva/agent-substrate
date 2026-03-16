@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # (e.g. SpotifyPlayerTool fetching the OAuth token endpoint).
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 
+    # Visual Builder — set to True to mount /builder API routes.
+    # Keep False in production to avoid bloat.
+    ENABLE_BUILDER: bool = False
+
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
         env_file_encoding="utf-8",

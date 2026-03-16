@@ -49,6 +49,9 @@ agent-framework = "agent_framework.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.optional-dependencies]
+builder = []
+
 [dependency-groups]
 dev = [
     "opensearch-py>=3.1.0",

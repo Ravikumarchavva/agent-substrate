@@ -271,6 +271,12 @@ def create_app() -> FastAPI:
     app.include_router(spotify_oauth_router)
     app.include_router(tasks_router)
 
+    # Visual Builder — only mounted when ENABLE_BUILDER=true (zero prod footprint)
+    if settings.ENABLE_BUILDER:
+        from agent_framework.server.routes.builder import router as builder_router
+        app.include_router(builder_router)
+        logging.getLogger(__name__).info("Builder API mounted at /builder")
+
     # Health check
     @app.get("/health", tags=["infra"])
     async def health():

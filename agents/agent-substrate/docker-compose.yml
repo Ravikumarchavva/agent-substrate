@@ -64,6 +64,18 @@ services:
       - mcp
     restart: unless-stopped
 
+  builder-ui:
+    build:
+      context: ./builder
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
+    profiles:
+      - builder
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:

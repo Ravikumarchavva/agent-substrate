@@ -128,6 +128,22 @@ export default function BuilderPage() {
     api.getRegistry().then(setRegistry).catch(console.error);
   }, []);
 
+  /* ── Restore pipeline from URL on initial load ────────────────────── */
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) return;
+    api.getPipeline(id)
+      .then((full) => {
+        usePipelineStore.getState().loadPipeline({ ...full.config, name: full.name }, full.id);
+        setView("canvas");
+      })
+      .catch(() => {
+        // pipeline not found — stay on landing
+        window.history.replaceState(null, "", "/");
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* ── Keyboard shortcuts ───────────────────────────────────────────── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -173,6 +189,7 @@ export default function BuilderPage() {
     try {
       const full = await api.getPipeline(pipeline.id);
       usePipelineStore.getState().loadPipeline({ ...full.config, name: full.name }, full.id);
+      window.history.replaceState(null, "", `?id=${full.id}`);
       setView("canvas");
     } catch (err) {
       console.error("Load pipeline failed:", err);
@@ -251,7 +268,7 @@ export default function BuilderPage() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
       {/* toolbar */}
-      <CanvasToolbar onRun={handleRun} onBack={() => setView("landing")} />
+      <CanvasToolbar onRun={handleRun} onBack={() => { window.history.replaceState(null, "", "/"); setView("landing"); }} />
 
       {/* main area — palette · canvas+chat · inspector */}
       <div className={styles.workspace}>

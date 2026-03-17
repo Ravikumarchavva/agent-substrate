@@ -1,32 +1,26 @@
-/* ── Input — styled text / number input ──────────────────────────────────
- * ────────────────────────────────────────────────────────────────────────── */
+import * as React from "react"
+import { Input as InputPrimitive } from "@base-ui/react/input"
 
-"use client";
+import { cn } from "@/lib/utils"
 
-import React from "react";
-
-interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
-  value: string | number;
-  onChange: (value: string) => void;
+interface InputProps extends Omit<React.ComponentProps<"input">, "onChange"> {
+  value: string | number
+  onChange: (value: string) => void
 }
 
-export function Input({ value, onChange, className = "", style, ...props }: InputProps) {
+function Input({ className, type, onChange, ...props }: InputProps) {
   return (
-    <input
+    <InputPrimitive
+      type={type}
+      data-slot="input"
+      onChange={(event) => onChange(event.target.value)}
+      className={cn(
+        "h-7 w-full min-w-0 rounded-md border border-(--border) bg-(--bg) px-2 py-1 text-xs text-(--text) transition-colors outline-none placeholder:text-(--text-dim) focus-visible:border-(--accent) focus-visible:ring-1 focus-visible:ring-(--accent)/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40",
+        className
+      )}
       {...props}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`
-        w-full min-h-11 rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all
-        hover:border-white/10 focus:border-[rgba(99,102,241,0.45)] focus:ring-4 focus:ring-[rgba(99,102,241,0.14)]
-        ${className}
-      `.trim()}
-      style={{
-        background: "#242424",
-        borderColor: "var(--border)",
-        color: "var(--text)",
-        ...style,
-      }}
     />
-  );
+  )
 }
+
+export { Input }

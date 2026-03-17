@@ -133,10 +133,10 @@
 .heroTitle {
   margin-top: 20px;
   color: var(--text);
-  font-size: clamp(3rem, 6vw, 5.8rem);
-  font-weight: 800;
-  line-height: 0.98;
-  letter-spacing: -0.06em;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
 }
 
 .heroTitleAccent {
@@ -148,11 +148,11 @@
 }
 
 .heroText {
-  margin-top: 24px;
-  max-width: 680px;
+  margin-top: 18px;
+  max-width: 520px;
   color: var(--text-muted);
-  font-size: 18px;
-  line-height: 1.8;
+  font-size: 15px;
+  line-height: 1.7;
 }
 
 .actions {
@@ -202,7 +202,7 @@
   width: 100%;
   justify-content: space-between;
   border-color: var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-elevated);
   color: var(--text);
   padding: 12px 14px;
   font-size: 14px;
@@ -221,7 +221,7 @@
   gap: 10px;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-elevated);
   padding: 12px 14px;
 }
 
@@ -258,7 +258,7 @@
 .statCard {
   border: 1px solid var(--border);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-elevated);
   padding: 18px 18px 16px;
 }
 
@@ -287,9 +287,9 @@
   overflow: hidden;
   border: 1px solid rgba(99, 102, 241, 0.2);
   border-radius: 30px;
-  background: linear-gradient(180deg, rgba(45, 45, 45, 0.98), rgba(34, 34, 34, 0.98));
+  background: var(--bg-surface);
   padding: 20px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-card);
 }
 
 .previewGlow {
@@ -341,7 +341,7 @@
 .previewMetric {
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-elevated);
   padding: 12px 14px;
 }
 
@@ -361,7 +361,7 @@
   margin-top: 18px;
   border: 1px solid var(--border);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-elevated);
   padding: 16px;
 }
 
@@ -548,7 +548,7 @@
 }
 
 .templateCard {
-  background: linear-gradient(180deg, rgba(45, 45, 45, 0.96), rgba(39, 39, 39, 0.96));
+  background: var(--bg-surface);
   min-height: 300px;
 }
 
@@ -556,7 +556,7 @@
   min-height: 300px;
   border-style: dashed;
   border-width: 2px;
-  background: rgba(255, 255, 255, 0.01);
+  background: var(--bg-elevated);
 }
 
 .savedCard {

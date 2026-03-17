@@ -1,13 +1,7 @@
-/* ── NodePalette — categorised draggable sidebar ─────────────────────────
- *
- * OpenAI-style palette with sections: Core · Tools · Logic · Data.
- * Users drag items onto the React Flow canvas via HTML5 DnD.
- * ────────────────────────────────────────────────────────────────────────── */
-
-"use client";
+﻿"use client";
 
 import { type DragEvent, useState } from "react";
-import { PanelLeftClose } from "lucide-react";
+import { ChevronRight, PanelLeftClose } from "lucide-react";
 import {
   AgentIcon,
   ToolIcon,
@@ -22,9 +16,6 @@ import {
   ApprovalIcon,
   McpIcon,
 } from "@/nodes/icons";
-import styles from "./NodePalette.module.css";
-
-/* ── Category schema ─────────────────────────────────────────────────── */
 
 interface PaletteItem {
   type: string;
@@ -74,14 +65,10 @@ const PALETTE: PaletteCategory[] = [
   },
 ];
 
-/* ── DnD helper ──────────────────────────────────────────────────────── */
-
 function onDragStart(e: DragEvent<HTMLDivElement>, nodeType: string) {
   e.dataTransfer.setData("application/reactflow-type", nodeType);
   e.dataTransfer.effectAllowed = "move";
 }
-
-/* ── Single palette item ─────────────────────────────────────────────── */
 
 function PaletteEntry({ item }: { item: PaletteItem }) {
   const Icon = item.icon;
@@ -89,50 +76,36 @@ function PaletteEntry({ item }: { item: PaletteItem }) {
     <div
       draggable
       onDragStart={(e) => onDragStart(e, item.type)}
-      className={styles.entry}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = `${item.color}55`;
-        e.currentTarget.style.boxShadow = `0 12px 28px ${item.color}14`;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "var(--border)";
-        e.currentTarget.style.boxShadow = "none";
-      }}
+      className="group flex items-center gap-2.5 px-2.5 py-2 rounded-md border border-(--border) bg-(--bg-surface) cursor-grab hover:bg-(--bg-hover) transition-colors"
     >
       <div
-        className={styles.iconWrap}
-        style={{ background: `${item.color}20`, color: item.color }}
+        className="shrink-0 flex items-center justify-center w-7 h-7 rounded-md"
+        style={{ background: item.color + "14", color: item.color }}
       >
-        <Icon size={18} />
+        <Icon size={15} />
       </div>
-      <div className={styles.copy}>
-        <div className={styles.labelRow}>
-          <div className={styles.label}>{item.label}</div>
-          <span className={styles.badge}>{item.tag}</span>
-        </div>
-        <div className={styles.desc}>
-          {item.desc}
-        </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-medium text-(--text) truncate">{item.label}</div>
+        <div className="text-[10px] text-(--text-dim) truncate">{item.desc}</div>
       </div>
+      <span className="shrink-0 text-[8px] font-medium tracking-wider uppercase text-(--text-dim) px-1.5 py-0.5 rounded bg-(--bg-elevated)">{item.tag}</span>
     </div>
   );
 }
 
-/* ── Collapsible section ─────────────────────────────────────────────── */
-
 function Section({ cat }: { cat: PaletteCategory }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className={styles.section}>
+    <div className="border-b border-(--border) last:border-0">
       <button
         onClick={() => setOpen(!open)}
-        className={styles.sectionButton}
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-[10px] font-semibold tracking-wider uppercase text-(--text-muted) hover:bg-(--bg-hover) transition-colors"
       >
-        <span className={`${styles.chevron} ${open ? styles.chevronOpen : ""}`}>›</span>
+        <ChevronRight className={`w-3.5 h-3.5 text-(--text-dim) transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
         {cat.heading}
       </button>
       {open && (
-        <div className={styles.entries}>
+        <div className="px-3 pb-3 space-y-1.5">
           {cat.items.map((item) => (
             <PaletteEntry key={item.type} item={item} />
           ))}
@@ -142,44 +115,31 @@ function Section({ cat }: { cat: PaletteCategory }) {
   );
 }
 
-/* ── Main component ──────────────────────────────────────────────────── */
-
 interface NodePaletteProps {
   onCollapse?: () => void;
 }
 
 export function NodePalette({ onCollapse }: NodePaletteProps) {
   return (
-    <aside
-      className={styles.sidebar}
-      style={{ borderColor: "var(--border)" }}
-    >
-      <div className={styles.header} style={{ borderColor: "var(--border)" }}>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <div className={styles.eyebrow}>
-              Workflow blocks
-            </div>
-            <p className={styles.description}>
-              Drag blocks onto the canvas to build the flow.
-            </p>
-          </div>
-          {onCollapse ? (
-            <button
-              onClick={onCollapse}
-              className={styles.collapseButton}
-              style={{ borderColor: "var(--border)" }}
-              aria-label="Collapse workflow blocks"
-              title="Collapse workflow blocks"
-            >
-              <PanelLeftClose size={15} />
-            </button>
-          ) : null}
-        </div>
+    <aside className="w-64 shrink-0 border-r border-(--border) bg-(--bg) flex flex-col h-full overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-(--border)">
+        <span className="text-xs font-semibold text-(--text)">Blocks</span>
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            className="p-1 text-(--text-dim) hover:bg-(--bg-hover) rounded transition-colors"
+            aria-label="Collapse"
+            title="Collapse"
+          >
+            <PanelLeftClose size={14} />
+          </button>
+        )}
       </div>
-      {PALETTE.map((cat) => (
-        <Section key={cat.heading} cat={cat} />
-      ))}
+      <div className="flex-1 overflow-y-auto">
+        {PALETTE.map((cat) => (
+          <Section key={cat.heading} cat={cat} />
+        ))}
+      </div>
     </aside>
   );
 }

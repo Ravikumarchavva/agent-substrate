@@ -14,6 +14,7 @@ from agent_framework.core.pipelines.schema import (
     PipelineConfig,
 )
 from agent_framework.core.pipelines.runner import PipelineRunner
+from agent_framework.core.pipelines.while_runner import WhilePipelineRunner
 from agent_framework.core.pipelines.codegen import generate_code
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "NodeType",
     "PipelineConfig",
     "PipelineRunner",
+    "WhilePipelineRunner",
     "generate_code",
 ]

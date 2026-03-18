@@ -10,7 +10,7 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        info: "border-[rgba(99,102,241,0.22)] bg-[rgba(99,102,241,0.1)] text-[rgb(165,180,252)]",
+        info: "border-(--border) bg-(--bg-elevated) text-(--text-muted)",
         saved: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
         success: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
         warning: "border-amber-500/20 bg-amber-500/10 text-amber-400",

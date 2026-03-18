@@ -126,9 +126,7 @@
   min-height: 0;
   overflow: hidden;
 }
-.bodyWithApps {
-  /* reserved: layout shifts when apps column is open */
-}
+.bodyWithApps {}
 .chatColumn {
   flex: 1;
   display: flex;

@@ -83,8 +83,8 @@ export function CanvasToolbar({ onRun, onBack, onDeleteComplete }: CanvasToolbar
   };
 
   return (
-    <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
-      <header className="border-b border-(--border) bg-(--bg-surface)/80 backdrop-blur-md px-4 py-2.5 flex items-center justify-between pointer-events-auto">
+    <>
+      <header className="border-b border-(--border) bg-(--bg-surface)/80 backdrop-blur-md px-4 py-2.5 flex items-center justify-between shrink-0 z-50">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="h-7 w-7 text-(--text-dim) hover:bg-(--bg-hover)" onClick={onBack} title="Back to home">
             <ChevronLeft className="w-4 h-4" />
@@ -114,11 +114,11 @@ export function CanvasToolbar({ onRun, onBack, onDeleteComplete }: CanvasToolbar
             </div>
           )}
 
-          <Badge variant="outline" className="text-[9px] font-normal px-1.5 py-0 h-4 bg-(--bg-elevated) text-(--text-dim) border-(--border)">Draft</Badge>
+          <Badge variant="outline" className="text-[9px] font-normal px-1.5 py-0 h-4 w-8 bg-(--bg-elevated) text-(--text-dim) border-(--border)">Draft</Badge>
         </div>
 
         <div className="flex items-center gap-1.5">
-          <Button variant="outline" size="sm" className="h-7 text-[11px] bg-(--bg) border-(--border)" onClick={handleSave} disabled={saving}>
+          <Button variant="outline" size="sm" className="h-7 w-16 text-[11px] bg-(--bg) border-(--border)" onClick={handleSave} disabled={saving}>
             <Save className="w-3 h-3 mr-1" />
             {saving ? "Saving..." : "Save"}
           </Button>
@@ -137,7 +137,7 @@ export function CanvasToolbar({ onRun, onBack, onDeleteComplete }: CanvasToolbar
 
           <div className="h-5 w-px bg-(--border) mx-0.5" />
           
-          <Button size="sm" className="h-7 text-[11px] gap-1.5 font-medium" onClick={onRun}>
+          <Button size="sm" className="h-7 w-16 text-[11px] gap-1.5 font-medium" onClick={onRun}>
              <Play className="w-3 h-3 fill-current" />
              Run
           </Button>
@@ -147,18 +147,14 @@ export function CanvasToolbar({ onRun, onBack, onDeleteComplete }: CanvasToolbar
       </header>
 
       {/* Floating bottom action bar */}
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 pointer-events-auto shadow-lg bg-(--bg-surface) border border-(--border) rounded-full flex items-center px-2 py-1 gap-0.5">
-        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-(--text-dim) hover:text-(--text)" title="Auto-layout">
-           <Network className="w-3.5 h-3.5" />
-        </Button>
-        <div className="w-px h-3.5 bg-(--border) mx-0.5" />
-        <Button variant="ghost" size="sm" className="h-7 text-[11px] font-medium rounded-full hover:bg-(--bg-hover)">
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 shadow-lg bg-(--bg-surface) border border-(--border) rounded-lg flex items-center px-2 py-1 gap-0.5 w-36 justify-center">
+        <Button variant="ghost" size="sm" className="h-7 w-1/2 text-[11px] font-medium rounded-lg hover:bg-(--accent) hover:cursor-pointer">
            Evaluate
         </Button>
-        <Button variant="ghost" size="sm" className="h-7 text-[11px] font-medium rounded-full hover:bg-(--bg-hover)">
+        <Button variant="ghost" size="sm" className="h-7 w-1/2 text-[11px] font-medium rounded-lg hover:bg-(--accent) hover:cursor-pointer">
            Deploy
         </Button>
       </div>
-    </div>
+    </>
   );
 }

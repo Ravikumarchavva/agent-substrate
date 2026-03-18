@@ -19,7 +19,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import {
   ReactFlow,
-  MiniMap,
   Background,
   BackgroundVariant,
   type ReactFlowInstance,
@@ -54,22 +53,7 @@ const DEFAULT_CONFIGS: Record<string, Record<string, unknown>> = {
   note: { text: "" },
   condition: { conditions: [{ expression: "", label: "Branch 1" }] },
   approval: { prompt: "Does this look correct?" },
-};
-
-/* ── MiniMap node colours ────────────────────────────────────────────── */
-
-const MINIMAP_COLORS: Record<string, string> = {
-  agent: "#6366f1",
-  tool: "#22c55e",
-  skill: "#a855f7",
-  guardrail: "#f59e0b",
-  router: "#06b6d4",
-  memory: "#ec4899",
-  start: "#22c55e",
-  end: "#22c55e",
-  note: "#c4a235",
-  condition: "#22c55e",
-  approval: "#f97316",
+  while: { condition: "", max_iterations: 10 },
 };
 
 /* ── Main component ──────────────────────────────────────────────────── */
@@ -325,16 +309,9 @@ export default function BuilderPage() {
                   fitView
                   deleteKeyCode={["Backspace", "Delete"]}
                   proOptions={{ hideAttribution: true }}
-                  className="!bg-[var(--bg)]"
+                  className={`!bg-[var(--canvas-bg)]`}
                 >
                   <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
-                  <MiniMap
-                    nodeColor={(n) => MINIMAP_COLORS[n.type ?? "agent"] ?? "#6366f1"}
-                    maskColor="rgba(33,33,33,0.75)"
-                    style={{ background: "var(--bg-surface)" }}
-                    pannable
-                    zoomable
-                  />
                 </ReactFlow>
               </div>
             </div>

@@ -37,6 +37,7 @@ class NodeType(str, Enum):
     NOTE       = "note"       # documentation only — no runtime effect
     CONDITION  = "condition"  # expression-based branching
     APPROVAL   = "approval"   # human-in-the-loop gate
+    WHILE      = "while"      # repeat-until loop
 
 
 class EdgeType(str, Enum):
@@ -54,6 +55,9 @@ class EdgeType(str, Enum):
     APPROVAL_INPUT    = "approval_input"       # upstream → approval node
     APPROVAL_APPROVE  = "approval_approve"     # approval → approve path
     APPROVAL_REJECT   = "approval_reject"      # approval → reject path
+    # While loop
+    WHILE_BODY        = "while_body"           # while → body (loop back)
+    WHILE_DONE        = "while_done"           # while → done (exit loop)
 
 
 # ---------------------------------------------------------------------------

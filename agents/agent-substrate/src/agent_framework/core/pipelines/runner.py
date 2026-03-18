@@ -42,6 +42,7 @@ from agent_framework.core.pipelines.schema import (
     PipelineConfig,
 )
 from agent_framework.core.pipelines.condition_runner import ConditionPipelineRunner
+from agent_framework.core.pipelines.while_runner import WhilePipelineRunner
 from agent_framework.core.structured.judge import LLMJudge
 from agent_framework.core.structured.router import StructuredRouter
 from agent_framework.core.tools.base_tool import BaseTool
@@ -81,17 +82,31 @@ class PipelineRunner:
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
-    ) -> Union[ReActAgent, StructuredRouter, "ConditionPipelineRunner"]:
+    ) -> Union[ReActAgent, StructuredRouter, "ConditionPipelineRunner", "WhilePipelineRunner"]:
         """Build the pipeline graph into a runnable agent or router.
 
         Topology detection (in priority order):
-        1. ``condition`` node  → ``ConditionPipelineRunner`` (expression-based branching)
-        2. ``router`` node     → ``StructuredRouter`` (LLM-based routing)
-        3. First ``agent``     → single ``ReActAgent``
+        1. ``while`` node     → ``WhilePipelineRunner`` (repeat-until loop)
+        2. ``condition`` node  → ``ConditionPipelineRunner`` (expression-based branching)
+        3. ``router`` node     → ``StructuredRouter`` (LLM-based routing)
+        4. First ``agent``     → single ``ReActAgent``
 
         ``start``, ``end``, and ``note`` nodes are structural-only and are
         always skipped at runtime.
         """
+        # While-loop pipeline
+        while_nodes = config.nodes_by_type(NodeType.WHILE)
+        if while_nodes:
+            return await self._build_while_pipeline(
+                config, while_nodes[0],
+                tools_registry=tools_registry,
+                model_client=model_client,
+                redis_memory=redis_memory,
+                model_context=model_context,
+                session_id=session_id,
+                hitl_bridge=hitl_bridge,
+            )
+
         # Condition-based branching pipeline
         condition_nodes = config.nodes_by_type(NodeType.CONDITION)
         if condition_nodes:
@@ -134,6 +149,76 @@ class PipelineRunner:
         return agent
 
     # ── Agent builder ────────────────────────────────────────────────────
+
+    # ── While-loop pipeline builder ──────────────────────────────────────
+
+    async def _build_while_pipeline(
+        self,
+        config: PipelineConfig,
+        while_node: NodeConfig,
+        *,
+        tools_registry: List[BaseTool],
+        model_client: BaseModelClient,
+        redis_memory: Optional[RedisMemory] = None,
+        model_context: Optional[ModelContext] = None,
+        session_id: Optional[str] = None,
+        hitl_bridge: Optional[Any] = None,
+    ) -> "WhilePipelineRunner":
+        """Build a WhilePipelineRunner from a while node.
+
+        Expects:
+        - One agent connected via a ``while_body`` edge (the loop body).
+        - Optionally one agent connected via a ``while_done`` edge (post-loop).
+        """
+        body_agent_node: Optional[NodeConfig] = None
+        done_agent_node: Optional[NodeConfig] = None
+
+        for edge in config.edges_from(while_node.id):
+            target = config.node_by_id(edge.target)
+            if not target or target.node_type != NodeType.AGENT:
+                continue
+            handle = edge.source_handle or ""
+            if handle == "done":
+                done_agent_node = target
+            else:
+                body_agent_node = target  # body / default
+
+        # Fall back: pick the first agent in graph as the body
+        if body_agent_node is None:
+            agent_nodes = config.nodes_by_type(NodeType.AGENT)
+            body_agent_node = agent_nodes[0] if agent_nodes else None
+
+        if body_agent_node is None:
+            raise ValueError("While loop has no body agent connected")
+
+        body_agent = await self._build_agent(
+            config, body_agent_node,
+            tools_registry=tools_registry,
+            model_client=model_client,
+            redis_memory=redis_memory,
+            model_context=model_context,
+            session_id=session_id,
+            hitl_bridge=hitl_bridge,
+        )
+
+        done_agent = None
+        if done_agent_node:
+            done_agent = await self._build_agent(
+                config, done_agent_node,
+                tools_registry=tools_registry,
+                model_client=model_client,
+                redis_memory=redis_memory,
+                model_context=model_context,
+                session_id=session_id,
+                hitl_bridge=hitl_bridge,
+            )
+
+        return WhilePipelineRunner(
+            body_agent=body_agent,
+            condition=str(while_node.config.get("condition", "")),
+            max_iterations=int(while_node.config.get("max_iterations", 10)),
+            done_agent=done_agent,
+        )
 
     # ── Condition pipeline builder ───────────────────────────────────────
 
@@ -232,7 +317,7 @@ class PipelineRunner:
         ]
         if approval_nodes and hitl_bridge is not None:
             try:
-                from agent_framework.human_input import AskHumanTool
+                from agent_framework.extensions.tools.human_input import AskHumanTool
                 tools = [*tools, AskHumanTool(bridge=hitl_bridge)]
                 logger.info("Injected AskHumanTool for approval node %s", approval_nodes[0].id)
             except Exception as exc:

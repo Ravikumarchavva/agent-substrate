@@ -31,7 +31,7 @@ export function ThemeToggle() {
       size="icon"
       onClick={toggle}
       title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+      className="h-8 w-8 text-(--text-muted) hover:text-(--text) bg-(--bg-elevated) hover:bg-(--bg-hover) hover:cursor-pointer rounded-lg border border-(--border)"
     >
       {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </Button>

@@ -52,7 +52,7 @@ async function consumeSSE(
 
 const ROLE_STYLE: Record<ChatMessage["role"], { bg: string; color: string; row: string; bubble: string }> = {
   user: {
-    bg: "linear-gradient(135deg, #6366f1 0%, #818cf8 100%)",
+    bg: "var(--bg-hover)",
     color: "#fff",
     row: styles.rowRight,
     bubble: styles.bubbleStandard,

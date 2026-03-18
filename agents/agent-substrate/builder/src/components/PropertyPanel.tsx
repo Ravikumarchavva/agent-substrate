@@ -597,6 +597,40 @@ function ApprovalForm({ config, onUpdate }: FormProps) {
   );
 }
 
+/* ── While form ─────────────────────────────────────────────────── */
+
+function WhileForm({ config, onUpdate }: FormProps) {
+  return (
+    <>
+      <SectionCard title="Loop condition" description="The loop runs the body while this expression is true.">
+        <Field
+          label="Expression"
+          description="Use Common Expression Language. Receives \`output\` (last reply) and \`iteration\` (1-based)."
+        >
+          <Textarea
+            value={(config.condition as string) ?? ""}
+            onChange={(v) => onUpdate({ condition: v })}
+            placeholder='e.g. \"DONE\" not in output'
+            rows={3}
+          />
+        </Field>
+        <p className={styles.helperText}>
+          Leave blank to loop until the max iterations cap is reached.
+        </p>
+      </SectionCard>
+      <SectionCard title="Limits" description="Hard cap on the number of loop iterations.">
+        <Field label="Max iterations" description="The loop will always stop after this many cycles.">
+          <Input
+            type="number"
+            value={(config.max_iterations as number) ?? 10}
+            onChange={(v) => onUpdate({ max_iterations: parseInt(v) || 10 })}
+          />
+        </Field>
+      </SectionCard>
+    </>
+  );
+}
+
 /* ── Start / End forms ───────────────────────────────────────────────── */
 
 function StartForm({ config, onUpdate }: FormProps) {
@@ -668,6 +702,7 @@ const FORM_MAP: Record<string, React.ComponentType<FormProps>> = {
   note: NoteForm,
   condition: ConditionForm,
   approval: ApprovalForm,
+  while: WhileForm,
   start: StartForm,
   end: EndForm,
 };
@@ -684,6 +719,7 @@ const NODE_COLORS: Record<string, string> = {
   note: "#c4a235",
   condition: "var(--success)",
   approval: "#f97316",
+  while: "#f59e0b",
 };
 
 const NODE_DESCRIPTIONS: Record<string, string> = {
@@ -696,6 +732,7 @@ const NODE_DESCRIPTIONS: Record<string, string> = {
   note: "Document intent or implementation details for collaborators.",
   condition: "Create conditions to branch the workflow.",
   approval: "Pause for a human to approve or reject a step.",
+  while: "Loop while a condition is true.",
   start: "Define the workflow inputs.",
   end: "End the run after the final step completes.",
 };

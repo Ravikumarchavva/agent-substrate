@@ -11,6 +11,7 @@ export { EndNode } from "./EndNode";
 export { NoteNode } from "./NoteNode";
 export { ConditionNode } from "./ConditionNode";
 export { ApprovalNode } from "./ApprovalNode";
+export { WhileNode } from "./WhileNode";
 
 import type { NodeTypes } from "@xyflow/react";
 import { AgentNode } from "./AgentNode";
@@ -24,6 +25,7 @@ import { EndNode } from "./EndNode";
 import { NoteNode } from "./NoteNode";
 import { ConditionNode } from "./ConditionNode";
 import { ApprovalNode } from "./ApprovalNode";
+import { WhileNode } from "./WhileNode";
 
 export const nodeTypes: NodeTypes = {
   agent: AgentNode,
@@ -37,4 +39,5 @@ export const nodeTypes: NodeTypes = {
   note: NoteNode,
   condition: ConditionNode,
   approval: ApprovalNode,
+  while: WhileNode,
 };

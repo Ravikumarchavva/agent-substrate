@@ -11,7 +11,8 @@ export type NodeType =
   | "end"
   | "note"
   | "condition"
-  | "approval";
+  | "approval"
+  | "mcp";
 
 export type EdgeType =
   | "agent_tool"
@@ -19,7 +20,8 @@ export type EdgeType =
   | "agent_skill"
   | "agent_memory"
   | "router_route"
-  | "router_input";
+  | "router_input"
+  | "agent_mcp";
 
 export interface Position {
   x: number;
@@ -83,11 +85,22 @@ export interface RegistryGuardrailSchema {
   fields: Array<{ name: string; type: string; description: string }>;
 }
 
+export interface RegistryMcpServer {
+  id: string;
+  name: string;
+  url: string;
+  transport: "sse" | "stdio";
+  command: string;
+  args: string[];
+  enabled_tools: string[];
+}
+
 export interface RegistryResponse {
   tools: RegistryTool[];
   skills: RegistrySkill[];
   guardrail_schemas: RegistryGuardrailSchema[];
   models: string[];
+  mcp_servers: RegistryMcpServer[];
 }
 
 /* ── SSE event types (from /builder/pipelines/{id}/run) ─────────────────── */

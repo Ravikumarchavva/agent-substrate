@@ -42,9 +42,10 @@ const PALETTE: PaletteCategory[] = [
   {
     heading: "Tools",
     items: [
-      { type: "tool",      label: "Tool",      desc: "Callable tool / function", icon: ToolIcon,      color: "#22c55e", tag: "Action" },
-      { type: "guardrail", label: "Guardrail", desc: "Input/output validation",  icon: GuardrailIcon, color: "#f59e0b", tag: "Safety" },
-      { type: "skill",     label: "MCP / Skill",desc: "Injected skill prompt",   icon: McpIcon,       color: "#a855f7", tag: "App" },
+      { type: "tool",      label: "Tool",       desc: "Callable tool / function",   icon: ToolIcon,      color: "#22c55e", tag: "Action" },
+      { type: "guardrail", label: "Guardrail",  desc: "Input/output validation",    icon: GuardrailIcon, color: "#f59e0b", tag: "Safety" },
+      { type: "skill",     label: "Skill",      desc: "Injected skill prompt",      icon: SkillIcon,     color: "#8b5cf6", tag: "Prompt" },
+      { type: "mcp",       label: "MCP Server", desc: "External MCP tool server",   icon: McpIcon,       color: "#a855f7", tag: "App" },
     ],
   },
   {

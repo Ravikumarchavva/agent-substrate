@@ -5,8 +5,8 @@ Design is intentionally simple; swap for Postgres/SQLAlchemy later.
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
-from threading import Lock
 from typing import Dict, List, Optional
 from uuid import uuid4
 
@@ -48,7 +48,7 @@ class TaskStore:
     """Thread-safe in-memory task store (singleton via GlobalTaskStore)."""
 
     def __init__(self) -> None:
-        self._lock = Lock()
+        self._lock = asyncio.Lock()
         # task_list_id -> TaskList
         self._lists: Dict[str, TaskList] = {}
         # conversation_id -> task_list_id  (one active list per conversation)
@@ -58,10 +58,10 @@ class TaskStore:
     # Create
     # ------------------------------------------------------------------
 
-    def create_task_list(
+    async def create_task_list(
         self, conversation_id: str, task_titles: List[str]
     ) -> TaskList:
-        with self._lock:
+        async with self._lock:
             task_list = TaskList(
                 id=str(uuid4()),
                 conversation_id=conversation_id,
@@ -92,10 +92,10 @@ class TaskStore:
     # Update status
     # ------------------------------------------------------------------
 
-    def update_status(
+    async def update_status(
         self, task_list_id: str, task_id: str, status: str
     ) -> Optional[Task]:
-        with self._lock:
+        async with self._lock:
             task_list = self._lists.get(task_list_id)
             if not task_list:
                 return None
@@ -109,8 +109,8 @@ class TaskStore:
     # Add / Delete
     # ------------------------------------------------------------------
 
-    def add_tasks(self, task_list_id: str, titles: List[str]) -> List[Task]:
-        with self._lock:
+    async def add_tasks(self, task_list_id: str, titles: List[str]) -> List[Task]:
+        async with self._lock:
             task_list = self._lists.get(task_list_id)
             if not task_list:
                 return []
@@ -123,8 +123,8 @@ class TaskStore:
             task_list.tasks.extend(new_tasks)
             return new_tasks
 
-    def delete_task(self, task_list_id: str, task_id: str) -> bool:
-        with self._lock:
+    async def delete_task(self, task_list_id: str, task_id: str) -> bool:
+        async with self._lock:
             task_list = self._lists.get(task_list_id)
             if not task_list:
                 return False
@@ -132,10 +132,10 @@ class TaskStore:
             task_list.tasks = [t for t in task_list.tasks if t.id != task_id]
             return len(task_list.tasks) < before
 
-    def update_task_title(
+    async def update_task_title(
         self, task_list_id: str, task_id: str, title: str
     ) -> Optional[Task]:
-        with self._lock:
+        async with self._lock:
             task_list = self._lists.get(task_list_id)
             if not task_list:
                 return None

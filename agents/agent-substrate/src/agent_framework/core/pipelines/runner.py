@@ -48,6 +48,8 @@ from agent_framework.core.structured.router import StructuredRouter
 from agent_framework.core.tools.base_tool import BaseTool
 from agent_framework.extensions.skills import SkillManager
 from agent_framework.providers.llm.base_client import BaseModelClient
+from agent_framework.extensions.mcp.client import MCPClient
+from agent_framework.extensions.mcp.tool import MCPTool
 
 logger = logging.getLogger("agent_framework.pipelines.runner")
 
@@ -308,6 +310,14 @@ class PipelineRunner:
         ]
         tools = self._resolve_tools(config, tool_edges, tools_registry)
 
+        # -- MCP server nodes: connect and inject their tools --
+        mcp_edges = [
+            e for e in config.edges_to(agent_node.id)
+            if e.edge_type == EdgeType.AGENT_MCP
+        ]
+        mcp_tools = await self._resolve_mcp_tools(config, mcp_edges)
+        tools = [*tools, *mcp_tools]
+
         # -- Approval nodes: inject AskHumanTool if connected approval gate --
         approval_nodes = [
             config.node_by_id(e.target)
@@ -449,6 +459,67 @@ class PipelineRunner:
             else:
                 logger.warning("Tool %r not found in registry — skipped", tool_name)
         return tools
+
+    async def _resolve_mcp_tools(
+        self,
+        config: PipelineConfig,
+        mcp_edges: list,
+    ) -> List[BaseTool]:
+        """Connect to MCP server nodes and collect their tools as MCPTool instances.
+
+        Each MCP node config must have:
+          - ``url``: SSE endpoint URL (required for ``transport: sse``)
+          - ``command`` + optionally ``args``: for ``transport: stdio``
+          - ``server_name``: human-readable label
+          - ``transport``: ``"sse"`` (default) or ``"stdio"``
+          - ``enabled_tools``: list of tool names to expose (empty = all)
+        """
+        result: List[BaseTool] = []
+        for edge in mcp_edges:
+            mcp_node = config.node_by_id(edge.source)
+            if not mcp_node or mcp_node.node_type != NodeType.MCP:
+                continue
+            cfg = mcp_node.config
+            server_name = cfg.get("server_name", "mcp-server")
+            transport = cfg.get("transport", "sse")
+            client = MCPClient()
+            try:
+                if transport == "stdio":
+                    command = cfg.get("command", "")
+                    args: List[str] = cfg.get("args") or []
+                    if not command:
+                        logger.warning("MCP node %r has no command — skipped", mcp_node.id)
+                        continue
+                    await client.connect_stdio(command, args)
+                else:
+                    url = cfg.get("url", "")
+                    if not url:
+                        logger.warning("MCP node %r has no url — skipped", mcp_node.id)
+                        continue
+                    await client.connect_sse(url)
+
+                raw_tools = await client.list_tools()
+                enabled: set[str] = set(cfg.get("enabled_tools") or [])
+                for raw in raw_tools:
+                    name = raw.get("name", "")
+                    if enabled and name not in enabled:
+                        continue
+                    result.append(
+                        MCPTool(
+                            client=client,
+                            name=name,
+                            description=raw.get("description", ""),
+                            input_schema=raw.get("inputSchema", {}),
+                        )
+                    )
+                logger.info(
+                    "MCP server %r connected (%s tools)", server_name, len(result)
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to connect MCP server %r (%s): %s", server_name, transport, exc
+                )
+        return result
 
     def _resolve_guardrails(
         self,

@@ -85,11 +85,22 @@ class RegistryGuardrailSchema(BaseModel):
     fields: List[Dict[str, str]]
 
 
+class RegistryMcpServer(BaseModel):
+    id: str
+    name: str
+    url: str = ""
+    transport: str = "sse"  # "sse" | "stdio"
+    command: str = ""
+    args: List[str] = Field(default_factory=list)
+    enabled_tools: List[str] = Field(default_factory=list)
+
+
 class RegistryResponse(BaseModel):
     tools: List[RegistryTool]
     skills: List[RegistrySkill]
     guardrail_schemas: List[RegistryGuardrailSchema]
     models: List[str]
+    mcp_servers: List[RegistryMcpServer] = Field(default_factory=list)
 
 
 # ── GET /builder/registry ────────────────────────────────────────────────────
@@ -149,11 +160,18 @@ async def get_registry(request: Request) -> RegistryResponse:
     # Available models
     models = ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o3-mini"]
 
+    # MCP servers from app.state
+    mcp_servers_list: List[RegistryMcpServer] = [
+        RegistryMcpServer(**srv)
+        for srv in getattr(request.app.state, "mcp_servers", {}).values()
+    ]
+
     return RegistryResponse(
         tools=tools_list,
         skills=skills_list,
         guardrail_schemas=guardrail_schemas,
         models=models,
+        mcp_servers=mcp_servers_list,
     )
 
 
@@ -443,6 +461,69 @@ async def run_pipeline(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ── MCP Server CRUD ──────────────────────────────────────────────────────────
+
+class McpServerCreate(BaseModel):
+    name: str
+    url: str = ""
+    transport: str = "sse"
+    command: str = ""
+    args: List[str] = Field(default_factory=list)
+    enabled_tools: List[str] = Field(default_factory=list)
+
+
+class McpServerUpdate(BaseModel):
+    name: Optional[str] = None
+    url: Optional[str] = None
+    transport: Optional[str] = None
+    command: Optional[str] = None
+    args: Optional[List[str]] = None
+    enabled_tools: Optional[List[str]] = None
+
+
+@router.get("/mcp-servers", response_model=List[RegistryMcpServer])
+async def list_mcp_servers(request: Request) -> List[RegistryMcpServer]:
+    """List all registered MCP server definitions."""
+    store: Dict[str, Any] = getattr(request.app.state, "mcp_servers", {})
+    return [RegistryMcpServer(**v) for v in store.values()]
+
+
+@router.post("/mcp-servers", response_model=RegistryMcpServer, status_code=201)
+async def create_mcp_server(body: McpServerCreate, request: Request) -> RegistryMcpServer:
+    """Register a new MCP server."""
+    if not hasattr(request.app.state, "mcp_servers"):
+        request.app.state.mcp_servers = {}
+    server_id = str(uuid.uuid4())
+    entry = RegistryMcpServer(id=server_id, **body.model_dump())
+    request.app.state.mcp_servers[server_id] = entry.model_dump()
+    return entry
+
+
+@router.put("/mcp-servers/{server_id}", response_model=RegistryMcpServer)
+async def update_mcp_server(
+    server_id: str, body: McpServerUpdate, request: Request
+) -> RegistryMcpServer:
+    """Update an existing MCP server definition."""
+    store: Dict[str, Any] = getattr(request.app.state, "mcp_servers", {})
+    entry = store.get(server_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    entry.update(updates)
+    store[server_id] = entry
+    return RegistryMcpServer(**entry)
+
+
+@router.delete("/mcp-servers/{server_id}", status_code=204)
+async def delete_mcp_server(server_id: str, request: Request) -> Response:
+    """Delete an MCP server definition."""
+    store: Dict[str, Any] = getattr(request.app.state, "mcp_servers", {})
+    if server_id not in store:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+    del store[server_id]
+    return Response(status_code=204)
 
 
 # ── SSE helpers ──────────────────────────────────────────────────────────────

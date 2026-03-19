@@ -136,37 +136,40 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
         </Field>
         <div className={styles.toolsRow}>
           <span className={styles.label} style={{ marginBottom: 0 }}>Tools</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            className={styles.iconAction}
-            aria-label="Add tool"
-            onClick={() => {
-              const tools = (config.tools as string[]) ?? [];
-              onUpdate({ tools: [...tools, ""] });
-            }}
-          >
-            +
-          </Button>
         </div>
-        {((config.tools as string[]) ?? []).length > 0 && (
-          <div className={styles.chips}>
-            {((config.tools as string[]) ?? []).map((t, i) => (
-              <span
-                key={i}
-                className={styles.chip}
-                title="Click to remove"
-                onClick={() => {
-                  const next = ((config.tools as string[]) ?? []).filter((_, j) => j !== i);
-                  onUpdate({ tools: next });
-                }}
-              >
-                {t || `tool-${i + 1}`} ×
-              </span>
-            ))}
+        {/* Registry-based tool checkboxes grouped by risk */}
+        {registry && registry.tools.length > 0 ? (
+          <div className={styles.toolChecklist}>
+            {(["critical", "sensitive", "safe"] as const).map((risk) => {
+              const group = registry.tools.filter((t) => t.risk === risk);
+              if (!group.length) return null;
+              return (
+                <div key={risk}>
+                  <span className={styles.toolRiskLabel}>{risk.toUpperCase()}</span>
+                  {group.map((tool) => {
+                    const selected = ((config.tools as string[]) ?? []).includes(tool.name);
+                    return (
+                      <ToggleField
+                        key={tool.name}
+                        label={tool.name}
+                        description={tool.description}
+                        value={selected}
+                        onChange={(v) => {
+                          const tools = (config.tools as string[]) ?? [];
+                          onUpdate({
+                            tools: v
+                              ? [...tools, tool.name]
+                              : tools.filter((t) => t !== tool.name),
+                          });
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
-        )}
+        ) : null}
         <Field label="Output format">
           <Select
             value={(config.output_format as string) ?? "text"}
@@ -294,6 +297,85 @@ function ToolForm({ config, onUpdate, registry }: FormProps) {
         <p className={styles.helperText}>{config.description}</p>
       )}
     </FormSection>
+  );
+}
+
+/* ── McpForm ─────────────────────────────────────────────────────────── */
+
+function McpForm({ config, onUpdate }: FormProps) {
+  const transport = (config.transport as string) ?? "sse";
+  return (
+    <>
+      <FormSection>
+        <Field label="Server name">
+          <Input
+            value={(config.server_name as string) ?? ""}
+            onChange={(v) => onUpdate({ server_name: v })}
+            placeholder="My MCP Server"
+          />
+        </Field>
+        <Field label="Transport">
+          <Select
+            value={transport}
+            onChange={(v) => onUpdate({ transport: v })}
+            options={[
+              { value: "sse", label: "SSE (HTTP)" },
+              { value: "stdio", label: "stdio (local process)" },
+            ]}
+          />
+        </Field>
+        {transport !== "stdio" && (
+          <Field label="URL">
+            <Input
+              value={(config.url as string) ?? ""}
+              onChange={(v) => onUpdate({ url: v })}
+              placeholder="http://localhost:9000/sse"
+            />
+          </Field>
+        )}
+        {transport === "stdio" && (
+          <>
+            <Field label="Command">
+              <Input
+                value={(config.command as string) ?? ""}
+                onChange={(v) => onUpdate({ command: v })}
+                placeholder="python"
+              />
+            </Field>
+            <Field label="Arguments (space-separated)">
+              <Input
+                value={((config.args as string[]) ?? []).join(" ")}
+                onChange={(v) =>
+                  onUpdate({
+                    args: v
+                      .split(" ")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="server.py --port 9000"
+              />
+            </Field>
+          </>
+        )}
+      </FormSection>
+      <FormSection title="Tool filter">
+        <Field label="Enabled tools (comma-separated, empty = all)">
+          <Input
+            value={((config.enabled_tools as string[]) ?? []).join(", ")}
+            onChange={(v) =>
+              onUpdate({
+                enabled_tools: v
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+            placeholder="tool_a, tool_b"
+          />
+        </Field>
+      </FormSection>
+    </>
   );
 }
 
@@ -680,6 +762,7 @@ const FORM_MAP: Record<string, React.ComponentType<FormProps>> = {
   agent: AgentForm,
   tool: ToolForm,
   skill: SkillForm,
+  mcp: McpForm,
   guardrail: GuardrailForm,
   router: RouterForm,
   memory: MemoryForm,
@@ -704,12 +787,14 @@ const NODE_COLORS: Record<string, string> = {
   condition: "var(--success)",
   approval: "#f97316",
   while: "#f59e0b",
+  mcp: "#a855f7",
 };
 
 const NODE_DESCRIPTIONS: Record<string, string> = {
   agent: "Call a model with instructions and workflow tools.",
   tool: "Run a tool with approval and risk controls.",
-  skill: "Attach a reusable MCP or prompt skill to the flow.",
+  skill: "Attach a reusable skill prompt to the agent.",
+  mcp: "Connect an external MCP server and expose its tools.",
   guardrail: "Run moderation, safety, or output validation checks.",
   router: "Route to the next step based on a structured decision.",
   memory: "Persist conversation state across multiple turns.",

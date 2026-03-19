@@ -144,7 +144,7 @@ class TaskManagerTool(BaseTool):
             if not tasks:
                 return _err("tasks[] is required for create_list")
 
-            task_list = store.create_task_list(conv_id, tasks)
+            task_list = await store.create_task_list(conv_id, tasks)
             self._task_lists[conv_id] = task_list.id
 
             await self._fire({
@@ -177,7 +177,7 @@ class TaskManagerTool(BaseTool):
             if not resolved:
                 return _err("No todo tasks left to start.")
 
-            updated = store.update_status(task_list_id, resolved, "in_progress")
+            updated = await store.update_status(task_list_id, resolved, "in_progress")
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
@@ -194,7 +194,7 @@ class TaskManagerTool(BaseTool):
             if not resolved:
                 return _err("No in-progress tasks to complete.")
 
-            updated = store.update_status(task_list_id, resolved, "done")
+            updated = await store.update_status(task_list_id, resolved, "done")
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
@@ -213,7 +213,7 @@ class TaskManagerTool(BaseTool):
             if not resolved:
                 return _err("No in-progress or todo task to mark as failed.")
 
-            updated = store.update_status(task_list_id, resolved, "failed")
+            updated = await store.update_status(task_list_id, resolved, "failed")
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
@@ -228,7 +228,7 @@ class TaskManagerTool(BaseTool):
             if not tasks:
                 return _err("tasks[] is required for add_task")
 
-            new_tasks = store.add_tasks(task_list_id, tasks)
+            new_tasks = await store.add_tasks(task_list_id, tasks)
             for t in new_tasks:
                 await self._fire({
                     "type": "task_added",
@@ -242,7 +242,7 @@ class TaskManagerTool(BaseTool):
             if not task_id:
                 return _err("task_id is required for delete_task")
 
-            deleted = store.delete_task(task_list_id, task_id)
+            deleted = await store.delete_task(task_list_id, task_id)
             if not deleted:
                 return _err(f"Task {task_id!r} not found.")
 
@@ -258,7 +258,7 @@ class TaskManagerTool(BaseTool):
             if not task_id or not title:
                 return _err("task_id and title are required for update_title")
 
-            updated = store.update_task_title(task_list_id, task_id, title)
+            updated = await store.update_task_title(task_list_id, task_id, title)
             if not updated:
                 return _err(f"Task {task_id!r} not found.")
 

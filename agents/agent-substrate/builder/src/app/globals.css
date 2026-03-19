@@ -218,7 +218,8 @@
 .node-border-router.node-card-selected,
 .node-border-memory.node-card-selected,
 .node-border-condition.node-card-selected,
-.node-border-approval.node-card-selected {
+.node-border-approval.node-card-selected,
+.node-border-mcp.node-card-selected {
   box-shadow: 0 0 0 1px var(--border-accent), var(--shadow-card-hover);
   border-color: var(--border-accent);
 }

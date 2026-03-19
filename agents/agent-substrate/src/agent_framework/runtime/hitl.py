@@ -274,3 +274,59 @@ class WebHITLBridge:
             selected_label=data.get("selected_label", ""),
             freeform_text=data.get("freeform_text"),
         )
+
+
+# ---------------------------------------------------------------------------
+# BridgeRegistry — per-thread bridge pool
+# ---------------------------------------------------------------------------
+
+class BridgeRegistry:
+    """Manages one WebHITLBridge per active thread (conversation).
+
+    Bridges are created lazily when a chat SSE stream starts and destroyed
+    when the stream ends, so each user's HITL events stay isolated.
+
+    Resolution uses UUID uniqueness to scan bridges without a secondary
+    request_id → thread_id index (UUIDs are collision-free in practice).
+    """
+
+    def __init__(self, response_timeout: float = 300.0) -> None:
+        self._timeout = response_timeout
+        self._bridges: Dict[str, "WebHITLBridge"] = {}
+        self._lock = asyncio.Lock()
+
+    async def acquire(self, thread_id: str) -> "WebHITLBridge":
+        """Return the live bridge for *thread_id*, creating one if needed."""
+        async with self._lock:
+            if thread_id not in self._bridges:
+                self._bridges[thread_id] = WebHITLBridge(self._timeout)
+                logger.debug("BridgeRegistry: created bridge for thread %s", thread_id)
+            return self._bridges[thread_id]
+
+    async def release(self, thread_id: str) -> None:
+        """Destroy the bridge when the SSE stream for *thread_id* closes."""
+        async with self._lock:
+            self._bridges.pop(thread_id, None)
+            logger.debug("BridgeRegistry: released bridge for thread %s", thread_id)
+
+    def resolve(self, request_id: str, data: Dict[str, Any]) -> bool:
+        """Find the bridge that owns *request_id* and resolve it.
+
+        Scans all active bridges.  Because request IDs are UUIDs, collisions
+        are statistically impossible across bridges.
+        """
+        for bridge in list(self._bridges.values()):
+            if request_id in bridge._pending:
+                return bridge.resolve(request_id, data)
+        logger.warning("BridgeRegistry: no pending request for id=%s", request_id)
+        return False
+
+    def get(self, thread_id: str) -> Optional["WebHITLBridge"]:
+        """Return the bridge for *thread_id* if active, else None."""
+        return self._bridges.get(thread_id)
+
+    async def emit(self, thread_id: str, event: Dict[str, Any]) -> None:
+        """Emit an event to the active bridge for *thread_id* (no-op if gone)."""
+        bridge = self._bridges.get(thread_id)
+        if bridge:
+            await bridge.put_event(event)

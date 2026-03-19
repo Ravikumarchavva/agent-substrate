@@ -12,7 +12,7 @@
   align-items: center;
   gap: 10px;
   border-right: 1px solid var(--border);
-  background: #101010;
+  background: var(--bg-surface);
   padding: 12px 8px;
 }
 
@@ -23,13 +23,13 @@
 
 .railButton {
   display: inline-flex;
-  align-items: center;
+  align-items: center;  
   justify-content: center;
   width: 36px;
   height: 36px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
   color: var(--text-muted);
   cursor: pointer;
   transition: transform 140ms ease, opacity 140ms ease, background 140ms ease;
@@ -71,9 +71,9 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  background: linear-gradient(180deg, #111111 0%, #0d0d0d 100%);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
 
 .canvasCardFullscreen {
@@ -88,7 +88,7 @@
   height: 48px;
   padding: 0 14px;
   border-bottom: 1px solid var(--border);
-  background: rgba(255,255,255,0.02);
+  background: var(--bg-elevated);
 }
 
 .canvasTopbarTitle {
@@ -116,14 +116,41 @@
   justify-content: center;
   gap: 8px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
   color: var(--text-muted);
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: transform 140ms ease, opacity 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.canvasActionButtonAccent {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+
+.canvasActionButtonAccent:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.canvasActionButtonAccentSolid {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+}
+
+.canvasActionButtonAccentSolid:hover {
+  opacity: 0.88;
+}
+
+.canvasActionsDiv {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 
 .canvasBody {
@@ -153,7 +180,7 @@
   width: 32px;
   height: 32px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
   color: var(--text-muted);
   cursor: pointer;

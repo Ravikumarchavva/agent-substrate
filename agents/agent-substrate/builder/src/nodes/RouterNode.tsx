@@ -21,7 +21,7 @@ function RouterNodeComponent({ data, selected }: NodeProps<RouterData>) {
 
       {/* Header */}
       <div className="node-multi-header">
-        <div className="node-icon bg-cyan-500"><ClassifyIcon /></div>
+        <div className="node-icon" style={{ background: "#06b6d420", color: "#06b6d4" }}><ClassifyIcon /></div>
         <div className="node-body">
           <div className="node-label">{label}</div>
           <div className="node-sub">Router</div>
@@ -30,16 +30,18 @@ function RouterNodeComponent({ data, selected }: NodeProps<RouterData>) {
 
       {/* Route branches */}
       {routes.length > 0 && (
-        <div className="border-t" style={{ borderColor: "var(--border)" }}>
+        <div className="node-multi-section">
           {routes.map((r: string, i: number) => (
-            <div key={i} className="node-multi-row relative">
-              <span className="text-[11px] font-mono">{r}</span>
-              <Handle type="source" position={Position.Right} id={`route-${i}`} className="node-handle" />
+            <div key={i} className="node-multi-row node-multi-row-branch relative">
+              <span className="node-expression-text">{r}</span>
+              <span className="node-row-output">Output</span>
+              <Handle type="source" position={Position.Right} id={`route-${i}`} className="node-handle node-handle-branch" />
             </div>
           ))}
-          <div className="node-multi-row relative">
-            <span style={{ color: "var(--text-dim)" }}>Else</span>
-            <Handle type="source" position={Position.Right} id="else" className="node-handle" />
+          <div className="node-multi-row node-multi-row-branch relative">
+            <span className="node-branch-pill node-branch-pill-muted">Else</span>
+            <span className="node-row-output">Output</span>
+            <Handle type="source" position={Position.Right} id="else" className="node-handle node-handle-branch" />
           </div>
         </div>
       )}

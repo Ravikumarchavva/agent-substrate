@@ -17,7 +17,7 @@ function ToolNodeComponent({ data, selected }: NodeProps<ToolData>) {
   return (
     <div className={`node-card node-type-tool ${selected ? "node-card-selected node-border-tool" : ""}`}>
       <Handle type="target" position={Position.Left} className="node-handle" />
-      <div className="node-icon bg-emerald-500"><ToolIcon /></div>
+      <div className="node-icon" style={{ background: "#22c55e20", color: "#22c55e" }}><ToolIcon /></div>
       <div className="node-body">
         <div className="node-label">{label}</div>
         <div className="node-sub">Tool</div>

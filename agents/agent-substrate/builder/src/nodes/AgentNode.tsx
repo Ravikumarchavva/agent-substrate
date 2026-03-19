@@ -17,7 +17,7 @@ function AgentNodeComponent({ data, selected }: NodeProps<AgentData>) {
   return (
     <div className={`node-card node-type-agent ${selected ? "node-card-selected node-border-agent" : ""}`}>
       <Handle type="target" position={Position.Left} className="node-handle" />
-      <div className="node-icon bg-blue-500"><AgentIcon /></div>
+      <div className="node-icon" style={{ background: "#a3a3a320", color: "#a3a3a3" }}><AgentIcon /></div>
       <div className="node-body">
         <div className="node-label">{label}</div>
         <div className="node-sub">Agent</div>

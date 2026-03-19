@@ -21,9 +21,9 @@ const TEMPLATES: Template[] = [
     config: {
       id: "", name: "Simple assistant", description: "",
       nodes: [
-        { id: "start_1", node_type: "start", label: "Start", position: { x: 50, y: 200 }, config: {} },
-        { id: "agent_1", node_type: "agent", label: "Assistant", position: { x: 250, y: 188 }, config: { model: "gpt-4o-mini", system_prompt: "You are a helpful assistant.", max_iterations: 10 } },
-        { id: "memory_1", node_type: "memory", label: "Memory", position: { x: 500, y: 260 }, config: { backend: "unbounded" } },
+        { id: "start_1", node_type: "start", label: "Start", position: { x: 0, y: 200 }, config: {} },
+        { id: "agent_1", node_type: "agent", label: "Assistant", position: { x: 300, y: 200 }, config: { model: "gpt-4o-mini", system_prompt: "You are a helpful assistant.", max_iterations: 10 } },
+        { id: "memory_1", node_type: "memory", label: "Memory", position: { x: 600, y: 200 }, config: { backend: "unbounded" } },
       ],
       edges: [
         { id: "e1", source: "start_1", target: "agent_1", source_handle: "", target_handle: "", edge_type: "agent_tool", label: "" },
@@ -65,14 +65,14 @@ const TEMPLATES: Template[] = [
     config: {
       id: "", name: "Customer service", description: "",
       nodes: [
-        { id: "start_1", node_type: "start", label: "Start", position: { x: 50, y: 250 }, config: {} },
-        { id: "guard_1", node_type: "guardrail", label: "Jailbreak guard", position: { x: 250, y: 200 }, config: { guardrail_type: "input", schema_name: "ContentSafetyJudge", pass_field: "is_safe", tripwire: true } },
-        { id: "agent_1", node_type: "agent", label: "Classifier", position: { x: 470, y: 250 }, config: { model: "gpt-4o-mini", system_prompt: "Classify the user intent into: billing, technical, general.", max_iterations: 3 } },
-        { id: "cond_1", node_type: "condition", label: "Condition", position: { x: 700, y: 200 }, config: { conditions: [{ expression: 'intent == "billing"', label: "Billing" }, { expression: 'intent == "technical"', label: "Technical" }] } },
-        { id: "agent_2", node_type: "agent", label: "Billing agent", position: { x: 980, y: 120 }, config: { model: "gpt-4o-mini", system_prompt: "You help with billing inquiries.", max_iterations: 10 } },
-        { id: "agent_3", node_type: "agent", label: "Tech support", position: { x: 980, y: 250 }, config: { model: "gpt-4o-mini", system_prompt: "You provide technical support.", max_iterations: 10 } },
-        { id: "agent_4", node_type: "agent", label: "General agent", position: { x: 980, y: 380 }, config: { model: "gpt-4o-mini", system_prompt: "You handle general queries.", max_iterations: 10 } },
-        { id: "end_1", node_type: "end", label: "End", position: { x: 250, y: 350 }, config: {} },
+        { id: "start_1", node_type: "start", label: "Start", position: { x: 0, y: 250 }, config: {} },
+        { id: "guard_1", node_type: "guardrail", label: "Jailbreak guard", position: { x: 230, y: 200 }, config: { guardrail_type: "input", schema_name: "ContentSafetyJudge", pass_field: "is_safe", tripwire: true } },
+        { id: "agent_1", node_type: "agent", label: "Classifier", position: { x: 520, y: 250 }, config: { model: "gpt-4o-mini", system_prompt: "Classify the user intent into: billing, technical, general.", max_iterations: 3 } },
+        { id: "cond_1", node_type: "condition", label: "Condition", position: { x: 750, y: 200 }, config: { conditions: [{ expression: 'intent == "billing"', label: "Billing" }, { expression: 'intent == "technical"', label: "Technical" }] } },
+        { id: "agent_2", node_type: "agent", label: "Billing agent", position: { x: 1050, y: 120 }, config: { model: "gpt-4o-mini", system_prompt: "You help with billing inquiries.", max_iterations: 10 } },
+        { id: "agent_3", node_type: "agent", label: "Tech support", position: { x: 1050, y: 250 }, config: { model: "gpt-4o-mini", system_prompt: "You provide technical support.", max_iterations: 10 } },
+        { id: "agent_4", node_type: "agent", label: "General agent", position: { x: 1050, y: 380 }, config: { model: "gpt-4o-mini", system_prompt: "You handle general queries.", max_iterations: 10 } },
+        { id: "end_1", node_type: "end", label: "End", position: { x: 520, y: 350 }, config: {} },
       ],
       edges: [
         { id: "e1", source: "start_1", target: "guard_1", source_handle: "", target_handle: "", edge_type: "agent_tool", label: "" },

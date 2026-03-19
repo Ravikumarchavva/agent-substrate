@@ -17,7 +17,7 @@ function MemoryNodeComponent({ data, selected }: NodeProps<MemoryData>) {
   return (
     <div className={`node-card node-type-memory ${selected ? "node-card-selected node-border-memory" : ""}`}>
       <Handle type="target" position={Position.Left} className="node-handle" />
-      <div className="node-icon bg-pink-500"><MemoryIcon /></div>
+      <div className="node-icon" style={{ background: "#ec489920", color: "#ec4899" }}><MemoryIcon /></div>
       <div className="node-body">
         <div className="node-label">{label}</div>
         <div className="node-sub">Memory</div>

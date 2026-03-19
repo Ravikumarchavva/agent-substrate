@@ -121,7 +121,7 @@ export function PipelineAppPanel({
       >
         <button
           onClick={onToggleCollapse}
-          className="p-1.5 rounded-md transition-opacity hover:opacity-80"
+          className="p-1.5 rounded-lg transition-opacity hover:opacity-80"
           style={{ color: "var(--text-muted)" }}
           title="Expand panel"
         >
@@ -131,7 +131,7 @@ export function PipelineAppPanel({
           <button
             key={item.id}
             onClick={() => { onSetActive(item.id); onToggleCollapse(); }}
-            className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold text-white"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white"
             style={{ background: "var(--accent)" }}
             title={toolLabel(item.toolName)}
           >
@@ -180,7 +180,7 @@ export function PipelineAppPanel({
               <div key={item.id} className="flex items-center gap-0.5 shrink-0">
                 <button
                   onClick={() => onSetActive(item.id)}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors"
                   style={{
                     background: isActive ? "var(--accent)" : "transparent",
                     color: isActive ? "#fff" : "var(--text-muted)",
@@ -225,7 +225,7 @@ export function PipelineAppPanel({
                          style={{ background: "var(--bg-surface)" }}>
                       <div className="flex flex-col items-center gap-2">
                         <div
-                          className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
+                          className="w-5 h-5 rounded-lg border-2 border-t-transparent animate-spin"
                           style={{ borderColor: "var(--accent)" }}
                         />
                         <p className="text-[11px]" style={{ color: "var(--text-dim)" }}>

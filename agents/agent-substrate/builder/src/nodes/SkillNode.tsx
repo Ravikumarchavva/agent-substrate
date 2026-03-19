@@ -17,11 +17,12 @@ function SkillNodeComponent({ data, selected }: NodeProps<SkillData>) {
   return (
     <div className={`node-card node-type-skill ${selected ? "node-card-selected node-border-skill" : ""}`}>
       <Handle type="target" position={Position.Left} className="node-handle" />
-      <div className="node-icon bg-purple-500"><SkillIcon /></div>
+      <div className="node-icon" style={{ background: "#a855f720", color: "#a855f7" }}><SkillIcon /></div>
       <div className="node-body">
         <div className="node-label">{label}</div>
-        <div className="node-sub">Skill</div>
+        <div className="node-sub">MCP / Skill</div>
       </div>
+      <Handle type="source" position={Position.Right} className="node-handle" />
     </div>
   );
 }

@@ -105,7 +105,7 @@ export function CanvasToolbar({ onRun, onBack, onDeleteComplete }: CanvasToolbar
             </div>
           ) : (
             <div
-              className="flex items-center gap-2 px-2 py-1 -ml-2 rounded-md hover:bg-(--bg-hover) cursor-pointer transition-colors group"
+              className="flex items-center gap-2 px-2 py-1 -ml-2 rounded-lg hover:bg-(--bg-hover) cursor-pointer transition-colors group"
               onClick={startNameEdit}
               title="Rename workflow"
             >
@@ -118,26 +118,26 @@ export function CanvasToolbar({ onRun, onBack, onDeleteComplete }: CanvasToolbar
         </div>
 
         <div className="flex items-center gap-1.5">
-          <Button variant="outline" size="sm" className="h-7 w-16 text-[11px] bg-(--bg) border-(--border)" onClick={handleSave} disabled={saving}>
+          <Button variant="outline" size="sm" className="h-7 w-16 text-[11px] bg-(--bg) border-(--border) hover:cursor-pointer" onClick={handleSave} disabled={saving}>
             <Save className="w-3 h-3 mr-1" />
             {saving ? "Saving..." : "Save"}
           </Button>
           
-          <Button variant="outline" size="icon" className="h-7 w-7 bg-(--bg) border-(--border)" title="Copy pipeline JSON" onClick={() => {
+          <Button variant="outline" size="icon" className="h-7 w-7 bg-(--bg) border-(--border) hover:cursor-pointer" title="Copy pipeline JSON" onClick={() => {
             navigator.clipboard.writeText(JSON.stringify(toPipelineConfig(), null, 2));
           }}>
             <Code2 className="w-3.5 h-3.5 text-(--text-dim)" />
           </Button>
 
           {pipelineId && (
-            <Button variant="outline" size="icon" className="h-7 w-7 bg-(--bg) text-(--danger) hover:bg-(--danger)/10 border-transparent" title="Delete" onClick={handleDelete}>
+            <Button variant="outline" size="icon" className="h-7 w-7 bg-(--bg) text-(--danger) hover:bg-(--danger)/10 border-transparent hover:cursor-pointer" title="Delete" onClick={handleDelete}>
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
           )}
 
           <div className="h-5 w-px bg-(--border) mx-0.5" />
           
-          <Button size="sm" className="h-7 w-16 text-[11px] gap-1.5 font-medium" onClick={onRun}>
+          <Button size="sm" className="h-7 w-16 text-[11px] gap-1.5 font-medium hover:cursor-pointer" onClick={onRun}>
              <Play className="w-3 h-3 fill-current" />
              Run
           </Button>
@@ -146,15 +146,6 @@ export function CanvasToolbar({ onRun, onBack, onDeleteComplete }: CanvasToolbar
         </div>
       </header>
 
-      {/* Floating bottom action bar */}
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 shadow-lg bg-(--bg-surface) border border-(--border) rounded-lg flex items-center px-2 py-1 gap-0.5 w-36 justify-center">
-        <Button variant="ghost" size="sm" className="h-7 w-1/2 text-[11px] font-medium rounded-lg hover:bg-(--accent) hover:cursor-pointer">
-           Evaluate
-        </Button>
-        <Button variant="ghost" size="sm" className="h-7 w-1/2 text-[11px] font-medium rounded-lg hover:bg-(--accent) hover:cursor-pointer">
-           Deploy
-        </Button>
-      </div>
     </>
   );
 }

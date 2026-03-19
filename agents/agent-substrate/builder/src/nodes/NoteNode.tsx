@@ -23,11 +23,7 @@ function NoteNodeComponent({ id, data, selected }: NodeProps<NoteData>) {
 
   return (
     <div
-      className={`
-        min-w-[160px] max-w-[280px] rounded-lg p-3 transition-all
-        ${selected ? "shadow-lg ring-2 ring-yellow-500/50" : "shadow-md"}
-      `}
-      style={{ background: "#c4a235", color: "#1a1500" }}
+      className={`node-note ${selected ? "ring-2 ring-yellow-500/50" : ""}`}
       onDoubleClick={() => setEditing(true)}
     >
       {editing ? (
@@ -36,14 +32,12 @@ function NoteNodeComponent({ id, data, selected }: NodeProps<NoteData>) {
           defaultValue={text}
           onBlur={handleBlur}
           className="w-full bg-transparent text-[12px] leading-relaxed outline-none resize-none min-h-[60px]"
-          style={{ color: "#1a1500" }}
         />
       ) : (
         <p className="text-[12px] leading-relaxed whitespace-pre-wrap">
           {text || "Double-click to add a note…"}
         </p>
       )}
-      {/* Notes don't have handles — purely for documentation */}
     </div>
   );
 }

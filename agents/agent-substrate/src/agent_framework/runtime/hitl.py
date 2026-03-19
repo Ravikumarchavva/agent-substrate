@@ -50,6 +50,9 @@ logger = logging.getLogger("agent_framework.web_hitl")
 # Sentinel used to signal the SSE generator that the agent is done
 _DONE = object()
 
+# Public alias — consumers can import BRIDGE_DONE instead of the private _DONE.
+BRIDGE_DONE = _DONE
+
 
 class WebHITLBridge:
     """Bidirectional bridge between the agent's HITL handlers and HTTP/SSE.
@@ -64,11 +67,19 @@ class WebHITLBridge:
     Both ``approval_handler`` and ``human_handler`` are pre-built
     ``CallbackApprovalHandler`` / ``CallbackHumanHandler`` instances
     that route through this bridge.
+
+    Lock-free HITL:
+        When a browser disconnects while a HITL Future is pending, the
+        bridge stays alive in the ``BridgeRegistry``.  The agent task keeps
+        running (blocked on the Future).  The user can reconnect and respond
+        via ``POST /chat/respond/{request_id}``.  Use ``has_pending`` to
+        check before deciding whether to release the bridge.
     """
 
     def __init__(self, response_timeout: float = 300.0):
         self._outgoing: asyncio.Queue[Any] = asyncio.Queue()
         self._pending: Dict[str, asyncio.Future[Dict[str, Any]]] = {}
+        self._pending_payloads: Dict[str, Dict[str, Any]] = {}
         self._response_timeout = response_timeout
 
         # Pre-built handlers wired to this bridge
@@ -90,6 +101,60 @@ class WebHITLBridge:
     def human_handler(self) -> HumanInputHandler:
         """HumanInputHandler to pass to AskHumanTool."""
         return self._human_handler
+
+    # -- Pending state introspection ─────────────────────────────────────
+
+    @property
+    def has_pending(self) -> bool:
+        """True when at least one HITL request is awaiting user response."""
+        return bool(self._pending)
+
+    def get_pending_info(self) -> list[dict[str, Any]]:
+        """Return metadata about all pending HITL requests.
+
+        Used by the ``GET /hitl/status/{thread_id}`` endpoint so the frontend
+        can restore approval/input cards after a reconnect.
+        """
+        # We store the sent event payloads alongside Futures so we can
+        # replay them.  Fall back to just the request_id if no payload saved.
+        return [
+            {
+                "request_id": rid,
+                **(self._pending_payloads.get(rid) or {}),
+            }
+            for rid in self._pending
+        ]
+
+    # -- Disconnect / cancellation -----------------------------------------------
+
+    def cancel_all_pending(self, reason: str = "session_disconnected") -> int:
+        """Resolve all pending HITL futures immediately with a disconnect signal.
+
+        Called when the client browser disconnects so the blocked agent can
+        resume (and likely abort), rather than waiting for the full timeout.
+
+        Args:
+            reason: Short machine-readable reason string stored under the
+                    ``"reason"`` key in the resolved dict.  Defaults to
+                    ``"session_disconnected"``.
+
+        Returns:
+            Number of futures that were resolved.
+        """
+        resolved = 0
+        for request_id, future in list(self._pending.items()):
+            if not future.done():
+                future.set_result({"session_disconnected": True, "reason": reason})
+                resolved += 1
+        self._pending.clear()
+        self._pending_payloads.clear()
+        if resolved:
+            logger.info(
+                "WebHITLBridge: cancelled %d pending HITL request(s) (%s)",
+                resolved,
+                reason,
+            )
+        return resolved
 
     # -- Outgoing queue (agent → SSE → frontend) ----------------------------
 
@@ -113,6 +178,7 @@ class WebHITLBridge:
         Returns True if the request was found and resolved, False otherwise.
         """
         future = self._pending.pop(request_id, None)
+        self._pending_payloads.pop(request_id, None)
         if future is None:
             logger.warning(f"No pending HITL request for id={request_id}")
             return False
@@ -135,6 +201,12 @@ class WebHITLBridge:
         future: asyncio.Future[Dict[str, Any]] = loop.create_future()
         self._pending[request_id] = future
 
+        # Save the full event payload so we can replay it on frontend reconnect
+        self._pending_payloads[request_id] = {
+            "type": event_type,
+            **payload,
+        }
+
         # Send event to frontend via SSE
         await self._outgoing.put({
             "type": event_type,
@@ -153,6 +225,7 @@ class WebHITLBridge:
             return result
         except asyncio.TimeoutError:
             self._pending.pop(request_id, None)
+            self._pending_payloads.pop(request_id, None)
             logger.warning(f"HITL request {request_id} timed out")
             return {"timed_out": True}
 
@@ -210,6 +283,13 @@ class WebHITLBridge:
             "tool_approval_request", payload, request.request_id, timeout=timeout
         )
 
+        if data.get("session_disconnected"):
+            return ToolApprovalResponse(
+                request_id=request.request_id,
+                action=ToolApprovalAction.DENY,
+                reason="Session disconnected — tool denied",
+            )
+
         if data.get("timed_out"):
             if request.hitl_mode == "continue_on_timeout":
                 logger.info(
@@ -262,6 +342,13 @@ class WebHITLBridge:
             "human_input_request", payload, request.request_id
         )
 
+        if data.get("session_disconnected"):
+            return HumanInputResponse(
+                request_id=request.request_id,
+                timed_out=True,
+                freeform_text="[session disconnected]",
+            )
+
         if data.get("timed_out"):
             return HumanInputResponse(
                 request_id=request.request_id,
@@ -284,7 +371,9 @@ class BridgeRegistry:
     """Manages one WebHITLBridge per active thread (conversation).
 
     Bridges are created lazily when a chat SSE stream starts and destroyed
-    when the stream ends, so each user's HITL events stay isolated.
+    when the stream ends **unless** a HITL request is still pending.  In
+    that case the bridge stays alive so the user can reconnect and respond
+    without losing the agent's blocked context.
 
     Resolution uses UUID uniqueness to scan bridges without a secondary
     request_id → thread_id index (UUIDs are collision-free in practice).
@@ -304,10 +393,35 @@ class BridgeRegistry:
             return self._bridges[thread_id]
 
     async def release(self, thread_id: str) -> None:
-        """Destroy the bridge when the SSE stream for *thread_id* closes."""
+        """Unconditionally destroy the bridge for *thread_id*.
+
+        Prefer ``release_if_idle`` in the SSE generator's ``finally`` block
+        so bridges with pending HITL requests survive browser disconnects.
+        """
         async with self._lock:
             self._bridges.pop(thread_id, None)
             logger.debug("BridgeRegistry: released bridge for thread %s", thread_id)
+
+    async def release_if_idle(self, thread_id: str) -> bool:
+        """Release the bridge only if it has **no** pending HITL requests.
+
+        Returns True if the bridge was released, False if it was kept alive
+        because a HITL request is still pending (user can still respond).
+        """
+        async with self._lock:
+            bridge = self._bridges.get(thread_id)
+            if bridge is None:
+                return True
+            if bridge.has_pending:
+                logger.info(
+                    "BridgeRegistry: keeping bridge alive for thread %s "
+                    "— %d pending HITL request(s)",
+                    thread_id, len(bridge._pending),
+                )
+                return False
+            self._bridges.pop(thread_id, None)
+            logger.debug("BridgeRegistry: released idle bridge for thread %s", thread_id)
+            return True
 
     def resolve(self, request_id: str, data: Dict[str, Any]) -> bool:
         """Find the bridge that owns *request_id* and resolve it.
@@ -324,6 +438,16 @@ class BridgeRegistry:
     def get(self, thread_id: str) -> Optional["WebHITLBridge"]:
         """Return the bridge for *thread_id* if active, else None."""
         return self._bridges.get(thread_id)
+
+    def get_pending_hitl(self, thread_id: str) -> list[dict[str, Any]]:
+        """Return pending HITL request info for *thread_id*.
+
+        Used by the ``GET /hitl/status/{thread_id}`` endpoint.
+        """
+        bridge = self._bridges.get(thread_id)
+        if bridge is None:
+            return []
+        return bridge.get_pending_info()
 
     async def emit(self, thread_id: str, event: Dict[str, Any]) -> None:
         """Emit an event to the active bridge for *thread_id* (no-op if gone)."""

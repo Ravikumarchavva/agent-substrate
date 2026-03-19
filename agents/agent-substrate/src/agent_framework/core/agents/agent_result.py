@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import List, Optional, Any, Dict, Union
 from pydantic import BaseModel, Field, computed_field
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 from PIL import Image
 
@@ -45,7 +45,7 @@ class ToolCallRecord(BaseModel):
     result: str = ""
     is_error: bool = False
     duration_ms: Optional[float] = None          # wall-clock for this call
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = {"frozen": False}
 

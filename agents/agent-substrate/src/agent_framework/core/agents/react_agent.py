@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 from uuid import uuid4
 
@@ -64,7 +64,6 @@ from agent_framework.extensions.tools.human_input import (
     ToolApprovalResponse,
 )
 from agent_framework.core.resilience import (
-    CircuitBreaker,
     LLM_RETRY_POLICY,
     RetryPolicy,
     TOOL_RETRY_POLICY,
@@ -139,6 +138,12 @@ class ReActAgent(BaseAgent):
         skill_dirs: Optional[List[str]] = None,
         skill_manager: Optional[SkillManager] = None,
     ):
+        # Skills -- build SkillManager here (avoids core->extensions coupling in BaseAgent)
+        _skill_manager: Optional[SkillManager] = skill_manager
+        if _skill_manager is None and skill_dirs:
+            from pathlib import Path
+            _skill_manager = SkillManager(skill_dirs=[Path(d) for d in skill_dirs])
+
         super().__init__(
             name=name,
             description=description,
@@ -150,9 +155,10 @@ class ReActAgent(BaseAgent):
             memory_scope=memory_scope,
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
-            skill_dirs=skill_dirs,
-            skill_manager=skill_manager,
+            prompt_enricher=_skill_manager,
         )
+        # Keep skill_manager attribute for direct access / backwards compat
+        self.skill_manager: Optional[SkillManager] = _skill_manager
         self.max_iterations = max_iterations
         self.verbose = verbose
 
@@ -171,20 +177,13 @@ class ReActAgent(BaseAgent):
 
     async def _seed_system_message(self) -> None:
         """Seed the system prompt into memory if it is empty (lazy, async-safe)."""
-        effective_system = (
-            self.skill_manager.inject_into_prompt(self.system_instructions)
-            if self.skill_manager else self.system_instructions
-        )
         if await self.memory.size() == 0:
-            await self.memory.add_message(SystemMessage(content=effective_system))
+            await self.memory.add_message(SystemMessage(content=self.get_effective_system_prompt()))
 
     async def reset(self) -> None:
         """Clear memory and return agent to initial state with system message."""
         await super().reset()
-        # Re-add system message (with skill context) after clearing
-        effective_system = self.skill_manager.inject_into_prompt(self.system_instructions) \
-            if self.skill_manager else self.system_instructions
-        await self.memory.add_message(SystemMessage(content=effective_system))
+        await self.memory.add_message(SystemMessage(content=self.get_effective_system_prompt()))
         # Reset HITL tool counters
         self._reset_hitl_tools()
 
@@ -206,7 +205,7 @@ class ReActAgent(BaseAgent):
 
     async def _run_inner(self, input_text: str, **kwargs) -> AgentRunResult:
         run_id = str(uuid4())
-        run_start = datetime.utcnow()
+        run_start = datetime.now(timezone.utc)
         usage = AggregatedUsage()
         steps: List[StepResult] = []
         tool_calls_by_name: Dict[str, int] = {}
@@ -252,7 +251,7 @@ class ReActAgent(BaseAgent):
                     guardrail_results.extend(results)
             except GuardrailTripwireError as e:
                 logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
-                run_end = datetime.utcnow()
+                run_end = datetime.now(timezone.utc)
                 return AgentRunResult(
                     run_id=run_id,
                     agent_name=self.name,
@@ -305,7 +304,7 @@ class ReActAgent(BaseAgent):
                                 guardrail_results.extend(results)
                         except GuardrailTripwireError as e:
                             logger.error(f"[{self.name}] Output guardrail tripwire: {e.message}")
-                            run_end = datetime.utcnow()
+                            run_end = datetime.now(timezone.utc)
                             return AgentRunResult(
                                 run_id=run_id,
                                 agent_name=self.name,
@@ -411,7 +410,7 @@ class ReActAgent(BaseAgent):
                     final_output = steps[-1].thought
 
             # 3. Build result
-            run_end = datetime.utcnow()
+            run_end = datetime.now(timezone.utc)
             duration = (run_end - run_start).total_seconds()
 
             result = AgentRunResult(
@@ -715,23 +714,6 @@ class ReActAgent(BaseAgent):
                                 _, tool_msg = await self._execute_tool(parsed, step_num)
                                 await self.memory.add_message(tool_msg)
                                 yield tool_msg
-
-    # ── State management ─────────────────────────────────────────────────────
-
-    async def save_state(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "system_instructions": self.system_instructions,
-            "max_iterations": self.max_iterations,
-            "messages": [m.to_dict() for m in await self.memory.get_messages()],
-        }
-
-    def load_state(self, state: Dict[str, Any]) -> None:
-        if state.get("name") != self.name:
-            logger.warning("Loading state for a different agent name")
-        self.max_iterations = state.get("max_iterations", self.max_iterations)
-        # TODO: reconstruct memory from state["messages"]
 
     # ── Private helpers ──────────────────────────────────────────────────────
 

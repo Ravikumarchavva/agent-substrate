@@ -2,7 +2,7 @@
 import asyncio
 import base64
 from typing import Any, ClassVar, Optional, Literal
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     from playwright.async_api import async_playwright, Browser, Page, TimeoutError as PlaywrightTimeout
@@ -438,7 +438,7 @@ class WebSurferTool(BaseTool):
             "status": "success",
             "action": "get_metadata",
             "url": self._page.url,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
         return metadata
     

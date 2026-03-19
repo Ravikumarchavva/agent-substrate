@@ -13,7 +13,8 @@ from typing import Any, ClassVar, Dict, List, Optional
 import httpx
 
 from agent_framework.configs.settings import settings
-from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from agent_framework.core.tools.base_tool import ToolResult, ToolRisk
+from agent_framework.extensions.mcp.app_tool_base import McpAppTool
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,9 @@ async def _is_spotify_authenticated_async() -> bool:
 # Data Visualizer
 # ---------------------------------------------------------------------------
 
-class DataVisualizerTool(BaseTool):
+class DataVisualizerTool(McpAppTool):
     """Visualise structured data as interactive bar / line / pie charts."""
+    ui_resource_uri: ClassVar[str] = "ui://data_visualizer"
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only data rendering
 
     def __init__(self) -> None:
@@ -83,11 +85,6 @@ class DataVisualizerTool(BaseTool):
                 "openWorldHint": False,
                 "title": "Data Visualizer",
             },
-            _meta={
-                "ui": {
-                    "resourceUri": "ui://data_visualizer",
-                }
-            },
         )
 
     async def execute(self, **kwargs: Any) -> ToolResult:
@@ -120,8 +117,9 @@ class DataVisualizerTool(BaseTool):
 # Markdown Previewer
 # ---------------------------------------------------------------------------
 
-class MarkdownPreviewerTool(BaseTool):
+class MarkdownPreviewerTool(McpAppTool):
     """Render markdown content with a live preview / source toggle."""
+    ui_resource_uri: ClassVar[str] = "ui://markdown_previewer"
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # rendering only, no I/O
 
     def __init__(self) -> None:
@@ -153,11 +151,6 @@ class MarkdownPreviewerTool(BaseTool):
                 "openWorldHint": False,
                 "title": "Markdown Previewer",
             },
-            _meta={
-                "ui": {
-                    "resourceUri": "ui://markdown_previewer",
-                }
-            },
         )
 
     async def execute(self, **kwargs: Any) -> ToolResult:
@@ -184,8 +177,9 @@ class MarkdownPreviewerTool(BaseTool):
 # JSON Explorer
 # ---------------------------------------------------------------------------
 
-class JsonExplorerTool(BaseTool):
+class JsonExplorerTool(McpAppTool):
     """Display structured data in an interactive collapsible tree."""
+    ui_resource_uri: ClassVar[str] = "ui://json_explorer"
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only display
 
     def __init__(self) -> None:
@@ -215,11 +209,6 @@ class JsonExplorerTool(BaseTool):
                 "readOnlyHint": True,
                 "openWorldHint": False,
                 "title": "JSON Explorer",
-            },
-            _meta={
-                "ui": {
-                    "resourceUri": "ui://json_explorer",
-                }
             },
         )
 
@@ -255,8 +244,9 @@ class JsonExplorerTool(BaseTool):
 # Color Palette
 # ---------------------------------------------------------------------------
 
-class ColorPaletteTool(BaseTool):
+class ColorPaletteTool(McpAppTool):
     """Generate and explore colour palettes with harmonies & contrast info."""
+    ui_resource_uri: ClassVar[str] = "ui://color_palette"
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only generation
 
     def __init__(self) -> None:
@@ -288,11 +278,6 @@ class ColorPaletteTool(BaseTool):
                 "readOnlyHint": True,
                 "openWorldHint": False,
                 "title": "Color Palette",
-            },
-            _meta={
-                "ui": {
-                    "resourceUri": "ui://color_palette",
-                }
             },
         )
 
@@ -327,8 +312,9 @@ class ColorPaletteTool(BaseTool):
 # Kanban Board
 # ---------------------------------------------------------------------------
 
-class KanbanBoardTool(BaseTool):
+class KanbanBoardTool(McpAppTool):
     """Render a drag-and-drop Kanban board for task management."""
+    ui_resource_uri: ClassVar[str] = "ui://kanban_board"
     risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # writes persistent task data
 
     def __init__(self) -> None:
@@ -384,11 +370,6 @@ class KanbanBoardTool(BaseTool):
                 "openWorldHint": False,
                 "title": "Kanban Board",
             },
-            _meta={
-                "ui": {
-                    "resourceUri": "ui://kanban_board",
-                }
-            },
         )
 
     async def execute(self, **kwargs: Any) -> ToolResult:
@@ -418,12 +399,13 @@ class KanbanBoardTool(BaseTool):
 # Spotify Player
 # ---------------------------------------------------------------------------
 
-class SpotifyPlayerTool(BaseTool):
+class SpotifyPlayerTool(McpAppTool):
     """Search Spotify and display an interactive music player with Web Playback SDK.
-    
+
     Uses Spotify Web Playback SDK to play FULL TRACKS (not just previews).
     Requires user to log in with Spotify Premium account.
     """
+    ui_resource_uri: ClassVar[str] = "ui://spotify_player_sdk"
     risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # external service, acts on behalf of user
 
     def __init__(self, spotify_service: Any = None) -> None:
@@ -465,11 +447,6 @@ class SpotifyPlayerTool(BaseTool):
                 "readOnlyHint": False,
                 "openWorldHint": True,
                 "title": "Spotify Player (SDK)",
-            },
-            _meta={
-                "ui": {
-                    "resourceUri": "ui://spotify_player_sdk",
-                }
             },
         )
 

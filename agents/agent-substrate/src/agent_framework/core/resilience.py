@@ -1,16 +1,8 @@
-"""Retry and resilience utilities for production agent workloads.
+﻿"""Retry and resilience utilities for production agent workloads.
 
 Provides:
   - retry_async: Decorator for async functions with exponential backoff + jitter.
   - RetryPolicy: Configurable retry parameters.
-  - CircuitBreaker: Fail-fast when a dependency is unhealthy.
-
-Design decisions:
-  - Pure async — no threading overhead.
-  - Jitter prevents thundering herd on shared LLM endpoints.
-  - Retryable errors are detected by exception class, not status code,
-    keeping the utility transport-agnostic.
-  - CircuitBreaker tracks failure rate over a sliding window.
 """
 from __future__ import annotations
 
@@ -18,10 +10,8 @@ import asyncio
 import functools
 import logging
 import random
-import time
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Optional, Set, Tuple, Type
+from dataclasses import dataclass
+from typing import Callable, Optional, Tuple, Type
 
 logger = logging.getLogger("agent_framework.resilience")
 
@@ -141,7 +131,7 @@ def retry_async(
                         )
                         raise
                 except Exception:
-                    # Non-retryable — propagate immediately
+                    # Non-retryable -- propagate immediately
                     raise
 
             # Should not reach here, but safety
@@ -150,128 +140,3 @@ def retry_async(
 
         return wrapper
     return decorator
-
-
-# ---------------------------------------------------------------------------
-# Circuit Breaker
-# ---------------------------------------------------------------------------
-
-class CircuitState(str, Enum):
-    CLOSED = "closed"       # Normal operation
-    OPEN = "open"           # Failing — reject calls immediately
-    HALF_OPEN = "half_open" # Testing recovery
-
-
-class CircuitBreakerOpenError(Exception):
-    """Raised when a call is rejected because the circuit is open."""
-    pass
-
-
-@dataclass
-class CircuitBreaker:
-    """Fail-fast when a dependency is persistently unhealthy.
-
-    Usage::
-
-        breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0)
-
-        async def call_llm():
-            async with breaker:
-                return await model_client.generate(...)
-
-    State machine:
-        CLOSED → (failures >= threshold) → OPEN
-        OPEN   → (after recovery_timeout) → HALF_OPEN
-        HALF_OPEN → (success) → CLOSED
-        HALF_OPEN → (failure) → OPEN
-    """
-    failure_threshold: int = 5
-    recovery_timeout: float = 30.0
-    monitored_exceptions: Tuple[Type[Exception], ...] = (
-        ConnectionError,
-        TimeoutError,
-        OSError,
-    )
-
-    # Internal state
-    _state: CircuitState = field(default=CircuitState.CLOSED, init=False)
-    _failure_count: int = field(default=0, init=False)
-    _last_failure_time: float = field(default=0.0, init=False)
-    _success_count: int = field(default=0, init=False)
-
-    @property
-    def state(self) -> CircuitState:
-        """Return current circuit state (pure read — no side effects).
-
-        Callers that need the OPEN → HALF_OPEN transition to be considered
-        should use ``_maybe_transition()`` explicitly before reading this.
-        The context manager ``__aenter__`` does this automatically.
-        """
-        return self._state
-
-    def _maybe_transition(self) -> None:
-        """Transition OPEN → HALF_OPEN when the recovery timeout has elapsed.
-
-        Extracted from ``.state`` so the property is a pure getter
-        (GoF principle of least surprise; eliminates hidden side effects).
-        """
-        if (
-            self._state == CircuitState.OPEN
-            and time.monotonic() - self._last_failure_time >= self.recovery_timeout
-        ):
-            self._state = CircuitState.HALF_OPEN
-            logger.info("Circuit breaker → HALF_OPEN (testing recovery)")
-
-    def record_success(self) -> None:
-        """Record a successful call."""
-        if self._state == CircuitState.HALF_OPEN:
-            self._state = CircuitState.CLOSED
-            self._failure_count = 0
-            logger.info("Circuit breaker → CLOSED (recovered)")
-        self._success_count += 1
-
-    def record_failure(self) -> None:
-        """Record a failed call."""
-        self._failure_count += 1
-        self._last_failure_time = time.monotonic()
-
-        if self._state == CircuitState.HALF_OPEN:
-            self._state = CircuitState.OPEN
-            logger.warning("Circuit breaker → OPEN (failed during recovery)")
-        elif self._failure_count >= self.failure_threshold:
-            self._state = CircuitState.OPEN
-            logger.warning(
-                f"Circuit breaker → OPEN "
-                f"({self._failure_count} failures >= {self.failure_threshold})"
-            )
-
-    async def __aenter__(self):
-        self._maybe_transition()
-        if self.state == CircuitState.OPEN:
-            raise CircuitBreakerOpenError(
-                f"Circuit breaker is OPEN (failed {self._failure_count} times). "
-                f"Recovery in {self.recovery_timeout - (time.monotonic() - self._last_failure_time):.1f}s"
-            )
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is None:
-            self.record_success()
-        elif issubclass(exc_type, self.monitored_exceptions):
-            self.record_failure()
-        return False  # Don't suppress exceptions
-
-    def reset(self) -> None:
-        """Manually reset the circuit breaker."""
-        self._state = CircuitState.CLOSED
-        self._failure_count = 0
-        self._success_count = 0
-        self._last_failure_time = 0.0
-
-    def stats(self) -> dict:
-        """Return current stats."""
-        return {
-            "state": self.state.value,
-            "failure_count": self._failure_count,
-            "success_count": self._success_count,
-        }

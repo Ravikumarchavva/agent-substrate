@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from agent_framework.runtime.tasks.store import GlobalTaskStore
 from agent_framework.runtime.hitl import BridgeRegistry
+from agent_framework.server.context import ServerContext, get_ctx
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -42,11 +43,11 @@ async def update_task(
     task_list_id: str,
     task_id: str,
     req: TaskUpdateRequest,
-    request: Request,
+    ctx: ServerContext = Depends(get_ctx),
 ):
     """Update a task's status or title (drag-drop / inline edit from frontend)."""
     store = GlobalTaskStore.get()
-    bridge_registry: BridgeRegistry = request.app.state.bridge_registry
+    bridge_registry = ctx.bridge_registry
 
     result = None
     if req.status:
@@ -80,11 +81,11 @@ async def update_task(
 async def add_tasks(
     task_list_id: str,
     req: AddTasksRequest,
-    request: Request,
+    ctx: ServerContext = Depends(get_ctx),
 ):
     """Append new tasks to an existing task list (user-initiated)."""
     store = GlobalTaskStore.get()
-    bridge_registry: BridgeRegistry = request.app.state.bridge_registry
+    bridge_registry = ctx.bridge_registry
 
     new_tasks = await store.add_tasks(task_list_id, req.tasks)
     task_list_obj = store.get_task_list(task_list_id)
@@ -102,11 +103,11 @@ async def add_tasks(
 async def delete_task(
     task_list_id: str,
     task_id: str,
-    request: Request,
+    ctx: ServerContext = Depends(get_ctx),
 ):
     """Delete a task (user-initiated)."""
     store = GlobalTaskStore.get()
-    bridge_registry: BridgeRegistry = request.app.state.bridge_registry
+    bridge_registry = ctx.bridge_registry
 
     deleted = await store.delete_task(task_list_id, task_id)
     if not deleted:
@@ -120,3 +121,4 @@ async def delete_task(
             "task_id": task_id,
         })
     return {"status": "ok"}
+

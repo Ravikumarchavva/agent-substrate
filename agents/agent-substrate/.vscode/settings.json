@@ -9,5 +9,6 @@
             "envManager": "ms-python.python:venv",
             "packageManager": "ms-python.python:pip"
         }
-    ]
+    ],
+    "snyk.advanced.organization": "8d171c19-a49d-4aaa-bf37-5e88b3432fe0"
 }

@@ -38,6 +38,7 @@ class NodeType(str, Enum):
     CONDITION  = "condition"  # expression-based branching
     APPROVAL   = "approval"   # human-in-the-loop gate
     WHILE      = "while"      # repeat-until loop
+    MCP        = "mcp"        # external MCP server (SSE or stdio)
 
 
 class EdgeType(str, Enum):
@@ -58,6 +59,8 @@ class EdgeType(str, Enum):
     # While loop
     WHILE_BODY        = "while_body"           # while → body (loop back)
     WHILE_DONE        = "while_done"           # while → done (exit loop)
+    # MCP server
+    AGENT_MCP         = "agent_mcp"            # mcp_server → agent (tools injection)
 
 
 # ---------------------------------------------------------------------------

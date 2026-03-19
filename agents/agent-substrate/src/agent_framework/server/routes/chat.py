@@ -39,26 +39,43 @@ from agent_framework.server.services.file_service import (
 from agent_framework.server.routes.mcp_apps import resolve_ui_uri
 from agent_framework.extensions.tools.task_manager_tool import current_thread_id
 from agent_framework.extensions.tools.web_surfer import WebSurferTool
-from agent_framework.runtime.hitl import WebHITLBridge, _DONE
+from agent_framework.extensions.tools.human_input import AskHumanTool
+from agent_framework.runtime.hitl import BridgeRegistry, WebHITLBridge, _DONE
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
 
-def _get_agent_deps(request: Request):
-    """Extract shared agent dependencies from app state, adding WebSurferTool."""
-    tools = list(request.app.state.tools)
-    # Only add if not already present
+async def _get_agent_deps(request: Request, thread_id: str):
+    """Assemble per-request agent dependencies with an isolated HITL bridge."""
+    bridge_registry: BridgeRegistry = request.app.state.bridge_registry
+    bridge = await bridge_registry.acquire(str(thread_id))
+
+    # Build a fresh AskHumanTool for this request wired to the thread's bridge.
+    # Removes the placeholder from app.state.tools so only one instance exists.
+    base_tools = [
+        t for t in request.app.state.tools
+        if not isinstance(t, AskHumanTool)
+    ]
+    ask_tool = AskHumanTool(
+        handler=bridge.human_handler,
+        max_requests_per_run=5,
+    )
+    tools = [ask_tool] + base_tools
+
+    # Only add WebSurferTool if not already present
     if not any(isinstance(t, WebSurferTool) for t in tools):
         tools.append(WebSurferTool())
+
     return {
         "model_client": request.app.state.model_client,
         "tools": tools,
         "system_instructions": request.app.state.system_instructions,
-        "tool_approval_handler": getattr(request.app.state, "tool_approval_handler", None),
+        "tool_approval_handler": bridge.approval_handler,
         "tools_requiring_approval": getattr(request.app.state, "tools_requiring_approval", None),
         "tool_timeout": getattr(request.app.state, "tool_timeout", None),
+        "bridge": bridge,
     }
 
 
@@ -181,8 +198,8 @@ async def chat(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    # 2. Build agent with restored memory + HITL support
-    deps = _get_agent_deps(request)
+    # 2. Build agent with restored memory + per-thread HITL bridge
+    deps = await _get_agent_deps(request, body.thread_id)
 
     # Append per-request custom instructions if provided by the frontend
     if body.system_instructions and body.system_instructions.strip():
@@ -206,6 +223,8 @@ async def chat(
     )
 
     # 3. Extract user content from last message
+    if not body.messages:
+        raise HTTPException(status_code=422, detail="messages[] must not be empty")
     user_content = body.messages[-1].content
 
     # 3a. Inject attached file context (text extraction + CI VM push)
@@ -227,8 +246,8 @@ async def chat(
     await persist_user_message(db, body.thread_id, user_content)
     await db.commit()
 
-    # Get the HITL bridge from app state
-    bridge: WebHITLBridge = request.app.state.bridge
+    # Per-thread HITL bridge (acquired in _get_agent_deps)
+    bridge: WebHITLBridge = deps["bridge"]
 
     async def sse_generator() -> AsyncIterator[str]:
         """Yield SSE events from merged agent + HITL streams, persist results."""
@@ -414,7 +433,7 @@ async def chat(
                                 "tool_name": tool_name,
                                 "tool_call_id": getattr(chunk, "tool_call_id", ""),
                                 "content": content_text,
-                                "is_error": getattr(chunk, "isError", False),
+                                "is_error": chunk.is_error,
                                 "has_app": "ui" in tool_meta,
                                 "http_url": tool_http_url,
                                 "app_data": getattr(chunk, "app_data", None),
@@ -433,7 +452,7 @@ async def chat(
                                         tool_call_id=getattr(chunk, "tool_call_id", ""),
                                         tool_name=getattr(chunk, "name", "unknown"),
                                         output=content_text,
-                                        is_error=getattr(chunk, "isError", False),
+                                        is_error=chunk.is_error,
                                     )
                                     await persist_db.commit()
                             except Exception:
@@ -485,6 +504,8 @@ async def chat(
                 agent_task.cancel()
             if not hitl_task.done():
                 hitl_task.cancel()
+            # Release the per-thread bridge back to the registry
+            await request.app.state.bridge_registry.release(str(body.thread_id))
 
         # All assistant messages are now persisted inline above,
         # no deferred persistence needed.

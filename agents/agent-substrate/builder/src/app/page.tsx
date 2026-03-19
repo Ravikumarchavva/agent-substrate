@@ -45,6 +45,7 @@ const DEFAULT_CONFIGS: Record<string, Record<string, unknown>> = {
   agent: { model: "gpt-4o-mini", system_prompt: "", max_iterations: 10 },
   tool: { tool_name: "", risk: "safe", hitl_mode: "blocking" },
   skill: { skill_name: "", version: "" },
+  mcp: { server_name: "", url: "", transport: "sse", command: "", args: [], enabled_tools: [] },
   guardrail: { guardrail_type: "input", schema_name: "", pass_field: "is_safe", tripwire: true, system_prompt: "" },
   router: { routing_key: "intent", routes: [], routing_fields: [] },
   memory: { backend: "unbounded", ttl: 3600, max_messages: 200 },

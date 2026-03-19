@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from agent_framework.runtime.tasks.store import GlobalTaskStore
-from agent_framework.runtime.hitl import WebHITLBridge
+from agent_framework.runtime.hitl import BridgeRegistry
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -46,27 +46,30 @@ async def update_task(
 ):
     """Update a task's status or title (drag-drop / inline edit from frontend)."""
     store = GlobalTaskStore.get()
-    bridge: WebHITLBridge = request.app.state.bridge
+    bridge_registry: BridgeRegistry = request.app.state.bridge_registry
 
     result = None
     if req.status:
-        result = store.update_status(task_list_id, task_id, req.status)
+        result = await store.update_status(task_list_id, task_id, req.status)
     if req.title:
-        result = store.update_task_title(task_list_id, task_id, req.title)
+        result = await store.update_task_title(task_list_id, task_id, req.title)
 
     if not result:
         return {"status": "error", "detail": "Task not found"}
 
-    await bridge.put_event({
-        "type": "task_updated",
-        "task_list_id": task_list_id,
-        "task": {
-            "id": result.id,
-            "title": result.title,
-            "status": result.status,
-            "order": result.order,
-        },
-    })
+    # Emit to the correct per-thread bridge (looks up conversation_id from store)
+    task_list_obj = store.get_task_list(task_list_id)
+    if task_list_obj:
+        await bridge_registry.emit(task_list_obj.conversation_id, {
+            "type": "task_updated",
+            "task_list_id": task_list_id,
+            "task": {
+                "id": result.id,
+                "title": result.title,
+                "status": result.status,
+                "order": result.order,
+            },
+        })
     return {
         "status": "ok",
         "task": {"id": result.id, "title": result.title, "status": result.status},
@@ -81,15 +84,17 @@ async def add_tasks(
 ):
     """Append new tasks to an existing task list (user-initiated)."""
     store = GlobalTaskStore.get()
-    bridge: WebHITLBridge = request.app.state.bridge
+    bridge_registry: BridgeRegistry = request.app.state.bridge_registry
 
-    new_tasks = store.add_tasks(task_list_id, req.tasks)
-    for t in new_tasks:
-        await bridge.put_event({
-            "type": "task_added",
-            "task_list_id": task_list_id,
-            "task": {"id": t.id, "title": t.title, "status": t.status, "order": t.order},
-        })
+    new_tasks = await store.add_tasks(task_list_id, req.tasks)
+    task_list_obj = store.get_task_list(task_list_id)
+    if task_list_obj:
+        for t in new_tasks:
+            await bridge_registry.emit(task_list_obj.conversation_id, {
+                "type": "task_added",
+                "task_list_id": task_list_id,
+                "task": {"id": t.id, "title": t.title, "status": t.status, "order": t.order},
+            })
     return {"status": "ok", "added": len(new_tasks)}
 
 
@@ -101,15 +106,17 @@ async def delete_task(
 ):
     """Delete a task (user-initiated)."""
     store = GlobalTaskStore.get()
-    bridge: WebHITLBridge = request.app.state.bridge
+    bridge_registry: BridgeRegistry = request.app.state.bridge_registry
 
-    deleted = store.delete_task(task_list_id, task_id)
+    deleted = await store.delete_task(task_list_id, task_id)
     if not deleted:
         return {"status": "error", "detail": "Task not found"}
 
-    await bridge.put_event({
-        "type": "task_deleted",
-        "task_list_id": task_list_id,
-        "task_id": task_id,
-    })
+    task_list_obj = store.get_task_list(task_list_id)
+    if task_list_obj:
+        await bridge_registry.emit(task_list_obj.conversation_id, {
+            "type": "task_deleted",
+            "task_list_id": task_list_id,
+            "task_id": task_id,
+        })
     return {"status": "ok"}

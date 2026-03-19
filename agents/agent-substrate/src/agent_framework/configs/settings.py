@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+from typing import List
 
 
 class Settings(BaseSettings):
@@ -31,9 +32,28 @@ class Settings(BaseSettings):
     # (e.g. SpotifyPlayerTool fetching the OAuth token endpoint).
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 
+    # CORS — comma-separated list of allowed origins.
+    # In production set this to your exact frontend domain(s), e.g.:
+    # CORS_ALLOWED_ORIGINS=https://app.example.com,https://www.example.com
+    CORS_ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3002", "http://127.0.0.1:3002"]
+
+    # OpenTelemetry — OTLP HTTP endpoint for traces.
+    # Set to "" to disable tracing entirely.
+    OTLP_ENDPOINT: str = "http://localhost:4318"
+
     # Visual Builder — set to True to mount /builder API routes.
     # Keep False in production to avoid bloat.
     ENABLE_BUILDER: bool = False
+
+    # JWT authentication
+    # JWT_SECRET must be set to a 32+ char random string in production.
+    # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+    JWT_SECRET: str = "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    # Agent context tokens are short-lived ephemeral tokens bound to a thread
+    JWT_AGENT_TOKEN_EXPIRE_MINUTES: int = 5
 
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",

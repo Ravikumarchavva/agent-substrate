@@ -169,6 +169,7 @@ function inferEdgeType(
 
   if (sType === "router") return "router_route";
   if (tType === "router") return "router_input";
+  if (sType === "mcp") return "agent_mcp";
   if (tType === "tool") return "agent_tool";
   if (tType === "guardrail") return "agent_guardrail";
   if (tType === "skill") return "agent_skill";

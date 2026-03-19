@@ -15,7 +15,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, logger
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
@@ -30,6 +30,7 @@ from agent_framework.runtime.observability.telemetry import (
 )
 from agent_framework.server.database import close_db, get_session_factory, init_db
 from agent_framework.server.routes.admin import router as admin_router
+from agent_framework.server.routes.auth import router as auth_router
 from agent_framework.server.routes.cancel import router as cancel_router
 from agent_framework.server.routes.chat import router as chat_router
 from agent_framework.server.routes.code_interpreter import router as code_interpreter_router
@@ -42,6 +43,7 @@ from agent_framework.server.routes.mcp_apps import router as mcp_apps_router
 from agent_framework.server.routes.spotify_oauth import router as spotify_oauth_router
 from agent_framework.server.routes.tasks import router as tasks_router
 from agent_framework.server.routes.threads import router as threads_router
+from agent_framework.core.tools.base_tool import ToolRisk
 from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from agent_framework.extensions.tools.code_interpreter import CodeInterpreterTool
 from agent_framework.extensions.tools.code_interpreter.http_client import CodeInterpreterClient
@@ -54,7 +56,7 @@ from agent_framework.extensions.mcp.app_tools import (
     SpotifyPlayerTool,
 )
 from agent_framework.providers.integrations.spotify import SpotifyService
-from agent_framework.runtime.hitl import WebHITLBridge
+from agent_framework.runtime.hitl import BridgeRegistry
 from agent_framework.extensions.tools.task_manager_tool import TaskManagerTool
     
 # ── Lifespan ─────────────────────────────────────────────────────────────────
@@ -67,7 +69,7 @@ async def lifespan(app: FastAPI):
     # Observability
     configure_opentelemetry(
         service_name="agent-framework",
-        otlp_trace_endpoint="localhost:4318",
+        otlp_trace_endpoint=settings.OTLP_ENDPOINT,
     )
 
     # Database
@@ -93,21 +95,31 @@ async def lifespan(app: FastAPI):
         api_key=settings.OPENAI_API_KEY,
     )
 
-    # HITL bridge: connects agent approval/input requests to SSE/HTTP
-    bridge = WebHITLBridge(response_timeout=300.0)
-    app.state.bridge = bridge
+    # HITL bridge registry: one WebHITLBridge per active thread (conversation).
+    # Bridges are created lazily on SSE stream start and destroyed on close.
+    bridge_registry = BridgeRegistry(response_timeout=300.0)
+    app.state.bridge_registry = bridge_registry
 
-    # AskHumanTool wired through the bridge
-    ask_tool = AskHumanTool(
-        handler=bridge.human_handler,
-        max_requests_per_run=5,
-    )
+    # --- keep app.state.bridge as a sentinel-less stub for task SSE events ---
+    # TaskManagerTool emits via a dynamic closure that routes through the
+    # correct per-thread bridge at call time (safe with concurrent requests).
+    from agent_framework.extensions.tools.task_manager_tool import current_thread_id as _task_thread_id
 
-    # TaskManagerTool — wired to the bridge so SSE events reach the frontend
-    task_tool = TaskManagerTool(event_emitter=bridge.put_event)
+    async def _task_event_emitter(event: dict) -> None:
+        """Emit task SSE events to the active bridge for the current thread."""
+        tid = _task_thread_id.get("default")
+        await bridge_registry.emit(tid, event)
+
+    # AskHumanTool is created per-request in _get_agent_deps (needs thread bridge).
+    # Remove global bridge from state — routes now use bridge_registry directly.
+
+    # TaskManagerTool — emitter wired at startup via dynamic closure
+    task_tool = TaskManagerTool(event_emitter=_task_event_emitter)
     app.state.task_tool = task_tool
 
-    # Spotify service (needs SPOTIFY_CLIENT_ID + SPOTIFY_CLIENT_SECRET)
+    # AskHumanTool placeholder (a real per-thread tool is built in _get_agent_deps)
+    # Include a placeholder here so the tools registry returns it.
+    ask_tool = AskHumanTool(handler=None, max_requests_per_run=5)
     spotify_svc = None
     if settings.SPOTIFY_CLIENT_ID and settings.SPOTIFY_CLIENT_SECRET:
         spotify_svc = SpotifyService(
@@ -162,56 +174,25 @@ async def lifespan(app: FastAPI):
     ]
 
     # HITL configuration for the agent
-    app.state.tool_approval_handler = bridge.approval_handler
-    app.state.tools_requiring_approval = ["calculator", "get_current_time"]
+    # Note: tool_approval_handler is set per-request in _get_agent_deps using
+    # the per-thread bridge acquired from bridge_registry.
+    app.state.tools_requiring_approval = [
+        t.name for t in app.state.tools if t.risk == ToolRisk.CRITICAL
+    ]
     app.state.tool_timeout = 300.0  # match HITL bridge timeout
 
-    app.state.system_instructions = (
-        "You are a helpful AI assistant. "
-        "You MUST format all math using Markdown LaTeX.\n\n"
-        "Rules:\n"
-        "- Inline math: $...$\n"
-        "- Block math: $$...$$\n"
-        "- Do NOT escape dollar signs\n"
-        "- Do NOT use \\[ \\] or \\( \\)\n"
-        "When the user asks for a table:\n"
-        "- ALWAYS return a Markdown table\n"
-        "- Use | pipes and a separator row\n\n"
-        "TASK BOARD (IMPORTANT):\n"
-        "For ANY request that requires multiple steps or research, you MUST:\n"
-        "1. Call manage_tasks action=create_list with ALL planned steps FIRST.\n"
-        "2. For each step: call manage_tasks action=start_task, do the work, then action=complete_task.\n"
-        "This gives the user a live Kanban board showing your progress in real-time.\n\n"
-        "When you need user preferences or confirmation, use the ask_human tool\n"
-        "to present options and let them choose.\n\n"
-        "When the user asks you to visualize, chart, or plot data, use the\n"
-        "data_visualizer tool. Provide the data as an array of {label, value}\n"
-        "objects. The user will see an interactive chart they can switch\n"
-        "between bar, line, and pie views.\n\n"
-        "When showing structured data (API responses, configs, nested objects),\n"
-        "use the json_explorer tool so the user can browse it interactively.\n\n"
-        "When displaying formatted text, documentation, or rich content,\n"
-        "use the markdown_previewer tool for a rendered preview.\n\n"
-        "When working with colors, themes, or palettes, use the\n"
-        "color_palette tool to show interactive color swatches.\n\n"
-        "When managing tasks, projects, or workflows, use the\n"
-        "kanban_board tool to display a drag-and-drop board.\n\n"
-        "When the user asks about music, songs, artists, or wants to listen\n"
-        "to something, use the spotify_player tool. Provide a descriptive\n"
-        "search query. The user will see an interactive music player with\n"
-        "30-second previews, play/pause, and next/previous controls.\n\n"
-        "IMPORTANT: When you use any of the interactive tools above\n"
-        "(data_visualizer, json_explorer, markdown_previewer, color_palette,\n"
-        "kanban_board, spotify_player), the user will see a rich interactive\n"
-        "UI widget. After calling one of these tools, give ONLY a brief\n"
-        "1-2 sentence confirmation. Do NOT repeat, summarize, or list the\n"
-        "data you passed to the tool — the user can already see it in the\n"
-        "interactive widget.\n"
+    _prompt_path = (
+        __import__('pathlib').Path(__file__).parent / "prompts" / "default_system.md"
     )
+    app.state.system_instructions = _prompt_path.read_text(encoding="utf-8").strip()
 
     # Cancel registry: maps thread_id → asyncio.Event so running streams can
     # be aborted from the POST /chat/{thread_id}/cancel endpoint.
     app.state.cancel_registry: dict[str, object] = {}
+
+    # MCP server registry: maps server_id → RegistryMcpServer dict.
+    # Populated at runtime via POST /builder/mcp-servers (in-memory, not persisted).
+    app.state.mcp_servers: dict[str, dict] = {}
 
     # Expose session factory for routes that need a fresh DB session
     app.state.session_factory = get_session_factory()
@@ -247,10 +228,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS – allow all for dev, tighten in production
+    # CORS — origins from settings; in production set CORS_ALLOWED_ORIGINS in .env
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.CORS_ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -258,6 +239,7 @@ def create_app() -> FastAPI:
 
     # Mount routers
     app.include_router(admin_router)
+    app.include_router(auth_router)
     app.include_router(threads_router)
     app.include_router(chat_router)
     app.include_router(cancel_router)

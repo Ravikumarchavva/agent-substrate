@@ -1,13 +1,12 @@
 """OpenAI model client implementation."""
+from __future__ import annotations
+
 from typing import Any, AsyncIterator, Optional
 import json
 from openai import AsyncOpenAI
-from openai.types.shared_params.reasoning import Reasoning
 from openai.types.responses.response_completed_event import ResponseCompletedEvent
 from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 from openai.types.responses.response_reasoning_summary_text_delta_event import ResponseReasoningSummaryTextDeltaEvent
-from openai.types.responses.response_function_call_arguments_done_event import ResponseFunctionCallArgumentsDoneEvent
-from openai.types.responses import Response
 import tiktoken
 
 from agent_framework.core.messages.client_messages import ToolExecutionResultMessage, ToolCallMessage, AssistantMessage, SystemMessage, UserMessage
@@ -49,6 +48,124 @@ class OpenAIClient(BaseModelClient):
         if not tools:
             return None
         return tools
+
+    # ------------------------------------------------------------------
+    # Private helpers — shared serialisation logic
+    # ------------------------------------------------------------------
+
+    def _serialize_messages(
+        self, messages: list[BaseClientMessage]
+    ) -> tuple[str, list[dict]]:
+        """Serialise framework messages into (instructions, conversation_input).
+
+        Returns:
+            instructions: Concatenated system prompt text for the Responses API.
+            conversation_input: List of Responses-API input items.
+        """
+        instructions = ""
+        conversation_input: list[dict] = []
+
+        for msg in messages:
+            if msg.role == "system":
+                instructions += f"{msg.content}\n"
+            elif msg.role == "user":
+                msg_dict = msg.to_dict()
+                conversation_input.append({
+                    "type": "message",
+                    "role": "user",
+                    "content": msg_dict.get("content", []),
+                })
+            elif msg.role == "assistant":
+                msg_dict = msg.to_dict()
+                if msg.content:
+                    serialized_content = msg_dict.get("content", [])
+                    if serialized_content:
+                        conversation_input.append({
+                            "type": "message",
+                            "role": "assistant",
+                            "content": serialized_content,
+                        })
+                tool_calls = getattr(msg, "tool_calls", None)
+                if tool_calls:
+                    for tc in tool_calls:
+                        if not (hasattr(tc, "name") and hasattr(tc, "arguments")):
+                            continue
+                        tc_args = tc.arguments
+                        if isinstance(tc_args, dict):
+                            tc_args = json.dumps(tc_args)
+                        conversation_input.append({
+                            "type": "function_call",
+                            "call_id": tc.id,
+                            "name": tc.name,
+                            "arguments": tc_args,
+                        })
+            elif msg.role in ("tool_response", "tool"):
+                content_str = ""
+                if hasattr(msg, "content") and msg.content:
+                    if isinstance(msg.content, list):
+                        content_str = "\n".join(
+                            block.get("text", "")
+                            for block in msg.content
+                            if isinstance(block, dict) and block.get("type") == "text"
+                        )
+                    elif isinstance(msg.content, str):
+                        content_str = msg.content
+                conversation_input.append({
+                    "type": "function_call_output",
+                    "call_id": getattr(msg, "tool_call_id", None),
+                    "output": content_str,
+                })
+
+        return instructions.strip(), conversation_input
+
+    def _serialize_tools(self, tools: Optional[list[dict]]) -> Optional[list[dict]]:
+        """Normalise tool dicts to Responses API flattened format.
+
+        Accepts OpenAI nested format, MCP format, or already-flattened format.
+        Returns None when *tools* is falsy.
+        """
+        if not tools:
+            return None
+
+        result: list[dict] = []
+        for tool in tools:
+            # Already flattened Responses-API format
+            if "type" in tool and "name" in tool and "parameters" in tool:
+                result.append(tool)
+            # OpenAI nested Chat Completions format
+            elif tool.get("type") == "function" and "function" in tool:
+                fn = tool["function"]
+                result.append({
+                    "type": "function",
+                    "name": fn.get("name"),
+                    "description": fn.get("description", ""),
+                    "parameters": fn.get("parameters", {"type": "object", "properties": {}}),
+                })
+            # MCP format with inputSchema
+            elif "name" in tool and "inputSchema" in tool:
+                result.append({
+                    "type": "function",
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "parameters": tool["inputSchema"],
+                })
+            # Generic named tool — best-effort
+            elif "name" in tool:
+                result.append({
+                    "type": "function",
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "parameters": (
+                        tool.get("parameters")
+                        or tool.get("inputSchema")
+                        or {"type": "object", "properties": {}}
+                    ),
+                })
+            else:
+                # Unknown format — pass through and let the API handle it
+                result.append(tool)
+
+        return result
     
     async def generate(
         self,
@@ -58,201 +175,66 @@ class OpenAIClient(BaseModelClient):
         **kwargs
     ) -> AssistantMessage:
         """Generate a single response from OpenAI using Responses API."""
-        # Separate system instructions from other messages
-        instructions = ""
-        conversation_input = []
-        
-        for msg in messages:
-            if msg.role == "system":
-                # For Responses API, instructions are typically passed as a separate param
-                # But if we have multiple, we can append them.
-                instructions += f"{msg.content}\n"
-            elif msg.role == "user":
-                # Get the properly serialized content from the message
-                msg_dict = msg.to_dict()
-                conversation_input.append({
-                    "type": "message",
-                    "role": "user",
-                    "content": msg_dict.get("content", [])
-                })
-            elif msg.role == "assistant":
-                # Assistant message might have content OR tool_calls or both
-                msg_dict = msg.to_dict()
-                if msg.content:
-                    # Serialize content properly
-                    serialized_content = msg_dict.get("content", [])
-                    if serialized_content:
-                        conversation_input.append({
-                            "type": "message",
-                            "role": "assistant",
-                            "content": serialized_content
-                        })
-                
-                # Check for tool_calls (AssistantMessage format)
-                tool_calls = getattr(msg, "tool_calls", None)
-                if tool_calls:
-                    for tc in tool_calls:
-                        # Handle both ToolCallMessage and legacy formats
-                        if hasattr(tc, 'name') and hasattr(tc, 'arguments'):
-                            # ToolCallMessage has name and arguments directly
-                            tc_name = tc.name
-                            tc_args = tc.arguments
-                            tc_id = tc.id
-                        elif hasattr(tc, 'function') and isinstance(tc.function, dict):
-                            # Legacy format with function dict
-                            tc_name = tc.function["name"]
-                            tc_args = tc.function["arguments"]
-                            tc_id = tc.id
-                        else:
-                            # Skip unknown format
-                            continue
-                        
-                        # Convert arguments to JSON string if it's a dict
-                        if isinstance(tc_args, dict):
-                            tc_args = json.dumps(tc_args)
-                        
-                        conversation_input.append({
-                            "type": "function_call",
-                            "call_id": tc_id,
-                            "name": tc_name,
-                            "arguments": tc_args
-                        })
-            elif msg.role == "tool_response" or msg.role == "tool":
-                # ToolExecutionResultMessage maps to function_call_output
-                # Content is a list of MCP content blocks - convert to string
-                content_str = ""
-                if hasattr(msg, 'content') and msg.content:
-                    if isinstance(msg.content, list):
-                        # MCP format: list of content blocks
-                        text_parts = []
-                        for block in msg.content:
-                            if isinstance(block, dict) and block.get("type") == "text":
-                                text_parts.append(block.get("text", ""))
-                        content_str = "\n".join(text_parts)
-                    elif isinstance(msg.content, str):
-                        content_str = msg.content
-                
-                conversation_input.append({
-                    "type": "function_call_output",
-                    "call_id": getattr(msg, "tool_call_id", None),
-                    "output": content_str
-                })
+        instructions, conversation_input = self._serialize_messages(messages)
 
-        params = {
+        params: dict[str, Any] = {
             "model": self.model,
             "input": conversation_input,
         }
-        
-        # Only add temperature if explicitly passed or if the model supports it
-        # GPT-5 models don't support temperature parameter
+
+        # GPT-5 models don't support the temperature parameter
         if "temperature" in kwargs:
             params["temperature"] = kwargs["temperature"]
         elif not self.model.startswith("gpt-5"):
             params["temperature"] = self.temperature
-        
+
         if instructions:
-             params["instructions"] = instructions.strip()
-        
+            params["instructions"] = instructions
+
         if self.max_tokens:
             params["max_tokens"] = kwargs.get("max_tokens", self.max_tokens)
-        
-        if tools:
-            # Transform tools to Responses API format (flattened)
-            # The Responses API expects { "type": "function", "name": "...", "description": "...", "parameters": ... }
-            # Input can be:
-            # 1. OpenAI format: { "type": "function", "function": { "name": "...", "description": "...", "parameters": {...} } }
-            # 2. MCP format: { "name": "...", "description": "...", "inputSchema": {...} }
-            # 3. Already flattened: { "type": "function", "name": "...", "description": "...", "parameters": {...} }
-            
-            transformed_tools = []
-            for tool in tools:
-                # Check if it's already in the flattened Responses API format
-                if "type" in tool and "name" in tool and "parameters" in tool:
-                    transformed_tools.append(tool)
-                # OpenAI nested format
-                elif tool.get("type") == "function" and "function" in tool:
-                    fn_def = tool["function"]
-                    new_tool = {
-                        "type": "function",
-                        "name": fn_def.get("name"),
-                        "description": fn_def.get("description", ""),
-                        "parameters": fn_def.get("parameters", {"type": "object", "properties": {}}),
-                    }
-                    transformed_tools.append(new_tool)
-                # MCP format (has inputSchema instead of parameters)
-                elif "name" in tool and "inputSchema" in tool:
-                    new_tool = {
-                        "type": "function",
-                        "name": tool.get("name"),
-                        "description": tool.get("description", ""),
-                        "parameters": tool.get("inputSchema", {"type": "object", "properties": {}}),
-                    }
-                    transformed_tools.append(new_tool)
-                # MCP format without explicit inputSchema (use default)
-                elif "name" in tool:
-                    new_tool = {
-                        "type": "function",
-                        "name": tool.get("name"),
-                        "description": tool.get("description", ""),
-                        "parameters": tool.get("parameters") or tool.get("inputSchema") or {"type": "object", "properties": {}},
-                    }
-                    transformed_tools.append(new_tool)
-                else:
-                    # Unknown format - pass through and let API handle it
-                    transformed_tools.append(tool)
-            
+
+        transformed_tools = self._serialize_tools(tools)
+        if transformed_tools:
             params["tools"] = transformed_tools
             if tool_choice:
                 params["tool_choice"] = tool_choice
-        
-        # Add any additional kwargs
+
+        # Forward any remaining caller kwargs
         params.update({k: v for k, v in kwargs.items() if k not in params})
-        
-        # Use new Responses API
+
         response = await self.client.responses.create(**params)
-        
-        # Convert to framework format
-        # The Responses API has a convenience property for text
-        final_content_text = response.output_text if hasattr(response, "output_text") else ""
-        
-        # Convert string content to List[MediaType] format
+
+        final_content_text = getattr(response, "output_text", "") or ""
         final_content = [final_content_text] if final_content_text else None
-        
+
         tool_calls_obj = None
-        
-        # Iterate through output items to find tool calls
         if response.output:
             for item in response.output:
-                # Based on SDK, tool calls have types like "function_call"
                 if item.type == "function_call":
                     if tool_calls_obj is None:
                         tool_calls_obj = []
-                    
-                    # SDK: ResponseFunctionToolCallMessage has fields: name, arguments, call_id
                     tool_calls_obj.append(
                         ToolCallMessage(
                             id=getattr(item, "call_id", getattr(item, "id", None)),
                             name=item.name,
-                            arguments=item.arguments
+                            arguments=item.arguments,
                         )
                     )
-                # Handle other tool call types if necessary (mcp_call, etc.) in the future
-        
-        # Usage mapping
+
         usage_dict = None
-        if hasattr(response, "usage") and response.usage:
+        if getattr(response, "usage", None):
             from agent_framework.core.messages.base_message import UsageStats
             usage_dict = UsageStats(
                 prompt_tokens=response.usage.input_tokens,
                 completion_tokens=response.usage.output_tokens,
                 total_tokens=response.usage.total_tokens,
             )
-        
-        # Determine finish reason
+
         finish_reason = "stop"
         if tool_calls_obj:
             finish_reason = "tool_calls"
-        elif hasattr(response, "finish_reason") and response.finish_reason:
+        elif getattr(response, "finish_reason", None):
             finish_reason = response.finish_reason
 
         return AssistantMessage(
@@ -262,7 +244,7 @@ class OpenAIClient(BaseModelClient):
             usage=usage_dict,
             finish_reason=finish_reason,
         )
-    
+
     # ------------------------------------------------------------------
     # Structured outputs
     # ------------------------------------------------------------------
@@ -293,55 +275,15 @@ class OpenAIClient(BaseModelClient):
             StructuredOutputResult,
         )
 
-        # Reuse the same message-conversion path as generate()
-        instructions = ""
-        conversation_input = []
-
-        for msg in messages:
-            if msg.role == "system":
-                instructions += f"{msg.content}\n"
-            elif msg.role == "user":
-                msg_dict = msg.to_dict()
-                conversation_input.append({
-                    "type": "message",
-                    "role": "user",
-                    "content": msg_dict.get("content", []),
-                })
-            elif msg.role == "assistant":
-                msg_dict = msg.to_dict()
-                serialized_content = msg_dict.get("content", [])
-                if serialized_content:
-                    conversation_input.append({
-                        "type": "message",
-                        "role": "assistant",
-                        "content": serialized_content,
-                    })
-            elif msg.role in ("tool_response", "tool"):
-                content_str = ""
-                if hasattr(msg, "content") and msg.content:
-                    if isinstance(msg.content, list):
-                        text_parts = [
-                            b.get("text", "") for b in msg.content
-                            if isinstance(b, dict) and b.get("type") == "text"
-                        ]
-                        content_str = "\n".join(text_parts)
-                    elif isinstance(msg.content, str):
-                        content_str = msg.content
-                conversation_input.append({
-                    "type": "function_call_output",
-                    "call_id": getattr(msg, "tool_call_id", None),
-                    "output": content_str,
-                })
+        instructions, conversation_input = self._serialize_messages(messages)
 
         params: dict = {
             "model": kwargs.get("model", self.model),
             "input": conversation_input,
             "text": {"format": {"type": "json_schema", "strict": True}},
         }
-        # text_format is the Pydantic-aware helper — pass the class directly
-        # and pass instructions if present
         if instructions:
-            params["instructions"] = instructions.strip()
+            params["instructions"] = instructions
         if self.max_tokens:
             params["max_output_tokens"] = kwargs.get("max_tokens", self.max_tokens)
 
@@ -411,70 +353,9 @@ class OpenAIClient(BaseModelClient):
             CompletionChunk,
         )
         
-        instructions = ""
-        conversation_input = []
-        for msg in messages:
-            if msg.role == "system":
-                instructions += f"{msg.content}\n"
-            elif msg.role == "user":
-                msg_dict = msg.to_dict()
-                conversation_input.append({
-                    "type": "message",
-                    "role": "user",
-                    "content": msg_dict.get("content", [])
-                })
-            elif msg.role == "assistant":
-                msg_dict = msg.to_dict()
-                if msg.content:
-                    serialized_content = msg_dict.get("content", [])
-                    if serialized_content:
-                        conversation_input.append({
-                            "type": "message",
-                            "role": "assistant",
-                            "content": serialized_content
-                        })
-                tool_calls = getattr(msg, "tool_calls", None)
-                if tool_calls:
-                    for tc in tool_calls:
-                        if hasattr(tc, 'name') and hasattr(tc, 'arguments'):
-                            tc_name = tc.name
-                            tc_args = tc.arguments
-                            tc_id = tc.id
-                        elif hasattr(tc, 'function') and isinstance(tc.function, dict):
-                            tc_name = tc.function["name"]
-                            tc_args = tc.function["arguments"]
-                            tc_id = tc.id
-                        else:
-                            continue
-                        
-                        if isinstance(tc_args, dict):
-                            tc_args = json.dumps(tc_args)
-                        
-                        conversation_input.append({
-                            "type": "function_call",
-                            "call_id": tc_id,
-                            "name": tc_name,
-                            "arguments": tc_args
-                        })
-            elif msg.role == "tool_response" or msg.role == "tool":
-                content_str = ""
-                if hasattr(msg, 'content') and msg.content:
-                    if isinstance(msg.content, list):
-                        text_parts = []
-                        for block in msg.content:
-                            if isinstance(block, dict) and block.get("type") == "text":
-                                text_parts.append(block.get("text", ""))
-                        content_str = "\n".join(text_parts)
-                    elif isinstance(msg.content, str):
-                        content_str = msg.content
-                
-                conversation_input.append({
-                    "type": "function_call_output",
-                    "call_id": getattr(msg, "tool_call_id", None),
-                    "output": content_str
-                })
+        instructions, conversation_input = self._serialize_messages(messages)
 
-        params = {
+        params: dict[str, Any] = {
             "model": self.model,
             "input": conversation_input,
             "stream": True,
@@ -488,23 +369,11 @@ class OpenAIClient(BaseModelClient):
             params["temperature"] = self.temperature
         
         if instructions:
-            params["instructions"] = instructions.strip()
+            params["instructions"] = instructions
         if self.max_tokens:
             params["max_tokens"] = kwargs.get("max_tokens", self.max_tokens)
-        if tools:
-            transformed_tools = []
-            for tool in tools:
-                if tool.get("type") == "function" and "function" in tool:
-                    fn_def = tool["function"]
-                    new_tool = {
-                        "type": "function",
-                        "name": fn_def.get("name"),
-                        "description": fn_def.get("description"),
-                        "parameters": fn_def.get("parameters"),
-                    }
-                    transformed_tools.append(new_tool)
-                else:
-                    transformed_tools.append(tool)
+        transformed_tools = self._serialize_tools(tools)
+        if transformed_tools:
             params["tools"] = transformed_tools
             if tool_choice:
                 params["tool_choice"] = tool_choice

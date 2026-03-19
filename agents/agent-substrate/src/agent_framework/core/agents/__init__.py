@@ -1,6 +1,7 @@
-from .base_agent import BaseAgent
+from .base_agent import BaseAgent, PromptEnricher
 from .react_agent import ReActAgent
 from .orchestrator_agent import OrchestratorAgent
+from .config import AgentConfig
 from .flow import BaseFlow, SequentialFlow, ParallelFlow, ConditionalFlow
 from .graph import FlowGraph, FlowNode, FlowEdge
 from .agent_result import (
@@ -14,8 +15,11 @@ from .agent_result import (
 __all__ = [
     # Core agents
     "BaseAgent",
+    "PromptEnricher",
     "ReActAgent",
     "OrchestratorAgent",
+    # Config
+    "AgentConfig",
     # Flows
     "BaseFlow",
     "SequentialFlow",

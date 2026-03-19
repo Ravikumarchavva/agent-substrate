@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 from .base_tool import BaseTool, ToolResult, ToolRisk
@@ -87,7 +87,7 @@ class GetCurrentTimeTool(BaseTool):
         Returns:
             ToolResult with current time information
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return ToolResult(
             content=[{
                 "type": "text",

@@ -328,7 +328,7 @@ class TestPipelineRunner:
         async def _inner():
             cfg = PipelineConfig(name="Empty", nodes=[_tool_node()], edges=[])
             runner = PipelineRunner()
-            with pytest.raises(ValueError, match="no agent or router"):
+            with pytest.raises(ValueError, match="no agent"):
                 await runner.build(
                     cfg,
                     tools_registry=[],

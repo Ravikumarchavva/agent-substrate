@@ -3,7 +3,7 @@ Credential Service for Agent Framework
 Handles secure storage and retrieval of OAuth tokens with AES-256 encryption.
 """
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import asyncpg
 from cryptography.fernet import Fernet
@@ -56,7 +56,7 @@ class CredentialService:
         """
         encrypted_access = self.encrypt_token(access_token)
         encrypted_refresh = self.encrypt_token(refresh_token) if refresh_token else None
-        expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
         await self.db.execute(
             """
@@ -108,7 +108,7 @@ class CredentialService:
             return None
 
         # Check if token is expired
-        if row["expires_at"] and row["expires_at"] < datetime.utcnow():
+        if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
             # Try to refresh
             if row["refresh_token"]:
                 refreshed = await self.refresh_token(user_id, provider)

@@ -29,6 +29,7 @@ from agent_framework.runtime.observability.telemetry import (
     shutdown_opentelemetry,
 )
 from agent_framework.server.database import close_db, get_session_factory, init_db
+from agent_framework.server.context import ServerContext
 from agent_framework.server.routes.admin import router as admin_router
 from agent_framework.server.routes.auth import router as auth_router
 from agent_framework.server.routes.cancel import router as cancel_router
@@ -45,6 +46,7 @@ from agent_framework.server.routes.tasks import router as tasks_router
 from agent_framework.server.routes.threads import router as threads_router
 from agent_framework.core.tools.base_tool import ToolRisk
 from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from agent_framework.core.tools.registry import ToolRegistry
 from agent_framework.extensions.tools.code_interpreter import CodeInterpreterTool
 from agent_framework.extensions.tools.code_interpreter.http_client import CodeInterpreterClient
 from agent_framework.extensions.mcp.app_tools import (
@@ -159,7 +161,7 @@ async def lifespan(app: FastAPI):
 
     app.state.ci_client = ci_client
 
-    app.state.tools = [
+    app.state.tools = ToolRegistry.from_list([
         ask_tool,
         task_tool,
         CalculatorTool(),
@@ -171,7 +173,7 @@ async def lifespan(app: FastAPI):
         KanbanBoardTool(),
         SpotifyPlayerTool(spotify_service=spotify_svc),
         *([code_interpreter_tool] if code_interpreter_tool else []),
-    ]
+    ])
 
     # HITL configuration for the agent
     # Note: tool_approval_handler is set per-request in _get_agent_deps using
@@ -196,6 +198,23 @@ async def lifespan(app: FastAPI):
 
     # Expose session factory for routes that need a fresh DB session
     app.state.session_factory = get_session_factory()
+
+    # Typed context — new code should prefer app.state.ctx over individual attrs.
+    # Existing routes continue to work via the app.state.* assignments above.
+    app.state.ctx = ServerContext(
+        model_client=app.state.model_client,
+        audio_client=app.state.audio_client,
+        redis_memory=app.state.redis_memory,
+        tools=app.state.tools,
+        bridge_registry=app.state.bridge_registry,
+        tools_requiring_approval=app.state.tools_requiring_approval,
+        system_instructions=app.state.system_instructions,
+        tool_timeout=app.state.tool_timeout,
+        cancel_registry=app.state.cancel_registry,
+        mcp_servers=app.state.mcp_servers,
+        session_factory=app.state.session_factory,
+        ci_client=app.state.ci_client,
+    )
 
     # Quiet noisy loggers
     for name in ("httpx", "urllib3", "openai"):

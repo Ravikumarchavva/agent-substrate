@@ -1,5 +1,6 @@
 """extensions.mcp - Model Context Protocol client, tool wrapper, and App UIs."""
 
+from agent_framework.extensions.mcp.app_tool_base import McpAppTool
 from agent_framework.extensions.mcp.client import MCPClient
 from agent_framework.extensions.mcp.tool import MCPTool
 from agent_framework.extensions.mcp.app_tools import (
@@ -12,6 +13,7 @@ from agent_framework.extensions.mcp.app_tools import (
 )
 
 __all__ = [
+    "McpAppTool",
     "MCPClient",
     "MCPTool",
     "DataVisualizerTool",

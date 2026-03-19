@@ -31,8 +31,8 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
     def add_fields(self, log_record, record, message_dict):
         super().add_fields(log_record, record, message_dict)
         if not log_record.get("timestamp"):
-            from datetime import datetime
-            log_record["timestamp"] = datetime.utcnow().isoformat()
+            from datetime import datetime, timezone
+            log_record["timestamp"] = datetime.now(timezone.utc).isoformat()
         if log_record.get("level"):
             log_record["level"] = log_record["level"].upper()
         else:

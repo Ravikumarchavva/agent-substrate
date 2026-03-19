@@ -14,6 +14,8 @@ builder/.yarn/*
 builder/coverage
 
 # next.js
+*/.next/
+*/node_modules/
 builder/.next/
 builder/out/
 

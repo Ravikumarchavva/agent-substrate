@@ -118,12 +118,42 @@ class RedisMemory(BaseMemory):
         safe_url = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"
         logger.info("RedisMemory connected to %s", safe_url)
 
+    @classmethod
+    def for_session(cls, parent: "RedisMemory", session_id: str) -> "RedisMemory":
+        """Create a session-bound clone that shares the parent's connection pool.
+
+        The returned instance reuses the parent's Redis client (connection pool)
+        so no new TCP connections are opened.  Lifecycle of the underlying pool
+        remains with the *parent* — callers must **not** call ``disconnect()``
+        on the returned instance.
+
+        Example::
+
+            shared = app.state.redis_memory          # connectionless session_id=None
+            per_req = RedisMemory.for_session(shared, session_id="thread-42")
+            await per_req.restore()                    # loads history from Redis
+            agent = ReActAgent(..., memory=per_req)    # pass as agent memory
+        """
+        instance = cls(
+            session_id=session_id,
+            redis_url=parent._redis_url,
+            default_ttl=parent._default_ttl,
+            max_messages=parent._max_messages,
+            key_prefix=parent._key_prefix,
+            auto_checkpoint_every=parent._auto_checkpoint_every,
+            session_manager=parent._session_manager,
+        )
+        # Share the existing connection pool — no new TCP connection
+        instance._client = parent._client
+        instance._owns_client = False
+        return instance
+
     async def disconnect(self) -> None:
-        """Close the Redis connection pool."""
-        if self._client is not None:
+        """Close the Redis connection pool (only if this instance owns it)."""
+        if self._client is not None and getattr(self, "_owns_client", True):
             await self._client.aclose()
-            self._client = None
             logger.info("RedisMemory disconnected")
+        self._client = None
 
     def _require_client(self) -> aioredis.Redis:
         if self._client is None:
@@ -190,20 +220,26 @@ class RedisMemory(BaseMemory):
         """Approximate token count (100 tokens per message heuristic)."""
         return len(self._messages) * 100
 
-    async def restore(self) -> int:
+    async def restore(self, limit: Optional[int] = None) -> int:
         """Reload history from Redis into the local cache.
+
+        Args:
+            limit: If given, only the most recent *limit* messages are loaded
+                   (``LRANGE key -limit -1``).  Pass ``model_context_window + 5``
+                   for a fast hot-path fetch that still covers the full LLM window.
+                   When ``None`` the full history is loaded.
 
         Returns the number of messages restored.  Must be called once after
         ``connect()`` to resume a session from a previous agent run.
         """
         sid = self._require_session_id()
-        history = await self.fetch(sid)
+        history = await self.fetch(sid, limit=limit)
         self._messages = list(history)
-        # Also restore metadata into the meta key if not present
         logger.info(
-            "RedisMemory: restored %d messages for session %s",
+            "RedisMemory: restored %d messages for session %s (limit=%s)",
             len(self._messages),
             sid,
+            limit,
         )
         return len(self._messages)
 

@@ -16,7 +16,7 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -86,7 +86,7 @@ class EvalRunner:
         Returns:
             EvalReport with all results and aggregate metrics.
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         t0 = time.monotonic()
 
         logger.info(
@@ -126,7 +126,7 @@ class EvalRunner:
             tasks = [run_with_sem(case) for case in dataset.cases]
             results = await asyncio.gather(*tasks)
 
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         total_duration = time.monotonic() - t0
 
         report = EvalReport(

@@ -1,16 +1,15 @@
-"""Base agent contract.
+﻿"""Base agent contract.
 
 Every agent type (ReAct, Plan-and-Execute, Custom) implements this interface.
 The contract is deliberately minimal:
-  - run()        → full result
-  - run_stream() → async iterator of partial events
-  - save/load    → serializable state for checkpointing
+  - run()        -> full result
+  - run_stream() -> async iterator of partial events
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, List, Optional
 from abc import ABC, abstractmethod
+from typing import runtime_checkable, Protocol
 
 from agent_framework.core.agents.agent_result import AgentRunResult
 from agent_framework.core.context.base_context import ModelContext
@@ -19,7 +18,23 @@ from agent_framework.providers.llm.base_client import BaseModelClient
 from agent_framework.core.memory.base_memory import BaseMemory
 from agent_framework.core.memory.memory_scope import MemoryScope
 from agent_framework.core.guardrails.base_guardrail import BaseGuardrail
-from agent_framework.extensions.skills import SkillManager
+
+
+# ---------------------------------------------------------------------------
+# PromptEnricher -- protocol that decouples core from extensions.skills
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class PromptEnricher(Protocol):
+    """Anything that can inject extra context into a system prompt.
+
+    ``SkillManager`` (in ``extensions.skills``) implements this protocol via
+    duck typing -- no explicit inheritance required.
+    """
+
+    def inject_into_prompt(self, system_prompt: str) -> str:
+        """Return *system_prompt* augmented with extra context."""
+        ...
 
 
 class BaseAgent(ABC):
@@ -38,34 +53,26 @@ class BaseAgent(ABC):
         memory_scope: MemoryScope = MemoryScope.ISOLATED,
         input_guardrails: Optional[List[BaseGuardrail]] = None,
         output_guardrails: Optional[List[BaseGuardrail]] = None,
-        # Skills
-        skill_dirs: Optional[List[Union[str, Path]]] = None,
-        skill_manager: Optional[SkillManager] = None,
+        # Prompt enrichment (replaces skill_manager / skill_dirs coupling)
+        prompt_enricher: Optional[PromptEnricher] = None,
     ):
         self.name = name
         self.description = description
         self.model_client = model_client
         self.model_context = model_context
-        self.tools = tools or []
+        self.tools: List[BaseTool] = list(tools) if tools else []
         self.system_instructions = system_instructions
         self.memory = memory
         self.memory_scope = memory_scope
         self.input_guardrails = input_guardrails or []
         self.output_guardrails = output_guardrails or []
+        self.prompt_enricher: Optional[PromptEnricher] = prompt_enricher
 
-        # Normalise skill_dirs to List[Path] at construction time so downstream
-        # code never has to deal with str vs Path heterogeneity.
-        normalised_dirs: Optional[List[Path]] = (
-            [Path(d) for d in skill_dirs] if skill_dirs else None
-        )
-
-        # Skills: prefer an explicit manager; otherwise build one from dirs
-        if skill_manager is not None:
-            self.skill_manager: Optional[SkillManager] = skill_manager
-        elif normalised_dirs:
-            self.skill_manager = SkillManager(skill_dirs=normalised_dirs)
-        else:
-            self.skill_manager = None
+    def get_effective_system_prompt(self) -> str:
+        """Return the system prompt, enriched by prompt_enricher if set."""
+        if self.prompt_enricher is not None:
+            return self.prompt_enricher.inject_into_prompt(self.system_instructions)
+        return self.system_instructions
 
     # -- Core lifecycle -------------------------------------------------------
 
@@ -77,18 +84,6 @@ class BaseAgent(ABC):
     @abstractmethod
     async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
         """Execute the agent, yielding events/chunks as they happen."""
-        ...
-
-    # -- State management (checkpoint / resume) -------------------------------
-
-    @abstractmethod
-    async def save_state(self) -> Dict[str, Any]:
-        """Serialize agent state for persistence / checkpointing."""
-        ...
-
-    @abstractmethod
-    def load_state(self, state: Dict[str, Any]) -> None:
-        """Restore agent state from a previously saved checkpoint."""
         ...
 
     # -- Helpers --------------------------------------------------------------

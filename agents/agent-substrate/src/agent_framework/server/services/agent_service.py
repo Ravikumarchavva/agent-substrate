@@ -3,18 +3,21 @@
 Responsibilities:
   1. Build agent memory from persisted steps (Redis hot path, Postgres cold path)
   2. Create configured ReActAgent per thread
-  3. Sync new messages back to Redis after each agent run
+  3. Real-time write-through to Redis via per-request ``RedisMemory``
   4. Persist new messages to database (Postgres cold store) during streaming
 
 Stateless agent design
 ──────────────────────
 Agents hold **no** state between requests.  Every request:
-  1. Loads the full chat history for the thread from Redis (O(1) fast).
-  2. Passes a **windowed** context (system + last N messages) to the LLM —
-     this is the "selective model context" the user controls via
-     ``MODEL_CONTEXT_WINDOW`` in settings.
-  3. Runs the agent (messages accumulate in local ``UnboundedMemory``).
-  4. Syncs the new messages back to Redis so the next request can read them.
+  1. Creates a per-request ``RedisMemory(session_id=...)`` sharing the
+     parent's connection pool (zero new TCP connections).
+  2. Loads the full chat history from Redis into local cache via ``restore()``.
+     On cache miss, seeds Redis from the Postgres cold store first.
+  3. Passes a ``SlidingWindowContext(max_messages=N)`` to the agent — the LLM
+     only sees the last N messages, while the full history stays in memory
+     and Redis.
+  4. Runs the agent — each ``add_message()`` writes through to Redis in
+     real-time via a fire-and-forget background task.  No post-run sync needed.
 
 Redis is the source of truth for active sessions.  On the first request for
 a thread (cache miss), the Postgres cold store is read to seed Redis.
@@ -26,13 +29,17 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_framework.core.agents.react_agent import ReActAgent
+from agent_framework.core.context.base_context import ModelContext
+from agent_framework.core.context.implementations import SlidingWindowContext
 from agent_framework.core.guardrails.prebuilt import MaxTokenGuardrail
 from agent_framework.extensions.tools.human_input import ToolApprovalHandler
+from agent_framework.core.memory.base_memory import BaseMemory
+from agent_framework.core.memory.redis_memory import RedisMemory
 from agent_framework.core.memory.unbounded_memory import UnboundedMemory
 from agent_framework.core.messages.client_messages import (
     AssistantMessage,
@@ -50,24 +57,26 @@ from agent_framework.server.services import (
     load_messages_for_memory,
 )
 
-if TYPE_CHECKING:
-    from agent_framework.core.memory.redis_memory import RedisMemory
-
 logger = logging.getLogger(__name__)
 
 
-def _rebuild_memory(
+async def _rebuild_messages(
     step_rows: List[Dict[str, Any]],
     system_instructions: str,
-) -> UnboundedMemory:
-    """Rebuild UnboundedMemory from persisted step rows.
+) -> List[BaseClientMessage]:
+    """Rebuild a message list from persisted Postgres step rows.
 
     Maps each step type back to the proper framework message object.
+    Used only on the cold path (Redis miss) to seed Redis with the
+    full Postgres history.
+
+    Returns:
+        Ordered list of ``BaseClientMessage`` starting with the system prompt.
     """
-    memory = UnboundedMemory()
+    messages: List[BaseClientMessage] = []
 
     # Always start with system message
-    memory.add_message(SystemMessage(content=system_instructions))
+    messages.append(SystemMessage(content=system_instructions))
 
     for row in step_rows:
         step_type = row["type"]
@@ -79,7 +88,7 @@ def _rebuild_memory(
 
         elif step_type == "user_message":
             content_text = row.get("input") or ""
-            memory.add_message(UserMessage(content=[content_text]))
+            messages.append(UserMessage(content=[content_text]))
 
         elif step_type == "assistant_message":
             output_text = row.get("output")
@@ -93,7 +102,7 @@ def _rebuild_memory(
                     ToolCallMessage(**tc) for tc in gen["tool_calls"]
                 ]
 
-            memory.add_message(AssistantMessage(
+            messages.append(AssistantMessage(
                 content=content,
                 tool_calls=tool_calls,
                 finish_reason=gen.get("finish_reason", "stop"),
@@ -108,7 +117,7 @@ def _rebuild_memory(
             tool_name = row.get("name", "")
             output = row.get("output") or ""
             is_error = row.get("is_error") or False
-            memory.add_message(ToolExecutionResultMessage(
+            messages.append(ToolExecutionResultMessage(
                 tool_call_id=tool_call_id,
                 name=tool_name,
                 content=[{"type": "text", "text": output}],
@@ -125,38 +134,9 @@ def _rebuild_memory(
                 f"The user interacted with the {tool_name} widget. "
                 f"Current state:\n{context_data}"
             )
-            memory.add_message(UserMessage(content=[context_msg]))
+            messages.append(UserMessage(content=[context_msg]))
 
-    return memory
-
-
-def _build_windowed_memory(
-    all_messages: List[BaseClientMessage],
-    context_window: int,
-) -> Tuple[UnboundedMemory, int]:
-    """Build an UnboundedMemory from a windowed slice of messages.
-
-    The system message (if present) is always preserved as the first entry.
-    Only the last ``context_window`` non-system messages are included so that
-    the LLM receives a bounded context while the full history stays in Redis.
-
-    Returns:
-        (memory, snapshot_count) where snapshot_count is the number of messages
-        loaded into the in-process memory.  Used by callers to compute which
-        messages are *new* after the agent run completes.
-    """
-    system_msgs = [m for m in all_messages if getattr(m, "role", None) == "system"]
-    non_system = [m for m in all_messages if getattr(m, "role", None) != "system"]
-
-    # Cap the non-system history to the context window
-    windowed_non_system = non_system[-context_window:] if context_window > 0 else non_system
-    windowed = system_msgs + windowed_non_system
-
-    memory = UnboundedMemory()
-    for msg in windowed:
-        memory.add_message(msg)
-
-    return memory, len(windowed)
+    return messages
 
 
 def create_agent_for_thread(
@@ -164,7 +144,8 @@ def create_agent_for_thread(
     model_client: BaseModelClient,
     tools: List[BaseTool],
     system_instructions: str,
-    memory: UnboundedMemory,
+    memory: BaseMemory,
+    model_context: ModelContext,
     max_iterations: int = 30,
     verbose: bool = True,
     tool_approval_handler: Optional[ToolApprovalHandler] = None,
@@ -173,6 +154,11 @@ def create_agent_for_thread(
     max_input_tokens: int = 16_000,
 ) -> ReActAgent:
     """Create a ReActAgent with pre-loaded per-session memory.
+
+    Args:
+        memory:        Per-request memory (``RedisMemory`` or ``UnboundedMemory``).
+        model_context: Windowing strategy that filters messages before each LLM
+                       call.  Typically ``SlidingWindowContext(max_messages=N)``.
 
     A ``MaxTokenGuardrail`` is always installed as a default input guardrail
     to prevent runaway context costs and prompt injection via oversized inputs.
@@ -191,6 +177,7 @@ def create_agent_for_thread(
         name="ChatBot",
         description="A helpful AI assistant with tool access.",
         model_client=model_client,
+        model_context=model_context,
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
@@ -214,7 +201,7 @@ async def load_agent_for_thread(
     model_client: BaseModelClient,
     tools: List[BaseTool],
     system_instructions: str,
-    redis_memory: Optional["RedisMemory"] = None,
+    redis_memory: Optional[RedisMemory] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
     verbose: bool = True,
@@ -222,50 +209,58 @@ async def load_agent_for_thread(
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
-) -> Tuple[ReActAgent, int]:
+) -> ReActAgent:
     """Load a per-session agent whose history comes from Redis (hot) or Postgres (cold).
 
-    Stateless design — a fresh ``ReActAgent`` is created on every request with
-    a windowed snapshot of the conversation loaded from Redis.  After the run,
-    callers use ``sync_new_messages_to_redis`` to push new messages back.
+    Stateless design — a fresh ``ReActAgent`` is created on every request.
+    The agent's memory is a per-request ``RedisMemory`` instance that shares
+    the connection pool from ``app.state.redis_memory``.  Every
+    ``add_message`` during the run writes through to Redis in real-time
+    (fire-and-forget background task), eliminating the need for post-run sync.
+
+    Windowing is delegated to ``SlidingWindowContext`` — the agent's memory
+    stores the full history while the LLM only sees the last
+    ``model_context_window`` messages per turn.
 
     Args:
         db:                   DB session (used only for the Postgres cold path).
         thread_id:            Thread / session identifier.
         redis_memory:         Shared ``RedisMemory`` instance from ``app.state``.
-                              When ``None``, falls back to Postgres-only mode.
+                              When ``None``, falls back to Postgres-only mode
+                              with ``UnboundedMemory``.
         model_context_window: Max non-system messages passed to the LLM per
-                              turn (the "selective model context").  Full history
-                              is preserved in Redis; only this window is loaded
-                              into the agent's in-process memory.
+                              turn via ``SlidingWindowContext``.
         …                     All other kwargs forwarded to ``create_agent_for_thread``.
 
     Returns:
-        ``(agent, snapshot_count)`` — snapshot_count is the size of the
-        in-process memory at creation time.  New messages added during the run
-        are ``agent.memory.get_messages()[snapshot_count:]``.
+        A configured ``ReActAgent`` ready for ``run_stream()``.
     """
     session_id = str(thread_id)
-    memory: UnboundedMemory
-    snapshot_count: int
+    memory: BaseMemory
+    context: ModelContext = SlidingWindowContext(max_messages=model_context_window)
 
     if redis_memory is not None:
+        # Create a per-request RedisMemory bound to this session, sharing
+        # the parent's connection pool (no new TCP connections).
+        per_request_mem = RedisMemory.for_session(redis_memory, session_id)
+
         in_redis = await redis_memory.exists(session_id)
 
         if in_redis:
-            # ── Hot path: load windowed context directly from Redis ──────────
-            all_messages = await redis_memory.fetch(session_id)
-            memory, snapshot_count = _build_windowed_memory(all_messages, model_context_window)
+            # ── Hot path: restore only the most recent N messages from Redis ──
+            # SlidingWindowContext only passes model_context_window msgs to the
+            # LLM anyway, so loading more is wasteful.  The +5 buffer covers
+            # the system message and a few extra turns of lookahead.
+            count = await per_request_mem.restore(limit=model_context_window + 5)
             logger.debug(
-                "Redis hit for session %s — %d total, %d in window",
-                session_id, len(all_messages), snapshot_count,
+                "Redis hit for session %s — %d messages restored",
+                session_id, count,
             )
         else:
-            # ── Cold path: load from Postgres, seed Redis ────────────────────
+            # ── Cold path: rebuild from Postgres, seed Redis, then restore ───
             logger.debug("Redis miss for session %s — seeding from Postgres", session_id)
             step_rows = await load_messages_for_memory(db, thread_id)
-            full_memory = _rebuild_memory(step_rows, system_instructions)
-            all_messages = await full_memory.get_messages()
+            all_messages = await _rebuild_messages(step_rows, system_instructions)
 
             # Seed Redis with the full Postgres history so future requests are fast
             if all_messages:
@@ -275,19 +270,25 @@ async def load_agent_for_thread(
                     session_id, len(all_messages),
                 )
 
-            # Provide the agent with a windowed context
-            memory, snapshot_count = _build_windowed_memory(all_messages, model_context_window)
+            # Restore into the per-request memory (loads from Redis)
+            await per_request_mem.restore()
+
+        memory = per_request_mem
     else:
-        # ── Fallback: Postgres only (no Redis configured) ────────────────────
+        # ── Fallback: Postgres only (no Redis configured) ────────────────
         step_rows = await load_messages_for_memory(db, thread_id)
-        memory = _rebuild_memory(step_rows, system_instructions)
-        snapshot_count = len(await memory.get_messages())
+        all_messages = await _rebuild_messages(step_rows, system_instructions)
+        fallback_mem = UnboundedMemory()
+        for msg in all_messages:
+            await fallback_mem.add_message(msg)
+        memory = fallback_mem
 
     agent = create_agent_for_thread(
         model_client=model_client,
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
+        model_context=context,
         max_iterations=max_iterations,
         verbose=verbose,
         tool_approval_handler=tool_approval_handler,
@@ -295,45 +296,7 @@ async def load_agent_for_thread(
         tool_timeout=tool_timeout,
         max_input_tokens=max_input_tokens,
     )
-    return agent, snapshot_count
-
-
-async def sync_new_messages_to_redis(
-    redis_memory: "RedisMemory",
-    session_id: str,
-    agent: ReActAgent,
-    snapshot_count: int,
-) -> None:
-    """Write messages added during the agent run back to Redis.
-
-    After ``agent.run_stream()`` completes, the agent's in-process memory
-    contains all pre-loaded messages PLUS the new ones from this turn.
-    This function extracts the new messages and appends them to Redis so the
-    next request can pick them up without touching Postgres.
-
-    Args:
-        redis_memory:   Shared ``RedisMemory`` instance.
-        session_id:     Thread ID as string (Redis key namespace).
-        agent:          The agent whose memory holds the completed run.
-        snapshot_count: Value returned by ``load_agent_for_thread`` —
-                        messages at or above this index are new.
-    """
-    all_messages = await agent.memory.get_messages()
-    new_messages = all_messages[snapshot_count:]
-    if not new_messages:
-        return
-    try:
-        await redis_memory.store_many(session_id, new_messages)
-        logger.debug(
-            "Synced %d new message(s) to Redis session %s",
-            len(new_messages), session_id,
-        )
-    except Exception:
-        logger.exception(
-            "Failed to sync new messages to Redis for session %s — "
-            "history will be rebuilt from Postgres on the next request",
-            session_id,
-        )
+    return agent
 
 
 async def persist_user_message(

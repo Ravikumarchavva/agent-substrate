@@ -40,7 +40,7 @@
   height: 42px;
   width: 42px;
   place-items: center;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--accent);
   box-shadow: none;
   color: #ffffff;
@@ -66,7 +66,7 @@
 }
 
 .beta {
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   color: var(--text-dim);
   padding: 3px 8px;
@@ -110,7 +110,7 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   color: var(--text-muted);
   padding: 8px 12px;
@@ -123,7 +123,7 @@
 .eyebrowDot {
   height: 6px;
   width: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   background: var(--accent);
 }
 
@@ -162,7 +162,7 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
   cursor: pointer;
   font-weight: 700;
@@ -213,7 +213,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   padding: 12px 14px;
 }
@@ -223,7 +223,7 @@
   height: 32px;
   width: 32px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 15px;
@@ -250,7 +250,7 @@
 
 .statCard {
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   padding: 18px 18px 16px;
 }
@@ -279,7 +279,7 @@
   position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 30px;
+  border-radius: var(--radius-lg);
   background: var(--bg-surface);
   padding: 20px;
   box-shadow: var(--shadow-card);
@@ -313,7 +313,7 @@
 }
 
 .previewBadge {
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   background: rgba(34, 197, 94, 0.12);
   color: #4ade80;
   padding: 6px 10px;
@@ -330,7 +330,7 @@
 
 .previewMetric {
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   padding: 12px 14px;
 }
@@ -350,7 +350,7 @@
 .previewFlow {
   margin-top: 18px;
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   padding: 16px;
 }
@@ -367,7 +367,7 @@
 .previewFlowDot {
   height: 8px;
   width: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   background: var(--accent);
 }
 
@@ -392,7 +392,7 @@
 .previewNodePin {
   height: 10px;
   width: 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
 }
 
 .previewNodeLine {
@@ -406,7 +406,7 @@
 .previewNodeCard {
   flex: 1;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--bg-surface);
   padding: 10px 12px;
 }
@@ -432,7 +432,7 @@
 
 .railCard {
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   padding: 22px;
 }
 
@@ -504,7 +504,7 @@
   height: 52px;
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--bg-surface);
   color: var(--text);
   padding: 0 16px 0 42px;
@@ -530,7 +530,7 @@
   height: 100%;
   width: 100%;
   flex-direction: column;
-  border-radius: 28px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   padding: 22px;
   text-align: left;
@@ -577,11 +577,11 @@
   height: 52px;
   width: 52px;
   place-items: center;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
 }
 
 .cardTag {
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   padding: 6px 10px;
   font-size: 10px;
   font-weight: 700;
@@ -615,7 +615,7 @@
 }
 
 .metaPill {
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   color: var(--text-dim);
   padding: 6px 10px;
@@ -640,7 +640,7 @@
 .emptyState {
   margin-top: 28px;
   border: 1px solid var(--border);
-  border-radius: 28px;
+  border-radius: var(--radius-lg);
   background: var(--bg-surface);
   padding: 44px 28px;
   text-align: center;
@@ -716,6 +716,6 @@
   .previewCard,
   .railCard,
   .statCard {
-    border-radius: 22px;
+    border-radius: var(--radius-lg);
   }
 }

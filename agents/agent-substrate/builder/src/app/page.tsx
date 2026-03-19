@@ -261,10 +261,10 @@ export default function BuilderPage() {
         {showPalette ? <NodePalette onCollapse={() => setPaletteCollapsed(true)} /> : null}
         {showPaletteRail ? (
           <aside className={styles.sideRail}>
-            <button className={styles.railButton} onClick={() => setPaletteCollapsed(false)} aria-label="Expand workflow blocks">
+            <button className={styles.railButton} onClick={() => setPaletteCollapsed(false)} aria-label="Expand workflow nodes">
               <PanelLeftOpen size={16} />
             </button>
-            <span className={styles.railLabel}>Blocks</span>
+            <span className={styles.railLabel}>Nodes</span>
           </aside>
         ) : null}
 
@@ -278,6 +278,13 @@ export default function BuilderPage() {
                   <div className={styles.canvasTopbarHint}>Build and connect workflow nodes visually</div>
                 </div>
                 <div className={styles.canvasActions}>
+                  {!chatOpen && (
+                    <>
+                      <button className={`${styles.canvasActionButton} ${styles.canvasActionButtonAccent}`} onClick={() => {}}>Evaluate</button>
+                      <button className={`${styles.canvasActionButton} ${styles.canvasActionButtonAccentSolid}`} onClick={() => {}}>Deploy</button>
+                      <div className={styles.canvasActionsDiv} />
+                    </>
+                  )}
                   {!chatOpen ? (
                     <button className={styles.canvasActionButton} onClick={() => setChatOpen(true)}>
                       <MessagesSquare size={15} />

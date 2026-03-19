@@ -21,7 +21,7 @@ function ApprovalNodeComponent({ data, selected }: NodeProps<ApprovalData>) {
 
       {/* Header */}
       <div className="node-multi-header">
-        <div className="node-icon bg-orange-500"><ApprovalIcon /></div>
+        <div className="node-icon" style={{ background: "#f9731620", color: "#f97316" }}><ApprovalIcon /></div>
         <div className="node-body">
           <div className="node-label">{label}</div>
           <div className="node-sub">User approval</div>
@@ -31,14 +31,16 @@ function ApprovalNodeComponent({ data, selected }: NodeProps<ApprovalData>) {
       {/* Approve / Reject branches */}
       {prompt && <div className="node-multi-description">{prompt}</div>}
 
-      <div className="node-multi-rows">
-        <div className="node-multi-row relative">
-          <span className="node-branch-label">Approve</span>
-          <Handle type="source" position={Position.Right} id="approve" className="node-handle" />
+      <div className="node-multi-section">
+        <div className="node-multi-row node-multi-row-branch relative">
+          <span className="node-branch-pill node-branch-pill-success">Approve</span>
+          <span className="node-row-output">Output</span>
+          <Handle type="source" position={Position.Right} id="approve" className="node-handle node-handle-branch" />
         </div>
-        <div className="node-multi-row relative">
-          <span className="node-branch-label">Reject</span>
-          <Handle type="source" position={Position.Right} id="reject" className="node-handle" />
+        <div className="node-multi-row node-multi-row-branch relative">
+          <span className="node-branch-pill node-branch-pill-danger">Reject</span>
+          <span className="node-row-output">Output</span>
+          <Handle type="source" position={Position.Right} id="reject" className="node-handle node-handle-branch" />
         </div>
       </div>
     </div>

@@ -19,17 +19,17 @@ interface FieldProps {
 
 export function Field({ label, required, description, message, children, className = "" }: FieldProps) {
   return (
-    <div className={cn("grid grid-cols-[90px_minmax(0,1fr)] items-start gap-x-3 gap-y-0.5", className)}>
-      <div className="pt-1.5">
-        <label className="text-[10px] font-medium leading-none tracking-wide text-(--text-muted) uppercase">
+    <div className={cn("flex flex-col gap-2.5", className)}>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-semibold leading-none text-(--text)">
           {label}
           {required && <span className="ml-0.5 text-red-400">*</span>}
         </label>
-        {description ? <p className="mt-0.5 text-[9px] leading-snug text-(--text-dim)">{description}</p> : null}
+        {description ? <p className="text-[11px] leading-5 text-(--text-dim)">{description}</p> : null}
       </div>
       <div className="min-w-0">
         {children}
-        {message ? <p className="mt-1 text-[9px] leading-snug text-(--text-dim)">{message}</p> : null}
+        {message ? <p className="text-[11px] leading-5 text-(--text-dim)">{message}</p> : null}
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ function Input({ className, type, onChange, ...props }: InputProps) {
       data-slot="input"
       onChange={(event) => onChange(event.target.value)}
       className={cn(
-        "h-7 w-full min-w-0 rounded-md border border-(--border) bg-(--bg) px-2 py-1 text-xs text-(--text) transition-colors outline-none placeholder:text-(--text-dim) focus-visible:border-(--accent) focus-visible:ring-1 focus-visible:ring-(--accent)/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40",
+        "h-9 w-full min-w-0 rounded-lg border border-(--bg-hover) bg-(--bg-elevated) px-3 py-2 text-[13px] font-normal text-(--text) transition-colors outline-none placeholder:text-(--text-dim) focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--accent)/25 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40",
         className
       )}
       {...props}

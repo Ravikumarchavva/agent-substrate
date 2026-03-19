@@ -23,7 +23,7 @@ function ConditionNodeComponent({ data, selected }: NodeProps<ConditionData>) {
 
       {/* Header */}
       <div className="node-multi-header">
-        <div className="node-icon bg-emerald-600"><ConditionIcon /></div>
+        <div className="node-icon" style={{ background: "#f59e0b20", color: "#f59e0b" }}><ConditionIcon /></div>
         <div className="node-body">
           <div className="node-label">{label}</div>
           <div className="node-sub">If / else</div>
@@ -31,18 +31,20 @@ function ConditionNodeComponent({ data, selected }: NodeProps<ConditionData>) {
       </div>
 
       {/* Condition branches */}
-      <div className="border-t" style={{ borderColor: "var(--border)" }}>
+      <div className="node-multi-section">
         {conditions.map((c, i) => (
-          <div key={i} className="node-multi-row relative">
-            <span className="text-[10px] font-mono truncate max-w-[180px]">
+          <div key={i} className="node-multi-row node-multi-row-branch relative">
+            <span className="node-expression-text">
               {c.expression || c.label || `Condition ${i + 1}`}
             </span>
-            <Handle type="source" position={Position.Right} id={`cond-${i}`} className="node-handle" />
+            <span className="node-row-output">Output</span>
+            <Handle type="source" position={Position.Right} id={`cond-${i}`} className="node-handle node-handle-branch" />
           </div>
         ))}
-        <div className="node-multi-row relative">
-          <span style={{ color: "var(--text-dim)" }}>Else</span>
-          <Handle type="source" position={Position.Right} id="else" className="node-handle" />
+        <div className="node-multi-row node-multi-row-branch relative">
+          <span className="node-branch-pill node-branch-pill-muted">Else</span>
+          <span className="node-row-output">Output</span>
+          <Handle type="source" position={Position.Right} id="else" className="node-handle node-handle-branch" />
         </div>
       </div>
     </div>

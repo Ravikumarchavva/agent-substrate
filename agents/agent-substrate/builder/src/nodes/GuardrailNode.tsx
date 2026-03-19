@@ -21,7 +21,7 @@ function GuardrailNodeComponent({ data, selected }: NodeProps<GuardrailData>) {
 
       {/* Main header */}
       <div className="node-multi-header">
-        <div className="node-icon bg-amber-500"><GuardrailIcon /></div>
+        <div className="node-icon" style={{ background: "#f59e0b20", color: "#f59e0b" }}><GuardrailIcon /></div>
         <div className="node-body">
           <div className="node-label">{label}</div>
           {schema && <div className="node-sub">{schema}</div>}
@@ -29,14 +29,16 @@ function GuardrailNodeComponent({ data, selected }: NodeProps<GuardrailData>) {
       </div>
 
       {/* Pass / Fail branches */}
-      <div className="border-t" style={{ borderColor: "var(--border)" }}>
-        <div className="node-multi-row relative">
-          <span className="text-[10px] text-emerald-400 font-medium">Pass</span>
-          <Handle type="source" position={Position.Right} id="pass" className="node-handle" />
+      <div className="node-multi-section">
+        <div className="node-multi-row node-multi-row-branch relative">
+          <span className="node-branch-pill node-branch-pill-success">Pass</span>
+          <span className="node-row-output">Output</span>
+          <Handle type="source" position={Position.Right} id="pass" className="node-handle node-handle-branch" />
         </div>
-        <div className="node-multi-row relative">
-          <span className="text-[10px] text-red-400 font-medium">Fail</span>
-          <Handle type="source" position={Position.Right} id="fail" className="node-handle" />
+        <div className="node-multi-row node-multi-row-branch relative">
+          <span className="node-branch-pill node-branch-pill-danger">Fail</span>
+          <span className="node-row-output">Output</span>
+          <Handle type="source" position={Position.Right} id="fail" className="node-handle node-handle-branch" />
         </div>
       </div>
     </div>

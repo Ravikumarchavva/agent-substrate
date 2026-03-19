@@ -21,7 +21,7 @@ function WhileNodeComponent({ data, selected }: NodeProps<WhileData>) {
 
       {/* Header */}
       <div className="node-multi-header">
-        <div className="node-icon" style={{ background: "#f59e0b22", color: "#f59e0b" }}>
+        <div className="node-icon" style={{ background: "#f59e0b20", color: "#f59e0b" }}>
           <WhileIcon />
         </div>
         <div className="node-body">
@@ -31,26 +31,28 @@ function WhileNodeComponent({ data, selected }: NodeProps<WhileData>) {
       </div>
 
       {/* Condition + exit handles */}
-      <div className="border-t" style={{ borderColor: "var(--border)" }}>
-        <div className="node-multi-row relative">
-          <span className="text-[10px] font-mono truncate max-w-[180px]">
+      <div className="node-multi-section">
+        <div className="node-multi-row node-multi-row-branch relative">
+          <span className="node-expression-text">
             {condition || "condition expression"}
           </span>
+          <span className="node-branch-pill node-branch-pill-accent">Body</span>
           <Handle
             type="source"
             position={Position.Right}
             id="body"
-            className="node-handle"
+            className="node-handle node-handle-branch"
             style={{ top: "50%" }}
           />
         </div>
-        <div className="node-multi-row relative">
-          <span style={{ color: "var(--text-dim)" }}>Done</span>
+        <div className="node-multi-row node-multi-row-branch relative">
+          <span className="node-branch-pill node-branch-pill-muted">Done</span>
+          <span className="node-row-output">Output</span>
           <Handle
             type="source"
             position={Position.Right}
             id="done"
-            className="node-handle"
+            className="node-handle node-handle-branch"
             style={{ top: "50%" }}
           />
         </div>

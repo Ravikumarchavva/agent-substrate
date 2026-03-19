@@ -17,7 +17,7 @@ function PaletteEntry({ item }: { item: PaletteItem }) {
       draggable
       onDragStart={(e) => onDragStart(e, item.type)}
       title={item.desc}
-      className="group flex items-center gap-3 px-3 py-2.5 mx-2 rounded-lg cursor-grab hover:bg-(--bg-elevated) transition-colors"
+      className="group flex items-center gap-3 p-1 mx-2 rounded-lg cursor-grab hover:bg-(--bg-elevated) transition-colors"
     >
       <div
         className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg"
@@ -32,11 +32,11 @@ function PaletteEntry({ item }: { item: PaletteItem }) {
 
 function Section({ cat }: { cat: PaletteCategory }) {
   return (
-    <div className="mb-3">
-      <div className="px-5 pt-4 pb-1.5 text-[10px] font-semibold tracking-widest uppercase text-(--text-dim)">
+    <div>
+      <div className="p-1 text-[10px] font-semibold tracking-widest uppercase text-(--text-dim)">
         {cat.heading}
       </div>
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col">
         {cat.items.map((item) => (
           <PaletteEntry key={item.type} item={item} />
         ))}
@@ -57,15 +57,15 @@ export function NodePalette({ onCollapse }: NodePaletteProps) {
         {onCollapse && (
           <button
             onClick={onCollapse}
-            className="p-1 text-(--text-dim) hover:bg-(--bg-elevated) rounded transition-colors"
+            className="p-1 text-(--text-dim) hover:bg-(--bg-elevated) rounded-lg transition-colors"
             aria-label="Collapse"
             title="Collapse"
           >
-            <PanelLeftClose size={24} />
+            <PanelLeftClose size={24} className="hover:cursor-pointer" />
           </button>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto">
         {PALETTE.map((cat) => (
           <Section key={cat.heading} cat={cat} />
         ))}

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PanelRightClose } from "lucide-react";
 import { usePipelineStore } from "@/store/pipeline-store";
 import type { RegistryResponse } from "@/types";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Field, FormLabel, Input, Textarea, Select, Switch } from "@/components/ui";
+import { Button, Field, FormLabel, Input, Textarea, Select, Switch } from "@/components/ui";
 import styles from "./PropertyPanel.module.css";
 
 /* ── Thin Label alias for the local section headers ──────────────────── */
@@ -24,29 +24,23 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ── Section card — groups related fields visually ───────────────────── */
-function SectionCard({
+function SectionDivider({ children }: { children: React.ReactNode }) {
+  return <span className={styles.sectionDivider}>{children}</span>;
+}
+
+function FormSection({
   title,
-  description,
   children,
 }: {
-  title: string;
-  description?: string;
+  title?: string;
   children: React.ReactNode;
 }) {
   return (
-    <Card className={styles.sectionCard} size="sm">
-      <CardHeader className={styles.sectionCardHeader}>
-        <CardTitle className={styles.sectionCardTitle}>{title}</CardTitle>
-        {description ? <CardDescription className={styles.sectionCardDescription}>{description}</CardDescription> : null}
-      </CardHeader>
-      <CardContent className={styles.sectionCardBody}>{children}</CardContent>
-    </Card>
+    <div className={styles.formSection}>
+      {title ? <SectionDivider>{title}</SectionDivider> : null}
+      {children}
+    </div>
   );
-}
-
-function SectionDivider({ children }: { children: React.ReactNode }) {
-  return <span className={styles.sectionDivider}>{children}</span>;
 }
 
 function SliderField({
@@ -118,8 +112,8 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   return (
     <>
-      <SectionCard title="General" description="Core model and response settings for this agent.">
-        <Field label="Instructions" description="System instructions that shape the agent behavior.">
+      <FormSection>
+        <Field label="Instructions">
           <Textarea
             value={(config.system_prompt as string) ?? ""}
             onChange={(v) => onUpdate({ system_prompt: v })}
@@ -129,11 +123,11 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
         </Field>
         <ToggleField
           label="Include chat history"
-          description="Pass prior messages into the model context for multi-turn behavior."
+          description="Use previous messages in context."
           value={(config.include_history as boolean) ?? true}
           onChange={(v) => onUpdate({ include_history: v })}
         />
-        <Field label="Model" description="Choose the model used for this agent step.">
+        <Field label="Model">
           <Select
             value={(config.model as string) ?? "gpt-4o-mini"}
             onChange={(v) => onUpdate({ model: v })}
@@ -142,8 +136,10 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
         </Field>
         <div className={styles.toolsRow}>
           <span className={styles.label} style={{ marginBottom: 0 }}>Tools</span>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="icon-sm"
             className={styles.iconAction}
             aria-label="Add tool"
             onClick={() => {
@@ -152,7 +148,7 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
             }}
           >
             +
-          </button>
+          </Button>
         </div>
         {((config.tools as string[]) ?? []).length > 0 && (
           <div className={styles.chips}>
@@ -171,7 +167,7 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
             ))}
           </div>
         )}
-        <Field label="Output format" description="Select how downstream steps should interpret the response.">
+        <Field label="Output format">
           <Select
             value={(config.output_format as string) ?? "text"}
             onChange={(v) => onUpdate({ output_format: v })}
@@ -182,9 +178,9 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
             ]}
           />
         </Field>
-      </SectionCard>
+      </FormSection>
 
-      <SectionCard title="Model parameters" description="Tune sampling behavior and token budget.">
+      <FormSection title="Model parameters">
         <SliderField
           label="Temperature"
           value={(config.temperature as number) ?? 1.0}
@@ -209,53 +205,55 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
           step={0.01}
           onChange={(v) => onUpdate({ top_p: v })}
         />
-      </SectionCard>
+      </FormSection>
 
-      <SectionCard title="ChatKit" description="Control how this step appears inside the test chat UI.">
+      <FormSection title="Chat">
         <ToggleField
           label="Display response in chat"
-          description="Show the agent response as a visible assistant message."
+          description="Show the response in test chat."
           value={(config.display_in_chat as boolean) ?? true}
           onChange={(v) => onUpdate({ display_in_chat: v })}
         />
         <ToggleField
           label="Show in-progress messages"
-          description="Surface partial streaming updates while the model is thinking."
+          description="Show partial streaming updates."
           value={(config.show_in_progress as boolean) ?? true}
           onChange={(v) => onUpdate({ show_in_progress: v })}
         />
         <ToggleField
           label="Show search sources"
-          description="Display cited sources when tools return supporting links or results."
+          description="Show cited sources when available."
           value={(config.show_sources as boolean) ?? true}
           onChange={(v) => onUpdate({ show_sources: v })}
         />
-      </SectionCard>
+      </FormSection>
 
-      <SectionCard title="Advanced" description="Execution safeguards and iteration controls.">
+      <FormSection title="Advanced">
         <ToggleField
           label="Continue on error"
-          description="Allow the workflow to keep running if this node fails."
+          description="Keep the run going if this step fails."
           value={(config.continue_on_error as boolean) ?? false}
           onChange={(v) => onUpdate({ continue_on_error: v })}
         />
-        {showAdvanced && (
-          <Field label="Max iterations" description="Maximum tool / reasoning loops before the step stops.">
+        {showAdvanced ? (
+          <Field label="Max iterations">
             <Input
               type="number"
               value={(config.max_iterations as number) ?? 10}
               onChange={(v) => onUpdate({ max_iterations: parseInt(v) || 10 })}
             />
           </Field>
-        )}
-        <button
+        ) : null}
+        <Button
           type="button"
+          variant="ghost"
+          size="xs"
           className={styles.ghostButton}
           onClick={() => setShowAdvanced((p) => !p)}
         >
-          {showAdvanced ? "▲ Less" : "▼ More"}
-        </button>
-      </SectionCard>
+          {showAdvanced ? "Show less" : "Show more"}
+        </Button>
+      </FormSection>
     </>
   );
 }
@@ -263,8 +261,8 @@ function AgentForm({ config, onUpdate, registry }: FormProps) {
 function ToolForm({ config, onUpdate, registry }: FormProps) {
   const tools = registry?.tools ?? [];
   return (
-    <SectionCard title="Tool settings" description="Choose the tool and how approval or timeout behavior should work.">
-      <Field label="Tool" description="Choose the callable tool or integration for this node.">
+    <FormSection>
+      <Field label="Tool">
         <Select
           value={(config.tool_name as string) ?? ""}
           onChange={(v) => {
@@ -281,7 +279,7 @@ function ToolForm({ config, onUpdate, registry }: FormProps) {
           ]}
         />
       </Field>
-      <Field label="HITL Mode" description="Decide whether user approval blocks, times out, or runs asynchronously.">
+      <Field label="HITL mode">
         <Select
           value={(config.hitl_mode as string) ?? "blocking"}
           onChange={(v) => onUpdate({ hitl_mode: v })}
@@ -295,15 +293,15 @@ function ToolForm({ config, onUpdate, registry }: FormProps) {
       {typeof config.description === "string" && config.description.length > 0 && (
         <p className={styles.helperText}>{config.description}</p>
       )}
-    </SectionCard>
+    </FormSection>
   );
 }
 
 function SkillForm({ config, onUpdate, registry }: FormProps) {
   const skills = registry?.skills ?? [];
   return (
-    <SectionCard title="Skill" description="Attach a reusable skill from the registry to this workflow node.">
-      <Field label="Skill" description="Attach a reusable skill bundle from the registry.">
+    <FormSection>
+      <Field label="Skill">
         <Select
           value={(config.skill_name as string) ?? ""}
           onChange={(v) => {
@@ -316,7 +314,7 @@ function SkillForm({ config, onUpdate, registry }: FormProps) {
           ]}
         />
       </Field>
-    </SectionCard>
+    </FormSection>
   );
 }
 
@@ -347,18 +345,20 @@ function GuardrailForm({ config, onUpdate }: FormProps) {
 
   return (
     <>
-      <Field label="Input" description="Choose whether this guardrail validates the input or the output.">
-        <Select
-          value={(config.guardrail_type as string) ?? "input"}
-          onChange={(v) => onUpdate({ guardrail_type: v })}
-          options={[
-            { value: "input", label: "Input as text" },
-            { value: "output", label: "Output as text" },
-          ]}
-        />
-      </Field>
+      <FormSection>
+        <Field label="Mode">
+          <Select
+            value={(config.guardrail_type as string) ?? "input"}
+            onChange={(v) => onUpdate({ guardrail_type: v })}
+            options={[
+              { value: "input", label: "Input as text" },
+              { value: "output", label: "Output as text" },
+            ]}
+          />
+        </Field>
+      </FormSection>
 
-      <SectionCard title="Checks" description="Enable the safety checks that should run for this guardrail.">
+      <FormSection title="Checks">
         {GUARDRAIL_CHECKS.map(({ key, label, description }) => (
           <ToggleField
             key={key}
@@ -369,7 +369,7 @@ function GuardrailForm({ config, onUpdate }: FormProps) {
           />
         ))}
         {showCustom && (
-          <Field label="Custom check prompt" description="Provide your own judging criteria when the custom check is enabled.">
+          <Field label="Custom prompt">
             <Textarea
               value={(config.custom_prompt as string) ?? ""}
               onChange={(v) => onUpdate({ custom_prompt: v })}
@@ -378,16 +378,16 @@ function GuardrailForm({ config, onUpdate }: FormProps) {
             />
           </Field>
         )}
-      </SectionCard>
+      </FormSection>
 
-      <SectionCard title="Advanced" description="Configure fallback behavior for this guardrail step.">
+      <FormSection title="Advanced">
         <ToggleField
           label="Continue on error"
-          description="Do not stop the run if the guardrail itself errors."
+          description="Do not stop if the guardrail errors."
           value={(config.continue_on_error as boolean) ?? false}
           onChange={(v) => onUpdate({ continue_on_error: v })}
         />
-      </SectionCard>
+      </FormSection>
     </>
   );
 }
@@ -409,15 +409,15 @@ function RouterForm({ config, onUpdate }: FormProps) {
   };
 
   return (
-    <SectionCard title="Routing" description="Define the routing key, branch labels, and structured output fields.">
-      <Field label="Routing Key" description="The structured output field used to decide which branch to follow.">
+    <FormSection>
+      <Field label="Routing key">
         <Input
           value={(config.routing_key as string) ?? "intent"}
           onChange={(v) => onUpdate({ routing_key: v })}
           placeholder="intent"
         />
       </Field>
-      <Field label="Routes" description="Add or remove branch names for this router.">
+      <Field label="Routes">
         <div className={styles.chips}>
           {routes.map((r) => (
             <span
@@ -436,15 +436,12 @@ function RouterForm({ config, onUpdate }: FormProps) {
             onChange={setNewRoute}
             placeholder="Add route…"
           />
-          <button
-            onClick={addRoute}
-            className={styles.miniAction}
-          >
+          <Button onClick={addRoute} type="button" variant="outline" size="icon-sm" className={styles.miniActionButton}>
             +
-          </button>
+          </Button>
         </div>
       </Field>
-      <Field label="Routing Fields" description="JSON schema-like fields expected from the classifier output.">
+      <Field label="Routing fields">
         <Textarea
           value={
             Array.isArray(config.routing_fields)
@@ -462,14 +459,14 @@ function RouterForm({ config, onUpdate }: FormProps) {
           rows={4}
         />
       </Field>
-    </SectionCard>
+    </FormSection>
   );
 }
 
 function MemoryForm({ config, onUpdate }: FormProps) {
   return (
-    <SectionCard title="Memory" description="Configure how conversation state is persisted between turns.">
-      <Field label="Backend" description="Select the memory backend for this workflow.">
+    <FormSection>
+      <Field label="Backend">
         <Select
           value={(config.backend as string) ?? "unbounded"}
           onChange={(v) => onUpdate({ backend: v })}
@@ -481,14 +478,14 @@ function MemoryForm({ config, onUpdate }: FormProps) {
       </Field>
       {(config.backend as string) === "redis" && (
         <>
-          <Field label="Session TTL (seconds)" description="How long the Redis session should remain available.">
+          <Field label="Session TTL">
             <Input
               type="number"
               value={(config.ttl as number) ?? 3600}
               onChange={(v) => onUpdate({ ttl: parseInt(v) || 3600 })}
             />
           </Field>
-          <Field label="Max Messages" description="Maximum number of messages to retain in memory.">
+          <Field label="Max messages">
             <Input
               type="number"
               value={(config.max_messages as number) ?? 200}
@@ -497,7 +494,7 @@ function MemoryForm({ config, onUpdate }: FormProps) {
           </Field>
         </>
       )}
-    </SectionCard>
+    </FormSection>
   );
 }
 
@@ -505,8 +502,8 @@ function MemoryForm({ config, onUpdate }: FormProps) {
 
 function NoteForm({ config, onUpdate }: FormProps) {
   return (
-    <SectionCard title="Note" description="Use notes to document workflow intent or implementation details.">
-      <Field label="Note text" description="Add documentation or reminders for collaborators editing this workflow.">
+    <FormSection>
+      <Field label="Note">
         <Textarea
           value={(config.text as string) ?? ""}
           onChange={(v) => onUpdate({ text: v })}
@@ -514,7 +511,7 @@ function NoteForm({ config, onUpdate }: FormProps) {
           rows={4}
         />
       </Field>
-    </SectionCard>
+    </FormSection>
   );
 }
 
@@ -543,39 +540,41 @@ function ConditionForm({ config, onUpdate }: FormProps) {
 
   return (
     <>
-      <SectionCard title="Conditions" description="Create if/else-if branches. Unmatched input falls through to else.">
-        <div>
-        <Label>Conditions</Label>
-        <div className={styles.conditionList}>
-          {conditions.map((c, i) => (
-            <div key={i} className={styles.conditionCard}>
-              <div className={styles.conditionHeader}>
-                <span className={styles.conditionMeta}>{i === 0 ? "If" : `Else if ${i}`}</span>
-                {conditions.length > 1 && (
-                  <button
-                    onClick={() => removeCond(i)}
-                    className={styles.inlineRemove}
-                  >
-                    Remove
-                  </button>
-                )}
+      <FormSection title="Branches">
+        <div className={styles.conditionGroup}>
+          <div className={styles.conditionList}>
+            {conditions.map((c, i) => (
+              <div key={i} className={styles.conditionCard}>
+                <div className={styles.conditionHeader}>
+                  <span className={styles.conditionMeta}>{i === 0 ? "If" : `Else if ${i}`}</span>
+                  {conditions.length > 1 && (
+                    <Button
+                      onClick={() => removeCond(i)}
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      className={styles.inlineRemove}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                <Input value={c.label} onChange={(v) => updateCond(i, { label: v })} placeholder="Case name (optional)" />
+                <Input value={c.expression} onChange={(v) => updateCond(i, { expression: v })} placeholder='Enter condition, e.g. intent == "billing"' />
               </div>
-              <Input value={c.label} onChange={(v) => updateCond(i, { label: v })} placeholder="Case name (optional)" />
-              <Input value={c.expression} onChange={(v) => updateCond(i, { expression: v })} placeholder='Enter condition, e.g. intent == "billing"' />
-            </div>
-          ))}
+            ))}
+          </div>
+          <Button
+            onClick={addCond}
+            type="button"
+            variant="outline"
+            className={styles.secondaryButton}
+          >
+            + Add branch
+          </Button>
         </div>
-        <button
-          onClick={addCond}
-          className={styles.secondaryButton}
-        >
-          + Add branch
-        </button>
-        </div>
-      </SectionCard>
-      <p className={styles.helperText}>
-        An “Else” branch is added automatically for unmatched input.
-      </p>
+        <p className={styles.helperText}>Else is added automatically.</p>
+      </FormSection>
     </>
   );
 }
@@ -584,8 +583,8 @@ function ConditionForm({ config, onUpdate }: FormProps) {
 
 function ApprovalForm({ config, onUpdate }: FormProps) {
   return (
-    <SectionCard title="Approval" description="Define the message shown before asking for user approval.">
-      <Field label="Message" description="The copy shown to the user before they approve or reject the step.">
+    <FormSection>
+      <Field label="Message">
         <Textarea
           value={(config.prompt as string) ?? ""}
           onChange={(v) => onUpdate({ prompt: v })}
@@ -593,7 +592,7 @@ function ApprovalForm({ config, onUpdate }: FormProps) {
           rows={3}
         />
       </Field>
-    </SectionCard>
+    </FormSection>
   );
 }
 
@@ -602,11 +601,8 @@ function ApprovalForm({ config, onUpdate }: FormProps) {
 function WhileForm({ config, onUpdate }: FormProps) {
   return (
     <>
-      <SectionCard title="Loop condition" description="The loop runs the body while this expression is true.">
-        <Field
-          label="Expression"
-          description="Use Common Expression Language. Receives \`output\` (last reply) and \`iteration\` (1-based)."
-        >
+      <FormSection>
+        <Field label="Expression">
           <Textarea
             value={(config.condition as string) ?? ""}
             onChange={(v) => onUpdate({ condition: v })}
@@ -615,18 +611,18 @@ function WhileForm({ config, onUpdate }: FormProps) {
           />
         </Field>
         <p className={styles.helperText}>
-          Leave blank to loop until the max iterations cap is reached.
+          Uses `output` and `iteration`. Leave blank to loop until the cap is reached.
         </p>
-      </SectionCard>
-      <SectionCard title="Limits" description="Hard cap on the number of loop iterations.">
-        <Field label="Max iterations" description="The loop will always stop after this many cycles.">
+      </FormSection>
+      <FormSection title="Limits">
+        <Field label="Max iterations">
           <Input
             type="number"
             value={(config.max_iterations as number) ?? 10}
             onChange={(v) => onUpdate({ max_iterations: parseInt(v) || 10 })}
           />
         </Field>
-      </SectionCard>
+      </FormSection>
     </>
   );
 }
@@ -635,20 +631,15 @@ function WhileForm({ config, onUpdate }: FormProps) {
 
 function StartForm({ config, onUpdate }: FormProps) {
   return (
-    <>
-      <p className={styles.infoCard}>
-        Entry point for the workflow. The input received here is forwarded to
-        the first connected node.
-      </p>
-      <SectionCard title="Input settings" description="Define the input contract that enters this workflow.">
-        <Field label="Input variable name" description="The key name exposed to the first workflow step.">
+    <FormSection>
+        <Field label="Input variable">
           <Input
             value={(config.input_key as string) ?? "input"}
             onChange={(v) => onUpdate({ input_key: v })}
             placeholder="input"
           />
         </Field>
-        <Field label="Input type" description="Choose the shape of the incoming workflow input.">
+        <Field label="Input type">
           <Select
             value={(config.input_type as string) ?? "text"}
             onChange={(v) => onUpdate({ input_type: v })}
@@ -658,21 +649,15 @@ function StartForm({ config, onUpdate }: FormProps) {
               { value: "file", label: "File" },
             ]}
           />
-          </Field>
-      </SectionCard>
-    </>
+        </Field>
+    </FormSection>
   );
 }
 
 function EndForm({ config, onUpdate }: FormProps) {
   return (
-    <>
-      <p className={styles.infoCard}>
-        Terminates the workflow run. The output from the last connected node is
-        returned as the final response.
-      </p>
-      <SectionCard title="Output settings" description="Define what this workflow returns once execution finishes.">
-        <Field label="Output variable" description="The final key that downstream consumers receive from the run.">
+    <FormSection>
+        <Field label="Output variable">
           <Input
             value={(config.output_key as string) ?? "output"}
             onChange={(v) => onUpdate({ output_key: v })}
@@ -681,12 +666,11 @@ function EndForm({ config, onUpdate }: FormProps) {
         </Field>
         <ToggleField
           label="Return full conversation"
-          description="Return message history instead of only the final output payload."
+          description="Return message history instead of only the final output."
           value={(config.return_history as boolean) ?? false}
           onChange={(v) => onUpdate({ return_history: v })}
         />
-      </SectionCard>
-    </>
+    </FormSection>
   );
 }
 
@@ -832,7 +816,7 @@ export function PropertyPanel({ registry, onCollapse }: PropertyPanelProps) {
 
       {/* form */}
       <div className={styles.formBody}>
-        <Field label="Label" description="The name shown on the workflow canvas for this node.">
+        <Field label="Label">
           <Input value={label} onChange={onLabelChange} placeholder="Node name…" />
         </Field>
 
@@ -841,12 +825,14 @@ export function PropertyPanel({ registry, onCollapse }: PropertyPanelProps) {
         )}
 
         {/* delete */}
-        <button
+        <Button
           onClick={() => removeNode(node.id)}
+          type="button"
+          variant="danger"
           className={styles.dangerButton}
         >
           Delete Node
-        </button>
+        </Button>
       </div>
     </aside>
   );

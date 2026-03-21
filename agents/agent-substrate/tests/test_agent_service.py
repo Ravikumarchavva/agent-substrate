@@ -174,8 +174,8 @@ def test_rebuild_messages_assistant_none_content():
 # load_agent_for_thread — Redis hot path (limit= contract)
 # ---------------------------------------------------------------------------
 
-def test_load_agent_hot_path_calls_restore_with_window_plus_5():
-    """Redis hit → restore(limit=model_context_window+5) must be called."""
+def test_load_agent_hot_path_calls_restore_without_limit():
+    """Redis hit → restore() must be called with no limit (full history loaded)."""
     async def _inner():
         mock_redis = AsyncMock()
         mock_redis.exists = AsyncMock(return_value=True)
@@ -211,8 +211,9 @@ def test_load_agent_hot_path_calls_restore_with_window_plus_5():
                 redis_memory=mock_redis,
                 model_context_window=40,
             )
-            # 40 + 5 = 45
-            mock_per_request.restore.assert_called_once_with(limit=45)
+            # No limit — Redis holds the full history; SlidingWindowContext
+            # is what filters messages at LLM-call time.
+            mock_per_request.restore.assert_called_once_with()
 
     _run(_inner())
 

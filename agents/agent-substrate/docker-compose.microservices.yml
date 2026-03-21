@@ -1,0 +1,330 @@
+## Docker Compose — Microservice Deployment
+##
+## Usage:
+##   docker compose -f docker-compose.microservices.yml up -d
+##
+## Infrastructure services (postgres, redis) are shared.
+## Each microservice gets its own container.
+##
+## Port allocation:
+##   Gateway BFF        : 8001 (public — only service exposed to frontend)
+##   Identity Auth      : 8010 (internal)
+##   Policy Auth        : 8011 (internal)
+##   Conversation       : 8012 (internal)
+##   Job Controller     : 8013 (internal)
+##   Agent Runtime      : 8014 (internal)
+##   Tool Executor      : 8015 (internal)
+##   Human Gate         : 8016 (internal)
+##   Live Stream        : 8017 (internal)
+##   File Store         : 8018 (internal)
+##   Admin Control Plane: 8019 (internal)
+
+x-common-env: &common-env
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agentdb
+  REDIS_URL: redis://redis:6379/0
+  JWT_SECRET: ${JWT_SECRET:-CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET}
+  OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+x-service-base: &service-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+  networks:
+    - agent-net
+
+services:
+  # ══════════════════════════════════════════════════════════════════════════
+  # Infrastructure
+  # ══════════════════════════════════════════════════════════════════════════
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agentdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - agent-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - agent-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Wave 1: Identity / Policy / Gateway
+  # ══════════════════════════════════════════════════════════════════════════
+
+  identity:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.identity.app:app", "--host", "0.0.0.0", "--port", "8010"]
+    ports:
+      - "8010:8010"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: identity
+
+  policy:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.policy.app:app", "--host", "0.0.0.0", "--port", "8011"]
+    ports:
+      - "8011:8011"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: policy
+
+  gateway:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.gateway.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: gateway
+      IDENTITY_SERVICE_URL: http://identity:8010
+      POLICY_SERVICE_URL: http://policy:8011
+      CONVERSATION_SERVICE_URL: http://conversation:8012
+      JOB_CONTROLLER_SERVICE_URL: http://job-controller:8013
+      HUMAN_GATE_SERVICE_URL: http://human-gate:8016
+      LIVE_STREAM_SERVICE_URL: http://live-stream:8017
+      FILE_STORE_SERVICE_URL: http://file-store:8018
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      CODE_INTERPRETER_SERVICE_URL: http://code-interpreter:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      identity:
+        condition: service_started
+      policy:
+        condition: service_started
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Wave 2: Conversation / Job Controller
+  # ══════════════════════════════════════════════════════════════════════════
+
+  conversation:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.conversation.app:app", "--host", "0.0.0.0", "--port", "8012"]
+    ports:
+      - "8012:8012"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: conversation
+
+  job-controller:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.job_controller.app:app", "--host", "0.0.0.0", "--port", "8013"]
+    ports:
+      - "8013:8013"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: job-controller
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Wave 3: Agent Runtime / Tool Executor
+  # ══════════════════════════════════════════════════════════════════════════
+
+  agent-runtime:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.agent_runtime.app:app", "--host", "0.0.0.0", "--port", "8014"]
+    ports:
+      - "8014:8014"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: agent-runtime
+      CONVERSATION_SERVICE_URL: http://conversation:8012
+      MODEL_NAME: ${MODEL_NAME:-gpt-4o}
+
+  tool-executor:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.tool_executor.app:app", "--host", "0.0.0.0", "--port", "8015"]
+    ports:
+      - "8015:8015"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: tool-executor
+      CODE_INTERPRETER_URL: http://code-interpreter:8080
+      FILE_STORE_SERVICE_URL: http://file-store:8018
+      CODE_INTERPRETER_URL_EXTERNAL: ${CODE_INTERPRETER_URL:-}
+
+  # ══════════════════════════════════════════════════════════════════════════  # Code Interpreter (Firecracker microVM execution engine)
+  # Requires /dev/kvm on the host. Docker Desktop on Mac/Win uses a Linux VM,
+  # so /dev/kvm is available by default. On Linux ensure KVM module is loaded.
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  code-interpreter:
+    <<: *service-base
+    # MUST be --workers 1: VMPool is in-process asyncio state
+    command:
+      - uv
+      - run
+      - uvicorn
+      - agent_framework.code_interpreter_service.app:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8080"
+      - --workers
+      - "1"
+    ports:
+      - "8020:8080"  # host:container
+    environment:
+      <<: *common-env
+      SERVICE_NAME: code-interpreter
+      CI_FC_KERNEL_PATH: /opt/firecracker/vmlinux.bin
+      CI_FC_ROOTFS_PATH: /opt/firecracker/rootfs.ext4
+      CI_FC_VCPU_COUNT: "1"
+      CI_FC_MEM_SIZE_MIB: "256"
+      CI_POOL_SIZE: "2"
+      CI_POOL_MAX_SIZE: "4"
+      CI_DEFAULT_TIMEOUT: "30"
+      CI_MAX_TIMEOUT: "300"
+    devices:
+      - /dev/kvm:/dev/kvm
+    volumes:
+      - firecracker-assets:/opt/firecracker:ro
+    privileged: true
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ══════════════════════════════════════════════════════════════════════════════  # Wave 4: Human Gate / Live Stream / File Store
+  # ══════════════════════════════════════════════════════════════════════════
+
+  human-gate:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.human_gate.app:app", "--host", "0.0.0.0", "--port", "8016"]
+    ports:
+      - "8016:8016"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: human-gate
+
+  live-stream:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.live_stream.app:app", "--host", "0.0.0.0", "--port", "8017"]
+    ports:
+      - "8017:8017"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: live-stream
+
+  file-store:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.file_store.app:app", "--host", "0.0.0.0", "--port", "8018"]
+    ports:
+      - "8018:8018"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: file-store
+      FILE_STORAGE_PATH: /data/files
+    volumes:
+      - file-store-data:/data/files
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Wave 5: Admin
+  # ══════════════════════════════════════════════════════════════════════════
+
+  admin:
+    <<: *service-base
+    command: ["uv", "run", "uvicorn", "agent_framework.services.admin.app:app", "--host", "0.0.0.0", "--port", "8019"]
+    ports:
+      - "8019:8019"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: admin
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Observability (optional)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  tempo:
+    image: grafana/tempo:2.10.0
+    user: root
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./docker/tempo/tempo.yaml:/etc/tempo.yaml
+      - ./docker/tempo/data:/tmp/tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - agent-net
+    profiles:
+      - observability
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    depends_on:
+      - tempo
+    networks:
+      - agent-net
+    profiles:
+      - observability
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # MCP Server (optional)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  mcp-server:
+    build:
+      context: ./docker/mcp_server
+      dockerfile: Dockerfile
+    ports:
+      - "9000:9000"
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=9000
+    networks:
+      - agent-net
+    profiles:
+      - mcp
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  file-store-data:
+  firecracker-assets:
+
+networks:
+  agent-net:
+    driver: bridge

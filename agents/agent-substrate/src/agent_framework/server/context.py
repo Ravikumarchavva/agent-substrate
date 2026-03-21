@@ -20,6 +20,7 @@ from typing import Any, Optional
 from fastapi import Request
 
 from agent_framework.core.memory.redis_memory import RedisMemory
+from agent_framework.core.storage.base import FileStore
 from agent_framework.core.tools.registry import ToolRegistry
 from agent_framework.providers.llm.openai.openai_client import OpenAIClient
 from agent_framework.providers.audio.openai import OpenAIAudioClient
@@ -44,6 +45,7 @@ class ServerContext:
         mcp_servers: Runtime MCP server registry (populated via /builder API).
         session_factory: SQLAlchemy async session factory for DB access.
         ci_client: Optional code-interpreter HTTP client.
+        file_store: Pluggable file storage backend (local / S3 / encrypted).
     """
 
     model_client: OpenAIClient
@@ -59,6 +61,7 @@ class ServerContext:
     mcp_servers: dict[str, dict] = field(default_factory=dict)
     session_factory: Any = None
     ci_client: Optional[Any] = None
+    file_store: Optional[FileStore] = None
 
 
 def get_ctx(request: Request) -> ServerContext:

@@ -47,8 +47,10 @@ from agent_framework.server.routes.threads import router as threads_router
 from agent_framework.core.tools.base_tool import ToolRisk
 from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from agent_framework.core.tools.registry import ToolRegistry
+from agent_framework.core.storage.factory import create_file_store
 from agent_framework.extensions.tools.code_interpreter import CodeInterpreterTool
 from agent_framework.extensions.tools.code_interpreter.http_client import CodeInterpreterClient
+from agent_framework.extensions.tools.file_manager_tool import FileManagerTool
 from agent_framework.extensions.mcp.app_tools import (
     ColorPaletteTool,
     DataVisualizerTool,
@@ -161,9 +163,24 @@ async def lifespan(app: FastAPI):
 
     app.state.ci_client = ci_client
 
+    # ── File Store (local / S3 / encrypted) ──────────────────────────────
+    file_store = create_file_store(settings)
+    await file_store.startup()
+    app.state.file_store = file_store
+
+    # Session factory (needed by FileManagerTool and routes)
+    session_factory = get_session_factory()
+    app.state.session_factory = session_factory
+
+    file_manager_tool = FileManagerTool(
+        file_store=file_store,
+        session_factory=session_factory,
+    )
+
     app.state.tools = ToolRegistry.from_list([
         ask_tool,
         task_tool,
+        file_manager_tool,
         CalculatorTool(),
         GetCurrentTimeTool(),
         DataVisualizerTool(),
@@ -196,9 +213,6 @@ async def lifespan(app: FastAPI):
     # Populated at runtime via POST /builder/mcp-servers (in-memory, not persisted).
     app.state.mcp_servers: dict[str, dict] = {}
 
-    # Expose session factory for routes that need a fresh DB session
-    app.state.session_factory = get_session_factory()
-
     # Typed context — new code should prefer app.state.ctx over individual attrs.
     # Existing routes continue to work via the app.state.* assignments above.
     app.state.ctx = ServerContext(
@@ -214,6 +228,7 @@ async def lifespan(app: FastAPI):
         mcp_servers=app.state.mcp_servers,
         session_factory=app.state.session_factory,
         ci_client=app.state.ci_client,
+        file_store=app.state.file_store,
     )
 
     # Quiet noisy loggers
@@ -223,6 +238,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # ---------- SHUTDOWN ----------
+    if getattr(app.state, "file_store", None):
+        await app.state.file_store.shutdown()
     if getattr(app.state, "ci_client", None):
         await app.state.ci_client.close()
     if getattr(app.state, "redis_memory", None):

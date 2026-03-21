@@ -33,11 +33,13 @@ from agent_framework.server.services.agent_service import (
 )
 from agent_framework.server.services.file_service import (
     extract_text,
+    get_file_content,
     get_files_by_ids,
     to_vision_image_block,
 )
 from agent_framework.server.routes.mcp_apps import resolve_ui_uri
 from agent_framework.extensions.tools.task_manager_tool import current_thread_id
+from agent_framework.extensions.tools.file_manager_tool import current_thread_id as file_thread_id
 from agent_framework.extensions.tools.web_surfer import WebSurferTool
 from agent_framework.extensions.tools.human_input import AskHumanTool
 from agent_framework.runtime.hitl import BRIDGE_DONE, BridgeRegistry, WebHITLBridge
@@ -192,6 +194,7 @@ async def _build_file_context(
     db: AsyncSession,
     body: ChatRequest,
     request: Request,
+    ctx: ServerContext,
 ) -> tuple[str, list[str]]:
     """Load file IDs from the request, extract text and push to CI VM.
 
@@ -205,58 +208,58 @@ async def _build_file_context(
     if not body.file_ids:
         return "", []
 
-    elements = await get_files_by_ids(db, body.file_ids, body.thread_id)
-    if not elements:
+    store = ctx.file_store
+    files = await get_files_by_ids(db, body.file_ids, body.thread_id)
+    if not files:
         return "", []
 
     text_parts: list[str] = []
     image_notes: list[str] = []
 
-    for el in elements:
-        extracted = extract_text(el)
+    for meta in files:
+        extracted = await extract_text(store, meta)
         if extracted is not None:
             text_parts.append(
-                f"### File: {el.name}\n"
+                f"### File: {meta.original_name}\n"
                 f"```\n{extracted}\n```"
             )
-        elif (el.mime or "").startswith("image/"):
+        elif (meta.content_type or "").startswith("image/"):
             image_notes.append(
-                f"[Image attached: {el.name} — "
-                f"available at /data/{el.name} in the code interpreter]"
+                f"[Image attached: {meta.original_name} — "
+                f"available at /data/{meta.original_name} in the code interpreter]"
             )
         else:
             # Unknown binary — just note it exists in the CI VM
             text_parts.append(
-                f"### File: {el.name} ({el.mime or 'binary'})\n"
-                f"(Binary file — available at /data/{el.name} in the code interpreter)"
+                f"### File: {meta.original_name} ({meta.content_type or 'binary'})\n"
+                f"(Binary file — available at /data/{meta.original_name} in the code interpreter)"
             )
 
     # Push every file to the code-interpreter VM so the agent can
     # use pandas, PIL, etc. to work with them programmatically.
-    ci_client = getattr(request.app.state, "ci_client", None)
+    ci_client = ctx.ci_client
     if ci_client:
         import base64 as _b64
         session_id = str(body.thread_id)
-        for el in elements:
-            if not el.content:
-                continue
+        for meta in files:
             try:
-                b64 = _b64.b64encode(el.content).decode()
+                raw = await get_file_content(store, meta)
+                b64 = _b64.b64encode(raw).decode()
                 await ci_client.write_file(
                     session_id,
-                    path=f"/data/{el.name}",
+                    path=f"/data/{meta.original_name}",
                     content=b64,
                     encoding="base64",
                 )
                 logger.info("Pushed file %s (%d bytes) to CI session %s",
-                            el.name, len(el.content), session_id)
+                            meta.original_name, meta.size_bytes, session_id)
             except Exception as exc:
-                logger.warning("Failed to push %s to CI VM: %s", el.name, exc)
+                logger.warning("Failed to push %s to CI VM: %s", meta.original_name, exc)
 
     if not text_parts and not image_notes:
         return "", image_notes
 
-    names = ", ".join(el.name for el in elements)
+    names = ", ".join(m.original_name for m in files)
     sections = "\n\n".join(text_parts)
     block = (
         f"The user has attached {len(elements)} file(s): {names}.\n"
@@ -333,7 +336,7 @@ async def chat(
         user_content = body.messages[-1].content
 
         # 4a. Inject attached file context (text extraction + CI VM push)
-        file_block, image_notes = await _build_file_context(db, body, request)
+        file_block, image_notes = await _build_file_context(db, body, request, ctx)
         if file_block:
             user_content = f"{file_block}\n\n---\n\n{user_content}"
         if image_notes:
@@ -452,8 +455,9 @@ async def chat(
             # All HITL events flushed — signal consumer to stop
             bus.close()
 
-        # Bind ContextVar so TaskManagerTool routes SSE events to this thread
+        # Bind ContextVars so tools route events to this thread
         current_thread_id.set(body.thread_id)
+        file_thread_id.set(str(body.thread_id))
 
         agent_task = asyncio.create_task(agent_worker())
         hitl_task = asyncio.create_task(hitl_worker())

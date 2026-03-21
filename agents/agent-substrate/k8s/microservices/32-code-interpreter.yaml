@@ -1,0 +1,224 @@
+# Code Interpreter Service — Kubernetes StatefulSet
+#
+# This service runs Firecracker microVMs for sandboxed code execution.
+# It has strict host requirements and special networking:
+#
+#  1. StatefulSet (not Deployment) — each pod manages its own VMPool.
+#     Session→VM mapping is in-process; concurrent agent requests route
+#     to the correct pod via consistent hashing in CodeInterpreterClient.
+#
+#  2. Privileged pod + /dev/kvm — Firecracker requires KVM access.
+#     Nodes must be labeled: firecracker=true
+#
+#  3. Headless Service — provides stable DNS names
+#     code-interpreter-{i}.code-interpreter-headless.af-runtime.svc.cluster.local:8080
+#     used by CodeInterpreterClient for consistent-hash routing.
+#
+#  4. Regular Service — for health checks and single-replica access.
+#
+#  5. --workers 1 — REQUIRED. SessionManager is in-process asyncio state.
+#     Scaling = more StatefulSet replicas (each pod = isolated VM pool).
+#
+# Prerequisites:
+#   - Nodes with /dev/kvm: label them with `firecracker=true`
+#   - Kernel image + rootfs stored in the code-interpreter-kernels ConfigMap
+#     or mounted via an NFS/hostPath PV
+#   - Consider taint ci-node=true:NoSchedule to isolate CI workloads
+
+# ── Headless Service (StatefulSet DNS + consistent-hash routing) ─────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-interpreter-headless
+  namespace: af-runtime
+  labels:
+    app: code-interpreter
+spec:
+  clusterIP: None  # headless
+  selector:
+    app: code-interpreter
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http
+---
+# ── Regular Service (health checks, single-pod access, Gateway proxy) ────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-interpreter
+  namespace: af-runtime
+  labels:
+    app: code-interpreter
+spec:
+  selector:
+    app: code-interpreter
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http
+---
+# ── ServiceAccount ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: code-interpreter
+  namespace: af-runtime
+---
+# ── ConfigMap for kernel / rootfs paths ──────────────────────────────────────
+# In production, kernel + rootfs are fetched from an init container
+# or mounted via a ReadOnlyMany PV. This ConfigMap sets the paths.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: code-interpreter-config
+  namespace: af-runtime
+data:
+  CI_FC_KERNEL_PATH: "/opt/firecracker/vmlinux.bin"
+  CI_FC_ROOTFS_PATH: "/opt/firecracker/rootfs.ext4"
+  CI_FC_VCPU_COUNT: "1"
+  CI_FC_MEM_SIZE_MIB: "256"
+  CI_POOL_SIZE: "3"
+  CI_POOL_MAX_SIZE: "8"
+  CI_DEFAULT_TIMEOUT: "30"
+  CI_MAX_TIMEOUT: "300"
+  CI_SESSION_TIMEOUT: "1800"
+  CI_MAX_SESSIONS: "20"
+---
+# ── StatefulSet ───────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: code-interpreter
+  namespace: af-runtime
+  labels:
+    app: code-interpreter
+    af.service-role: code-interpreter
+spec:
+  serviceName: code-interpreter-headless
+  replicas: 2
+  selector:
+    matchLabels:
+      app: code-interpreter
+  podManagementPolicy: Parallel  # boot pods concurrently
+  template:
+    metadata:
+      labels:
+        app: code-interpreter
+        af.service-role: code-interpreter
+    spec:
+      serviceAccountName: code-interpreter
+      # Only schedule on nodes with /dev/kvm
+      nodeSelector:
+        firecracker: "true"
+      # Tolerate the CI-node taint if present
+      tolerations:
+        - key: ci-node
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      # Init container: pull kernel/rootfs from object storage if not present
+      initContainers:
+        - name: fetch-kernel
+          image: ghcr.io/example/agent-framework/ci-kernel-fetcher:0.1.0
+          command: ["/bin/sh", "-c", "echo 'Kernel fetch skipped — use pre-baked node image'"]
+          volumeMounts:
+            - name: firecracker-assets
+              mountPath: /opt/firecracker
+      containers:
+        - name: code-interpreter
+          image: ghcr.io/example/agent-framework/code-interpreter:0.1.0
+          # MUST be --workers 1: VMPool is in-process asyncio state
+          command:
+            - uv
+            - run
+            - uvicorn
+            - agent_framework.code_interpreter_service.app:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8080"
+            - --workers
+            - "1"
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: code-interpreter-config
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: CI_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CI_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: code-interpreter
+          securityContext:
+            privileged: true  # required for /dev/kvm + tuntap
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 1Gi
+            limits:
+              cpu: 4000m
+              memory: 4Gi
+          volumeMounts:
+            - name: kvm-device
+              mountPath: /dev/kvm
+            - name: firecracker-assets
+              mountPath: /opt/firecracker
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: kvm-device
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice
+        - name: firecracker-assets
+          # Mount pre-built kernel + rootfs from node-local path.
+          # In production use a ReadOnlyMany PV or pre-bake into node image.
+          hostPath:
+            path: /opt/firecracker
+            type: DirectoryOrCreate
+        - name: tmp
+          emptyDir: {}
+---
+# ── HPA — scale on CPU (each additional pod = independent VM pool) ────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: code-interpreter
+  namespace: af-runtime
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: code-interpreter
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60

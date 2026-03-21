@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-store
+  namespace: af-runtime
+  labels:
+    app: file-store
+    af.service-role: file-store
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: file-store
+  template:
+    metadata:
+      labels:
+        app: file-store
+        af.service-role: file-store
+    spec:
+      serviceAccountName: file-store
+      containers:
+        - name: file-store
+          image: ghcr.io/example/agent-framework/file-store:0.1.0
+          ports:
+            - containerPort: 8018
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: file-store
+            - name: FILE_STORAGE_PATH
+              value: /data/files
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: file-store-data
+              mountPath: /data/files
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: file-store-data
+          persistentVolumeClaim:
+            claimName: file-store-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: file-store
+  namespace: af-runtime
+  labels:
+    app: file-store
+spec:
+  selector:
+    app: file-store
+  ports:
+    - port: 8018
+      targetPort: http
+      name: http
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: file-store
+  namespace: af-runtime
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: file-store-data
+  namespace: af-runtime
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: file-store
+  namespace: af-runtime
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: file-store
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

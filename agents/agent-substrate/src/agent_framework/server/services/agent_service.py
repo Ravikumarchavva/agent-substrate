@@ -247,11 +247,12 @@ async def load_agent_for_thread(
         in_redis = await redis_memory.exists(session_id)
 
         if in_redis:
-            # ── Hot path: restore only the most recent N messages from Redis ──
-            # SlidingWindowContext only passes model_context_window msgs to the
-            # LLM anyway, so loading more is wasteful.  The +5 buffer covers
-            # the system message and a few extra turns of lookahead.
-            count = await per_request_mem.restore(limit=model_context_window + 5)
+            # ── Hot path: restore ALL messages from Redis ────────────────────
+            # Redis holds the full thread history (capped at max_messages).
+            # SlidingWindowContext is responsible for selecting the last
+            # model_context_window messages to send to the LLM — that
+            # filtering happens at LLM-call time, not here.
+            count = await per_request_mem.restore()
             logger.debug(
                 "Redis hit for session %s — %d messages restored",
                 session_id, count,

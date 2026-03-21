@@ -3,6 +3,8 @@
 This directory contains production-ready Kubernetes manifests for the AI Agent Framework.
 Every resource is explained below — what it is, why it exists, and how it connects to everything else.
 
+Microservice migration scaffolding is available in `k8s/microservices/` with associated approval docs in `docs/microservices/`.
+
 ---
 
 ## Table of Contents

@@ -1,0 +1,152 @@
+<mxfile host="65bd71144e">
+    <diagram id="topology-v3" name="Platform Topology v3">
+        <mxGraphModel dx="1070" dy="1541" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1640" pageHeight="900" background="#FFFFFF" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="ui" value="Frontend UI" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=13;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="308.35" y="-30" width="180" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge_c" value="Edge" style="rounded=1;whiteSpace=wrap;html=1;container=1;collapsible=0;verticalAlign=top;fontStyle=1;fontSize=13;arcSize=5;fillColor=#E3F2FD;strokeColor=#1565C0;fontFamily=Inter,Helvetica,Arial;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="40" width="840" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="gw" value="API Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=11;fontStyle=1;shadow=1;arcSize=8;" parent="edge_c" vertex="1">
+                    <mxGeometry x="246.7" y="30" width="223.3" height="46.06" as="geometry"/>
+                </mxCell>
+                <mxCell id="core_c" value="Core Execution" style="rounded=1;whiteSpace=wrap;html=1;container=1;collapsible=0;verticalAlign=top;fontStyle=1;fontSize=13;arcSize=4;fillColor=#E8F5E9;strokeColor=#2E7D32;fontFamily=Inter,Helvetica,Arial;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="152" width="840" height="562" as="geometry"/>
+                </mxCell>
+                <mxCell id="ls" value="Live Stream&#xa;SSE / WebSocket to browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1565C0;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;strokeWidth=1.5;" parent="core_c" vertex="1">
+                    <mxGeometry x="22" y="46" width="170" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="hg" value="Human Gate&#xa;HITL checkpoint  pause / resume run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;" parent="core_c" vertex="1">
+                    <mxGeometry x="22" y="186" width="170" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="nh" value="Notification Hub  (new)&#xa;email  Slack  webhook" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9E9E9E;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;dashed=1;dashPattern=8 3;" parent="core_c" vertex="1">
+                    <mxGeometry x="22.24" y="413" width="170" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="ss" value="Conversation Service&lt;br&gt;conversation threads  message history" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;" parent="core_c" vertex="1">
+                    <mxGeometry x="248" y="28" width="222" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="rm" value="Job Controller&lt;br&gt;durable run state  retries  crash recovery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;" parent="core_c" vertex="1">
+                    <mxGeometry x="248" y="138" width="222" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="ar_c" value="Agent Runtime    AI execution layer" style="rounded=1;whiteSpace=wrap;html=1;container=1;collapsible=0;verticalAlign=top;fontStyle=1;fontSize=12;arcSize=5;fillColor=#F1F8E9;strokeColor=#1B5E20;strokeWidth=2;fontFamily=Inter,Helvetica,Arial;" parent="core_c" vertex="1">
+                    <mxGeometry x="218" y="234" width="598" height="296" as="geometry"/>
+                </mxCell>
+                <mxCell id="ae" value="Agent Engine&#xa;ReAct loop  LLM calls  tool decisions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1B5E20;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;strokeWidth=2;" parent="ar_c" vertex="1">
+                    <mxGeometry x="18" y="38" width="196" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="tr" value="Tool Router&#xa;dispatch  quotas  timeouts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;" parent="ar_c" vertex="1">
+                    <mxGeometry x="18" y="178" width="196" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="sandbox_c" value="gVisor RuntimeClass" style="rounded=1;whiteSpace=wrap;html=1;container=1;collapsible=0;verticalAlign=top;fontStyle=3;fontSize=9;arcSize=8;fillColor=#F9FBE7;strokeColor=#33691E;strokeWidth=1.5;dashed=1;dashPattern=6 3;fontFamily=Inter,Helvetica,Arial;" parent="ar_c" vertex="1">
+                    <mxGeometry x="268" y="24" width="310" height="122" as="geometry"/>
+                </mxCell>
+                <mxCell id="cs" value="Code Sandbox&#xa;isolated Python  session-affine per run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#33691E;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;strokeWidth=1.5;" parent="sandbox_c" vertex="1">
+                    <mxGeometry x="14" y="30" width="282" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="fsv" value="File Store&#xa;uploads  extraction  object storage bridge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=10;shadow=1;arcSize=10;" parent="ar_c" vertex="1">
+                    <mxGeometry x="268" y="178" width="310" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="plat_c" value="Platform" style="rounded=1;whiteSpace=wrap;html=1;container=1;collapsible=0;verticalAlign=top;fontStyle=1;fontSize=13;arcSize=4;fillColor=#F3E5F5;strokeColor=#7B1FA2;fontFamily=Inter,Helvetica,Arial;" parent="1" vertex="1">
+                    <mxGeometry x="960" y="40" width="636" height="682" as="geometry"/>
+                </mxCell>
+                <mxCell id="auth" value="Auth Service&#xa;identity verification + policy authorization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1565C0;fontFamily=Inter,Helvetica,Arial;fontSize=11;shadow=1;arcSize=10;strokeWidth=1.5;" parent="plat_c" vertex="1">
+                    <mxGeometry x="22" y="31.5" width="592" height="44.56" as="geometry"/>
+                </mxCell>
+                <mxCell id="mcpgw" value="MCP Gateway&#xa;external MCP tools  integration routing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=11;shadow=1;arcSize=10;" parent="plat_c" vertex="1">
+                    <mxGeometry x="22" y="350" width="592" height="42.31" as="geometry"/>
+                </mxCell>
+                <mxCell id="admin" value="Admin Console&#xa;operator controls  tenant admin  diagnostics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#424242;fontFamily=Inter,Helvetica,Arial;fontSize=11;shadow=1;arcSize=10;" parent="plat_c" vertex="1">
+                    <mxGeometry x="10" y="250" width="592" height="41.3" as="geometry"/>
+                </mxCell>
+                <mxCell id="leg" value="&lt;b&gt;Legend&lt;/b&gt;&lt;hr style=&quot;margin:2px 0&quot;&gt;&lt;font color=&quot;#1A1A1A&quot;&gt;━━ Primary execution flow&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#1565C0&quot;&gt;━━ Auth check&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#2E7D32&quot;&gt;━━ Code execution dispatch&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#616161&quot;&gt;── Supporting service call&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#FF7F00&quot;&gt;── Data read / write&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#9E9E9E&quot;&gt;┌┌ Admin operator&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#1565C0&quot;&gt;┌┌ SSE push to browser&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#2E7D32&quot;&gt;┌┌ Presigned read (direct S3)&lt;/font&gt;&lt;hr style=&quot;margin:2px 0&quot;&gt;&lt;font style=&quot;font-size: 9px; color: rgb(97, 97, 97);&quot;&gt;&lt;b&gt;Agent Runtime&lt;/b&gt; (dark green) = AI layer.&lt;br&gt;Runs only when Agent Engine is active.&lt;br&gt;&lt;br&gt;&lt;b&gt;Core Execution&lt;/b&gt; (light green) = always&lt;br&gt;active platform layer.&lt;br&gt;&lt;br&gt;&lt;b&gt;Notification Hub&lt;/b&gt; = new; dashed = v2.&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=1;fillColor=#FFFFFF;strokeColor=#E0E0E0;fontFamily=Inter,Helvetica,Arial;fontSize=10;spacingLeft=8;spacingRight=8;spacingTop=6;spacingBottom=6;shadow=1;" parent="plat_c" vertex="1">
+                    <mxGeometry x="390" y="420.0038461538461" width="234" height="247.61846153846153" as="geometry"/>
+                </mxCell>
+                <mxCell id="data_c" value="Data" style="rounded=1;whiteSpace=wrap;html=1;container=1;collapsible=0;verticalAlign=top;fontStyle=1;fontSize=13;arcSize=4;fillColor=#FFF8E1;strokeColor=#F57F17;fontFamily=Inter,Helvetica,Arial;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="740" width="1540" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="pg" value="PostgreSQL" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#FFF8E1;strokeColor=#F57F17;fontFamily=Inter,Helvetica,Arial;fontSize=10;" parent="data_c" vertex="1">
+                    <mxGeometry x="270.9321568627451" y="26" width="176.1437908496732" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="redis" value="Redis&#xa;session cache" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#FFF8E1;strokeColor=#F57F17;fontFamily=Inter,Helvetica,Arial;fontSize=10;" parent="data_c" vertex="1">
+                    <mxGeometry x="920.0015032679738" y="26" width="201.30718954248366" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="objstore" value="Object Storage&#xa;MinIO / S3" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#FFF8E1;strokeColor=#F57F17;fontFamily=Inter,Helvetica,Arial;fontSize=10;" parent="data_c" vertex="1">
+                    <mxGeometry x="527.761568627451" y="26" width="226.47058823529412" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="evbus" value="Kafka&#xa;Event Bus" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#FFF8E1;strokeColor=#F57F17;fontFamily=Inter,Helvetica,Arial;fontSize=10;" parent="data_c" vertex="1">
+                    <mxGeometry x="22" y="26" width="170.24" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_ui_gw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1A1A1A;strokeWidth=2;endArrow=blockThin;endFill=1;" parent="1" source="ui" target="gw" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_gw_ss" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1A1A1A;strokeWidth=2;endArrow=blockThin;endFill=1;" parent="1" source="gw" target="ss" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_ss_rm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1A1A1A;strokeWidth=2;endArrow=blockThin;endFill=1;" parent="1" source="ss" target="rm" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_rm_ae" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1A1A1A;strokeWidth=2;endArrow=blockThin;endFill=1;" parent="1" source="rm" target="ae" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_ae_tr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1A1A1A;strokeWidth=2;endArrow=blockThin;endFill=1;" parent="1" source="ae" target="tr" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_gw_auth" value="auth check" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1565C0;strokeWidth=1.5;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;" parent="1" source="gw" target="auth" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_gw_ls" value="subscribe" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#616161;strokeWidth=1;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;" parent="1" source="gw" target="ls" edge="1">
+                    <mxGeometry x="-0.2094" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e_ls_ui" value="SSE push" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1565C0;strokeWidth=1.5;dashed=1;dashPattern=6 3;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="ls" target="ui" edge="1">
+                    <mxGeometry x="0.1605" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e_rm_hg" value="pause for human" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#616161;strokeWidth=1;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;" parent="1" source="rm" target="hg" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_tr_cs" value="code exec" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2E7D32;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;" parent="1" source="tr" target="cs" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_tr_fs" value="file ops" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#616161;strokeWidth=1;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;" parent="1" source="tr" target="fsv" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_tr_mcp" value="external tools" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#616161;strokeWidth=1;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;" parent="1" source="tr" target="mcpgw" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_admin_rm" value="manage" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9E9E9E;strokeWidth=1;dashed=1;dashPattern=8 4;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;" parent="1" source="admin" target="rm" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_ss_pg" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#F57F17;strokeWidth=1.5;endArrow=blockThin;endFill=1;" parent="1" source="ss" target="pg" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_rm_pg" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#F57F17;strokeWidth=1.5;endArrow=blockThin;endFill=1;" parent="1" source="rm" target="pg" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_cs_redis" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#F57F17;strokeWidth=1.5;endArrow=blockThin;endFill=1;" parent="1" source="cs" target="redis" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_fs_obj" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#F57F17;strokeWidth=1.5;endArrow=blockThin;endFill=1;" parent="1" source="fsv" target="objstore" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_cs_obj" value="presigned read" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2E7D32;strokeWidth=1;dashed=1;dashPattern=4 4;endArrow=blockThin;endFill=1;fontSize=9;fontFamily=Inter;labelBackgroundColor=#FFFFFF;" parent="1" source="cs" target="objstore" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_ae_evbus" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#F57F17;strokeWidth=1.5;endArrow=blockThin;endFill=1;" parent="1" source="ae" target="evbus" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_evbus_ls" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#F57F17;strokeWidth=1.5;endArrow=open;endFill=0;" parent="1" source="evbus" target="ls" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_evbus_nh" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#F57F17;strokeWidth=1.5;endArrow=open;endFill=0;" parent="1" source="evbus" target="nh" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -54,6 +54,28 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     # Agent context tokens are short-lived ephemeral tokens bound to a thread
     JWT_AGENT_TOKEN_EXPIRE_MINUTES: int = 5
+
+    # ── File Storage ─────────────────────────────────────────────────────
+    # Backend driver: "local", "s3"
+    FILE_STORE_BACKEND: str = "local"
+
+    # Local driver — base directory for file storage
+    FILE_STORE_ROOT: str = ""
+
+    # S3-compatible driver (AWS S3, MinIO, R2, Spaces)
+    FILE_STORE_BUCKET: str = "agent-files"
+    FILE_STORE_ENDPOINT: Optional[str] = None
+    FILE_STORE_REGION: str = "us-east-1"
+    FILE_STORE_ACCESS_KEY: Optional[str] = None
+    FILE_STORE_SECRET_KEY: Optional[str] = None
+    FILE_STORE_PREFIX: str = ""
+
+    # Encryption: "none", "envelope"
+    FILE_ENCRYPTION_MODE: str = "none"
+    # 64-char hex key for local KEK (dev only, used when FILE_KEK_PROVIDER=local)
+    FILE_KEK_HEX: str = ""
+    # Max upload size in bytes (default 200 MB)
+    FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
 
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",

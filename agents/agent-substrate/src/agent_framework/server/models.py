@@ -207,6 +207,71 @@ class Element(Base):
         return f"<Element(id={self.id}, name={self.name!r}, type={self.type!r})>"
 
 
+# ── File Metadata (external storage) ────────────────────────────────────────
+
+class FileMetadata(Base):
+    """Metadata for files stored in the external FileStore.
+
+    The actual bytes live in LocalFileStore / S3 / Azure — this table
+    tracks ownership, location (object_key), encryption state, and
+    soft-deletion.
+    """
+    __tablename__ = "file_metadata"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Tenant isolation columns
+    org_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    thread_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    scope: Mapped[str] = mapped_column(
+        String, nullable=False, default="uploads"
+    )
+
+    # Storage location
+    object_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    original_name: Mapped[str] = mapped_column(String, nullable=False)
+    content_type: Mapped[str] = mapped_column(
+        String, nullable=False, default="application/octet-stream"
+    )
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    checksum_sha256: Mapped[str] = mapped_column(String, nullable=False, default="")
+
+    # Encryption
+    encryption_mode: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )  # "none", "aes-256-gcm-envelope"
+    encrypted_dek: Mapped[Optional[bytes]] = mapped_column(
+        LargeBinary, nullable=True
+    )  # wrapped DEK (only when envelope encryption is active)
+
+    # Extensible properties
+    props: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # soft delete
+
+    def __repr__(self) -> str:
+        return (
+            f"<FileMetadata(id={self.id}, name={self.original_name!r}, "
+            f"key={self.object_key!r})>"
+        )
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
+
+
 # ── Feedbacks ────────────────────────────────────────────────────────────────
 
 class Feedback(Base):

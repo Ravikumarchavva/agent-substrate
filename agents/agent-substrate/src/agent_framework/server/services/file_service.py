@@ -1,5 +1,8 @@
 """File service — save, list, retrieve and extract text from uploaded files.
 
+Storage is delegated to the pluggable ``FileStore`` layer (local, S3, etc.).
+Metadata (ownership, path, checksum) lives in the ``file_metadata`` table.
+
 Text extraction supports:
   - CSV  → column summary + first 100 rows
   - JSON → pretty-printed
@@ -9,8 +12,6 @@ Text extraction supports:
 
 Images are not converted to text here; the caller receives a separate
 ``image_url`` vision block that can be embedded in a multimodal message.
-All other binary types are pushed to the code-interpreter VM so the agent
-can access them programmatically.
 """
 
 from __future__ import annotations
@@ -23,10 +24,12 @@ import logging
 import uuid
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_framework.server.models import Element
+from agent_framework.core.storage.base import FileRef, FileStore
+from agent_framework.core.storage.tenant import FileScope, TenantContext
+from agent_framework.server.models import FileMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,14 @@ _XLSX_MIMES = {
     "application/vnd.ms-excel",
 }
 
+_IMAGE_MIMES = {
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+}
+
 
 # ---------------------------------------------------------------------------
 # CRUD helpers
@@ -64,35 +75,58 @@ _XLSX_MIMES = {
 
 async def save_file(
     db: AsyncSession,
+    store: FileStore,
     *,
     thread_id: uuid.UUID,
     name: str,
     mime: str,
     content: bytes,
-) -> Element:
-    """Persist an uploaded file to the elements table."""
-    element = Element(
-        thread_id=thread_id,
-        type="file",
-        name=name,
-        mime=mime,
-        size=str(len(content)),
-        content=content,
+    user_id: uuid.UUID | None = None,
+    org_id: str | None = None,
+    scope: FileScope = FileScope.UPLOADS,
+) -> FileMetadata:
+    """Upload a file to the external store and record metadata in the DB."""
+    tenant = TenantContext(
+        org_id=org_id,
+        user_id=str(user_id) if user_id else None,
+        thread_id=str(thread_id),
     )
-    db.add(element)
+    object_key = tenant.key(name, scope)
+
+    ref: FileRef = await store.put(
+        object_key,
+        content,
+        content_type=mime,
+    )
+
+    meta = FileMetadata(
+        thread_id=thread_id,
+        user_id=user_id,
+        org_id=org_id,
+        scope=scope.value,
+        object_key=ref.object_key,
+        original_name=name,
+        content_type=mime,
+        size_bytes=ref.size_bytes,
+        checksum_sha256=ref.checksum_sha256,
+    )
+    db.add(meta)
     await db.flush()
-    return element
+    return meta
 
 
 async def list_files(
     db: AsyncSession,
     thread_id: uuid.UUID,
-) -> list[Element]:
-    """Return all files attached to a thread, oldest first."""
+) -> list[FileMetadata]:
+    """Return all non-deleted files attached to a thread, oldest first."""
     result = await db.execute(
-        select(Element)
-        .where(Element.thread_id == thread_id, Element.type == "file")
-        .order_by(Element.id)
+        select(FileMetadata)
+        .where(
+            FileMetadata.thread_id == thread_id,
+            FileMetadata.deleted_at.is_(None),
+        )
+        .order_by(FileMetadata.created_at)
     )
     return list(result.scalars().all())
 
@@ -101,13 +135,13 @@ async def get_file(
     db: AsyncSession,
     file_id: uuid.UUID,
     thread_id: uuid.UUID,
-) -> Optional[Element]:
-    """Get a single file that belongs to the given thread."""
+) -> Optional[FileMetadata]:
+    """Get a single non-deleted file that belongs to the given thread."""
     result = await db.execute(
-        select(Element).where(
-            Element.id == file_id,
-            Element.thread_id == thread_id,
-            Element.type == "file",
+        select(FileMetadata).where(
+            FileMetadata.id == file_id,
+            FileMetadata.thread_id == thread_id,
+            FileMetadata.deleted_at.is_(None),
         )
     )
     return result.scalar_one_or_none()
@@ -115,14 +149,25 @@ async def get_file(
 
 async def delete_file(
     db: AsyncSession,
+    store: FileStore,
     file_id: uuid.UUID,
     thread_id: uuid.UUID,
 ) -> bool:
-    """Delete a file. Returns True if found and deleted."""
-    element = await get_file(db, file_id, thread_id)
-    if not element:
+    """Soft-delete a file. Also removes the object from the store.
+
+    Returns True if found and deleted.
+    """
+    from datetime import datetime, timezone
+
+    meta = await get_file(db, file_id, thread_id)
+    if not meta:
         return False
-    await db.delete(element)
+
+    # Remove from external store
+    await store.delete(meta.object_key)
+
+    # Soft-delete in DB
+    meta.deleted_at = datetime.now(timezone.utc)
     await db.flush()
     return True
 
@@ -131,37 +176,98 @@ async def get_files_by_ids(
     db: AsyncSession,
     file_ids: list[uuid.UUID],
     thread_id: uuid.UUID,
-) -> list[Element]:
-    """Fetch a set of files by ID, all belonging to the same thread."""
+) -> list[FileMetadata]:
+    """Fetch a set of non-deleted files by ID, all belonging to the same thread."""
     if not file_ids:
         return []
     result = await db.execute(
-        select(Element).where(
-            Element.id.in_(file_ids),
-            Element.thread_id == thread_id,
-            Element.type == "file",
+        select(FileMetadata).where(
+            FileMetadata.id.in_(file_ids),
+            FileMetadata.thread_id == thread_id,
+            FileMetadata.deleted_at.is_(None),
         )
     )
     return list(result.scalars().all())
+
+
+async def get_file_content(
+    store: FileStore,
+    meta: FileMetadata,
+) -> bytes:
+    """Download the file bytes from the external store."""
+    return await store.get(meta.object_key)
+
+
+async def get_file_url(
+    store: FileStore,
+    meta: FileMetadata,
+    *,
+    expires_in: int = 3600,
+) -> str:
+    """Generate a pre-signed download URL for a file.
+
+    For LocalFileStore this returns a ``file://`` URI.
+    For S3 it returns a time-limited HTTPS pre-signed URL.
+    """
+    return await store.get_url(meta.object_key, expires_in=expires_in)
+
+
+async def purge_thread_files(
+    db: AsyncSession,
+    store: FileStore,
+    thread_id: uuid.UUID,
+) -> int:
+    """Remove all files (store + DB) for a given thread.
+
+    Returns the number of objects deleted from the store.
+    """
+    from datetime import datetime, timezone
+
+    files = await list_files(db, thread_id)
+    if not files:
+        return 0
+
+    # Build prefix for bulk store deletion
+    # (faster than deleting one by one)
+    tenant = TenantContext(thread_id=str(thread_id))
+    count = await store.delete_prefix(tenant.prefix())
+
+    # Soft-delete all metadata rows
+    now = datetime.now(timezone.utc)
+    await db.execute(
+        update(FileMetadata)
+        .where(
+            FileMetadata.thread_id == thread_id,
+            FileMetadata.deleted_at.is_(None),
+        )
+        .values(deleted_at=now)
+    )
+    await db.flush()
+    return count
 
 
 # ---------------------------------------------------------------------------
 # Text extraction
 # ---------------------------------------------------------------------------
 
-def extract_text(element: Element) -> Optional[str]:
-    """Extract a text representation for LLM context injection.
+def extract_text_from_bytes(
+    raw: bytes,
+    *,
+    name: str = "",
+    mime: str = "",
+) -> Optional[str]:
+    """Extract a text representation from raw file bytes for LLM context.
 
     Returns the extracted string (≤ _MAX_TEXT_CHARS chars), or None when
     the file is binary-only (images / unknown blobs) and cannot be texified.
+
+    This is a pure function — no DB or store access.
     """
-    if not element.content:
+    if not raw:
         return None
 
-    mime = (element.mime or "").lower()
-    name = element.name or ""
+    mime = mime.lower()
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-    raw: bytes = element.content
 
     # ── Plain text / source code ──────────────────────────────────────────
     if mime in _TEXT_MIMES or ext in _TEXT_EXTS:
@@ -258,17 +364,33 @@ def extract_text(element: Element) -> Optional[str]:
     return None
 
 
-def to_vision_image_block(element: Element) -> Optional[dict]:
-    """Build an OpenAI-compatible vision content block from an image element.
+async def extract_text(
+    store: FileStore,
+    meta: FileMetadata,
+) -> Optional[str]:
+    """Download file from store and extract text for LLM context."""
+    raw = await store.get(meta.object_key)
+    return extract_text_from_bytes(
+        raw,
+        name=meta.original_name,
+        mime=meta.content_type,
+    )
 
-    Returns None if the element is not an image or has no content.
+
+async def to_vision_image_block(
+    store: FileStore,
+    meta: FileMetadata,
+) -> Optional[dict]:
+    """Build an OpenAI-compatible vision content block from an image file.
+
+    Returns None if the file is not an image.
     """
-    if not element.content:
-        return None
-    mime = (element.mime or "image/png").lower()
+    mime = (meta.content_type or "image/png").lower()
     if not mime.startswith("image/"):
         return None
-    b64 = base64.b64encode(element.content).decode()
+
+    raw = await store.get(meta.object_key)
+    b64 = base64.b64encode(raw).decode()
     return {
         "type": "image_url",
         "image_url": {

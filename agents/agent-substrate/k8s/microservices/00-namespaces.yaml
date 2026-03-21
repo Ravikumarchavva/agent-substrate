@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: af-edge
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+    af.layer: edge
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: af-platform
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+    af.layer: platform
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: af-runtime
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+    af.layer: runtime
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: af-data
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+    af.layer: data
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: af-observability
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+    af.layer: observability

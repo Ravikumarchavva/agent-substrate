@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tool-executor
+  namespace: af-runtime
+  labels:
+    app: tool-executor
+    af.service-role: tool-executor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tool-executor
+  template:
+    metadata:
+      labels:
+        app: tool-executor
+        af.service-role: tool-executor
+    spec:
+      serviceAccountName: tool-executor
+      containers:
+        - name: tool-executor
+          image: ghcr.io/example/agent-framework/tool-executor:0.1.0
+          ports:
+            - containerPort: 8015
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: tool-executor
+            - name: CODE_INTERPRETER_URL
+              value: http://code-interpreter.af-runtime.svc.cluster.local:8080
+            - name: ARTIFACT_SERVICE_URL
+              value: http://artifact.af-runtime.svc.cluster.local:8018
+            - name: CI_HEADLESS_SERVICE
+              value: code-interpreter-headless
+            - name: CI_NAMESPACE
+              value: af-runtime
+            - name: CI_REPLICAS
+              value: "2"
+          resources:
+            requests:
+              cpu: 300m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tool-executor
+  namespace: af-runtime
+  labels:
+    app: tool-executor
+spec:
+  selector:
+    app: tool-executor
+  ports:
+    - port: 8015
+      targetPort: http
+      name: http
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tool-executor
+  namespace: af-runtime
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tool-executor
+  namespace: af-runtime
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tool-executor
+  minReplicas: 2
+  maxReplicas: 15
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60

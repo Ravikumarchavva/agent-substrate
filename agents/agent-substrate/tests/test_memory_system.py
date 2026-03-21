@@ -94,13 +94,13 @@ async def test_redis_memory():
         await redis.delete_session(session_id)
 
         # Add messages
-        await redis.add_message(session_id, SystemMessage(content="Be concise"))
-        await redis.add_message(session_id, UserMessage(content=["What is 2+2?"]))
-        await redis.add_message(session_id, AssistantMessage(content=["4"], finish_reason="stop"))
+        await redis.store(session_id, SystemMessage(content="Be concise"))
+        await redis.store(session_id, UserMessage(content=["What is 2+2?"]))
+        await redis.store(session_id, AssistantMessage(content=["4"], finish_reason="stop"))
         print("  ✓ Added 3 messages")
 
         # Read back
-        messages = await redis.get_messages(session_id)
+        messages = await redis.fetch(session_id)
         assert len(messages) == 3
         assert type(messages[0]).__name__ == "SystemMessage"
         assert type(messages[1]).__name__ == "UserMessage"
@@ -108,7 +108,7 @@ async def test_redis_memory():
         print(f"  ✓ Retrieved {len(messages)} messages with correct types")
 
         # Count
-        count = await redis.get_message_count(session_id)
+        count = await redis.count(session_id)
         assert count == 3
         print(f"  ✓ Message count: {count}")
 
@@ -117,7 +117,7 @@ async def test_redis_memory():
         print("  ✓ Session exists check")
 
         # Limit
-        last_two = await redis.get_messages(session_id, limit=2)
+        last_two = await redis.fetch(session_id, limit=2)
         assert len(last_two) == 2
         print(f"  ✓ Limited retrieval: {len(last_two)} messages")
 
@@ -130,15 +130,15 @@ async def test_redis_memory():
 
         # Bulk add
         bulk_msgs = [UserMessage(content=[f"Message {i}"]) for i in range(5)]
-        await redis.add_messages(session_id, bulk_msgs)
-        total = await redis.get_message_count(session_id)
+        await redis.store_many(session_id, bulk_msgs)
+        total = await redis.count(session_id)
         assert total == 8  # 3 + 5
         print(f"  ✓ Bulk add: total now {total}")
 
         # Max messages trim (max_messages=10)
         more_msgs = [UserMessage(content=[f"Overflow {i}"]) for i in range(5)]
-        await redis.add_messages(session_id, more_msgs)
-        trimmed_count = await redis.get_message_count(session_id)
+        await redis.store_many(session_id, more_msgs)
+        trimmed_count = await redis.count(session_id)
         assert trimmed_count <= 10
         print(f"  ✓ Trim enforced: {trimmed_count} messages (max=10)")
 
@@ -148,8 +148,8 @@ async def test_redis_memory():
         print(f"  ✓ TTL active: {ttl}s remaining")
 
         # Clear
-        await redis.clear(session_id)
-        assert await redis.get_message_count(session_id) == 0
+        await redis.drop(session_id)
+        assert await redis.count(session_id) == 0
         print("  ✓ Clear")
 
         # Cleanup

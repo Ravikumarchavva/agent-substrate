@@ -132,8 +132,8 @@ async def test_max_token():
     assert result.passed
     print(f"  ✅ Short input passed: {result.message}")
     
-    # Long input — should fail (soft)
-    ctx = GuardrailContext(input_text="x" * 500)
+    # Long input — should fail (soft); use real words so tiktoken token count is high
+    ctx = GuardrailContext(input_text="hello world " * 200)
     result = await guard.check(ctx)
     assert not result.passed
     assert result.tripwire is False  # soft failure

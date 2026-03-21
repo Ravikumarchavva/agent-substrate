@@ -42,6 +42,7 @@ dependencies = [
     "rich>=14.3.2",
     "pyjwt>=2.8.0",
     "cryptography>=45.0.0",
+    "pytest-asyncio>=1.3.0",
 ]
 
 [project.scripts]
@@ -51,12 +52,10 @@ agent-framework = "agent_framework.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[project.optional-dependencies]
-builder = []
-
 [dependency-groups]
 dev = [
-    "opensearch-py>=3.1.0",
-    "opensearch-py-ml>=1.3.0",
-    "polars>=1.38.1",
+    "ruff>=0.15.7",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

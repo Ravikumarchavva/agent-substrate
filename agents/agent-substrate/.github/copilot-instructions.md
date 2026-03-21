@@ -235,3 +235,69 @@ Key behaviours:
 - New DB models go in `server/models/`, new schemas in `server/schemas.py`.
 - Add built-in skills as `skills/<name>/SKILL.md` with YAML frontmatter.
 - MCP SSE server source lives in `docker/mcp_server/server.py` (FastMCP 2.x, pinned).
+
+---
+
+## Microservices Architecture
+
+The repo ships a second deployment mode: 11 independent FastAPI services under `src/agent_framework/services/`.
+
+### Service Map
+
+| Service | Key Model | Role |
+|---|---|---|
+| `gateway` | — | BFF proxy — single external ingress |
+| `identity` | `User` | JWT issuance, OAuth |
+| `policy` | `Policy` | RBAC authorization |
+| `conversation` | `Thread`, `Message` | Thread + message persistence |
+| `job_controller` | `JobRun` | Job lifecycle; dispatches agent_runtime |
+| `agent_runtime` | — | Runs the ReAct agent loop per job |
+| `tool_executor` | — | Executes individual tools in isolation |
+| `human_gate` | `HITLRequest` | HITL: ask_human + tool_approval |
+| `live_stream` | — | SSE projector (fans out EventBus → clients) |
+| `file_store` | `FileRecord` | File artifact upload/download |
+| `admin` | `AdminLog` | Admin CRUD (users, stats) |
+
+### Standard Service Layout
+```
+services/<name>/
+├── app.py       ← FastAPI factory + lifespan, wires app.state.*
+├── models.py    ← SQLAlchemy ORM models (service-private DB tables)
+├── routes.py    ← APIRouter with all endpoints
+├── service.py   ← Business logic layer
+└── __init__.py
+```
+`gateway`, `live_stream`, `tool_executor` omit `models.py`/`service.py` by design.
+
+### Shared Contracts
+Cross-service Pydantic DTOs live in `shared/contracts/<service_name>.py`:
+```python
+from agent_framework.shared.contracts.job_controller import JobRunRequest
+from agent_framework.shared.contracts.human_gate import HITLResponse
+```
+
+### Shared Event Bus
+All cross-service state changes go through Redis pub/sub:
+```python
+from agent_framework.shared.events.bus import EventBus
+from agent_framework.shared.events.types import workflow_started, workflow_failed
+
+bus: EventBus = app.state.bus
+await bus.publish(workflow_started(job_id=job.id, run_id=run.id))
+```
+Always use factory functions from `shared/events/types.py`. The `JobRun` model in `job_controller` emits events named `workflow_*` (naming is historical).
+
+### LLM Client Import
+```python
+# ✅ Correct
+from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+# ❌ Wrong — this file does not exist
+from agent_framework.providers.llm.openai.client import OpenAIClient
+```
+
+### MCP Tool Loading
+```python
+from agent_framework.extensions.mcp import MCPClient
+tools = await MCPClient(url="http://localhost:9000/sse").discover_tools()
+```
+There is **no** `extensions.mcp.loader` module.

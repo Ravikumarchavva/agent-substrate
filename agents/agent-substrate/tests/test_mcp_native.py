@@ -6,12 +6,12 @@ from agent_framework.core.messages.client_messages import ToolExecutionResultMes
 
 class SimpleTool(BaseTool):
     """A simple test tool."""
-    
+
     def __init__(self):
-        self.tool_schema = Tool(
+        super().__init__(
             name="add_numbers",
             description="Add two numbers together",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "a": {"type": "number", "description": "First number"},
@@ -20,7 +20,7 @@ class SimpleTool(BaseTool):
                 "required": ["a", "b"]
             }
         )
-    
+
     async def execute(self, a: float, b: float) -> ToolResult:
         """Execute the addition."""
         result = a + b
@@ -29,11 +29,8 @@ class SimpleTool(BaseTool):
                 "type": "text",
                 "text": json.dumps({"result": result, "operation": f"{a} + {b}"})
             }],
-            isError=False
+            is_error=False
         )
-    
-    def get_schema(self) -> Tool:
-        return self.tool_schema
 
 
 async def test_mcp_native_tool():
@@ -57,14 +54,15 @@ async def test_mcp_native_tool():
     result = await tool.execute(a=5, b=7)
     print(f"Result type: {type(result).__name__}")
     print(f"Content: {result.content}")
-    print(f"Is Error: {result.isError}")
+    print(f"Is Error: {result.is_error}")
     
     # Test message conversion
     print("\n4. Tool Execution Result Message:")
-    msg = ToolExecutionResultMessage.from_tool_result(
-        tool_result=result,
+    msg = ToolExecutionResultMessage(
         tool_call_id="test_call_123",
-        tool_name="add_numbers"
+        name="add_numbers",
+        content=result.content,
+        isError=result.is_error,
     )
     print(f"Message type: {type(msg).__name__}")
     print(f"Tool Call ID: {msg.tool_call_id}")

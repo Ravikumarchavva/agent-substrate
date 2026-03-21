@@ -213,5 +213,15 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Builder (extracted to separate repo)
+builder/
+
+# Notebook artifacts
+notebooks/results/
+notebooks/opensearch-*/
+
+# Example results
+examples/results/
+
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md

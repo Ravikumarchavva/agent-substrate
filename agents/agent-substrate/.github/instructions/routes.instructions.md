@@ -1,6 +1,7 @@
 ---
+name: "Server Route Conventions"
+description: "FastAPI server patterns, dependency injection, SSE streaming, and route registration"
 applyTo: "src/agent_framework/server/**"
-description: FastAPI server patterns and route conventions
 ---
 
 # Server & Route Conventions

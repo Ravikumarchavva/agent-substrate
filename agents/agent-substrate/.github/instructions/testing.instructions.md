@@ -1,6 +1,7 @@
 ---
+name: "Testing Conventions"
+description: "pytest-asyncio patterns, tool unit tests, agent integration tests, and DB session fixtures"
 applyTo: "tests/**"
-description: Testing conventions for the agent framework
 ---
 
 # Testing Conventions

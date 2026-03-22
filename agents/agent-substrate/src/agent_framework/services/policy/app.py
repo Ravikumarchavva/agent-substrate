@@ -2,6 +2,7 @@
 
 Entry point: uvicorn agent_framework.services.policy.app:app --port 8011
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,6 +40,7 @@ async def lifespan(app):
     # Seed default policies on startup
     async with session_factory() as db:
         from agent_framework.services.policy.service import seed_default_policies
+
         seeded = await seed_default_policies(db)
         await db.commit()
         if seeded:

@@ -91,20 +91,20 @@ async def _rebuild_messages(
         elif step_type == "assistant_message":
             output_text = row.get("output")
             content = [output_text] if output_text else None
-            
+
             # Rebuild tool calls if stored
             tool_calls = None
             gen = row.get("generation") or {}
             if gen.get("tool_calls"):
-                tool_calls = [
-                    ToolCallMessage(**tc) for tc in gen["tool_calls"]
-                ]
+                tool_calls = [ToolCallMessage(**tc) for tc in gen["tool_calls"]]
 
-            messages.append(AssistantMessage(
-                content=content,
-                tool_calls=tool_calls,
-                finish_reason=gen.get("finish_reason", "stop"),
-            ))
+            messages.append(
+                AssistantMessage(
+                    content=content,
+                    tool_calls=tool_calls,
+                    finish_reason=gen.get("finish_reason", "stop"),
+                )
+            )
 
         elif step_type == "tool_call":
             # Tool calls are embedded in assistant message, skip standalone
@@ -115,12 +115,14 @@ async def _rebuild_messages(
             tool_name = row.get("name", "")
             output = row.get("output") or ""
             is_error = row.get("is_error") or False
-            messages.append(ToolExecutionResultMessage(
-                tool_call_id=tool_call_id,
-                name=tool_name,
-                content=[{"type": "text", "text": output}],
-                isError=is_error,
-            ))
+            messages.append(
+                ToolExecutionResultMessage(
+                    tool_call_id=tool_call_id,
+                    name=tool_name,
+                    content=[{"type": "text", "text": output}],
+                    isError=is_error,
+                )
+            )
 
         elif step_type == "mcp_app_context":
             # MCP App context update — inject as a user message so the LLM
@@ -253,11 +255,14 @@ async def load_agent_for_thread(
             count = await per_request_mem.restore()
             logger.debug(
                 "Redis hit for session %s — %d messages restored",
-                session_id, count,
+                session_id,
+                count,
             )
         else:
             # ── Cold path: rebuild from Postgres, seed Redis, then restore ───
-            logger.debug("Redis miss for session %s — seeding from Postgres", session_id)
+            logger.debug(
+                "Redis miss for session %s — seeding from Postgres", session_id
+            )
             step_rows = await load_messages_for_memory(db, thread_id)
             all_messages = await _rebuild_messages(step_rows, system_instructions)
 
@@ -266,7 +271,8 @@ async def load_agent_for_thread(
                 await redis_memory.store_many(session_id, all_messages)
                 logger.debug(
                     "Seeded Redis session %s with %d messages from Postgres",
-                    session_id, len(all_messages),
+                    session_id,
+                    len(all_messages),
                 )
 
             # Restore into the per-request memory (loads from Redis)
@@ -350,6 +356,7 @@ async def persist_assistant_message(
                 resource_uri = ui_info.get("resourceUri", "")
                 if resource_uri:
                     from agent_framework.server.routes.mcp_apps import resolve_ui_uri
+
                     http_url = resolve_ui_uri(resource_uri) or resource_uri
                     tc_data["_meta"] = {
                         "ui": {

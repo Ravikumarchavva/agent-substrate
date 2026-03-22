@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SessionInfo:
     """Metadata for an active session VM."""
+
     session_id: str
     vm: VM
     created_at: float = field(default_factory=time.monotonic)
@@ -56,11 +57,11 @@ class SessionInfo:
 
     def to_dict(self) -> dict:
         return {
-            "session_id":   self.session_id,
-            "vm_id":        self.vm.vm_id,
-            "vm_state":     self.vm.state.name,
-            "exec_count":   self.exec_count,
-            "age_seconds":  round(self.age_seconds),
+            "session_id": self.session_id,
+            "vm_id": self.vm.vm_id,
+            "vm_state": self.vm.state.name,
+            "exec_count": self.exec_count,
+            "age_seconds": round(self.age_seconds),
             "idle_seconds": round(self.idle_seconds),
         }
 
@@ -211,8 +212,7 @@ class SessionManager:
         threshold = self.config.session_timeout
         async with self._lock:
             expired = [
-                si for si in self._sessions.values()
-                if si.idle_seconds > threshold
+                si for si in self._sessions.values() if si.idle_seconds > threshold
             ]
             for si in expired:
                 del self._sessions[si.session_id]
@@ -220,7 +220,9 @@ class SessionManager:
         for si in expired:
             logger.info(
                 "Session %s expired (idle=%.0fs), destroying VM %s",
-                si.session_id, si.idle_seconds, si.vm.vm_id,
+                si.session_id,
+                si.idle_seconds,
+                si.vm.vm_id,
             )
             await self._destroy_vm(si)
 

@@ -4,6 +4,7 @@ Routes:
   GET /stream/{thread_id}  — SSE stream for a thread/run
   GET /stream/health       — projector health
 """
+
 from __future__ import annotations
 
 import logging

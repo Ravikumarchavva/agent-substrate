@@ -2,6 +2,7 @@
 
 Entry point: uvicorn agent_framework.services.tool_executor.app:app --port 8015
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,19 +25,24 @@ def _load_default_tools(ci_http_client=None) -> list:
 
     try:
         from agent_framework.extensions.tools.web_surfer import WebSurferTool
+
         tools.append(WebSurferTool())
     except Exception:
         logger.debug("WebSurferTool not available")
 
     try:
         from agent_framework.extensions.tools.task_manager_tool import TaskManagerTool
+
         tools.append(TaskManagerTool())
     except Exception:
         logger.debug("TaskManagerTool not available")
 
     if ci_http_client is not None:
         try:
-            from agent_framework.extensions.tools.code_interpreter.tool import CodeInterpreterTool
+            from agent_framework.extensions.tools.code_interpreter.tool import (
+                CodeInterpreterTool,
+            )
+
             tools.append(CodeInterpreterTool(http_client=ci_http_client))
             logger.info("CodeInterpreterTool registered (HTTP mode)")
         except Exception:
@@ -70,6 +76,7 @@ async def lifespan(app):
             from agent_framework.extensions.tools.code_interpreter.http_client import (
                 CodeInterpreterClient,
             )
+
             replicas = int(os.environ.get("CI_REPLICAS", "1"))
             headless = os.environ.get("CI_HEADLESS_SERVICE", "")
             namespace = os.environ.get("CI_NAMESPACE", "af-runtime")
@@ -80,7 +87,9 @@ async def lifespan(app):
                 namespace=namespace,
             )
             logger.info(
-                "CodeInterpreterClient configured: url=%s replicas=%d", ci_url, replicas,
+                "CodeInterpreterClient configured: url=%s replicas=%d",
+                ci_url,
+                replicas,
             )
         except Exception as exc:
             logger.warning("CodeInterpreterClient init failed: %s", exc)

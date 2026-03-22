@@ -32,10 +32,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     """Declarative base for all ORM models."""
+
     pass
 
 
 # ── Users ────────────────────────────────────────────────────────────────────
+
 
 class User(Base):
     __tablename__ = "users"
@@ -62,6 +64,7 @@ class User(Base):
 
 # ── Threads (Sessions) ──────────────────────────────────────────────────────
 
+
 class Thread(Base):
     __tablename__ = "threads"
 
@@ -87,7 +90,8 @@ class Thread(Base):
     # Relationships
     user: Mapped[Optional["User"]] = relationship(back_populates="threads")
     steps: Mapped[List["Step"]] = relationship(
-        back_populates="thread", cascade="all, delete-orphan",
+        back_populates="thread",
+        cascade="all, delete-orphan",
         order_by="Step.created_at",
     )
     elements: Mapped[List["Element"]] = relationship(
@@ -103,12 +107,13 @@ class Thread(Base):
 
 # ── Steps (Messages / Tool Calls / Agent Steps) ─────────────────────────────
 
+
 class Step(Base):
     """Each step in a conversation thread.
 
     Covers user messages, assistant messages, tool calls, tool results,
     and internal agent steps.
-    
+
     type values:
       - "user_message"   – user input
       - "assistant_message" – LLM response
@@ -116,6 +121,7 @@ class Step(Base):
       - "tool_result"     – tool execution result
       - "system_message"  – system instructions
     """
+
     __tablename__ = "steps"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -171,8 +177,10 @@ class Step(Base):
 
 # ── Elements (Attachments) ───────────────────────────────────────────────────
 
+
 class Element(Base):
     """File attachments, images, audio, or other media linked to a thread."""
+
     __tablename__ = "elements"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -207,6 +215,7 @@ class Element(Base):
 
 # ── File Metadata (external storage) ────────────────────────────────────────
 
+
 class FileMetadata(Base):
     """Metadata for files stored in the external FileStore.
 
@@ -214,6 +223,7 @@ class FileMetadata(Base):
     tracks ownership, location (object_key), encryption state, and
     soft-deletion.
     """
+
     __tablename__ = "file_metadata"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -222,14 +232,18 @@ class FileMetadata(Base):
     # Tenant isolation columns
     org_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     thread_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("threads.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
-    scope: Mapped[str] = mapped_column(
-        String, nullable=False, default="uploads"
-    )
+    scope: Mapped[str] = mapped_column(String, nullable=False, default="uploads")
 
     # Storage location
     object_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
@@ -272,16 +286,16 @@ class FileMetadata(Base):
 
 # ── Feedbacks ────────────────────────────────────────────────────────────────
 
+
 class Feedback(Base):
     """User feedback on a specific step (thumbs up/down, rating, comment)."""
+
     __tablename__ = "feedbacks"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    for_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False
-    )
+    for_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     thread_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False
     )
@@ -297,18 +311,20 @@ class Feedback(Base):
 
 # ── Pipelines (Visual Builder) ──────────────────────────────────────────────
 
+
 class Pipeline(Base):
     """A visual-builder pipeline graph (JSON config stored in JSONB)."""
+
     __tablename__ = "pipelines"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    name: Mapped[str] = mapped_column(String, nullable=False, default="Untitled Pipeline")
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    config: Mapped[Dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
+    name: Mapped[str] = mapped_column(
+        String, nullable=False, default="Untitled Pipeline"
     )
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    config: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -318,7 +334,8 @@ class Pipeline(Base):
 
     # Relationships
     runs: Mapped[List["PipelineRun"]] = relationship(
-        back_populates="pipeline", cascade="all, delete-orphan",
+        back_populates="pipeline",
+        cascade="all, delete-orphan",
         order_by="PipelineRun.started_at.desc()",
     )
 
@@ -328,17 +345,18 @@ class Pipeline(Base):
 
 class PipelineRun(Base):
     """A single execution of a pipeline (tracks status and result)."""
+
     __tablename__ = "pipeline_runs"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     pipeline_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("pipelines.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("pipelines.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    status: Mapped[str] = mapped_column(
-        String, nullable=False, default="pending"
-    )
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
     input_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     result: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[datetime] = mapped_column(

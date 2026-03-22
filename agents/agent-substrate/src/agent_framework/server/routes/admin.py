@@ -21,14 +21,13 @@ from agent_framework.server.models import Step, Thread
 
 logger = logging.getLogger(__name__)
 
-ADMIN_EMAIL: str = os.environ.get(
-    "ADMIN_EMAIL", "chavvaravikumarreddy2004@gmail.com"
-)
+ADMIN_EMAIL: str = os.environ.get("ADMIN_EMAIL", "chavvaravikumarreddy2004@gmail.com")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 # ── Auth guard ───────────────────────────────────────────────────────────────
+
 
 def _require_admin(request: Request) -> None:
     """Raise 403 unless the request carries the correct admin email header."""
@@ -39,6 +38,7 @@ def _require_admin(request: Request) -> None:
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
+
 @router.get("/stats")
 async def admin_stats(
     request: Request,
@@ -47,12 +47,8 @@ async def admin_stats(
     """Return top-level aggregate stats."""
     _require_admin(request)
 
-    thread_count: int = (
-        await db.execute(select(func.count(Thread.id)))
-    ).scalar_one()
-    step_count: int = (
-        await db.execute(select(func.count(Step.id)))
-    ).scalar_one()
+    thread_count: int = (await db.execute(select(func.count(Thread.id)))).scalar_one()
+    step_count: int = (await db.execute(select(func.count(Step.id)))).scalar_one()
 
     return {
         "total_threads": thread_count,

@@ -3,6 +3,7 @@
 Every service inherits from this to get health checks, CORS,
 OpenTelemetry, and standard error handling.
 """
+
 from __future__ import annotations
 
 import logging
@@ -53,6 +54,7 @@ def create_service_app(
     if enable_otel:
         try:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
             FastAPIInstrumentor.instrument_app(app)
         except ImportError:
             logger.debug("OpenTelemetry not available, skipping instrumentation")

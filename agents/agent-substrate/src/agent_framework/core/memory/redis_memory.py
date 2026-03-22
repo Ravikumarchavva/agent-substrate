@@ -25,6 +25,7 @@ Security:
   - Session IDs are validated to prevent Redis key injection.
   - TTL is enforced on every write.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -275,9 +276,7 @@ class RedisMemory(BaseMemory):
             pipe.expire(key, self._default_ttl)
         await pipe.execute()
 
-    async def get_metadata(
-        self, session_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def get_metadata(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Retrieve session metadata.
 
         ``session_id`` is optional when the instance has one baked in.
@@ -361,9 +360,7 @@ class RedisMemory(BaseMemory):
         client = self._require_client()
         return await client.exists(self._msg_key(session_id)) > 0
 
-    async def refresh_ttl(
-        self, session_id: str, ttl: Optional[int] = None
-    ) -> None:
+    async def refresh_ttl(self, session_id: str, ttl: Optional[int] = None) -> None:
         """Reset TTL on messages and meta keys for *session_id*."""
         _validate_session_id(session_id)
         client = self._require_client()

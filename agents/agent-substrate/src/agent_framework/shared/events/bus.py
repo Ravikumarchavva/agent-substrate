@@ -4,6 +4,7 @@ Provides publish/subscribe over Redis Streams with consumer groups.
 Each service creates a consumer group for events it cares about. Events
 are durable (stored in the stream) and replayable from offsets.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -68,7 +69,10 @@ class EventBus:
             raise RuntimeError("EventBus not connected")
         try:
             await self._client.xgroup_create(
-                stream_key, group, id="0", mkstream=True,
+                stream_key,
+                group,
+                id="0",
+                mkstream=True,
             )
         except aioredis.ResponseError as e:
             if "BUSYGROUP" not in str(e):
@@ -108,7 +112,9 @@ class EventBus:
                 for stream, entries in messages:
                     for msg_id, data in entries:
                         try:
-                            envelope = EventEnvelope.model_validate_json(data["envelope"])
+                            envelope = EventEnvelope.model_validate_json(
+                                data["envelope"]
+                            )
                             yield envelope
                             await self._client.xack(stream_key, group, msg_id)
                         except Exception:

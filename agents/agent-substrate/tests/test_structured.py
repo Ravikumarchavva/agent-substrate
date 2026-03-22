@@ -4,6 +4,7 @@ All tests use synchronous wrappers (asyncio.run) so the suite requires
 only core pytest with no asyncio plugin.  Higher-level integration tests
 (against live OpenAI) live in examples/10_structured_outputs.ipynb.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -39,6 +40,7 @@ from agent_framework.core.messages.client_messages import (
 # Helper: build a mock client that returns a pre-canned structured result
 # ---------------------------------------------------------------------------
 
+
 def _mock_client(result: StructuredOutputResult) -> MagicMock:
     client = MagicMock()
     client.generate_structured = AsyncMock(return_value=result)
@@ -53,9 +55,12 @@ def _make_user_messages(text: str = "Hello") -> list:
 # StructuredOutputResult
 # ---------------------------------------------------------------------------
 
+
 class TestStructuredOutputResult:
     def test_ok_when_parsed(self):
-        r = StructuredOutputResult(parsed=ContentSafetyJudge(safe=True, reasoning="ok", violated_categories=[]))
+        r = StructuredOutputResult(
+            parsed=ContentSafetyJudge(safe=True, reasoning="ok", violated_categories=[])
+        )
         assert r.ok is True
         assert r.refused is False
 
@@ -79,9 +84,12 @@ class TestStructuredOutputResult:
 # Built-in schemas
 # ---------------------------------------------------------------------------
 
+
 class TestSchemas:
     def test_content_safety_judge_fields(self):
-        j = ContentSafetyJudge(safe=True, reasoning="looks fine", violated_categories=[])
+        j = ContentSafetyJudge(
+            safe=True, reasoning="looks fine", violated_categories=[]
+        )
         assert j.safe is True
         assert j.violated_categories == []
 
@@ -90,7 +98,9 @@ class TestSchemas:
         assert 0.0 <= j.score <= 1.0
 
     def test_classification_result(self):
-        c = ClassificationResult(label="positive", confidence=0.9, reasoning="happy tone")
+        c = ClassificationResult(
+            label="positive", confidence=0.9, reasoning="happy tone"
+        )
         assert c.label == "positive"
 
     def test_extraction_result_generic(self):
@@ -107,10 +117,13 @@ class TestSchemas:
 # parse()
 # ---------------------------------------------------------------------------
 
+
 class TestParseUtility:
     def test_parse_calls_generate_structured(self):
         """parse() must forward messages + schema to client.generate_structured."""
-        parsed_val = ContentSafetyJudge(safe=True, reasoning="ok", violated_categories=[])
+        parsed_val = ContentSafetyJudge(
+            safe=True, reasoning="ok", violated_categories=[]
+        )
         fake_result = StructuredOutputResult(parsed=parsed_val)
         client = _mock_client(fake_result)
         messages = _make_user_messages("is this safe?")
@@ -131,7 +144,9 @@ class TestParseUtility:
         client = _mock_client(fake_result)
         messages = _make_user_messages("test")
 
-        asyncio.run(parse(client, messages, ContentSafetyJudge, system="You are a judge."))
+        asyncio.run(
+            parse(client, messages, ContentSafetyJudge, system="You are a judge.")
+        )
 
         sent_messages = client.generate_structured.call_args[0][0]
         assert isinstance(sent_messages[0], SystemMessage)
@@ -151,6 +166,7 @@ class TestParseUtility:
 # LLMJudge
 # ---------------------------------------------------------------------------
 
+
 class TestLLMJudge:
     def _make_judge(self, client, **kwargs):
         return LLMJudge(
@@ -165,7 +181,9 @@ class TestLLMJudge:
         return GuardrailContext(agent_name="test", output_text=text)
 
     def test_pass_when_safe(self):
-        parsed = ContentSafetyJudge(safe=True, reasoning="clean", violated_categories=[])
+        parsed = ContentSafetyJudge(
+            safe=True, reasoning="clean", violated_categories=[]
+        )
         client = _mock_client(StructuredOutputResult(parsed=parsed))
         judge = self._make_judge(client)
 
@@ -220,17 +238,23 @@ class TestLLMJudge:
     def test_api_error_surfaces_as_failed_result(self):
         """Exceptions from generate_structured must not propagate — return failed result."""
         client = MagicMock()
-        client.generate_structured = AsyncMock(side_effect=RuntimeError("network error"))
+        client.generate_structured = AsyncMock(
+            side_effect=RuntimeError("network error")
+        )
         judge = self._make_judge(client)
 
         result = asyncio.run(judge.check(self._output_ctx("some text")))
 
         assert result.passed is False
-        assert "error" in result.message.lower() or "error" in str(result.metadata).lower()
+        assert (
+            "error" in result.message.lower() or "error" in str(result.metadata).lower()
+        )
 
     def test_input_guardrail_reads_input_text(self):
         """INPUT-type judge must read ctx.input_text, not ctx.output_text."""
-        parsed = ContentSafetyJudge(safe=True, reasoning="clean", violated_categories=[])
+        parsed = ContentSafetyJudge(
+            safe=True, reasoning="clean", violated_categories=[]
+        )
         client = _mock_client(StructuredOutputResult(parsed=parsed))
         judge = LLMJudge(
             client=client,
@@ -239,7 +263,9 @@ class TestLLMJudge:
             guardrail_type=GuardrailType.INPUT,
             pass_field="safe",
         )
-        ctx = GuardrailContext(agent_name="test", input_text="hello", output_text="ignored")
+        ctx = GuardrailContext(
+            agent_name="test", input_text="hello", output_text="ignored"
+        )
         asyncio.run(judge.check(ctx))
 
         sent_messages = client.generate_structured.call_args[0][0]
@@ -256,6 +282,7 @@ class TestLLMJudge:
 # ---------------------------------------------------------------------------
 # StructuredRouter
 # ---------------------------------------------------------------------------
+
 
 class TestStructuredRouter:
     class _Category(BaseModel):

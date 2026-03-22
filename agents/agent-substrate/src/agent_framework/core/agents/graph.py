@@ -8,6 +8,7 @@ it does not execute anything. Flows build a graph via to_graph() so that:
 * Mermaid diagrams can be embedded in docs or Markdown reports.
 * Jupyter notebooks can render an interactive visualization via draw().
 """
+
 from __future__ import annotations
 
 import base64
@@ -19,27 +20,52 @@ from typing import Any, Dict, List, Literal, Optional
 NodeType = Literal["agent", "flow", "condition", "input", "output"]
 
 _THEMES = {
-    "dark": {"bg": "#0f0f1a", "card_bg": "#16213e", "text": "#e2e8f0", "border": "#4a5568", "mermaid_theme": "dark"},
-    "light": {"bg": "#f8fafc", "card_bg": "#ffffff", "text": "#1e293b", "border": "#e2e8f0", "mermaid_theme": "default"},
-    "forest": {"bg": "#0d1117", "card_bg": "#161b22", "text": "#c9d1d9", "border": "#30363d", "mermaid_theme": "forest"},
+    "dark": {
+        "bg": "#0f0f1a",
+        "card_bg": "#16213e",
+        "text": "#e2e8f0",
+        "border": "#4a5568",
+        "mermaid_theme": "dark",
+    },
+    "light": {
+        "bg": "#f8fafc",
+        "card_bg": "#ffffff",
+        "text": "#1e293b",
+        "border": "#e2e8f0",
+        "mermaid_theme": "default",
+    },
+    "forest": {
+        "bg": "#0d1117",
+        "card_bg": "#161b22",
+        "text": "#c9d1d9",
+        "border": "#30363d",
+        "mermaid_theme": "forest",
+    },
 }
 
 
 @dataclass
 class FlowNode:
     """A single node in the flow topology."""
+
     id: str
     label: str
     node_type: NodeType = "agent"
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"id": self.id, "label": self.label, "node_type": self.node_type, "metadata": self.metadata}
+        return {
+            "id": self.id,
+            "label": self.label,
+            "node_type": self.node_type,
+            "metadata": self.metadata,
+        }
 
 
 @dataclass
 class FlowEdge:
     """A directed edge between two FlowNode instances."""
+
     source: str
     target: str
     label: Optional[str] = None
@@ -66,6 +92,7 @@ class FlowGraph:
         graph.draw(output="mermaid")   # print raw Mermaid text
         payload = graph.to_dict()      # JSON for REST API
     """
+
     nodes: List[FlowNode] = field(default_factory=list)
     edges: List[FlowEdge] = field(default_factory=list)
     name: Optional[str] = None
@@ -79,17 +106,21 @@ class FlowGraph:
         return self
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"name": self.name, "nodes": [n.to_dict() for n in self.nodes], "edges": [e.to_dict() for e in self.edges]}
+        return {
+            "name": self.name,
+            "nodes": [n.to_dict() for n in self.nodes],
+            "edges": [e.to_dict() for e in self.edges],
+        }
 
     def to_mermaid(self) -> str:
         """Render as a Mermaid flowchart LR diagram."""
         # node_type -> (open_delim, close_delim) for Mermaid node shapes
         _SHAPE = {
-            "input":     ('(["', '"])'),   # stadium / rounded rect
-            "output":    ('(["', '"])'),   # stadium / rounded rect
-            "condition": ('{',   '}'),     # diamond / rhombus
-            "flow":      ('(["', '"])'),   # stadium
-            "agent":     ('["',  '"]'),    # rectangle with quoted label
+            "input": ('(["', '"])'),  # stadium / rounded rect
+            "output": ('(["', '"])'),  # stadium / rounded rect
+            "condition": ("{", "}"),  # diamond / rhombus
+            "flow": ('(["', '"])'),  # stadium
+            "agent": ('["', '"]'),  # rectangle with quoted label
         }
         lines = ["flowchart LR"]
         for node in self.nodes:
@@ -126,30 +157,34 @@ class FlowGraph:
 
     def _display_png(self, mermaid_code: str, display: Any, Image: Any) -> None:
         try:
-            payload = json.dumps({"code": mermaid_code, "mermaid": {"theme": "default"}})
+            payload = json.dumps(
+                {"code": mermaid_code, "mermaid": {"theme": "default"}}
+            )
             encoded = base64.urlsafe_b64encode(payload.encode()).decode()
             display(Image(url=f"https://mermaid.ink/img/{encoded}", width=900))
         except Exception as exc:
             print(f"[FlowGraph.draw] PNG render failed ({exc}). Mermaid fallback:")
             print(mermaid_code)
 
-    def _display_html(self, mermaid_code: str, theme: str, display: Any, HTML: Any) -> None:
+    def _display_html(
+        self, mermaid_code: str, theme: str, display: Any, HTML: Any
+    ) -> None:
         t = _THEMES.get(theme, _THEMES["dark"])
         uid = _uuid.uuid4().hex[:8]
         title = self.name or "Flow Graph"
         badge = f"{len(self.nodes)} nodes \u00b7 {len(self.edges)} edges"
         html = f"""
-<div id="fg-{uid}" style="background:{t['bg']};border:1px solid {t['border']};border-radius:12px;padding:20px 24px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:8px 0;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid {t['border']};">
-    <span style="color:{t['text']};font-weight:600;font-size:14px;">&#x229E; {title}</span>
+<div id="fg-{uid}" style="background:{t["bg"]};border:1px solid {t["border"]};border-radius:12px;padding:20px 24px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:8px 0;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid {t["border"]};">
+    <span style="color:{t["text"]};font-weight:600;font-size:14px;">&#x229E; {title}</span>
     <div style="display:flex;gap:8px;align-items:center;">
-      <button id="fg-zoom-in-{uid}" style="background:{t['card_bg']};color:{t['text']};border:1px solid {t['border']};border-radius:4px;padding:2px 10px;cursor:pointer;font-size:16px;font-weight:600;line-height:1.6;">+</button>
-      <button id="fg-zoom-out-{uid}" style="background:{t['card_bg']};color:{t['text']};border:1px solid {t['border']};border-radius:4px;padding:2px 10px;cursor:pointer;font-size:16px;font-weight:600;line-height:1.6;">−</button>
+      <button id="fg-zoom-in-{uid}" style="background:{t["card_bg"]};color:{t["text"]};border:1px solid {t["border"]};border-radius:4px;padding:2px 10px;cursor:pointer;font-size:16px;font-weight:600;line-height:1.6;">+</button>
+      <button id="fg-zoom-out-{uid}" style="background:{t["card_bg"]};color:{t["text"]};border:1px solid {t["border"]};border-radius:4px;padding:2px 10px;cursor:pointer;font-size:16px;font-weight:600;line-height:1.6;">−</button>
       <span id="fg-zoom-label-{uid}" style="color:#718096;font-size:11px;width:36px;text-align:center;">100%</span>
       <span style="color:#718096;font-size:11px;margin-left:4px;">{badge}</span>
     </div>
   </div>
-  <div id="fg-container-{uid}" style="overflow:auto;background:{t['card_bg']};border-radius:8px;padding:24px;position:relative;min-height:300px;">
+  <div id="fg-container-{uid}" style="overflow:auto;background:{t["card_bg"]};border-radius:8px;padding:24px;position:relative;min-height:300px;">
     <div id="fg-svg-wrapper-{uid}" style="transform-origin:top left;transition:transform 0.15s ease;display:inline-block;min-width:100%;">
       <pre id="fg-pre-{uid}" style="display:none;">{mermaid_code}</pre>
     </div>
@@ -159,7 +194,7 @@ class FlowGraph:
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
   mermaid.initialize({{
     startOnLoad: false,
-    theme: '{t['mermaid_theme']}',
+    theme: '{t["mermaid_theme"]}',
     flowchart: {{curve:'basis', nodeSpacing:60, rankSpacing:80, padding:30, useMaxWidth:false}},
     securityLevel: 'loose'
   }});

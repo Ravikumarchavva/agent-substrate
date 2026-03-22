@@ -10,6 +10,7 @@ All I/O is delegated to ``aiofiles`` (asyncio-friendly) with fallback to
 ``anyio.to_thread.run_sync`` for zero-copy reads on platforms where
 aiofiles is unavailable.
 """
+
 from __future__ import annotations
 
 import os
@@ -36,7 +37,9 @@ class LocalFileStore(FileStore):
     # ── lifecycle ────────────────────────────────────────────────────────
 
     async def startup(self) -> None:
-        await anyio.to_thread.run_sync(lambda: self._root.mkdir(parents=True, exist_ok=True))
+        await anyio.to_thread.run_sync(
+            lambda: self._root.mkdir(parents=True, exist_ok=True)
+        )
 
     # ── helpers ──────────────────────────────────────────────────────────
 
@@ -61,7 +64,9 @@ class LocalFileStore(FileStore):
         metadata: dict[str, str] | None = None,
     ) -> FileRef:
         path = self._abs(key)
-        await anyio.to_thread.run_sync(lambda: path.parent.mkdir(parents=True, exist_ok=True))
+        await anyio.to_thread.run_sync(
+            lambda: path.parent.mkdir(parents=True, exist_ok=True)
+        )
 
         if isinstance(data, bytes):
             blob = data
@@ -89,7 +94,9 @@ class LocalFileStore(FileStore):
             raise FileNotFoundError(key)
         return await anyio.to_thread.run_sync(path.read_bytes)
 
-    async def get_stream(self, key: str, chunk_size: int = 1024 * 256) -> AsyncIterator[bytes]:
+    async def get_stream(
+        self, key: str, chunk_size: int = 1024 * 256
+    ) -> AsyncIterator[bytes]:
         path = self._abs(key)
         if not path.is_file():
             raise FileNotFoundError(key)
@@ -210,7 +217,9 @@ class LocalFileStore(FileStore):
         if not src.is_file():
             raise FileNotFoundError(src_key)
 
-        await anyio.to_thread.run_sync(lambda: dst.parent.mkdir(parents=True, exist_ok=True))
+        await anyio.to_thread.run_sync(
+            lambda: dst.parent.mkdir(parents=True, exist_ok=True)
+        )
         await anyio.to_thread.run_sync(shutil.copy2, src, dst)
 
         return await self.head(dst_key)

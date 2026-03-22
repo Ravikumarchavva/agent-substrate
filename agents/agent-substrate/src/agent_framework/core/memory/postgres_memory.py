@@ -17,6 +17,7 @@ Security:
   - All queries use parameterized ORM operations — no raw SQL string interpolation.
   - Session IDs validated before every operation.
 """
+
 from __future__ import annotations
 
 import logging
@@ -66,21 +67,22 @@ def _validate_session_id(session_id: str) -> None:
 # ORM Models (memory-specific, separate Base from server models)
 # ---------------------------------------------------------------------------
 
+
 class MemoryBase(DeclarativeBase):
     """Separate declarative base for the memory subsystem."""
+
     pass
 
 
 class MemorySession(MemoryBase):
     """Persistent session record."""
+
     __tablename__ = "memory_sessions"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     agent_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="active"
-    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         "metadata", JSONB, default=dict
     )
@@ -108,6 +110,7 @@ class MemorySession(MemoryBase):
 
 class MemoryMessage(MemoryBase):
     """Single message stored for a session."""
+
     __tablename__ = "memory_messages"
     __table_args__ = (
         UniqueConstraint("session_id", "sequence", name="uq_session_sequence"),
@@ -142,6 +145,7 @@ class MemoryMessage(MemoryBase):
 # ---------------------------------------------------------------------------
 # PostgresMemory
 # ---------------------------------------------------------------------------
+
 
 class PostgresMemory:
     """Async PostgreSQL-backed long-term message store.
@@ -236,9 +240,7 @@ class PostgresMemory:
         async with factory() as db:
             return await db.get(MemorySession, session_id)
 
-    async def update_session_status(
-        self, session_id: str, status: str
-    ) -> None:
+    async def update_session_status(self, session_id: str, status: str) -> None:
         """Update the session status (active / closed / archived)."""
         _validate_session_id(session_id)
         factory = self._get_session()
@@ -271,9 +273,7 @@ class PostgresMemory:
         """List sessions with optional filters."""
         factory = self._get_session()
         async with factory() as db:
-            stmt = select(MemorySession).order_by(
-                MemorySession.updated_at.desc()
-            )
+            stmt = select(MemorySession).order_by(MemorySession.updated_at.desc())
             if agent_name is not None:
                 stmt = stmt.where(MemorySession.agent_name == agent_name)
             if user_id is not None:
@@ -304,9 +304,7 @@ class PostgresMemory:
             # session (fixes TOCTOU race on sequence counter).
             # Note: We can't use FOR UPDATE on the aggregate MAX() query directly,
             # so we lock the parent session row instead.
-            session_obj = await db.get(
-                MemorySession, session_id, with_for_update=True
-            )
+            session_obj = await db.get(MemorySession, session_id, with_for_update=True)
             if session_obj is None:
                 raise ValueError(f"Session '{session_id}' not found")
 
@@ -320,20 +318,20 @@ class PostgresMemory:
             # Bulk insert messages
             for i, msg in enumerate(messages, start=max_seq + 1):
                 payload = serialize_message(msg)
-                db.add(MemoryMessage(
-                    session_id=session_id,
-                    sequence=i,
-                    message_type=payload.get("type", type(msg).__name__),
-                    payload=payload,
-                ))
+                db.add(
+                    MemoryMessage(
+                        session_id=session_id,
+                        sequence=i,
+                        message_type=payload.get("type", type(msg).__name__),
+                        payload=payload,
+                    )
+                )
 
             # Update session message count
             session_obj.message_count = max_seq + len(messages)
 
             await db.commit()
-            logger.debug(
-                "Saved %d messages for session %s", len(messages), session_id
-            )
+            logger.debug("Saved %d messages for session %s", len(messages), session_id)
             return len(messages)
 
     async def load_messages(
@@ -387,9 +385,7 @@ class PostgresMemory:
         _validate_session_id(session_id)
         factory = self._get_session()
         async with factory() as db:
-            stmt = delete(MemoryMessage).where(
-                MemoryMessage.session_id == session_id
-            )
+            stmt = delete(MemoryMessage).where(MemoryMessage.session_id == session_id)
             await db.execute(stmt)
 
             session_obj = await db.get(MemorySession, session_id)

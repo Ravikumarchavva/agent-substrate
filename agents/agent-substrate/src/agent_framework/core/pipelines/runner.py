@@ -56,6 +56,7 @@ logger = logging.getLogger("agent_framework.pipelines.runner")
 # Schema name → Pydantic class mapping for built-in guardrail schemas
 _GUARDRAIL_SCHEMAS: Dict[str, Any] = {}
 
+
 def _load_guardrail_schemas() -> Dict[str, Any]:
     """Lazy-load to avoid circular imports."""
     global _GUARDRAIL_SCHEMAS
@@ -64,6 +65,7 @@ def _load_guardrail_schemas() -> Dict[str, Any]:
             ContentSafetyJudge,
             RelevanceJudge,
         )
+
         _GUARDRAIL_SCHEMAS = {
             "ContentSafetyJudge": ContentSafetyJudge,
             "RelevanceJudge": RelevanceJudge,
@@ -84,7 +86,9 @@ class PipelineRunner:
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
-    ) -> Union[ReActAgent, StructuredRouter, "ConditionPipelineRunner", "WhilePipelineRunner"]:
+    ) -> Union[
+        ReActAgent, StructuredRouter, "ConditionPipelineRunner", "WhilePipelineRunner"
+    ]:
         """Build the pipeline graph into a runnable agent or router.
 
         Topology detection (in priority order):
@@ -100,7 +104,8 @@ class PipelineRunner:
         while_nodes = config.nodes_by_type(NodeType.WHILE)
         if while_nodes:
             return await self._build_while_pipeline(
-                config, while_nodes[0],
+                config,
+                while_nodes[0],
                 tools_registry=tools_registry,
                 model_client=model_client,
                 redis_memory=redis_memory,
@@ -113,7 +118,8 @@ class PipelineRunner:
         condition_nodes = config.nodes_by_type(NodeType.CONDITION)
         if condition_nodes:
             return await self._build_condition_pipeline(
-                config, condition_nodes[0],
+                config,
+                condition_nodes[0],
                 tools_registry=tools_registry,
                 model_client=model_client,
                 redis_memory=redis_memory,
@@ -126,7 +132,8 @@ class PipelineRunner:
         router_nodes = config.nodes_by_type(NodeType.ROUTER)
         if router_nodes:
             return await self._build_router(
-                config, router_nodes[0],
+                config,
+                router_nodes[0],
                 tools_registry=tools_registry,
                 model_client=model_client,
                 redis_memory=redis_memory,
@@ -140,7 +147,8 @@ class PipelineRunner:
             raise ValueError("Pipeline has no agent, router, or condition node")
 
         agent = await self._build_agent(
-            config, agent_nodes[0],
+            config,
+            agent_nodes[0],
             tools_registry=tools_registry,
             model_client=model_client,
             redis_memory=redis_memory,
@@ -194,7 +202,8 @@ class PipelineRunner:
             raise ValueError("While loop has no body agent connected")
 
         body_agent = await self._build_agent(
-            config, body_agent_node,
+            config,
+            body_agent_node,
             tools_registry=tools_registry,
             model_client=model_client,
             redis_memory=redis_memory,
@@ -206,7 +215,8 @@ class PipelineRunner:
         done_agent = None
         if done_agent_node:
             done_agent = await self._build_agent(
-                config, done_agent_node,
+                config,
+                done_agent_node,
                 tools_registry=tools_registry,
                 model_client=model_client,
                 redis_memory=redis_memory,
@@ -241,21 +251,27 @@ class PipelineRunner:
         upstream_agents = [
             config.node_by_id(e.source)
             for e in config.edges_to(condition_node.id)
-            if config.node_by_id(e.source) and config.node_by_id(e.source).node_type == NodeType.AGENT
+            if config.node_by_id(e.source)
+            and config.node_by_id(e.source).node_type == NodeType.AGENT
         ]
         if not upstream_agents:
             # Fall back to the first agent in the graph
             upstream_agents = config.nodes_by_type(NodeType.AGENT)[:1]
 
-        upstream_agent = await self._build_agent(
-            config, upstream_agents[0],
-            tools_registry=tools_registry,
-            model_client=model_client,
-            redis_memory=redis_memory,
-            model_context=model_context,
-            session_id=session_id,
-            hitl_bridge=hitl_bridge,
-        ) if upstream_agents else None
+        upstream_agent = (
+            await self._build_agent(
+                config,
+                upstream_agents[0],
+                tools_registry=tools_registry,
+                model_client=model_client,
+                redis_memory=redis_memory,
+                model_context=model_context,
+                session_id=session_id,
+                hitl_bridge=hitl_bridge,
+            )
+            if upstream_agents
+            else None
+        )
 
         # Build branch agents (condition branches and else)
         branch_agents: Dict[str, ReActAgent] = {}
@@ -266,7 +282,8 @@ class PipelineRunner:
             if not target_node or target_node.node_type != NodeType.AGENT:
                 continue
             branch_agent = await self._build_agent(
-                config, target_node,
+                config,
+                target_node,
                 tools_registry=tools_registry,
                 model_client=model_client,
                 redis_memory=redis_memory,
@@ -305,14 +322,16 @@ class PipelineRunner:
 
         # -- Tools: find connected tool nodes --
         tool_edges = [
-            e for e in config.edges_from(agent_node.id)
+            e
+            for e in config.edges_from(agent_node.id)
             if e.edge_type == EdgeType.AGENT_TOOL
         ]
         tools = self._resolve_tools(config, tool_edges, tools_registry)
 
         # -- MCP server nodes: connect and inject their tools --
         mcp_edges = [
-            e for e in config.edges_to(agent_node.id)
+            e
+            for e in config.edges_to(agent_node.id)
             if e.edge_type == EdgeType.AGENT_MCP
         ]
         mcp_tools = await self._resolve_mcp_tools(config, mcp_edges)
@@ -328,14 +347,18 @@ class PipelineRunner:
         if approval_nodes and hitl_bridge is not None:
             try:
                 from agent_framework.extensions.tools.human_input import AskHumanTool
+
                 tools = [*tools, AskHumanTool(bridge=hitl_bridge)]
-                logger.info("Injected AskHumanTool for approval node %s", approval_nodes[0].id)
+                logger.info(
+                    "Injected AskHumanTool for approval node %s", approval_nodes[0].id
+                )
             except Exception as exc:
                 logger.warning("Could not inject AskHumanTool: %s", exc)
 
         # -- Guardrails --
         guardrail_edges = [
-            e for e in config.edges_from(agent_node.id)
+            e
+            for e in config.edges_from(agent_node.id)
             if e.edge_type == EdgeType.AGENT_GUARDRAIL
         ]
         input_guardrails, output_guardrails = self._resolve_guardrails(
@@ -352,7 +375,10 @@ class PipelineRunner:
 
         # -- Model context --
         if model_context is None:
-            from agent_framework.core.context.implementations import SlidingWindowContext
+            from agent_framework.core.context.implementations import (
+                SlidingWindowContext,
+            )
+
             window = cfg.get("context_window", 40)
             model_context = SlidingWindowContext(max_messages=window)
 
@@ -362,6 +388,7 @@ class PipelineRunner:
             # Build a new client with the different model, preserving the API key.
             # Try multiple attribute paths: self.api_key → self.client.api_key → env var
             from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+
             api_key = (
                 getattr(model_client, "api_key", None)
                 or getattr(getattr(model_client, "client", None), "api_key", None)
@@ -377,7 +404,9 @@ class PipelineRunner:
             model_client=agent_client,
             model_context=model_context,
             tools=tools,
-            system_instructions=cfg.get("system_prompt", "You are a helpful assistant."),
+            system_instructions=cfg.get(
+                "system_prompt", "You are a helpful assistant."
+            ),
             memory=memory,
             max_iterations=cfg.get("max_iterations", 10),
             input_guardrails=input_guardrails or None,
@@ -409,7 +438,8 @@ class PipelineRunner:
 
         # Find route edges → build sub-agents for each
         route_edges = [
-            e for e in config.edges_from(router_node.id)
+            e
+            for e in config.edges_from(router_node.id)
             if e.edge_type == EdgeType.ROUTER_ROUTE
         ]
 
@@ -418,7 +448,8 @@ class PipelineRunner:
             target_node = config.node_by_id(edge.target)
             if target_node and target_node.node_type == NodeType.AGENT:
                 sub_agent = await self._build_agent(
-                    config, target_node,
+                    config,
+                    target_node,
                     tools_registry=tools_registry,
                     model_client=model_client,
                     redis_memory=redis_memory,
@@ -488,7 +519,9 @@ class PipelineRunner:
                     command = cfg.get("command", "")
                     args: List[str] = cfg.get("args") or []
                     if not command:
-                        logger.warning("MCP node %r has no command — skipped", mcp_node.id)
+                        logger.warning(
+                            "MCP node %r has no command — skipped", mcp_node.id
+                        )
                         continue
                     await client.connect_stdio(command, args)
                 else:
@@ -517,7 +550,10 @@ class PipelineRunner:
                 )
             except Exception as exc:
                 logger.warning(
-                    "Failed to connect MCP server %r (%s): %s", server_name, transport, exc
+                    "Failed to connect MCP server %r (%s): %s",
+                    server_name,
+                    transport,
+                    exc,
                 )
         return result
 
@@ -538,7 +574,9 @@ class PipelineRunner:
                 continue
             gcfg = guard_node.config
             # Frontend sends "schema_name"; fallback to legacy "schema" key
-            schema_name = gcfg.get("schema_name") or gcfg.get("schema", "ContentSafetyJudge")
+            schema_name = gcfg.get("schema_name") or gcfg.get(
+                "schema", "ContentSafetyJudge"
+            )
             schema_cls = schemas.get(schema_name)
             if not schema_cls:
                 logger.warning("Unknown guardrail schema %r — skipped", schema_name)
@@ -547,7 +585,9 @@ class PipelineRunner:
             judge = LLMJudge(
                 client=model_client,
                 schema=schema_cls,
-                system_prompt=gcfg.get("system_prompt", f"Evaluate using {schema_name}."),
+                system_prompt=gcfg.get(
+                    "system_prompt", f"Evaluate using {schema_name}."
+                ),
                 pass_field=gcfg.get("pass_field", "safe"),
                 tripwire_on_fail=gcfg.get("tripwire_on_fail", False),
                 name=guard_node.label or f"judge_{schema_name}",
@@ -571,7 +611,8 @@ class PipelineRunner:
     ) -> BaseMemory:
         """Build the memory backend from the connected memory node."""
         mem_edges = [
-            e for e in config.edges_from(agent_node.id)
+            e
+            for e in config.edges_from(agent_node.id)
             if e.edge_type == EdgeType.AGENT_MEMORY
         ]
         if not mem_edges:
@@ -588,7 +629,9 @@ class PipelineRunner:
             sid = session_id or f"pipeline-{agent_node.id}"
             mem = RedisMemory(
                 session_id=sid,
-                redis_url=redis_memory._redis_url if hasattr(redis_memory, "_redis_url") else "redis://localhost:6379/0",
+                redis_url=redis_memory._redis_url
+                if hasattr(redis_memory, "_redis_url")
+                else "redis://localhost:6379/0",
                 default_ttl=mcfg.get("ttl", 3600),
                 max_messages=mcfg.get("max_messages", 200),
             )
@@ -604,7 +647,8 @@ class PipelineRunner:
     ) -> Optional[SkillManager]:
         """Build a SkillManager if skills are connected."""
         skill_edges = [
-            e for e in config.edges_from(agent_node.id)
+            e
+            for e in config.edges_from(agent_node.id)
             if e.edge_type == EdgeType.AGENT_SKILL
         ]
         if not skill_edges:
@@ -641,7 +685,11 @@ class PipelineRunner:
         if not fields_def:
             # Fallback: simple category + reasoning
             fields_def = [
-                {"name": "category", "type": "str", "description": "The routing category"},
+                {
+                    "name": "category",
+                    "type": "str",
+                    "description": "The routing category",
+                },
                 {"name": "reasoning", "type": "str", "description": "Explanation"},
             ]
 

@@ -17,6 +17,7 @@ Routes that work for both authenticated and anonymous requests:
     async def public_route(user: TokenPayload | None = Depends(optional_current_user)):
         ...
 """
+
 from __future__ import annotations
 
 import logging

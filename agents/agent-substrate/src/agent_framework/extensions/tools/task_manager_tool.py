@@ -10,6 +10,7 @@ The agent calls this tool when approaching complex multi-step questions:
 Each action emits an SSE event via the injected event_emitter so the
 frontend KanbanPanel updates in real-time.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -49,6 +50,7 @@ class TaskManagerTool(BaseTool):
     1. create_list with all planned steps
     2. start_task  → do the work → complete_task  (repeat per step)
     """
+
     risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # writes task state, fires SSE events
 
     def __init__(self, event_emitter: Optional[EventEmitter] = None) -> None:
@@ -147,12 +149,14 @@ class TaskManagerTool(BaseTool):
             task_list = await store.create_task_list(conv_id, tasks)
             self._task_lists[conv_id] = task_list.id
 
-            await self._fire({
-                "type": "task_list_created",
-                "task_list": task_list.to_dict(),
-            })
+            await self._fire(
+                {
+                    "type": "task_list_created",
+                    "task_list": task_list.to_dict(),
+                }
+            )
 
-            names = "\n".join(f"  {i+1}. {t}" for i, t in enumerate(tasks))
+            names = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(tasks))
             return _ok(
                 f"Task list created ({len(tasks)} tasks):\n{names}\n\n"
                 f"Now call start_task (no task_id needed — auto-advances) "
@@ -167,9 +171,7 @@ class TaskManagerTool(BaseTool):
                 task_list_id = existing.id
                 self._task_lists[conv_id] = task_list_id
             else:
-                return _err(
-                    "No active task list. Call action=create_list first."
-                )
+                return _err("No active task list. Call action=create_list first.")
 
         # ── start_task ───────────────────────────────────────────────
         if action == "start_task":
@@ -181,16 +183,20 @@ class TaskManagerTool(BaseTool):
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            await self._fire({
-                "type": "task_updated",
-                "task_list_id": task_list_id,
-                "task": _task_dict(updated),
-            })
+            await self._fire(
+                {
+                    "type": "task_updated",
+                    "task_list_id": task_list_id,
+                    "task": _task_dict(updated),
+                }
+            )
             return _ok(f"Started: {updated.title}")
 
         # ── complete_task ─────────────────────────────────────────────
         if action == "complete_task":
-            resolved = self._resolve_task_id(task_id, "in_progress", store, task_list_id)
+            resolved = self._resolve_task_id(
+                task_id, "in_progress", store, task_list_id
+            )
             if not resolved:
                 return _err("No in-progress tasks to complete.")
 
@@ -198,15 +204,19 @@ class TaskManagerTool(BaseTool):
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            await self._fire({
-                "type": "task_updated",
-                "task_list_id": task_list_id,
-                "task": _task_dict(updated),
-            })
+            await self._fire(
+                {
+                    "type": "task_updated",
+                    "task_list_id": task_list_id,
+                    "task": _task_dict(updated),
+                }
+            )
             return _ok(f"Completed: {updated.title}")
         # ── fail_task ─────────────────────────────────────────────
         if action == "fail_task":
-            resolved = self._resolve_task_id(task_id, "in_progress", store, task_list_id)
+            resolved = self._resolve_task_id(
+                task_id, "in_progress", store, task_list_id
+            )
             if not resolved:
                 # Fall back to any todo task if none is in progress
                 resolved = self._resolve_task_id(task_id, "todo", store, task_list_id)
@@ -217,11 +227,13 @@ class TaskManagerTool(BaseTool):
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            await self._fire({
-                "type": "task_updated",
-                "task_list_id": task_list_id,
-                "task": _task_dict(updated),
-            })
+            await self._fire(
+                {
+                    "type": "task_updated",
+                    "task_list_id": task_list_id,
+                    "task": _task_dict(updated),
+                }
+            )
             return _ok(f"Marked as failed: {updated.title}")
         # ── add_task ─────────────────────────────────────────────────
         if action == "add_task":
@@ -230,11 +242,13 @@ class TaskManagerTool(BaseTool):
 
             new_tasks = await store.add_tasks(task_list_id, tasks)
             for t in new_tasks:
-                await self._fire({
-                    "type": "task_added",
-                    "task_list_id": task_list_id,
-                    "task": _task_dict(t),
-                })
+                await self._fire(
+                    {
+                        "type": "task_added",
+                        "task_list_id": task_list_id,
+                        "task": _task_dict(t),
+                    }
+                )
             return _ok(f"Added {len(new_tasks)} task(s).")
 
         # ── delete_task ───────────────────────────────────────────────
@@ -246,11 +260,13 @@ class TaskManagerTool(BaseTool):
             if not deleted:
                 return _err(f"Task {task_id!r} not found.")
 
-            await self._fire({
-                "type": "task_deleted",
-                "task_list_id": task_list_id,
-                "task_id": task_id,
-            })
+            await self._fire(
+                {
+                    "type": "task_deleted",
+                    "task_list_id": task_list_id,
+                    "task_id": task_id,
+                }
+            )
             return _ok(f"Deleted task {task_id}.")
 
         # ── update_title ──────────────────────────────────────────────
@@ -262,11 +278,13 @@ class TaskManagerTool(BaseTool):
             if not updated:
                 return _err(f"Task {task_id!r} not found.")
 
-            await self._fire({
-                "type": "task_updated",
-                "task_list_id": task_list_id,
-                "task": _task_dict(updated),
-            })
+            await self._fire(
+                {
+                    "type": "task_updated",
+                    "task_list_id": task_list_id,
+                    "task": _task_dict(updated),
+                }
+            )
             return _ok(f"Renamed task to: {updated.title}")
 
         return _err(f"Unknown action: {action!r}")
@@ -275,7 +293,9 @@ class TaskManagerTool(BaseTool):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _first_with_status(self, status: str, store, task_list_id: Optional[str]) -> Optional[str]:
+    def _first_with_status(
+        self, status: str, store, task_list_id: Optional[str]
+    ) -> Optional[str]:
         """Return the first task ID matching the given status."""
         if not task_list_id:
             return None
@@ -351,6 +371,7 @@ class TaskManagerTool(BaseTool):
 # Tiny helpers
 # ---------------------------------------------------------------------------
 
+
 def _ok(message: str) -> ToolResult:
     return ToolResult(
         content=[{"type": "text", "text": message}],
@@ -366,4 +387,9 @@ def _err(message: str) -> ToolResult:
 
 
 def _task_dict(task: Task) -> Dict[str, Any]:
-    return {"id": task.id, "title": task.title, "status": task.status, "order": task.order}
+    return {
+        "id": task.id,
+        "title": task.title,
+        "status": task.status,
+        "order": task.order,
+    }

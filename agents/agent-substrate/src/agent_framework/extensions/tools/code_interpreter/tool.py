@@ -50,6 +50,7 @@ class CodeInterpreterTool(BaseTool):
       - **HTTP mode**: routes to the code-interpreter service via HTTP
       - **Direct mode**: uses a local SessionManager (testing only)
     """
+
     risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # executes arbitrary code
 
     def __init__(
@@ -117,6 +118,7 @@ class CodeInterpreterTool(BaseTool):
             url = os.environ.get("CODE_INTERPRETER_URL", "")
             if url:
                 from .http_client import CodeInterpreterClient
+
                 self._http_client = CodeInterpreterClient(
                     base_url=url,
                     auth_token=os.environ.get("CI_AUTH_TOKEN", ""),
@@ -163,7 +165,10 @@ class CodeInterpreterTool(BaseTool):
 
         logger.info(
             "code_interpreter[%s]: %s %d bytes (timeout=%ds)",
-            self.session_id, exec_type, len(code), timeout,
+            self.session_id,
+            exec_type,
+            len(code),
+            timeout,
         )
 
         if self._mode == "http":
@@ -172,19 +177,28 @@ class CodeInterpreterTool(BaseTool):
             return await self._execute_direct(code, exec_type, timeout)
         else:
             return ToolResult(
-                content=[{"type": "text", "text": json.dumps({
-                    "success": False,
-                    "error": (
-                        "Code interpreter not configured. "
-                        "Set CODE_INTERPRETER_URL env var or provide http_client."
-                    ),
-                })}],
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "success": False,
+                                "error": (
+                                    "Code interpreter not configured. "
+                                    "Set CODE_INTERPRETER_URL env var or provide http_client."
+                                ),
+                            }
+                        ),
+                    }
+                ],
                 isError=True,
             )
 
     # ── HTTP mode ─────────────────────────────────────────────────────────────
 
-    async def _execute_http(self, code: str, exec_type: str, timeout: int) -> ToolResult:
+    async def _execute_http(
+        self, code: str, exec_type: str, timeout: int
+    ) -> ToolResult:
         """Execute via the code-interpreter HTTP service."""
         try:
             resp = await self._http_client.execute(
@@ -196,9 +210,17 @@ class CodeInterpreterTool(BaseTool):
         except Exception as exc:
             logger.error("code_interpreter HTTP error: %s", exc, exc_info=True)
             return ToolResult(
-                content=[{"type": "text", "text": json.dumps({
-                    "success": False, "error": f"{type(exc).__name__}: {exc}",
-                })}],
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "success": False,
+                                "error": f"{type(exc).__name__}: {exc}",
+                            }
+                        ),
+                    }
+                ],
                 isError=True,
             )
 
@@ -218,11 +240,13 @@ class CodeInterpreterTool(BaseTool):
             elif output.type.value == "error":
                 text_parts.append(f"[error] {output.content.rstrip()}")
             elif output.type.value == "image":
-                images.append({
-                    "name": output.name or "figure.png",
-                    "format": output.format or "png",
-                    "data": output.content,  # base64
-                })
+                images.append(
+                    {
+                        "name": output.name or "figure.png",
+                        "format": output.format or "png",
+                        "data": output.content,  # base64
+                    }
+                )
                 text_parts.append(f"[Generated {output.name or 'figure.png'}]")
             elif output.type.value == "file":
                 text_parts.append(
@@ -252,7 +276,9 @@ class CodeInterpreterTool(BaseTool):
 
     # ── Direct mode ───────────────────────────────────────────────────────────
 
-    async def _execute_direct(self, code: str, exec_type: str, timeout: int) -> ToolResult:
+    async def _execute_direct(
+        self, code: str, exec_type: str, timeout: int
+    ) -> ToolResult:
         """Execute via local SessionManager (testing / local dev)."""
         if self._session_manager is None:
             await self.start()
@@ -267,9 +293,17 @@ class CodeInterpreterTool(BaseTool):
         except Exception as exc:
             logger.error("code_interpreter direct error: %s", exc, exc_info=True)
             return ToolResult(
-                content=[{"type": "text", "text": json.dumps({
-                    "success": False, "error": f"{type(exc).__name__}: {exc}",
-                })}],
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "success": False,
+                                "error": f"{type(exc).__name__}: {exc}",
+                            }
+                        ),
+                    }
+                ],
                 isError=True,
             )
 
@@ -292,16 +326,19 @@ class CodeInterpreterTool(BaseTool):
                 elif otype == "error":
                     text_parts.append(f"[error] {o['content'].rstrip()}")
                 elif otype == "image":
-                    images.append({
-                        "name": o.get("name", "figure.png"),
-                        "format": o.get("format", "png"),
-                        "data": o["content"],
-                    })
+                    images.append(
+                        {
+                            "name": o.get("name", "figure.png"),
+                            "format": o.get("format", "png"),
+                            "data": o["content"],
+                        }
+                    )
                     text_parts.append(f"[Generated {o.get('name', 'figure.png')}]")
 
             text = "\n".join(text_parts) if text_parts else "(no output)"
             data = {
-                "success": success, "output": text,
+                "success": success,
+                "output": text,
                 "execution_time": result.get("execution_time", 0),
                 "cell_id": result.get("cell_id"),
                 "exec_type": exec_type,
@@ -326,20 +363,37 @@ class CodeInterpreterTool(BaseTool):
             text = "\n".join(parts) if parts else "(no output)"
 
             return ToolResult(
-                content=[{"type": "text", "text": json.dumps({
-                    "success": True, "output": text,
-                    "execution_time": result.get("execution_time", 0),
-                    "cell_id": result.get("cell_id"), "exec_type": exec_type,
-                })}],
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "success": True,
+                                "output": text,
+                                "execution_time": result.get("execution_time", 0),
+                                "cell_id": result.get("cell_id"),
+                                "exec_type": exec_type,
+                            }
+                        ),
+                    }
+                ],
                 isError=False,
             )
         else:
             return ToolResult(
-                content=[{"type": "text", "text": json.dumps({
-                    "success": False, "error": result.get("error", "Unknown error"),
-                    "output": result.get("output", ""),
-                    "stderr": result.get("stderr", ""),
-                    "exec_type": exec_type,
-                })}],
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "success": False,
+                                "error": result.get("error", "Unknown error"),
+                                "output": result.get("output", ""),
+                                "stderr": result.get("stderr", ""),
+                                "exec_type": exec_type,
+                            }
+                        ),
+                    }
+                ],
                 isError=True,
             )

@@ -1,10 +1,11 @@
-﻿"""Base agent contract.
+"""Base agent contract.
 
 Every agent type (ReAct, Plan-and-Execute, Custom) implements this interface.
 The contract is deliberately minimal:
   - run()        -> full result
   - run_stream() -> async iterator of partial events
 """
+
 from __future__ import annotations
 
 from typing import Any, AsyncIterator, List, Optional
@@ -23,6 +24,7 @@ from agent_framework.core.guardrails.base_guardrail import BaseGuardrail
 # ---------------------------------------------------------------------------
 # PromptEnricher -- protocol that decouples core from extensions.skills
 # ---------------------------------------------------------------------------
+
 
 @runtime_checkable
 class PromptEnricher(Protocol):
@@ -94,4 +96,6 @@ class BaseAgent(ABC):
             await self.memory.clear()
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__}(name={self.name!r}, tools={len(self.tools)})>"
+        return (
+            f"<{self.__class__.__name__}(name={self.name!r}, tools={len(self.tools)})>"
+        )

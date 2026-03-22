@@ -3,6 +3,7 @@
 Extracted from monolith server/services/__init__.py. Pure async
 functions that operate on the Conversation models.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -59,7 +60,9 @@ async def list_threads(
     )
 
     query = (
-        select(Thread, func.coalesce(count_subq.c.message_count, 0).label("message_count"))
+        select(
+            Thread, func.coalesce(count_subq.c.message_count, 0).label("message_count")
+        )
         .outerjoin(count_subq, Thread.id == count_subq.c.thread_id)
         .order_by(Thread.updated_at.desc())
         .limit(limit)
@@ -108,9 +111,7 @@ async def update_thread(
 
     values["updated_at"] = datetime.now(timezone.utc)
 
-    await db.execute(
-        update(Thread).where(Thread.id == thread_id).values(**values)
-    )
+    await db.execute(update(Thread).where(Thread.id == thread_id).values(**values))
     await db.flush()
     return await get_thread(db, thread_id)
 
@@ -170,11 +171,7 @@ async def get_steps(
     *,
     types: Optional[List[str]] = None,
 ) -> List[Step]:
-    query = (
-        select(Step)
-        .where(Step.thread_id == thread_id)
-        .order_by(Step.created_at)
-    )
+    query = select(Step).where(Step.thread_id == thread_id).order_by(Step.created_at)
     if types:
         query = query.where(Step.type.in_(types))
 
@@ -215,9 +212,7 @@ async def update_step(
     if not values:
         return await get_step(db, step_id)
 
-    await db.execute(
-        update(Step).where(Step.id == step_id).values(**values)
-    )
+    await db.execute(update(Step).where(Step.id == step_id).values(**values))
     await db.flush()
     return await get_step(db, step_id)
 

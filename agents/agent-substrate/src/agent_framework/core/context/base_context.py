@@ -11,6 +11,7 @@ LLM invocation the agent calls ``await context.build(...)`` which may:
 The contract is deliberately minimal so that any strategy can be dropped in
 without modifying the agent loop.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -7,6 +7,7 @@ Envelope fields (per docs/microservices/03-data-ownership-and-contract-standards
   event_id, event_type, event_version, emitted_at, tenant_id, workspace_id,
   actor_id, correlation_id, payload
 """
+
 from __future__ import annotations
 
 import uuid

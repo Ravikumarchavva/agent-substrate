@@ -2,6 +2,7 @@
 
 Entry point: uvicorn agent_framework.services.agent_runtime.app:app --port 8014
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,7 +33,8 @@ def _load_tools():
 async def lifespan(app):
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     conversation_url = os.environ.get(
-        "CONVERSATION_SERVICE_URL", "http://localhost:8012",
+        "CONVERSATION_SERVICE_URL",
+        "http://localhost:8012",
     )
 
     # Redis

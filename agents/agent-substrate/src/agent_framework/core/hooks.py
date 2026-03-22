@@ -23,6 +23,7 @@ Design decisions:
   - Exceptions in hooks are caught and logged — they never crash the agent.
   - Hooks are registered per-agent, not globally, for isolation.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,8 +39,10 @@ logger = logging.getLogger("agent_framework.hooks")
 # Event types
 # ---------------------------------------------------------------------------
 
+
 class HookEvent(str, Enum):
     """Agent lifecycle events that can be hooked."""
+
     RUN_START = "on_run_start"
     RUN_END = "on_run_end"
     STEP_START = "on_step_start"
@@ -50,9 +53,9 @@ class HookEvent(str, Enum):
     TOOL_END = "on_tool_end"
     GUARDRAIL_TRIP = "on_guardrail_trip"
     # Multi-agent flow events
-    HANDOFF = "on_handoff"       # Orchestrator delegates to a sub-agent
-    FLOW_START = "on_flow_start" # A Flow begins execution
-    FLOW_END = "on_flow_end"     # A Flow finishes execution
+    HANDOFF = "on_handoff"  # Orchestrator delegates to a sub-agent
+    FLOW_START = "on_flow_start"  # A Flow begins execution
+    FLOW_END = "on_flow_end"  # A Flow finishes execution
 
 
 # Type alias for hook callbacks — both async and sync callables are accepted;
@@ -66,6 +69,7 @@ HookCallback = Union[
 # ---------------------------------------------------------------------------
 # Hook Manager
 # ---------------------------------------------------------------------------
+
 
 class HookManager:
     """Manages lifecycle hook registrations and dispatching.
@@ -98,9 +102,11 @@ class HookManager:
             async def my_hook(ctx: dict):
                 ...
         """
+
         def decorator(func: HookCallback) -> HookCallback:
             self._hooks[event].append(func)
             return func
+
         return decorator
 
     def register(self, event: HookEvent, callback: HookCallback) -> None:
@@ -162,6 +168,7 @@ class HookManager:
 # Pre-built hook implementations
 # ---------------------------------------------------------------------------
 
+
 class CostTracker:
     """Hook that tracks estimated LLM costs per run.
 
@@ -191,7 +198,9 @@ class CostTracker:
         if model and model in self.DEFAULT_PRICING:
             pricing = self.DEFAULT_PRICING[model]
             self.cost_per_1k_prompt = cost_per_1k_prompt or pricing["prompt"]
-            self.cost_per_1k_completion = cost_per_1k_completion or pricing["completion"]
+            self.cost_per_1k_completion = (
+                cost_per_1k_completion or pricing["completion"]
+            )
         else:
             self.cost_per_1k_prompt = cost_per_1k_prompt or 0.0025
             self.cost_per_1k_completion = cost_per_1k_completion or 0.01
@@ -208,10 +217,9 @@ class CostTracker:
             prompt_tokens = getattr(usage, "prompt_tokens", 0)
             completion_tokens = getattr(usage, "completion_tokens", 0)
 
-            cost = (
-                (prompt_tokens / 1000) * self.cost_per_1k_prompt +
-                (completion_tokens / 1000) * self.cost_per_1k_completion
-            )
+            cost = (prompt_tokens / 1000) * self.cost_per_1k_prompt + (
+                completion_tokens / 1000
+            ) * self.cost_per_1k_completion
             self.total_cost += cost
             self.total_prompt_tokens += prompt_tokens
             self.total_completion_tokens += completion_tokens
@@ -261,7 +269,9 @@ class RunLogger:
     async def log(self, ctx: Dict[str, Any]) -> None:
         event = ctx.get("event", "unknown")
         agent = ctx.get("agent_name", "unknown")
-        logger.log(self.level, f"[HOOK] {event} | agent={agent} | {self._summarize(ctx)}")
+        logger.log(
+            self.level, f"[HOOK] {event} | agent={agent} | {self._summarize(ctx)}"
+        )
         self.events.append(ctx)
 
     @staticmethod

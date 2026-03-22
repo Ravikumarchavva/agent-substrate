@@ -1,4 +1,5 @@
 """MemoryScope — controls how agent memory is shared in multi-agent flows."""
+
 from __future__ import annotations
 
 from enum import Enum

@@ -9,35 +9,36 @@ from uuid import uuid4
 
 from agent_framework.core.messages._types import (
     MediaType,
-    serialize_media_content, deserialize_media_content
+    serialize_media_content,
+    deserialize_media_content,
 )
+
 
 class SystemMessage(BaseClientMessage):
     """System message for agent instructions."""
+
     role: CLIENT_ROLES = "system"
     content: str
     type: Literal["SystemMessage"] = "SystemMessage"
-    
+
     def to_dict(self) -> Dict:
-        return {
-            "role": self.role,
-            "content": self.content,
-            "type": self.type
-        }
-    
+        return {"role": self.role, "content": self.content, "type": self.type}
+
     @classmethod
     def from_dict(cls, data: Dict) -> "SystemMessage":
         return cls(content=data["content"])
 
+
 class UserMessage(BaseClientMessage):
     """User message with text or multimodal content."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     role: CLIENT_ROLES = "user"
     content: List[MediaType]
     name: Optional[str] = None
     type: Literal["UserMessage"] = "UserMessage"
-    
+
     @model_serializer
     def ser_model(self) -> Dict[str, Any]:
         serialized_content = [
@@ -51,27 +52,27 @@ class UserMessage(BaseClientMessage):
         if self.name:
             msg["name"] = self.name
         return msg
-    
+
     def to_dict(self) -> Dict:
         """Convert to dictionary format."""
         return self.ser_model()
-    
+
     @classmethod
     def from_dict(cls, data: Dict) -> "UserMessage":
         """Create from dictionary."""
         return cls(**data)
-    
-    @field_validator("content", mode="before")
 
+    @field_validator("content", mode="before")
     def des_content(cls, v: Any) -> List[MediaType]:
         if isinstance(v, list):
             return [deserialize_media_content(item) for item in v]
         else:
             raise ValueError("Content must be a list")
-   
+
 
 class ToolCallMessage(BaseClientMessage):
     """Represents a single tool call (MCP-compatible)."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     role: CLIENT_ROLES = "tool_call"
@@ -101,23 +102,23 @@ class ToolCallMessage(BaseClientMessage):
             "name": self.name,
             "arguments": self.arguments,
         }
-    
+
     def to_dict(self) -> Dict:
         """Convert to dictionary format."""
         return self.ser_model()
-    
+
     @classmethod
     def from_dict(cls, data: Dict) -> "ToolCallMessage":
         """Create from dictionary."""
         return cls(**data)
-    
+
     def to_mcp_format(self) -> Dict[str, Any]:
         """Convert to MCP tool call format."""
         return {
             "name": self.name,
             "arguments": self.arguments,
         }
-    
+
     def to_openai_format(self) -> Dict[str, Any]:
         """Convert to OpenAI tool call format."""
         return {
@@ -132,8 +133,9 @@ class ToolCallMessage(BaseClientMessage):
 
 class AssistantMessage(BaseClientMessage):
     """Assistant message with optional tool calls."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    
+
     type: Literal["AssistantMessage"] = "AssistantMessage"
     role: CLIENT_ROLES = "assistant"
     name: Optional[str] = None
@@ -142,7 +144,7 @@ class AssistantMessage(BaseClientMessage):
     tool_calls: Optional[List[ToolCallMessage]] = None
     finish_reason: str = "stop"  # e.g., "stop", "tool_call", etc.
     usage: Optional[UsageStats] = None
-    cached: bool = False # Indicates if response used input caching or not
+    cached: bool = False  # Indicates if response used input caching or not
 
     @model_serializer
     def ser_model(self) -> Dict[str, Any]:
@@ -173,28 +175,37 @@ class AssistantMessage(BaseClientMessage):
                     serialized_tool_calls.append(tc)
                 else:
                     serialized_tool_calls.append(
-                        {"name": getattr(tc, "name", None), "arguments": getattr(tc, "arguments", None)}
+                        {
+                            "name": getattr(tc, "name", None),
+                            "arguments": getattr(tc, "arguments", None),
+                        }
                     )
             msg["tool_calls"] = serialized_tool_calls
         if self.usage is not None:
-            msg["usage"] = self.usage.model_dump() if hasattr(self.usage, 'model_dump') else {
-                "prompt_tokens": self.usage.prompt_tokens,
-                "completion_tokens": self.usage.completion_tokens,
-                "total_tokens": self.usage.total_tokens,
-            }
+            msg["usage"] = (
+                self.usage.model_dump()
+                if hasattr(self.usage, "model_dump")
+                else {
+                    "prompt_tokens": self.usage.prompt_tokens,
+                    "completion_tokens": self.usage.completion_tokens,
+                    "total_tokens": self.usage.total_tokens,
+                }
+            )
         return msg
-    
+
     def to_dict(self) -> Dict:
         """Convert to dictionary format."""
         return self.ser_model()
-    
+
     @classmethod
     def from_dict(cls, data: Dict) -> "AssistantMessage":
         """Create from dictionary."""
         return cls(**data)
 
+
 class ToolExecutionResultMessage(BaseClientMessage):
     """Tool execution result message (MCP-compatible)."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     role: CLIENT_ROLES = "tool_response"
@@ -234,7 +245,7 @@ class ToolExecutionResultMessage(BaseClientMessage):
     def to_dict(self) -> Dict:
         """Convert to dictionary format."""
         return self.ser_model()
-    
+
     @classmethod
     def from_dict(cls, data: Dict) -> "ToolExecutionResultMessage":
         """Create from dictionary."""
@@ -252,13 +263,10 @@ class ToolExecutionResultMessage(BaseClientMessage):
         if self.name:
             msg["name"] = self.name
         return msg
-    
+
     @classmethod
     def from_tool_result(
-        cls, 
-        tool_result: ToolResult, 
-        tool_call_id: str, 
-        tool_name: Optional[str] = None
+        cls, tool_result: ToolResult, tool_call_id: str, tool_name: Optional[str] = None
     ) -> "ToolExecutionResultMessage":
         """Create ToolExecutionResultMessage from ToolResult."""
         return cls(
@@ -268,14 +276,14 @@ class ToolExecutionResultMessage(BaseClientMessage):
             isError=tool_result.is_error,
             app_data=tool_result.app_data,
         )
-    
+
     def to_mcp_format(self) -> Dict[str, Any]:
         """Convert to MCP tool result format."""
         return {
             "content": self.content,
             "isError": self.isError,
         }
-    
+
     def to_openai_format(self) -> Dict[str, Any]:
         """Convert to OpenAI tool message format."""
         # OpenAI expects simple string content
@@ -286,10 +294,12 @@ class ToolExecutionResultMessage(BaseClientMessage):
             elif block.get("type") == "image":
                 text_parts.append("[Image]")
             elif block.get("type") == "resource":
-                text_parts.append(f"[Resource: {block.get('resource', {}).get('uri', '')}]")
+                text_parts.append(
+                    f"[Resource: {block.get('resource', {}).get('uri', '')}]"
+                )
             else:
                 text_parts.append(str(block))
-        
+
         return {
             "role": "tool",
             "tool_call_id": self.tool_call_id,

@@ -6,6 +6,7 @@ to LLMJudge.
 
 Score scale: 1 (worst) → 5 (best), normalised to 0.0–1.0.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ class EvalCriterion:
         score_range: Tuple of (min, max) for raw scores.
         threshold: Normalised score >= this value counts as "passed".
     """
+
     name: str
     description: str
     prompt_template: str

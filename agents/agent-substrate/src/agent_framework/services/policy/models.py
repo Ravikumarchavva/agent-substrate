@@ -2,6 +2,7 @@
 
 System of record for: roles, policies, grants.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -17,12 +18,17 @@ from agent_framework.shared.database.base import ServiceBase
 
 class PolicyRule(ServiceBase):
     """A policy rule defining what a role can do on a resource."""
+
     __tablename__ = "policy_rules"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
-    tenant_id: Mapped[str] = mapped_column(String, nullable=False, default="default", index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, nullable=False, default="default", index=True
+    )
     role: Mapped[str] = mapped_column(String, nullable=False, index=True)
     action: Mapped[str] = mapped_column(String, nullable=False, index=True)
     resource_type: Mapped[str] = mapped_column(String, nullable=False, default="*")
@@ -31,7 +37,8 @@ class PolicyRule(ServiceBase):
     priority: Mapped[int] = mapped_column(default=0)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
     def __repr__(self) -> str:
@@ -40,10 +47,13 @@ class PolicyRule(ServiceBase):
 
 class WorkspaceGrant(ServiceBase):
     """Workspace-level role binding for a user."""
+
     __tablename__ = "workspace_grants"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
     tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     workspace_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -52,7 +62,8 @@ class WorkspaceGrant(ServiceBase):
     granted_by: Mapped[str] = mapped_column(String, nullable=False, default="system")
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
     def __repr__(self) -> str:

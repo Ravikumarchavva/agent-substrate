@@ -15,6 +15,7 @@ Usage::
     )
     agent = ReActAgent.from_config(cfg, model_client=client, tools=tools)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -50,8 +51,8 @@ class AgentConfig:
 
     # Execution limits
     max_iterations: int = 10
-    run_timeout: Optional[float] = None       # seconds; None = no limit
-    tool_timeout: float = 30.0                # per-tool timeout in seconds
+    run_timeout: Optional[float] = None  # seconds; None = no limit
+    tool_timeout: float = 30.0  # per-tool timeout in seconds
     verbose: bool = True
 
     # Memory

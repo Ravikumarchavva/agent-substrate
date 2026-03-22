@@ -41,8 +41,10 @@ async def _is_spotify_authenticated_async() -> bool:
 # Data Visualizer
 # ---------------------------------------------------------------------------
 
+
 class DataVisualizerTool(McpAppTool):
     """Visualise structured data as interactive bar / line / pie charts."""
+
     ui_resource_uri: ClassVar[str] = "ui://data_visualizer"
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only data rendering
 
@@ -116,8 +118,10 @@ class DataVisualizerTool(McpAppTool):
 # Markdown Previewer
 # ---------------------------------------------------------------------------
 
+
 class MarkdownPreviewerTool(McpAppTool):
     """Render markdown content with a live preview / source toggle."""
+
     ui_resource_uri: ClassVar[str] = "ui://markdown_previewer"
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # rendering only, no I/O
 
@@ -162,10 +166,7 @@ class MarkdownPreviewerTool(McpAppTool):
 
         lines = content.strip().split("\n")
         words = content.split()
-        summary = (
-            f"Rendered markdown preview: {len(lines)} lines, "
-            f"{len(words)} words"
-        )
+        summary = f"Rendered markdown preview: {len(lines)} lines, {len(words)} words"
         return ToolResult(
             content=[{"type": "text", "text": summary}],
             isError=False,
@@ -176,8 +177,10 @@ class MarkdownPreviewerTool(McpAppTool):
 # JSON Explorer
 # ---------------------------------------------------------------------------
 
+
 class JsonExplorerTool(McpAppTool):
     """Display structured data in an interactive collapsible tree."""
+
     ui_resource_uri: ClassVar[str] = "ui://json_explorer"
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only display
 
@@ -243,8 +246,10 @@ class JsonExplorerTool(McpAppTool):
 # Color Palette
 # ---------------------------------------------------------------------------
 
+
 class ColorPaletteTool(McpAppTool):
     """Generate and explore colour palettes with harmonies & contrast info."""
+
     ui_resource_uri: ClassVar[str] = "ui://color_palette"
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # read-only generation
 
@@ -311,8 +316,10 @@ class ColorPaletteTool(McpAppTool):
 # Kanban Board
 # ---------------------------------------------------------------------------
 
+
 class KanbanBoardTool(McpAppTool):
     """Render a drag-and-drop Kanban board for task management."""
+
     ui_resource_uri: ClassVar[str] = "ui://kanban_board"
     risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # writes persistent task data
 
@@ -383,10 +390,7 @@ class KanbanBoardTool(McpAppTool):
             elif isinstance(c, dict):
                 col_names.append(c.get("name", c.get("title", "?")))
 
-        summary = (
-            f"**{title}**\n"
-            f"Columns: {', '.join(col_names)} | {len(tasks)} tasks"
-        )
+        summary = f"**{title}**\nColumns: {', '.join(col_names)} | {len(tasks)} tasks"
 
         return ToolResult(
             content=[{"type": "text", "text": summary}],
@@ -398,14 +402,18 @@ class KanbanBoardTool(McpAppTool):
 # Spotify Player
 # ---------------------------------------------------------------------------
 
+
 class SpotifyPlayerTool(McpAppTool):
     """Search Spotify and display an interactive music player with Web Playback SDK.
 
     Uses Spotify Web Playback SDK to play FULL TRACKS (not just previews).
     Requires user to log in with Spotify Premium account.
     """
+
     ui_resource_uri: ClassVar[str] = "ui://spotify_player_sdk"
-    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # external service, acts on behalf of user
+    risk: ClassVar[ToolRisk] = (
+        ToolRisk.CRITICAL
+    )  # external service, acts on behalf of user
 
     def __init__(self, spotify_service: Any = None) -> None:
         self._spotify = spotify_service
@@ -463,13 +471,15 @@ class SpotifyPlayerTool(McpAppTool):
         # Check if Spotify service is configured
         if not self._base_spotify_service:
             return ToolResult(
-                content=[{
-                    "type": "text",
-                    "text": (
-                        "Spotify API not configured. Set SPOTIFY_CLIENT_ID and "
-                        "SPOTIFY_CLIENT_SECRET environment variables."
-                    ),
-                }],
+                content=[
+                    {
+                        "type": "text",
+                        "text": (
+                            "Spotify API not configured. Set SPOTIFY_CLIENT_ID and "
+                            "SPOTIFY_CLIENT_SECRET environment variables."
+                        ),
+                    }
+                ],
                 isError=True,
             )
 
@@ -488,6 +498,7 @@ class SpotifyPlayerTool(McpAppTool):
             logger.debug("No OAuth token available from Next.js: %s", e)
 
         from agent_framework.providers.integrations.spotify import SpotifyService
+
         if oauth_token:
             spotify = SpotifyService(
                 client_id=self._base_spotify_service._client_id,
@@ -509,7 +520,12 @@ class SpotifyPlayerTool(McpAppTool):
                 limit=effective_limit,
             )
         except Exception as e:
-            logger.warning("Spotify search failed for query=%r (limit=%d): %s", query, effective_limit, e)
+            logger.warning(
+                "Spotify search failed for query=%r (limit=%d): %s",
+                query,
+                effective_limit,
+                e,
+            )
             # Retry with a smaller limit and simpler query
             try:
                 simple_query = query.split()[0] if query.split() else query
@@ -524,7 +540,8 @@ class SpotifyPlayerTool(McpAppTool):
                     try:
                         logger.info("Falling back to Client Credentials for search")
                         tracks = await self._base_spotify_service.search_tracks(
-                            query=query, limit=min(effective_limit, 5),
+                            query=query,
+                            limit=min(effective_limit, 5),
                         )
                     except Exception:
                         pass
@@ -532,10 +549,12 @@ class SpotifyPlayerTool(McpAppTool):
                         if tracks:
                             logger.info("Client Credentials fallback succeeded")
                             # Continue to result handling below
-                
+
                 if not tracks:
                     return ToolResult(
-                        content=[{"type": "text", "text": f"Spotify search failed: {e}"}],
+                        content=[
+                            {"type": "text", "text": f"Spotify search failed: {e}"}
+                        ],
                         isError=True,
                     )
 
@@ -547,29 +566,26 @@ class SpotifyPlayerTool(McpAppTool):
 
         # Filter to tracks with preview URLs available (check only, not stored)
         all_tracks = tracks
-        
+
         # Check Spotify OAuth authentication status
         is_authenticated = await _is_spotify_authenticated_async()
 
         # Build text summary for the LLM
         track_list = []
         for i, t in enumerate(all_tracks[:10], 1):
-            track_list.append(
-                f"{i}. 🎵 {t['name']} — {t['artist']} "
-                f"({t['album']})"
-            )
-        
+            track_list.append(f"{i}. 🎵 {t['name']} — {t['artist']} ({t['album']})")
+
         # Different message based on authentication state
         if is_authenticated:
             summary = (
-                f"🎵 Found {len(all_tracks)} tracks for \"{query}\""
+                f'🎵 Found {len(all_tracks)} tracks for "{query}"'
                 + (f" (genre: {genre})" if genre else "")
                 + ". User is connected to Spotify Premium and can play full tracks.\n"
                 + "\n".join(track_list)
             )
         else:
             summary = (
-                f"🎵 Found {len(all_tracks)} tracks for \"{query}\""
+                f'🎵 Found {len(all_tracks)} tracks for "{query}"'
                 + (f" (genre: {genre})" if genre else "")
                 + ". ⚠️ User needs to connect their Spotify Premium account first to play full tracks. "
                 + "The player will show a 'Connect Spotify' button.\n"

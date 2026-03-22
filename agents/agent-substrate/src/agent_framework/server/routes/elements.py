@@ -61,9 +61,7 @@ async def get_element_content(
     db: AsyncSession = Depends(get_db),
 ):
     """Stream binary content of an element."""
-    result = await db.execute(
-        select(Element).where(Element.id == element_id)
-    )
+    result = await db.execute(select(Element).where(Element.id == element_id))
     element = result.scalar_one_or_none()
     if element is None:
         raise HTTPException(status_code=404, detail="Element not found")
@@ -88,9 +86,7 @@ async def list_elements(
     db: AsyncSession = Depends(get_db),
 ):
     """List all elements for a thread."""
-    result = await db.execute(
-        select(Element).where(Element.thread_id == thread_id)
-    )
+    result = await db.execute(select(Element).where(Element.thread_id == thread_id))
     return result.scalars().all()
 
 

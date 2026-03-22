@@ -3,6 +3,7 @@
 Evaluates policy decisions based on role→action→resource rules.
 Every mutating endpoint in the platform calls this before executing side effects.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,35 +19,51 @@ logger = logging.getLogger(__name__)
 # Default permission matrix (per docs/microservices/02-role-and-responsibility-matrix.md)
 DEFAULT_PERMISSIONS: dict[str, set[str]] = {
     "platform_admin": {
-        "manage_global_policies", "manage_tenant_users", "manage_workspace_roles",
-        "submit_conversation", "approve_hitl_request", "cancel_or_retry_workflow",
-        "deploy_or_update_service", "read_audit_reports",
+        "manage_global_policies",
+        "manage_tenant_users",
+        "manage_workspace_roles",
+        "submit_conversation",
+        "approve_hitl_request",
+        "cancel_or_retry_workflow",
+        "deploy_or_update_service",
+        "read_audit_reports",
     },
     "tenant_admin": {
-        "manage_tenant_users", "manage_workspace_roles",
-        "submit_conversation", "approve_hitl_request", "cancel_or_retry_workflow",
+        "manage_tenant_users",
+        "manage_workspace_roles",
+        "submit_conversation",
+        "approve_hitl_request",
+        "cancel_or_retry_workflow",
         "read_audit_reports",
     },
     "workspace_admin": {
         "manage_workspace_roles",
-        "submit_conversation", "approve_hitl_request", "cancel_or_retry_workflow",
+        "submit_conversation",
+        "approve_hitl_request",
+        "cancel_or_retry_workflow",
         "read_audit_reports",
     },
     "operator": {
-        "submit_conversation", "approve_hitl_request", "cancel_or_retry_workflow",
+        "submit_conversation",
+        "approve_hitl_request",
+        "cancel_or_retry_workflow",
         "read_audit_reports",
     },
     "developer": {
-        "submit_conversation", "deploy_or_update_service", "read_audit_reports",
+        "submit_conversation",
+        "deploy_or_update_service",
+        "read_audit_reports",
     },
     "analyst": {
         "read_audit_reports",
     },
     "end_user": {
-        "submit_conversation", "approve_hitl_request",
+        "submit_conversation",
+        "approve_hitl_request",
     },
     "service_runtime": {
-        "cancel_or_retry_workflow", "execute_tool_call",
+        "cancel_or_retry_workflow",
+        "execute_tool_call",
     },
 }
 
@@ -66,7 +83,8 @@ async def check_permission(
     """
     # Phase 1: DB rules (explicit deny wins)
     rules = await db.execute(
-        select(PolicyRule).where(
+        select(PolicyRule)
+        .where(
             and_(
                 PolicyRule.is_active.is_(True),
                 PolicyRule.tenant_id.in_([claims.tenant_id, "*"]),
@@ -74,13 +92,17 @@ async def check_permission(
                 PolicyRule.action == action,
                 PolicyRule.resource_type.in_([resource_type, "*"]),
             )
-        ).order_by(PolicyRule.priority.desc())
+        )
+        .order_by(PolicyRule.priority.desc())
     )
     for rule in rules.scalars():
         if rule.effect == "deny":
             logger.debug(
                 "Policy DENY: %s cannot %s on %s (rule %s)",
-                claims.sub, action, resource_type, rule.id,
+                claims.sub,
+                action,
+                resource_type,
+                rule.id,
             )
             return False
         if rule.effect == "allow":
@@ -133,13 +155,15 @@ async def seed_default_policies(db: AsyncSession) -> int:
             )
             if existing.scalar_one_or_none():
                 continue
-            db.add(PolicyRule(
-                tenant_id="default",
-                role=role,
-                action=action,
-                resource_type="*",
-                effect="allow",
-            ))
+            db.add(
+                PolicyRule(
+                    tenant_id="default",
+                    role=role,
+                    action=action,
+                    resource_type="*",
+                    effect="allow",
+                )
+            )
             count += 1
     await db.flush()
     return count

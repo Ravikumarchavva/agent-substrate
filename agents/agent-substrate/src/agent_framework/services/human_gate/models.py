@@ -2,6 +2,7 @@
 
 Tracks pending and resolved HITL approval/input requests.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -17,20 +18,29 @@ from agent_framework.shared.database.base import ServiceBase
 
 class HITLRequest(ServiceBase):
     """Tracks a pending or resolved HITL request."""
+
     __tablename__ = "hitl_requests"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
     request_id: Mapped[str] = mapped_column(
-        String, nullable=False, unique=True, index=True,
+        String,
+        nullable=False,
+        unique=True,
+        index=True,
     )
     thread_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True,
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
     )
     run_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     type: Mapped[str] = mapped_column(
-        String, nullable=False,
+        String,
+        nullable=False,
     )
     # type: "tool_approval" or "human_input"
 
@@ -42,7 +52,9 @@ class HITLRequest(ServiceBase):
 
     # Resolution
     status: Mapped[str] = mapped_column(
-        String, nullable=False, default="pending",
+        String,
+        nullable=False,
+        default="pending",
     )
     # Status: pending → approved|rejected|answered|timeout|cancelled
     response_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -50,10 +62,12 @@ class HITLRequest(ServiceBase):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
     resolved_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     def __repr__(self) -> str:

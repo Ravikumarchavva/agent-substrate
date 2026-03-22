@@ -23,7 +23,11 @@ Public API::
         ExtractionResult,
     )
 """
-from agent_framework.core.structured.result import StructuredOutputError, StructuredOutputResult
+
+from agent_framework.core.structured.result import (
+    StructuredOutputError,
+    StructuredOutputResult,
+)
 from agent_framework.core.structured.parse import parse
 from agent_framework.core.structured.judge import LLMJudge
 from agent_framework.core.structured.router import StructuredRouter

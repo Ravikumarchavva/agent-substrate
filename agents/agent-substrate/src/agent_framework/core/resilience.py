@@ -1,9 +1,10 @@
-﻿"""Retry and resilience utilities for production agent workloads.
+"""Retry and resilience utilities for production agent workloads.
 
 Provides:
   - retry_async: Decorator for async functions with exponential backoff + jitter.
   - RetryPolicy: Configurable retry parameters.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,6 +21,7 @@ logger = logging.getLogger("agent_framework.resilience")
 # Retry Policy
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class RetryPolicy:
     """Configuration for retry behaviour.
@@ -33,6 +35,7 @@ class RetryPolicy:
         retryable_exceptions: Exception types that trigger a retry.
             Defaults to common transient errors.
     """
+
     max_retries: int = 3
     base_delay: float = 1.0
     max_delay: float = 60.0
@@ -75,7 +78,7 @@ TOOL_RETRY_POLICY = RetryPolicy(
 
 def _calculate_delay(attempt: int, policy: RetryPolicy) -> float:
     """Calculate delay with exponential backoff + jitter."""
-    delay = policy.base_delay * (policy.backoff_factor ** attempt)
+    delay = policy.base_delay * (policy.backoff_factor**attempt)
     delay = min(delay, policy.max_delay)
     jitter = random.uniform(0, policy.jitter)
     return delay + jitter
@@ -84,6 +87,7 @@ def _calculate_delay(attempt: int, policy: RetryPolicy) -> float:
 # ---------------------------------------------------------------------------
 # Retry decorator
 # ---------------------------------------------------------------------------
+
 
 def retry_async(
     policy: Optional[RetryPolicy] = None,
@@ -139,4 +143,5 @@ def retry_async(
                 raise last_exception
 
         return wrapper
+
     return decorator

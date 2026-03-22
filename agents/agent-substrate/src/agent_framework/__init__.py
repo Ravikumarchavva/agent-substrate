@@ -52,5 +52,6 @@ __all__ = [
 
 def main() -> None:
     """Entry point - run uvicorn agent_framework.server.app:app to start."""
-    print("agent-framework - run `uvicorn agent_framework.server.app:app --port 8001 --reload`")
-
+    print(
+        "agent-framework - run `uvicorn agent_framework.server.app:app --port 8001 --reload`"
+    )

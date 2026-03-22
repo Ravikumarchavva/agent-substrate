@@ -72,6 +72,7 @@ def resolve_ui_uri(uri: str, base_url: str = "") -> str | None:
 
 # ── Auto-discover built-in apps ─────────────────────────────────────────────
 
+
 def _discover_builtin_apps() -> None:
     """Scan the mcp_apps/ directory for *.html files and register them."""
     if not _APPS_DIR.exists():
@@ -87,6 +88,7 @@ _discover_builtin_apps()
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
+
 @router.get("/ui/{resource_name}", response_class=HTMLResponse)
 async def serve_ui_resource(resource_name: str):
     """Serve a registered MCP App HTML resource.
@@ -96,7 +98,9 @@ async def serve_ui_resource(resource_name: str):
     """
     html_path = _ui_resources.get(resource_name)
     if html_path is None or not html_path.exists():
-        raise HTTPException(status_code=404, detail=f"UI resource '{resource_name}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"UI resource '{resource_name}' not found"
+        )
 
     html = html_path.read_text(encoding="utf-8")
     return HTMLResponse(
@@ -133,18 +137,21 @@ async def get_manifest(request: Request) -> List[Dict[str, Any]]:
         if schema.meta and schema.meta.get("ui", {}).get("resourceUri"):
             uri = schema.meta["ui"]["resourceUri"]
             name = uri.removeprefix("ui://") if uri.startswith("ui://") else uri
-            manifest.append({
-                "tool_name": schema.name,
-                "description": schema.description,
-                "resource_uri": uri,
-                "http_url": f"/ui/{name}",
-                "annotations": schema.annotations,
-            })
+            manifest.append(
+                {
+                    "tool_name": schema.name,
+                    "description": schema.description,
+                    "resource_uri": uri,
+                    "http_url": f"/ui/{name}",
+                    "annotations": schema.annotations,
+                }
+            )
 
     return manifest
 
 
 # ── MCP App context update ───────────────────────────────────────────────────
+
 
 @router.post("/threads/{thread_id}/mcp-context")
 async def update_mcp_context(

@@ -2,6 +2,7 @@
 
 All async tests use asyncio.run() wrappers — no pytest-asyncio required.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,6 +31,7 @@ SYSTEM_PROMPT = "You are a helpful agent."
 # ---------------------------------------------------------------------------
 # _rebuild_messages — message reconstruction from Postgres rows
 # ---------------------------------------------------------------------------
+
 
 def test_rebuild_messages_empty_rows_yields_only_system():
     msgs = _run(_rebuild_messages([], SYSTEM_PROMPT))
@@ -128,7 +130,9 @@ def test_rebuild_messages_mcp_app_context_becomes_user_message():
     user_msg = msgs[1]
     assert isinstance(user_msg, UserMessage)
     # content is built as list[str] per UserMessage contract
-    content_text = user_msg.content[0] if isinstance(user_msg.content, list) else user_msg.content
+    content_text = (
+        user_msg.content[0] if isinstance(user_msg.content, list) else user_msg.content
+    )
     assert "spotify_player" in content_text
     assert "MCP App Update" in content_text
 
@@ -173,8 +177,10 @@ def test_rebuild_messages_assistant_none_content():
 # load_agent_for_thread — Redis hot path (limit= contract)
 # ---------------------------------------------------------------------------
 
+
 def test_load_agent_hot_path_calls_restore_without_limit():
     """Redis hit → restore() must be called with no limit (full history loaded)."""
+
     async def _inner():
         mock_redis = AsyncMock()
         mock_redis.exists = AsyncMock(return_value=True)
@@ -198,7 +204,9 @@ def test_load_agent_hot_path_calls_restore_without_limit():
                 return_value=[],
             ),
         ):
-            from agent_framework.server.services.agent_service import load_agent_for_thread
+            from agent_framework.server.services.agent_service import (
+                load_agent_for_thread,
+            )
 
             db = AsyncMock()
             await load_agent_for_thread(
@@ -219,6 +227,7 @@ def test_load_agent_hot_path_calls_restore_without_limit():
 
 def test_load_agent_cold_path_seeds_redis_with_all_messages():
     """Redis miss → store_many called with system+user+assistant=3 messages."""
+
     async def _inner():
         mock_redis = AsyncMock()
         mock_redis.exists = AsyncMock(return_value=False)
@@ -254,7 +263,9 @@ def test_load_agent_cold_path_seeds_redis_with_all_messages():
                 return_value=MagicMock(),
             ),
         ):
-            from agent_framework.server.services.agent_service import load_agent_for_thread
+            from agent_framework.server.services.agent_service import (
+                load_agent_for_thread,
+            )
 
             db = AsyncMock()
             await load_agent_for_thread(
@@ -281,6 +292,7 @@ def test_load_agent_cold_path_seeds_redis_with_all_messages():
 
 def test_load_agent_no_redis_uses_unbounded_memory():
     """When redis_memory=None, agent falls back to Postgres-only UnboundedMemory."""
+
     async def _inner():
         from agent_framework.server.services.agent_service import load_agent_for_thread
         from agent_framework.core.memory.unbounded_memory import UnboundedMemory
@@ -324,6 +336,7 @@ def test_load_agent_no_redis_uses_unbounded_memory():
 # ---------------------------------------------------------------------------
 # Single-flight lock semantics (mirrors the 409 guard in chat.py)
 # ---------------------------------------------------------------------------
+
 
 def test_single_flight_locked_lock_reports_as_locked():
     """An acquired Lock must report locked() == True."""

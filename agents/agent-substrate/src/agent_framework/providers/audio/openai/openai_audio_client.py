@@ -65,7 +65,9 @@ class OpenAIAudioClient(BaseAudioClient):
         effective_model = model or self._default_stt_model
         logger.info(
             "Transcribing audio: file=%s model=%s bytes=%d",
-            filename, effective_model, len(audio_bytes),
+            filename,
+            effective_model,
+            len(audio_bytes),
         )
 
         kwargs: dict = {}
@@ -108,7 +110,10 @@ class OpenAIAudioClient(BaseAudioClient):
 
         logger.info(
             "TTS request: model=%s voice=%s format=%s chars=%d",
-            effective_model, effective_voice, effective_fmt, len(text),
+            effective_model,
+            effective_voice,
+            effective_fmt,
+            len(text),
         )
 
         kwargs: dict = {}
@@ -154,7 +159,9 @@ class OpenAIAudioClient(BaseAudioClient):
         effective_model = model or self._realtime_model
         effective_voice = voice or self._default_voice
 
-        logger.info("Creating S2S session: model=%s voice=%s", effective_model, effective_voice)
+        logger.info(
+            "Creating S2S session: model=%s voice=%s", effective_model, effective_voice
+        )
 
         body: dict = {
             "model": effective_model,
@@ -188,17 +195,18 @@ class OpenAIAudioClient(BaseAudioClient):
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+
 def _mime_for(filename: str) -> str:
     """Return a plausible MIME type based on the file extension."""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     return {
-        "mp3":  "audio/mpeg",
-        "mp4":  "audio/mp4",
+        "mp3": "audio/mpeg",
+        "mp4": "audio/mp4",
         "mpeg": "audio/mpeg",
         "mpga": "audio/mpeg",
-        "m4a":  "audio/mp4",
-        "ogg":  "audio/ogg",
-        "wav":  "audio/wav",
+        "m4a": "audio/mp4",
+        "ogg": "audio/ogg",
+        "wav": "audio/wav",
         "webm": "audio/webm",
         "flac": "audio/flac",
     }.get(ext, "audio/octet-stream")

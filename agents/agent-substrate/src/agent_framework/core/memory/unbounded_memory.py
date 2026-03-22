@@ -1,4 +1,5 @@
 """Unbounded memory implementation that stores all messages."""
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -21,7 +22,9 @@ class UnboundedMemory(BaseMemory):
         """Add a message to memory."""
         self._messages.append(message)
 
-    async def get_messages(self, limit: Optional[int] = None) -> List[BaseClientMessage]:
+    async def get_messages(
+        self, limit: Optional[int] = None
+    ) -> List[BaseClientMessage]:
         """Retrieve messages from memory.
 
         Args:

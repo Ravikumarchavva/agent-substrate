@@ -24,8 +24,8 @@ class SpotifyService:
     """Lightweight async Spotify API client supporting both OAuth and Client Credentials."""
 
     def __init__(
-        self, 
-        client_id: str, 
+        self,
+        client_id: str,
         client_secret: str,
         oauth_token: Optional[str] = None,
     ) -> None:
@@ -40,7 +40,7 @@ class SpotifyService:
         # Prefer OAuth token if available
         if self._oauth_token:
             return self._oauth_token
-            
+
         if self._access_token and time.time() < self._token_expires_at - 60:
             return self._access_token
 
@@ -70,10 +70,14 @@ class SpotifyService:
 
         self._access_token = data["access_token"]
         self._token_expires_at = time.time() + data.get("expires_in", 3600)
-        logger.info("Spotify access token refreshed (expires in %ds)", data.get("expires_in"))
+        logger.info(
+            "Spotify access token refreshed (expires in %ds)", data.get("expires_in")
+        )
         return self._access_token
 
-    async def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def _get(
+        self, path: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Make an authenticated GET request to the Spotify API."""
         token = await self._ensure_token()
         try:
@@ -94,7 +98,9 @@ class SpotifyService:
                 error_body = "(could not read response body)"
             logger.error(
                 "Spotify API error %s for %s: %s",
-                e.response.status_code, path, error_body,
+                e.response.status_code,
+                path,
+                error_body,
             )
             if e.response.status_code == 403:
                 raise ValueError(
@@ -114,7 +120,7 @@ class SpotifyService:
         """Search Spotify for tracks.
 
         Returns a simplified list of track objects suitable for the UI.
-        
+
         Args:
             query: Search query string
             limit: Maximum number of tracks to return
@@ -134,7 +140,7 @@ class SpotifyService:
             "limit": safe_limit,
             "market": effective_market,
         }
-        
+
         data = await self._get("/search", params=params)
 
         tracks: List[Dict[str, Any]] = []
@@ -149,33 +155,39 @@ class SpotifyService:
                 if img.get("height", 0) <= 300:
                     break
 
-            tracks.append({
-                "id": item["id"],
-                "name": item["name"],
-                "artists": artists,
-                "artist": ", ".join(artists),
-                "album": album.get("name", ""),
-                "album_id": album.get("id", ""),
-                "cover_url": cover_url,
-                "duration_ms": item.get("duration_ms", 0),
-                "preview_url": item.get("preview_url"),
-                "spotify_url": item.get("external_urls", {}).get("spotify", ""),
-                "uri": item.get("uri", ""),
-                "popularity": item.get("popularity", 0),
-                "track_number": item.get("track_number", 0),
-            })
+            tracks.append(
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "artists": artists,
+                    "artist": ", ".join(artists),
+                    "album": album.get("name", ""),
+                    "album_id": album.get("id", ""),
+                    "cover_url": cover_url,
+                    "duration_ms": item.get("duration_ms", 0),
+                    "preview_url": item.get("preview_url"),
+                    "spotify_url": item.get("external_urls", {}).get("spotify", ""),
+                    "uri": item.get("uri", ""),
+                    "popularity": item.get("popularity", 0),
+                    "track_number": item.get("track_number", 0),
+                }
+            )
 
         # Prioritize tracks with preview URLs
         if prefer_previews:
             with_preview = [t for t in tracks if t["preview_url"]]
             without_preview = [t for t in tracks if not t["preview_url"]]
             tracks = with_preview + without_preview
-            
+
             # Log preview availability for debugging
             if with_preview:
-                logger.info(f"Found {len(with_preview)}/{len(tracks)} tracks with previews for query: {query}")
+                logger.info(
+                    f"Found {len(with_preview)}/{len(tracks)} tracks with previews for query: {query}"
+                )
             else:
-                logger.warning(f"No preview URLs available for query: {query} (market: {effective_market})")
+                logger.warning(
+                    f"No preview URLs available for query: {query} (market: {effective_market})"
+                )
 
         return tracks[:limit]
 
@@ -191,11 +203,11 @@ class SpotifyService:
         params: Dict[str, Any] = {
             "limit": min(limit, 100),
         }
-        
+
         # Only add market if explicitly specified
         if market:
             params["market"] = market
-            
+
         if seed_tracks:
             params["seed_tracks"] = ",".join(seed_tracks[:5])
         if seed_artists:
@@ -220,19 +232,21 @@ class SpotifyService:
                 if img.get("height", 0) <= 300:
                     break
 
-            tracks.append({
-                "id": item["id"],
-                "name": item["name"],
-                "artists": artists,
-                "artist": ", ".join(artists),
-                "album": album.get("name", ""),
-                "cover_url": cover_url,
-                "duration_ms": item.get("duration_ms", 0),
-                "preview_url": item.get("preview_url"),
-                "spotify_url": item.get("external_urls", {}).get("spotify", ""),
-                "uri": item.get("uri", ""),
-                "popularity": item.get("popularity", 0),
-            })
+            tracks.append(
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "artists": artists,
+                    "artist": ", ".join(artists),
+                    "album": album.get("name", ""),
+                    "cover_url": cover_url,
+                    "duration_ms": item.get("duration_ms", 0),
+                    "preview_url": item.get("preview_url"),
+                    "spotify_url": item.get("external_urls", {}).get("spotify", ""),
+                    "uri": item.get("uri", ""),
+                    "popularity": item.get("popularity", 0),
+                }
+            )
 
         return tracks
 

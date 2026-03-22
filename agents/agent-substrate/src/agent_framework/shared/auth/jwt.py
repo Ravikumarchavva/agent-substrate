@@ -3,6 +3,7 @@
 Centralised token creation and verification. Each service imports these
 instead of maintaining its own JWT logic.
 """
+
 from __future__ import annotations
 
 import logging
@@ -134,7 +135,8 @@ def verify_token(
     if expected_type and payload.get("type") != expected_type:
         logger.debug(
             "JWT type mismatch: expected=%s, got=%s",
-            expected_type, payload.get("type"),
+            expected_type,
+            payload.get("type"),
         )
         return None
 

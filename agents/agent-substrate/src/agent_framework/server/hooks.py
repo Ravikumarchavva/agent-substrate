@@ -28,13 +28,14 @@ logger = logging.getLogger("agent_framework.server.hooks")
 
 # ── Context objects passed to hooks ──────────────────────────────────────────
 
+
 @dataclass
 class ChatContext:
     """Context object passed to every hook."""
 
     thread_id: uuid.UUID
     db: AsyncSession
-    agent: BaseAgent      # decoupled from concrete ReActAgent
+    agent: BaseAgent  # decoupled from concrete ReActAgent
     user_id: Optional[uuid.UUID] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -48,6 +49,7 @@ ResumeHook = Callable[[ChatContext], Awaitable[None]]
 
 
 # ── Registry ─────────────────────────────────────────────────────────────────
+
 
 class HookRegistry:
     """Central registry for lifecycle hooks.

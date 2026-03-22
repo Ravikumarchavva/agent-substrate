@@ -28,6 +28,7 @@ Security:
   - Session IDs are UUID-based and validated on every call.
   - No user-supplied data is used in key construction without validation.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,8 +51,10 @@ logger = logging.getLogger("agent_framework.core.memory.session")
 # Session state model
 # ---------------------------------------------------------------------------
 
+
 class SessionStatus(str, Enum):
     """Lifecycle states for a session."""
+
     ACTIVE = "active"
     CLOSED = "closed"
     ARCHIVED = "archived"
@@ -59,6 +62,7 @@ class SessionStatus(str, Enum):
 
 class SessionState(BaseModel):
     """Snapshot of a session's metadata (returned to callers)."""
+
     session_id: str
     agent_name: Optional[str] = None
     user_id: Optional[str] = None
@@ -75,6 +79,7 @@ class SessionState(BaseModel):
 # ---------------------------------------------------------------------------
 # SessionManager
 # ---------------------------------------------------------------------------
+
 
 class SessionManager:
     """Orchestrates short-term (Redis) and long-term (Postgres) memory.
@@ -214,7 +219,8 @@ class SessionManager:
 
         logger.info(
             "Resumed cold session %s (%d messages from Postgres)",
-            session_id, len(messages),
+            session_id,
+            len(messages),
         )
         return SessionState(
             session_id=session_id,
@@ -230,9 +236,7 @@ class SessionManager:
 
     # -- Message operations ---------------------------------------------------
 
-    async def add_message(
-        self, session_id: str, message: BaseClientMessage
-    ) -> None:
+    async def add_message(self, session_id: str, message: BaseClientMessage) -> None:
         """Add a message to the session (fast path via Redis).
 
         Automatically checkpoints to Postgres when the dirty count exceeds
@@ -249,7 +253,8 @@ class SessionManager:
         ):
             logger.debug(
                 "Auto-checkpoint triggered for session %s (%d dirty)",
-                session_id, dirty,
+                session_id,
+                dirty,
             )
             await self.checkpoint(session_id)
 
@@ -317,7 +322,8 @@ class SessionManager:
             self._dirty_counts[session_id] = 0
             logger.info(
                 "Checkpointed session %s: %d messages → Postgres",
-                session_id, saved,
+                session_id,
+                saved,
             )
             return saved
 
@@ -357,9 +363,7 @@ class SessionManager:
 
         is_hot = await self._redis.exists(session_id)
         count = (
-            await self._redis.count(session_id)
-            if is_hot
-            else pg_session.message_count
+            await self._redis.count(session_id) if is_hot else pg_session.message_count
         )
 
         return SessionState(

@@ -1,4 +1,3 @@
-
 import logging
 from typing import Any, Dict, Optional, ContextManager
 from contextlib import contextmanager
@@ -84,11 +83,15 @@ def configure_opentelemetry(
         tracer_provider.add_span_processor(span_processor)
     else:
         if export_traces_to_console:
-            logger.warning("No OTLP trace endpoint set, using ConsoleSpanExporter (enable only for debugging)")
+            logger.warning(
+                "No OTLP trace endpoint set, using ConsoleSpanExporter (enable only for debugging)"
+            )
             span_processor = SimpleSpanProcessor(ConsoleSpanExporter())
             tracer_provider.add_span_processor(span_processor)
         else:
-            logger.info("Trace export is disabled (no OTLP trace endpoint and console export disabled)")
+            logger.info(
+                "Trace export is disabled (no OTLP trace endpoint and console export disabled)"
+            )
             # Do not add a console span exporter by default to avoid noisy span dumps
 
     trace.set_tracer_provider(tracer_provider)
@@ -103,14 +106,20 @@ def configure_opentelemetry(
         if "://" in grpc_endpoint:
             grpc_endpoint = grpc_endpoint.split("://")[-1]
 
-        metric_readers.append(PeriodicExportingMetricReader(
-            OTLPMetricExporter(endpoint=grpc_endpoint, insecure=True)
-        ))
+        metric_readers.append(
+            PeriodicExportingMetricReader(
+                OTLPMetricExporter(endpoint=grpc_endpoint, insecure=True)
+            )
+        )
     elif export_metrics_to_console:
-        logger.warning("No OTLP metric endpoint set, using ConsoleMetricExporter (enable only for debugging)")
+        logger.warning(
+            "No OTLP metric endpoint set, using ConsoleMetricExporter (enable only for debugging)"
+        )
         metric_readers.append(PeriodicExportingMetricReader(ConsoleMetricExporter()))
     else:
-        logger.info("Metrics export is disabled (no OTLP metric endpoint and console export disabled)")
+        logger.info(
+            "Metrics export is disabled (no OTLP metric endpoint and console export disabled)"
+        )
 
     meter_provider = MeterProvider(
         resource=resource,
@@ -139,6 +148,7 @@ def shutdown_opentelemetry():
 # Tracer Wrapper (unchanged API)
 # ------------------------------------------------------------------------------
 
+
 class Tracer:
     def __init__(self, name: str = "agent_framework"):
         self._tracer = trace.get_tracer(name)
@@ -159,6 +169,7 @@ class Tracer:
 # ------------------------------------------------------------------------------
 # Metrics Wrapper (unchanged API)
 # ------------------------------------------------------------------------------
+
 
 class Metrics:
     def __init__(self, name: str = "agent_framework"):

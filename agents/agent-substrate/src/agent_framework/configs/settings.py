@@ -4,7 +4,6 @@ from typing import List, Optional
 
 
 class Settings(BaseSettings):
-
     ROOT_DIR: Path = Path(__file__).parent.parent.parent.parent
     OPENAI_API_KEY: str
     DATABASE_URL: str
@@ -26,7 +25,9 @@ class Settings(BaseSettings):
     # Spotify API credentials
     SPOTIFY_CLIENT_ID: str = ""
     SPOTIFY_CLIENT_SECRET: str = ""
-    SPOTIFY_REDIRECT_URI: str = ""  # OAuth callback URL (default: http://localhost:8001/auth/spotify/callback)
+    SPOTIFY_REDIRECT_URI: str = (
+        ""  # OAuth callback URL (default: http://localhost:8001/auth/spotify/callback)
+    )
 
     # Frontend URL — used by tools that need to call back into the Next.js API
     # (e.g. SpotifyPlayerTool fetching the OAuth token endpoint).
@@ -35,7 +36,12 @@ class Settings(BaseSettings):
     # CORS — comma-separated list of allowed origins.
     # In production set this to your exact frontend domain(s), e.g.:
     # CORS_ALLOWED_ORIGINS=https://app.example.com,https://www.example.com
-    CORS_ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3002", "http://127.0.0.1:3002"]
+    CORS_ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
+    ]
 
     # OpenTelemetry — OTLP HTTP endpoint for traces.
     # Set to "" to disable tracing entirely.
@@ -83,6 +89,7 @@ class Settings(BaseSettings):
         extra="ignore",
         case_sensitive=True,
     )
+
 
 settings = Settings()
 if __name__ == "__main__":

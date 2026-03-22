@@ -1,10 +1,12 @@
 """Web Surfer Tool - Agentic web browsing with Playwright."""
+
 import base64
 from typing import Any, ClassVar, Optional, Literal
 from datetime import datetime, timezone
 
 try:
     from playwright.async_api import async_playwright, Browser, Page  # noqa: F401
+
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
@@ -14,7 +16,7 @@ from agent_framework.core.tools.base_tool import BaseTool, Tool, ToolResult, Too
 
 class WebSurferTool(BaseTool):
     """Agentic web surfing tool with browser automation capabilities.
-    
+
     Provides comprehensive web browsing actions:
     - Navigate to URLs
     - Extract page content (text, markdown, HTML)
@@ -24,15 +26,20 @@ class WebSurferTool(BaseTool):
     - Scroll pages
     - Execute JavaScript
     - Get page metadata
-    
+
     Uses Playwright for reliable browser automation.
     Maintains browser session for multi-step workflows.
     """
+
     risk: ClassVar[ToolRisk] = ToolRisk.SENSITIVE  # external network reads
 
-    def __init__(self, headless: bool = True, browser_type: Literal["chromium", "firefox", "webkit"] = "chromium"):
+    def __init__(
+        self,
+        headless: bool = True,
+        browser_type: Literal["chromium", "firefox", "webkit"] = "chromium",
+    ):
         """Initialize web surfer tool.
-        
+
         Args:
             headless: Run browser in headless mode (default: True)
             browser_type: Browser engine to use (chromium, firefox, or webkit)
@@ -42,13 +49,13 @@ class WebSurferTool(BaseTool):
                 "Playwright is required for WebSurferTool. "
                 "Install it with: pip install playwright && playwright install"
             )
-        
+
         self.headless = headless
         self.browser_type = browser_type
         self._playwright = None
         self._browser: Optional[Browser] = None
         self._page: Optional[Page] = None
-        
+
         self.tool_schema = Tool(
             name="web_surfer",
             description=(
@@ -62,9 +69,19 @@ class WebSurferTool(BaseTool):
                     "action": {
                         "type": "string",
                         "enum": [
-                            "navigate", "extract_text", "extract_markdown", "get_html",
-                            "screenshot", "click", "fill", "scroll", "execute_js",
-                            "get_metadata", "go_back", "go_forward", "close"
+                            "navigate",
+                            "extract_text",
+                            "extract_markdown",
+                            "get_html",
+                            "screenshot",
+                            "click",
+                            "fill",
+                            "scroll",
+                            "execute_js",
+                            "get_metadata",
+                            "go_back",
+                            "go_forward",
+                            "close",
                         ],
                         "description": (
                             "Action to perform:\n"
@@ -81,71 +98,77 @@ class WebSurferTool(BaseTool):
                             "- go_back: Navigate back\n"
                             "- go_forward: Navigate forward\n"
                             "- close: Close browser session"
-                        )
+                        ),
                     },
                     "url": {
                         "type": "string",
-                        "description": "URL to navigate to (for 'navigate' action)"
+                        "description": "URL to navigate to (for 'navigate' action)",
                     },
                     "selector": {
                         "type": "string",
-                        "description": "CSS selector for element (for 'click', 'fill' actions)"
+                        "description": "CSS selector for element (for 'click', 'fill' actions)",
                     },
                     "text": {
                         "type": "string",
-                        "description": "Text to enter (for 'fill' action)"
+                        "description": "Text to enter (for 'fill' action)",
                     },
                     "javascript": {
                         "type": "string",
-                        "description": "JavaScript code to execute (for 'execute_js' action)"
+                        "description": "JavaScript code to execute (for 'execute_js' action)",
                     },
                     "scroll_direction": {
                         "type": "string",
                         "enum": ["up", "down", "top", "bottom"],
-                        "description": "Direction to scroll (for 'scroll' action)"
+                        "description": "Direction to scroll (for 'scroll' action)",
                     },
                     "full_page": {
                         "type": "boolean",
-                        "description": "Take full page screenshot (default: true for 'screenshot' action)"
+                        "description": "Take full page screenshot (default: true for 'screenshot' action)",
                     },
                     "timeout": {
                         "type": "number",
-                        "description": "Timeout in milliseconds (default: 30000)"
-                    }
+                        "description": "Timeout in milliseconds (default: 30000)",
+                    },
                 },
-                "required": ["action"]
-            }
+                "required": ["action"],
+            },
         )
-    
+
     @property
     def name(self) -> str:
         return self.tool_schema.name
-    
+
     @property
     def description(self) -> str:
         return self.tool_schema.description
-    
+
     @property
     def input_schema(self) -> dict:
         return self.tool_schema.inputSchema
-    
+
     async def _ensure_browser(self) -> None:
         """Ensure browser is initialized and ready."""
         if self._browser is None:
             self._playwright = await async_playwright().start()
-            
+
             if self.browser_type == "firefox":
-                self._browser = await self._playwright.firefox.launch(headless=self.headless)
+                self._browser = await self._playwright.firefox.launch(
+                    headless=self.headless
+                )
             elif self.browser_type == "webkit":
-                self._browser = await self._playwright.webkit.launch(headless=self.headless)
+                self._browser = await self._playwright.webkit.launch(
+                    headless=self.headless
+                )
             else:
-                self._browser = await self._playwright.chromium.launch(headless=self.headless)
-        
+                self._browser = await self._playwright.chromium.launch(
+                    headless=self.headless
+                )
+
         if self._page is None:
             self._page = await self._browser.new_page()
             # Set reasonable defaults
             await self._page.set_viewport_size({"width": 1280, "height": 720})
-    
+
     async def _close_browser(self) -> None:
         """Close browser and cleanup resources."""
         if self._page:
@@ -157,7 +180,7 @@ class WebSurferTool(BaseTool):
         if self._playwright:
             await self._playwright.stop()
             self._playwright = None
-    
+
     async def execute(
         self,
         action: str,
@@ -167,10 +190,10 @@ class WebSurferTool(BaseTool):
         javascript: Optional[str] = None,
         scroll_direction: Optional[str] = None,
         full_page: bool = True,
-        timeout: int = 30000
+        timeout: int = 30000,
     ) -> ToolResult:
         """Execute web surfing action.
-        
+
         Args:
             action: Action to perform
             url: URL for navigation
@@ -180,7 +203,7 @@ class WebSurferTool(BaseTool):
             scroll_direction: Scroll direction
             full_page: Full page screenshot flag
             timeout: Operation timeout in milliseconds
-            
+
         Returns:
             ToolResult with action outcome
         """
@@ -189,66 +212,75 @@ class WebSurferTool(BaseTool):
             if action == "close":
                 await self._close_browser()
                 return ToolResult(
-                    content=[{
-                        "type": "text",
-                        "text": "Browser session closed successfully"
-                    }],
-                    isError=False
+                    content=[
+                        {"type": "text", "text": "Browser session closed successfully"}
+                    ],
+                    isError=False,
                 )
-            
+
             # Ensure browser is ready for all other actions
             await self._ensure_browser()
-            
+
             # Execute action
             if action == "navigate":
                 if not url:
                     raise ValueError("URL is required for navigate action")
                 result = await self._navigate(url, timeout)
-            
+
             elif action == "extract_text":
                 result = await self._extract_text()
-            
+
             elif action == "extract_markdown":
                 result = await self._extract_markdown()
-            
+
             elif action == "get_html":
                 result = await self._get_html()
-            
+
             elif action == "screenshot":
                 result = await self._screenshot(full_page)
-            
+
             elif action == "click":
                 if not selector:
                     raise ValueError("Selector is required for click action")
                 result = await self._click(selector, timeout)
-            
+
             elif action == "fill":
                 if not selector or not text:
                     raise ValueError("Selector and text are required for fill action")
                 result = await self._fill(selector, text, timeout)
-            
+
             elif action == "scroll":
                 result = await self._scroll(scroll_direction or "down")
-            
+
             elif action == "execute_js":
                 if not javascript:
-                    raise ValueError("JavaScript code is required for execute_js action")
+                    raise ValueError(
+                        "JavaScript code is required for execute_js action"
+                    )
                 result = await self._execute_js(javascript)
-            
+
             elif action == "get_metadata":
                 result = await self._get_metadata()
-            
+
             elif action == "go_back":
                 await self._page.go_back(timeout=timeout)
-                result = {"status": "success", "action": "go_back", "url": self._page.url}
-            
+                result = {
+                    "status": "success",
+                    "action": "go_back",
+                    "url": self._page.url,
+                }
+
             elif action == "go_forward":
                 await self._page.go_forward(timeout=timeout)
-                result = {"status": "success", "action": "go_forward", "url": self._page.url}
-            
+                result = {
+                    "status": "success",
+                    "action": "go_forward",
+                    "url": self._page.url,
+                }
+
             else:
                 raise ValueError(f"Unknown action: {action}")
-            
+
             # Format result
             if isinstance(result, dict) and "screenshot" in result:
                 # Handle screenshot with image content
@@ -256,47 +288,46 @@ class WebSurferTool(BaseTool):
                     content=[
                         {
                             "type": "text",
-                            "text": f"Screenshot captured: {result['url']}"
+                            "text": f"Screenshot captured: {result['url']}",
                         },
                         {
                             "type": "image",
                             "data": result["screenshot"],
-                            "mimeType": "image/png"
-                        }
+                            "mimeType": "image/png",
+                        },
                     ],
-                    isError=False
+                    isError=False,
                 )
             else:
                 # Handle text results
                 import json
+
                 return ToolResult(
-                    content=[{
-                        "type": "text",
-                        "text": json.dumps(result, indent=2)
-                    }],
-                    isError=False
+                    content=[{"type": "text", "text": json.dumps(result, indent=2)}],
+                    isError=False,
                 )
-        
+
         except Exception as e:
             return ToolResult(
-                content=[{
-                    "type": "text",
-                    "text": f"Error executing {action}: {str(e)}"
-                }],
-                isError=True
+                content=[
+                    {"type": "text", "text": f"Error executing {action}: {str(e)}"}
+                ],
+                isError=True,
             )
-    
+
     async def _navigate(self, url: str, timeout: int) -> dict[str, Any]:
         """Navigate to URL."""
-        response = await self._page.goto(url, timeout=timeout, wait_until="domcontentloaded")
+        response = await self._page.goto(
+            url, timeout=timeout, wait_until="domcontentloaded"
+        )
         return {
             "status": "success",
             "action": "navigate",
             "url": self._page.url,
             "title": await self._page.title(),
-            "status_code": response.status if response else None
+            "status_code": response.status if response else None,
         }
-    
+
     async def _extract_text(self) -> dict[str, Any]:
         """Extract visible text from page."""
         text = await self._page.evaluate("""
@@ -309,9 +340,9 @@ class WebSurferTool(BaseTool):
             "action": "extract_text",
             "url": self._page.url,
             "text": text,
-            "length": len(text)
+            "length": len(text),
         }
-    
+
     async def _extract_markdown(self) -> dict[str, Any]:
         """Extract content as markdown (simplified)."""
         # Simple markdown conversion - can be enhanced
@@ -340,9 +371,9 @@ class WebSurferTool(BaseTool):
             "status": "success",
             "action": "extract_markdown",
             "url": self._page.url,
-            "markdown": markdown
+            "markdown": markdown,
         }
-    
+
     async def _get_html(self) -> dict[str, Any]:
         """Get page HTML source."""
         html = await self._page.content()
@@ -351,9 +382,9 @@ class WebSurferTool(BaseTool):
             "action": "get_html",
             "url": self._page.url,
             "html": html,
-            "length": len(html)
+            "length": len(html),
         }
-    
+
     async def _screenshot(self, full_page: bool) -> dict[str, Any]:
         """Take page screenshot."""
         screenshot_bytes = await self._page.screenshot(full_page=full_page, type="png")
@@ -363,9 +394,9 @@ class WebSurferTool(BaseTool):
             "action": "screenshot",
             "url": self._page.url,
             "screenshot": screenshot_base64,
-            "full_page": full_page
+            "full_page": full_page,
         }
-    
+
     async def _click(self, selector: str, timeout: int) -> dict[str, Any]:
         """Click element by selector."""
         await self._page.click(selector, timeout=timeout)
@@ -373,9 +404,9 @@ class WebSurferTool(BaseTool):
             "status": "success",
             "action": "click",
             "selector": selector,
-            "url": self._page.url
+            "url": self._page.url,
         }
-    
+
     async def _fill(self, selector: str, text: str, timeout: int) -> dict[str, Any]:
         """Fill input field."""
         await self._page.fill(selector, text, timeout=timeout)
@@ -383,9 +414,9 @@ class WebSurferTool(BaseTool):
             "status": "success",
             "action": "fill",
             "selector": selector,
-            "url": self._page.url
+            "url": self._page.url,
         }
-    
+
     async def _scroll(self, direction: str) -> dict[str, Any]:
         """Scroll page in specified direction."""
         if direction == "down":
@@ -396,14 +427,14 @@ class WebSurferTool(BaseTool):
             await self._page.evaluate("window.scrollTo(0, 0)")
         elif direction == "bottom":
             await self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        
+
         return {
             "status": "success",
             "action": "scroll",
             "direction": direction,
-            "url": self._page.url
+            "url": self._page.url,
         }
-    
+
     async def _execute_js(self, javascript: str) -> dict[str, Any]:
         """Execute JavaScript code on page."""
         result = await self._page.evaluate(javascript)
@@ -411,9 +442,9 @@ class WebSurferTool(BaseTool):
             "status": "success",
             "action": "execute_js",
             "result": result,
-            "url": self._page.url
+            "url": self._page.url,
         }
-    
+
     async def _get_metadata(self) -> dict[str, Any]:
         """Get page metadata."""
         metadata = await self._page.evaluate("""
@@ -433,19 +464,21 @@ class WebSurferTool(BaseTool):
                 return meta;
             }
         """)
-        metadata.update({
-            "status": "success",
-            "action": "get_metadata",
-            "url": self._page.url,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
+        metadata.update(
+            {
+                "status": "success",
+                "action": "get_metadata",
+                "url": self._page.url,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         return metadata
-    
+
     async def __aenter__(self):
         """Async context manager entry."""
         await self._ensure_browser()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self._close_browser()

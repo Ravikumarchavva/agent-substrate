@@ -12,6 +12,7 @@ File output bridge (code_interpreter):
   This means the agent doesn't need to handle base64 blobs — it just gets
   back a file_id it can use with the file_manager tool.
 """
+
 from __future__ import annotations
 
 import base64
@@ -74,7 +75,11 @@ async def _save_ci_file_outputs(
         encoding = item.get("encoding", "utf-8")
 
         try:
-            file_bytes = base64.b64decode(raw_content) if encoding == "base64" else raw_content.encode(encoding)
+            file_bytes = (
+                base64.b64decode(raw_content)
+                if encoding == "base64"
+                else raw_content.encode(encoding)
+            )
         except Exception as exc:
             logger.warning("CI output decode failed (%s): %s", filename, exc)
             saved.append(item)
@@ -90,12 +95,14 @@ async def _save_ci_file_outputs(
                 resp.raise_for_status()
                 file_meta = resp.json()
                 file_id = file_meta.get("id") or file_meta.get("file_id", "")
-                file_refs.append({
-                    "type": "file_ref",
-                    "file_id": file_id,
-                    "name": filename,
-                    "content_type": content_type,
-                })
+                file_refs.append(
+                    {
+                        "type": "file_ref",
+                        "file_id": file_id,
+                        "name": filename,
+                        "content_type": content_type,
+                    }
+                )
                 saved.append({"type": "file_ref", "file_id": file_id, "name": filename})
         except Exception as exc:
             logger.warning("Failed to save CI file output '%s': %s", filename, exc)
@@ -121,10 +128,17 @@ async def _save_ci_file_outputs(
 def _mime_for(filename: str, fmt: str) -> str:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else fmt.lower()
     _map = {
-        "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-        "gif": "image/gif", "svg": "image/svg+xml", "pdf": "application/pdf",
-        "csv": "text/csv", "json": "application/json", "txt": "text/plain",
-        "html": "text/html", "zip": "application/zip",
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "gif": "image/gif",
+        "svg": "image/svg+xml",
+        "pdf": "application/pdf",
+        "csv": "text/csv",
+        "json": "application/json",
+        "txt": "text/plain",
+        "html": "text/html",
+        "zip": "application/zip",
     }
     return _map.get(ext, "application/octet-stream")
 

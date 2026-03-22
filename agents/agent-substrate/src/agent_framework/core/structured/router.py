@@ -36,15 +36,29 @@ The ``category`` field is parsed deterministically — the model is forced
 into the declared schema and cannot invent new values, making the
 dispatch entirely predictable.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    TYPE_CHECKING,
+)
 
 from pydantic import BaseModel
 
 from agent_framework.core.structured.parse import parse
-from agent_framework.core.structured.result import StructuredOutputError, StructuredOutputResult
+from agent_framework.core.structured.result import (
+    StructuredOutputError,
+    StructuredOutputResult,
+)
 
 if TYPE_CHECKING:
     from agent_framework.core.agents.base_agent import BaseAgent
@@ -200,6 +214,7 @@ class StructuredRouter:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_last_user_text(messages: "List[BaseClientMessage]") -> str:
     """Pull the plain text from the last user / system message."""

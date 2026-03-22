@@ -3,6 +3,7 @@
 Every API and event must carry tenant_id, workspace_id, actor_id, and role claims
 (per docs/microservices/02-role-and-responsibility-matrix.md).
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -17,13 +18,13 @@ class AuthClaims(BaseModel):
     must propagate these claims on every outgoing request or event.
     """
 
-    sub: str                        # stable user/service identity
+    sub: str  # stable user/service identity
     email: str = ""
-    role: str = "end_user"          # platform role
+    role: str = "end_user"  # platform role
     tenant_id: str = "default"
     workspace_id: str = "default"
     jti: str = ""
-    token_type: str = "access"      # access | refresh | agent | service
+    token_type: str = "access"  # access | refresh | agent | service
     # Agent context fields (optional)
     thread_id: Optional[str] = None
     permissions: Optional[list[str]] = None

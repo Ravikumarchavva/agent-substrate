@@ -6,6 +6,7 @@ Provides a centralized tool execution service that:
 3. Publishes tool results as events
 4. Handles MCP tool discovery and schema management
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -42,12 +43,14 @@ class ToolRegistry:
         for name, tool in self._tools.items():
             try:
                 schema = tool.get_schema()
-                result.append({
-                    "name": schema.name,
-                    "description": schema.description,
-                    "input_schema": schema.input_schema,
-                    "risk": getattr(schema, "risk", "safe"),
-                })
+                result.append(
+                    {
+                        "name": schema.name,
+                        "description": schema.description,
+                        "input_schema": schema.input_schema,
+                        "risk": getattr(schema, "risk", "safe"),
+                    }
+                )
             except Exception as e:
                 logger.warning("Failed to get schema for %s: %s", name, e)
         return result
@@ -136,15 +139,17 @@ async def execute_and_publish(
         timeout=timeout,
     )
 
-    await event_bus.publish(EventEnvelope(
-        event_type="tool.execution_completed",
-        correlation_id=run_id,
-        payload={
-            "type": "tool.execution_completed",
-            "run_id": run_id,
-            "thread_id": thread_id,
-            **result,
-        },
-    ))
+    await event_bus.publish(
+        EventEnvelope(
+            event_type="tool.execution_completed",
+            correlation_id=run_id,
+            payload={
+                "type": "tool.execution_completed",
+                "run_id": run_id,
+                "thread_id": thread_id,
+                **result,
+            },
+        )
+    )
 
     return result

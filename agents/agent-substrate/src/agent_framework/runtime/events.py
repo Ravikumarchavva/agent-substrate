@@ -21,6 +21,7 @@ Usage::
     async for event in bus:
         yield f"data: {event.to_sse()}\\n\\n"
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -43,9 +44,11 @@ BUS_CLOSED = _BUS_DONE
 # Typed event definitions
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TextDeltaEvent:
     """Streaming text chunk from the LLM."""
+
     type: Literal["text_delta"] = field(default="text_delta", init=False)
     content: str = ""
     partial: bool = True
@@ -57,6 +60,7 @@ class TextDeltaEvent:
 @dataclass
 class ReasoningDeltaEvent:
     """Streaming reasoning/thinking chunk."""
+
     type: Literal["reasoning_delta"] = field(default="reasoning_delta", init=False)
     content: str = ""
     partial: bool = True
@@ -68,6 +72,7 @@ class ReasoningDeltaEvent:
 @dataclass
 class ToolCallEvent:
     """Agent requested a tool execution."""
+
     type: Literal["tool_call"] = field(default="tool_call", init=False)
     tool_name: str = ""
     input: Dict[str, Any] = field(default_factory=dict)
@@ -76,7 +81,11 @@ class ToolCallEvent:
     color: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {"type": self.type, "tool_name": self.tool_name, "input": self.input}
+        d: Dict[str, Any] = {
+            "type": self.type,
+            "tool_name": self.tool_name,
+            "input": self.input,
+        }
         if self.call_id:
             d["call_id"] = self.call_id
         if self.risk:
@@ -89,6 +98,7 @@ class ToolCallEvent:
 @dataclass
 class ToolResultEvent:
     """Tool execution completed."""
+
     type: Literal["tool_result"] = field(default="tool_result", init=False)
     tool_name: str = ""
     result: Any = None
@@ -110,7 +120,10 @@ class ToolResultEvent:
 @dataclass
 class ToolApprovalRequestEvent:
     """Agent is waiting for human approval of a tool call."""
-    type: Literal["tool_approval_request"] = field(default="tool_approval_request", init=False)
+
+    type: Literal["tool_approval_request"] = field(
+        default="tool_approval_request", init=False
+    )
     request_id: str = ""
     tool_name: str = ""
     input: Dict[str, Any] = field(default_factory=dict)
@@ -127,7 +140,10 @@ class ToolApprovalRequestEvent:
 @dataclass
 class HumanInputRequestEvent:
     """Agent is waiting for human input."""
-    type: Literal["human_input_request"] = field(default="human_input_request", init=False)
+
+    type: Literal["human_input_request"] = field(
+        default="human_input_request", init=False
+    )
     request_id: str = ""
     prompt: str = ""
     options: Optional[List[str]] = None
@@ -146,6 +162,7 @@ class HumanInputRequestEvent:
 @dataclass
 class CompletionEvent:
     """Agent run completed successfully."""
+
     type: Literal["completion"] = field(default="completion", init=False)
     message: str = ""
 
@@ -156,6 +173,7 @@ class CompletionEvent:
 @dataclass
 class ErrorEvent:
     """An error occurred during agent execution."""
+
     type: Literal["error"] = field(default="error", init=False)
     message: str = ""
     code: Optional[str] = None
@@ -170,6 +188,7 @@ class ErrorEvent:
 @dataclass
 class RawDictEvent:
     """Escape hatch for arbitrary dict events (task_updated, etc.)."""
+
     type: str = "raw"
     data: Dict[str, Any] = field(default_factory=dict)
 
@@ -194,6 +213,7 @@ AgentEvent = Union[
 # ---------------------------------------------------------------------------
 # EventBus
 # ---------------------------------------------------------------------------
+
 
 class EventBus:
     """Typed async event queue bridging the agent loop and the SSE transport.

@@ -7,6 +7,7 @@ Integration pattern (agentskills.io spec):
 1. At startup: scan dirs → build <available_skills> XML block → inject into system prompt
 2. At activation: model references SKILL.md location → manager loads full body → inject into context
 """
+
 from __future__ import annotations
 
 import logging
@@ -126,8 +127,7 @@ class SkillManager:
         return (
             "\n\nYou have access to the following skills. "
             "When a task matches a skill's purpose, read the full SKILL.md "
-            "at the listed location and follow its instructions precisely.\n\n"
-            + xml
+            "at the listed location and follow its instructions precisely.\n\n" + xml
         )
 
     def inject_into_prompt(self, system_prompt: str) -> str:
@@ -197,8 +197,7 @@ class SkillManager:
         for skill in self._active.values():
             parts += [
                 f"  <skill name={skill.name!r}>",
-                skill.to_context_block()
-                    .replace("  ", "    "),  # indent
+                skill.to_context_block().replace("  ", "    "),  # indent
                 "  </skill>",
             ]
         parts.append("</active_skills>")
@@ -220,15 +219,17 @@ class SkillManager:
         """Return serialisable list of discovered skill metadata."""
         result = []
         for meta in self._discovered:
-            result.append({
-                "name": meta.name,
-                "description": meta.description,
-                "version": meta.version,
-                "license": meta.license,
-                "allowed_tools": meta.allowed_tools,
-                "active": meta.name in self._active,
-                "path": str(meta.path),
-            })
+            result.append(
+                {
+                    "name": meta.name,
+                    "description": meta.description,
+                    "version": meta.version,
+                    "license": meta.license,
+                    "allowed_tools": meta.allowed_tools,
+                    "active": meta.name in self._active,
+                    "path": str(meta.path),
+                }
+            )
         return result
 
 
@@ -236,11 +237,11 @@ class SkillManager:
 # Utility
 # ---------------------------------------------------------------------------
 
+
 def _xml_escape(text: str) -> str:
     """Minimal XML escaping for values embedded in skill XML."""
     return (
-        text
-        .replace("&", "&amp;")
+        text.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")

@@ -30,6 +30,7 @@ Usage::
     )
     result = await orchestrator.run("Find all prime numbers under 100")
 """
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -54,6 +55,7 @@ from agent_framework.extensions.tools.human_input import ToolApprovalHandler
 # ---------------------------------------------------------------------------
 # HandoffTool — wraps a single sub-agent as a BaseTool
 # ---------------------------------------------------------------------------
+
 
 class _HandoffTool(BaseTool):
     """Internal tool that delegates execution to a sub-agent.
@@ -106,7 +108,9 @@ class _HandoffTool(BaseTool):
         """Run the sub-agent and return its output as a ToolResult."""
         logger.debug(
             "Handoff → %s | reason: %s | input: %.80s…",
-            self._agent.name, reason, input,
+            self._agent.name,
+            reason,
+            input,
         )
         result: AgentRunResult = await self._agent.run(input)
         output_text = result.output
@@ -121,6 +125,7 @@ class _HandoffTool(BaseTool):
 # ---------------------------------------------------------------------------
 # OrchestratorAgent
 # ---------------------------------------------------------------------------
+
 
 class OrchestratorAgent(ReActAgent):
     """Orchestrates a set of specialist sub-agents via tool-calling delegation.
@@ -188,9 +193,7 @@ class OrchestratorAgent(ReActAgent):
         all_tools = handoff_tools + (extra_tools or [])
 
         # Build roster description for the system prompt
-        roster = "\n".join(
-            f"  - {a.name}: {a.description}" for a in sub_agents
-        )
+        roster = "\n".join(f"  - {a.name}: {a.description}" for a in sub_agents)
         default_instructions = (
             "You are an orchestrator agent. Your job is to analyse the user's "
             "request and delegate to the most appropriate specialist agent.\n\n"
@@ -226,7 +229,8 @@ class OrchestratorAgent(ReActAgent):
 
         self.sub_agents = sub_agents
         self._handoff_tools: Dict[str, _HandoffTool] = {
-            t.name: t for t in handoff_tools  # type: ignore[misc]
+            t.name: t
+            for t in handoff_tools  # type: ignore[misc]
         }
 
         # Patch the hook dispatcher so every handoff emits HANDOFF event
@@ -242,14 +246,19 @@ class OrchestratorAgent(ReActAgent):
             if event == HookEvent.TOOL_START:
                 tool_name = payload.get("tool_name", "")
                 if tool_name.startswith("handoff_"):
-                    agent_name = tool_name[len("handoff_"):]
-                    await original_dispatch(HookEvent.HANDOFF, {
-                        "event": "on_handoff",
-                        "from_agent": self.name,
-                        "to_agent": agent_name,
-                        "input": payload.get("tool_arguments", {}).get("input", ""),
-                        "reason": payload.get("tool_arguments", {}).get("reason", ""),
-                    })
+                    agent_name = tool_name[len("handoff_") :]
+                    await original_dispatch(
+                        HookEvent.HANDOFF,
+                        {
+                            "event": "on_handoff",
+                            "from_agent": self.name,
+                            "to_agent": agent_name,
+                            "input": payload.get("tool_arguments", {}).get("input", ""),
+                            "reason": payload.get("tool_arguments", {}).get(
+                                "reason", ""
+                            ),
+                        },
+                    )
             await original_dispatch(event, payload)
 
         self.hooks.dispatch = _patched_dispatch  # type: ignore[method-assign]
@@ -258,34 +267,43 @@ class OrchestratorAgent(ReActAgent):
 
     def to_graph(self) -> "FlowGraph":  # type: ignore[name-defined]  # noqa: F821
         from agent_framework.core.agents.graph import FlowGraph, FlowEdge, FlowNode
+
         graph = FlowGraph(name=self.name)
         graph.add_node(FlowNode(id="__input__", label="start", node_type="input"))
         orch_id = self.name
-        graph.add_node(FlowNode(
-            id=orch_id,
-            label=f"🎯 {self.name}",
-            node_type="agent",
-            metadata={"role": "orchestrator"},
-        ))
+        graph.add_node(
+            FlowNode(
+                id=orch_id,
+                label=f"🎯 {self.name}",
+                node_type="agent",
+                metadata={"role": "orchestrator"},
+            )
+        )
         graph.add_edge(FlowEdge(source="__input__", target=orch_id))
 
         for agent in self.sub_agents:
-            graph.add_node(FlowNode(
-                id=agent.name,
-                label=agent.name,
-                node_type="agent",
-                metadata={"role": "specialist"},
-            ))
-            graph.add_edge(FlowEdge(
-                source=orch_id,
-                target=agent.name,
-                label="handoff",
-            ))
-            graph.add_edge(FlowEdge(
-                source=agent.name,
-                target=orch_id,
-                label="result",
-            ))
+            graph.add_node(
+                FlowNode(
+                    id=agent.name,
+                    label=agent.name,
+                    node_type="agent",
+                    metadata={"role": "specialist"},
+                )
+            )
+            graph.add_edge(
+                FlowEdge(
+                    source=orch_id,
+                    target=agent.name,
+                    label="handoff",
+                )
+            )
+            graph.add_edge(
+                FlowEdge(
+                    source=agent.name,
+                    target=orch_id,
+                    label="result",
+                )
+            )
 
         graph.add_node(FlowNode(id="__output__", label="end", node_type="output"))
         graph.add_edge(FlowEdge(source=orch_id, target="__output__"))

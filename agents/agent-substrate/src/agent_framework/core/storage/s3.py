@@ -7,6 +7,7 @@ Requirements::
 
     uv add aiobotocore
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -53,7 +54,7 @@ class S3FileStore(FileStore):
 
     def _strip_prefix(self, full_key: str) -> str:
         if self._prefix and full_key.startswith(self._prefix):
-            return full_key[len(self._prefix):]
+            return full_key[len(self._prefix) :]
         return full_key
 
     # ── lifecycle ────────────────────────────────────────────────────────
@@ -148,7 +149,9 @@ class S3FileStore(FileStore):
         async with resp["Body"] as stream:
             return await stream.read()
 
-    async def get_stream(self, key: str, chunk_size: int = 1024 * 256) -> AsyncIterator[bytes]:
+    async def get_stream(
+        self, key: str, chunk_size: int = 1024 * 256
+    ) -> AsyncIterator[bytes]:
         full_key = self._full_key(key)
         try:
             resp = await self._client.get_object(Bucket=self._bucket, Key=full_key)

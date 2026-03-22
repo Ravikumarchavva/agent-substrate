@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 
 # Required scopes for Web Playback SDK
 SPOTIFY_SCOPES = [
-    "streaming",                    # Play tracks via Web Playback SDK
-    "user-read-email",              # Read user's email
-    "user-read-private",            # Read subscription type (Premium required)
-    "user-modify-playback-state",   # Control playback (play/pause/skip)
-    "user-read-playback-state",     # Read current playback state
+    "streaming",  # Play tracks via Web Playback SDK
+    "user-read-email",  # Read user's email
+    "user-read-private",  # Read subscription type (Premium required)
+    "user-modify-playback-state",  # Control playback (play/pause/skip)
+    "user-read-playback-state",  # Read current playback state
 ]
 
 
@@ -69,7 +69,9 @@ class SpotifyAuthService:
         }
 
         auth_url = f"{self.AUTHORIZE_URL}?{urlencode(params)}"
-        logger.info(f"Generated Spotify OAuth URL for redirect_uri: {self.redirect_uri}")
+        logger.info(
+            f"Generated Spotify OAuth URL for redirect_uri: {self.redirect_uri}"
+        )
         return auth_url, state
 
     def validate_state(self, state: str) -> bool:
@@ -157,5 +159,7 @@ class SpotifyAuthService:
             resp.raise_for_status()
             token_data = resp.json()
 
-        logger.info(f"Refreshed access token (expires in {token_data.get('expires_in')}s)")
+        logger.info(
+            f"Refreshed access token (expires in {token_data.get('expires_in')}s)"
+        )
         return token_data

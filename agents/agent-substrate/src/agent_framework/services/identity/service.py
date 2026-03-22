@@ -1,4 +1,5 @@
 """Identity Auth Service — business logic."""
+
 from __future__ import annotations
 
 import logging
@@ -48,13 +49,12 @@ async def get_or_create_user(
 async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[IdentityUser]:
     """Look up a user by UUID string."""
     import uuid
+
     try:
         uid = uuid.UUID(user_id)
     except ValueError:
         return None
-    result = await db.execute(
-        select(IdentityUser).where(IdentityUser.id == uid)
-    )
+    result = await db.execute(select(IdentityUser).where(IdentityUser.id == uid))
     return result.scalar_one_or_none()
 
 
@@ -95,11 +95,13 @@ async def exchange_frontend_token(
 
     # Publish session event
     if event_bus:
-        await event_bus.publish(events.session_started(
-            user_id=str(user.id),
-            session_id=jti,
-            tenant_id=user.tenant_id,
-        ))
+        await event_bus.publish(
+            events.session_started(
+                user_id=str(user.id),
+                session_id=jti,
+                tenant_id=user.tenant_id,
+            )
+        )
 
     return {
         "access_token": access_token,

@@ -38,14 +38,15 @@ _SECRET = settings.JWT_SECRET
 # Payload model
 # ---------------------------------------------------------------------------
 
+
 class TokenPayload(BaseModel):
     """Decoded JWT claims attached to request.state.user."""
 
-    sub: str                        # user_id (opaque string)
+    sub: str  # user_id (opaque string)
     email: str = ""
-    role: str = "user"              # "user" | "admin"
-    jti: str = ""                   # unique token ID
-    type: str = "access"            # "access" | "refresh" | "agent"
+    role: str = "user"  # "user" | "admin"
+    jti: str = ""  # unique token ID
+    type: str = "access"  # "access" | "refresh" | "agent"
     # Optional agent context fields
     thread_id: str | None = None
     permissions: list[str] | None = None
@@ -54,6 +55,7 @@ class TokenPayload(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -66,6 +68,7 @@ def _encode(claims: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Token creators
 # ---------------------------------------------------------------------------
+
 
 def create_access_token(
     user_id: str,
@@ -132,6 +135,7 @@ def create_agent_context_token(
 # ---------------------------------------------------------------------------
 # Token verification
 # ---------------------------------------------------------------------------
+
 
 def verify_token(token: str, expected_type: str | None = None) -> TokenPayload | None:
     """Decode and validate a JWT.  Returns ``None`` on any failure.

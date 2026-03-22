@@ -18,6 +18,7 @@ Usage (stream watcher — attach to any ``run_stream`` iterator)::
     async for _ in Console.stream(agent.run_stream("Hello")):
         pass
 """
+
 from __future__ import annotations
 
 from io import UnsupportedOperation
@@ -38,16 +39,18 @@ from agent_framework.core.logger import setup_logging
 # Theme
 # ---------------------------------------------------------------------------
 
-_THEME = Theme({
-    "agent":     "bold cyan",
-    "user":      "bold green",
-    "tool_name": "bold yellow",
-    "tool_ok":   "green",
-    "tool_err":  "red",
-    "thinking":  "dim italic",
-    "info":      "dim",
-    "error":     "bold red",
-})
+_THEME = Theme(
+    {
+        "agent": "bold cyan",
+        "user": "bold green",
+        "tool_name": "bold yellow",
+        "tool_ok": "green",
+        "tool_err": "red",
+        "thinking": "dim italic",
+        "info": "dim",
+        "error": "bold red",
+    }
+)
 
 # Lazy imports — avoid circular deps at module level
 _TextDeltaChunk = None
@@ -57,7 +60,11 @@ _ToolExecutionResultMessage = None
 
 
 def _ensure_types() -> None:
-    global _TextDeltaChunk, _ReasoningDeltaChunk, _CompletionChunk, _ToolExecutionResultMessage
+    global \
+        _TextDeltaChunk, \
+        _ReasoningDeltaChunk, \
+        _CompletionChunk, \
+        _ToolExecutionResultMessage
     if _TextDeltaChunk is None:
         from agent_framework.core.messages._types import (
             TextDeltaChunk,
@@ -67,6 +74,7 @@ def _ensure_types() -> None:
         from agent_framework.core.messages.client_messages import (
             ToolExecutionResultMessage,
         )
+
         _TextDeltaChunk = TextDeltaChunk
         _ReasoningDeltaChunk = ReasoningDeltaChunk
         _CompletionChunk = CompletionChunk
@@ -76,6 +84,7 @@ def _ensure_types() -> None:
 # ---------------------------------------------------------------------------
 # Console
 # ---------------------------------------------------------------------------
+
 
 class Console:
     """Rich interactive console for agent execution.
@@ -294,7 +303,13 @@ class Console:
         status = getattr(result, "status", None)
         status_str = status.value if status else ""
 
-        parts = [f"{status_str}", f"{steps} steps", f"{tools} tool calls", token_str, f"{elapsed:.1f}s"]
+        parts = [
+            f"{status_str}",
+            f"{steps} steps",
+            f"{tools} tool calls",
+            token_str,
+            f"{elapsed:.1f}s",
+        ]
         footer = " · ".join(p for p in parts if p)
         self.console.print(f"  [info]{footer}[/info]")
 
@@ -336,6 +351,7 @@ class Console:
 # ---------------------------------------------------------------------------
 # Module-level helper (shared by instance and static methods)
 # ---------------------------------------------------------------------------
+
 
 def _print_tool_result_static(con: RichConsole, msg: Any) -> None:
     """Render a single tool execution result."""

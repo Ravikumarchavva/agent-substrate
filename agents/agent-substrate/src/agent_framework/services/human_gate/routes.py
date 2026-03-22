@@ -5,6 +5,7 @@ Routes:
   GET  /hitl/status/{thread_id}    — get pending HITL requests for a thread
   GET  /hitl/request/{request_id}  — get a specific HITL request
 """
+
 from __future__ import annotations
 
 import logging
@@ -83,7 +84,9 @@ async def respond_to_request(
     if not req:
         raise HTTPException(status_code=404, detail="HITL request not found")
     if req.status != "pending":
-        raise HTTPException(status_code=409, detail=f"Request already resolved: {req.status}")
+        raise HTTPException(
+            status_code=409, detail=f"Request already resolved: {req.status}"
+        )
 
     # Determine status from response
     if req.type == "tool_approval":

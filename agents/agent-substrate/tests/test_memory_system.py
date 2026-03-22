@@ -9,6 +9,7 @@ Tests:
 Usage:
   uv run python examples/test_memory_system.py
 """
+
 import asyncio
 import os
 
@@ -16,14 +17,20 @@ import os
 # 1. Message Serializer Tests (no external deps)
 # ---------------------------------------------------------------------------
 
+
 def test_serializer():
     from agent_framework.core.memory.message_serializer import (
-        serialize_message, deserialize_message,
-        serialize_messages, deserialize_messages,
+        serialize_message,
+        deserialize_message,
+        serialize_messages,
+        deserialize_messages,
     )
     from agent_framework.core.messages.client_messages import (
-        SystemMessage, UserMessage, AssistantMessage,
-        ToolCallMessage, ToolExecutionResultMessage,
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
+        ToolCallMessage,
+        ToolExecutionResultMessage,
     )
 
     print("=" * 60)
@@ -73,10 +80,13 @@ def test_serializer():
 # 2. Redis Memory Tests
 # ---------------------------------------------------------------------------
 
+
 async def test_redis_memory():
     from agent_framework.core.memory.redis_memory import RedisMemory
     from agent_framework.core.messages.client_messages import (
-        SystemMessage, UserMessage, AssistantMessage,
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
     )
 
     print("=" * 60)
@@ -85,7 +95,9 @@ async def test_redis_memory():
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-    async with RedisMemory(redis_url=redis_url, default_ttl=60, max_messages=10) as redis:
+    async with RedisMemory(
+        redis_url=redis_url, default_ttl=60, max_messages=10
+    ) as redis:
         session_id = "test-redis-session-001"
 
         # Clean up from previous runs
@@ -94,7 +106,9 @@ async def test_redis_memory():
         # Add messages
         await redis.store(session_id, SystemMessage(content="Be concise"))
         await redis.store(session_id, UserMessage(content=["What is 2+2?"]))
-        await redis.store(session_id, AssistantMessage(content=["4"], finish_reason="stop"))
+        await redis.store(
+            session_id, AssistantMessage(content=["4"], finish_reason="stop")
+        )
         print("  ✓ Added 3 messages")
 
         # Read back
@@ -162,17 +176,22 @@ async def test_redis_memory():
 # 3. Postgres Memory Tests
 # ---------------------------------------------------------------------------
 
+
 async def test_postgres_memory():
     from agent_framework.core.memory.postgres_memory import PostgresMemory
     from agent_framework.core.messages.client_messages import (
-        SystemMessage, UserMessage, AssistantMessage,
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
     )
 
     print("=" * 60)
     print("3. POSTGRES MEMORY TESTS")
     print("=" * 60)
 
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
+    )
 
     async with PostgresMemory(database_url=db_url) as pg:
         session_id = "test-pg-session-001"
@@ -244,14 +263,18 @@ async def test_postgres_memory():
 # 4. Session Manager Tests
 # ---------------------------------------------------------------------------
 
+
 async def test_session_manager():
     from agent_framework.core.memory.redis_memory import RedisMemory
     from agent_framework.core.memory.postgres_memory import PostgresMemory
     from agent_framework.core.memory.session_manager import (
-        SessionManager, SessionStatus,
+        SessionManager,
+        SessionStatus,
     )
     from agent_framework.core.messages.client_messages import (
-        SystemMessage, UserMessage, AssistantMessage,
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
     )
 
     print("=" * 60)
@@ -259,12 +282,16 @@ async def test_session_manager():
     print("=" * 60)
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
+    )
 
     redis = RedisMemory(redis_url=redis_url, default_ttl=120, max_messages=100)
     postgres = PostgresMemory(database_url=db_url)
 
-    async with SessionManager(redis=redis, postgres=postgres, auto_checkpoint_threshold=5) as mgr:
+    async with SessionManager(
+        redis=redis, postgres=postgres, auto_checkpoint_threshold=5
+    ) as mgr:
         # Create session
         state = await mgr.create_session(
             agent_name="react-agent",
@@ -279,7 +306,9 @@ async def test_session_manager():
         # Add messages
         await mgr.add_message(sid, SystemMessage(content="You are a test agent"))
         await mgr.add_message(sid, UserMessage(content=["Hello"]))
-        await mgr.add_message(sid, AssistantMessage(content=["Hi!"], finish_reason="stop"))
+        await mgr.add_message(
+            sid, AssistantMessage(content=["Hi!"], finish_reason="stop")
+        )
         print("  ✓ Added 3 messages")
 
         # Read messages
@@ -302,13 +331,17 @@ async def test_session_manager():
         assert full_state is not None
         assert full_state.message_count == 3
         assert full_state.is_hot
-        print(f"  ✓ Session state: count={full_state.message_count}, hot={full_state.is_hot}")
+        print(
+            f"  ✓ Session state: count={full_state.message_count}, hot={full_state.is_hot}"
+        )
 
         # Auto-checkpoint test: add enough messages to trigger
         for i in range(6):
             await mgr.add_message(sid, UserMessage(content=[f"Auto msg {i}"]))
         pg_count_after = await postgres.get_message_count(sid)
-        print(f"  ✓ After 6 more messages: Postgres has {pg_count_after} (auto-checkpoint threshold=5)")
+        print(
+            f"  ✓ After 6 more messages: Postgres has {pg_count_after} (auto-checkpoint threshold=5)"
+        )
 
         # Close session
         await mgr.close_session(sid)
@@ -352,6 +385,7 @@ async def test_session_manager():
 # Runner
 # ---------------------------------------------------------------------------
 
+
 async def main():
     print("\n🧠 AGENT FRAMEWORK — MEMORY SYSTEM TESTS\n")
 
@@ -362,6 +396,7 @@ async def main():
     redis_available = False
     try:
         import redis.asyncio as aioredis
+
         r = aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
         await r.ping()
         await r.aclose()
@@ -373,15 +408,25 @@ async def main():
     pg_available = False
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
-        db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
+
+        db_url = os.getenv(
+            "DATABASE_URL",
+            "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
+        )
         engine = create_async_engine(db_url)
         async with engine.connect() as conn:
-            await conn.execute(engine.dialect.statement_compiler(engine.dialect, None).__class__.__module__ and conn.connection)
+            await conn.execute(
+                engine.dialect.statement_compiler(
+                    engine.dialect, None
+                ).__class__.__module__
+                and conn.connection
+            )
         pg_available = True
     except Exception:
         try:
             from sqlalchemy.ext.asyncio import create_async_engine
             from sqlalchemy import text
+
             engine = create_async_engine(db_url)
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))

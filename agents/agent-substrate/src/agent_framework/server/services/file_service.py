@@ -50,9 +50,25 @@ _TEXT_MIMES = {
     "text/x-python",
 }
 _TEXT_EXTS = {
-    "txt", "md", "py", "js", "ts", "tsx", "jsx",
-    "html", "css", "sh", "yaml", "yml", "toml",
-    "ini", "conf", "log", "r", "sql", "xml",
+    "txt",
+    "md",
+    "py",
+    "js",
+    "ts",
+    "tsx",
+    "jsx",
+    "html",
+    "css",
+    "sh",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "conf",
+    "log",
+    "r",
+    "sql",
+    "xml",
 }
 
 _XLSX_MIMES = {
@@ -72,6 +88,7 @@ _IMAGE_MIMES = {
 # ---------------------------------------------------------------------------
 # CRUD helpers
 # ---------------------------------------------------------------------------
+
 
 async def save_file(
     db: AsyncSession,
@@ -250,6 +267,7 @@ async def purge_thread_files(
 # Text extraction
 # ---------------------------------------------------------------------------
 
+
 def extract_text_from_bytes(
     raw: bytes,
     *,
@@ -314,13 +332,16 @@ def extract_text_from_bytes(
     if mime == "application/pdf" or ext == "pdf":
         try:
             import pypdf  # noqa: PLC0415
+
             reader_obj = pypdf.PdfReader(io.BytesIO(raw))
             pages: list[str] = []
             for i, page in enumerate(reader_obj.pages):
                 pages.append(f"--- Page {i + 1} ---\n{page.extract_text() or ''}")
             return "\n\n".join(pages)[:_MAX_TEXT_CHARS]
         except ImportError:
-            logger.warning("pypdf not installed; PDF text extraction unavailable for %s", name)
+            logger.warning(
+                "pypdf not installed; PDF text extraction unavailable for %s", name
+            )
             return (
                 f"(PDF file: {name} — text extraction unavailable, "
                 "install pypdf to enable it. "
@@ -334,6 +355,7 @@ def extract_text_from_bytes(
     if mime in _XLSX_MIMES or ext in ("xlsx", "xls"):
         try:
             import openpyxl  # noqa: PLC0415
+
             wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
             lines: list[str] = []
             for sheet_name in wb.sheetnames:
@@ -346,7 +368,9 @@ def extract_text_from_bytes(
                         break
             return "\n".join(lines)[:_MAX_TEXT_CHARS]
         except ImportError:
-            logger.warning("openpyxl not installed; XLSX text extraction unavailable for %s", name)
+            logger.warning(
+                "openpyxl not installed; XLSX text extraction unavailable for %s", name
+            )
             return (
                 f"(Excel file: {name} — text extraction unavailable, "
                 "install openpyxl to enable it. "

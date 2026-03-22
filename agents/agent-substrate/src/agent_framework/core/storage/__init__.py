@@ -14,13 +14,18 @@ Public surface::
         EncryptedFileStore, # envelope-encryption decorator
     )
 """
+
 from __future__ import annotations
 
 from agent_framework.core.storage.base import FileRef, FileStore
 from agent_framework.core.storage.tenant import FileScope, TenantContext
 from agent_framework.core.storage.local import LocalFileStore
 from agent_framework.core.storage.s3 import S3FileStore
-from agent_framework.core.storage.encrypted import EncryptedFileStore, KeyProvider, LocalKeyProvider
+from agent_framework.core.storage.encrypted import (
+    EncryptedFileStore,
+    KeyProvider,
+    LocalKeyProvider,
+)
 
 __all__ = [
     "FileRef",

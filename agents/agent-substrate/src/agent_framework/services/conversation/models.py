@@ -3,6 +3,7 @@
 Extracted from monolith server/models.py. Each model maps to
 the same Postgres table names for data continuity.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -29,22 +30,30 @@ class Thread(ServiceBase):
     __tablename__ = "threads"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), nullable=True,
+        UUID(as_uuid=True),
+        nullable=True,
     )
     user_identifier: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), default=list)
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        "metadata", JSONB, default=dict,
+        "metadata",
+        JSONB,
+        default=dict,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
     # Relationships
@@ -72,18 +81,24 @@ class Step(ServiceBase):
       - "tool_result"        – tool execution result
       - "system_message"     – system instructions
     """
+
     __tablename__ = "steps"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
     name: Mapped[str] = mapped_column(String, nullable=False, default="")
     type: Mapped[str] = mapped_column(String, nullable=False)
     thread_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False,
+        UUID(as_uuid=True),
+        ForeignKey("threads.id", ondelete="CASCADE"),
+        nullable=False,
     )
     parent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), nullable=True,
+        UUID(as_uuid=True),
+        nullable=True,
     )
 
     # Content
@@ -97,17 +112,22 @@ class Step(ServiceBase):
 
     # Metadata
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        "metadata", JSONB, default=dict,
+        "metadata",
+        JSONB,
+        default=dict,
     )
     generation: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     start_time: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     end_time: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
     # Relationships
@@ -121,16 +141,21 @@ class Feedback(ServiceBase):
     __tablename__ = "feedbacks"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
     for_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     thread_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False,
+        UUID(as_uuid=True),
+        ForeignKey("threads.id", ondelete="CASCADE"),
+        nullable=False,
     )
     value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
     # Relationships

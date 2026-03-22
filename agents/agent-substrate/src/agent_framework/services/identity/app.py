@@ -2,6 +2,7 @@
 
 Entry point: uvicorn agent_framework.services.identity.app:app --port 8010
 """
+
 from __future__ import annotations
 
 import logging

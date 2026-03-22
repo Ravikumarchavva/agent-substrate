@@ -160,7 +160,9 @@ class ConditionPipelineRunner:
             try:
                 # Safe evaluation: replace variable names with ctx lookups
                 if self._safe_eval(expr, ctx):
-                    agent = self.branch_agents.get(handle) or self.branch_agents.get(label)
+                    agent = self.branch_agents.get(handle) or self.branch_agents.get(
+                        label
+                    )
                     if agent:
                         return agent, label
             except Exception as exc:

@@ -19,11 +19,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-_PID_DIR  = Path.home() / ".agent_framework"
+_PID_DIR = Path.home() / ".agent_framework"
 _PID_FILE = _PID_DIR / "server.pid"
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _read_pid() -> int | None:
     try:
@@ -56,6 +57,7 @@ def _is_running(pid: int) -> bool:
 
 # ── commands ─────────────────────────────────────────────────────────────────
 
+
 def cmd_start(args: argparse.Namespace) -> None:
     """Start the uvicorn server and write its PID to the PID file."""
     pid = _read_pid()
@@ -64,16 +66,20 @@ def cmd_start(args: argparse.Namespace) -> None:
         print("  Run `agent-framework stop` to stop it first.")
         sys.exit(1)
 
-    host    = args.host
-    port    = args.port
-    reload  = args.reload
+    host = args.host
+    port = args.port
+    reload = args.reload
     workers = args.workers
 
     cmd = [
-        sys.executable, "-m", "uvicorn",
+        sys.executable,
+        "-m",
+        "uvicorn",
         "agent_framework.server.app:app",
-        "--host", host,
-        "--port", str(port),
+        "--host",
+        host,
+        "--port",
+        str(port),
     ]
     if reload:
         cmd.append("--reload")
@@ -94,7 +100,7 @@ def cmd_start(args: argparse.Namespace) -> None:
     kwargs: dict = {}
     if sys.platform == "win32":
         # Windows: use DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP
-        DETACHED_PROCESS      = 0x00000008
+        DETACHED_PROCESS = 0x00000008
         CREATE_NEW_PROCESS_GROUP = 0x00000200
         kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
         kwargs["close_fds"] = True
@@ -138,6 +144,7 @@ def cmd_stop(args: argparse.Namespace) -> None:
 
     # Wait up to 5 s for clean exit.
     import time
+
     for _ in range(50):
         time.sleep(0.1)
         if not _is_running(pid):
@@ -174,7 +181,11 @@ def cmd_chat(args: argparse.Namespace) -> None:
     # Build tools
     tools = []
     if not args.no_tools:
-        from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+        from agent_framework.core.tools.builtin_tools import (
+            CalculatorTool,
+            GetCurrentTimeTool,
+        )
+
         tools = [CalculatorTool(), GetCurrentTimeTool()]
 
         # MCP tools (if --mcp supplied)
@@ -223,6 +234,7 @@ def _load_mcp_tools(server_urls: list[str]) -> list:
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="agent-framework",
@@ -233,16 +245,32 @@ def main() -> None:
 
     # ── start ──────────────────────────────────────────────────────────────
     p_start = sub.add_parser("start", help="Start the server")
-    p_start.add_argument("--host",        default="127.0.0.1",             help="Bind host  (default: 127.0.0.1)")
-    p_start.add_argument("--port", "-p",  default=8001,       type=int,    help="Bind port  (default: 8001)")
-    p_start.add_argument("--reload",      action="store_true",             help="Enable auto-reload (dev mode, runs foreground)")
-    p_start.add_argument("--workers",     default=1,          type=int,    help="Number of uvicorn workers (default: 1)")
-    p_start.add_argument("--foreground",  action="store_true",             help="Run in foreground instead of background")
+    p_start.add_argument(
+        "--host", default="127.0.0.1", help="Bind host  (default: 127.0.0.1)"
+    )
+    p_start.add_argument(
+        "--port", "-p", default=8001, type=int, help="Bind port  (default: 8001)"
+    )
+    p_start.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload (dev mode, runs foreground)",
+    )
+    p_start.add_argument(
+        "--workers", default=1, type=int, help="Number of uvicorn workers (default: 1)"
+    )
+    p_start.add_argument(
+        "--foreground",
+        action="store_true",
+        help="Run in foreground instead of background",
+    )
     p_start.set_defaults(func=cmd_start)
 
     # ── stop ───────────────────────────────────────────────────────────────
     p_stop = sub.add_parser("stop", help="Stop the running server")
-    p_stop.add_argument("--force", action="store_true", help="SIGKILL instead of SIGTERM")
+    p_stop.add_argument(
+        "--force", action="store_true", help="SIGKILL instead of SIGTERM"
+    )
     p_stop.set_defaults(func=cmd_stop)
 
     # ── status ─────────────────────────────────────────────────────────────
@@ -251,26 +279,42 @@ def main() -> None:
 
     # ── chat ───────────────────────────────────────────────────────────────
     p_chat = sub.add_parser("chat", help="Interactive CLI chat with an agent")
-    p_chat.add_argument("--model",   default="gpt-4o",     help="OpenAI model name (default: gpt-4o)")
-    p_chat.add_argument("--name",    default="Assistant",   help="Agent display name (default: Assistant)")
-    p_chat.add_argument("--max-iterations", type=int, default=10, help="Max ReAct steps (default: 10)")
-    p_chat.add_argument("--no-tools",  action="store_true", help="Disable built-in tools")
-    p_chat.add_argument("--no-stream", action="store_true", help="Use non-streaming run()")
-    p_chat.add_argument("--verbose",   action="store_true", help="Show agent reasoning logs")
-    p_chat.add_argument("--mcp", nargs="+", metavar="URL",  help="MCP SSE server URLs to connect")
+    p_chat.add_argument(
+        "--model", default="gpt-4o", help="OpenAI model name (default: gpt-4o)"
+    )
+    p_chat.add_argument(
+        "--name", default="Assistant", help="Agent display name (default: Assistant)"
+    )
+    p_chat.add_argument(
+        "--max-iterations", type=int, default=10, help="Max ReAct steps (default: 10)"
+    )
+    p_chat.add_argument(
+        "--no-tools", action="store_true", help="Disable built-in tools"
+    )
+    p_chat.add_argument(
+        "--no-stream", action="store_true", help="Use non-streaming run()"
+    )
+    p_chat.add_argument(
+        "--verbose", action="store_true", help="Show agent reasoning logs"
+    )
+    p_chat.add_argument(
+        "--mcp", nargs="+", metavar="URL", help="MCP SSE server URLs to connect"
+    )
     p_chat.set_defaults(func=cmd_chat)
 
     # ── restart ────────────────────────────────────────────────────────────
     p_restart = sub.add_parser("restart", help="Stop then start the server")
-    p_restart.add_argument("--host",       default="127.0.0.1",          help="Bind host")
-    p_restart.add_argument("--port", "-p", default=8001,      type=int,  help="Bind port")
-    p_restart.add_argument("--reload",     action="store_true")
-    p_restart.add_argument("--workers",    default=1,         type=int)
+    p_restart.add_argument("--host", default="127.0.0.1", help="Bind host")
+    p_restart.add_argument("--port", "-p", default=8001, type=int, help="Bind port")
+    p_restart.add_argument("--reload", action="store_true")
+    p_restart.add_argument("--workers", default=1, type=int)
     p_restart.add_argument("--foreground", action="store_true")
-    p_restart.add_argument("--force",      action="store_true")
+    p_restart.add_argument("--force", action="store_true")
+
     def cmd_restart(a: argparse.Namespace) -> None:
         cmd_stop(a)
         cmd_start(a)
+
     p_restart.set_defaults(func=cmd_restart)
 
     args = parser.parse_args()

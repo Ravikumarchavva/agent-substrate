@@ -19,6 +19,7 @@ SKILL.md format expected:
     # Skill Body
     Markdown instructions...
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,6 +28,7 @@ from typing import Dict, List, Optional
 
 try:
     import yaml
+
     _YAML_AVAILABLE = True
 except ImportError:
     _YAML_AVAILABLE = False
@@ -39,6 +41,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_frontmatter(raw: str) -> tuple[dict, str]:
     """
@@ -55,7 +58,7 @@ def _parse_frontmatter(raw: str) -> tuple[dict, str]:
         return {}, raw
 
     fm_text = rest[:end].strip()
-    body = rest[end + 4:].strip()   # skip \n---
+    body = rest[end + 4 :].strip()  # skip \n---
 
     if not _YAML_AVAILABLE:
         logger.warning(
@@ -84,6 +87,7 @@ def _list_dir_files(directory: Path) -> List[Path]:
 # Public SkillLoader
 # ---------------------------------------------------------------------------
 
+
 class SkillLoader:
     """
     Discovers and loads Agent Skills from filesystem directories.
@@ -99,7 +103,7 @@ class SkillLoader:
         skill_dirs: Optional[List[str | Path]] = None,
     ) -> None:
         self._dirs: List[Path] = []
-        for d in (skill_dirs or []):
+        for d in skill_dirs or []:
             p = Path(d).expanduser().resolve()
             if p.is_dir():
                 self._dirs.append(p)
@@ -134,7 +138,9 @@ class SkillLoader:
                     continue
                 if meta.name in found:
                     logger.debug(
-                        "Skill %r already discovered – skipping %s", meta.name, skill_dir
+                        "Skill %r already discovered – skipping %s",
+                        meta.name,
+                        skill_dir,
                     )
                 else:
                     found[meta.name] = meta

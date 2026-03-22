@@ -14,6 +14,7 @@ Supported KEK sources:
   - ``LocalKeyProvider``: Static hex key from env var (dev / Docker Compose).
   - Extend ``KeyProvider`` for AWS KMS, Azure Key Vault, HashiCorp Vault.
 """
+
 from __future__ import annotations
 
 import os
@@ -25,6 +26,7 @@ from agent_framework.core.storage.base import FileRef, FileStore
 
 
 # ── Key Provider ABC ─────────────────────────────────────────────────────────
+
 
 class KeyProvider(ABC):
     """Provides Key Encryption Keys (KEKs) for envelope encryption."""
@@ -182,7 +184,9 @@ class EncryptedFileStore(FileStore):
         envelope = await self._inner.get(key)
         return await self._decrypt_envelope(envelope)
 
-    async def get_stream(self, key: str, chunk_size: int = 1024 * 256) -> AsyncIterator[bytes]:
+    async def get_stream(
+        self, key: str, chunk_size: int = 1024 * 256
+    ) -> AsyncIterator[bytes]:
         # Must decrypt entire blob (GCM is authenticated, can't chunk-decrypt)
         cleartext = await self.get(key)
 
@@ -221,7 +225,9 @@ class EncryptedFileStore(FileStore):
         return FileRef(
             object_key=inner_ref.object_key,
             size_bytes=cleartext_size or inner_ref.size_bytes,
-            content_type=inner_ref.metadata.get("x-original-content-type", inner_ref.content_type),
+            content_type=inner_ref.metadata.get(
+                "x-original-content-type", inner_ref.content_type
+            ),
             checksum_sha256=cleartext_sha,
             created_at=inner_ref.created_at,
             metadata=user_meta,

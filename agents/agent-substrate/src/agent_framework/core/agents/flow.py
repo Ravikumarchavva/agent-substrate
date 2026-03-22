@@ -25,6 +25,7 @@ ConditionalFlow
 All streaming variants tag every yielded chunk with an ``agent_id`` field so
 the frontend can colour-code chunks per agent in the chat UI.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +33,11 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Callable, List, Optional, Union
 from uuid import uuid4
 
-from agent_framework.core.agents.agent_result import AgentRunResult, AggregatedUsage, RunStatus
+from agent_framework.core.agents.agent_result import (
+    AgentRunResult,
+    AggregatedUsage,
+    RunStatus,
+)
 from agent_framework.core.agents.base_agent import BaseAgent
 from agent_framework.core.agents.graph import FlowEdge, FlowGraph, FlowNode
 from agent_framework.core.memory.memory_scope import MemoryScope
@@ -48,7 +53,7 @@ from agent_framework.runtime.observability import logger
 FlowStep = Union[BaseAgent, "BaseFlow"]
 
 MergeStrategy = Union[
-    str,         # "concat" | "vote"
+    str,  # "concat" | "vote"
     Callable[[List[str]], str],  # custom merge function
 ]
 
@@ -56,6 +61,7 @@ MergeStrategy = Union[
 # ---------------------------------------------------------------------------
 # BaseFlow
 # ---------------------------------------------------------------------------
+
 
 class BaseFlow(ABC):
     """Abstract base for all multi-agent flows.
@@ -105,6 +111,7 @@ class BaseFlow(ABC):
 # ---------------------------------------------------------------------------
 # SequentialFlow
 # ---------------------------------------------------------------------------
+
 
 class SequentialFlow(BaseFlow):
     """Execute steps one after another, piping output → input.
@@ -159,11 +166,14 @@ class SequentialFlow(BaseFlow):
 
     async def run(self, input_text: str, **kwargs) -> AgentRunResult:
         run_id = str(uuid4())
-        await self.hooks.dispatch(HookEvent.FLOW_START, {
-            "flow_name": self.name,
-            "run_id": run_id,
-            "step_count": len(self.steps),
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_START,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+                "step_count": len(self.steps),
+            },
+        )
 
         accumulated_output = input_text
         last_result: Optional[AgentRunResult] = None
@@ -186,14 +196,19 @@ class SequentialFlow(BaseFlow):
                     str(p) for p in step_output if isinstance(p, str)
                 )
             accumulated_output = (
-                f"{accumulated_output}\n\n{step_output}" if step_output else accumulated_output
+                f"{accumulated_output}\n\n{step_output}"
+                if step_output
+                else accumulated_output
             )
 
-        await self.hooks.dispatch(HookEvent.FLOW_END, {
-            "flow_name": self.name,
-            "run_id": run_id,
-            "status": last_result.status.value if last_result else "unknown",
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_END,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+                "status": last_result.status.value if last_result else "unknown",
+            },
+        )
 
         if last_result is None:
             return AgentRunResult(
@@ -222,15 +237,20 @@ class SequentialFlow(BaseFlow):
 
     async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
         run_id = str(uuid4())
-        await self.hooks.dispatch(HookEvent.FLOW_START, {
-            "flow_name": self.name,
-            "run_id": run_id,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_START,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+            },
+        )
 
         accumulated_output = input_text
 
         for step in self.steps:
-            agent_id = step.name if isinstance(step, (BaseAgent, BaseFlow)) else "unknown"
+            agent_id = (
+                step.name if isinstance(step, (BaseAgent, BaseFlow)) else "unknown"
+            )
             step_input = accumulated_output
             partial_chunks: List[str] = []
 
@@ -242,13 +262,16 @@ class SequentialFlow(BaseFlow):
             async for chunk in stream:
                 # Tag every chunk with the producing agent's id
                 if hasattr(chunk, "__dict__"):
-                    chunk_dict = chunk.__dict__.copy() if hasattr(chunk, "__dict__") else {}
+                    chunk_dict = (
+                        chunk.__dict__.copy() if hasattr(chunk, "__dict__") else {}
+                    )
                     chunk_dict["agent_id"] = agent_id
                     chunk.__dict__.update(chunk_dict)
                 yield chunk
 
                 # Accumulate text for next step's input
                 from agent_framework.core.messages._types import TextDeltaChunk
+
                 if isinstance(chunk, TextDeltaChunk):
                     partial_chunks.append(chunk.text)
 
@@ -257,10 +280,13 @@ class SequentialFlow(BaseFlow):
                     f"{accumulated_output}\n\n{''.join(partial_chunks)}"
                 )
 
-        await self.hooks.dispatch(HookEvent.FLOW_END, {
-            "flow_name": self.name,
-            "run_id": run_id,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_END,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+            },
+        )
 
     def to_graph(self) -> FlowGraph:
         graph = FlowGraph(name=self.name)
@@ -282,6 +308,7 @@ class SequentialFlow(BaseFlow):
 # ---------------------------------------------------------------------------
 # ParallelFlow
 # ---------------------------------------------------------------------------
+
 
 class ParallelFlow(BaseFlow):
     """Run all branches concurrently and merge their outputs.
@@ -327,6 +354,7 @@ class ParallelFlow(BaseFlow):
             return self.merge(outputs)
         if self.merge == "vote":
             from collections import Counter
+
             counts = Counter(outputs)
             return counts.most_common(1)[0][0]
         # Default: concat
@@ -334,15 +362,21 @@ class ParallelFlow(BaseFlow):
 
     async def run(self, input_text: str, **kwargs) -> AgentRunResult:
         run_id = str(uuid4())
-        await self.hooks.dispatch(HookEvent.FLOW_START, {
-            "flow_name": self.name,
-            "run_id": run_id,
-            "branch_count": len(self.branches),
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_START,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+                "branch_count": len(self.branches),
+            },
+        )
 
         tasks = [
-            (step.run(input_text, **kwargs) if isinstance(step, BaseAgent)
-             else step.run(input_text, **kwargs))
+            (
+                step.run(input_text, **kwargs)
+                if isinstance(step, BaseAgent)
+                else step.run(input_text, **kwargs)
+            )
             for step in self.branches
         ]
         results: List[AgentRunResult] = await asyncio.gather(*tasks)
@@ -358,10 +392,13 @@ class ParallelFlow(BaseFlow):
 
         merged = self._merge_outputs(branch_outputs)
 
-        await self.hooks.dispatch(HookEvent.FLOW_END, {
-            "flow_name": self.name,
-            "run_id": run_id,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_END,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+            },
+        )
 
         return AgentRunResult(
             run_id=run_id,
@@ -373,10 +410,13 @@ class ParallelFlow(BaseFlow):
 
     async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
         run_id = str(uuid4())
-        await self.hooks.dispatch(HookEvent.FLOW_START, {
-            "flow_name": self.name,
-            "run_id": run_id,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_START,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+            },
+        )
 
         # Collect all branch streams concurrently using async queues
         async def _drain(step: FlowStep, q: asyncio.Queue) -> None:
@@ -396,8 +436,7 @@ class ParallelFlow(BaseFlow):
 
         queue: asyncio.Queue = asyncio.Queue()
         drain_tasks = [
-            asyncio.create_task(_drain(step, queue))
-            for step in self.branches
+            asyncio.create_task(_drain(step, queue)) for step in self.branches
         ]
         done_count = 0
         total = len(self.branches)
@@ -410,10 +449,13 @@ class ParallelFlow(BaseFlow):
                 yield item
 
         await asyncio.gather(*drain_tasks, return_exceptions=True)
-        await self.hooks.dispatch(HookEvent.FLOW_END, {
-            "flow_name": self.name,
-            "run_id": run_id,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_END,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+            },
+        )
 
     def to_graph(self) -> FlowGraph:
         graph = FlowGraph(name=self.name)
@@ -433,6 +475,7 @@ class ParallelFlow(BaseFlow):
 # ---------------------------------------------------------------------------
 # ConditionalFlow
 # ---------------------------------------------------------------------------
+
 
 class ConditionalFlow(BaseFlow):
     """Route execution to one of two sub-flows based on a predicate.
@@ -481,17 +524,21 @@ class ConditionalFlow(BaseFlow):
         except Exception as exc:
             logger.warning(
                 "[%s] Predicate raised %s — defaulting to if_false branch",
-                self.name, exc,
+                self.name,
+                exc,
             )
             result = False
         return self.if_true if result else self.if_false
 
     async def run(self, input_text: str, **kwargs) -> AgentRunResult:
         run_id = str(uuid4())
-        await self.hooks.dispatch(HookEvent.FLOW_START, {
-            "flow_name": self.name,
-            "run_id": run_id,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_START,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+            },
+        )
 
         branch = self._select_branch(input_text)
         branch_name = branch.name if hasattr(branch, "name") else str(branch)
@@ -502,19 +549,25 @@ class ConditionalFlow(BaseFlow):
         else:
             result = await branch.run(input_text, **kwargs)
 
-        await self.hooks.dispatch(HookEvent.FLOW_END, {
-            "flow_name": self.name,
-            "run_id": run_id,
-            "branch_taken": branch_name,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_END,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+                "branch_taken": branch_name,
+            },
+        )
         return result
 
     async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
         run_id = str(uuid4())
-        await self.hooks.dispatch(HookEvent.FLOW_START, {
-            "flow_name": self.name,
-            "run_id": run_id,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_START,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+            },
+        )
 
         branch = self._select_branch(input_text)
         agent_id = branch.name if hasattr(branch, "name") else "branch"
@@ -529,11 +582,14 @@ class ConditionalFlow(BaseFlow):
                 chunk.__dict__["agent_id"] = agent_id
             yield chunk
 
-        await self.hooks.dispatch(HookEvent.FLOW_END, {
-            "flow_name": self.name,
-            "run_id": run_id,
-            "branch_taken": agent_id,
-        })
+        await self.hooks.dispatch(
+            HookEvent.FLOW_END,
+            {
+                "flow_name": self.name,
+                "run_id": run_id,
+                "branch_taken": agent_id,
+            },
+        )
 
     def to_graph(self) -> FlowGraph:
         graph = FlowGraph(name=self.name)
@@ -543,12 +599,8 @@ class ConditionalFlow(BaseFlow):
         graph.add_node(FlowNode(id=cond_id, label="predicate?", node_type="condition"))
         graph.add_edge(FlowEdge(source="__input__", target=cond_id))
 
-        true_id = (
-            self.if_true.name if hasattr(self.if_true, "name") else "if_true"
-        )
-        false_id = (
-            self.if_false.name if hasattr(self.if_false, "name") else "if_false"
-        )
+        true_id = self.if_true.name if hasattr(self.if_true, "name") else "if_true"
+        false_id = self.if_false.name if hasattr(self.if_false, "name") else "if_false"
 
         true_type: Any = "flow" if isinstance(self.if_true, BaseFlow) else "agent"
         false_type: Any = "flow" if isinstance(self.if_false, BaseFlow) else "agent"

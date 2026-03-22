@@ -7,6 +7,7 @@ in a service-aware runner that:
 3. Streams agent output as events for the Stream Projection service
 4. Publishes completion/failure events back to the Workflow Orchestrator
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,7 +21,11 @@ from agent_framework.core.guardrails.prebuilt import MaxTokenGuardrail
 from agent_framework.core.memory.redis_memory import RedisMemory
 from agent_framework.core.memory.unbounded_memory import UnboundedMemory
 from agent_framework.core.memory.base_memory import BaseMemory
-from agent_framework.core.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
+from agent_framework.core.messages import (
+    CompletionChunk,
+    ReasoningDeltaChunk,
+    TextDeltaChunk,
+)
 from agent_framework.core.messages.client_messages import (
     AssistantMessage,
     SystemMessage,
@@ -54,17 +59,21 @@ async def _rebuild_messages(
         elif step_type == "assistant_message":
             output_text = row.get("output")
             content = [output_text] if output_text else None
-            messages.append(AssistantMessage(
-                content=content,
-                finish_reason="stop",
-            ))
+            messages.append(
+                AssistantMessage(
+                    content=content,
+                    finish_reason="stop",
+                )
+            )
         elif step_type == "tool_result":
-            messages.append(ToolExecutionResultMessage(
-                tool_call_id=meta.get("tool_call_id", ""),
-                name=row.get("name", ""),
-                content=[{"type": "text", "text": row.get("output") or ""}],
-                isError=row.get("is_error") or False,
-            ))
+            messages.append(
+                ToolExecutionResultMessage(
+                    tool_call_id=meta.get("tool_call_id", ""),
+                    name=row.get("name", ""),
+                    content=[{"type": "text", "text": row.get("output") or ""}],
+                    isError=row.get("is_error") or False,
+                )
+            )
 
     return messages
 
@@ -90,7 +99,9 @@ async def load_memory_for_thread(
             return per_request_mem
 
         # Cold path: fetch from Conversation service
-        logger.debug("Redis miss for %s — fetching from Conversation service", thread_id)
+        logger.debug(
+            "Redis miss for %s — fetching from Conversation service", thread_id
+        )
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 f"{conversation_service_url}/internal/threads/{thread_id}/memory"
@@ -144,7 +155,9 @@ def create_agent(
         memory=memory,
         max_iterations=max_iterations,
         verbose=True,
-        input_guardrails=[MaxTokenGuardrail(max_tokens=16_000, model="gpt-4o", tripwire=True)],
+        input_guardrails=[
+            MaxTokenGuardrail(max_tokens=16_000, model="gpt-4o", tripwire=True)
+        ],
     )
     if tool_approval_handler is not None:
         kwargs["tool_approval_handler"] = tool_approval_handler
@@ -178,30 +191,34 @@ async def run_agent_stream(
         step_count = 0
         async for chunk in agent.run_stream(user_content):
             if isinstance(chunk, TextDeltaChunk):
-                await event_bus.publish(EventEnvelope(
-                    event_type="agent.text_delta",
-                    correlation_id=run_id,
-                    payload={
-                        "type": "text_delta",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "content": chunk.text,
-                        "partial": True,
-                    },
-                ))
+                await event_bus.publish(
+                    EventEnvelope(
+                        event_type="agent.text_delta",
+                        correlation_id=run_id,
+                        payload={
+                            "type": "text_delta",
+                            "run_id": run_id,
+                            "thread_id": thread_id,
+                            "content": chunk.text,
+                            "partial": True,
+                        },
+                    )
+                )
 
             elif isinstance(chunk, ReasoningDeltaChunk):
-                await event_bus.publish(EventEnvelope(
-                    event_type="agent.reasoning_delta",
-                    correlation_id=run_id,
-                    payload={
-                        "type": "reasoning_delta",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "content": chunk.text,
-                        "partial": True,
-                    },
-                ))
+                await event_bus.publish(
+                    EventEnvelope(
+                        event_type="agent.reasoning_delta",
+                        correlation_id=run_id,
+                        payload={
+                            "type": "reasoning_delta",
+                            "run_id": run_id,
+                            "thread_id": thread_id,
+                            "content": chunk.text,
+                            "partial": True,
+                        },
+                    )
+                )
 
             elif isinstance(chunk, CompletionChunk):
                 step_count += 1
@@ -218,21 +235,23 @@ async def run_agent_stream(
                         for tc in msg.tool_calls
                     ]
 
-                await event_bus.publish(EventEnvelope(
-                    event_type="agent.completion",
-                    correlation_id=run_id,
-                    payload={
-                        "type": "completion",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "content": [content_text] if content_text else None,
-                        "tool_calls": tool_calls,
-                        "finish_reason": msg.finish_reason,
-                        "has_tool_calls": bool(msg.tool_calls),
-                        "partial": False,
-                        "complete": True,
-                    },
-                ))
+                await event_bus.publish(
+                    EventEnvelope(
+                        event_type="agent.completion",
+                        correlation_id=run_id,
+                        payload={
+                            "type": "completion",
+                            "run_id": run_id,
+                            "thread_id": thread_id,
+                            "content": [content_text] if content_text else None,
+                            "tool_calls": tool_calls,
+                            "finish_reason": msg.finish_reason,
+                            "has_tool_calls": bool(msg.tool_calls),
+                            "partial": False,
+                            "complete": True,
+                        },
+                    )
+                )
 
             elif isinstance(chunk, ToolExecutionResultMessage):
                 step_count += 1
@@ -244,42 +263,48 @@ async def run_agent_stream(
                             parts.append(block.get("text", ""))
                     content_text = "\n".join(parts)
 
-                await event_bus.publish(EventEnvelope(
-                    event_type="agent.tool_result",
-                    correlation_id=run_id,
-                    payload={
-                        "type": "tool_result",
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "tool_name": getattr(chunk, "name", "unknown"),
-                        "tool_call_id": getattr(chunk, "tool_call_id", ""),
-                        "content": content_text,
-                        "is_error": chunk.is_error,
-                        "partial": False,
-                    },
-                ))
+                await event_bus.publish(
+                    EventEnvelope(
+                        event_type="agent.tool_result",
+                        correlation_id=run_id,
+                        payload={
+                            "type": "tool_result",
+                            "run_id": run_id,
+                            "thread_id": thread_id,
+                            "tool_name": getattr(chunk, "name", "unknown"),
+                            "tool_call_id": getattr(chunk, "tool_call_id", ""),
+                            "content": content_text,
+                            "is_error": chunk.is_error,
+                            "partial": False,
+                        },
+                    )
+                )
 
         # Run completed successfully
-        await event_bus.publish(EventEnvelope(
-            event_type="agent.run_completed",
-            correlation_id=run_id,
-            payload={
-                "type": "agent.run_completed",
-                "run_id": run_id,
-                "thread_id": thread_id,
-                "steps_count": step_count,
-            },
-        ))
+        await event_bus.publish(
+            EventEnvelope(
+                event_type="agent.run_completed",
+                correlation_id=run_id,
+                payload={
+                    "type": "agent.run_completed",
+                    "run_id": run_id,
+                    "thread_id": thread_id,
+                    "steps_count": step_count,
+                },
+            )
+        )
 
     except Exception as exc:
         logger.exception("Agent run %s failed", run_id)
-        await event_bus.publish(EventEnvelope(
-            event_type="agent.run_failed",
-            correlation_id=run_id,
-            payload={
-                "type": "agent.run_failed",
-                "run_id": run_id,
-                "thread_id": thread_id,
-                "error": str(exc),
-            },
-        ))
+        await event_bus.publish(
+            EventEnvelope(
+                event_type="agent.run_failed",
+                correlation_id=run_id,
+                payload={
+                    "type": "agent.run_failed",
+                    "run_id": run_id,
+                    "thread_id": thread_id,
+                    "error": str(exc),
+                },
+            )
+        )

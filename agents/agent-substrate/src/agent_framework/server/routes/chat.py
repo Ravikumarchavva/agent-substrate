@@ -16,8 +16,15 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_framework.configs.settings import settings
-from agent_framework.core.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
-from agent_framework.core.messages.client_messages import AssistantMessage, ToolExecutionResultMessage
+from agent_framework.core.messages import (
+    CompletionChunk,
+    ReasoningDeltaChunk,
+    TextDeltaChunk,
+)
+from agent_framework.core.messages.client_messages import (
+    AssistantMessage,
+    ToolExecutionResultMessage,
+)
 from agent_framework.server.context import ServerContext, get_ctx
 from agent_framework.server.database import get_db
 from agent_framework.server.hooks import ChatContext, hooks
@@ -36,7 +43,9 @@ from agent_framework.server.services.file_service import (
 )
 from agent_framework.server.routes.mcp_apps import resolve_ui_uri
 from agent_framework.extensions.tools.task_manager_tool import current_thread_id
-from agent_framework.extensions.tools.file_manager_tool import current_thread_id as file_thread_id
+from agent_framework.extensions.tools.file_manager_tool import (
+    current_thread_id as file_thread_id,
+)
 from agent_framework.extensions.tools.web_surfer import WebSurferTool
 from agent_framework.extensions.tools.human_input import AskHumanTool
 from agent_framework.runtime.hitl import BRIDGE_DONE, BridgeRegistry, WebHITLBridge
@@ -61,10 +70,7 @@ async def _get_agent_deps(ctx: ServerContext, thread_id: str):
 
     # Build a fresh AskHumanTool for this request wired to the thread's bridge.
     # Removes the placeholder from ctx.tools so only one instance exists.
-    base_tools = [
-        t for t in ctx.tools
-        if not isinstance(t, AskHumanTool)
-    ]
+    base_tools = [t for t in ctx.tools if not isinstance(t, AskHumanTool)]
     ask_tool = AskHumanTool(
         handler=bridge.human_handler,
         max_requests_per_run=5,
@@ -100,7 +106,11 @@ def _build_tool_meta_map(tools: list) -> dict:
                 entry["ui"] = schema.meta["ui"]
             meta_map[schema.name] = entry
         except Exception as e:
-            logger.warning("Failed to get schema for tool %s: %s", getattr(tool, "name", "unknown"), e)
+            logger.warning(
+                "Failed to get schema for tool %s: %s",
+                getattr(tool, "name", "unknown"),
+                e,
+            )
     return meta_map
 
 
@@ -121,7 +131,7 @@ def _build_completion_payload(message: AssistantMessage, tool_meta_map: dict) ->
             }
             meta = tool_meta_map.get(tc.name)
             if meta:
-                tc_data["risk"]  = meta.get("risk", "safe")
+                tc_data["risk"] = meta.get("risk", "safe")
                 tc_data["color"] = meta.get("color", "green")
                 ui_info = meta.get("ui")
                 if ui_info:
@@ -146,13 +156,17 @@ def _build_completion_payload(message: AssistantMessage, tool_meta_map: dict) ->
             "prompt_tokens": message.usage.prompt_tokens,
             "completion_tokens": message.usage.completion_tokens,
             "total_tokens": message.usage.total_tokens,
-        } if message.usage else None,
+        }
+        if message.usage
+        else None,
         "partial": False,
         "complete": True,
     }
 
 
-def _build_tool_result_payload(chunk: ToolExecutionResultMessage, tool_meta_map: dict) -> dict:
+def _build_tool_result_payload(
+    chunk: ToolExecutionResultMessage, tool_meta_map: dict
+) -> dict:
     """Build the SSE ``tool_result`` event payload from a ``ToolExecutionResultMessage``."""
     content_text = ""
     if isinstance(chunk.content, list):
@@ -168,7 +182,9 @@ def _build_tool_result_payload(chunk: ToolExecutionResultMessage, tool_meta_map:
     if "ui" in tool_meta:
         ui_info = tool_meta["ui"]
         resource_uri = ui_info.get("resourceUri", "")
-        tool_http_url = resolve_ui_uri(resource_uri) if resource_uri else f"/ui/{tool_name}"
+        tool_http_url = (
+            resolve_ui_uri(resource_uri) if resource_uri else f"/ui/{tool_name}"
+        )
 
     return {
         "type": "tool_result",
@@ -179,7 +195,7 @@ def _build_tool_result_payload(chunk: ToolExecutionResultMessage, tool_meta_map:
         "has_app": "ui" in tool_meta,
         "http_url": tool_http_url,
         "app_data": getattr(chunk, "app_data", None),
-        "risk":  tool_meta.get("risk", "safe"),
+        "risk": tool_meta.get("risk", "safe"),
         "color": tool_meta.get("color", "green"),
         "partial": False,
         # Carry raw content text for persistence — not sent to frontend
@@ -216,10 +232,7 @@ async def _build_file_context(
     for meta in files:
         extracted = await extract_text(store, meta)
         if extracted is not None:
-            text_parts.append(
-                f"### File: {meta.original_name}\n"
-                f"```\n{extracted}\n```"
-            )
+            text_parts.append(f"### File: {meta.original_name}\n```\n{extracted}\n```")
         elif (meta.content_type or "").startswith("image/"):
             image_notes.append(
                 f"[Image attached: {meta.original_name} — "
@@ -237,6 +250,7 @@ async def _build_file_context(
     ci_client = ctx.ci_client
     if ci_client:
         import base64 as _b64
+
         session_id = str(body.thread_id)
         for meta in files:
             try:
@@ -248,10 +262,16 @@ async def _build_file_context(
                     content=b64,
                     encoding="base64",
                 )
-                logger.info("Pushed file %s (%d bytes) to CI session %s",
-                            meta.original_name, meta.size_bytes, session_id)
+                logger.info(
+                    "Pushed file %s (%d bytes) to CI session %s",
+                    meta.original_name,
+                    meta.size_bytes,
+                    session_id,
+                )
             except Exception as exc:
-                logger.warning("Failed to push %s to CI VM: %s", meta.original_name, exc)
+                logger.warning(
+                    "Failed to push %s to CI VM: %s", meta.original_name, exc
+                )
 
     if not text_parts and not image_notes:
         return "", image_notes
@@ -390,10 +410,14 @@ async def chat(
                         await bus.emit(TextDeltaEvent(content=chunk.text, partial=True))
 
                     elif isinstance(chunk, ReasoningDeltaChunk):
-                        await bus.emit(ReasoningDeltaEvent(content=chunk.text, partial=True))
+                        await bus.emit(
+                            ReasoningDeltaEvent(content=chunk.text, partial=True)
+                        )
 
                     elif isinstance(chunk, CompletionChunk):
-                        payload = _build_completion_payload(chunk.message, tool_meta_map)
+                        payload = _build_completion_payload(
+                            chunk.message, tool_meta_map
+                        )
                         # Persist BEFORE emitting so Postgres and SSE stay in sync
                         try:
                             async with ctx.session_factory() as persist_db:
@@ -467,15 +491,14 @@ async def chat(
                 except asyncio.TimeoutError:
                     # ── Disconnect detection ─────────────────────────────────
                     if await request.is_disconnected():
-                        logger.info(
-                            "Client disconnected for thread %s", body.thread_id
-                        )
+                        logger.info("Client disconnected for thread %s", body.thread_id)
                         resolved = bridge.cancel_all_pending("session_disconnected")
                         if resolved:
                             logger.info(
                                 "Thread %s: resolved %d pending HITL request(s) "
                                 "with session_disconnected",
-                                body.thread_id, resolved,
+                                body.thread_id,
+                                resolved,
                             )
                         if not agent_task.done():
                             agent_task.cancel()

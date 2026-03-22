@@ -32,6 +32,7 @@ router = APIRouter(prefix="/v1", tags=["code-interpreter"])
 
 # ── Auth dependency ──────────────────────────────────────────────────────────
 
+
 async def _verify_token(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -50,6 +51,7 @@ Authed = Annotated[None, Depends(_verify_token)]
 
 
 # ── Execute ──────────────────────────────────────────────────────────────────
+
 
 @router.post("/execute", response_model=ExecuteResponse)
 async def execute(body: ExecuteRequest, request: Request, _: Authed):
@@ -74,7 +76,9 @@ async def execute(body: ExecuteRequest, request: Request, _: Authed):
             raise HTTPException(429, str(exc))
         raise HTTPException(503, str(exc))
     except Exception as exc:
-        logger.error("Execute failed session=%s: %s", body.session_id, exc, exc_info=True)
+        logger.error(
+            "Execute failed session=%s: %s", body.session_id, exc, exc_info=True
+        )
         raise HTTPException(500, f"Execution error: {exc}")
 
     outputs = _build_outputs(result)
@@ -90,6 +94,7 @@ async def execute(body: ExecuteRequest, request: Request, _: Authed):
 
 
 # ── Sessions ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/sessions", response_model=SessionListResponse)
 async def list_sessions(request: Request, _: Authed):
@@ -140,13 +145,17 @@ async def get_session_state(session_id: str, request: Request, _: Authed):
 
 # ── File operations ──────────────────────────────────────────────────────────
 
+
 @router.post("/sessions/{session_id}/files/write")
-async def write_file(session_id: str, body: FileWriteRequest, request: Request, _: Authed):
+async def write_file(
+    session_id: str, body: FileWriteRequest, request: Request, _: Authed
+):
     """Write a file into the session VM."""
     sm = request.app.state.session_manager
     req_type = "write_file_b" if body.encoding == "base64" else "write_file"
     result = await sm.execute(
-        session_id, {"type": req_type, "path": body.path, "content": body.content},
+        session_id,
+        {"type": req_type, "path": body.path, "content": body.content},
     )
     return result
 
@@ -174,17 +183,22 @@ async def read_file_binary(session_id: str, path: str, request: Request, _: Auth
 
 # ── Install packages ─────────────────────────────────────────────────────────
 
+
 @router.post("/sessions/{session_id}/install")
-async def install_packages(session_id: str, body: InstallRequest, request: Request, _: Authed):
+async def install_packages(
+    session_id: str, body: InstallRequest, request: Request, _: Authed
+):
     """pip-install packages into the session VM."""
     sm = request.app.state.session_manager
     result = await sm.execute(
-        session_id, {"type": "install", "packages": body.packages},
+        session_id,
+        {"type": "install", "packages": body.packages},
     )
     return result
 
 
 # ── Health ───────────────────────────────────────────────────────────────────
+
 
 @router.get("/health", response_model=HealthResponse)
 async def health(request: Request):
@@ -226,6 +240,7 @@ async def readiness(request: Request):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _build_outputs(result: dict) -> list[OutputItem]:
     """Convert guest-agent result dict to structured OutputItem list.
 
@@ -236,20 +251,24 @@ def _build_outputs(result: dict) -> list[OutputItem]:
     # v3 agent returns structured outputs
     if "outputs" in result and result["outputs"]:
         for o in result["outputs"]:
-            outputs.append(OutputItem(
-                type=o.get("type", "text"),
-                content=o.get("content", ""),
-                name=o.get("name"),
-                format=o.get("format"),
-                encoding=o.get("encoding", "utf-8"),
-            ))
+            outputs.append(
+                OutputItem(
+                    type=o.get("type", "text"),
+                    content=o.get("content", ""),
+                    name=o.get("name"),
+                    format=o.get("format"),
+                    encoding=o.get("encoding", "utf-8"),
+                )
+            )
         return outputs
 
     # v2 fallback — flat output/stderr/error fields
     if result.get("output"):
         outputs.append(OutputItem(type=OutputType.text, content=result["output"]))
     if result.get("stderr"):
-        outputs.append(OutputItem(type=OutputType.stderr, content=result["stderr"], name="stderr"))
+        outputs.append(
+            OutputItem(type=OutputType.stderr, content=result["stderr"], name="stderr")
+        )
     if result.get("error") and not result.get("success"):
         outputs.append(OutputItem(type=OutputType.error, content=result["error"]))
 

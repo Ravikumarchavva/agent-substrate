@@ -1,8 +1,10 @@
 """Web Surfer Tool - Agentic web browsing with Playwright."""
 
+from __future__ import annotations
+
 import base64
-from typing import Any, ClassVar, Optional, Literal
 from datetime import datetime, timezone
+from typing import Any, ClassVar, Literal, Optional
 
 try:
     from playwright.async_api import async_playwright, Browser, Page  # noqa: F401
@@ -11,7 +13,7 @@ try:
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
 
-from agent_framework.core.tools.base_tool import BaseTool, Tool, ToolResult, ToolRisk
+from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
 
 
 class WebSurferTool(BaseTool):
@@ -56,14 +58,14 @@ class WebSurferTool(BaseTool):
         self._browser: Optional[Browser] = None
         self._page: Optional[Page] = None
 
-        self.tool_schema = Tool(
+        super().__init__(
             name="web_surfer",
             description=(
                 "Advanced web browsing tool for agents. Supports navigation, content extraction, "
                 "screenshots, element interaction, and form filling. Maintains browser session "
                 "across multiple actions."
             ),
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
@@ -132,19 +134,15 @@ class WebSurferTool(BaseTool):
                 },
                 "required": ["action"],
             },
+            annotations={
+                "readOnlyHint": True,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": True,
+                "title": "Web Surfer",
+            },
+            risk=self.risk,
         )
-
-    @property
-    def name(self) -> str:
-        return self.tool_schema.name
-
-    @property
-    def description(self) -> str:
-        return self.tool_schema.description
-
-    @property
-    def input_schema(self) -> dict:
-        return self.tool_schema.inputSchema
 
     async def _ensure_browser(self) -> None:
         """Ensure browser is initialized and ready."""

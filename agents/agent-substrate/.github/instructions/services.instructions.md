@@ -1,4 +1,6 @@
 ---
+name: "Microservice Conventions"
+description: "Service structure, event bus, shared contracts, and FastAPI lifespan wiring for microservices"
 applyTo: "src/agent_framework/services/**"
 ---
 

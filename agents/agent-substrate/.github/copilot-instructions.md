@@ -101,55 +101,11 @@ Each action fires an SSE event → `KanbanPanel` in the UI updates live.
 
 ---
 
-## Running the Server
-```bash
-# 1. Start infrastructure
-docker compose up -d postgres redis
+## `.env` Rule
+Never add inline comments after integer values. `python-dotenv` passes the whole string (including `# comment`) to Pydantic, causing `ValidationError` on settings load.
+✅ `REDIS_SESSION_TTL=3600`   ❌ `REDIS_SESSION_TTL=3600  # seconds`
 
-# 1b. Start MCP SSE demo server (optional — needed for notebooks 04/05/06)
-docker compose --profile mcp up -d mcp-server
-# → available at http://localhost:9000/sse
-
-# 2. Start backend (port 8001)
-uv run uvicorn agent_framework.server.app:app --port 8001 --reload
-
-# 3. Run tests
-uv run pytest
-
-# 4. Format / lint
-uv run ruff format .
-uv run ruff check .
-```
-
----
-
-## Docker Port Mapping
-| Service  | Host port | Container port | Notes |
-|---|---|---|---|
-| PostgreSQL | 5432 | 5432 | `DATABASE_URL` uses `localhost:5432` |
-| Redis | 6379 | 6379 | `REDIS_URL` uses `localhost:6379` |
-| MCP server | 9000 | 9000 | SSE at `localhost:9000/sse` (profile: `mcp`) |
-| Tempo | 4318 | 4318 | OTLP HTTP |
-| Grafana | 3001 | 3000 | |
-
----
-
-## Environment Variables (`.env` at repo root)
-```
-OPENAI_API_KEY=...
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
-REDIS_URL=redis://localhost:6379/0
-REDIS_SESSION_TTL=3600
-SESSION_MAX_MESSAGES=200
-SESSION_AUTO_CHECKPOINT=50
-SPOTIFY_CLIENT_ID=...        # optional
-SPOTIFY_CLIENT_SECRET=...    # optional
-CODE_INTERPRETER_URL=...     # optional
-```
-
-> **`.env` rule:** Never put inline comments after integer values — `python-dotenv`
-> passes the entire string (including `# comment`) to Pydantic, causing `ValidationError`.
-> ✅ `REDIS_SESSION_TTL=3600`   ❌ `REDIS_SESSION_TTL=3600  # seconds`
+> For Docker ports, service commands, and full env var reference, see `CLAUDE.md`.
 
 ---
 
@@ -240,64 +196,10 @@ Key behaviours:
 
 ## Microservices Architecture
 
-The repo ships a second deployment mode: 11 independent FastAPI services under `src/agent_framework/services/`.
+See `services.instructions.md` for the detailed service file layout and event bus patterns.
 
-### Service Map
-
-| Service | Key Model | Role |
-|---|---|---|
-| `gateway` | — | BFF proxy — single external ingress |
-| `identity` | `User` | JWT issuance, OAuth |
-| `policy` | `Policy` | RBAC authorization |
-| `conversation` | `Thread`, `Message` | Thread + message persistence |
-| `job_controller` | `JobRun` | Job lifecycle; dispatches agent_runtime |
-| `agent_runtime` | — | Runs the ReAct agent loop per job |
-| `tool_executor` | — | Executes individual tools in isolation |
-| `human_gate` | `HITLRequest` | HITL: ask_human + tool_approval |
-| `live_stream` | — | SSE projector (fans out EventBus → clients) |
-| `file_store` | `FileRecord` | File artifact upload/download |
-| `admin` | `AdminLog` | Admin CRUD (users, stats) |
-
-### Standard Service Layout
-```
-services/<name>/
-├── app.py       ← FastAPI factory + lifespan, wires app.state.*
-├── models.py    ← SQLAlchemy ORM models (service-private DB tables)
-├── routes.py    ← APIRouter with all endpoints
-├── service.py   ← Business logic layer
-└── __init__.py
-```
-`gateway`, `live_stream`, `tool_executor` omit `models.py`/`service.py` by design.
-
-### Shared Contracts
-Cross-service Pydantic DTOs live in `shared/contracts/<service_name>.py`:
-```python
-from agent_framework.shared.contracts.job_controller import JobRunRequest
-from agent_framework.shared.contracts.human_gate import HITLResponse
-```
-
-### Shared Event Bus
-All cross-service state changes go through Redis pub/sub:
-```python
-from agent_framework.shared.events.bus import EventBus
-from agent_framework.shared.events.types import workflow_started, workflow_failed
-
-bus: EventBus = app.state.bus
-await bus.publish(workflow_started(job_id=job.id, run_id=run.id))
-```
-Always use factory functions from `shared/events/types.py`. The `JobRun` model in `job_controller` emits events named `workflow_*` (naming is historical).
-
-### LLM Client Import
-```python
-# ✅ Correct
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
-# ❌ Wrong — this file does not exist
-from agent_framework.providers.llm.openai.client import OpenAIClient
-```
-
-### MCP Tool Loading
-```python
-from agent_framework.extensions.mcp import MCPClient
-tools = await MCPClient(url="http://localhost:9000/sse").discover_tools()
-```
-There is **no** `extensions.mcp.loader` module.
+**Non-obvious rules:**
+- LLM client exact import: `from agent_framework.providers.llm.openai.openai_client import OpenAIClient` (no `client.py` alias exists — importing from the wrong path silently fails at startup).
+- MCP tools: `from agent_framework.extensions.mcp import MCPClient` — there is **no** `extensions.mcp.loader` module.
+- Event factory functions only — never build event dicts manually, because factory functions enforce the schema contract consumed by all subscribers.
+- Services that intentionally omit `models.py`/`service.py`: `gateway` (BFF proxy), `live_stream` (SSE projector), `tool_executor` (executor pattern).

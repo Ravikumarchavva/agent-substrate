@@ -1,16 +1,31 @@
 ---
-applyTo: "src/agent_framework/tools/**"
-description: Conventions for writing agent tools
+name: "Tool Authoring Rules"
+description: "BaseTool subclassing, input schema, SSE emission, thread-safety, and registration"
+applyTo: "src/agent_framework/core/tools/**,src/agent_framework/extensions/tools/**"
 ---
 
 # Tool Authoring Rules
 
 ## Every tool MUST:
-1. Subclass `BaseTool` from `agent_framework.tools.base_tool`.
-2. Call `super().__init__(name, description, input_schema)` in `__init__`.
+1. Subclass `BaseTool` from `agent_framework.core.tools.base_tool`.
+2. Call `super().__init__(name, description, input_schema)` in `__init__` — never store a `Tool` Pydantic model on `self.tool_schema` instead. Bypassing `super().__init__()` means `self.annotations`, `self.name`, `self.description`, and `self.input_schema` never exist on the instance, causing `AttributeError` at runtime when the agent loop accesses them.
 3. Implement `async def execute(self, **kwargs) -> ToolResult`.
 4. Document each `input_schema` property with a `"description"` field.
 5. Return `ToolResult(content=..., metadata={...})`.
+
+**Correct:**
+```python
+class MyTool(BaseTool):
+    def __init__(self):
+        super().__init__(name="my_tool", description="...", input_schema={...})
+```
+
+**Wrong — never do this:**
+```python
+class MyTool(BaseTool):
+    def __init__(self):
+        self.tool_schema = Tool(name="my_tool", ...)  # ❌ bypasses BaseTool contract
+```
 
 ## required=[] vs optional fields
 Mark genuinely optional parameters by omitting them from `"required"`.

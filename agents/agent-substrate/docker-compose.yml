@@ -60,8 +60,9 @@ services:
     environment:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=9000
-    profiles:
-      - mcp
+    # profiles:
+    #   - mcp
+    init: true
     restart: unless-stopped
 
   # ── MinIO (S3-compatible object store for file storage) ────────────────
@@ -81,8 +82,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles:
-      - storage
+    # profiles:
+    #   - storage
 
   # ── Kafka (KRaft mode, no Zookeeper) ──────────────────────────────────
   # Two listeners:
@@ -115,8 +116,22 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    profiles:
-      - events
+    # profiles:
+    #   - events
+
+  # ── Kafka UI (web console for Kafka) ──────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    # profiles:
+    #   - events
 
 volumes:
   pgdata:

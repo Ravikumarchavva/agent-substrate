@@ -1,11 +1,10 @@
 """Web Surfer Tool - Agentic web browsing with Playwright."""
-import asyncio
 import base64
 from typing import Any, ClassVar, Optional, Literal
 from datetime import datetime, timezone
 
 try:
-    from playwright.async_api import async_playwright, Browser, Page, TimeoutError as PlaywrightTimeout
+    from playwright.async_api import async_playwright, Browser, Page  # noqa: F401
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False

@@ -100,7 +100,7 @@ class ConditionPipelineRunner:
 
     async def run_stream(self, input_text: str):  # type: ignore[override]
         """Stream version — runs upstream blocking then streams the branch."""
-        from agent_framework.core.messages._types import TextDeltaChunk, CompletionChunk
+        from agent_framework.core.messages._types import TextDeltaChunk
 
         if self.upstream_agent is None:
             yield TextDeltaChunk(text="No agent configured.")

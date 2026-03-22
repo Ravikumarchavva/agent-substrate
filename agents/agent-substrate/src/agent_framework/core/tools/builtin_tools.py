@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Any, ClassVar
+from datetime import datetime
+from typing import ClassVar
 
 from .base_tool import BaseTool, ToolResult, ToolRisk
 

@@ -18,7 +18,7 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from agent_framework.core.agents.base_agent import BaseAgent
 from agent_framework.evals.judge import LLMJudge
@@ -253,14 +253,14 @@ class EvalRunner:
 
         lines = [
             f"# Eval Report: {report.dataset_name}",
-            f"",
+            "",
             f"**Agent:** {report.agent_name}  ",
             f"**Model:** {report.model}  ",
             f"**Pass Rate:** {report.pass_rate:.1%}  ",
             f"**Avg Score:** {report.avg_score:.3f}  ",
             f"**Total Tokens:** {report.total_tokens:,}  ",
             f"**Duration:** {report.total_duration_seconds:.1f}s  ",
-            f"",
+            "",
             "## Results",
             "",
             "| # | Input | Expected | Actual | Score | Pass | Latency |",

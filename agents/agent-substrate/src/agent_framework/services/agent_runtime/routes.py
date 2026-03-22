@@ -10,7 +10,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from agent_framework.services.agent_runtime.runner import (

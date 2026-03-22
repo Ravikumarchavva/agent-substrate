@@ -13,7 +13,7 @@ async def main():
     # Traces: http://localhost:4318/v1/traces
     otlp_trace_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "localhost:4318")
     
-    print(f"--- ReAct Agent Tempo Tracing Demo ---")
+    print("--- ReAct Agent Tempo Tracing Demo ---")
     print(f"Configuring OTLP HTTP exporter for traces at: {otlp_trace_endpoint}\n")
     
     configure_opentelemetry(

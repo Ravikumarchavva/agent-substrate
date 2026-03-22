@@ -9,7 +9,6 @@ import uuid
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 from agent_framework.core.messages.client_messages import (
     AssistantMessage,

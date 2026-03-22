@@ -22,7 +22,6 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from pathlib import Path
 from typing import Optional
 
 from .config import CodeInterpreterConfig

@@ -9,11 +9,8 @@ in a service-aware runner that:
 """
 from __future__ import annotations
 
-import json
 import logging
-import uuid
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -27,7 +24,6 @@ from agent_framework.core.messages import CompletionChunk, ReasoningDeltaChunk, 
 from agent_framework.core.messages.client_messages import (
     AssistantMessage,
     SystemMessage,
-    ToolCallMessage,
     ToolExecutionResultMessage,
     UserMessage,
 )

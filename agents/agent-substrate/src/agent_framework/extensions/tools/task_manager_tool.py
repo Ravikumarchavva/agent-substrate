@@ -17,7 +17,7 @@ import logging
 from typing import Any, Awaitable, Callable, ClassVar, Dict, List, Optional
 
 from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from agent_framework.runtime.tasks.store import GlobalTaskStore, Task, TaskList
+from agent_framework.runtime.tasks.store import GlobalTaskStore, Task
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,7 @@ import os
 
 import pytest
 
-from agent_framework.core.storage.base import FileRef, FileStore
+from agent_framework.core.storage.base import FileRef
 from agent_framework.core.storage.local import LocalFileStore
 from agent_framework.core.storage.tenant import FileScope, TenantContext
 

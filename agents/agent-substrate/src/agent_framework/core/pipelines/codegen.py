@@ -23,7 +23,6 @@ from typing import List
 
 from agent_framework.core.pipelines.schema import (
     EdgeType,
-    NodeConfig,
     NodeType,
     PipelineConfig,
 )
@@ -165,7 +164,7 @@ def generate_code(config: PipelineConfig) -> str:
         main_lines.append(f'        pass_field="{pass_field}",')
         main_lines.append(f"        tripwire_on_fail={tripwire},")
         main_lines.append(f'        name="{gn.label or var}",')
-        main_lines.append(f"    )")
+        main_lines.append("    )")
     if guardrail_vars:
         main_lines.append("")
 
@@ -224,7 +223,7 @@ def generate_code(config: PipelineConfig) -> str:
             main_lines.append(f"        input_guardrails=[{', '.join(input_guards)}],")
         if output_guards:
             main_lines.append(f"        output_guardrails=[{', '.join(output_guards)}],")
-        main_lines.append(f"    )")
+        main_lines.append("    )")
     main_lines.append("")
 
     # Build router if present

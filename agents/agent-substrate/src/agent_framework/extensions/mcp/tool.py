@@ -1,6 +1,5 @@
 """MCP tool adapter that wraps MCP server tools as BaseTool instances."""
 from typing import Any
-import json
 
 from agent_framework.core.tools.base_tool import BaseTool, ToolResult
 from agent_framework.extensions.mcp.client import MCPClient

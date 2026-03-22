@@ -1,11 +1,9 @@
 
 import logging
-import sys
 from typing import Any, Dict, Optional, ContextManager
 from contextlib import contextmanager
 
 from opentelemetry import trace, metrics
-from opentelemetry.trace import Status, StatusCode
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import (
     ConsoleSpanExporter,

@@ -18,20 +18,16 @@ Routes mirror the public API surface:
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import AsyncIterator
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from agent_framework.shared.auth.claims import AuthClaims
-from agent_framework.shared.auth.middleware import get_current_user, optional_current_user
 from agent_framework.shared.contracts.conversation import (
     ChatRequest,
     ThreadCreate,
-    ThreadUpdate,
 )
 from agent_framework.shared.contracts.human_gate import HITLResponse
 

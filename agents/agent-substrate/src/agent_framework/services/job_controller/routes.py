@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent_framework.services.job_controller.service import (
     cancel_run,
     cleanup_cancel_signal,
-    complete_run,
     create_run,
     dispatch_run,
     get_active_run_for_thread,
@@ -168,7 +167,7 @@ async def cancel_run_endpoint(
     cleanup_cancel_signal(str(run_id))
 
     # Update DB
-    cancelled = await cancel_run(db, run_id)
+    await cancel_run(db, run_id)
     return CancelOut(
         status="cancelled",
         run_id=str(run_id),

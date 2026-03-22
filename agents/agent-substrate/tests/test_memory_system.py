@@ -10,8 +10,6 @@ Usage:
   uv run python examples/test_memory_system.py
 """
 import asyncio
-import json
-import sys
 import os
 
 # ---------------------------------------------------------------------------

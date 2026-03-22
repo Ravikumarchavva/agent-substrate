@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, Type
+from typing import TYPE_CHECKING, AsyncIterator, Optional, Type
 
 from agent_framework.core.messages.client_messages import BaseClientMessage, AssistantMessage
 

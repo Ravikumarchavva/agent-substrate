@@ -1,9 +1,7 @@
 """Shared API contracts for tool executor and MCP registry."""
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 

@@ -30,7 +30,7 @@ Design notes:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, Type, TYPE_CHECKING
+from typing import Any, Dict, Type, TYPE_CHECKING
 
 from pydantic import BaseModel
 

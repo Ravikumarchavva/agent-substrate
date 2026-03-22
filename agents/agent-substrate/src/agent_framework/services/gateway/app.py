@@ -76,11 +76,6 @@ async def lifespan(app):
         "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET",
     )
 
-    cors_origins = os.environ.get(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
-    ).split(",")
-
     logger.info("Gateway BFF started — routing to %d downstream services", len(clients))
     yield
 

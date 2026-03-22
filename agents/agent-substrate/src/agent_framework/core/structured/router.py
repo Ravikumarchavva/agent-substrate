@@ -183,7 +183,6 @@ class StructuredRouter:
             input_text = _extract_last_user_text(messages)
 
         # --- Step 4: dispatch to sub-agent or callable --------------------
-        import asyncio
         import inspect
 
         sub_result: Any

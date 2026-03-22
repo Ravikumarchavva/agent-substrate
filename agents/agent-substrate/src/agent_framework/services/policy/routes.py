@@ -10,9 +10,9 @@ POST /policy/seed           Seed default policies
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from agent_framework.shared.auth.claims import AuthClaims

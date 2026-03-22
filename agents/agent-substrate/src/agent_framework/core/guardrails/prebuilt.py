@@ -486,7 +486,6 @@ class LLMJudgeGuardrail(BaseGuardrail):
             response = await self._model_client.generate(messages=messages)
 
             # Parse judge response
-            import json
             response_text = ""
             if response.content:
                 response_text = " ".join(

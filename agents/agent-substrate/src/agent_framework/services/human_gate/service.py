@@ -5,7 +5,6 @@ Uses Redis pub/sub to deliver responses back to the waiting agent.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import uuid

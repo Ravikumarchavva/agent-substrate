@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .config import CodeInterpreterConfig
-from .vm_manager import VM, VMPool, VMState
+from .vm_manager import VM, VMPool
 
 logger = logging.getLogger(__name__)
 

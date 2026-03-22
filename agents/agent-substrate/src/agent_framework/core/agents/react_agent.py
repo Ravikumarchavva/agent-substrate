@@ -46,8 +46,7 @@ from agent_framework.core.hooks import HookEvent, HookManager
 from agent_framework.core.memory.base_memory import BaseMemory
 from agent_framework.core.memory.memory_scope import MemoryScope
 from agent_framework.core.memory.unbounded_memory import UnboundedMemory
-from agent_framework.core.messages.base_message import UsageStats
-from agent_framework.core.structured import StructuredOutputResult, StructuredOutputError
+from agent_framework.core.structured import StructuredOutputResult
 from agent_framework.core.messages.client_messages import (
     AssistantMessage,
     SystemMessage,

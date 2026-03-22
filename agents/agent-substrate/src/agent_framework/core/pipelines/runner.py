@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from agent_framework.core.agents.react_agent import ReActAgent
 from agent_framework.core.context.base_context import ModelContext
-from agent_framework.core.guardrails.base_guardrail import BaseGuardrail, GuardrailType
+from agent_framework.core.guardrails.base_guardrail import BaseGuardrail
 from agent_framework.core.memory.base_memory import BaseMemory
 from agent_framework.core.memory.redis_memory import RedisMemory
 from agent_framework.core.memory.unbounded_memory import UnboundedMemory
@@ -635,7 +635,7 @@ class PipelineRunner:
     @staticmethod
     def _build_routing_schema(cfg: Dict[str, Any]) -> type:
         """Dynamically build a Pydantic model from routing_fields config."""
-        from pydantic import BaseModel as PydanticBaseModel, create_model, Field as PydanticField
+        from pydantic import create_model, Field as PydanticField
 
         fields_def = cfg.get("routing_fields", [])
         if not fields_def:

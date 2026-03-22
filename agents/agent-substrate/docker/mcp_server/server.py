@@ -65,10 +65,9 @@ def server_info() -> dict:
 # ── Entry point ────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    host = os.environ.get("MCP_HOST", "0.0.0.0")
+    host = os.environ.get("MCP_HOST", "127.0.0.1")
     port = int(os.environ.get("MCP_PORT", "9000"))
 
-    print(f"Starting MCP SSE server on http://{host}:{port}/sse")
     mcp.run(
         transport="sse",
         host=host,

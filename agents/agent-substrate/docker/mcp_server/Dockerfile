@@ -11,4 +11,4 @@ ENV MCP_PORT=9000
 
 EXPOSE 9000
 
-CMD ["python", "server.py"]
+CMD ["python", "-u", "server.py"]

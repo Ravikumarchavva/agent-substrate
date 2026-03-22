@@ -10,6 +10,7 @@ Covers:
 
 All async tests use asyncio.run() wrappers — no pytest-asyncio required.
 """
+
 from __future__ import annotations
 
 import asyncio

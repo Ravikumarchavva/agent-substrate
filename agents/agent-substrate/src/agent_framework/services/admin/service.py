@@ -2,6 +2,7 @@
 
 Platform administration: stats aggregation, tenant management, audit logging.
 """
+
 from __future__ import annotations
 
 import logging
@@ -101,10 +102,7 @@ async def list_tenants(
     offset: int = 0,
 ) -> List[Tenant]:
     result = await db.execute(
-        select(Tenant)
-        .order_by(Tenant.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        select(Tenant).order_by(Tenant.created_at.desc()).limit(limit).offset(offset)
     )
     return list(result.scalars().all())
 

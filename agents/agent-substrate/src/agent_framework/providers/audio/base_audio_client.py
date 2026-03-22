@@ -40,9 +40,19 @@ STT_MODEL = Literal[
 ]
 
 TTS_VOICE = Literal[
-    "alloy", "ash", "ballad", "coral", "echo",
-    "fable", "nova", "onyx", "sage", "shimmer",
-    "verse", "marin", "cedar",
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "fable",
+    "nova",
+    "onyx",
+    "sage",
+    "shimmer",
+    "verse",
+    "marin",
+    "cedar",
 ]
 
 TTS_FORMAT = Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
@@ -51,6 +61,7 @@ TTS_FORMAT = Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
 # ---------------------------------------------------------------------------
 # Abstract base
 # ---------------------------------------------------------------------------
+
 
 class BaseAudioClient(ABC):
     """Provider-agnostic interface for STT, TTS, and Speech-to-Speech.

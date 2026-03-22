@@ -11,6 +11,7 @@ Import any of these directly as the ``schema`` argument to
 
     from agent_framework.core.structured.schemas import ContentSafetyJudge
 """
+
 from __future__ import annotations
 
 from typing import Generic, List, TypeVar
@@ -23,6 +24,7 @@ T = TypeVar("T")
 # ---------------------------------------------------------------------------
 # Judge schemas
 # ---------------------------------------------------------------------------
+
 
 class ContentSafetyJudge(BaseModel):
     """LLM-as-judge output schema for content safety moderation.
@@ -113,6 +115,7 @@ class ClassificationResult(BaseModel):
 # ---------------------------------------------------------------------------
 # Extraction schema
 # ---------------------------------------------------------------------------
+
 
 class ExtractionResult(BaseModel, Generic[T]):
     """Generic structured data extraction wrapper.

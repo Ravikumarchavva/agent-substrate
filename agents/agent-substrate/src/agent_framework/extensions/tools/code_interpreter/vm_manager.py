@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 # ── Data types ───────────────────────────────────────────────────────────────
 
+
 class VMState(Enum):
     CREATING = auto()
     READY = auto()
@@ -42,6 +43,7 @@ class VMState(Enum):
 @dataclass
 class VM:
     """Represents a single Firecracker microVM instance."""
+
     vm_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     state: VMState = VMState.CREATING
     socket_path: str = ""
@@ -57,6 +59,7 @@ class VM:
 
 
 # ── vsock communication ─────────────────────────────────────────────────────
+
 
 def _recv_exact(sock: socket.socket, n: int) -> bytes:
     """Read exactly n bytes from a socket."""
@@ -87,6 +90,7 @@ def recv_vsock_message(sock: socket.socket) -> dict:
 
 # ── VM Manager ───────────────────────────────────────────────────────────────
 
+
 class VMManager:
     """Manages the lifecycle of a single Firecracker VM."""
 
@@ -101,7 +105,9 @@ class VMManager:
         )
         vm.socket_path = os.path.join(vm.work_dir, "firecracker.sock")
         vm.rootfs_path = os.path.join(vm.work_dir, "rootfs.ext4")
-        vm.vsock_uds_path = os.path.join(vm.work_dir, f"vsock_{self.config.vsock_port}.sock")
+        vm.vsock_uds_path = os.path.join(
+            vm.work_dir, f"vsock_{self.config.vsock_port}.sock"
+        )
 
         logger.info("Creating VM %s (CID=%d)", vm.vm_id, cid)
 
@@ -131,28 +137,44 @@ class VMManager:
 
         # 3. Configure via Firecracker REST API
         try:
-            await self._fc_put(vm, "boot-source", {
-                "kernel_image_path": self.config.kernel_path,
-                "boot_args": "console=ttyS0 reboot=k panic=1 pci=off quiet loglevel=1",
-            })
+            await self._fc_put(
+                vm,
+                "boot-source",
+                {
+                    "kernel_image_path": self.config.kernel_path,
+                    "boot_args": "console=ttyS0 reboot=k panic=1 pci=off quiet loglevel=1",
+                },
+            )
 
-            await self._fc_put(vm, "drives/rootfs", {
-                "drive_id": "rootfs",
-                "path_on_host": vm.rootfs_path,
-                "is_root_device": True,
-                "is_read_only": False,
-            })
+            await self._fc_put(
+                vm,
+                "drives/rootfs",
+                {
+                    "drive_id": "rootfs",
+                    "path_on_host": vm.rootfs_path,
+                    "is_root_device": True,
+                    "is_read_only": False,
+                },
+            )
 
-            await self._fc_put(vm, "machine-config", {
-                "vcpu_count": self.config.vcpu_count,
-                "mem_size_mib": self.config.mem_size_mib,
-            })
+            await self._fc_put(
+                vm,
+                "machine-config",
+                {
+                    "vcpu_count": self.config.vcpu_count,
+                    "mem_size_mib": self.config.mem_size_mib,
+                },
+            )
 
             # vsock device — guest_cid must be >= 3
-            await self._fc_put(vm, "vsock", {
-                "guest_cid": cid,
-                "uds_path": vm.vsock_uds_path,
-            })
+            await self._fc_put(
+                vm,
+                "vsock",
+                {
+                    "guest_cid": cid,
+                    "uds_path": vm.vsock_uds_path,
+                },
+            )
 
             # Start the VM
             await self._fc_put(vm, "actions", {"action_type": "InstanceStart"})
@@ -167,9 +189,13 @@ class VMManager:
 
     async def execute_code(self, vm: VM, code: str, timeout: int = 30) -> dict:
         """Send code to the guest agent and get the result via vsock."""
-        return await self.execute_request(vm, {"type": "python", "code": code, "timeout": timeout}, timeout)
+        return await self.execute_request(
+            vm, {"type": "python", "code": code, "timeout": timeout}, timeout
+        )
 
-    async def execute_request(self, vm: VM, request: dict, timeout: int | None = None) -> dict:
+    async def execute_request(
+        self, vm: VM, request: dict, timeout: int | None = None
+    ) -> dict:
         """Send any request to the guest agent and return the result.
 
         This is the low-level method used by SessionManager.  The VM state
@@ -292,12 +318,17 @@ class VMManager:
         result = await asyncio.to_thread(
             subprocess.run,
             [
-                "curl", "-s",
-                "--unix-socket", vm.socket_path,
-                "-X", "PUT",
+                "curl",
+                "-s",
+                "--unix-socket",
+                vm.socket_path,
+                "-X",
+                "PUT",
                 f"http://localhost/{endpoint}",
-                "-H", "Content-Type: application/json",
-                "-d", json.dumps(payload),
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                json.dumps(payload),
             ],
             capture_output=True,
             text=True,
@@ -319,6 +350,7 @@ class VMManager:
 
 # ── VM Pool ──────────────────────────────────────────────────────────────────
 
+
 class VMPool:
     """Async pool of warm Firecracker VMs for low-latency code execution.
 
@@ -330,9 +362,7 @@ class VMPool:
     def __init__(self, config: CodeInterpreterConfig | None = None):
         self.config = config or CodeInterpreterConfig()
         self.manager = VMManager(self.config)
-        self._pool: asyncio.Queue[VM] = asyncio.Queue(
-            maxsize=self.config.pool_max_size
-        )
+        self._pool: asyncio.Queue[VM] = asyncio.Queue(maxsize=self.config.pool_max_size)
         self._cid_counter: int = self.config.vsock_guest_cid
         self._started = False
         self._replenish_tasks: list[asyncio.Task] = []
@@ -361,7 +391,9 @@ class VMPool:
         tasks = [self._create_and_enqueue() for _ in range(self.config.pool_size)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         successes = sum(1 for r in results if not isinstance(r, Exception))
-        logger.info("VM pool started: %d/%d VMs ready", successes, self.config.pool_size)
+        logger.info(
+            "VM pool started: %d/%d VMs ready", successes, self.config.pool_size
+        )
 
     async def stop(self) -> None:
         """Drain and destroy all VMs in the pool."""
@@ -387,7 +419,9 @@ class VMPool:
         """Get a ready VM from the pool."""
         try:
             vm = await asyncio.wait_for(self._pool.get(), timeout=timeout)
-            if vm.state != VMState.READY or (vm.process and vm.process.poll() is not None):
+            if vm.state != VMState.READY or (
+                vm.process and vm.process.poll() is not None
+            ):
                 # VM died while waiting — destroy and try again
                 await self.manager.destroy_vm(vm)
                 self._schedule_replenish()

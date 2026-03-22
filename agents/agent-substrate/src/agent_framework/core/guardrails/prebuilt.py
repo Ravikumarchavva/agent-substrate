@@ -18,6 +18,7 @@ Included:
   └──────────────────────────────┴──────────┴──────────────────────────────────┘
   I = input, O = output, T = tool_call
 """
+
 from __future__ import annotations
 
 import re
@@ -34,6 +35,7 @@ from agent_framework.core.guardrails.base_guardrail import (
 # ---------------------------------------------------------------------------
 # Content filter — keyword / regex blocklist
 # ---------------------------------------------------------------------------
+
 
 class ContentFilterGuardrail(BaseGuardrail):
     """Block messages that match any pattern in a configurable blocklist.
@@ -62,14 +64,18 @@ class ContentFilterGuardrail(BaseGuardrail):
         self.blocked_keywords = [kw.lower() for kw in (blocked_keywords or [])]
         # Pre-compile regexes (validate user-supplied patterns)
         self._compiled = []
-        for p in (blocked_patterns or []):
+        for p in blocked_patterns or []:
             try:
                 self._compiled.append(re.compile(p, re.IGNORECASE))
             except re.error as e:
                 raise ValueError(f"Invalid blocked_pattern regex '{p}': {e}") from e
 
     async def check(self, ctx: GuardrailContext) -> GuardrailResult:
-        text = ctx.input_text if self.guardrail_type == GuardrailType.INPUT else ctx.output_text
+        text = (
+            ctx.input_text
+            if self.guardrail_type == GuardrailType.INPUT
+            else ctx.output_text
+        )
         if not text:
             return self._pass("No text to check")
 
@@ -107,18 +113,10 @@ _PII_PATTERNS: Dict[str, re.Pattern] = {
     "email": re.compile(
         r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", re.IGNORECASE
     ),
-    "phone_us": re.compile(
-        r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}"
-    ),
-    "ssn": re.compile(
-        r"\b\d{3}-\d{2}-\d{4}\b"
-    ),
-    "credit_card": re.compile(
-        r"\b\d(?:[ -]?\d){12,18}\b"
-    ),
-    "ip_address": re.compile(
-        r"\b(?:\d{1,3}\.){3}\d{1,3}\b"
-    ),
+    "phone_us": re.compile(r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}"),
+    "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "credit_card": re.compile(r"\b\d(?:[ -]?\d){12,18}\b"),
+    "ip_address": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
 }
 
 
@@ -159,10 +157,16 @@ class PIIDetectionGuardrail(BaseGuardrail):
                 try:
                     self._patterns[label] = re.compile(pat_str, re.IGNORECASE)
                 except re.error as e:
-                    raise ValueError(f"Invalid custom PII pattern '{label}': {e}") from e
+                    raise ValueError(
+                        f"Invalid custom PII pattern '{label}': {e}"
+                    ) from e
 
     async def check(self, ctx: GuardrailContext) -> GuardrailResult:
-        text = ctx.input_text if self.guardrail_type == GuardrailType.INPUT else ctx.output_text
+        text = (
+            ctx.input_text
+            if self.guardrail_type == GuardrailType.INPUT
+            else ctx.output_text
+        )
         if not text:
             return self._pass("No text to check")
 
@@ -174,7 +178,11 @@ class PIIDetectionGuardrail(BaseGuardrail):
                 raw = match.group()
                 if label in ("ssn", "credit_card"):
                     # Show only last 4 characters
-                    masked = "*" * max(0, len(raw) - 4) + raw[-4:] if len(raw) > 4 else "****"
+                    masked = (
+                        "*" * max(0, len(raw) - 4) + raw[-4:]
+                        if len(raw) > 4
+                        else "****"
+                    )
                 else:
                     masked = "****"
                 detected[label] = masked
@@ -195,7 +203,10 @@ class PIIDetectionGuardrail(BaseGuardrail):
 # ---------------------------------------------------------------------------
 
 _INJECTION_PATTERNS: List[re.Pattern] = [
-    re.compile(r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)", re.I),
+    re.compile(
+        r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)",
+        re.I,
+    ),
     re.compile(r"disregard\s+(all\s+)?(previous|prior|above)", re.I),
     re.compile(r"forget\s+(all\s+)?(previous|prior|above|everything)", re.I),
     re.compile(r"you\s+are\s+now\s+(?:a|an|the)\s+", re.I),
@@ -263,6 +274,7 @@ class PromptInjectionGuardrail(BaseGuardrail):
 # Max token guardrail
 # ---------------------------------------------------------------------------
 
+
 class MaxTokenGuardrail(BaseGuardrail):
     """Reject input that exceeds a token limit.
 
@@ -303,6 +315,7 @@ class MaxTokenGuardrail(BaseGuardrail):
         self._encoding = None
         try:
             import tiktoken
+
             try:
                 self._encoding = tiktoken.encoding_for_model(model)
             except KeyError:
@@ -345,6 +358,7 @@ class MaxTokenGuardrail(BaseGuardrail):
 # ---------------------------------------------------------------------------
 # Tool-call validation
 # ---------------------------------------------------------------------------
+
 
 class ToolCallValidationGuardrail(BaseGuardrail):
     """Validate tool calls against allow/block lists and argument schemas.
@@ -434,6 +448,7 @@ class ToolCallValidationGuardrail(BaseGuardrail):
 # LLM Judge — uses a second model call to evaluate safety / relevance
 # ---------------------------------------------------------------------------
 
+
 class LLMJudgeGuardrail(BaseGuardrail):
     """Use a secondary LLM to judge content safety or policy compliance.
 
@@ -454,7 +469,7 @@ class LLMJudgeGuardrail(BaseGuardrail):
     _DEFAULT_JUDGE_PROMPT = (
         "You are a content safety classifier. Evaluate if the following content "
         "is safe, appropriate, and free of harmful intent.\n\n"
-        "Respond ONLY with a JSON object: {\"safe\": true/false, \"reason\": \"brief explanation\"}\n\n"
+        'Respond ONLY with a JSON object: {"safe": true/false, "reason": "brief explanation"}\n\n'
         "Content to evaluate:\n"
     )
 
@@ -472,12 +487,19 @@ class LLMJudgeGuardrail(BaseGuardrail):
         self._judge_prompt = judge_prompt or self._DEFAULT_JUDGE_PROMPT
 
     async def check(self, ctx: GuardrailContext) -> GuardrailResult:
-        text = ctx.input_text if self.guardrail_type == GuardrailType.INPUT else ctx.output_text
+        text = (
+            ctx.input_text
+            if self.guardrail_type == GuardrailType.INPUT
+            else ctx.output_text
+        )
         if not text:
             return self._pass("No text to judge")
 
         try:
-            from agent_framework.core.messages.client_messages import SystemMessage, UserMessage
+            from agent_framework.core.messages.client_messages import (
+                SystemMessage,
+                UserMessage,
+            )
 
             messages = [
                 SystemMessage(content=self._judge_prompt),
@@ -527,6 +549,7 @@ class LLMJudgeGuardrail(BaseGuardrail):
 
         # Try extracting from markdown code block
         import re
+
         json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if json_match:
             try:
@@ -544,6 +567,6 @@ class LLMJudgeGuardrail(BaseGuardrail):
 
         # Fallback: look for keywords
         lower = text.lower()
-        if "unsafe" in lower or "not safe" in lower or "\"safe\": false" in lower:
+        if "unsafe" in lower or "not safe" in lower or '"safe": false' in lower:
             return {"safe": False, "reason": text[:200]}
         return {"safe": True, "reason": text[:200]}

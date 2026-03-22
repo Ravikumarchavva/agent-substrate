@@ -16,6 +16,7 @@ Design decisions:
   - Results carry metadata for audit trails.
   - Guardrails run in parallel by default (asyncio.gather) for performance.
 """
+
 from __future__ import annotations
 
 from __future__ import annotations
@@ -34,16 +35,19 @@ from agent_framework.core.messages.base_message import BaseClientMessage
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class GuardrailType(str, Enum):
     """When a guardrail fires in the agent loop."""
-    INPUT = "input"            # Before user input enters memory / LLM
-    OUTPUT = "output"          # After LLM responds, before returning to user
-    TOOL_CALL = "tool_call"    # Before a tool is executed
+
+    INPUT = "input"  # Before user input enters memory / LLM
+    OUTPUT = "output"  # After LLM responds, before returning to user
+    TOOL_CALL = "tool_call"  # Before a tool is executed
 
 
 # ---------------------------------------------------------------------------
 # Context — immutable snapshot passed to guardrails
 # ---------------------------------------------------------------------------
+
 
 class GuardrailContext(BaseModel):
     """Read-only context for a guardrail check.
@@ -51,6 +55,7 @@ class GuardrailContext(BaseModel):
     Carries everything a guardrail might need to make a decision.
     Fields are Optional because not every field applies to every type.
     """
+
     # Identity
     agent_name: str = ""
     run_id: str = ""
@@ -76,13 +81,15 @@ class GuardrailContext(BaseModel):
 # Result
 # ---------------------------------------------------------------------------
 
+
 class GuardrailResult(BaseModel):
     """Outcome of a single guardrail check."""
+
     guardrail_name: str
     guardrail_type: GuardrailType
     passed: bool = True
-    tripwire: bool = False        # True → hard stop, agent loop aborts
-    message: str = ""             # Human-readable explanation
+    tripwire: bool = False  # True → hard stop, agent loop aborts
+    message: str = ""  # Human-readable explanation
     metadata: Dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -92,6 +99,7 @@ class GuardrailResult(BaseModel):
 # ---------------------------------------------------------------------------
 # Abstract base
 # ---------------------------------------------------------------------------
+
 
 class BaseGuardrail(ABC):
     """Abstract base for all guardrails.
@@ -160,7 +168,9 @@ class BaseGuardrail(ABC):
             metadata=meta,
         )
 
-    def _fail(self, message: str, *, tripwire: bool = False, **meta: Any) -> GuardrailResult:
+    def _fail(
+        self, message: str, *, tripwire: bool = False, **meta: Any
+    ) -> GuardrailResult:
         """Shortcut to build a failing result."""
         return GuardrailResult(
             guardrail_name=self.name,

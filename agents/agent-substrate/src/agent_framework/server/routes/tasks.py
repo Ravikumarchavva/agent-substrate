@@ -1,4 +1,5 @@
 """Tasks REST API — CRUD for the agent-driven Kanban task board."""
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -16,8 +17,9 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 # Schemas
 # ---------------------------------------------------------------------------
 
+
 class TaskUpdateRequest(BaseModel):
-    status: Optional[str] = None   # "todo" | "in_progress" | "done"
+    status: Optional[str] = None  # "todo" | "in_progress" | "done"
     title: Optional[str] = None
 
 
@@ -28,6 +30,7 @@ class AddTasksRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get("/{conversation_id}")
 async def get_tasks(conversation_id: str):
@@ -60,16 +63,19 @@ async def update_task(
     # Emit to the correct per-thread bridge (looks up conversation_id from store)
     task_list_obj = store.get_task_list(task_list_id)
     if task_list_obj:
-        await bridge_registry.emit(task_list_obj.conversation_id, {
-            "type": "task_updated",
-            "task_list_id": task_list_id,
-            "task": {
-                "id": result.id,
-                "title": result.title,
-                "status": result.status,
-                "order": result.order,
+        await bridge_registry.emit(
+            task_list_obj.conversation_id,
+            {
+                "type": "task_updated",
+                "task_list_id": task_list_id,
+                "task": {
+                    "id": result.id,
+                    "title": result.title,
+                    "status": result.status,
+                    "order": result.order,
+                },
             },
-        })
+        )
     return {
         "status": "ok",
         "task": {"id": result.id, "title": result.title, "status": result.status},
@@ -90,11 +96,19 @@ async def add_tasks(
     task_list_obj = store.get_task_list(task_list_id)
     if task_list_obj:
         for t in new_tasks:
-            await bridge_registry.emit(task_list_obj.conversation_id, {
-                "type": "task_added",
-                "task_list_id": task_list_id,
-                "task": {"id": t.id, "title": t.title, "status": t.status, "order": t.order},
-            })
+            await bridge_registry.emit(
+                task_list_obj.conversation_id,
+                {
+                    "type": "task_added",
+                    "task_list_id": task_list_id,
+                    "task": {
+                        "id": t.id,
+                        "title": t.title,
+                        "status": t.status,
+                        "order": t.order,
+                    },
+                },
+            )
     return {"status": "ok", "added": len(new_tasks)}
 
 
@@ -114,10 +128,12 @@ async def delete_task(
 
     task_list_obj = store.get_task_list(task_list_id)
     if task_list_obj:
-        await bridge_registry.emit(task_list_obj.conversation_id, {
-            "type": "task_deleted",
-            "task_list_id": task_list_id,
-            "task_id": task_id,
-        })
+        await bridge_registry.emit(
+            task_list_obj.conversation_id,
+            {
+                "type": "task_deleted",
+                "task_list_id": task_list_id,
+                "task_id": task_id,
+            },
+        )
     return {"status": "ok"}
-

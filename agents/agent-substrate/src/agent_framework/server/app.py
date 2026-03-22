@@ -34,7 +34,9 @@ from agent_framework.server.routes.admin import router as admin_router
 from agent_framework.server.routes.auth import router as auth_router
 from agent_framework.server.routes.cancel import router as cancel_router
 from agent_framework.server.routes.chat import router as chat_router
-from agent_framework.server.routes.code_interpreter import router as code_interpreter_router
+from agent_framework.server.routes.code_interpreter import (
+    router as code_interpreter_router,
+)
 from agent_framework.server.routes.elements import router as elements_router
 from agent_framework.server.routes.feedback import router as feedback_router
 from agent_framework.server.routes.audio import router as audio_router
@@ -49,7 +51,9 @@ from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentT
 from agent_framework.core.tools.registry import ToolRegistry
 from agent_framework.core.storage.factory import create_file_store
 from agent_framework.extensions.tools.code_interpreter import CodeInterpreterTool
-from agent_framework.extensions.tools.code_interpreter.http_client import CodeInterpreterClient
+from agent_framework.extensions.tools.code_interpreter.http_client import (
+    CodeInterpreterClient,
+)
 from agent_framework.extensions.tools.file_manager_tool import FileManagerTool
 from agent_framework.extensions.mcp.app_tools import (
     ColorPaletteTool,
@@ -62,8 +66,9 @@ from agent_framework.extensions.mcp.app_tools import (
 from agent_framework.providers.integrations.spotify import SpotifyService
 from agent_framework.runtime.hitl import BridgeRegistry
 from agent_framework.extensions.tools.task_manager_tool import TaskManagerTool
-    
+
 # ── Lifespan ─────────────────────────────────────────────────────────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -107,7 +112,9 @@ async def lifespan(app: FastAPI):
     # --- keep app.state.bridge as a sentinel-less stub for task SSE events ---
     # TaskManagerTool emits via a dynamic closure that routes through the
     # correct per-thread bridge at call time (safe with concurrent requests).
-    from agent_framework.extensions.tools.task_manager_tool import current_thread_id as _task_thread_id
+    from agent_framework.extensions.tools.task_manager_tool import (
+        current_thread_id as _task_thread_id,
+    )
 
     async def _task_event_emitter(event: dict) -> None:
         """Emit task SSE events to the active bridge for the current thread."""
@@ -135,7 +142,9 @@ async def lifespan(app: FastAPI):
     code_interpreter_tool: CodeInterpreterTool | None = None
     ci_client: CodeInterpreterClient | None = None
 
-    ci_url = getattr(settings, "CODE_INTERPRETER_URL", "") or os.environ.get("CODE_INTERPRETER_URL", "")
+    ci_url = getattr(settings, "CODE_INTERPRETER_URL", "") or os.environ.get(
+        "CODE_INTERPRETER_URL", ""
+    )
     if ci_url:
         ci_client = CodeInterpreterClient(
             base_url=ci_url,
@@ -153,10 +162,14 @@ async def lifespan(app: FastAPI):
             code_interpreter_tool = CodeInterpreterTool()  # auto-detect from env
             if code_interpreter_tool._mode != "none":
                 await code_interpreter_tool.start()
-                logging.getLogger(__name__).info("Code interpreter started (local mode)")
+                logging.getLogger(__name__).info(
+                    "Code interpreter started (local mode)"
+                )
             else:
                 code_interpreter_tool = None
-                logging.getLogger(__name__).info("Code interpreter disabled (no URL configured)")
+                logging.getLogger(__name__).info(
+                    "Code interpreter disabled (no URL configured)"
+                )
         except Exception as e:
             logging.getLogger(__name__).warning("Code interpreter disabled: %s", e)
             code_interpreter_tool = None
@@ -177,20 +190,22 @@ async def lifespan(app: FastAPI):
         session_factory=session_factory,
     )
 
-    app.state.tools = ToolRegistry.from_list([
-        ask_tool,
-        task_tool,
-        file_manager_tool,
-        CalculatorTool(),
-        GetCurrentTimeTool(),
-        DataVisualizerTool(),
-        MarkdownPreviewerTool(),
-        JsonExplorerTool(),
-        ColorPaletteTool(),
-        KanbanBoardTool(),
-        SpotifyPlayerTool(spotify_service=spotify_svc),
-        *([code_interpreter_tool] if code_interpreter_tool else []),
-    ])
+    app.state.tools = ToolRegistry.from_list(
+        [
+            ask_tool,
+            task_tool,
+            file_manager_tool,
+            CalculatorTool(),
+            GetCurrentTimeTool(),
+            DataVisualizerTool(),
+            MarkdownPreviewerTool(),
+            JsonExplorerTool(),
+            ColorPaletteTool(),
+            KanbanBoardTool(),
+            SpotifyPlayerTool(spotify_service=spotify_svc),
+            *([code_interpreter_tool] if code_interpreter_tool else []),
+        ]
+    )
 
     # HITL configuration for the agent
     # Note: tool_approval_handler is set per-request in _get_agent_deps using
@@ -201,7 +216,7 @@ async def lifespan(app: FastAPI):
     app.state.tool_timeout = 300.0  # match HITL bridge timeout
 
     _prompt_path = (
-        __import__('pathlib').Path(__file__).parent / "prompts" / "default_system.md"
+        __import__("pathlib").Path(__file__).parent / "prompts" / "default_system.md"
     )
     app.state.system_instructions = _prompt_path.read_text(encoding="utf-8").strip()
 
@@ -256,6 +271,7 @@ async def lifespan(app: FastAPI):
 
 # ── App factory ──────────────────────────────────────────────────────────────
 
+
 def create_app() -> FastAPI:
     """Build and return the FastAPI application."""
     app = FastAPI(
@@ -292,6 +308,7 @@ def create_app() -> FastAPI:
     # Visual Builder — only mounted when ENABLE_BUILDER=true (zero prod footprint)
     if settings.ENABLE_BUILDER:
         from agent_framework.server.routes.builder import router as builder_router
+
         app.include_router(builder_router)
         logging.getLogger(__name__).info("Builder API mounted at /builder")
 

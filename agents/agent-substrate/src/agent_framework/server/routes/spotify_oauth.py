@@ -21,8 +21,10 @@ _user_tokens: Dict[str, Dict[str, Any]] = {}
 
 def get_auth_service() -> SpotifyAuthService:
     """Get Spotify OAuth service instance."""
-    redirect_uri = settings.SPOTIFY_REDIRECT_URI or "http://localhost:8001/auth/spotify/callback"
-    
+    redirect_uri = (
+        settings.SPOTIFY_REDIRECT_URI or "http://localhost:8001/auth/spotify/callback"
+    )
+
     return SpotifyAuthService(
         client_id=settings.SPOTIFY_CLIENT_ID,
         client_secret=settings.SPOTIFY_CLIENT_SECRET,
@@ -33,7 +35,7 @@ def get_auth_service() -> SpotifyAuthService:
 @router.get("/login")
 async def spotify_login(request: Request):
     """Redirect user to Spotify OAuth authorization page.
-    
+
     Opens Spotify login where user grants permissions for:
     - Streaming (Web Playback SDK)
     - Read email & private info
@@ -41,10 +43,10 @@ async def spotify_login(request: Request):
     """
     auth_service = get_auth_service()
     auth_url, state = auth_service.get_authorization_url()
-    
+
     # Store state in session (simplified - use Redis in production)
-    request.app.state.spotify_oauth_state = state  
-    
+    request.app.state.spotify_oauth_state = state
+
     logger.info("Redirecting to Spotify OAuth login")
     return RedirectResponse(auth_url)
 
@@ -57,7 +59,7 @@ async def spotify_callback(
     error: Optional[str] = Query(None, description="Error if user declined"),
 ):
     """Handle OAuth callback from Spotify.
-    
+
     Exchanges authorization code for access + refresh tokens and closes popup.
     """
     if error:
@@ -80,19 +82,19 @@ async def spotify_callback(
             """,
             status_code=400,
         )
-    
+
     auth_service = get_auth_service()
-    
+
     # Validate state to prevent CSRF
-    stored_state = getattr(request.app.state, 'spotify_oauth_state', None)
+    stored_state = getattr(request.app.state, "spotify_oauth_state", None)
     if not stored_state or state != stored_state:
         logger.error("Invalid OAuth state parameter")
         raise HTTPException(status_code=400, detail="Invalid state parameter")
-    
+
     try:
         # Exchange code for tokens
         token_data = await auth_service.exchange_code_for_token(code)
-        
+
         # Store tokens (use session ID or user ID in production)
         session_id = "default_user"  # TODO: Use actual session management
         _user_tokens[session_id] = {
@@ -101,9 +103,9 @@ async def spotify_callback(
             "expires_in": token_data.get("expires_in", 3600),
             "scope": token_data.get("scope", ""),
         }
-        
+
         logger.info(f"Successfully stored Spotify tokens for session: {session_id}")
-        
+
         # Return HTML that sends tokens to parent window and closes popup
         return HTMLResponse(
             content=f"""
@@ -138,7 +140,7 @@ async def spotify_callback(
             """,
             status_code=200,
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to exchange OAuth code: {e}")
         raise HTTPException(status_code=500, detail=f"Token exchange failed: {str(e)}")
@@ -147,58 +149,65 @@ async def spotify_callback(
 @router.get("/token")
 async def get_access_token(request: Request):
     """Get current user's Spotify access token.
-    
+
     Returns:
         JSON with access_token for Web Playback SDK initialization
     """
     session_id = "default_user"  # TODO: Use actual session management
-    
+
     tokens = _user_tokens.get(session_id)
     if not tokens:
         raise HTTPException(
             status_code=401,
-            detail="Not authenticated. Please log in with Spotify first."
+            detail="Not authenticated. Please log in with Spotify first.",
         )
-    
-    return JSONResponse({
-        "access_token": tokens["access_token"],
-        "expires_in": tokens["expires_in"],
-    })
+
+    return JSONResponse(
+        {
+            "access_token": tokens["access_token"],
+            "expires_in": tokens["expires_in"],
+        }
+    )
 
 
 @router.post("/refresh")
 async def refresh_token(request: Request):
     """Refresh the access token using refresh token.
-    
+
     Called automatically when access token expires.
     """
     session_id = "default_user"  # TODO: Use actual session management
-    
+
     tokens = _user_tokens.get(session_id)
     if not tokens or not tokens.get("refresh_token"):
         raise HTTPException(
-            status_code=401,
-            detail="No refresh token available. Please log in again."
+            status_code=401, detail="No refresh token available. Please log in again."
         )
-    
+
     auth_service = get_auth_service()
-    
+
     try:
-        new_token_data = await auth_service.refresh_access_token(tokens["refresh_token"])
-        
+        new_token_data = await auth_service.refresh_access_token(
+            tokens["refresh_token"]
+        )
+
         # Update stored tokens
-        _user_tokens[session_id].update({
-            "access_token": new_token_data["access_token"],
-            "expires_in": new_token_data.get("expires_in", 3600),
-        })
-        
+        _user_tokens[session_id].update(
+            {
+                "access_token": new_token_data["access_token"],
+                "expires_in": new_token_data.get("expires_in", 3600),
+            }
+        )
+
         logger.info(f"Refreshed access token for session: {session_id}")
-        
-        return JSONResponse({
-            "access_token": new_token_data["access_token"],
-            "expires_in": new_token_data.get("expires_in", 3600),
-        })
-        
+
+        return JSONResponse(
+            {
+                "access_token": new_token_data["access_token"],
+                "expires_in": new_token_data.get("expires_in", 3600),
+            }
+        )
+
     except Exception as e:
         logger.error(f"Failed to refresh token: {e}")
         raise HTTPException(status_code=500, detail=f"Token refresh failed: {str(e)}")
@@ -208,40 +217,42 @@ async def refresh_token(request: Request):
 async def logout(request: Request):
     """Log out user and clear tokens."""
     session_id = "default_user"  # TODO: Use actual session management
-    
+
     if session_id in _user_tokens:
         del _user_tokens[session_id]
         logger.info(f"Logged out session: {session_id}")
-    
+
     return JSONResponse({"message": "Logged out successfully"})
 
 
 @router.post("/restore")
 async def restore_tokens(request: Request):
     """Restore OAuth tokens from client-side localStorage.
-    
+
     Called when the Spotify player iframe loads and has tokens saved
     in localStorage that the server may have lost (e.g., after restart).
     Uses the refresh_token to obtain a fresh access_token.
     """
     body = await request.json()
     session_id = "default_user"
-    
+
     access_token_val = body.get("access_token")
     refresh_token_val = body.get("refresh_token")
-    
+
     if not access_token_val and not refresh_token_val:
         raise HTTPException(status_code=400, detail="No tokens provided")
-    
+
     # If we already have tokens in memory, just return them
     existing = _user_tokens.get(session_id)
     if existing and existing.get("access_token"):
-        return JSONResponse({
-            "access_token": existing["access_token"],
-            "expires_in": existing.get("expires_in", 3600),
-            "status": "already_active",
-        })
-    
+        return JSONResponse(
+            {
+                "access_token": existing["access_token"],
+                "expires_in": existing.get("expires_in", 3600),
+                "status": "already_active",
+            }
+        )
+
     # Try to refresh using the provided refresh token
     if refresh_token_val:
         try:
@@ -254,14 +265,16 @@ async def restore_tokens(request: Request):
                 "scope": body.get("scope", ""),
             }
             logger.info("Restored Spotify tokens from client localStorage (refreshed)")
-            return JSONResponse({
-                "access_token": new_data["access_token"],
-                "expires_in": new_data.get("expires_in", 3600),
-                "status": "refreshed",
-            })
+            return JSONResponse(
+                {
+                    "access_token": new_data["access_token"],
+                    "expires_in": new_data.get("expires_in", 3600),
+                    "status": "refreshed",
+                }
+            )
         except Exception as e:
             logger.warning(f"Could not refresh during restore: {e}")
-    
+
     # Fall back to storing the provided access token as-is
     if access_token_val:
         _user_tokens[session_id] = {
@@ -271,10 +284,12 @@ async def restore_tokens(request: Request):
             "scope": body.get("scope", ""),
         }
         logger.info("Restored Spotify tokens from client localStorage (stored as-is)")
-        return JSONResponse({
-            "access_token": access_token_val,
-            "expires_in": body.get("expires_in", 3600),
-            "status": "stored",
-        })
-    
+        return JSONResponse(
+            {
+                "access_token": access_token_val,
+                "expires_in": body.get("expires_in", 3600),
+                "status": "stored",
+            }
+        )
+
     raise HTTPException(status_code=400, detail="Could not restore tokens")

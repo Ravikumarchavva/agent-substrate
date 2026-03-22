@@ -4,6 +4,7 @@ All downstream communication goes through typed clients with retries,
 timeouts, and circuit breaking. Services never call each other directly
 from route handlers.
 """
+
 from __future__ import annotations
 
 import logging
@@ -49,22 +50,30 @@ class ServiceClient:
 
     async def get(self, path: str, auth_token: str = "", **kwargs) -> httpx.Response:
         return await self._client.get(
-            path, headers=self._headers(auth_token), **kwargs,
+            path,
+            headers=self._headers(auth_token),
+            **kwargs,
         )
 
     async def post(self, path: str, auth_token: str = "", **kwargs) -> httpx.Response:
         return await self._client.post(
-            path, headers=self._headers(auth_token), **kwargs,
+            path,
+            headers=self._headers(auth_token),
+            **kwargs,
         )
 
     async def patch(self, path: str, auth_token: str = "", **kwargs) -> httpx.Response:
         return await self._client.patch(
-            path, headers=self._headers(auth_token), **kwargs,
+            path,
+            headers=self._headers(auth_token),
+            **kwargs,
         )
 
     async def delete(self, path: str, auth_token: str = "", **kwargs) -> httpx.Response:
         return await self._client.delete(
-            path, headers=self._headers(auth_token), **kwargs,
+            path,
+            headers=self._headers(auth_token),
+            **kwargs,
         )
 
 
@@ -96,7 +105,9 @@ class PolicyClient(ServiceClient):
     def __init__(self, base_url: str = "http://localhost:8011", **kw):
         super().__init__(base_url, "policy", **kw)
 
-    async def check(self, auth_token: str, action: str, resource_type: str = "*") -> bool:
+    async def check(
+        self, auth_token: str, action: str, resource_type: str = "*"
+    ) -> bool:
         resp = await self.post(
             "/policy/check",
             auth_token=auth_token,
@@ -117,9 +128,12 @@ class ConversationClient(ServiceClient):
         resp.raise_for_status()
         return resp.json()
 
-    async def list_threads(self, auth_token: str, limit: int = 50, offset: int = 0) -> list:
+    async def list_threads(
+        self, auth_token: str, limit: int = 50, offset: int = 0
+    ) -> list:
         resp = await self.get(
-            "/threads", auth_token=auth_token,
+            "/threads",
+            auth_token=auth_token,
             params={"limit": limit, "offset": offset},
         )
         resp.raise_for_status()
@@ -240,7 +254,9 @@ class CodeInterpreterServiceClient(ServiceClient):
 
     async def destroy_session(self, session_id: str) -> dict:
         resp = await self._client.request(
-            "DELETE", f"/v1/sessions/{session_id}", headers=self._headers(),
+            "DELETE",
+            f"/v1/sessions/{session_id}",
+            headers=self._headers(),
         )
         resp.raise_for_status()
         return resp.json()

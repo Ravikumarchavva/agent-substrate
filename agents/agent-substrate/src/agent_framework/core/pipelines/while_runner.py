@@ -50,7 +50,9 @@ class WhilePipelineRunner:
         if not self.condition:
             return True  # loop until max_iterations
         try:
-            return bool(eval(self.condition, {"output": output, "iteration": iteration}))  # noqa: S307
+            return bool(
+                eval(self.condition, {"output": output, "iteration": iteration})
+            )  # noqa: S307
         except Exception as exc:
             logger.warning("While condition eval error (treating as False): %s", exc)
             return False

@@ -7,6 +7,7 @@ GET  /auth/me             Return caller's decoded token
 POST /auth/logout         Revoke refresh token
 GET  /auth/users/{id}     Get user by ID (service-to-service)
 """
+
 from __future__ import annotations
 
 import logging
@@ -71,7 +72,10 @@ async def exchange_token(body: TokenExchangeRequest, request: Request):
     async with db_factory() as db:
         try:
             result = await exchange_frontend_token(
-                db, body.frontend_token, jwt_secret, event_bus,
+                db,
+                body.frontend_token,
+                jwt_secret,
+                event_bus,
             )
         except ValueError as e:
             raise HTTPException(
@@ -94,7 +98,9 @@ async def refresh_tokens(body: RefreshRequest, request: Request):
     """Rotate a refresh token."""
     jwt_secret = request.app.state.jwt_secret
     payload = jwt_utils.verify_token(
-        body.refresh_token, secret=jwt_secret, expected_type="refresh",
+        body.refresh_token,
+        secret=jwt_secret,
+        expected_type="refresh",
     )
     if payload is None:
         raise HTTPException(
@@ -111,10 +117,12 @@ async def refresh_tokens(body: RefreshRequest, request: Request):
     await _revoke_refresh_jti(request, payload.jti)
 
     access_token, _ = jwt_utils.create_access_token(
-        user_id=payload.sub, secret=jwt_secret,
+        user_id=payload.sub,
+        secret=jwt_secret,
     )
     refresh_token, new_jti, refresh_exp = jwt_utils.create_refresh_token(
-        user_id=payload.sub, secret=jwt_secret,
+        user_id=payload.sub,
+        secret=jwt_secret,
     )
     await _store_refresh_jti(request, new_jti, refresh_exp)
 
@@ -157,7 +165,9 @@ async def logout(body: RefreshRequest, request: Request):
     """Revoke a refresh token."""
     jwt_secret = request.app.state.jwt_secret
     payload = jwt_utils.verify_token(
-        body.refresh_token, secret=jwt_secret, expected_type="refresh",
+        body.refresh_token,
+        secret=jwt_secret,
+        expected_type="refresh",
     )
     if payload and payload.jti:
         await _revoke_refresh_jti(request, payload.jti)

@@ -8,6 +8,7 @@ It handles:
   - Collecting results into an ordered list
   - Raising GuardrailTripwireError on hard stops
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -45,7 +46,8 @@ async def run_guardrails(
     """
     # Filter
     to_run = [
-        g for g in guardrails
+        g
+        for g in guardrails
         if guardrail_type is None or g.guardrail_type == guardrail_type
     ]
 
@@ -70,13 +72,21 @@ async def run_guardrails(
                 if result.passed:
                     global_metrics.increment_counter(
                         "guardrail.passed",
-                        tags={"name": guardrail.name, "type": guardrail.guardrail_type.value},
+                        tags={
+                            "name": guardrail.name,
+                            "type": guardrail.guardrail_type.value,
+                        },
                     )
                 else:
-                    counter = "guardrail.tripped" if result.tripwire else "guardrail.failed"
+                    counter = (
+                        "guardrail.tripped" if result.tripwire else "guardrail.failed"
+                    )
                     global_metrics.increment_counter(
                         counter,
-                        tags={"name": guardrail.name, "type": guardrail.guardrail_type.value},
+                        tags={
+                            "name": guardrail.name,
+                            "type": guardrail.guardrail_type.value,
+                        },
                     )
 
                 # Logging
@@ -103,7 +113,10 @@ async def run_guardrails(
                 )
                 global_metrics.increment_counter(
                     "guardrail.errors",
-                    tags={"name": guardrail.name, "type": guardrail.guardrail_type.value},
+                    tags={
+                        "name": guardrail.name,
+                        "type": guardrail.guardrail_type.value,
+                    },
                 )
                 return GuardrailResult(
                     guardrail_name=guardrail.name,

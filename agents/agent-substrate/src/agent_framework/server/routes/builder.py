@@ -37,6 +37,7 @@ router = APIRouter(prefix="/builder", tags=["builder"])
 
 # ── Request / Response schemas ───────────────────────────────────────────────
 
+
 class PipelineCreate(BaseModel):
     name: str = "Untitled Pipeline"
     description: str = ""
@@ -103,6 +104,7 @@ class RegistryResponse(BaseModel):
 
 # ── GET /builder/registry ────────────────────────────────────────────────────
 
+
 @router.get("/registry", response_model=RegistryResponse)
 async def get_registry(request: Request) -> RegistryResponse:
     """Return available tools, skills, and guardrail schemas for the builder."""
@@ -111,25 +113,30 @@ async def get_registry(request: Request) -> RegistryResponse:
     tools_list: List[RegistryTool] = []
     for tool in getattr(request.app.state, "tools", []):
         schema = tool.get_schema()
-        tools_list.append(RegistryTool(
-            name=schema.name,
-            description=schema.description,
-            risk=schema.risk,
-            hitl_mode=schema.hitl_mode,
-            input_schema=schema.inputSchema,
-        ))
+        tools_list.append(
+            RegistryTool(
+                name=schema.name,
+                description=schema.description,
+                risk=schema.risk,
+                hitl_mode=schema.hitl_mode,
+                input_schema=schema.inputSchema,
+            )
+        )
 
     # Skills — discover from SkillManager
     skills_list: List[RegistrySkill] = []
     try:
         from agent_framework.extensions.skills import SkillManager
+
         mgr = SkillManager(auto_discover=True)
         for meta in mgr.list_available():
-            skills_list.append(RegistrySkill(
-                name=meta.name,
-                description=meta.description,
-                version=getattr(meta, "version", ""),
-            ))
+            skills_list.append(
+                RegistrySkill(
+                    name=meta.name,
+                    description=meta.description,
+                    version=getattr(meta, "version", ""),
+                )
+            )
     except Exception:
         pass
 
@@ -140,8 +147,16 @@ async def get_registry(request: Request) -> RegistryResponse:
             description="Content safety moderation — checks for harmful content",
             fields=[
                 {"name": "safe", "type": "bool", "description": "True if safe"},
-                {"name": "reasoning", "type": "str", "description": "Step-by-step reasoning"},
-                {"name": "violated_categories", "type": "List[str]", "description": "Violated categories"},
+                {
+                    "name": "reasoning",
+                    "type": "str",
+                    "description": "Step-by-step reasoning",
+                },
+                {
+                    "name": "violated_categories",
+                    "type": "List[str]",
+                    "description": "Violated categories",
+                },
             ],
         ),
         RegistryGuardrailSchema(
@@ -149,14 +164,25 @@ async def get_registry(request: Request) -> RegistryResponse:
             description="Answer relevance — checks if response is on-topic",
             fields=[
                 {"name": "relevant", "type": "bool", "description": "True if relevant"},
-                {"name": "score", "type": "float", "description": "Relevance score 0-1"},
+                {
+                    "name": "score",
+                    "type": "float",
+                    "description": "Relevance score 0-1",
+                },
                 {"name": "reasoning", "type": "str", "description": "Explanation"},
             ],
         ),
     ]
 
     # Available models
-    models = ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o3-mini"]
+    models = [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "o3-mini",
+    ]
 
     # MCP servers from app.state
     mcp_servers_list: List[RegistryMcpServer] = [
@@ -174,6 +200,7 @@ async def get_registry(request: Request) -> RegistryResponse:
 
 
 # ── POST /builder/pipelines ─────────────────────────────────────────────────
+
 
 @router.post("/pipelines", response_model=PipelineOut, status_code=201)
 async def create_pipeline(body: PipelineCreate, request: Request) -> PipelineOut:
@@ -200,6 +227,7 @@ async def create_pipeline(body: PipelineCreate, request: Request) -> PipelineOut
 
 # ── GET /builder/pipelines ──────────────────────────────────────────────────
 
+
 @router.get("/pipelines", response_model=List[PipelineOut])
 async def list_pipelines(request: Request) -> List[PipelineOut]:
     """List all pipelines, newest first."""
@@ -224,6 +252,7 @@ async def list_pipelines(request: Request) -> List[PipelineOut]:
 
 # ── GET /builder/pipelines/{id} ─────────────────────────────────────────────
 
+
 @router.get("/pipelines/{pipeline_id}", response_model=PipelineOut)
 async def get_pipeline(pipeline_id: uuid.UUID, request: Request) -> PipelineOut:
     """Get a single pipeline by ID."""
@@ -246,6 +275,7 @@ async def get_pipeline(pipeline_id: uuid.UUID, request: Request) -> PipelineOut:
 
 
 # ── PUT /builder/pipelines/{id} ─────────────────────────────────────────────
+
 
 @router.put("/pipelines/{pipeline_id}", response_model=PipelineOut)
 async def update_pipeline(
@@ -282,6 +312,7 @@ async def update_pipeline(
 
 # ── DELETE /builder/pipelines/{id} ──────────────────────────────────────────
 
+
 @router.delete("/pipelines/{pipeline_id}", status_code=204)
 async def delete_pipeline(pipeline_id: uuid.UUID, request: Request) -> Response:
     """Delete a pipeline and all its runs."""
@@ -299,6 +330,7 @@ async def delete_pipeline(pipeline_id: uuid.UUID, request: Request) -> Response:
 
 
 # ── GET /builder/pipelines/{id}/export ───────────────────────────────────────
+
 
 @router.get("/pipelines/{pipeline_id}/export")
 async def export_pipeline(pipeline_id: uuid.UUID, request: Request) -> Response:
@@ -326,6 +358,7 @@ async def export_pipeline(pipeline_id: uuid.UUID, request: Request) -> Response:
 
 
 # ── POST /builder/pipelines/{id}/run ────────────────────────────────────────
+
 
 @router.post("/pipelines/{pipeline_id}/run")
 async def run_pipeline(
@@ -380,8 +413,12 @@ async def run_pipeline(
             if hasattr(runnable, "run_stream"):
                 # Agent — stream chunks
                 from agent_framework.core.messages._types import (
-                    StreamChunk, TextDeltaChunk, ReasoningDeltaChunk, CompletionChunk,
+                    StreamChunk,
+                    TextDeltaChunk,
+                    ReasoningDeltaChunk,
+                    CompletionChunk,
                 )
+
                 async for chunk in runnable.run_stream(body.input_text):
                     if isinstance(chunk, TextDeltaChunk):
                         yield _sse_event("text_delta", {"content": chunk.text})
@@ -392,7 +429,11 @@ async def run_pipeline(
                         msg = chunk.message
                         content = ""
                         if msg and hasattr(msg, "content") and msg.content:
-                            content = msg.content[0] if isinstance(msg.content, list) else str(msg.content)
+                            content = (
+                                msg.content[0]
+                                if isinstance(msg.content, list)
+                                else str(msg.content)
+                            )
                         yield _sse_event("completion", {"content": content})
                     elif isinstance(chunk, StreamChunk):
                         yield _sse_event(chunk.type, {"content": str(chunk.data)})
@@ -403,12 +444,20 @@ async def run_pipeline(
             elif hasattr(runnable, "route"):
                 # Router — single decision
                 from agent_framework.core.messages.client_messages import UserMessage
-                messages = [UserMessage(content=[{"type": "text", "text": body.input_text}])]
-                decision, sub_result = await runnable.route(messages, input_text=body.input_text)
-                yield _sse_event("router_decision", {
-                    "parsed": str(decision.parsed) if decision.parsed else None,
-                    "raw_text": decision.raw_text,
-                })
+
+                messages = [
+                    UserMessage(content=[{"type": "text", "text": body.input_text}])
+                ]
+                decision, sub_result = await runnable.route(
+                    messages, input_text=body.input_text
+                )
+                yield _sse_event(
+                    "router_decision",
+                    {
+                        "parsed": str(decision.parsed) if decision.parsed else None,
+                        "raw_text": decision.raw_text,
+                    },
+                )
                 yield _sse_event("text_delta", {"content": str(sub_result)})
             else:
                 # Fallback run
@@ -427,7 +476,10 @@ async def run_pipeline(
                 )
                 await session.commit()
 
-            yield _sse_event("completion", {"message": "Pipeline run complete", "run_id": str(run_id)})
+            yield _sse_event(
+                "completion",
+                {"message": "Pipeline run complete", "run_id": str(run_id)},
+            )
 
         except Exception as exc:
             logger.exception("Pipeline run failed: %s", exc)
@@ -463,6 +515,7 @@ async def run_pipeline(
 
 # ── MCP Server CRUD ──────────────────────────────────────────────────────────
 
+
 class McpServerCreate(BaseModel):
     name: str
     url: str = ""
@@ -489,7 +542,9 @@ async def list_mcp_servers(request: Request) -> List[RegistryMcpServer]:
 
 
 @router.post("/mcp-servers", response_model=RegistryMcpServer, status_code=201)
-async def create_mcp_server(body: McpServerCreate, request: Request) -> RegistryMcpServer:
+async def create_mcp_server(
+    body: McpServerCreate, request: Request
+) -> RegistryMcpServer:
     """Register a new MCP server."""
     if not hasattr(request.app.state, "mcp_servers"):
         request.app.state.mcp_servers = {}
@@ -526,7 +581,12 @@ async def delete_mcp_server(server_id: str, request: Request) -> Response:
 
 # ── SSE helpers ──────────────────────────────────────────────────────────────
 
+
 def _sse_event(event_type: str, data: Any) -> str:
     """Format a single SSE event."""
-    payload = json.dumps({"type": event_type, **data} if isinstance(data, dict) else {"type": event_type, "data": data})
+    payload = json.dumps(
+        {"type": event_type, **data}
+        if isinstance(data, dict)
+        else {"type": event_type, "data": data}
+    )
     return f"data: {payload}\n\n"

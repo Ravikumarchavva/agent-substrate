@@ -14,6 +14,7 @@ Key design decisions:
   - Every LLM call produces exactly one StepResult.
   - The final AgentRunResult contains zero duplication.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -76,8 +77,10 @@ from agent_framework.extensions.skills import SkillManager
 # Helper: Parsed tool-call (normalised from any SDK shape)
 # ---------------------------------------------------------------------------
 
+
 class _ParsedToolCall:
     """Internal normalised representation of a tool call."""
+
     __slots__ = ("call_id", "name", "arguments")
 
     def __init__(self, call_id: str, name: str, arguments: Dict[str, Any]):
@@ -89,6 +92,7 @@ class _ParsedToolCall:
 # ---------------------------------------------------------------------------
 # ReActAgent
 # ---------------------------------------------------------------------------
+
 
 class ReActAgent(BaseAgent):
     """Reasoning + Acting agent with tool calling loop.
@@ -141,6 +145,7 @@ class ReActAgent(BaseAgent):
         _skill_manager: Optional[SkillManager] = skill_manager
         if _skill_manager is None and skill_dirs:
             from pathlib import Path
+
             _skill_manager = SkillManager(skill_dirs=[Path(d) for d in skill_dirs])
 
         super().__init__(
@@ -170,25 +175,32 @@ class ReActAgent(BaseAgent):
 
         # HITL: tool approval
         self.tool_approval_handler = tool_approval_handler
-        self.tools_requiring_approval = tools_requiring_approval  # None = all tools when handler set
+        self.tools_requiring_approval = (
+            tools_requiring_approval  # None = all tools when handler set
+        )
 
     # ── Core run ─────────────────────────────────────────────────────────────
 
     async def _seed_system_message(self) -> None:
         """Seed the system prompt into memory if it is empty (lazy, async-safe)."""
         if await self.memory.size() == 0:
-            await self.memory.add_message(SystemMessage(content=self.get_effective_system_prompt()))
+            await self.memory.add_message(
+                SystemMessage(content=self.get_effective_system_prompt())
+            )
 
     async def reset(self) -> None:
         """Clear memory and return agent to initial state with system message."""
         await super().reset()
-        await self.memory.add_message(SystemMessage(content=self.get_effective_system_prompt()))
+        await self.memory.add_message(
+            SystemMessage(content=self.get_effective_system_prompt())
+        )
         # Reset HITL tool counters
         self._reset_hitl_tools()
 
     def _reset_hitl_tools(self) -> None:
         """Reset AskHumanTool request counters between runs."""
         from agent_framework.extensions.tools.human_input import AskHumanTool
+
         for tool in self.tools:
             if isinstance(tool, AskHumanTool):
                 tool.reset()
@@ -222,12 +234,15 @@ class ReActAgent(BaseAgent):
                 logger.info(f"[{self.name}] Starting run: {input_text[:80]}...")
 
             # ── LIFECYCLE HOOK: RUN_START ─────────────────────────────
-            await self.hooks.dispatch(HookEvent.RUN_START, {
-                "event": "on_run_start",
-                "agent_name": self.name,
-                "run_id": run_id,
-                "input_text": input_text,
-            })
+            await self.hooks.dispatch(
+                HookEvent.RUN_START,
+                {
+                    "event": "on_run_start",
+                    "agent_name": self.name,
+                    "run_id": run_id,
+                    "input_text": input_text,
+                },
+            )
 
             # Ensure system prompt is loaded (lazy seed for async memory)
             await self._seed_system_message()
@@ -244,7 +259,8 @@ class ReActAgent(BaseAgent):
                         input_text=input_text,
                     )
                     results = await run_guardrails(
-                        self.input_guardrails, ctx,
+                        self.input_guardrails,
+                        ctx,
                         guardrail_type=GuardrailType.INPUT,
                     )
                     guardrail_results.extend(results)
@@ -263,15 +279,13 @@ class ReActAgent(BaseAgent):
                     duration_seconds=(run_end - run_start).total_seconds(),
                     max_iterations=self.max_iterations,
                     error=e.message,
-                    guardrail_results=guardrail_results + (
-                        [e.details["result"]] if "result" in e.details else []
-                    ),
+                    guardrail_results=guardrail_results
+                    + ([e.details["result"]] if "result" in e.details else []),
                 )
 
             # 2. ReAct loop
             for step_num in range(1, self.max_iterations + 1):
                 with global_tracer.start_span(f"step_{step_num}", {"step": step_num}):
-
                     # A. THINK — call LLM
                     response = await self._call_llm(current_input=input_text, **kwargs)
                     usage.add(response.usage)
@@ -297,12 +311,15 @@ class ReActAgent(BaseAgent):
                                     raw_message=response,
                                 )
                                 results = await run_guardrails(
-                                    self.output_guardrails, ctx,
+                                    self.output_guardrails,
+                                    ctx,
                                     guardrail_type=GuardrailType.OUTPUT,
                                 )
                                 guardrail_results.extend(results)
                         except GuardrailTripwireError as e:
-                            logger.error(f"[{self.name}] Output guardrail tripwire: {e.message}")
+                            logger.error(
+                                f"[{self.name}] Output guardrail tripwire: {e.message}"
+                            )
                             run_end = datetime.now(timezone.utc)
                             return AgentRunResult(
                                 run_id=run_id,
@@ -316,25 +333,34 @@ class ReActAgent(BaseAgent):
                                 duration_seconds=(run_end - run_start).total_seconds(),
                                 max_iterations=self.max_iterations,
                                 error=e.message,
-                                guardrail_results=guardrail_results + (
-                                    [e.details["result"]] if "result" in e.details else []
+                                guardrail_results=guardrail_results
+                                + (
+                                    [e.details["result"]]
+                                    if "result" in e.details
+                                    else []
                                 ),
                             )
 
-                        steps.append(StepResult(
-                            step=step_num,
-                            thought=thought_content,
-                            tool_calls=[],
-                            usage=response.usage,
-                            finish_reason=response.finish_reason or "stop",
-                        ))
+                        steps.append(
+                            StepResult(
+                                step=step_num,
+                                thought=thought_content,
+                                tool_calls=[],
+                                usage=response.usage,
+                                finish_reason=response.finish_reason or "stop",
+                            )
+                        )
                         final_output = thought_content or []
                         break
 
                     # C. ACT — execute tool calls
                     if self.verbose:
-                        names = [self._parse_tool_call(tc).name for tc in response.tool_calls]
-                        logger.info(f"[{self.name}] Step {step_num}: tool calls → {names}")
+                        names = [
+                            self._parse_tool_call(tc).name for tc in response.tool_calls
+                        ]
+                        logger.info(
+                            f"[{self.name}] Step {step_num}: tool calls → {names}"
+                        )
 
                     tool_records: List[ToolCallRecord] = []
                     for tc_raw in response.tool_calls:
@@ -343,9 +369,12 @@ class ReActAgent(BaseAgent):
                         # ── TOOL-CALL GUARDRAILS ─────────────────────────
                         tool_blocked = False
                         try:
-                            all_guardrails = self.input_guardrails + self.output_guardrails
+                            all_guardrails = (
+                                self.input_guardrails + self.output_guardrails
+                            )
                             tool_guardrails = [
-                                g for g in all_guardrails
+                                g
+                                for g in all_guardrails
                                 if g.guardrail_type == GuardrailType.TOOL_CALL
                             ]
                             if tool_guardrails:
@@ -356,54 +385,74 @@ class ReActAgent(BaseAgent):
                                     tool_arguments=parsed.arguments,
                                 )
                                 results = await run_guardrails(
-                                    tool_guardrails, ctx,
+                                    tool_guardrails,
+                                    ctx,
                                     guardrail_type=GuardrailType.TOOL_CALL,
                                 )
                                 guardrail_results.extend(results)
                         except GuardrailTripwireError as e:
-                            logger.error(f"[{self.name}] Tool-call guardrail tripwire: {e.message}")
+                            logger.error(
+                                f"[{self.name}] Tool-call guardrail tripwire: {e.message}"
+                            )
                             tool_blocked = True
                             # Create error tool message so the LLM sees it was blocked
                             tool_msg = ToolExecutionResultMessage(
-                                content=[{"type": "text", "text": json.dumps({"error": f"Tool blocked: {e.message}"})}],
+                                content=[
+                                    {
+                                        "type": "text",
+                                        "text": json.dumps(
+                                            {"error": f"Tool blocked: {e.message}"}
+                                        ),
+                                    }
+                                ],
                                 tool_call_id=parsed.call_id,
                                 name=parsed.name,
                                 isError=True,
                             )
                             await self.memory.add_message(tool_msg)
-                            tool_records.append(ToolCallRecord(
-                                tool_name=parsed.name,
-                                call_id=parsed.call_id,
-                                arguments=parsed.arguments,
-                                result=f"Blocked by guardrail: {e.message}",
-                                is_error=True,
-                            ))
+                            tool_records.append(
+                                ToolCallRecord(
+                                    tool_name=parsed.name,
+                                    call_id=parsed.call_id,
+                                    arguments=parsed.arguments,
+                                    result=f"Blocked by guardrail: {e.message}",
+                                    is_error=True,
+                                )
+                            )
                             guardrail_results.extend(
                                 [e.details["result"]] if "result" in e.details else []
                             )
 
                         if not tool_blocked:
-                            record, tool_msg = await self._execute_tool(parsed, step_num)
+                            record, tool_msg = await self._execute_tool(
+                                parsed, step_num
+                            )
                             await self.memory.add_message(tool_msg)
                             tool_records.append(record)
 
                         # Tally
-                        tool_calls_by_name[parsed.name] = tool_calls_by_name.get(parsed.name, 0) + 1
+                        tool_calls_by_name[parsed.name] = (
+                            tool_calls_by_name.get(parsed.name, 0) + 1
+                        )
                         total_tool_calls += 1
 
-                    steps.append(StepResult(
-                        step=step_num,
-                        thought=thought_content,
-                        tool_calls=tool_records,
-                        usage=response.usage,
-                        finish_reason="tool_calls",
-                    ))
+                    steps.append(
+                        StepResult(
+                            step=step_num,
+                            thought=thought_content,
+                            tool_calls=tool_records,
+                            usage=response.usage,
+                            finish_reason="tool_calls",
+                        )
+                    )
 
             else:
                 # Loop exhausted without breaking → max iterations
                 status = RunStatus.MAX_ITERATIONS
                 if self.verbose:
-                    logger.warning(f"[{self.name}] Hit max iterations ({self.max_iterations})")
+                    logger.warning(
+                        f"[{self.name}] Hit max iterations ({self.max_iterations})"
+                    )
                 # Try to extract whatever the last response said
                 if steps and steps[-1].thought:
                     final_output = steps[-1].thought
@@ -430,16 +479,19 @@ class ReActAgent(BaseAgent):
             )
 
             # ── LIFECYCLE HOOK: RUN_END ──────────────────────────────
-            await self.hooks.dispatch(HookEvent.RUN_END, {
-                "event": "on_run_end",
-                "agent_name": self.name,
-                "run_id": run_id,
-                "status": status.value,
-                "steps_used": len(steps),
-                "tool_calls_total": total_tool_calls,
-                "tokens_used": usage.total_tokens,
-                "duration_seconds": duration,
-            })
+            await self.hooks.dispatch(
+                HookEvent.RUN_END,
+                {
+                    "event": "on_run_end",
+                    "agent_name": self.name,
+                    "run_id": run_id,
+                    "status": status.value,
+                    "steps_used": len(steps),
+                    "tool_calls_total": total_tool_calls,
+                    "tokens_used": usage.total_tokens,
+                    "duration_seconds": duration,
+                },
+            )
 
             return result
 
@@ -514,8 +566,11 @@ class ReActAgent(BaseAgent):
             await self.model_client.generate_structured(
                 context_messages,
                 schema,
-                **{k: v for k, v in kwargs.items()
-                   if k not in ("temperature", "tools", "tool_choice")},
+                **{
+                    k: v
+                    for k, v in kwargs.items()
+                    if k not in ("temperature", "tools", "tool_choice")
+                },
             )
         )
         return structured_result
@@ -537,7 +592,9 @@ class ReActAgent(BaseAgent):
         with global_tracer.start_span("agent_run_stream", attrs):
             global_metrics.increment_counter("agent_runs", tags={"name": self.name})
             if self.verbose:
-                logger.info(f"[{self.name}] Starting streaming run: {input_text[:80]}...")
+                logger.info(
+                    f"[{self.name}] Starting streaming run: {input_text[:80]}..."
+                )
 
             # Ensure system prompt is loaded (lazy seed for async memory)
             await self._seed_system_message()
@@ -552,12 +609,14 @@ class ReActAgent(BaseAgent):
                         input_text=input_text,
                     )
                     await run_guardrails(
-                        self.input_guardrails, ctx,
+                        self.input_guardrails,
+                        ctx,
                         guardrail_type=GuardrailType.INPUT,
                     )
             except GuardrailTripwireError as e:
                 logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
                 from agent_framework.core.messages._types import CompletionChunk
+
                 yield CompletionChunk(
                     message=AssistantMessage(
                         role="assistant",
@@ -579,9 +638,14 @@ class ReActAgent(BaseAgent):
                         model_client=self.model_client,
                     )
 
-                    with global_tracer.start_span("llm_generate_stream", {"msg_count": len(messages)}):
-                        from agent_framework.core.messages._types import CompletionChunk, TextDeltaChunk
-                        
+                    with global_tracer.start_span(
+                        "llm_generate_stream", {"msg_count": len(messages)}
+                    ):
+                        from agent_framework.core.messages._types import (
+                            CompletionChunk,
+                            TextDeltaChunk,
+                        )
+
                         llm_t0 = asyncio.get_event_loop().time()
                         final_response_obj = None
                         # Accumulate partial text so we can persist it if cancelled
@@ -597,21 +661,26 @@ class ReActAgent(BaseAgent):
                             ):
                                 # Yield the chunk to user
                                 yield chunk
-                                
+
                                 # Track partial text and final completion
                                 if isinstance(chunk, TextDeltaChunk):
                                     partial_text += chunk.text
                                 elif isinstance(chunk, CompletionChunk):
                                     final_response_obj = chunk.message
-                            
+
                             # After stream completes, add final message to memory
                             if final_response_obj:
                                 await self.memory.add_message(final_response_obj)
-                            
+
                             llm_t1 = asyncio.get_event_loop().time()
                             global_metrics.record_histogram(
-                                "llm_latency", llm_t1 - llm_t0,
-                                tags={"model": getattr(self.model_client, "model", "unknown")},
+                                "llm_latency",
+                                llm_t1 - llm_t0,
+                                tags={
+                                    "model": getattr(
+                                        self.model_client, "model", "unknown"
+                                    )
+                                },
                             )
                         except asyncio.CancelledError:
                             # Agent task was cancelled — persist whatever content we
@@ -628,7 +697,9 @@ class ReActAgent(BaseAgent):
                                 )
                             raise  # Must re-raise so the asyncio.Task is properly cancelled
                         except Exception as e:
-                            global_metrics.increment_counter("llm_errors", tags={"error": type(e).__name__})
+                            global_metrics.increment_counter(
+                                "llm_errors", tags={"error": type(e).__name__}
+                            )
                             raise
 
                     # Use the final response from streaming (should always exist)
@@ -653,37 +724,52 @@ class ReActAgent(BaseAgent):
                                     raw_message=response,
                                 )
                                 await run_guardrails(
-                                    self.output_guardrails, ctx,
+                                    self.output_guardrails,
+                                    ctx,
                                     guardrail_type=GuardrailType.OUTPUT,
                                 )
                         except GuardrailTripwireError as e:
-                            logger.error(f"[{self.name}] Output guardrail tripwire (stream): {e.message}")
+                            logger.error(
+                                f"[{self.name}] Output guardrail tripwire (stream): {e.message}"
+                            )
                             yield CompletionChunk(
                                 message=AssistantMessage(
                                     role="assistant",
                                     content=[f"Response blocked: {e.message}"],
                                     finish_reason="guardrail_tripped",
                                 ),
-                                metadata={"guardrail_tripped": True, "guardrail": e.guardrail_name},
+                                metadata={
+                                    "guardrail_tripped": True,
+                                    "guardrail": e.guardrail_name,
+                                },
                             )
                             return
                         break
 
                     # ACT — execute tools
                     if self.verbose:
-                        names = [self._parse_tool_call(tc).name for tc in response.tool_calls]
-                        logger.info(f"[{self.name}] [stream] Step {step_num}: tools → {names}")
+                        names = [
+                            self._parse_tool_call(tc).name for tc in response.tool_calls
+                        ]
+                        logger.info(
+                            f"[{self.name}] [stream] Step {step_num}: tools → {names}"
+                        )
 
-                    with global_tracer.start_span("execute_tools_stream", {"count": len(response.tool_calls)}):
+                    with global_tracer.start_span(
+                        "execute_tools_stream", {"count": len(response.tool_calls)}
+                    ):
                         for tc_raw in response.tool_calls:
                             parsed = self._parse_tool_call(tc_raw)
 
                             # ── TOOL-CALL GUARDRAILS (stream) ────────────
                             tool_blocked = False
                             try:
-                                all_guardrails = self.input_guardrails + self.output_guardrails
+                                all_guardrails = (
+                                    self.input_guardrails + self.output_guardrails
+                                )
                                 tool_guardrails = [
-                                    g for g in all_guardrails
+                                    g
+                                    for g in all_guardrails
                                     if g.guardrail_type == GuardrailType.TOOL_CALL
                                 ]
                                 if tool_guardrails:
@@ -694,14 +780,24 @@ class ReActAgent(BaseAgent):
                                         tool_arguments=parsed.arguments,
                                     )
                                     await run_guardrails(
-                                        tool_guardrails, ctx,
+                                        tool_guardrails,
+                                        ctx,
                                         guardrail_type=GuardrailType.TOOL_CALL,
                                     )
                             except GuardrailTripwireError as e:
-                                logger.error(f"[{self.name}] Tool-call guardrail tripwire (stream): {e.message}")
+                                logger.error(
+                                    f"[{self.name}] Tool-call guardrail tripwire (stream): {e.message}"
+                                )
                                 tool_blocked = True
                                 tool_msg = ToolExecutionResultMessage(
-                                    content=[{"type": "text", "text": json.dumps({"error": f"Tool blocked: {e.message}"})}],
+                                    content=[
+                                        {
+                                            "type": "text",
+                                            "text": json.dumps(
+                                                {"error": f"Tool blocked: {e.message}"}
+                                            ),
+                                        }
+                                    ],
                                     tool_call_id=parsed.call_id,
                                     name=parsed.name,
                                     isError=True,
@@ -748,12 +844,15 @@ class ReActAgent(BaseAgent):
         )
 
         # ── LIFECYCLE HOOK: LLM_START ────────────────────────────────
-        await self.hooks.dispatch(HookEvent.LLM_START, {
-            "event": "on_llm_start",
-            "agent_name": self.name,
-            "message_count": len(messages),
-            "tool_count": len(tool_schemas),
-        })
+        await self.hooks.dispatch(
+            HookEvent.LLM_START,
+            {
+                "event": "on_llm_start",
+                "agent_name": self.name,
+                "message_count": len(messages),
+                "tool_count": len(tool_schemas),
+            },
+        )
 
         with global_tracer.start_span("llm_generate", {"msg_count": len(messages)}):
             llm_t0 = asyncio.get_event_loop().time()
@@ -768,18 +867,22 @@ class ReActAgent(BaseAgent):
                     )
                     llm_t1 = asyncio.get_event_loop().time()
                     global_metrics.record_histogram(
-                        "llm_latency", llm_t1 - llm_t0,
+                        "llm_latency",
+                        llm_t1 - llm_t0,
                         tags={"model": getattr(self.model_client, "model", "unknown")},
                     )
 
                     # ── LIFECYCLE HOOK: LLM_END ──────────────────────
-                    await self.hooks.dispatch(HookEvent.LLM_END, {
-                        "event": "on_llm_end",
-                        "agent_name": self.name,
-                        "duration_ms": (llm_t1 - llm_t0) * 1000,
-                        "usage": response.usage,
-                        "has_tool_calls": bool(response.tool_calls),
-                    })
+                    await self.hooks.dispatch(
+                        HookEvent.LLM_END,
+                        {
+                            "event": "on_llm_end",
+                            "agent_name": self.name,
+                            "duration_ms": (llm_t1 - llm_t0) * 1000,
+                            "usage": response.usage,
+                            "has_tool_calls": bool(response.tool_calls),
+                        },
+                    )
 
                     return response
 
@@ -875,48 +978,63 @@ class ReActAgent(BaseAgent):
             t0 = time.monotonic()
 
             # ── LIFECYCLE HOOK: TOOL_START ────────────────────────────
-            await self.hooks.dispatch(HookEvent.TOOL_START, {
-                "event": "on_tool_start",
-                "agent_name": self.name,
-                "tool_name": parsed.name,
-                "arguments": parsed.arguments,
-                "step": step_num,
-            })
+            await self.hooks.dispatch(
+                HookEvent.TOOL_START,
+                {
+                    "event": "on_tool_start",
+                    "agent_name": self.name,
+                    "tool_name": parsed.name,
+                    "arguments": parsed.arguments,
+                    "step": step_num,
+                },
+            )
 
             # Find tool
             tool = self._find_tool(parsed.name)
 
             if tool is None:
                 result = self._tool_error(
-                    parsed, step_num, t0, span,
+                    parsed,
+                    step_num,
+                    t0,
+                    span,
                     f"Tool '{parsed.name}' not found in agent's tool list",
                     "tool_not_found_errors",
                 )
-                await self.hooks.dispatch(HookEvent.TOOL_END, {
-                    "event": "on_tool_end",
-                    "agent_name": self.name,
-                    "tool_name": parsed.name,
-                    "is_error": True,
-                    "error": "tool_not_found",
-                    "duration_ms": (time.monotonic() - t0) * 1000,
-                })
+                await self.hooks.dispatch(
+                    HookEvent.TOOL_END,
+                    {
+                        "event": "on_tool_end",
+                        "agent_name": self.name,
+                        "tool_name": parsed.name,
+                        "is_error": True,
+                        "error": "tool_not_found",
+                        "duration_ms": (time.monotonic() - t0) * 1000,
+                    },
+                )
                 return result
 
             if isinstance(tool, dict):
                 result = self._tool_error(
-                    parsed, step_num, t0, span,
+                    parsed,
+                    step_num,
+                    t0,
+                    span,
                     f"Tool '{parsed.name}' is a raw dict schema, not executable. "
                     "Wrap with MCPTool.from_mcp_client().",
                     "tool_not_executable_errors",
                 )
-                await self.hooks.dispatch(HookEvent.TOOL_END, {
-                    "event": "on_tool_end",
-                    "agent_name": self.name,
-                    "tool_name": parsed.name,
-                    "is_error": True,
-                    "error": "tool_not_executable",
-                    "duration_ms": (time.monotonic() - t0) * 1000,
-                })
+                await self.hooks.dispatch(
+                    HookEvent.TOOL_END,
+                    {
+                        "event": "on_tool_end",
+                        "agent_name": self.name,
+                        "tool_name": parsed.name,
+                        "is_error": True,
+                        "error": "tool_not_executable",
+                        "duration_ms": (time.monotonic() - t0) * 1000,
+                    },
+                )
                 return result
 
             # ── HITL: TOOL APPROVAL GATE ─────────────────────────
@@ -928,7 +1046,9 @@ class ReActAgent(BaseAgent):
                     call_id=parsed.call_id,
                     arguments=parsed.arguments,
                     context=f"Agent wants to call '{parsed.name}' at step {step_num}",
-                    hitl_mode=_hitl_mode.value if hasattr(_hitl_mode, "value") else str(_hitl_mode),
+                    hitl_mode=_hitl_mode.value
+                    if hasattr(_hitl_mode, "value")
+                    else str(_hitl_mode),
                     hitl_timeout_seconds=getattr(tool, "hitl_timeout_seconds", None),
                 )
                 try:
@@ -945,21 +1065,29 @@ class ReActAgent(BaseAgent):
 
                 if approval.action == ToolApprovalAction.DENY:
                     deny_msg = approval.reason or "User denied tool execution"
-                    logger.info(f"[{self.name}] Tool '{parsed.name}' DENIED: {deny_msg}")
+                    logger.info(
+                        f"[{self.name}] Tool '{parsed.name}' DENIED: {deny_msg}"
+                    )
                     result = self._tool_error(
-                        parsed, step_num, t0, span,
+                        parsed,
+                        step_num,
+                        t0,
+                        span,
                         f"Tool denied by user: {deny_msg}",
                         "tool_denied_by_user",
                     )
-                    await self.hooks.dispatch(HookEvent.TOOL_END, {
-                        "event": "on_tool_end",
-                        "agent_name": self.name,
-                        "tool_name": parsed.name,
-                        "is_error": True,
-                        "error": "denied_by_user",
-                        "reason": deny_msg,
-                        "duration_ms": (time.monotonic() - t0) * 1000,
-                    })
+                    await self.hooks.dispatch(
+                        HookEvent.TOOL_END,
+                        {
+                            "event": "on_tool_end",
+                            "agent_name": self.name,
+                            "tool_name": parsed.name,
+                            "is_error": True,
+                            "error": "denied_by_user",
+                            "reason": deny_msg,
+                            "duration_ms": (time.monotonic() - t0) * 1000,
+                        },
+                    )
                     return result
 
                 if approval.action == ToolApprovalAction.MODIFY:
@@ -970,7 +1098,9 @@ class ReActAgent(BaseAgent):
                         )
                         parsed.arguments = approval.modified_arguments
                     else:
-                        logger.info(f"[{self.name}] Tool '{parsed.name}' APPROVED (modify with no changes)")
+                        logger.info(
+                            f"[{self.name}] Tool '{parsed.name}' APPROVED (modify with no changes)"
+                        )
 
                 else:
                     logger.info(f"[{self.name}] Tool '{parsed.name}' APPROVED")
@@ -980,7 +1110,9 @@ class ReActAgent(BaseAgent):
             for attempt in range(self.tool_retry_policy.max_retries + 1):
                 try:
                     if self.verbose:
-                        logger.info(f"[{self.name}] Executing {parsed.name}({parsed.arguments})")
+                        logger.info(
+                            f"[{self.name}] Executing {parsed.name}({parsed.arguments})"
+                        )
 
                     # Apply per-tool timeout
                     if self.tool_timeout:
@@ -998,7 +1130,10 @@ class ReActAgent(BaseAgent):
                         tool_call_id=parsed.call_id,
                         tool_name=parsed.name,
                     )
-                    global_metrics.increment_counter("tool_executions", tags={"tool": parsed.name, "status": "success"})
+                    global_metrics.increment_counter(
+                        "tool_executions",
+                        tags={"tool": parsed.name, "status": "success"},
+                    )
 
                     record = ToolCallRecord(
                         tool_name=parsed.name,
@@ -1010,14 +1145,17 @@ class ReActAgent(BaseAgent):
                     )
 
                     # ── LIFECYCLE HOOK: TOOL_END ─────────────────────
-                    await self.hooks.dispatch(HookEvent.TOOL_END, {
-                        "event": "on_tool_end",
-                        "agent_name": self.name,
-                        "tool_name": parsed.name,
-                        "is_error": False,
-                        "duration_ms": duration_ms,
-                        "step": step_num,
-                    })
+                    await self.hooks.dispatch(
+                        HookEvent.TOOL_END,
+                        {
+                            "event": "on_tool_end",
+                            "agent_name": self.name,
+                            "tool_name": parsed.name,
+                            "is_error": False,
+                            "duration_ms": duration_ms,
+                            "step": step_num,
+                        },
+                    )
 
                     return record, tool_msg
 
@@ -1054,17 +1192,24 @@ class ReActAgent(BaseAgent):
             # All retries exhausted
             error_msg = str(last_error) if last_error else "Unknown tool error"
             result = self._tool_error(
-                parsed, step_num, t0, span,
-                error_msg, "tool_execution_errors",
+                parsed,
+                step_num,
+                t0,
+                span,
+                error_msg,
+                "tool_execution_errors",
             )
-            await self.hooks.dispatch(HookEvent.TOOL_END, {
-                "event": "on_tool_end",
-                "agent_name": self.name,
-                "tool_name": parsed.name,
-                "is_error": True,
-                "error": error_msg,
-                "duration_ms": (time.monotonic() - t0) * 1000,
-            })
+            await self.hooks.dispatch(
+                HookEvent.TOOL_END,
+                {
+                    "event": "on_tool_end",
+                    "agent_name": self.name,
+                    "tool_name": parsed.name,
+                    "is_error": True,
+                    "error": error_msg,
+                    "duration_ms": (time.monotonic() - t0) * 1000,
+                },
+            )
             return result
 
     def _tool_error(
@@ -1101,7 +1246,9 @@ class ReActAgent(BaseAgent):
     def _find_tool(self, name: str) -> Optional[Any]:
         """Look up a tool by name from the agent's tools list."""
         for t in self.tools:
-            t_name = getattr(t, "name", None) or (t.get("name") if isinstance(t, dict) else None)
+            t_name = getattr(t, "name", None) or (
+                t.get("name") if isinstance(t, dict) else None
+            )
             if t_name == name:
                 return t
         return None

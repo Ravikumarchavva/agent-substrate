@@ -7,6 +7,7 @@ Routes:
   GET    /artifacts/files/{file_id}/download — download file
   DELETE /artifacts/files/{file_id}        — delete file
 """
+
 from __future__ import annotations
 
 import logging

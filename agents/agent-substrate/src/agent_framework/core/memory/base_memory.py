@@ -5,6 +5,7 @@ async split: all memory implementations use ``async def`` methods.
 In-process stores (``UnboundedMemory``) are trivially async (no I/O);
 remote stores (``RedisMemory``) are properly async.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

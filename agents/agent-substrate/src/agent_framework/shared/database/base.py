@@ -1,4 +1,5 @@
 """Shared database base model for all service-owned tables."""
+
 from __future__ import annotations
 
 from sqlalchemy.orm import DeclarativeBase
@@ -11,4 +12,5 @@ class ServiceBase(DeclarativeBase):
     share the same PostgreSQL database but own separate tables.
     In production, each service may use its own database instance.
     """
+
     pass

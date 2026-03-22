@@ -18,7 +18,16 @@ import json
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import StreamingResponse
 
 from agent_framework.providers.audio import BaseAudioClient
@@ -42,10 +51,13 @@ _REALTIME_IDLE_TIMEOUT = 120.0
 
 # ── POST /audio/transcribe ────────────────────────────────────────────────────
 
+
 @router.post("/transcribe", response_model=TranscribeResponse)
 async def transcribe_audio(
     request: Request,
-    file: Annotated[UploadFile, File(description="Audio file (mp3/wav/webm/m4a, max 25 MB)")],
+    file: Annotated[
+        UploadFile, File(description="Audio file (mp3/wav/webm/m4a, max 25 MB)")
+    ],
     model: Annotated[str, Form()] = "whisper-1",
     language: Annotated[str | None, Form()] = None,
     prompt: Annotated[str | None, Form()] = None,
@@ -129,6 +141,7 @@ async def text_to_speech(request: Request, body: TTSRequest):
 
 # ── GET /audio/realtime-token ─────────────────────────────────────────────────
 
+
 @router.get("/realtime-token", response_model=RealtimeTokenResponse)
 async def get_realtime_token(request: Request):
     """Mint a short-lived ephemeral Realtime session token.
@@ -142,7 +155,10 @@ async def get_realtime_token(request: Request):
     system_instructions: str = getattr(request.app.state, "system_instructions", "")
 
     if not audio_client.supports_s2s:
-        raise HTTPException(status_code=501, detail="Speech-to-speech not supported by the configured audio provider")
+        raise HTTPException(
+            status_code=501,
+            detail="Speech-to-speech not supported by the configured audio provider",
+        )
 
     try:
         session = await audio_client.create_s2s_session(
@@ -168,6 +184,7 @@ async def get_realtime_token(request: Request):
 
 
 # ── WS /audio/realtime ────────────────────────────────────────────────────────
+
 
 @router.websocket("/realtime")
 async def realtime_proxy(websocket: WebSocket):
@@ -214,7 +231,9 @@ async def realtime_proxy(websocket: WebSocket):
     try:
         upstream_url = audio_client.s2s_ws_url(model)
     except NotImplementedError:
-        await websocket.close(code=4005, reason="Realtime not supported by this audio provider")
+        await websocket.close(
+            code=4005, reason="Realtime not supported by this audio provider"
+        )
         return
 
     logger.info("Realtime proxy: connecting upstream model=%s", model)

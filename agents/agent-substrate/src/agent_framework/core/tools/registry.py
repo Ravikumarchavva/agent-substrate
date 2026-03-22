@@ -24,6 +24,7 @@ Usage::
     await registry.startup()
     await registry.shutdown()
 """
+
 from __future__ import annotations
 
 import logging

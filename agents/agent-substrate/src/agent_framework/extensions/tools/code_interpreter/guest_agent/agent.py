@@ -39,11 +39,12 @@ import time
 import traceback
 
 VSOCK_PORT = 52
-MAX_OUTPUT = 1_000_000   # 1 MB cap per field
-IDLE_TIMEOUT = 3600      # 1 h idle → auto-shutdown
+MAX_OUTPUT = 1_000_000  # 1 MB cap per field
+IDLE_TIMEOUT = 3600  # 1 h idle → auto-shutdown
 
 
 # ── Wire protocol ────────────────────────────────────────────────────────────
+
 
 def _recv_exact(sock, n):
     buf = bytearray()
@@ -68,6 +69,7 @@ def send_msg(sock, data):
 
 
 # ── Guest Agent ──────────────────────────────────────────────────────────────
+
 
 class GuestAgent:
     """Persistent Python execution engine with multimodal output."""
@@ -102,8 +104,10 @@ class GuestAgent:
         error = None
 
         try:
-            with contextlib.redirect_stdout(stdout_buf), \
-                 contextlib.redirect_stderr(stderr_buf):
+            with (
+                contextlib.redirect_stdout(stdout_buf),
+                contextlib.redirect_stderr(stderr_buf),
+            ):
                 exec(compile(code, cell_id, "exec"), self.globals)
         except SystemExit as e:
             success = int(e.code or 0) == 0
@@ -120,9 +124,18 @@ class GuestAgent:
         # Build structured outputs
         outputs = []
         if stdout_text:
-            outputs.append({"type": "text", "content": stdout_text, "encoding": "utf-8"})
+            outputs.append(
+                {"type": "text", "content": stdout_text, "encoding": "utf-8"}
+            )
         if stderr_text:
-            outputs.append({"type": "stderr", "content": stderr_text, "name": "stderr", "encoding": "utf-8"})
+            outputs.append(
+                {
+                    "type": "stderr",
+                    "content": stderr_text,
+                    "name": "stderr",
+                    "encoding": "utf-8",
+                }
+            )
 
         # Auto-capture matplotlib figures
         outputs.extend(self._capture_figures())
@@ -131,14 +144,14 @@ class GuestAgent:
             outputs.append({"type": "error", "content": error, "encoding": "utf-8"})
 
         return {
-            "success":        success,
-            "outputs":        outputs,
-            "output":         stdout_text,       # backward compat
-            "stderr":         stderr_text,       # backward compat
-            "error":          error,
+            "success": success,
+            "outputs": outputs,
+            "output": stdout_text,  # backward compat
+            "stderr": stderr_text,  # backward compat
+            "error": error,
             "execution_time": elapsed,
-            "cell_id":        cell_id,
-            "script_path":    script_path,
+            "cell_id": cell_id,
+            "script_path": script_path,
         }
 
     def _capture_figures(self):
@@ -163,13 +176,15 @@ class GuestAgent:
                     fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
                     buf.seek(0)
                     b64 = base64.b64encode(buf.read()).decode("ascii")
-                    captured.append({
-                        "type": "image",
-                        "content": b64,
-                        "name": f"figure_{num}.png",
-                        "format": "png",
-                        "encoding": "base64",
-                    })
+                    captured.append(
+                        {
+                            "type": "image",
+                            "content": b64,
+                            "name": f"figure_{num}.png",
+                            "format": "png",
+                            "encoding": "base64",
+                        }
+                    )
                 except Exception:
                     pass
             if fig_nums:
@@ -185,36 +200,60 @@ class GuestAgent:
         start = time.monotonic()
         try:
             proc = subprocess.run(
-                cmd, shell=True, executable="/bin/bash",
-                capture_output=True, text=True, timeout=timeout, cwd="/tmp",
+                cmd,
+                shell=True,
+                executable="/bin/bash",
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd="/tmp",
                 env={
                     "PATH": "/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin",
-                    "HOME": "/root", "LANG": "C.UTF-8", "TMPDIR": "/tmp",
+                    "HOME": "/root",
+                    "LANG": "C.UTF-8",
+                    "TMPDIR": "/tmp",
                 },
             )
             stdout_text = proc.stdout[:MAX_OUTPUT]
             stderr_text = proc.stderr[:MAX_OUTPUT]
             outputs = []
             if stdout_text:
-                outputs.append({"type": "text", "content": stdout_text, "encoding": "utf-8"})
+                outputs.append(
+                    {"type": "text", "content": stdout_text, "encoding": "utf-8"}
+                )
             if stderr_text:
-                outputs.append({"type": "stderr", "content": stderr_text, "name": "stderr", "encoding": "utf-8"})
+                outputs.append(
+                    {
+                        "type": "stderr",
+                        "content": stderr_text,
+                        "name": "stderr",
+                        "encoding": "utf-8",
+                    }
+                )
             if proc.returncode != 0 and stderr_text:
-                outputs.append({"type": "error", "content": stderr_text, "encoding": "utf-8"})
+                outputs.append(
+                    {"type": "error", "content": stderr_text, "encoding": "utf-8"}
+                )
             return {
-                "success":        proc.returncode == 0,
-                "outputs":        outputs,
-                "output":         stdout_text,
-                "stderr":         stderr_text,
-                "error":          stderr_text if proc.returncode != 0 else None,
-                "exit_code":      proc.returncode,
+                "success": proc.returncode == 0,
+                "outputs": outputs,
+                "output": stdout_text,
+                "stderr": stderr_text,
+                "error": stderr_text if proc.returncode != 0 else None,
+                "exit_code": proc.returncode,
                 "execution_time": round(time.monotonic() - start, 4),
             }
         except subprocess.TimeoutExpired:
             return {
-                "success": False, "outputs": [{"type": "error", "content": f"Timed out after {timeout}s"}],
-                "output": "", "stderr": "", "error": f"Bash timed out after {timeout}s",
-                "exit_code": -1, "execution_time": float(timeout),
+                "success": False,
+                "outputs": [
+                    {"type": "error", "content": f"Timed out after {timeout}s"}
+                ],
+                "output": "",
+                "stderr": "",
+                "error": f"Bash timed out after {timeout}s",
+                "exit_code": -1,
+                "execution_time": float(timeout),
             }
 
     # ── File operations (text) ───────────────────────────────────────────
@@ -258,8 +297,11 @@ class GuestAgent:
                 data = f.read(MAX_OUTPUT)
             b64 = base64.b64encode(data).decode("ascii")
             return {
-                "success": True, "path": path,
-                "content": b64, "encoding": "base64", "size": len(data),
+                "success": True,
+                "path": path,
+                "content": b64,
+                "encoding": "base64",
+                "size": len(data),
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -271,9 +313,13 @@ class GuestAgent:
             entries = []
             for entry in sorted(os.scandir(path), key=lambda e: e.name):
                 stat = entry.stat()
-                entries.append({
-                    "name": entry.name, "is_dir": entry.is_dir(), "size": stat.st_size,
-                })
+                entries.append(
+                    {
+                        "name": entry.name,
+                        "is_dir": entry.is_dir(),
+                        "size": stat.st_size,
+                    }
+                )
             return {"success": True, "path": path, "entries": entries}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -290,8 +336,16 @@ class GuestAgent:
     # ── Session state ────────────────────────────────────────────────────
 
     def get_state(self):
-        skip = {"__builtins__", "__name__", "__doc__", "__loader__",
-                "__spec__", "__package__", "__cached__", "__file__"}
+        skip = {
+            "__builtins__",
+            "__name__",
+            "__doc__",
+            "__loader__",
+            "__spec__",
+            "__package__",
+            "__cached__",
+            "__file__",
+        }
         variables = {}
         for k, v in self.globals.items():
             if k.startswith("__") or k in skip:
@@ -311,8 +365,12 @@ class GuestAgent:
         scripts = sorted(
             f for f in os.listdir("/tmp") if f.startswith("exec_") and f.endswith(".py")
         )
-        return {"success": True, "exec_count": self.exec_count,
-                "variables": variables, "scripts": scripts}
+        return {
+            "success": True,
+            "exec_count": self.exec_count,
+            "variables": variables,
+            "scripts": scripts,
+        }
 
     def reset(self):
         self.globals = {
@@ -334,19 +392,33 @@ class GuestAgent:
     def handle(self, request):
         rtype = request.get("type", "python")
         try:
-            if   rtype == "python":       return self.exec_python(request["code"], request.get("timeout", 30))
-            elif rtype == "bash":         return self.exec_bash(request["cmd"], request.get("timeout", 30))
-            elif rtype == "write_file":   return self.write_file(request["path"], request["content"])
-            elif rtype == "read_file":    return self.read_file(request["path"])
-            elif rtype == "write_file_b": return self.write_file_binary(request["path"], request["content"])
-            elif rtype == "read_file_b":  return self.read_file_binary(request["path"])
-            elif rtype == "list_files":   return self.list_files(request.get("path", "/tmp"))
-            elif rtype == "install":      return self.install(request["packages"])
-            elif rtype == "get_state":    return self.get_state()
-            elif rtype == "reset":        return self.reset()
-            elif rtype == "ping":         return {"success": True, "pong": True, "exec_count": self.exec_count}
-            elif rtype == "shutdown":     self._running = False; return {"success": True, "shutdown": True}
-            else:                         return {"success": False, "error": f"Unknown request type: {rtype!r}"}
+            if rtype == "python":
+                return self.exec_python(request["code"], request.get("timeout", 30))
+            elif rtype == "bash":
+                return self.exec_bash(request["cmd"], request.get("timeout", 30))
+            elif rtype == "write_file":
+                return self.write_file(request["path"], request["content"])
+            elif rtype == "read_file":
+                return self.read_file(request["path"])
+            elif rtype == "write_file_b":
+                return self.write_file_binary(request["path"], request["content"])
+            elif rtype == "read_file_b":
+                return self.read_file_binary(request["path"])
+            elif rtype == "list_files":
+                return self.list_files(request.get("path", "/tmp"))
+            elif rtype == "install":
+                return self.install(request["packages"])
+            elif rtype == "get_state":
+                return self.get_state()
+            elif rtype == "reset":
+                return self.reset()
+            elif rtype == "ping":
+                return {"success": True, "pong": True, "exec_count": self.exec_count}
+            elif rtype == "shutdown":
+                self._running = False
+                return {"success": True, "shutdown": True}
+            else:
+                return {"success": False, "error": f"Unknown request type: {rtype!r}"}
         except Exception:
             return {"success": False, "error": traceback.format_exc()}
 
@@ -365,7 +437,7 @@ class GuestAgent:
                 conn, addr = sock.accept()
                 try:
                     request = recv_msg(conn)
-                    result  = self.handle(request)
+                    result = self.handle(request)
                     send_msg(conn, result)
                 except Exception as e:
                     try:

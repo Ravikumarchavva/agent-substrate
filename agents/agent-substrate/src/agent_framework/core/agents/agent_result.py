@@ -7,6 +7,7 @@ Design principles:
 - Status enum: captures all terminal states, not just success/fail
 - Multimodal: supports text, images, audio, video outputs
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -24,27 +25,31 @@ from agent_framework.core.messages._types import MediaType, AudioContent, VideoC
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class RunStatus(str, Enum):
     """Terminal status of an agent run."""
-    COMPLETED = "completed"                     # Agent finished naturally
-    MAX_ITERATIONS = "max_iterations_reached"   # Hit iteration ceiling
-    ERROR = "error"                             # Unrecoverable error
-    CANCELLED = "cancelled"                     # Externally cancelled
-    GUARDRAIL_TRIPPED = "guardrail_tripped"     # Hard-stopped by a guardrail
+
+    COMPLETED = "completed"  # Agent finished naturally
+    MAX_ITERATIONS = "max_iterations_reached"  # Hit iteration ceiling
+    ERROR = "error"  # Unrecoverable error
+    CANCELLED = "cancelled"  # Externally cancelled
+    GUARDRAIL_TRIPPED = "guardrail_tripped"  # Hard-stopped by a guardrail
 
 
 # ---------------------------------------------------------------------------
 # Tool call record (single execution)
 # ---------------------------------------------------------------------------
 
+
 class ToolCallRecord(BaseModel):
     """Record of a single tool invocation and its result."""
+
     tool_name: str
     call_id: str
     arguments: Dict[str, Any] = Field(default_factory=dict)
     result: str = ""
     is_error: bool = False
-    duration_ms: Optional[float] = None          # wall-clock for this call
+    duration_ms: Optional[float] = None  # wall-clock for this call
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = {"frozen": False}
@@ -54,18 +59,20 @@ class ToolCallRecord(BaseModel):
 # Per-step snapshot
 # ---------------------------------------------------------------------------
 
+
 class StepResult(BaseModel):
     """One think-act cycle inside an agent run.
-    
+
     - If the LLM answered directly (no tool calls), tool_calls is empty.
     - If the LLM requested tools, tool_calls contains one entry per call.
     - Supports multimodal thought (text, images, audio, video).
     """
-    step: int                                     # 1-based
-    thought: Optional[List[MediaType]] = None    # LLM output (can be multimodal)
+
+    step: int  # 1-based
+    thought: Optional[List[MediaType]] = None  # LLM output (can be multimodal)
     tool_calls: List[ToolCallRecord] = Field(default_factory=list)
-    usage: Optional[UsageStats] = None           # tokens for *this* step's LLM call
-    finish_reason: str = "stop"                  # stop | tool_calls | error
+    usage: Optional[UsageStats] = None  # tokens for *this* step's LLM call
+    finish_reason: str = "stop"  # stop | tool_calls | error
 
     model_config = {"frozen": False, "arbitrary_types_allowed": True}
 
@@ -73,7 +80,7 @@ class StepResult(BaseModel):
     @property
     def has_tool_calls(self) -> bool:
         return len(self.tool_calls) > 0
-    
+
     @computed_field
     @property
     def thought_text(self) -> Optional[str]:
@@ -95,12 +102,14 @@ class StepResult(BaseModel):
 # Aggregated usage
 # ---------------------------------------------------------------------------
 
+
 class AggregatedUsage(BaseModel):
     """Accumulated token usage across all LLM calls in a run."""
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
-    llm_calls: int = 0                            # how many generate() calls
+    llm_calls: int = 0  # how many generate() calls
 
     def add(self, usage: Optional[UsageStats]) -> None:
         if usage:
@@ -114,9 +123,10 @@ class AggregatedUsage(BaseModel):
 # Top-level run result
 # ---------------------------------------------------------------------------
 
+
 class AgentRunResult(BaseModel):
     """Complete result of an agent.run() invocation.
-    
+
     Design:
     - ``output`` is the final answer (can be multimodal: text, images, audio, video).
     - ``steps`` is the full reasoning trace (think-act cycles).
@@ -124,12 +134,15 @@ class AgentRunResult(BaseModel):
     - No ``conversation_history`` -- reconstruct from steps if needed.
     - No ``final_message`` object -- access via steps[-1] if needed.
     """
+
     # Identity
     run_id: str = Field(default_factory=lambda: str(uuid4()))
     agent_name: str
 
     # Output (multimodal)
-    output: List[MediaType] = Field(default_factory=list)  # Can contain text, images, audio, video
+    output: List[MediaType] = Field(
+        default_factory=list
+    )  # Can contain text, images, audio, video
     status: RunStatus = RunStatus.COMPLETED
 
     # Execution trace
@@ -169,12 +182,12 @@ class AgentRunResult(BaseModel):
     @property
     def success(self) -> bool:
         return self.status == RunStatus.COMPLETED
-    
+
     @computed_field
     @property
     def output_text(self) -> str:
         """Extract plain text from multimodal output (convenience accessor).
-        
+
         For text-only results, this is just the joined text.
         For multimodal results, non-text items are represented as [Type] placeholders.
         """
@@ -191,13 +204,13 @@ class AgentRunResult(BaseModel):
             elif isinstance(item, Image.Image):
                 parts.append(f"[Image: {item.size[0]}x{item.size[1]}]")
         return " ".join(parts)
-    
+
     @computed_field
     @property
     def has_media(self) -> bool:
         """Check if output contains non-text media (images, audio, video)."""
         return any(not isinstance(item, str) for item in self.output)
-    
+
     @computed_field
     @property
     def media_types(self) -> List[str]:
@@ -220,7 +233,9 @@ class AgentRunResult(BaseModel):
 
     def summary(self) -> str:
         """One-line human-readable summary."""
-        tool_info = ", ".join(f"{n}x{c}" for n, c in self.tool_calls_by_name.items()) or "none"
+        tool_info = (
+            ", ".join(f"{n}x{c}" for n, c in self.tool_calls_by_name.items()) or "none"
+        )
         duration = f"{self.duration_seconds:.2f}s" if self.duration_seconds else "n/a"
         media_info = f" | media: {'+'.join(self.media_types)}" if self.has_media else ""
         return (
@@ -242,16 +257,20 @@ class AgentRunResult(BaseModel):
         ]
         if self.duration_seconds is not None:
             lines.append(f"Duration: {self.duration_seconds:.2f}s")
-        
+
         # Output preview
         if self.has_media:
             lines.append(f"Output:   [Multimodal: {', '.join(self.media_types)}]")
-            output_preview = self.output_text[:120] + ("..." if len(self.output_text) > 120 else "")
+            output_preview = self.output_text[:120] + (
+                "..." if len(self.output_text) > 120 else ""
+            )
             lines.append(f"          {output_preview}")
         else:
-            output_preview = self.output_text[:120] + ("..." if len(self.output_text) > 120 else "")
+            output_preview = self.output_text[:120] + (
+                "..." if len(self.output_text) > 120 else ""
+            )
             lines.append(f"Output:   {output_preview}")
-        
+
         if self.error:
             lines.append(f"Error:    {self.error}")
         return "\n".join(lines)

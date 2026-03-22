@@ -13,9 +13,10 @@ SOURCE_ROLES = Literal["user", "agent"]
 
 class UsageStats(BaseModel):
     """Token usage statistics for a single LLM call.
-    
+
     Pydantic model (not dataclass) so it serializes cleanly everywhere.
     """
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -25,14 +26,14 @@ class UsageStats(BaseModel):
 
 class BaseClientMessage(BaseModel, ABC):
     """Base message class for client-model communication (LLM API)."""
-    
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     role: CLIENT_ROLES
     content: Any
     type: Literal["BaseClientMessage"] = "BaseClientMessage"
-    
+
     model_config = {"arbitrary_types_allowed": True}
-    
+
     @abstractmethod
     def to_dict(self) -> Dict:
         """Convert message to dictionary for LLM API."""
@@ -73,7 +74,7 @@ class BaseAgentMessage(BaseModel, ABC):
 
 class BaseAgentEvent(BaseModel, ABC):
     """Base class for agent events (tool execution, thinking, etc.)."""
-    
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     source: str
     metadata: Dict[str, Any] = Field(default_factory=dict)

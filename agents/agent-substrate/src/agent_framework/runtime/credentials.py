@@ -2,6 +2,7 @@
 Credential Service for Agent Framework
 Handles secure storage and retrieval of OAuth tokens with AES-256 encryption.
 """
+
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
@@ -15,13 +16,13 @@ class CredentialService:
 
     def __init__(self, db_pool: asyncpg.Pool):
         self.db = db_pool
-        
+
         # Load encryption key from environment
         # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
         encryption_key = os.environ.get("ENCRYPTION_KEY")
         if not encryption_key:
             raise ValueError("ENCRYPTION_KEY environment variable not set")
-        
+
         self.cipher = Fernet(encryption_key.encode())
 
     def encrypt_token(self, token: str) -> str:
@@ -40,11 +41,11 @@ class CredentialService:
         refresh_token: Optional[str] = None,
         expires_in: int = 3600,
         scope: Optional[str] = None,
-        token_type: str = "Bearer"
+        token_type: str = "Bearer",
     ) -> None:
         """
         Store encrypted OAuth credentials for a user.
-        
+
         Args:
             user_id: UUID of the user
             provider: OAuth provider name ('spotify', 'google', etc.)
@@ -81,15 +82,17 @@ class CredentialService:
             scope,
         )
 
-    async def get_credential(self, user_id: str, provider: str) -> Optional[Dict[str, Any]]:
+    async def get_credential(
+        self, user_id: str, provider: str
+    ) -> Optional[Dict[str, Any]]:
         """
         Get decrypted OAuth credentials for a user.
         Automatically refreshes expired tokens if refresh_token is available.
-        
+
         Args:
             user_id: UUID of the user
             provider: OAuth provider name
-            
+
         Returns:
             Dict with 'access_token', 'refresh_token', 'expires_at', 'scope'
             None if credentials not found
@@ -118,21 +121,25 @@ class CredentialService:
 
         return {
             "access_token": self.decrypt_token(row["access_token"]),
-            "refresh_token": self.decrypt_token(row["refresh_token"]) if row["refresh_token"] else None,
+            "refresh_token": self.decrypt_token(row["refresh_token"])
+            if row["refresh_token"]
+            else None,
             "expires_at": row["expires_at"],
             "scope": row["scope"],
             "token_type": row["token_type"],
         }
 
-    async def refresh_token(self, user_id: str, provider: str) -> Optional[Dict[str, Any]]:
+    async def refresh_token(
+        self, user_id: str, provider: str
+    ) -> Optional[Dict[str, Any]]:
         """
         Refresh an expired OAuth token.
         Currently supports Spotify and Google.
-        
+
         Args:
             user_id: UUID of the user
             provider: OAuth provider name
-            
+
         Returns:
             Dict with new credentials, or None if refresh failed
         """
@@ -159,7 +166,9 @@ class CredentialService:
         else:
             return None
 
-    async def _refresh_spotify(self, user_id: str, refresh_token: str) -> Optional[Dict[str, Any]]:
+    async def _refresh_spotify(
+        self, user_id: str, refresh_token: str
+    ) -> Optional[Dict[str, Any]]:
         """Refresh Spotify access token"""
         import base64
 
@@ -186,7 +195,7 @@ class CredentialService:
                     return None
 
                 data = response.json()
-                
+
                 # Store new credentials
                 await self.store_credential(
                     user_id=user_id,
@@ -207,7 +216,9 @@ class CredentialService:
                 print(f"[CredentialService] Spotify refresh failed: {e}")
                 return None
 
-    async def _refresh_google(self, user_id: str, refresh_token: str) -> Optional[Dict[str, Any]]:
+    async def _refresh_google(
+        self, user_id: str, refresh_token: str
+    ) -> Optional[Dict[str, Any]]:
         """Refresh Google access token"""
         client_id = os.environ.get("GOOGLE_CLIENT_ID")
         client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
@@ -255,11 +266,11 @@ class CredentialService:
     async def delete_credential(self, user_id: str, provider: str) -> bool:
         """
         Delete stored credentials for a provider.
-        
+
         Args:
             user_id: UUID of the user
             provider: OAuth provider name
-            
+
         Returns:
             True if deleted, False if not found
         """
@@ -276,10 +287,10 @@ class CredentialService:
     async def list_user_providers(self, user_id: str) -> list[str]:
         """
         List all providers a user has connected.
-        
+
         Args:
             user_id: UUID of the user
-            
+
         Returns:
             List of provider names
         """
@@ -308,5 +319,7 @@ def init_credential_service(db_pool: asyncpg.Pool) -> CredentialService:
 def get_credential_service() -> CredentialService:
     """Get the credential service singleton"""
     if _credential_service is None:
-        raise RuntimeError("CredentialService not initialized. Call init_credential_service first.")
+        raise RuntimeError(
+            "CredentialService not initialized. Call init_credential_service first."
+        )
     return _credential_service

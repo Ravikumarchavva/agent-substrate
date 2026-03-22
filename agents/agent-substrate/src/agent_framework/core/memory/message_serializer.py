@@ -8,6 +8,7 @@ Security notes:
   - Only known message types are accepted during deserialization.
   - Unknown types raise ``ValueError`` — fail-closed by design.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,6 +41,7 @@ _MESSAGE_REGISTRY: Dict[str, Type[BaseClientMessage]] = {
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def serialize_message(message: BaseClientMessage) -> Dict[str, Any]:
     """Convert a ``BaseClientMessage`` subclass to a JSON-safe dict.
 
@@ -70,8 +72,7 @@ def deserialize_message(data: Dict[str, Any]) -> BaseClientMessage:
     cls = _MESSAGE_REGISTRY.get(msg_type)
     if cls is None:
         raise ValueError(
-            f"Unknown message type '{msg_type}'. "
-            f"Allowed: {sorted(_MESSAGE_REGISTRY)}"
+            f"Unknown message type '{msg_type}'. Allowed: {sorted(_MESSAGE_REGISTRY)}"
         )
 
     # Pre-process content for message types that use MediaType lists.

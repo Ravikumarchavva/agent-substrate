@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/execute", tags=["code-interpreter"])
 
 # ── Request / Response models ────────────────────────────────────────────────
 
+
 class ExecuteRequest(BaseModel):
     code: str = Field(..., max_length=1_000_000, description="Python or bash code")
     exec_type: str = Field(default="python", description="'python' or 'bash'")
@@ -39,6 +40,7 @@ class ExecuteResponse(BaseModel):
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
+
 
 @router.post("", response_model=ExecuteResponse)
 async def execute_code(body: ExecuteRequest, request: Request):
@@ -75,11 +77,13 @@ async def execute_code(body: ExecuteRequest, request: Request):
         elif t == "error":
             text_parts.append(f"[error] {output.content}")
         elif t == "image":
-            images.append({
-                "name": output.name or "figure.png",
-                "format": output.format or "png",
-                "data": output.content,
-            })
+            images.append(
+                {
+                    "name": output.name or "figure.png",
+                    "format": output.format or "png",
+                    "data": output.content,
+                }
+            )
             text_parts.append(f"[Generated {output.name or 'figure.png'}]")
 
     return ExecuteResponse(
@@ -102,7 +106,9 @@ async def pool_health(request: Request):
     try:
         pods = await client.health_all_pods()
         return {
-            "status": "healthy" if all(p.status == "healthy" for p in pods) else "degraded",
+            "status": "healthy"
+            if all(p.status == "healthy" for p in pods)
+            else "degraded",
             "pods": [p.model_dump() for p in pods],
         }
     except Exception as e:

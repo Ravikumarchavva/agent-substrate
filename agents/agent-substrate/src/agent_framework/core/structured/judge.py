@@ -27,6 +27,7 @@ Design notes:
   - ``tripwire_on_refusal`` (default True) causes a hard stop when the
     LLM refuses to evaluate (safety refusal of the judge itself).
 """
+
 from __future__ import annotations
 
 import logging
@@ -170,7 +171,9 @@ class LLMJudge(BaseGuardrail):
         except AttributeError:
             logger.error(
                 "[%s] Schema '%s' has no field '%s'.",
-                self.name, self._schema.__name__, self._pass_field,
+                self.name,
+                self._schema.__name__,
+                self._pass_field,
             )
             return GuardrailResult(
                 guardrail_name=self.name,

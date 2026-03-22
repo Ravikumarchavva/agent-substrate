@@ -10,6 +10,7 @@ Usage:
     # Quiet mode — only warnings and above
     setup_logging(mode="pretty", level=logging.WARNING)
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,6 +25,7 @@ from pythonjsonlogger.json import JsonFormatter
 # Formatters
 # ---------------------------------------------------------------------------
 
+
 class CustomJsonFormatter(JsonFormatter):
     """JSON formatter for server / structured-log pipelines."""
 
@@ -31,6 +33,7 @@ class CustomJsonFormatter(JsonFormatter):
         super().add_fields(log_record, record, message_dict)
         if not log_record.get("timestamp"):
             from datetime import datetime, timezone
+
             log_record["timestamp"] = datetime.now(timezone.utc).isoformat()
         if log_record.get("level"):
             log_record["level"] = log_record["level"].upper()
@@ -46,8 +49,8 @@ class PrettyFormatter(logging.Formatter):
     """
 
     LEVEL_TAGS = {
-        logging.WARNING:  "\033[33m⚠\033[0m ",   # yellow
-        logging.ERROR:    "\033[31m✖\033[0m ",     # red
+        logging.WARNING: "\033[33m⚠\033[0m ",  # yellow
+        logging.ERROR: "\033[31m✖\033[0m ",  # red
         logging.CRITICAL: "\033[1;31m✖✖\033[0m ",  # bold red
     }
 

@@ -3,6 +3,7 @@
 Handles file upload, download, listing, and deletion using
 pluggable storage backends (local, S3, encrypted).
 """
+
 from __future__ import annotations
 
 import logging
@@ -46,9 +47,7 @@ async def create_file_record(
 
 
 async def get_file(db: AsyncSession, file_id: uuid.UUID) -> Optional[FileMetadata]:
-    result = await db.execute(
-        select(FileMetadata).where(FileMetadata.id == file_id)
-    )
+    result = await db.execute(select(FileMetadata).where(FileMetadata.id == file_id))
     return result.scalar_one_or_none()
 
 
@@ -65,9 +64,7 @@ async def list_files(
 
 
 async def delete_file(db: AsyncSession, file_id: uuid.UUID) -> bool:
-    result = await db.execute(
-        delete(FileMetadata).where(FileMetadata.id == file_id)
-    )
+    result = await db.execute(delete(FileMetadata).where(FileMetadata.id == file_id))
     return result.rowcount > 0
 
 
@@ -78,8 +75,7 @@ async def get_files_by_ids(
 ) -> List[FileMetadata]:
     """Get multiple files by ID, scoped to a thread."""
     result = await db.execute(
-        select(FileMetadata)
-        .where(
+        select(FileMetadata).where(
             FileMetadata.id.in_(file_ids),
             FileMetadata.thread_id == thread_id,
         )

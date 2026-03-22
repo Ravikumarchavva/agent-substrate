@@ -5,6 +5,7 @@ Entry point: uvicorn agent_framework.services.gateway.app:app --port 8001
 The Gateway is the ONLY service exposed to the frontend. All client
 requests go through here and are routed to internal services.
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,7 +40,9 @@ async def lifespan(app):
     # Service URLs (from env or defaults for local dev)
     identity_url = os.environ.get("IDENTITY_SERVICE_URL", "http://localhost:8010")
     policy_url = os.environ.get("POLICY_SERVICE_URL", "http://localhost:8011")
-    conversation_url = os.environ.get("CONVERSATION_SERVICE_URL", "http://localhost:8012")
+    conversation_url = os.environ.get(
+        "CONVERSATION_SERVICE_URL", "http://localhost:8012"
+    )
     workflow_url = os.environ.get("WORKFLOW_SERVICE_URL", "http://localhost:8013")
     hitl_url = os.environ.get("HITL_SERVICE_URL", "http://localhost:8016")
     stream_url = os.environ.get("STREAM_SERVICE_URL", "http://localhost:8017")

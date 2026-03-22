@@ -7,6 +7,7 @@ GET  /policy/rules          List policy rules
 POST /policy/grants         Grant workspace role
 POST /policy/seed           Seed default policies
 """
+
 from __future__ import annotations
 
 import logging
@@ -62,7 +63,11 @@ async def check_policy(
     db_factory = request.app.state.session_factory
     async with db_factory() as db:
         allowed = await check_permission(
-            db, user, body.action, body.resource_type, body.resource_id,
+            db,
+            user,
+            body.action,
+            body.resource_type,
+            body.resource_id,
         )
     return PolicyCheckResponse(
         allowed=allowed,
@@ -147,7 +152,9 @@ async def list_rules(
 async def grant_workspace_role(
     body: WorkspaceGrantCreate,
     request: Request,
-    user: AuthClaims = Depends(require_role("platform_admin", "tenant_admin", "workspace_admin")),
+    user: AuthClaims = Depends(
+        require_role("platform_admin", "tenant_admin", "workspace_admin")
+    ),
 ):
     """Grant a workspace-level role to a user."""
     from agent_framework.services.policy.models import WorkspaceGrant

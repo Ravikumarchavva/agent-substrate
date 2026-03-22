@@ -21,6 +21,7 @@ Example::
     elif result.refused:
         print('Refused:', result.refusal)
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional, Type, TypeVar
@@ -28,7 +29,6 @@ from typing import TYPE_CHECKING, List, Optional, Type, TypeVar
 from agent_framework.core.messages.client_messages import SystemMessage
 
 if TYPE_CHECKING:
-
     from agent_framework.core.messages.base_message import BaseClientMessage
     from agent_framework.core.structured.result import StructuredOutputResult
     from agent_framework.providers.llm.base_client import BaseModelClient

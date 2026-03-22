@@ -3,6 +3,7 @@
 Every storage backend (local, S3, Azure, GCS) implements ``FileStore``.
 ``FileRef`` is the immutable receipt returned after a successful ``put()``.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -13,6 +14,7 @@ from typing import AsyncIterator, Optional
 
 
 # ── Value Objects ────────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True, slots=True)
 class FileRef:
@@ -36,6 +38,7 @@ class FileRef:
 
 
 # ── Abstract Base Class ─────────────────────────────────────────────────────
+
 
 class FileStore(ABC):
     """Backend-agnostic async file storage interface.
@@ -93,7 +96,9 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    async def get_stream(self, key: str, chunk_size: int = 1024 * 256) -> AsyncIterator[bytes]:
+    async def get_stream(
+        self, key: str, chunk_size: int = 1024 * 256
+    ) -> AsyncIterator[bytes]:
         """Yield the object contents in chunks.
 
         Raises ``FileNotFoundError`` if the key does not exist.

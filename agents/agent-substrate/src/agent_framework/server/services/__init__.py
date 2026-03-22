@@ -14,6 +14,7 @@ from agent_framework.server.models import Thread, Step, Feedback
 
 # ── Thread CRUD ──────────────────────────────────────────────────────────────
 
+
 async def create_thread(
     db: AsyncSession,
     *,
@@ -59,7 +60,9 @@ async def list_threads(
     )
 
     query = (
-        select(Thread, func.coalesce(count_subq.c.message_count, 0).label("message_count"))
+        select(
+            Thread, func.coalesce(count_subq.c.message_count, 0).label("message_count")
+        )
         .outerjoin(count_subq, Thread.id == count_subq.c.thread_id)
         .order_by(Thread.updated_at.desc())
         .limit(limit)
@@ -109,22 +112,19 @@ async def update_thread(
 
     values["updated_at"] = datetime.now(timezone.utc)
 
-    await db.execute(
-        update(Thread).where(Thread.id == thread_id).values(**values)
-    )
+    await db.execute(update(Thread).where(Thread.id == thread_id).values(**values))
     await db.flush()
     return await get_thread(db, thread_id)
 
 
 async def delete_thread(db: AsyncSession, thread_id: uuid.UUID) -> bool:
     """Delete a thread and all its steps/elements/feedbacks (cascade)."""
-    result = await db.execute(
-        delete(Thread).where(Thread.id == thread_id)
-    )
+    result = await db.execute(delete(Thread).where(Thread.id == thread_id))
     return result.rowcount > 0
 
 
 # ── Step CRUD ────────────────────────────────────────────────────────────────
+
 
 async def create_step(
     db: AsyncSession,
@@ -177,11 +177,7 @@ async def get_steps(
     types: Optional[List[str]] = None,
 ) -> List[Step]:
     """Get all steps for a thread, optionally filtered by type."""
-    query = (
-        select(Step)
-        .where(Step.thread_id == thread_id)
-        .order_by(Step.created_at)
-    )
+    query = select(Step).where(Step.thread_id == thread_id).order_by(Step.created_at)
     if types:
         query = query.where(Step.type.in_(types))
 
@@ -204,14 +200,13 @@ async def update_step(
     if not values:
         return await get_step(db, step_id)
 
-    await db.execute(
-        update(Step).where(Step.id == step_id).values(**values)
-    )
+    await db.execute(update(Step).where(Step.id == step_id).values(**values))
     await db.flush()
     return await get_step(db, step_id)
 
 
 # ── Feedback CRUD ────────────────────────────────────────────────────────────
+
 
 async def create_feedback(
     db: AsyncSession,
@@ -235,19 +230,27 @@ async def create_feedback(
 
 # ── Memory helpers ───────────────────────────────────────────────────────────
 
+
 async def load_messages_for_memory(
     db: AsyncSession,
     thread_id: uuid.UUID,
 ) -> List[Dict[str, Any]]:
     """Load steps as dicts suitable for reconstructing agent memory.
-    
+
     Returns steps in chronological order with type, input, output, and metadata
     so the agent service can rebuild the proper message objects.
     """
     steps = await get_steps(
         db,
         thread_id,
-        types=["system_message", "user_message", "assistant_message", "tool_call", "tool_result", "mcp_app_context"],
+        types=[
+            "system_message",
+            "user_message",
+            "assistant_message",
+            "tool_call",
+            "tool_result",
+            "mcp_app_context",
+        ],
     )
     return [
         {

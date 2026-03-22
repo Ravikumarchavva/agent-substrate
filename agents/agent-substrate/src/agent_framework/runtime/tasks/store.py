@@ -3,6 +3,7 @@ Task Store — in-memory store for agent task lists.
 Each conversation gets one active TaskList.
 Design is intentionally simple; swap for Postgres/SQLAlchemy later.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,11 +16,12 @@ from uuid import uuid4
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Task:
     id: str
     title: str
-    status: str = "todo"   # "todo" | "in_progress" | "done"
+    status: str = "todo"  # "todo" | "in_progress" | "done"
     order: int = 0
 
 
@@ -43,6 +45,7 @@ class TaskList:
 # ---------------------------------------------------------------------------
 # Store
 # ---------------------------------------------------------------------------
+
 
 class TaskStore:
     """Thread-safe in-memory task store (singleton via GlobalTaskStore)."""
@@ -116,7 +119,12 @@ class TaskStore:
                 return []
             start_order = len(task_list.tasks)
             new_tasks = [
-                Task(id=str(uuid4()), title=t.strip(), status="todo", order=start_order + i)
+                Task(
+                    id=str(uuid4()),
+                    title=t.strip(),
+                    status="todo",
+                    order=start_order + i,
+                )
                 for i, t in enumerate(titles)
                 if t.strip()
             ]
@@ -149,6 +157,7 @@ class TaskStore:
 # ---------------------------------------------------------------------------
 # Singleton accessor
 # ---------------------------------------------------------------------------
+
 
 class GlobalTaskStore:
     _instance: Optional[TaskStore] = None

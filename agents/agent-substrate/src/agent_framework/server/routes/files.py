@@ -169,5 +169,5 @@ async def get_download_url(
         raise HTTPException(
             status_code=501,
             detail="Direct download URLs are not available with encrypted storage. "
-                   "Use the /content endpoint instead.",
+            "Use the /content endpoint instead.",
         )

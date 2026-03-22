@@ -15,6 +15,7 @@ cannot be parsed at all (malformed JSON, schema validation failure after
 retries, etc.).  A safety refusal is *not* an error — it surfaces as
 ``parsed=None, refusal="<message>"``.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

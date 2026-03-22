@@ -36,6 +36,7 @@ SummarizingContext
     by a separate LLM call and the backing ``Memory`` is rewritten in-place
     so future turns start from the compressed state.
 """
+
 from __future__ import annotations
 
 import json
@@ -59,11 +60,17 @@ _logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _estimate_tokens(messages: List[BaseClientMessage]) -> int:
     """Very rough token estimate: 4 chars ≈ 1 token."""
     total = 0
     for msg in messages:
-        total += len(json.dumps(msg.model_dump() if hasattr(msg, "model_dump") else str(msg))) // 4
+        total += (
+            len(
+                json.dumps(msg.model_dump() if hasattr(msg, "model_dump") else str(msg))
+            )
+            // 4
+        )
     return total
 
 
@@ -79,6 +86,7 @@ def _split_system(
 # ---------------------------------------------------------------------------
 # UnboundedContext
 # ---------------------------------------------------------------------------
+
 
 class UnboundedContext(ModelContext):
     """Pass-through — returns all messages unchanged.
@@ -105,6 +113,7 @@ class UnboundedContext(ModelContext):
 # ---------------------------------------------------------------------------
 # SlidingWindowContext
 # ---------------------------------------------------------------------------
+
 
 class SlidingWindowContext(ModelContext):
     """Keep the system prompt + the last *max_messages* conversation turns.
@@ -140,6 +149,7 @@ class SlidingWindowContext(ModelContext):
 # ---------------------------------------------------------------------------
 # TokenBudgetContext
 # ---------------------------------------------------------------------------
+
 
 class TokenBudgetContext(ModelContext):
     """Trim oldest messages until the history fits within *max_tokens*.
@@ -190,6 +200,7 @@ class TokenBudgetContext(ModelContext):
 # ---------------------------------------------------------------------------
 # HybridContext
 # ---------------------------------------------------------------------------
+
 
 class HybridContext(ModelContext):
     """Fuse Redis (hot) and Postgres (cold) memory via a ``SessionManager``.
@@ -253,14 +264,20 @@ class HybridContext(ModelContext):
                 seen = {id(m) for m in combined}
                 # Serialise recent for content-based dedup fallback
                 seen_serialised = {
-                    json.dumps(m.model_dump() if hasattr(m, "model_dump") else str(m), sort_keys=True)
+                    json.dumps(
+                        m.model_dump() if hasattr(m, "model_dump") else str(m),
+                        sort_keys=True,
+                    )
                     for m in combined
                 }
                 unique_cold: List[BaseClientMessage] = []
                 for m in cold_messages:
                     if id(m) in seen:
                         continue
-                    s = json.dumps(m.model_dump() if hasattr(m, "model_dump") else str(m), sort_keys=True)
+                    s = json.dumps(
+                        m.model_dump() if hasattr(m, "model_dump") else str(m),
+                        sort_keys=True,
+                    )
                     if s in seen_serialised:
                         continue
                     seen.add(id(m))
@@ -278,14 +295,13 @@ class HybridContext(ModelContext):
         return combined
 
     def __repr__(self) -> str:
-        return (
-            f"<HybridContext(recent_n={self.recent_n}, max_total={self.max_total})>"
-        )
+        return f"<HybridContext(recent_n={self.recent_n}, max_total={self.max_total})>"
 
 
 # ---------------------------------------------------------------------------
 # RedisModelContext
 # ---------------------------------------------------------------------------
+
 
 class RedisModelContext(ModelContext):
     """Stateless context that reads directly from a ``RedisMemory`` instance.
@@ -350,6 +366,7 @@ class RedisModelContext(ModelContext):
 # ---------------------------------------------------------------------------
 # SummarizingContext
 # ---------------------------------------------------------------------------
+
 
 class SummarizingContext(ModelContext):
     """Compress history by LLM-summarising old messages when token threshold is hit.
@@ -427,7 +444,8 @@ class SummarizingContext(ModelContext):
             response = await self._summary_client.generate(messages=summary_request)
             if response.content:
                 text_parts = [
-                    p if isinstance(p, str)
+                    p
+                    if isinstance(p, str)
                     else (p.get("text", "") if isinstance(p, dict) else "")
                     for p in response.content
                 ]

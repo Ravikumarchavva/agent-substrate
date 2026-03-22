@@ -1,4 +1,5 @@
 """Shared API contracts for tool executor and MCP registry."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class ToolCallRequest(BaseModel):
     """Request to execute a tool via the Tool Executor service."""
+
     run_id: str
     tool_call_id: str
     tool_name: str
@@ -20,6 +22,7 @@ class ToolCallRequest(BaseModel):
 
 class ToolCallResult(BaseModel):
     """Result from a tool execution."""
+
     tool_call_id: str
     tool_name: str
     content: str = ""
@@ -31,6 +34,7 @@ class ToolCallResult(BaseModel):
 
 class ToolSchema(BaseModel):
     """Tool registration schema."""
+
     name: str
     description: str
     input_schema: Dict[str, Any] = Field(default_factory=dict)
@@ -41,6 +45,7 @@ class ToolSchema(BaseModel):
 
 class McpAppRegistration(BaseModel):
     """MCP App registration in the registry."""
+
     app_id: str
     name: str
     description: str = ""

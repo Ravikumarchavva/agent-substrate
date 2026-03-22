@@ -40,6 +40,7 @@ Usage::
         tools_requiring_approval=["dangerous_tool"],
     )
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -61,6 +62,7 @@ logger = logging.getLogger("agent_framework.hitl")
 # Data models
 # ---------------------------------------------------------------------------
 
+
 class InputOption(BaseModel):
     """A single selectable option presented to the user.
 
@@ -69,6 +71,7 @@ class InputOption(BaseModel):
         label: Human-readable label displayed to the user.
         description: Optional longer explanation.
     """
+
     key: str
     label: str
     description: str = ""
@@ -88,6 +91,7 @@ class HumanInputRequest(BaseModel):
         allow_freeform: If True, user can type a custom answer.
         timeout_seconds: How long to wait before giving up (0 = forever).
     """
+
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     question: str
     context: str = ""
@@ -106,6 +110,7 @@ class HumanInputResponse(BaseModel):
         freeform_text: User's custom text (if they chose "Other").
         timed_out: True if the user didn't respond in time.
     """
+
     request_id: str = ""
     selected_key: Optional[str] = None
     selected_label: str = ""
@@ -127,6 +132,7 @@ class HumanInputResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Abstract handler
 # ---------------------------------------------------------------------------
+
 
 class HumanInputHandler(ABC):
     """Interface for collecting human input.
@@ -153,6 +159,7 @@ class HumanInputHandler(ABC):
 # ---------------------------------------------------------------------------
 # CLI handler (built-in)
 # ---------------------------------------------------------------------------
+
 
 class CLIHumanHandler(HumanInputHandler):
     """Terminal-based human input handler.
@@ -214,8 +221,7 @@ class CLIHumanHandler(HumanInputHandler):
                     )
 
                 # Free-form option
-                elif (request.allow_freeform and
-                      choice_num == len(request.options) + 1):
+                elif request.allow_freeform and choice_num == len(request.options) + 1:
                     text = input("  Your answer: ").strip()
                     if not text:
                         print("  Please enter your answer.")
@@ -228,7 +234,9 @@ class CLIHumanHandler(HumanInputHandler):
                     )
 
                 else:
-                    valid_range = len(request.options) + (1 if request.allow_freeform else 0)
+                    valid_range = len(request.options) + (
+                        1 if request.allow_freeform else 0
+                    )
                     print(f"  Please enter a number between 1 and {valid_range}.")
 
             except ValueError:
@@ -244,6 +252,7 @@ class CLIHumanHandler(HumanInputHandler):
 # ---------------------------------------------------------------------------
 # Callback-based handler (for web/API integration)
 # ---------------------------------------------------------------------------
+
 
 class CallbackHumanHandler(HumanInputHandler):
     """Handler that delegates to an async callback function.
@@ -275,6 +284,7 @@ class CallbackHumanHandler(HumanInputHandler):
 # AskHuman Tool — the LLM calls this to pause and ask
 # ---------------------------------------------------------------------------
 
+
 class AskHumanTool(BaseTool):
     """MCP-compatible tool that pauses execution to ask the user.
 
@@ -298,7 +308,10 @@ class AskHumanTool(BaseTool):
             tools=[ask_tool],
         )
     """
-    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # interrupts workflow, demands user action
+
+    risk: ClassVar[ToolRisk] = (
+        ToolRisk.CRITICAL
+    )  # interrupts workflow, demands user action
 
     def __init__(
         self,
@@ -362,16 +375,20 @@ class AskHumanTool(BaseTool):
         # Guard: limit requests per run
         if self._request_count >= self._max_requests:
             return ToolResult(
-                content=[{
-                    "type": "text",
-                    "text": json.dumps({
-                        "error": (
-                            f"Maximum human input requests reached "
-                            f"({self._max_requests}). Make your best "
-                            f"judgement and proceed."
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "error": (
+                                    f"Maximum human input requests reached "
+                                    f"({self._max_requests}). Make your best "
+                                    f"judgement and proceed."
+                                ),
+                            }
                         ),
-                    }),
-                }],
+                    }
+                ],
                 isError=True,
             )
 
@@ -379,19 +396,25 @@ class AskHumanTool(BaseTool):
         options: List[InputOption] = []
         for i, label in enumerate([option_1, option_2, option_3], 1):
             if label and label.strip():
-                options.append(InputOption(
-                    key=str(i),
-                    label=label.strip(),
-                ))
+                options.append(
+                    InputOption(
+                        key=str(i),
+                        label=label.strip(),
+                    )
+                )
 
         if len(options) < 2:
             return ToolResult(
-                content=[{
-                    "type": "text",
-                    "text": json.dumps({
-                        "error": "Please provide at least 2 options.",
-                    }),
-                }],
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "error": "Please provide at least 2 options.",
+                            }
+                        ),
+                    }
+                ],
                 isError=True,
             )
 
@@ -403,10 +426,7 @@ class AskHumanTool(BaseTool):
             allow_freeform=True,
         )
 
-        logger.info(
-            f"Human input requested: {question} "
-            f"({len(options)} options)"
-        )
+        logger.info(f"Human input requested: {question} ({len(options)} options)")
 
         # Collect response
         try:
@@ -414,12 +434,16 @@ class AskHumanTool(BaseTool):
         except Exception as e:
             logger.error(f"Human input handler error: {e}")
             return ToolResult(
-                content=[{
-                    "type": "text",
-                    "text": json.dumps({
-                        "error": f"Failed to get human input: {e}",
-                    }),
-                }],
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "error": f"Failed to get human input: {e}",
+                            }
+                        ),
+                    }
+                ],
                 isError=True,
             )
 
@@ -438,16 +462,20 @@ class AskHumanTool(BaseTool):
 
         if response.timed_out:
             return ToolResult(
-                content=[{
-                    "type": "text",
-                    "text": json.dumps({
-                        "status": "timed_out",
-                        "message": (
-                            "User did not respond in time. "
-                            "Proceed with your best judgement."
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "status": "timed_out",
+                                "message": (
+                                    "User did not respond in time. "
+                                    "Proceed with your best judgement."
+                                ),
+                            }
                         ),
-                    }),
-                }],
+                    }
+                ],
                 isError=False,
             )
 
@@ -456,14 +484,18 @@ class AskHumanTool(BaseTool):
             "status": "answered",
             "user_choice": response.answer,
             "was_freeform": response.is_freeform,
-            "selected_option": response.selected_label if not response.is_freeform else None,
+            "selected_option": response.selected_label
+            if not response.is_freeform
+            else None,
         }
 
         return ToolResult(
-            content=[{
-                "type": "text",
-                "text": json.dumps(result_data),
-            }],
+            content=[
+                {
+                    "type": "text",
+                    "text": json.dumps(result_data),
+                }
+            ],
             isError=False,
         )
 
@@ -485,6 +517,7 @@ class AskHumanTool(BaseTool):
 
 class ToolApprovalAction(str, Enum):
     """Action the user takes on a tool-approval request."""
+
     APPROVE = "approve"
     DENY = "deny"
     MODIFY = "modify"
@@ -497,13 +530,14 @@ class ToolApprovalRequest(BaseModel):
     requires approval. The user can approve, deny, or modify the
     arguments.
     """
+
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     tool_name: str
     call_id: str = ""
     arguments: Dict[str, Any] = Field(default_factory=dict)
     context: str = ""
     # HITL behaviour declared on the tool — read by WebHITLBridge
-    hitl_mode: str = "blocking"          # HitlMode value
+    hitl_mode: str = "blocking"  # HitlMode value
     hitl_timeout_seconds: Optional[float] = None  # only used in continue_on_timeout
 
 
@@ -516,6 +550,7 @@ class ToolApprovalResponse(BaseModel):
         modified_arguments: New arguments if action is MODIFY.
         reason: Optional explanation from the user.
     """
+
     request_id: str = ""
     action: ToolApprovalAction = ToolApprovalAction.APPROVE
     modified_arguments: Optional[Dict[str, Any]] = None
@@ -525,6 +560,7 @@ class ToolApprovalResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Abstract approval handler
 # ---------------------------------------------------------------------------
+
 
 class ToolApprovalHandler(ABC):
     """Interface for collecting tool-execution approval from a human."""
@@ -540,6 +576,7 @@ class ToolApprovalHandler(ABC):
 # ---------------------------------------------------------------------------
 # CLI approval handler (built-in)
 # ---------------------------------------------------------------------------
+
 
 class CLIApprovalHandler(ToolApprovalHandler):
     """Terminal-based tool-approval handler.
@@ -631,6 +668,7 @@ class CLIApprovalHandler(ToolApprovalHandler):
 # Callback-based approval handler (for web/API integration)
 # ---------------------------------------------------------------------------
 
+
 class CallbackApprovalHandler(ToolApprovalHandler):
     """Approval handler that delegates to an async callback.
 
@@ -645,9 +683,7 @@ class CallbackApprovalHandler(ToolApprovalHandler):
 
     def __init__(
         self,
-        callback: Callable[
-            [ToolApprovalRequest], Awaitable[ToolApprovalResponse]
-        ],
+        callback: Callable[[ToolApprovalRequest], Awaitable[ToolApprovalResponse]],
     ):
         self._callback = callback
 

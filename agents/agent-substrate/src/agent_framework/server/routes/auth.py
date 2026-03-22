@@ -7,6 +7,7 @@ POST /auth/agent-token    Issue a short-lived agent context token for a thread.
 GET  /auth/me             Return the caller's decoded token payload.
 POST /auth/logout         Revoke the caller's refresh token.
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,16 +37,18 @@ _REFRESH_PREFIX = "rt:"
 # Schemas
 # ---------------------------------------------------------------------------
 
+
 class TokenExchangeRequest(BaseModel):
     """Carry the Next.js-issued session token to the backend."""
-    frontend_token: str   # JWT signed by INTERNAL_AUTH_SECRET on the frontend
+
+    frontend_token: str  # JWT signed by INTERNAL_AUTH_SECRET on the frontend
 
 
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
-    expires_in: int   # seconds until access token expires
+    expires_in: int  # seconds until access token expires
 
 
 class RefreshRequest(BaseModel):
@@ -60,6 +63,7 @@ class AgentTokenRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _redis_key(jti: str) -> str:
     return f"{_REFRESH_PREFIX}{jti}"
@@ -96,6 +100,7 @@ async def _is_refresh_jti_valid(request: Request, jti: str) -> bool:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.post("/token", response_model=TokenResponse)
 async def exchange_token(body: TokenExchangeRequest, request: Request):

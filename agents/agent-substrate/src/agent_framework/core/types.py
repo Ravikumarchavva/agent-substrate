@@ -11,6 +11,7 @@ Usage::
         NodeType, EdgeType,          # pipeline graph
     )
 """
+
 from __future__ import annotations
 
 # Tool-related enums — canonical home: core/tools/base_tool.py

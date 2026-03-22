@@ -84,7 +84,9 @@ class CodeInterpreterClient:
         digest = int(hashlib.md5(session_id.encode()).hexdigest(), 16)
         return self._pod_urls[digest % len(self._pod_urls)]
 
-    async def _request(self, method: str, url: str, path: str, **kwargs: Any) -> httpx.Response:
+    async def _request(
+        self, method: str, url: str, path: str, **kwargs: Any
+    ) -> httpx.Response:
         client = self._get_client(url)
         resp = await client.request(method, path, **kwargs)
         resp.raise_for_status()
@@ -93,26 +95,43 @@ class CodeInterpreterClient:
     # ── Execute ──────────────────────────────────────────────────────────
 
     async def execute(
-        self, session_id: str, code: str,
-        exec_type: str = "python", timeout: int = 30,
+        self,
+        session_id: str,
+        code: str,
+        exec_type: str = "python",
+        timeout: int = 30,
     ) -> ExecuteResponse:
         url = self._route(session_id)
         try:
-            resp = await self._request("POST", url, "/v1/execute", json={
-                "session_id": session_id, "code": code,
-                "exec_type": exec_type, "timeout": timeout,
-            })
+            resp = await self._request(
+                "POST",
+                url,
+                "/v1/execute",
+                json={
+                    "session_id": session_id,
+                    "code": code,
+                    "exec_type": exec_type,
+                    "timeout": timeout,
+                },
+            )
             return ExecuteResponse(**resp.json())
         except httpx.HTTPStatusError as exc:
-            logger.error("CI execute HTTP %d: %s", exc.response.status_code, exc.response.text[:500])
+            logger.error(
+                "CI execute HTTP %d: %s",
+                exc.response.status_code,
+                exc.response.text[:500],
+            )
             return ExecuteResponse(
-                success=False, session_id=session_id,
+                success=False,
+                session_id=session_id,
                 error=f"Service error {exc.response.status_code}: {exc.response.text[:200]}",
             )
         except httpx.RequestError as exc:
             logger.error("CI execute connection error: %s", exc)
             return ExecuteResponse(
-                success=False, session_id=session_id, error=f"Connection error: {exc}",
+                success=False,
+                session_id=session_id,
+                error=f"Connection error: {exc}",
             )
 
     # ── Session management ───────────────────────────────────────────────
@@ -149,27 +168,43 @@ class CodeInterpreterClient:
 
     # ── File operations ──────────────────────────────────────────────────
 
-    async def write_file(self, session_id: str, path: str, content: str, encoding: str = "utf-8") -> dict:
+    async def write_file(
+        self, session_id: str, path: str, content: str, encoding: str = "utf-8"
+    ) -> dict:
         url = self._route(session_id)
         resp = await self._request(
-            "POST", url, f"/v1/sessions/{session_id}/files/write",
+            "POST",
+            url,
+            f"/v1/sessions/{session_id}/files/write",
             json={"path": path, "content": content, "encoding": encoding},
         )
         return resp.json()
 
     async def read_file(self, session_id: str, path: str) -> FileReadResponse:
         url = self._route(session_id)
-        resp = await self._request("GET", url, f"/v1/sessions/{session_id}/files/read", params={"path": path})
+        resp = await self._request(
+            "GET", url, f"/v1/sessions/{session_id}/files/read", params={"path": path}
+        )
         return FileReadResponse(**resp.json())
 
     async def read_file_binary(self, session_id: str, path: str) -> dict:
         url = self._route(session_id)
-        resp = await self._request("GET", url, f"/v1/sessions/{session_id}/files/read_binary", params={"path": path})
+        resp = await self._request(
+            "GET",
+            url,
+            f"/v1/sessions/{session_id}/files/read_binary",
+            params={"path": path},
+        )
         return resp.json()
 
     async def install_packages(self, session_id: str, packages: list[str]) -> dict:
         url = self._route(session_id)
-        resp = await self._request("POST", url, f"/v1/sessions/{session_id}/install", json={"packages": packages})
+        resp = await self._request(
+            "POST",
+            url,
+            f"/v1/sessions/{session_id}/install",
+            json={"packages": packages},
+        )
         return resp.json()
 
     # ── Health ───────────────────────────────────────────────────────────

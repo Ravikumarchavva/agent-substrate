@@ -1,4 +1,5 @@
 """Shared API contracts for HITL approval service."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, Literal, Optional
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 
 class HITLApprovalRequest(BaseModel):
     """An approval request emitted when a critical tool is about to execute."""
+
     request_id: str
     run_id: str
     thread_id: str
@@ -19,6 +21,7 @@ class HITLApprovalRequest(BaseModel):
 
 class HITLInputRequest(BaseModel):
     """A human input request emitted when the agent needs user input."""
+
     request_id: str
     run_id: str
     thread_id: str
@@ -28,6 +31,7 @@ class HITLInputRequest(BaseModel):
 
 class HITLResponse(BaseModel):
     """User response to an HITL request."""
+
     # For tool approval
     action: Optional[Literal["approve", "deny", "modify"]] = None
     modified_arguments: Optional[Dict[str, Any]] = None
@@ -40,4 +44,5 @@ class HITLResponse(BaseModel):
 
 class HITLStatusOut(BaseModel):
     """Pending HITL requests for a thread."""
+
     pending: list[Dict[str, Any]]

@@ -1,4 +1,5 @@
 """FastAPI auth middleware and dependencies shared by all services."""
+
 from __future__ import annotations
 
 import logging
@@ -60,6 +61,7 @@ def optional_current_user(
 
 def require_role(*allowed_roles: str):
     """FastAPI dependency that restricts access to specific platform roles."""
+
     def checker(user: AuthClaims = Depends(get_current_user)) -> AuthClaims:
         if user.role not in allowed_roles:
             raise HTTPException(
@@ -67,6 +69,7 @@ def require_role(*allowed_roles: str):
                 detail=f"Role '{user.role}' is not authorized for this action",
             )
         return user
+
     return checker
 
 

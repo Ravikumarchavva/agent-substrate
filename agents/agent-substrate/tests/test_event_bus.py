@@ -2,6 +2,7 @@
 
 All async tests use asyncio.run() wrappers — no pytest-asyncio required.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,6 +31,7 @@ def _run(coro):
 # ---------------------------------------------------------------------------
 # EventBus — emit / consume
 # ---------------------------------------------------------------------------
+
 
 def test_emit_and_consume_in_order():
     async def _inner():
@@ -95,6 +97,7 @@ def test_emit_dict_produces_raw_dict_event():
 # EventBus.poll()
 # ---------------------------------------------------------------------------
 
+
 def test_poll_returns_bus_closed_sentinel():
     async def _inner():
         bus = EventBus()
@@ -126,6 +129,7 @@ def test_poll_returns_event():
 
 def test_poll_sequence_terminates_at_bus_closed():
     """Consumer loop using poll() must stop when BUS_CLOSED is returned."""
+
     async def _inner():
         bus = EventBus()
         await bus.emit(TextDeltaEvent(content="one"))
@@ -153,6 +157,7 @@ def test_poll_sequence_terminates_at_bus_closed():
 # Sentinel identity
 # ---------------------------------------------------------------------------
 
+
 def test_bus_closed_is_internal_sentinel():
     assert BUS_CLOSED is _BUS_DONE
 
@@ -170,12 +175,13 @@ def test_bus_closed_and_bridge_done_are_distinct():
 # to_sse_line format
 # ---------------------------------------------------------------------------
 
+
 def test_to_sse_line_format():
     bus = EventBus()
     line = bus.to_sse_line(TextDeltaEvent(content="hi"))
     assert line.startswith("data: ")
     assert line.endswith("\n\n")
-    data = json.loads(line[len("data: "):-2])
+    data = json.loads(line[len("data: ") : -2])
     assert data["type"] == "text_delta"
     assert data["content"] == "hi"
     assert data["partial"] is True
@@ -184,6 +190,7 @@ def test_to_sse_line_format():
 # ---------------------------------------------------------------------------
 # to_dict round-trips
 # ---------------------------------------------------------------------------
+
 
 def test_text_delta_to_dict():
     d = TextDeltaEvent(content="foo", partial=True).to_dict()
@@ -220,6 +227,7 @@ def test_raw_dict_event_to_dict_passthrough():
 # ---------------------------------------------------------------------------
 # WebHITLBridge.cancel_all_pending
 # ---------------------------------------------------------------------------
+
 
 def test_cancel_all_pending_resolves_futures_with_session_disconnected():
     async def _inner():

@@ -27,6 +27,7 @@ Usage::
         tools=[AskHumanTool(handler=bridge.human_handler), ...],
     )
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -192,7 +193,10 @@ class WebHITLBridge:
     # -- Internal: request-and-wait pattern ----------------------------------
 
     async def _request_and_wait(
-        self, event_type: str, payload: Dict[str, Any], request_id: str,
+        self,
+        event_type: str,
+        payload: Dict[str, Any],
+        request_id: str,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Put an event on the outgoing queue and wait for the response."""
@@ -208,10 +212,12 @@ class WebHITLBridge:
         }
 
         # Send event to frontend via SSE
-        await self._outgoing.put({
-            "type": event_type,
-            **payload,
-        })
+        await self._outgoing.put(
+            {
+                "type": event_type,
+                **payload,
+            }
+        )
 
         logger.info(
             f"HITL {event_type} sent (id={request_id}), "
@@ -219,9 +225,7 @@ class WebHITLBridge:
         )
 
         try:
-            result = await asyncio.wait_for(
-                future, timeout=effective_timeout
-            )
+            result = await asyncio.wait_for(future, timeout=effective_timeout)
             return result
         except asyncio.TimeoutError:
             self._pending.pop(request_id, None)
@@ -367,6 +371,7 @@ class WebHITLBridge:
 # BridgeRegistry — per-thread bridge pool
 # ---------------------------------------------------------------------------
 
+
 class BridgeRegistry:
     """Manages one WebHITLBridge per active thread (conversation).
 
@@ -416,11 +421,14 @@ class BridgeRegistry:
                 logger.info(
                     "BridgeRegistry: keeping bridge alive for thread %s "
                     "— %d pending HITL request(s)",
-                    thread_id, len(bridge._pending),
+                    thread_id,
+                    len(bridge._pending),
                 )
                 return False
             self._bridges.pop(thread_id, None)
-            logger.debug("BridgeRegistry: released idle bridge for thread %s", thread_id)
+            logger.debug(
+                "BridgeRegistry: released idle bridge for thread %s", thread_id
+            )
             return True
 
     def resolve(self, request_id: str, data: Dict[str, Any]) -> bool:

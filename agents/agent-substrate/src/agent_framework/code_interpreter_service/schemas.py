@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 # ── Enums ────────────────────────────────────────────────────────────────────
 
+
 class ExecType(str, Enum):
     python = "python"
     bash = "bash"
@@ -21,6 +22,7 @@ class ExecType(str, Enum):
 
 class OutputType(str, Enum):
     """Kind of output produced by code execution."""
+
     text = "text"
     stderr = "stderr"
     image = "image"
@@ -30,8 +32,10 @@ class OutputType(str, Enum):
 
 # ── Outputs ──────────────────────────────────────────────────────────────────
 
+
 class OutputItem(BaseModel):
     """A single output artefact from code execution."""
+
     type: OutputType
     content: str
     name: Optional[str] = None
@@ -41,8 +45,10 @@ class OutputItem(BaseModel):
 
 # ── Execute ──────────────────────────────────────────────────────────────────
 
+
 class ExecuteRequest(BaseModel):
     """Run code in a persistent session VM."""
+
     session_id: str = Field(..., min_length=1, max_length=256)
     code: str = Field(..., max_length=1_000_000)
     exec_type: ExecType = ExecType.python
@@ -51,6 +57,7 @@ class ExecuteRequest(BaseModel):
 
 class ExecuteResponse(BaseModel):
     """Structured execution result with multimodal outputs."""
+
     success: bool
     session_id: str
     outputs: list[OutputItem] = []
@@ -60,6 +67,7 @@ class ExecuteResponse(BaseModel):
 
 
 # ── Sessions ─────────────────────────────────────────────────────────────────
+
 
 class SessionDetail(BaseModel):
     session_id: str
@@ -79,6 +87,7 @@ class SessionListResponse(BaseModel):
 
 # ── File operations ──────────────────────────────────────────────────────────
 
+
 class FileWriteRequest(BaseModel):
     path: str = Field(..., max_length=4096)
     content: str
@@ -96,11 +105,13 @@ class FileReadResponse(BaseModel):
 
 # ── Install ──────────────────────────────────────────────────────────────────
 
+
 class InstallRequest(BaseModel):
     packages: list[str] = Field(..., min_length=1)
 
 
 # ── Health ───────────────────────────────────────────────────────────────────
+
 
 class HealthResponse(BaseModel):
     status: str

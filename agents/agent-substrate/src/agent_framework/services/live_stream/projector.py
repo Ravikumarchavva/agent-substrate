@@ -4,6 +4,7 @@ Subscribes to agent, HITL, and task events via the event bus,
 merges them into a single ordered SSE stream per thread/run,
 and delivers to connected clients.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -97,7 +98,11 @@ class StreamProjector:
                 yield f"event: {event_type}\ndata: {data}\n\n"
 
                 # Check for terminal events
-                if event_type in ("agent.run_completed", "agent.run_failed", "completion"):
+                if event_type in (
+                    "agent.run_completed",
+                    "agent.run_failed",
+                    "completion",
+                ):
                     if event.get("complete"):
                         break
 

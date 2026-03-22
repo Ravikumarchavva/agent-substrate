@@ -8,6 +8,7 @@ Usage::
     store = create_file_store(settings)
     await store.startup()
 """
+
 from __future__ import annotations
 
 import logging
@@ -56,8 +57,7 @@ def create_file_store(settings: Settings) -> FileStore:
 
     else:
         raise ValueError(
-            f"Unknown FILE_STORE_BACKEND={backend!r}.  "
-            "Supported values: 'local', 's3'."
+            f"Unknown FILE_STORE_BACKEND={backend!r}.  Supported values: 'local', 's3'."
         )
 
     # ── Optional encryption wrapper ──────────────────────────────────────

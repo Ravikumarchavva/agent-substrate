@@ -4,6 +4,7 @@ Routes:
   POST /agent/run       – start an agent run (called by Workflow Orchestrator)
   GET  /agent/health    – health check
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -51,8 +52,7 @@ async def start_agent_run(body: RunRequest, request: Request):
     conversation_url = request.app.state.conversation_service_url
 
     system_instructions = (
-        body.system_instructions
-        or request.app.state.system_instructions
+        body.system_instructions or request.app.state.system_instructions
     )
 
     # Load memory

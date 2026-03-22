@@ -1,4 +1,5 @@
 """Shared API contracts for auth-related communication between services."""
+
 from __future__ import annotations
 
 import uuid
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 
 
 # ── Token Exchange ───────────────────────────────────────────────────────────
+
 
 class TokenExchangeRequest(BaseModel):
     frontend_token: str
@@ -38,6 +40,7 @@ class AgentTokenResponse(BaseModel):
 
 
 # ── User Management ─────────────────────────────────────────────────────────
+
 
 class UserOut(BaseModel):
     id: uuid.UUID

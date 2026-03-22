@@ -11,13 +11,16 @@ from pydantic import BaseModel, Field
 
 # ── Thread / Session schemas ─────────────────────────────────────────────────
 
+
 class ThreadCreate(BaseModel):
     """POST /threads – create a new thread."""
+
     name: Optional[str] = "New Chat"
 
 
 class ThreadUpdate(BaseModel):
     """PATCH /threads/{id} – rename / update metadata."""
+
     name: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -25,6 +28,7 @@ class ThreadUpdate(BaseModel):
 
 class ThreadOut(BaseModel):
     """Thread response object."""
+
     id: uuid.UUID
     name: Optional[str]
     user_id: Optional[uuid.UUID] = None
@@ -39,8 +43,10 @@ class ThreadOut(BaseModel):
 
 # ── Step / Message schemas ───────────────────────────────────────────────────
 
+
 class StepOut(BaseModel):
     """Step (message / tool call) response object."""
+
     id: uuid.UUID
     type: str
     name: str
@@ -60,14 +66,17 @@ class StepOut(BaseModel):
 
 # ── Chat schemas ─────────────────────────────────────────────────────────────
 
+
 class ChatMessage(BaseModel):
     """Single message in a chat request."""
+
     role: Literal["user", "assistant", "system"] = "user"
     content: str
 
 
 class ChatRequest(BaseModel):
     """POST /chat – send a message."""
+
     thread_id: uuid.UUID
     messages: List[ChatMessage]
     system_instructions: Optional[str] = None  # appended to base prompt when provided
@@ -76,8 +85,10 @@ class ChatRequest(BaseModel):
 
 # ── Feedback schemas ─────────────────────────────────────────────────────────
 
+
 class FeedbackCreate(BaseModel):
     """POST /feedbacks – create feedback on a step."""
+
     for_id: uuid.UUID
     thread_id: uuid.UUID
     value: int = Field(..., ge=-1, le=1)  # -1 = bad, 0 = neutral, 1 = good
@@ -86,6 +97,7 @@ class FeedbackCreate(BaseModel):
 
 class FeedbackOut(BaseModel):
     """Feedback response object."""
+
     id: uuid.UUID
     for_id: uuid.UUID
     thread_id: uuid.UUID
@@ -97,8 +109,10 @@ class FeedbackOut(BaseModel):
 
 # ── File schemas ────────────────────────────────────────────────────────────
 
+
 class FileOut(BaseModel):
     """Uploaded file metadata returned after upload or listing."""
+
     id: uuid.UUID
     thread_id: Optional[uuid.UUID] = None
     name: str
@@ -110,8 +124,10 @@ class FileOut(BaseModel):
 
 # ── HITL schemas ─────────────────────────────────────────────────────────────
 
+
 class HITLResponse(BaseModel):
     """POST /chat/respond/{request_id} – resolve a pending HITL request."""
+
     # For tool approval
     action: Optional[Literal["approve", "deny", "modify"]] = None
     modified_arguments: Optional[Dict[str, Any]] = None
@@ -124,12 +140,14 @@ class HITLResponse(BaseModel):
 
 # ── MCP App schemas ──────────────────────────────────────────────────────────
 
+
 class McpAppContextPayload(BaseModel):
     """Typed payload for MCP App context updates.
 
     The ``data`` field carries the app-specific structured context
     (e.g. the current board state, playlist, selected item).
     """
+
     app_uri: str = Field(..., description="ui:// URI of the source MCP App")
     data: Dict[str, Any] = Field(default_factory=dict)
 
@@ -141,14 +159,17 @@ class McpContextUpdate(BaseModel):
     an app-specific state payload (e.g. current playback, board state, selected
     colour).  The backend serialises it as JSON for the LLM to read.
     """
+
     tool_name: str
     context: Any  # arbitrary app-state dict from the MCP App iframe
 
 
 # ── Element schemas ──────────────────────────────────────────────────────────
 
+
 class ElementOut(BaseModel):
     """Element (attachment) response object."""
+
     id: uuid.UUID
     thread_id: Optional[uuid.UUID] = None
     type: Optional[str] = None
@@ -165,22 +186,26 @@ class ElementOut(BaseModel):
 
 # ── Audio schemas ────────────────────────────────────────────────────────────
 
+
 class TranscribeResponse(BaseModel):
     """Response from POST /audio/transcribe."""
+
     text: str
 
 
 class TTSRequest(BaseModel):
     """Request body for POST /audio/tts."""
+
     text: str
-    model: Optional[str] = "gpt-4o-mini-tts"   # gpt-4o-mini-tts | tts-1 | tts-1-hd
-    voice: Optional[str] = "coral"              # alloy | ash | coral | nova | …
-    response_format: Optional[str] = "mp3"      # mp3 | opus | aac | flac | wav | pcm
-    instructions: Optional[str] = None          # style hint (gpt-4o-mini-tts only)
+    model: Optional[str] = "gpt-4o-mini-tts"  # gpt-4o-mini-tts | tts-1 | tts-1-hd
+    voice: Optional[str] = "coral"  # alloy | ash | coral | nova | …
+    response_format: Optional[str] = "mp3"  # mp3 | opus | aac | flac | wav | pcm
+    instructions: Optional[str] = None  # style hint (gpt-4o-mini-tts only)
 
 
 class RealtimeTokenResponse(BaseModel):
     """Response from GET /audio/realtime-token."""
+
     client_secret: str
     expires_at: int
     session_id: str
@@ -188,8 +213,10 @@ class RealtimeTokenResponse(BaseModel):
 
 # ── User schemas ─────────────────────────────────────────────────────────────
 
+
 class UserOut(BaseModel):
     """User response object."""
+
     id: uuid.UUID
     identifier: str
     metadata: Optional[Dict[str, Any]] = None

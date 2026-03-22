@@ -1,4 +1,5 @@
 """Shared API contracts for conversation service."""
+
 from __future__ import annotations
 
 import uuid

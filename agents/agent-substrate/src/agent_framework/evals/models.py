@@ -3,6 +3,7 @@
 All models are Pydantic BaseModel for JSON serialization,
 validation, and schema generation.
 """
+
 from __future__ import annotations
 
 import statistics
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field, computed_field
 # Eval Case — a single test case
 # ---------------------------------------------------------------------------
 
+
 class EvalCase(BaseModel):
     """A single evaluation test case.
 
@@ -29,6 +31,7 @@ class EvalCase(BaseModel):
         tags: Labels for filtering / grouping (e.g. ["math", "easy"]).
         metadata: Arbitrary key-value pairs.
     """
+
     case_id: str = Field(default_factory=lambda: str(uuid4()))
     input: str
     expected_output: Optional[str] = None
@@ -44,11 +47,13 @@ class EvalCase(BaseModel):
 # Eval Dataset — a collection of test cases
 # ---------------------------------------------------------------------------
 
+
 class EvalDataset(BaseModel):
     """A named collection of evaluation cases.
 
     Can be loaded from JSON / YAML or constructed programmatically.
     """
+
     name: str = "default"
     description: str = ""
     cases: List[EvalCase] = Field(default_factory=list)
@@ -84,6 +89,7 @@ class EvalDataset(BaseModel):
 # Eval Score — judgement for a single criterion
 # ---------------------------------------------------------------------------
 
+
 class EvalScore(BaseModel):
     """Score for one criterion on one eval case.
 
@@ -94,6 +100,7 @@ class EvalScore(BaseModel):
         reasoning: LLM judge's reasoning / explanation.
         raw_score: Original score before normalisation (e.g. 1-5 scale).
     """
+
     criterion: str
     score: float = Field(ge=0.0, le=1.0)
     passed: bool = True
@@ -108,12 +115,14 @@ class EvalScore(BaseModel):
 # Eval Case Result — full result for one test case
 # ---------------------------------------------------------------------------
 
+
 class EvalCaseResult(BaseModel):
     """Result of evaluating a single case.
 
     Links the original case, the agent's actual output, all scores,
     and run metadata (latency, tokens, etc.).
     """
+
     case_id: str
     input: str
     expected_output: Optional[str] = None
@@ -164,11 +173,13 @@ class EvalCaseResult(BaseModel):
 # Eval Report — aggregated results across all cases
 # ---------------------------------------------------------------------------
 
+
 class EvalReport(BaseModel):
     """Aggregated evaluation report.
 
     Contains per-case results, aggregate metrics, and metadata.
     """
+
     report_id: str = Field(default_factory=lambda: str(uuid4()))
     dataset_name: str = ""
     agent_name: str = ""
@@ -278,10 +289,10 @@ class EvalReport(BaseModel):
     def summary(self) -> str:
         """Human-readable summary string."""
         lines = [
-            f"{'='*60}",
+            f"{'=' * 60}",
             f"  EVAL REPORT: {self.dataset_name}",
             f"  Agent: {self.agent_name} | Model: {self.model}",
-            f"{'='*60}",
+            f"{'=' * 60}",
             f"  Cases:     {self.total_cases}",
             f"  Passed:    {self.passed_cases} ({self.pass_rate:.1%})",
             f"  Failed:    {self.failed_cases}",
@@ -289,7 +300,7 @@ class EvalReport(BaseModel):
             f"  Avg Score: {self.avg_score:.3f}",
             f"  Avg Latency: {self.avg_latency:.2f}s",
             f"  Total Tokens: {self.total_tokens:,}",
-            f"{'-'*60}",
+            f"{'-' * 60}",
         ]
 
         by_criterion = self.scores_by_criterion()
@@ -303,7 +314,7 @@ class EvalReport(BaseModel):
                     f"max={stats['max']:.3f}  "
                     f"pass={stats['pass_rate']:.1%}"
                 )
-            lines.append(f"{'='*60}")
+            lines.append(f"{'=' * 60}")
 
         if self.total_duration_seconds > 0:
             lines.append(f"  Total eval time: {self.total_duration_seconds:.1f}s")

@@ -5,6 +5,7 @@ Implements the Agent Skills open standard (https://agentskills.io).
 A Skill is a folder containing SKILL.md (YAML frontmatter + Markdown body)
 plus optional scripts/, references/, and assets/ directories.
 """
+
 from __future__ import annotations
 
 import re
@@ -17,7 +18,7 @@ from typing import Dict, List, Optional
 # SKILL.md frontmatter validation rules (per spec)
 # ---------------------------------------------------------------------------
 
-_NAME_RE = re.compile(r'^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$')
+_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$")
 
 
 def _validate_name(name: str) -> None:
@@ -28,7 +29,7 @@ def _validate_name(name: str) -> None:
             f"Skill name must be lowercase alphanumeric + hyphens, "
             f"not start/end with hyphen, no consecutive hyphens. Got: {name!r}"
         )
-    if '--' in name:
+    if "--" in name:
         raise ValueError(f"Skill name must not contain consecutive hyphens: {name!r}")
 
 
@@ -43,6 +44,7 @@ def _validate_description(desc: str) -> None:
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SkillMetadata:
     """
@@ -50,10 +52,11 @@ class SkillMetadata:
     Only name + description are loaded initially (~50-100 tokens each).
     This is injected into the system prompt so the model knows skills exist.
     """
+
     name: str
     description: str
-    path: Path                          # absolute path to the skill directory
-    skill_md_path: Path                 # absolute path to SKILL.md
+    path: Path  # absolute path to the skill directory
+    skill_md_path: Path  # absolute path to SKILL.md
     license: Optional[str] = None
     compatibility: Optional[str] = None
     allowed_tools: List[str] = field(default_factory=list)
@@ -71,8 +74,9 @@ class Skill:
     Fully loaded skill – activated when the model decides to use it.
     Contains the full SKILL.md body + paths to auxiliary files.
     """
+
     metadata: SkillMetadata
-    body: str                           # Full Markdown body (instructions)
+    body: str  # Full Markdown body (instructions)
     scripts: List[Path] = field(default_factory=list)
     references: List[Path] = field(default_factory=list)
     assets: List[Path] = field(default_factory=list)

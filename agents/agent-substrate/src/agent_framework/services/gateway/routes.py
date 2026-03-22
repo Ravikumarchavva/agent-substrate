@@ -16,6 +16,7 @@ Routes mirror the public API surface:
   GET  /api/execute/sessions → Code Interpreter sessions
   GET  /health            → Local health check
 """
+
 from __future__ import annotations
 
 import json
@@ -144,7 +145,9 @@ async def chat(body: ChatRequest, request: Request):
         allowed = True  # graceful degradation: allow if policy service is down
 
     if not allowed:
-        raise HTTPException(status_code=403, detail="Not authorized to submit conversation")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to submit conversation"
+        )
 
     # Start workflow run
     workflow = request.app.state.workflow_client
@@ -249,7 +252,9 @@ async def execute_code(request: Request):
     """
     ci = getattr(request.app.state, "code_interpreter_client", None)
     if ci is None:
-        raise HTTPException(status_code=503, detail="Code interpreter service not configured")
+        raise HTTPException(
+            status_code=503, detail="Code interpreter service not configured"
+        )
     body = await request.json()
     session_id = body.get("session_id", "default")
     return await ci.execute(session_id, body)
@@ -260,7 +265,9 @@ async def execute_health(request: Request):
     """Health of all code interpreter pod(s)."""
     ci = getattr(request.app.state, "code_interpreter_client", None)
     if ci is None:
-        raise HTTPException(status_code=503, detail="Code interpreter service not configured")
+        raise HTTPException(
+            status_code=503, detail="Code interpreter service not configured"
+        )
     return await ci.health()
 
 
@@ -269,7 +276,9 @@ async def execute_sessions(request: Request):
     """List active sessions on the code interpreter pod(s)."""
     ci = getattr(request.app.state, "code_interpreter_client", None)
     if ci is None:
-        raise HTTPException(status_code=503, detail="Code interpreter service not configured")
+        raise HTTPException(
+            status_code=503, detail="Code interpreter service not configured"
+        )
     return await ci.list_sessions()
 
 
@@ -278,7 +287,9 @@ async def reset_session(session_id: str, request: Request):
     """Reset (recreate) a VM session."""
     ci = getattr(request.app.state, "code_interpreter_client", None)
     if ci is None:
-        raise HTTPException(status_code=503, detail="Code interpreter service not configured")
+        raise HTTPException(
+            status_code=503, detail="Code interpreter service not configured"
+        )
     return await ci.reset_session(session_id)
 
 
@@ -287,5 +298,7 @@ async def destroy_session(session_id: str, request: Request):
     """Destroy a VM session and release VM resources."""
     ci = getattr(request.app.state, "code_interpreter_client", None)
     if ci is None:
-        raise HTTPException(status_code=503, detail="Code interpreter service not configured")
+        raise HTTPException(
+            status_code=503, detail="Code interpreter service not configured"
+        )
     await ci.destroy_session(session_id)

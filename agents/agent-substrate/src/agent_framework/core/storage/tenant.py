@@ -13,6 +13,7 @@ Scopes:
   - ``exports``   – CI output snapshots, reports
   - ``temp``      – ephemeral scratch files (auto-purged)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -116,7 +117,5 @@ def _sanitise_filename(name: str) -> str:
     # Replace spaces with underscores
     basename = basename.replace(" ", "_")
     # Keep only safe characters
-    safe = "".join(
-        c for c in basename if c.isalnum() or c in "-_."
-    )
+    safe = "".join(c for c in basename if c.isalnum() or c in "-_.")
     return safe or "unnamed"

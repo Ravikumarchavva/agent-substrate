@@ -29,6 +29,7 @@ logger = logging.getLogger("agent_framework.tools")
 # Risk / colour classification  (Strategy pattern)
 # ---------------------------------------------------------------------------
 
+
 class ToolRisk(str, Enum):
     """Risk tier for a tool — drives colour badges in the UI and approval gates.
 
@@ -45,9 +46,10 @@ class ToolRisk(str, Enum):
     The ``color`` property is consumed by the SSE / WebSocket event payload and
     by the frontend badge renderer.
     """
-    SAFE      = "safe"
+
+    SAFE = "safe"
     SENSITIVE = "sensitive"
-    CRITICAL  = "critical"
+    CRITICAL = "critical"
 
     @property
     def color(self) -> str:
@@ -57,6 +59,7 @@ class ToolRisk(str, Enum):
 # ---------------------------------------------------------------------------
 # HITL interaction mode
 # ---------------------------------------------------------------------------
+
 
 class HitlMode(str, Enum):
     """How the agent reacts when a tool triggers a human-in-the-loop event.
@@ -84,14 +87,16 @@ class HitlMode(str, Enum):
         should not block on (e.g. progress panels, live dashboards, MCP App
         state pushes that the user can interact with later).
     """
-    BLOCKING             = "blocking"
-    CONTINUE_ON_TIMEOUT  = "continue_on_timeout"
-    FIRE_AND_CONTINUE    = "fire_and_continue"
+
+    BLOCKING = "blocking"
+    CONTINUE_ON_TIMEOUT = "continue_on_timeout"
+    FIRE_AND_CONTINUE = "fire_and_continue"
 
 
 # ---------------------------------------------------------------------------
 # Typed MCP annotation model  (replaces raw Dict[str,Any])
 # ---------------------------------------------------------------------------
+
 
 class ToolAnnotations(BaseModel):
     """Validated MCP tool annotations.
@@ -99,21 +104,32 @@ class ToolAnnotations(BaseModel):
     Mirrors the MCP specification's ``annotations`` object.  Any extra fields
     from future spec versions pass through via ``extra="allow"``.
     """
+
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    readOnlyHint:    Optional[bool] = Field(None, description="Tool only reads, never writes")
-    destructiveHint: Optional[bool] = Field(None, description="Tool may delete or overwrite data")
-    idempotentHint:  Optional[bool] = Field(None, description="Repeated calls with same args produce same result")
-    openWorldHint:   Optional[bool] = Field(None, description="Tool may interact with external world")
-    title:           Optional[str]  = Field(None, description="Human-readable tool name for UI")
+    readOnlyHint: Optional[bool] = Field(
+        None, description="Tool only reads, never writes"
+    )
+    destructiveHint: Optional[bool] = Field(
+        None, description="Tool may delete or overwrite data"
+    )
+    idempotentHint: Optional[bool] = Field(
+        None, description="Repeated calls with same args produce same result"
+    )
+    openWorldHint: Optional[bool] = Field(
+        None, description="Tool may interact with external world"
+    )
+    title: Optional[str] = Field(None, description="Human-readable tool name for UI")
 
 
 # ---------------------------------------------------------------------------
 # Tool schema  (MCP wire format)
 # ---------------------------------------------------------------------------
 
+
 class Tool(BaseModel):
     """MCP-compatible tool schema with annotations and MCP Apps UI support."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
     name: str
@@ -134,7 +150,9 @@ class Tool(BaseModel):
     )
     # Risk tier exposed in schema so the frontend/router can read it without
     # importing the Python tool class.
-    risk: str = Field(default="safe", description="Risk tier: safe | sensitive | critical")    # HITL interaction mode — controls what the agent does when approval fires
+    risk: str = Field(
+        default="safe", description="Risk tier: safe | sensitive | critical"
+    )  # HITL interaction mode — controls what the agent does when approval fires
     hitl_mode: str = Field(
         default=HitlMode.BLOCKING.value,
         description="HITL mode: blocking | continue_on_timeout | fire_and_continue",
@@ -143,6 +161,7 @@ class Tool(BaseModel):
         default=None,
         description="Seconds to wait before auto-continuing (only used in continue_on_timeout mode)",
     )
+
     def to_openai_format(self) -> Dict[str, Any]:
         """Convert MCP tool schema to OpenAI function calling format."""
         return {
@@ -173,15 +192,17 @@ class Tool(BaseModel):
 # ToolResult
 # ---------------------------------------------------------------------------
 
+
 class ToolResult(BaseModel):
     """Structured result from tool execution (MCP-compatible).
 
     ``is_error`` is the canonical Python attribute name (PEP 8).
     ``isError`` is the MCP wire-format alias for serialization only.
     """
+
     model_config = ConfigDict(populate_by_name=True)
 
-    content:  List[Dict[str, Any]] = Field(default_factory=list)
+    content: List[Dict[str, Any]] = Field(default_factory=list)
     is_error: bool = Field(default=False, alias="isError")
     app_data: Optional[Dict[str, Any]] = Field(
         default=None,
@@ -199,8 +220,10 @@ class ToolResult(BaseModel):
 # ToolCall
 # ---------------------------------------------------------------------------
 
+
 class ToolCall(BaseModel):
     """Represents a tool call instance."""
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     arguments: Dict[str, Any] = Field(default_factory=dict)
@@ -221,6 +244,7 @@ class ToolCall(BaseModel):
 # ---------------------------------------------------------------------------
 # BaseTool  (Template Method)
 # ---------------------------------------------------------------------------
+
 
 class BaseTool(ABC):
     """Base class for all MCP-compatible tools.
@@ -298,12 +322,17 @@ class BaseTool(ABC):
             return
         try:
             import jsonschema
+
             jsonschema.validate(instance=kwargs, schema=self.input_schema)
         except ImportError:
             # jsonschema not installed — skip validation rather than crash
-            logger.debug("jsonschema not installed; skipping input validation for %s", self.name)
+            logger.debug(
+                "jsonschema not installed; skipping input validation for %s", self.name
+            )
         except jsonschema.ValidationError as exc:
-            raise ValueError(f"Input validation failed for tool '{self.name}': {exc.message}") from exc
+            raise ValueError(
+                f"Input validation failed for tool '{self.name}': {exc.message}"
+            ) from exc
 
     @abstractmethod
     async def execute(self, **kwargs: Any) -> ToolResult:

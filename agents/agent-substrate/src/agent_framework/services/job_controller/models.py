@@ -3,6 +3,7 @@
 JobRun tracks the lifecycle of a single agent invocation and
 provides durable state for cancellation, retry, and observability.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -18,23 +19,33 @@ from agent_framework.shared.database.base import ServiceBase
 
 class JobRun(ServiceBase):
     """Tracks a single chat-to-completion job run."""
+
     __tablename__ = "job_runs"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
     thread_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True,
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), nullable=True,
+        UUID(as_uuid=True),
+        nullable=True,
     )
     # Idempotency key from client
     client_request_id: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True, unique=True,
+        String,
+        nullable=True,
+        unique=True,
     )
     status: Mapped[str] = mapped_column(
-        String, nullable=False, default="pending",
+        String,
+        nullable=False,
+        default="pending",
     )
     # Status transitions: pending → running → completed|failed|cancelled
 
@@ -49,18 +60,23 @@ class JobRun(ServiceBase):
 
     # Metadata
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        "metadata", JSONB, default=dict,
+        "metadata",
+        JSONB,
+        default=dict,
     )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
     started_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     def __repr__(self) -> str:

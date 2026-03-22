@@ -7,6 +7,7 @@ Routes:
   GET  /admin/tenants         – list tenants
   GET  /admin/tenants/{id}    – get tenant
 """
+
 from __future__ import annotations
 
 import logging

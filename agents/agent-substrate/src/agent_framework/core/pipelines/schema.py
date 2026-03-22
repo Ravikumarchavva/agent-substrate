@@ -23,49 +23,53 @@ from pydantic import BaseModel, ConfigDict, Field
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class NodeType(str, Enum):
     """Allowed node types in a pipeline graph."""
-    AGENT      = "agent"
-    TOOL       = "tool"
-    SKILL      = "skill"
-    GUARDRAIL  = "guardrail"
-    ROUTER     = "router"
-    MEMORY     = "memory"
+
+    AGENT = "agent"
+    TOOL = "tool"
+    SKILL = "skill"
+    GUARDRAIL = "guardrail"
+    ROUTER = "router"
+    MEMORY = "memory"
     # Flow-control / structural nodes
-    START      = "start"
-    END        = "end"
-    NOTE       = "note"       # documentation only — no runtime effect
-    CONDITION  = "condition"  # expression-based branching
-    APPROVAL   = "approval"   # human-in-the-loop gate
-    WHILE      = "while"      # repeat-until loop
-    MCP        = "mcp"        # external MCP server (SSE or stdio)
+    START = "start"
+    END = "end"
+    NOTE = "note"  # documentation only — no runtime effect
+    CONDITION = "condition"  # expression-based branching
+    APPROVAL = "approval"  # human-in-the-loop gate
+    WHILE = "while"  # repeat-until loop
+    MCP = "mcp"  # external MCP server (SSE or stdio)
 
 
 class EdgeType(str, Enum):
     """Semantic edge types — drives validation and rendering."""
-    AGENT_TOOL        = "agent_tool"           # agent → tool
-    AGENT_GUARDRAIL   = "agent_guardrail"      # agent → guardrail
-    AGENT_SKILL       = "agent_skill"          # agent → skill
-    AGENT_MEMORY      = "agent_memory"         # agent → memory
-    ROUTER_ROUTE      = "router_route"         # router → agent (one per route label)
-    ROUTER_INPUT      = "router_input"         # upstream → router (incoming edge)
+
+    AGENT_TOOL = "agent_tool"  # agent → tool
+    AGENT_GUARDRAIL = "agent_guardrail"  # agent → guardrail
+    AGENT_SKILL = "agent_skill"  # agent → skill
+    AGENT_MEMORY = "agent_memory"  # agent → memory
+    ROUTER_ROUTE = "router_route"  # router → agent (one per route label)
+    ROUTER_INPUT = "router_input"  # upstream → router (incoming edge)
     # Condition branching
-    CONDITION_INPUT   = "condition_input"      # upstream → condition node
-    CONDITION_BRANCH  = "condition_branch"     # condition → downstream (per expression)
+    CONDITION_INPUT = "condition_input"  # upstream → condition node
+    CONDITION_BRANCH = "condition_branch"  # condition → downstream (per expression)
     # Approval gates
-    APPROVAL_INPUT    = "approval_input"       # upstream → approval node
-    APPROVAL_APPROVE  = "approval_approve"     # approval → approve path
-    APPROVAL_REJECT   = "approval_reject"      # approval → reject path
+    APPROVAL_INPUT = "approval_input"  # upstream → approval node
+    APPROVAL_APPROVE = "approval_approve"  # approval → approve path
+    APPROVAL_REJECT = "approval_reject"  # approval → reject path
     # While loop
-    WHILE_BODY        = "while_body"           # while → body (loop back)
-    WHILE_DONE        = "while_done"           # while → done (exit loop)
+    WHILE_BODY = "while_body"  # while → body (loop back)
+    WHILE_DONE = "while_done"  # while → done (exit loop)
     # MCP server
-    AGENT_MCP         = "agent_mcp"            # mcp_server → agent (tools injection)
+    AGENT_MCP = "agent_mcp"  # mcp_server → agent (tools injection)
 
 
 # ---------------------------------------------------------------------------
 # Position (for canvas rendering — not used at runtime)
 # ---------------------------------------------------------------------------
+
 
 class Position(BaseModel):
     x: float = 0.0
@@ -75,6 +79,7 @@ class Position(BaseModel):
 # ---------------------------------------------------------------------------
 # Node
 # ---------------------------------------------------------------------------
+
 
 class NodeConfig(BaseModel):
     """A single node on the visual canvas.
@@ -117,23 +122,25 @@ class NodeConfig(BaseModel):
 # Edge
 # ---------------------------------------------------------------------------
 
+
 class EdgeConfig(BaseModel):
     """A directed connection between two nodes."""
 
     model_config = ConfigDict(populate_by_name=True)
 
     id: str = Field(default_factory=lambda: str(uuid4()))
-    source: str          # source node id
-    target: str          # target node id
-    source_handle: str = ""   # output handle on source node
-    target_handle: str = ""   # input handle on target node
+    source: str  # source node id
+    target: str  # target node id
+    source_handle: str = ""  # output handle on source node
+    target_handle: str = ""  # input handle on target node
     edge_type: EdgeType
-    label: str = ""      # used for router route labels
+    label: str = ""  # used for router route labels
 
 
 # ---------------------------------------------------------------------------
 # Pipeline (full graph)
 # ---------------------------------------------------------------------------
+
 
 class PipelineConfig(BaseModel):
     """Complete pipeline definition — the JSON that lives in the DB."""

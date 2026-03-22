@@ -10,6 +10,7 @@ Features:
   - Progress callbacks for UI integration
   - Export to JSON / console / markdown
 """
+
 from __future__ import annotations
 
 import asyncio

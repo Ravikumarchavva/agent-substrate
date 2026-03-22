@@ -4,6 +4,7 @@
 Start via:  docker compose --profile mcp up -d mcp-server
             python docker/mcp_server/server.py          (local dev)
 """
+
 from __future__ import annotations
 
 import os
@@ -49,7 +50,11 @@ def to_uppercase(text: str) -> str:
 def word_count(text: str) -> dict:
     """Count words and characters in text."""
     words = text.split()
-    return {"words": len(words), "characters": len(text), "sentences": text.count(".") + text.count("!") + text.count("?")}
+    return {
+        "words": len(words),
+        "characters": len(text),
+        "sentences": text.count(".") + text.count("!") + text.count("?"),
+    }
 
 
 @mcp.tool()
@@ -58,7 +63,15 @@ def server_info() -> dict:
     return {
         "name": "agent-framework-demo",
         "transport": "sse",
-        "tools": ["add", "subtract", "multiply", "echo", "to_uppercase", "word_count", "server_info"],
+        "tools": [
+            "add",
+            "subtract",
+            "multiply",
+            "echo",
+            "to_uppercase",
+            "word_count",
+            "server_info",
+        ],
     }
 
 

@@ -11,6 +11,7 @@ Design decisions:
   - Falls back gracefully if the judge LLM returns malformed output.
   - Supports parallel judging of multiple criteria.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +23,11 @@ from typing import List, Optional
 from agent_framework.evals.criteria import EvalCriterion
 from agent_framework.evals.models import EvalScore
 from agent_framework.providers.llm.base_client import BaseModelClient
-from agent_framework.core.messages.client_messages import SystemMessage, UserMessage, AssistantMessage
+from agent_framework.core.messages.client_messages import (
+    SystemMessage,
+    UserMessage,
+    AssistantMessage,
+)
 
 logger = logging.getLogger("agent_framework.evals")
 
@@ -79,8 +84,11 @@ class LLMJudge:
         if self.parallel:
             tasks = [
                 self._score_criterion(
-                    criterion, input_text, actual_output,
-                    expected_output, context,
+                    criterion,
+                    input_text,
+                    actual_output,
+                    expected_output,
+                    context,
                 )
                 for criterion in self.criteria
             ]
@@ -89,8 +97,11 @@ class LLMJudge:
             results = []
             for criterion in self.criteria:
                 score = await self._score_criterion(
-                    criterion, input_text, actual_output,
-                    expected_output, context,
+                    criterion,
+                    input_text,
+                    actual_output,
+                    expected_output,
+                    context,
                 )
                 results.append(score)
             return results
@@ -122,7 +133,9 @@ class LLMJudge:
             try:
                 response = await self.model_client.generate(
                     messages=[
-                        SystemMessage(content="You are a precise evaluation judge. Always respond with valid JSON only."),
+                        SystemMessage(
+                            content="You are a precise evaluation judge. Always respond with valid JSON only."
+                        ),
                         UserMessage(content=[prompt]),
                     ],
                     tools=None,

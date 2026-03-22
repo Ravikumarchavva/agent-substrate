@@ -3,6 +3,7 @@
 Manages the lifecycle of human-in-the-loop approval and input requests.
 Uses Redis pub/sub to deliver responses back to the waiting agent.
 """
+
 from __future__ import annotations
 
 import json
@@ -111,28 +112,32 @@ async def resolve_request(
     # Publish response via Redis pub/sub for the waiting agent
     if redis_client:
         channel = HITL_RESPONSE_CHANNEL.format(request_id=request_id)
-        response_data = json.dumps({
-            "request_id": request_id,
-            "status": status,
-            "value": response_value,
-            "responded_by": responded_by,
-        })
+        response_data = json.dumps(
+            {
+                "request_id": request_id,
+                "status": status,
+                "value": response_value,
+                "responded_by": responded_by,
+            }
+        )
         await redis_client.publish(channel, response_data)
 
     # Publish event for observability
     if event_bus:
-        await event_bus.publish(EventEnvelope(
-            event_type="hitl.request_resolved",
-            correlation_id=req.run_id or request_id,
-            payload={
-                "type": "hitl.request_resolved",
-                "request_id": request_id,
-                "thread_id": str(req.thread_id),
-                "hitl_type": req.type,
-                "status": status,
-                "response_value": response_value,
-            },
-        ))
+        await event_bus.publish(
+            EventEnvelope(
+                event_type="hitl.request_resolved",
+                correlation_id=req.run_id or request_id,
+                payload={
+                    "type": "hitl.request_resolved",
+                    "request_id": request_id,
+                    "thread_id": str(req.thread_id),
+                    "hitl_type": req.type,
+                    "status": status,
+                    "response_value": response_value,
+                },
+            )
+        )
 
     return req
 

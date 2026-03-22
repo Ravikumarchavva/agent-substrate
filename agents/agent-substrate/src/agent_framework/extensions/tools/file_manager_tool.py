@@ -9,6 +9,7 @@ Actions:
 
 The tool operates in the context of the current thread (via contextvars).
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -52,7 +53,13 @@ class FileManagerTool(BaseTool):
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["list_files", "read_file", "write_file", "get_url", "delete_file"],
+                        "enum": [
+                            "list_files",
+                            "read_file",
+                            "write_file",
+                            "get_url",
+                            "delete_file",
+                        ],
                         "description": "The file operation to perform.",
                     },
                     "file_id": {
@@ -82,7 +89,9 @@ class FileManagerTool(BaseTool):
         action = kwargs.get("action", "")
         thread_id_str = current_thread_id.get("")
         if not thread_id_str:
-            return ToolResult(content="Error: no active thread context", metadata={"error": True})
+            return ToolResult(
+                content="Error: no active thread context", metadata={"error": True}
+            )
 
         thread_id = uuid.UUID(thread_id_str)
 
@@ -122,7 +131,9 @@ class FileManagerTool(BaseTool):
             lines = [f"Files in thread ({len(files)}):"]
             for f in files:
                 size_kb = f.size_bytes / 1024
-                lines.append(f"  - {f.original_name} (id={f.id}, {size_kb:.1f} KB, {f.content_type})")
+                lines.append(
+                    f"  - {f.original_name} (id={f.id}, {size_kb:.1f} KB, {f.content_type})"
+                )
 
             return ToolResult(
                 content="\n".join(lines),
@@ -133,13 +144,19 @@ class FileManagerTool(BaseTool):
         from agent_framework.server.services.file_service import extract_text, get_file
 
         if not file_id_str:
-            return ToolResult(content="Error: file_id is required for read_file", metadata={"error": True})
+            return ToolResult(
+                content="Error: file_id is required for read_file",
+                metadata={"error": True},
+            )
 
         file_id = uuid.UUID(file_id_str)
         async with self._session_factory() as db:
             meta = await get_file(db, file_id, thread_id)
             if not meta:
-                return ToolResult(content=f"File {file_id} not found in this thread.", metadata={"error": True})
+                return ToolResult(
+                    content=f"File {file_id} not found in this thread.",
+                    metadata={"error": True},
+                )
 
             text = await extract_text(self._store, meta)
             if text:
@@ -154,7 +171,7 @@ class FileManagerTool(BaseTool):
             else:
                 return ToolResult(
                     content=f"File '{meta.original_name}' is binary and cannot be read as text. "
-                            f"Use get_url to obtain a download link instead.",
+                    f"Use get_url to obtain a download link instead.",
                     metadata={
                         "file_id": str(meta.id),
                         "filename": meta.original_name,
@@ -173,9 +190,15 @@ class FileManagerTool(BaseTool):
         from agent_framework.core.storage.tenant import FileScope
 
         if not filename:
-            return ToolResult(content="Error: filename is required for write_file", metadata={"error": True})
+            return ToolResult(
+                content="Error: filename is required for write_file",
+                metadata={"error": True},
+            )
         if not content:
-            return ToolResult(content="Error: content is required for write_file", metadata={"error": True})
+            return ToolResult(
+                content="Error: content is required for write_file",
+                metadata={"error": True},
+            )
 
         data = content.encode("utf-8")
         async with self._session_factory() as db:
@@ -203,13 +226,18 @@ class FileManagerTool(BaseTool):
         from agent_framework.server.services.file_service import get_file, get_file_url
 
         if not file_id_str:
-            return ToolResult(content="Error: file_id is required for get_url", metadata={"error": True})
+            return ToolResult(
+                content="Error: file_id is required for get_url",
+                metadata={"error": True},
+            )
 
         file_id = uuid.UUID(file_id_str)
         async with self._session_factory() as db:
             meta = await get_file(db, file_id, thread_id)
             if not meta:
-                return ToolResult(content=f"File {file_id} not found.", metadata={"error": True})
+                return ToolResult(
+                    content=f"File {file_id} not found.", metadata={"error": True}
+                )
 
             try:
                 url = await get_file_url(self._store, meta)
@@ -220,7 +248,7 @@ class FileManagerTool(BaseTool):
             except NotImplementedError:
                 return ToolResult(
                     content=f"Direct URLs not available (encrypted store). "
-                            f"File '{meta.original_name}' must be downloaded via the API.",
+                    f"File '{meta.original_name}' must be downloaded via the API.",
                     metadata={"file_id": str(meta.id)},
                 )
 
@@ -228,7 +256,10 @@ class FileManagerTool(BaseTool):
         from agent_framework.server.services.file_service import delete_file
 
         if not file_id_str:
-            return ToolResult(content="Error: file_id is required for delete_file", metadata={"error": True})
+            return ToolResult(
+                content="Error: file_id is required for delete_file",
+                metadata={"error": True},
+            )
 
         file_id = uuid.UUID(file_id_str)
         async with self._session_factory() as db:
@@ -238,4 +269,6 @@ class FileManagerTool(BaseTool):
             if deleted:
                 return ToolResult(content=f"File {file_id} deleted.", metadata={})
             else:
-                return ToolResult(content=f"File {file_id} not found.", metadata={"error": True})
+                return ToolResult(
+                    content=f"File {file_id} not found.", metadata={"error": True}
+                )

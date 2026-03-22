@@ -19,24 +19,24 @@ class CodeInterpreterConfig:
     mem_size_mib: int = 256
 
     # ── Pool ─────────────────────────────────────────────────────────────
-    pool_size: int = 2          # warm VMs kept ready
-    pool_max_size: int = 8      # max concurrent VMs
+    pool_size: int = 2  # warm VMs kept ready
+    pool_max_size: int = 8  # max concurrent VMs
 
     # ── Execution limits ─────────────────────────────────────────────────
-    default_timeout: int = 30   # seconds
-    max_timeout: int = 120      # hard ceiling
-    max_code_size: int = 65_536 # bytes
+    default_timeout: int = 30  # seconds
+    max_timeout: int = 120  # hard ceiling
+    max_code_size: int = 65_536  # bytes
 
     # ── vsock ────────────────────────────────────────────────────────────
-    vsock_port: int = 52        # guest agent listens here
-    vsock_guest_cid: int = 3    # CID 3+ (0=hypervisor, 1=reserved, 2=host)
+    vsock_port: int = 52  # guest agent listens here
+    vsock_guest_cid: int = 3  # CID 3+ (0=hypervisor, 1=reserved, 2=host)
 
     # ── Workspace ────────────────────────────────────────────────────────
     work_dir: str = "/tmp/firecracker-code-interpreter"
 
     # ── Sessions ─────────────────────────────────────────────────────────
-    session_timeout: int = 1800     # seconds idle before VM is destroyed (30 min)
-    max_sessions: int = 20          # max concurrent sessions
+    session_timeout: int = 1800  # seconds idle before VM is destroyed (30 min)
+    max_sessions: int = 20  # max concurrent sessions
 
     # ── Guest agent ──────────────────────────────────────────────────────
     guest_agent_path: str = field(default="")

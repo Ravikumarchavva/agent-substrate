@@ -59,3 +59,18 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+exclude = [
+    "notebooks/",
+    "examples/",
+    ".venv",
+    "builder/",
+]
+
+[tool.ruff.lint]
+# E701/E702: single-line if/semicolons are intentional in dispatch tables
+# E402: mid-file imports are intentional in some route files
+[tool.ruff.lint.per-file-ignores]
+"src/agent_framework/extensions/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
+"src/agent_framework/services/conversation/routes.py" = ["E402"]

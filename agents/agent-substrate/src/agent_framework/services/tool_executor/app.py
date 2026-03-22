@@ -43,7 +43,6 @@ def _load_default_tools(ci_http_client=None) -> list:
             logger.debug("CodeInterpreterTool not available")
 
     try:
-        from agent_framework.extensions.tools.file_manager_tool import FileManagerTool
         # FileManagerTool requires file_store + session_factory from server context.
         # In microservices the Artifact service owns storage; skip for now — agent
         # uses the Artifact service directly via API.

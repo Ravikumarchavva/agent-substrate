@@ -25,10 +25,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional, Type, TypeVar
 
-from agent_framework.core.messages.client_messages import SystemMessage, UserMessage
+from agent_framework.core.messages.client_messages import SystemMessage
 
 if TYPE_CHECKING:
-    from pydantic import BaseModel
 
     from agent_framework.core.messages.base_message import BaseClientMessage
     from agent_framework.core.structured.result import StructuredOutputResult
@@ -72,7 +71,6 @@ async def parse(
             (not a safety refusal — those surface as
             ``result.refused == True``).
     """
-    from agent_framework.core.structured.result import StructuredOutputResult
 
     full_messages: List[BaseClientMessage] = []
     if system:

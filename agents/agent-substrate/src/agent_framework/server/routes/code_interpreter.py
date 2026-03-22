@@ -10,7 +10,6 @@ GET  /api/execute/sessions — list sessions across all CI pods
 
 from __future__ import annotations
 
-import json
 import logging
 
 from fastapi import APIRouter, HTTPException, Request

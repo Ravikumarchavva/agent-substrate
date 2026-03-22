@@ -6,8 +6,7 @@ OpenTelemetry, and standard error handling.
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable, Optional
+from typing import Any, Callable, Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

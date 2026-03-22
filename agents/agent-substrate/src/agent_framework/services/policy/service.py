@@ -6,7 +6,6 @@ Every mutating endpoint in the platform calls this before executing side effects
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,7 +68,7 @@ async def check_permission(
     rules = await db.execute(
         select(PolicyRule).where(
             and_(
-                PolicyRule.is_active == True,
+                PolicyRule.is_active.is_(True),
                 PolicyRule.tenant_id.in_([claims.tenant_id, "*"]),
                 PolicyRule.role == claims.role,
                 PolicyRule.action == action,
@@ -108,7 +107,7 @@ async def get_effective_role(
                 WorkspaceGrant.user_id == user_id,
                 WorkspaceGrant.tenant_id == tenant_id,
                 WorkspaceGrant.workspace_id == workspace_id,
-                WorkspaceGrant.is_active == True,
+                WorkspaceGrant.is_active.is_(True),
             )
         )
     )

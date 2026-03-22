@@ -13,19 +13,18 @@ Usage:
 from __future__ import annotations
 
 import logging
-import os
 import sys
 import io
 from typing import Literal
 
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 
 
 # ---------------------------------------------------------------------------
 # Formatters
 # ---------------------------------------------------------------------------
 
-class CustomJsonFormatter(jsonlogger.JsonFormatter):
+class CustomJsonFormatter(JsonFormatter):
     """JSON formatter for server / structured-log pipelines."""
 
     def add_fields(self, log_record, record, message_dict):

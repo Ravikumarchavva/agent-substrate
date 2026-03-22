@@ -9,7 +9,7 @@ from __future__ import annotations
 import base64
 import logging
 import secrets
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from urllib.parse import urlencode
 
 import httpx

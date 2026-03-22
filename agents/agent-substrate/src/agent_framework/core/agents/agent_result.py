@@ -10,7 +10,7 @@ Design principles:
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional, Any, Dict, Union
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field, computed_field
 from datetime import datetime, timezone
 from uuid import uuid4

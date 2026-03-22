@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union, Literal
+from typing import Any, Dict, List, Optional, Literal
 from pydantic import ConfigDict, field_validator, model_serializer, Field
 from .base_message import BaseClientMessage, CLIENT_ROLES, UsageStats
-from agent_framework.core.tools.base_tool import ToolCall as ToolCallDataclass, ToolResult
+from agent_framework.core.tools.base_tool import ToolResult
 import json
 from uuid import uuid4
 

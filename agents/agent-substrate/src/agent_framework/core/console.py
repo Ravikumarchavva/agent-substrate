@@ -20,20 +20,15 @@ Usage (stream watcher — attach to any ``run_stream`` iterator)::
 """
 from __future__ import annotations
 
-import asyncio
 from io import UnsupportedOperation
 import json
 import logging
-import sys
 import time
 from typing import Any, AsyncIterator, Optional, List
 
 from rich.console import Console as RichConsole
-from rich.live import Live
 from rich.markdown import Markdown
-from rich.padding import Padding
 from rich.panel import Panel
-from rich.text import Text
 from rich.table import Table
 from rich.theme import Theme
 

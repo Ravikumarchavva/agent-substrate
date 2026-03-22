@@ -7,8 +7,7 @@ only core pytest with no asyncio plugin.  Higher-level integration tests
 from __future__ import annotations
 
 import asyncio
-from typing import List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import BaseModel

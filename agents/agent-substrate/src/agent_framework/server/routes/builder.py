@@ -15,18 +15,16 @@ All routes are conditionally mounted only when ``ENABLE_BUILDER=true``.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
 
 from agent_framework.core.pipelines.codegen import generate_code
 from agent_framework.core.pipelines.runner import PipelineRunner

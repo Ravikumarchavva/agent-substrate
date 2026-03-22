@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -103,16 +103,16 @@ async def audit_log(
     )
     return [
         AuditLogOut(
-            id=str(l.id),
-            tenant_id=l.tenant_id,
-            actor_id=l.actor_id,
-            action=l.action,
-            resource_type=l.resource_type,
-            resource_id=l.resource_id,
-            details=l.details,
-            created_at=l.created_at.isoformat(),
+            id=str(log.id),
+            tenant_id=log.tenant_id,
+            actor_id=log.actor_id,
+            action=log.action,
+            resource_type=log.resource_type,
+            resource_id=log.resource_id,
+            details=log.details,
+            created_at=log.created_at.isoformat(),
         )
-        for l in logs
+        for log in logs
     ]
 
 

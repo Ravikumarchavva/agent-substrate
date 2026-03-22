@@ -8,8 +8,7 @@ Score scale: 1 (worst) → 5 (best), normalised to 0.0–1.0.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

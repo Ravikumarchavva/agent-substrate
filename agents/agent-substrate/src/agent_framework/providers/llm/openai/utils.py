@@ -1,12 +1,8 @@
-from typing import Any, Dict, List, Union, Literal, Sequence, Tuple
-from pydantic import BaseModel, ConfigDict, field_validator, model_serializer
+from typing import Any, Dict, List
 from PIL import Image
 
-from agent_framework.core.messages._types import (
-    MediaType, ToolResponseContent
-)
 from agent_framework.core.messages.client_messages import (
-    UserMessage, ToolCallMessage, AssistantMessage
+    UserMessage, AssistantMessage
 )
 
 def user_message_to_openai(msg: UserMessage) -> Dict[str, Any]:

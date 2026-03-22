@@ -11,7 +11,6 @@ from contextlib import asynccontextmanager
 import redis.asyncio as aioredis
 
 from agent_framework.services.base import create_service_app, init_service_db
-from agent_framework.services.identity.models import IdentityUser
 from agent_framework.services.identity.routes import router
 from agent_framework.shared.database.base import ServiceBase
 from agent_framework.shared.events.bus import EventBus

@@ -7,9 +7,8 @@ are durable (stored in the stream) and replayable from offsets.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from typing import Any, AsyncIterator, Callable, Awaitable, Optional
+from typing import AsyncIterator, Optional
 
 import redis.asyncio as aioredis
 

@@ -52,7 +52,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from agent_framework.core.tools.base_tool import BaseTool, Tool, ToolResult, ToolRisk
+from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
 
 logger = logging.getLogger("agent_framework.hitl")
 
@@ -565,7 +565,7 @@ class CLIApprovalHandler(ToolApprovalHandler):
         if request.context:
             print(f"  Why:   {request.context}")
 
-        print(f"\n  Arguments:")
+        print("\n  Arguments:")
         args_str = json.dumps(request.arguments, indent=4)
         for line in args_str.splitlines():
             print(f"    {line}")

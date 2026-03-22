@@ -6,9 +6,8 @@ a sandboxed iframe with the interactive HTML app alongside their output.
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
 
 import httpx
 
@@ -518,7 +517,7 @@ class SpotifyPlayerTool(McpAppTool):
                     query=simple_query,
                     limit=min(effective_limit, 5),
                 )
-            except Exception as retry_err:
+            except Exception:
                 logger.exception("Spotify search retry also failed")
                 # If OAuth token was used, try falling back to Client Credentials
                 if oauth_token:
@@ -546,8 +545,7 @@ class SpotifyPlayerTool(McpAppTool):
                 isError=False,
             )
 
-        # Filter to tracks with preview URLs available
-        playable = [t for t in tracks if t.get("preview_url")]
+        # Filter to tracks with preview URLs available (check only, not stored)
         all_tracks = tracks
         
         # Check Spotify OAuth authentication status
@@ -566,14 +564,14 @@ class SpotifyPlayerTool(McpAppTool):
             summary = (
                 f"🎵 Found {len(all_tracks)} tracks for \"{query}\""
                 + (f" (genre: {genre})" if genre else "")
-                + f". User is connected to Spotify Premium and can play full tracks.\n"
+                + ". User is connected to Spotify Premium and can play full tracks.\n"
                 + "\n".join(track_list)
             )
         else:
             summary = (
                 f"🎵 Found {len(all_tracks)} tracks for \"{query}\""
                 + (f" (genre: {genre})" if genre else "")
-                + f". ⚠️ User needs to connect their Spotify Premium account first to play full tracks. "
+                + ". ⚠️ User needs to connect their Spotify Premium account first to play full tracks. "
                 + "The player will show a 'Connect Spotify' button.\n"
                 + "\n".join(track_list)
             )

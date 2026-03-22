@@ -14,7 +14,7 @@ from __future__ import annotations
 import contextvars
 import logging
 import uuid
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
 

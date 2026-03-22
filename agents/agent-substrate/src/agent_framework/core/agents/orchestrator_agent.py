@@ -32,8 +32,7 @@ Usage::
 """
 from __future__ import annotations
 
-import json
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from agent_framework.core.agents.base_agent import BaseAgent
 from agent_framework.core.agents.react_agent import ReActAgent
@@ -257,7 +256,7 @@ class OrchestratorAgent(ReActAgent):
 
     # -- Graph support --------------------------------------------------------
 
-    def to_graph(self) -> "FlowGraph":  # type: ignore[name-defined]
+    def to_graph(self) -> "FlowGraph":  # type: ignore[name-defined]  # noqa: F821
         from agent_framework.core.agents.graph import FlowGraph, FlowEdge, FlowNode
         graph = FlowGraph(name=self.name)
         graph.add_node(FlowNode(id="__input__", label="start", node_type="input"))

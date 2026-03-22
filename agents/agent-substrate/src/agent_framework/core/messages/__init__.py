@@ -29,4 +29,8 @@ __all__ = [
     "MediaType",
     "AudioContent",
     "VideoContent",
+    "StreamChunk",
+    "TextDeltaChunk",
+    "ReasoningDeltaChunk",
+    "CompletionChunk",
 ]

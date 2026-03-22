@@ -11,7 +11,6 @@ Usage::
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_framework.core.storage.base import FileStore

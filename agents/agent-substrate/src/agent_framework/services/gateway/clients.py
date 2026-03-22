@@ -7,7 +7,7 @@ from route handlers.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import httpx
 

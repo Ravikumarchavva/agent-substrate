@@ -14,7 +14,6 @@ from typing import AsyncIterator, Dict, Optional, Set
 import redis.asyncio as aioredis
 
 from agent_framework.shared.events.bus import EventBus
-from agent_framework.shared.events.envelope import EventEnvelope
 
 logger = logging.getLogger(__name__)
 

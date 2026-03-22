@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Callable, List, Optional, Union
 from uuid import uuid4
 
 from agent_framework.core.agents.agent_result import AgentRunResult, AggregatedUsage, RunStatus

@@ -24,7 +24,6 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 from pydantic import BaseModel, Field
 

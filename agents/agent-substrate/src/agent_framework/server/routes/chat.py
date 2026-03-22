@@ -9,14 +9,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import uuid
 from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_framework.core.agents.react_agent import ReActAgent
 from agent_framework.configs.settings import settings
 from agent_framework.core.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
 from agent_framework.core.messages.client_messages import AssistantMessage, ToolExecutionResultMessage
@@ -35,7 +33,6 @@ from agent_framework.server.services.file_service import (
     extract_text,
     get_file_content,
     get_files_by_ids,
-    to_vision_image_block,
 )
 from agent_framework.server.routes.mcp_apps import resolve_ui_uri
 from agent_framework.extensions.tools.task_manager_tool import current_thread_id
@@ -262,7 +259,7 @@ async def _build_file_context(
     names = ", ".join(m.original_name for m in files)
     sections = "\n\n".join(text_parts)
     block = (
-        f"The user has attached {len(elements)} file(s): {names}.\n"
+        f"The user has attached {len(files)} file(s): {names}.\n"
         f"File contents:\n\n{sections}"
     )
     return block, image_notes
@@ -462,8 +459,6 @@ async def chat(
         agent_task = asyncio.create_task(agent_worker())
         hitl_task = asyncio.create_task(hitl_worker())
 
-        exit_reason = "disconnect"
-
         try:
             while True:
                 # Timeout-based poll so we can detect disconnect/cancel between events
@@ -493,7 +488,6 @@ async def chat(
                         if not bridge_signaled:
                             bridge_signaled = True
                             await bridge.signal_done()
-                        exit_reason = "disconnect"
                         break
 
                     # ── Explicit cancel ──────────────────────────────────────
@@ -513,13 +507,11 @@ async def chat(
                             bridge_signaled = True
                             await bridge.signal_done()
                         yield f"data: {json.dumps({'type': 'cancelled'})}\n\n"
-                        exit_reason = "cancelled"
                         break
                     continue
 
                 # ── Bus closed = both workers finished normally ───────────────
                 if item is BUS_CLOSED:
-                    exit_reason = "completed"
                     break
 
                 # ── Dispatch event to SSE transport ──────────────────────────

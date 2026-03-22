@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
-from agent_framework.configs.settings import settings
 from agent_framework.core.memory.redis_memory import RedisMemory
 from agent_framework.providers.llm.openai.openai_client import OpenAIClient
 from agent_framework.services.agent_runtime.routes import router

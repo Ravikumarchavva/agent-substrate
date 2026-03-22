@@ -61,7 +61,7 @@ def cmd_start(args: argparse.Namespace) -> None:
     pid = _read_pid()
     if pid and _is_running(pid):
         print(f"Agent Framework is already running (PID {pid}).")
-        print(f"  Run `agent-framework stop` to stop it first.")
+        print("  Run `agent-framework stop` to stop it first.")
         sys.exit(1)
 
     host    = args.host
@@ -114,7 +114,7 @@ def cmd_start(args: argparse.Namespace) -> None:
     _write_pid(proc.pid)
     print(f"  PID        : {proc.pid}")
     print(f"  Log file   : {log_file}")
-    print(f"  Stop with  : agent-framework stop")
+    print("  Stop with  : agent-framework stop")
 
 
 def cmd_stop(args: argparse.Namespace) -> None:

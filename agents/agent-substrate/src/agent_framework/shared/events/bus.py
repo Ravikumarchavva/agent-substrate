@@ -52,14 +52,20 @@ class EventBus:
     async def publish(self, event: EventEnvelope) -> str:
         """Publish an event to the appropriate Redis Stream.
 
+        Also broadcasts via pub/sub for real-time subscribers (e.g. StreamProjector).
         Returns the stream message ID.
         """
         if not self._client:
             raise RuntimeError("EventBus not connected")
 
         stream_key = event.stream_key()
-        data = {"envelope": event.model_dump_json()}
+        json_data = event.model_dump_json()
+        data = {"envelope": json_data}
         msg_id: str = await self._client.xadd(stream_key, data)
+
+        # Also publish via pub/sub for real-time fan-out to StreamProjector
+        await self._client.publish(stream_key, json_data)
+
         logger.debug("Published %s to %s (id=%s)", event.event_type, stream_key, msg_id)
         return msg_id
 

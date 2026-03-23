@@ -15,6 +15,8 @@ from agent_framework.services.base import create_service_app, init_service_db
 from agent_framework.services.policy.routes import router
 from agent_framework.shared.database.base import ServiceBase
 
+import agent_framework.services.policy.models  # noqa: F401 — register ORM models before create_all
+
 logger = logging.getLogger(__name__)
 
 

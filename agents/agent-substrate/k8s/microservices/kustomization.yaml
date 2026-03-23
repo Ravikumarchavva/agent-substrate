@@ -24,3 +24,7 @@ resources:
   - 50-admin.yaml
   # Network policies
   - 90-network-policies.yaml
+  # Pod disruption budgets
+  - 91-pod-disruption-budgets.yaml
+  # Ingress (production TLS + rate limiting)
+  - 95-ingress.yaml

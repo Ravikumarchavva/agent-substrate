@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional
@@ -181,6 +182,7 @@ async def dispatch_run(
     event_bus: EventBus,
     session_factory,
     redis_client,
+    agent_runtime_url: str = "",
 ) -> None:
     """Dispatch a job run to the Agent Runtime.
 
@@ -228,6 +230,31 @@ async def dispatch_run(
             correlation_id=run_id,
         )
         await event_bus.publish(cmd_envelope)
+
+        # Call Agent Runtime HTTP API to start the run
+        import httpx
+
+        runtime_url = agent_runtime_url or os.environ.get(
+            "AGENT_RUNTIME_SERVICE_URL",
+            os.environ.get("AGENT_RUNTIME_URL", "http://localhost:8014"),
+        )
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{runtime_url}/agent/run",
+                json={
+                    "run_id": run_id,
+                    "thread_id": thread_id,
+                    "user_content": run.user_content or "",
+                    "system_instructions": run.system_instructions or "",
+                    "file_ids": run.file_ids or [],
+                },
+            )
+            resp.raise_for_status()
+            logger.info(
+                "Agent Runtime accepted run %s (status %s)",
+                run_id,
+                resp.status_code,
+            )
 
         logger.info("Dispatched job run %s for thread %s", run_id, thread_id)
 

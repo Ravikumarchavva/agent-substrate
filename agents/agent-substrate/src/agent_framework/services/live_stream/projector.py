@@ -142,10 +142,15 @@ class StreamProjector:
                     continue
 
                 try:
-                    data = json.loads(message["data"])
-                    thread_id = data.get("thread_id", "")
+                    envelope = json.loads(message["data"])
+                    # EventBus publishes EventEnvelope JSON; extract payload
+                    payload = envelope.get("payload", envelope)
+                    event_type = envelope.get("event_type", payload.get("type", ""))
+                    thread_id = payload.get("thread_id", "")
                     if thread_id:
-                        await self.broadcast(thread_id, data)
+                        # Merge event_type into payload for downstream consumers
+                        broadcast_data = {**payload, "type": event_type}
+                        await self.broadcast(thread_id, broadcast_data)
                 except json.JSONDecodeError:
                     logger.warning("Invalid JSON in event: %s", message["data"][:200])
                 except Exception:

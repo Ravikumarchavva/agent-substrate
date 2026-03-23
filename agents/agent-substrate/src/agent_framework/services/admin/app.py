@@ -32,11 +32,15 @@ async def lifespan(app):
     app.state.session_factory = session_factory
 
     app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
-    app.state.event_bus = EventBus(app.state.redis)
+
+    event_bus = EventBus(redis_url)
+    await event_bus.connect()
+    app.state.event_bus = event_bus
 
     logger.info("Admin Control Plane started")
     yield
 
+    await event_bus.disconnect()
     await app.state.redis.aclose()
     await engine.dispose()
 

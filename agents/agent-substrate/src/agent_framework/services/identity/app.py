@@ -16,6 +16,8 @@ from agent_framework.services.identity.routes import router
 from agent_framework.shared.database.base import ServiceBase
 from agent_framework.shared.events.bus import EventBus
 
+import agent_framework.services.identity.models  # noqa: F401 — register ORM models before create_all
+
 logger = logging.getLogger(__name__)
 
 

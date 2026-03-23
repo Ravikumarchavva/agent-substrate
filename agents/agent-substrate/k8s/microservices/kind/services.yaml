@@ -1,0 +1,883 @@
+# Microservices Kind overlay — all services use local image, single replica, no HPA
+# Skip code-interpreter (requires KVM), skip network policies (Kind)
+---
+# ── Namespaces ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: af-edge
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: af-platform
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: af-runtime
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+---
+# ── Service Accounts ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gateway-bff
+  namespace: af-edge
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: identity-auth
+  namespace: af-platform
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: policy-authorization
+  namespace: af-platform
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: conversation
+  namespace: af-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: job-controller
+  namespace: af-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-runtime
+  namespace: af-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tool-executor
+  namespace: af-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: human-gate
+  namespace: af-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: live-stream
+  namespace: af-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: file-store
+  namespace: af-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin
+  namespace: af-runtime
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-edge: Gateway BFF
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-bff
+  namespace: af-edge
+  labels:
+    app: gateway-bff
+    af.service-role: gateway-bff
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gateway-bff
+  template:
+    metadata:
+      labels:
+        app: gateway-bff
+    spec:
+      serviceAccountName: gateway-bff
+      containers:
+        - name: gateway-bff
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.gateway.app:app",
+                    "--host", "0.0.0.0", "--port", "8001"]
+          ports:
+            - containerPort: 8001
+              name: http
+          envFrom:
+            - secretRef:
+                name: shared-secrets
+          env:
+            - name: SERVICE_NAME
+              value: gateway
+            - name: IDENTITY_SERVICE_URL
+              value: http://identity-auth.af-platform.svc.cluster.local:8010
+            - name: POLICY_SERVICE_URL
+              value: http://policy-authorization.af-platform.svc.cluster.local:8011
+            - name: CONVERSATION_SERVICE_URL
+              value: http://conversation.af-runtime.svc.cluster.local:8012
+            - name: WORKFLOW_SERVICE_URL
+              value: http://job-controller.af-runtime.svc.cluster.local:8013
+            - name: HITL_SERVICE_URL
+              value: http://human-gate.af-runtime.svc.cluster.local:8016
+            - name: STREAM_SERVICE_URL
+              value: http://live-stream.af-runtime.svc.cluster.local:8017
+            - name: ARTIFACT_SERVICE_URL
+              value: http://file-store.af-runtime.svc.cluster.local:8018
+            - name: ADMIN_SERVICE_URL
+              value: http://admin.af-runtime.svc.cluster.local:8019
+            - name: CORS_ALLOWED_ORIGINS
+              value: '["http://localhost","http://localhost:3000","http://localhost:3001","http://127.0.0.1:3000","http://frontend.af-edge.svc.cluster.local:3000"]'
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-bff
+  namespace: af-edge
+spec:
+  selector:
+    app: gateway-bff
+  ports:
+    - port: 8001
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-platform: Identity Auth
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-auth
+  namespace: af-platform
+  labels:
+    app: identity-auth
+    af.service-role: identity-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: identity-auth
+  template:
+    metadata:
+      labels:
+        app: identity-auth
+    spec:
+      serviceAccountName: identity-auth
+      containers:
+        - name: identity-auth
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.identity.app:app",
+                    "--host", "0.0.0.0", "--port", "8010"]
+          ports:
+            - containerPort: 8010
+              name: http
+          envFrom:
+            - secretRef:
+                name: platform-secrets
+          env:
+            - name: SERVICE_NAME
+              value: identity
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-auth
+  namespace: af-platform
+spec:
+  selector:
+    app: identity-auth
+  ports:
+    - port: 8010
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-platform: Policy Authorization
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-authorization
+  namespace: af-platform
+  labels:
+    app: policy-authorization
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: policy-authorization
+  template:
+    metadata:
+      labels:
+        app: policy-authorization
+    spec:
+      serviceAccountName: policy-authorization
+      containers:
+        - name: policy-authorization
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.policy.app:app",
+                    "--host", "0.0.0.0", "--port", "8011"]
+          ports:
+            - containerPort: 8011
+              name: http
+          envFrom:
+            - secretRef:
+                name: platform-secrets
+          env:
+            - name: SERVICE_NAME
+              value: policy
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: policy-authorization
+  namespace: af-platform
+spec:
+  selector:
+    app: policy-authorization
+  ports:
+    - port: 8011
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-runtime: Conversation
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conversation
+  namespace: af-runtime
+  labels:
+    app: conversation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: conversation
+  template:
+    metadata:
+      labels:
+        app: conversation
+    spec:
+      serviceAccountName: conversation
+      containers:
+        - name: conversation
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.conversation.app:app",
+                    "--host", "0.0.0.0", "--port", "8012"]
+          ports:
+            - containerPort: 8012
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: conversation
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: conversation
+  namespace: af-runtime
+spec:
+  selector:
+    app: conversation
+  ports:
+    - port: 8012
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-runtime: Job Controller
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-controller
+  namespace: af-runtime
+  labels:
+    app: job-controller
+    af.service-role: job-controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: job-controller
+  template:
+    metadata:
+      labels:
+        app: job-controller
+    spec:
+      serviceAccountName: job-controller
+      containers:
+        - name: job-controller
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.job_controller.app:app",
+                    "--host", "0.0.0.0", "--port", "8013"]
+          ports:
+            - containerPort: 8013
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: job-controller
+            - name: AGENT_RUNTIME_SERVICE_URL
+              value: http://agent-runtime.af-runtime.svc.cluster.local:8014
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: job-controller
+  namespace: af-runtime
+spec:
+  selector:
+    app: job-controller
+  ports:
+    - port: 8013
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-runtime: Agent Runtime
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-runtime
+  namespace: af-runtime
+  labels:
+    app: agent-runtime
+    af.service-role: agent-runtime
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agent-runtime
+  template:
+    metadata:
+      labels:
+        app: agent-runtime
+    spec:
+      serviceAccountName: agent-runtime
+      containers:
+        - name: agent-runtime
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.agent_runtime.app:app",
+                    "--host", "0.0.0.0", "--port", "8014"]
+          ports:
+            - containerPort: 8014
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: agent-runtime
+            - name: CONVERSATION_SERVICE_URL
+              value: http://conversation.af-runtime.svc.cluster.local:8012
+            - name: MODEL_NAME
+              value: gpt-4o
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-runtime
+  namespace: af-runtime
+spec:
+  selector:
+    app: agent-runtime
+  ports:
+    - port: 8014
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-runtime: Tool Executor
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tool-executor
+  namespace: af-runtime
+  labels:
+    app: tool-executor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tool-executor
+  template:
+    metadata:
+      labels:
+        app: tool-executor
+    spec:
+      serviceAccountName: tool-executor
+      containers:
+        - name: tool-executor
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.tool_executor.app:app",
+                    "--host", "0.0.0.0", "--port", "8015"]
+          ports:
+            - containerPort: 8015
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: tool-executor
+            - name: ARTIFACT_SERVICE_URL
+              value: http://file-store.af-runtime.svc.cluster.local:8018
+          resources:
+            requests:
+              cpu: 300m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tool-executor
+  namespace: af-runtime
+spec:
+  selector:
+    app: tool-executor
+  ports:
+    - port: 8015
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-runtime: Human Gate
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: human-gate
+  namespace: af-runtime
+  labels:
+    app: human-gate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: human-gate
+  template:
+    metadata:
+      labels:
+        app: human-gate
+    spec:
+      serviceAccountName: human-gate
+      containers:
+        - name: human-gate
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.human_gate.app:app",
+                    "--host", "0.0.0.0", "--port", "8016"]
+          ports:
+            - containerPort: 8016
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: human-gate
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: human-gate
+  namespace: af-runtime
+spec:
+  selector:
+    app: human-gate
+  ports:
+    - port: 8016
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-runtime: Live Stream (SSE Projector)
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: live-stream
+  namespace: af-runtime
+  labels:
+    app: live-stream
+    af.service-role: live-stream
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: live-stream
+  template:
+    metadata:
+      labels:
+        app: live-stream
+    spec:
+      serviceAccountName: live-stream
+      containers:
+        - name: live-stream
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.live_stream.app:app",
+                    "--host", "0.0.0.0", "--port", "8017"]
+          ports:
+            - containerPort: 8017
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: live-stream
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: live-stream
+  namespace: af-runtime
+spec:
+  selector:
+    app: live-stream
+  ports:
+    - port: 8017
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-runtime: File Store
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-store
+  namespace: af-runtime
+  labels:
+    app: file-store
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: file-store
+  template:
+    metadata:
+      labels:
+        app: file-store
+    spec:
+      serviceAccountName: file-store
+      containers:
+        - name: file-store
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.file_store.app:app",
+                    "--host", "0.0.0.0", "--port", "8018"]
+          ports:
+            - containerPort: 8018
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: file-store
+            - name: FILE_STORAGE_PATH
+              value: /data/files
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: file-store
+  namespace: af-runtime
+spec:
+  selector:
+    app: file-store
+  ports:
+    - port: 8018
+      targetPort: http
+      name: http
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# af-runtime: Admin
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin
+  namespace: af-runtime
+  labels:
+    app: admin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin
+  template:
+    metadata:
+      labels:
+        app: admin
+    spec:
+      serviceAccountName: admin
+      containers:
+        - name: admin
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "agent_framework.services.admin.app:app",
+                    "--host", "0.0.0.0", "--port", "8019"]
+          ports:
+            - containerPort: 8019
+              name: http
+          envFrom:
+            - secretRef:
+                name: runtime-secrets
+          env:
+            - name: SERVICE_NAME
+              value: admin
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin
+  namespace: af-runtime
+spec:
+  selector:
+    app: admin
+  ports:
+    - port: 8019
+      targetPort: http
+      name: http

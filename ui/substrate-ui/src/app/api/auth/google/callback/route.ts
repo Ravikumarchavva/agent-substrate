@@ -188,7 +188,12 @@ function buildCallbackHTML(
   <p>${error || "Unknown error"}</p>
   <p><a href="/" style="color:#4285f4">Return to Home</a></p>
   <script>
-    setTimeout(() => window.location.href = "/", 3000);
+    if (window.opener) {
+      window.opener.postMessage({ type: "google_auth_error", error: "${error || 'Unknown error'}" }, window.location.origin);
+      setTimeout(() => window.close(), 3000);
+    } else {
+      setTimeout(() => window.location.href = "/", 3000);
+    }
   </script>
 </body>
 </html>`;
@@ -216,15 +221,17 @@ function buildCallbackHTML(
   ` : ""}
   <p>Redirecting...</p>
   <script>
-    // Notify parent window if opened as popup
+    // Notify parent window and close popup
     if (window.opener) {
       window.opener.postMessage({
         type: "google_auth_success",
         user: ${JSON.stringify(user || {})}
-      }, "*");
+      }, window.location.origin);
+      setTimeout(() => window.close(), 500);
+    } else {
+      // Not a popup — redirect directly
+      setTimeout(() => window.location.href = "/", 1500);
     }
-    // Redirect to home
-    setTimeout(() => window.location.href = "/", 1500);
   </script>
 </body>
 </html>`;

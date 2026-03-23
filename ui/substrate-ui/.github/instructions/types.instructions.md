@@ -1,6 +1,7 @@
 ---
+name: "TypeScript Type Conventions"
+description: "Shared type location, discriminated unions for SSE events, and strictness rules"
 applyTo: "src/types/**"
-description: TypeScript type conventions for the chatbot UI
 ---
 
 # TypeScript Type Conventions

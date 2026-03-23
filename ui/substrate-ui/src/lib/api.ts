@@ -1,7 +1,7 @@
 import { Thread, BackendMessage, Message, ToolCall, TaskList, TaskStatus, UploadedFile, TranscribeResult, RealtimeToken, TTSVoice } from "@/types";
 
 // API service layer for backend communication
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 export const api = {
   // Thread management

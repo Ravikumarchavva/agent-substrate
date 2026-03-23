@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const ADMIN_EMAIL = "chavvaravikumarreddy2004@gmail.com";
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 function getAdminEmail(req: NextRequest): string | null {
   const cookie = req.cookies.get("google_user")?.value;

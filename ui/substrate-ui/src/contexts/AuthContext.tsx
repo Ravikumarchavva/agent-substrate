@@ -83,17 +83,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const height = 700;
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
-    
+
     const popup = window.open(
       "/api/auth/google/login",
       "google-auth",
       `width=${width},height=${height},left=${left},top=${top}`
     );
 
-    // Poll for popup close
+    // Listen for postMessage from callback page (faster than polling)
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "google_auth_success" || event.data?.type === "google_auth_error") {
+        window.removeEventListener("message", onMessage);
+        clearInterval(pollTimer);
+        popup?.close();
+        checkAuth();
+      }
+    };
+    window.addEventListener("message", onMessage);
+
+    // Fallback: poll for popup close
     const pollTimer = setInterval(() => {
       if (popup?.closed) {
         clearInterval(pollTimer);
+        window.removeEventListener("message", onMessage);
         checkAuth();
       }
     }, 500);
@@ -104,17 +117,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const height = 700;
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
-    
+
     const popup = window.open(
       "/api/spotify/login",
       "spotify-auth",
       `width=${width},height=${height},left=${left},top=${top}`
     );
 
-    // Poll for popup close
+    // Listen for postMessage from callback page (faster than polling)
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "spotify_auth_success" || event.data?.type === "spotify_auth_error") {
+        window.removeEventListener("message", onMessage);
+        clearInterval(pollTimer);
+        popup?.close();
+        checkAuth();
+      }
+    };
+    window.addEventListener("message", onMessage);
+
+    // Fallback: poll for popup close
     const pollTimer = setInterval(() => {
       if (popup?.closed) {
         clearInterval(pollTimer);
+        window.removeEventListener("message", onMessage);
         checkAuth();
       }
     }, 500);

@@ -39,7 +39,10 @@ async def lifespan(app):
 
     # Redis
     app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
-    app.state.event_bus = EventBus(app.state.redis)
+
+    event_bus = EventBus(redis_url)
+    await event_bus.connect()
+    app.state.event_bus = event_bus
 
     # Redis Memory (shared pool)
     redis_memory = RedisMemory(
@@ -70,6 +73,7 @@ async def lifespan(app):
     yield
 
     await redis_memory.disconnect()
+    await app.state.event_bus.disconnect()
     await app.state.redis.aclose()
 
 

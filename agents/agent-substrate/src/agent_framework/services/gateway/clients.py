@@ -144,6 +144,11 @@ class ConversationClient(ServiceClient):
         resp.raise_for_status()
         return resp.json()
 
+    async def update_thread(self, auth_token: str, thread_id: str, payload: dict) -> dict:
+        resp = await self.patch(f"/threads/{thread_id}", auth_token=auth_token, json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
     async def delete_thread(self, auth_token: str, thread_id: str) -> None:
         resp = await self.delete(f"/threads/{thread_id}", auth_token=auth_token)
         resp.raise_for_status()
@@ -161,13 +166,15 @@ class WorkflowClient(ServiceClient):
         super().__init__(base_url, "workflow", **kw)
 
     async def start_run(self, auth_token: str, payload: dict) -> dict:
-        resp = await self.post("/workflows/runs", auth_token=auth_token, json=payload)
+        resp = await self.post("/jobs/runs", auth_token=auth_token, json=payload)
         resp.raise_for_status()
         return resp.json()
 
     async def cancel_run(self, auth_token: str, thread_id: str) -> dict:
+        # Uses /threads/{thread_id}/cancel to avoid path ambiguity with
+        # /runs/{run_id}/cancel (same URL template, first route would win).
         resp = await self.post(
-            f"/workflows/runs/{thread_id}/cancel",
+            f"/jobs/threads/{thread_id}/cancel",
             auth_token=auth_token,
         )
         resp.raise_for_status()

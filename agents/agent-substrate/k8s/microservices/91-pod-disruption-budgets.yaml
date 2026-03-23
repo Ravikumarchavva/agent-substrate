@@ -1,0 +1,137 @@
+# PodDisruptionBudgets — ensure minimum availability during voluntary disruptions
+# (node drains, rolling upgrades, etc.)
+---
+# ── Edge Layer ────────────────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gateway-bff
+  namespace: af-edge
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gateway-bff
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend
+  namespace: af-edge
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend
+---
+# ── Platform Layer ────────────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: identity-auth
+  namespace: af-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: identity-auth
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: policy-authorization
+  namespace: af-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: policy-authorization
+---
+# ── Runtime Layer ─────────────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: conversation
+  namespace: af-runtime
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: conversation
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: job-controller
+  namespace: af-runtime
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: job-controller
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agent-runtime
+  namespace: af-runtime
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: agent-runtime
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tool-executor
+  namespace: af-runtime
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: tool-executor
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: human-gate
+  namespace: af-runtime
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: human-gate
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: live-stream
+  namespace: af-runtime
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: live-stream
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: file-store
+  namespace: af-runtime
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: file-store
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: admin
+  namespace: af-runtime
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: admin

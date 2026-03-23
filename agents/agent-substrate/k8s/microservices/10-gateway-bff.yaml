@@ -37,13 +37,15 @@ spec:
             - name: CONVERSATION_SERVICE_URL
               value: http://conversation.af-runtime.svc.cluster.local:8012
             - name: WORKFLOW_SERVICE_URL
-              value: http://workflow.af-runtime.svc.cluster.local:8013
+              value: http://job-controller.af-runtime.svc.cluster.local:8013
             - name: HITL_SERVICE_URL
-              value: http://hitl.af-runtime.svc.cluster.local:8016
+              value: http://human-gate.af-runtime.svc.cluster.local:8016
             - name: STREAM_SERVICE_URL
-              value: http://stream.af-runtime.svc.cluster.local:8017
+              value: http://live-stream.af-runtime.svc.cluster.local:8017
             - name: ARTIFACT_SERVICE_URL
-              value: http://artifact.af-runtime.svc.cluster.local:8018
+              value: http://file-store.af-runtime.svc.cluster.local:8018
+            - name: ADMIN_SERVICE_URL
+              value: http://admin.af-platform.svc.cluster.local:8019
             - name: CODE_INTERPRETER_SERVICE_URL
               value: http://code-interpreter.af-runtime.svc.cluster.local:8080
             - name: CORS_ALLOWED_ORIGINS

@@ -300,6 +300,293 @@ spec:
     - Ingress
 
 # ══════════════════════════════════════════════════════════════════════════
+# Runtime internal: Job Controller → Agent Runtime (dispatch runs)
+# ══════════════════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-job-controller-egress-to-agent-runtime
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: job-controller
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: agent-runtime
+      ports:
+        - protocol: TCP
+          port: 8014
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agent-runtime-ingress-from-job-controller
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-runtime
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: job-controller
+      ports:
+        - protocol: TCP
+          port: 8014
+  policyTypes:
+    - Ingress
+
+# ══════════════════════════════════════════════════════════════════════════
+# Agent Runtime → external APIs (OpenAI, etc.) — HTTPS egress
+# ══════════════════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agent-runtime-egress-external-https
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-runtime
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443
+  policyTypes:
+    - Egress
+
+# ══════════════════════════════════════════════════════════════════════════
+# Data layer egress — all services → Postgres (5432) + Redis (6379)
+# ══════════════════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-data
+  namespace: af-edge
+spec:
+  podSelector: {}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              af.layer: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-data
+  namespace: af-platform
+spec:
+  podSelector: {}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              af.layer: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-data
+  namespace: af-runtime
+spec:
+  podSelector: {}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              af.layer: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+  policyTypes:
+    - Egress
+
+# ══════════════════════════════════════════════════════════════════════════
+# Data layer ingress — allow from edge, platform, runtime namespaces
+# ══════════════════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-from-services
+  namespace: af-data
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: agent-framework
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+  policyTypes:
+    - Ingress
+
+# ══════════════════════════════════════════════════════════════════════════
+# Frontend → Gateway BFF (cluster-internal via BACKEND_API_URL)
+# ══════════════════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-egress-to-gateway
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: gateway-bff
+      ports:
+        - protocol: TCP
+          port: 8001
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-ingress-from-frontend
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway-bff
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 8001
+  policyTypes:
+    - Ingress
+
+# ══════════════════════════════════════════════════════════════════════════
+# Frontend → external (ingress from load balancer / NodePort)
+# ══════════════════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-ingress-from-external
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 3000
+  policyTypes:
+    - Ingress
+
+# ══════════════════════════════════════════════════════════════════════════
+# Admin service — ingress from Gateway
+# ══════════════════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-admin-ingress-from-gateway
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: admin
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              af.layer: edge
+          podSelector:
+            matchLabels:
+              app: gateway-bff
+      ports:
+        - protocol: TCP
+          port: 8019
+  policyTypes:
+    - Ingress
+
+# ══════════════════════════════════════════════════════════════════════════
+# Tool Executor → Code Interpreter
+# ══════════════════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tool-executor-egress-to-code-interpreter
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: tool-executor
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: code-interpreter
+      ports:
+        - protocol: TCP
+          port: 8080
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-code-interpreter-ingress-from-tool-executor
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: code-interpreter
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: tool-executor
+      ports:
+        - protocol: TCP
+          port: 8080
+  policyTypes:
+    - Ingress
+
+# ══════════════════════════════════════════════════════════════════════════
 # All services → Data namespace (PostgreSQL + Redis)
 # ══════════════════════════════════════════════════════════════════════════
 ---

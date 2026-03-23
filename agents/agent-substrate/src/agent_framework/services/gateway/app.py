@@ -89,10 +89,19 @@ async def lifespan(app):
         await app.state.code_interpreter_client.close()
 
 
+import json as _json
+
+_cors_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+_cors_origins = (
+    _json.loads(_cors_raw)
+    if _cors_raw
+    else ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"]
+)
+
 app = create_service_app(
     title="Gateway BFF",
     lifespan=lifespan,
-    cors_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    cors_origins=_cors_origins,
 )
 app.include_router(auth_router)
 app.include_router(thread_router)

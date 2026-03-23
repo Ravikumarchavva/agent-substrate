@@ -30,6 +30,8 @@ spec:
           env:
             - name: SERVICE_NAME
               value: job-controller
+            - name: AGENT_RUNTIME_SERVICE_URL
+              value: http://agent-runtime.af-runtime.svc.cluster.local:8014
           resources:
             requests:
               cpu: 200m

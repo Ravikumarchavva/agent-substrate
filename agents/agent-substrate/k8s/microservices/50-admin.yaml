@@ -2,10 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: admin
-  namespace: af-platform
+  namespace: af-runtime
   labels:
     app: admin
-    af.service-role: admin-control-plane
+    af.service-role: admin
 spec:
   replicas: 1
   selector:
@@ -15,7 +15,7 @@ spec:
     metadata:
       labels:
         app: admin
-        af.service-role: admin-control-plane
+        af.service-role: admin
     spec:
       serviceAccountName: admin
       containers:
@@ -26,7 +26,7 @@ spec:
               name: http
           envFrom:
             - secretRef:
-                name: platform-secrets
+                name: runtime-secrets
           env:
             - name: SERVICE_NAME
               value: admin
@@ -54,7 +54,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: admin
-  namespace: af-platform
+  namespace: af-runtime
   labels:
     app: admin
 spec:
@@ -69,4 +69,4 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: admin
-  namespace: af-platform
+  namespace: af-runtime

@@ -34,17 +34,21 @@ async def lifespan(app):
 
     # Redis + EventBus
     app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
-    app.state.event_bus = EventBus(app.state.redis)
+
+    event_bus = EventBus(redis_url)
+    await event_bus.connect()
+    app.state.event_bus = event_bus
 
     # File store — use local filesystem by default
     from agent_framework.core.storage.local import LocalFileStore
 
     storage_path = os.environ.get("FILE_STORAGE_PATH", "./data/files")
-    app.state.file_store = LocalFileStore(base_path=storage_path)
+    app.state.file_store = LocalFileStore(root=storage_path)
 
     logger.info("File Store service started")
     yield
 
+    await app.state.event_bus.disconnect()
     await app.state.redis.aclose()
     await engine.dispose()
 

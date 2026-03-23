@@ -1,0 +1,122 @@
+# Kind Development Ingress
+# Uses nginx-ingress (already installed in the cluster) to provide stable
+# access on port 80 — no port-forwards, no NodePort juggling.
+#
+# Access:
+#   http://localhost/              → frontend (Next.js)
+#   http://localhost/threads       → gateway-bff API
+#   http://localhost/chat          → gateway-bff API
+#   http://localhost/stream/*      → gateway-bff SSE
+#   http://localhost/tasks         → gateway-bff API
+#   http://localhost/jobs          → gateway-bff API
+#   http://localhost/hitl          → gateway-bff API
+#   http://localhost/files         → gateway-bff API
+#   http://localhost/admin         → gateway-bff API
+#   http://localhost/mcp-apps      → gateway-bff API
+#   http://localhost/health        → gateway-bff health
+#
+# Prerequisites: nginx-ingress-controller must be running (already is — 26d old)
+# Apply: kubectl apply -f k8s/microservices/kind/ingress.yaml
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: af-ingress
+  namespace: af-edge
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # No TLS for local dev
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Long timeouts required for SSE streams (chat, live-stream)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    # Disable buffering — required for SSE (EventSource) to work
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # HTTP/1.1 keeps the connection alive for SSE
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # ── Backend API → gateway-bff (specific paths, highest priority) ──
+          - path: /threads
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /chat
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /stream
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /tasks
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /jobs
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /hitl
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /files
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /mcp-apps
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-bff
+                port:
+                  number: 8001
+          # ── Frontend (Next.js) — catch-all, lowest priority ──
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000

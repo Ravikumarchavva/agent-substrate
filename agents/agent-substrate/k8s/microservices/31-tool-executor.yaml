@@ -33,7 +33,7 @@ spec:
             - name: CODE_INTERPRETER_URL
               value: http://code-interpreter.af-runtime.svc.cluster.local:8080
             - name: ARTIFACT_SERVICE_URL
-              value: http://artifact.af-runtime.svc.cluster.local:8018
+              value: http://file-store.af-runtime.svc.cluster.local:8018
             - name: CI_HEADLESS_SERVICE
               value: code-interpreter-headless
             - name: CI_NAMESPACE

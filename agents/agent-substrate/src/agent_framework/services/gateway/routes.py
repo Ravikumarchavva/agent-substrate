@@ -29,6 +29,7 @@ from fastapi.responses import StreamingResponse
 from agent_framework.shared.contracts.conversation import (
     ChatRequest,
     ThreadCreate,
+    ThreadUpdate,
 )
 from agent_framework.shared.contracts.human_gate import HITLResponse
 
@@ -107,6 +108,13 @@ async def get_thread(thread_id: str, request: Request):
     return await client.get_thread(token, thread_id)
 
 
+@thread_router.patch("/{thread_id}")
+async def update_thread(thread_id: str, body: ThreadUpdate, request: Request):
+    token = _get_auth_token(request)
+    client = request.app.state.conversation_client
+    return await client.update_thread(token, thread_id, body.model_dump(exclude_none=True))
+
+
 @thread_router.delete("/{thread_id}", status_code=204)
 async def delete_thread(thread_id: str, request: Request):
     token = _get_auth_token(request)
@@ -161,8 +169,23 @@ async def chat(body: ChatRequest, request: Request):
     try:
         run_result = await workflow.start_run(token, run_payload)
     except Exception as e:
-        logger.exception("Failed to start workflow run")
-        raise HTTPException(status_code=502, detail=f"Workflow service error: {e}")
+                # 409 = a run is already active for this thread (stale run, e.g. after page refresh).
+        # Auto-cancel it, then retry once so the user doesn't have to.
+        import httpx
+        if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 409:
+            logger.warning("Stale run detected for thread %s — cancelling and retrying", body.thread_id)
+            try:
+                await workflow.cancel_run(token, str(body.thread_id))
+            except Exception:
+                pass
+            try:
+                run_result = await workflow.start_run(token, run_payload)
+            except Exception as retry_err:
+                logger.exception("Retry after cancel failed")
+                raise HTTPException(status_code=502, detail=f"Workflow service error: {retry_err}")
+        else:
+            logger.exception("Failed to start workflow run")
+            raise HTTPException(status_code=502, detail=f"Workflow service error: {e}")
 
     run_id = run_result.get("run_id", "")
 
@@ -175,11 +198,14 @@ async def chat(body: ChatRequest, request: Request):
 
         try:
             async with httpx.AsyncClient(timeout=None) as client:
+                hdrs: dict[str, str] = {}
+                if token:
+                    hdrs["Authorization"] = f"Bearer {token}"
                 async with client.stream(
                     "GET",
                     f"{stream_client._base_url}/stream/{str(body.thread_id)}",
                     params={"run_id": run_id},
-                    headers={"Authorization": f"Bearer {token}"},
+                    headers=hdrs,
                 ) as resp:
                     async for line in resp.aiter_lines():
                         if await request.is_disconnected():

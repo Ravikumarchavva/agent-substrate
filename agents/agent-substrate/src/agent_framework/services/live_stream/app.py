@@ -25,10 +25,13 @@ async def lifespan(app):
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
     app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
-    app.state.event_bus = EventBus(app.state.redis)
+
+    event_bus = EventBus(redis_url)
+    await event_bus.connect()
+    app.state.event_bus = event_bus
 
     # Start the stream projector
-    projector = StreamProjector(app.state.redis, app.state.event_bus)
+    projector = StreamProjector(app.state.redis, event_bus)
     app.state.projector = projector
 
     # Start background event listener
@@ -45,6 +48,7 @@ async def lifespan(app):
     except asyncio.CancelledError:
         pass
 
+    await event_bus.disconnect()
     await app.state.redis.aclose()
 
 

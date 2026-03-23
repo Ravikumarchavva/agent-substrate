@@ -176,12 +176,16 @@ async def cancel_run_endpoint(
     )
 
 
-@router.post("/runs/{thread_id}/cancel", name="cancel_by_thread")
+@router.post("/threads/{thread_id}/cancel")
 async def cancel_by_thread_endpoint(
     thread_id: uuid.UUID,
     db: AsyncSession = Depends(_get_db),
 ):
-    """Cancel the active workflow run for a thread (convenience for Gateway)."""
+    """Cancel the active workflow run for a thread (convenience for Gateway).
+
+    Uses a distinct path (/threads/{thread_id}/cancel) to avoid ambiguity
+    with /runs/{run_id}/cancel which has the same URL template pattern.
+    """
     active = await get_active_run_for_thread(db, thread_id)
     if not active:
         return CancelOut(

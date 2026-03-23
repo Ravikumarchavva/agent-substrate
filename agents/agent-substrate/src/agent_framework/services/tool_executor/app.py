@@ -67,7 +67,10 @@ async def lifespan(app):
 
     # Redis + EventBus
     app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
-    app.state.event_bus = EventBus(app.state.redis)
+
+    event_bus = EventBus(redis_url)
+    await event_bus.connect()
+    app.state.event_bus = event_bus
 
     # Code Interpreter HTTP client (optional — only if URL is configured)
     ci_client = None
@@ -111,6 +114,7 @@ async def lifespan(app):
 
     if ci_client:
         await ci_client.close()
+    await app.state.event_bus.disconnect()
     await app.state.redis.aclose()
 
 

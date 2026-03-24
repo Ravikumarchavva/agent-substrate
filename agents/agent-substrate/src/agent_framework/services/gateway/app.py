@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import json as _json
 from contextlib import asynccontextmanager
 
 from agent_framework.services.base import create_service_app
@@ -89,7 +90,6 @@ async def lifespan(app):
         await app.state.code_interpreter_client.close()
 
 
-import json as _json
 
 _cors_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
 _cors_origins = (

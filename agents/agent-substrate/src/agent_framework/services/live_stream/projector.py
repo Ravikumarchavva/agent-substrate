@@ -97,14 +97,11 @@ class StreamProjector:
                 data = json.dumps(event)
                 yield f"event: {event_type}\ndata: {data}\n\n"
 
-                # Check for terminal events
-                if event_type in (
-                    "agent.run_completed",
-                    "agent.run_failed",
-                    "completion",
-                ):
-                    if event.get("complete"):
-                        break
+                # Terminate the stream only on explicit run-level terminal events.
+                # Individual "completion" events may be intermediate (has_tool_calls=True)
+                # and must NOT close the stream prematurely.
+                if event_type in ("agent.run_completed", "agent.run_failed"):
+                    break
 
         finally:
             self.unsubscribe(thread_id, queue)
@@ -121,8 +118,10 @@ class StreamProjector:
             "agent.tool_result",
             "agent.run_completed",
             "agent.run_failed",
-            "hitl.request_created",
-            "hitl.request_resolved",
+            "hitl.approval_requested",
+            "hitl.approval_resolved",
+            "hitl.input_requested",
+            "hitl.input_resolved",
             "task.list_created",
             "task.updated",
             "task.added",
@@ -148,8 +147,13 @@ class StreamProjector:
                     event_type = envelope.get("event_type", payload.get("type", ""))
                     thread_id = payload.get("thread_id", "")
                     if thread_id:
-                        # Merge event_type into payload for downstream consumers
-                        broadcast_data = {**payload, "type": event_type}
+                        # Preserve the `type` field already set by the publisher
+                        # (agent-runtime embeds frontend-expected types like "text_delta",
+                        # "completion", "tool_result" directly in the payload).
+                        # Only fall back to the channel event_type if payload has none.
+                        broadcast_data = dict(payload)
+                        if not broadcast_data.get("type"):
+                            broadcast_data["type"] = event_type
                         await self.broadcast(thread_id, broadcast_data)
                 except json.JSONDecodeError:
                     logger.warning("Invalid JSON in event: %s", message["data"][:200])

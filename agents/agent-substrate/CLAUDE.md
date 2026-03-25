@@ -31,7 +31,7 @@ docker compose up -d postgres redis
 docker compose --profile mcp up -d mcp-server   # → localhost:9000/sse
 
 # Start monolith backend
-uv run uvicorn agent_framework.server.app:app --port 8001 --reload
+uv run uvicorn agent_framework.server.app:app --port 8000 --reload
 
 # Run tests
 uv run pytest
@@ -285,7 +285,7 @@ SYSTEM_INSTRUCTIONS=...     # per-agent system prompt override for agent_runtime
 | PostgreSQL | 5432 | `DATABASE_URL` uses `localhost:5432` |
 | Redis | 6379 | `REDIS_URL` uses `localhost:6379` |
 | MCP demo server | 9000 | SSE at `localhost:9000/sse` (profile: `mcp`) |
-| Monolith backend | 8001 | `uv run uvicorn ... --port 8001` |
+| Monolith backend | 8000 | `uv run uvicorn ... --port 8000` |
 | Tempo | 4318 | OTLP HTTP |
 | Grafana | 3001 | Dashboard |
 

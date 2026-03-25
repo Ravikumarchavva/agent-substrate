@@ -1,0 +1,1321 @@
+# =============================================================================
+# Observability Stack for Agent Framework (Kind Cluster)
+# =============================================================================
+#
+# Deploys into the af-observability namespace:
+#   1. Loki        — Log aggregation (StatefulSet + ConfigMap + PVC + Service)
+#   2. Promtail    — Log shipper (DaemonSet + RBAC + ConfigMap)
+#   3. Tempo       — Distributed tracing (Deployment + ConfigMap + Service)
+#   4. Prometheus  — Metrics collection (Deployment + RBAC + ConfigMap + PVC + Service)
+#   5. Grafana     — Dashboards (Deployment + datasource/dashboard ConfigMaps + PVC + Service)
+#   6. Node Exporter — Host metrics (DaemonSet + Service)
+#
+# Apply:
+#   kubectl apply -f k8s/microservices/kind/observability.yaml
+#
+# All resource requests are conservative for single-node Kind clusters.
+# =============================================================================
+
+# =============================================================================
+# 1. LOKI — Log Aggregation
+# =============================================================================
+
+# -- Loki configuration (single-tenant, local filesystem storage) --
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: af-observability
+  labels:
+    app: loki
+    app.kubernetes.io/part-of: agent-framework
+data:
+  local-config.yaml: |
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+
+    common:
+      path_prefix: /loki
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+
+    schema_config:
+      configs:
+        - from: "2020-01-01"
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /loki/boltdb-shipper-active
+        cache_location: /loki/boltdb-shipper-cache
+        shared_store: filesystem
+      filesystem:
+        directory: /loki/chunks
+
+    ingester:
+      wal:
+        dir: /loki/wal
+
+    limits_config:
+      retention_period: 168h
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+
+    compactor:
+      working_directory: /loki/compactor
+      shared_store: filesystem
+      retention_enabled: true
+---
+# -- Loki StatefulSet --
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: loki
+  namespace: af-observability
+  labels:
+    app: loki
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  serviceName: loki
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+        app.kubernetes.io/part-of: agent-framework
+    spec:
+      containers:
+        - name: loki
+          image: grafana/loki:2.9.4
+          ports:
+            - containerPort: 3100
+              name: http
+          args:
+            - -config.file=/etc/loki/local-config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+            - name: data
+              mountPath: /loki
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 5Gi
+---
+# -- Loki Service --
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: af-observability
+  labels:
+    app: loki
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  type: ClusterIP
+  selector:
+    app: loki
+  ports:
+    - port: 3100
+      targetPort: 3100
+      name: http
+
+---
+# =============================================================================
+# 2. PROMTAIL — Log Shipper (DaemonSet)
+# =============================================================================
+
+# -- Promtail ServiceAccount + RBAC for reading pod logs --
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: promtail
+  namespace: af-observability
+  labels:
+    app: promtail
+    app.kubernetes.io/part-of: agent-framework
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: promtail
+  labels:
+    app: promtail
+    app.kubernetes.io/part-of: agent-framework
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy", "services", "endpoints", "pods"]
+    verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: promtail
+  labels:
+    app: promtail
+    app.kubernetes.io/part-of: agent-framework
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: promtail
+subjects:
+  - kind: ServiceAccount
+    name: promtail
+    namespace: af-observability
+---
+# -- Promtail configuration --
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-config
+  namespace: af-observability
+  labels:
+    app: promtail
+    app.kubernetes.io/part-of: agent-framework
+data:
+  promtail.yaml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+
+    positions:
+      filename: /tmp/positions.yaml
+
+    clients:
+      - url: http://loki.af-observability.svc.cluster.local:3100/loki/api/v1/push
+
+    scrape_configs:
+      # Discover all pods in af-* namespaces
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # Only scrape pods in af-* namespaces
+          - source_labels: [__meta_kubernetes_namespace]
+            regex: af-.*
+            action: keep
+          # Use pod name as instance label
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          # Extract namespace label
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          # Extract container name label
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          # Extract the 'app' label from pod labels
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          # Extract the 'af.layer' label from pod labels
+          - source_labels: [__meta_kubernetes_pod_label_af_layer]
+            target_label: af_layer
+          # Build the log file path from pod metadata
+          - source_labels:
+              - __meta_kubernetes_pod_uid
+              - __meta_kubernetes_pod_container_name
+            target_label: __path__
+            separator: /
+            replacement: /var/log/pods/*$1/*.log
+        pipeline_stages:
+          - docker: {}
+          - labels:
+              namespace:
+              pod:
+              container:
+              app:
+---
+# -- Promtail DaemonSet --
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail
+  namespace: af-observability
+  labels:
+    app: promtail
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  selector:
+    matchLabels:
+      app: promtail
+  template:
+    metadata:
+      labels:
+        app: promtail
+        app.kubernetes.io/part-of: agent-framework
+    spec:
+      serviceAccountName: promtail
+      containers:
+        - name: promtail
+          image: grafana/promtail:2.9.4
+          args:
+            - -config.file=/etc/promtail/promtail.yaml
+          ports:
+            - containerPort: 9080
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/promtail
+            - name: pods-log
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: docker-containers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      volumes:
+        - name: config
+          configMap:
+            name: promtail-config
+        - name: pods-log
+          hostPath:
+            path: /var/log/pods
+        - name: docker-containers
+          hostPath:
+            path: /var/lib/docker/containers
+
+---
+# =============================================================================
+# 3. TEMPO — Distributed Tracing
+# =============================================================================
+
+# -- Tempo configuration (OTLP receivers, local storage, metrics generator) --
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  namespace: af-observability
+  labels:
+    app: tempo
+    app.kubernetes.io/part-of: agent-framework
+data:
+  tempo.yaml: |
+    server:
+      http_listen_port: 3200
+
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: "0.0.0.0:4317"
+            http:
+              endpoint: "0.0.0.0:4318"
+
+    ingester:
+      trace_idle_period: 10s
+      max_block_bytes: 1_000_000
+      max_block_duration: 5m
+
+    compactor:
+      compaction:
+        block_retention: 1h
+
+    storage:
+      trace:
+        backend: local
+        wal:
+          path: /tmp/tempo/wal
+        local:
+          path: /tmp/tempo/blocks
+
+    metrics_generator:
+      registry:
+        external_labels:
+          source: tempo
+          cluster: kind
+      storage:
+        path: /tmp/tempo/generator/wal
+        remote_write:
+          - url: http://prometheus.af-observability.svc.cluster.local:9090/api/v1/write
+            send_exemplars: true
+      processor:
+        span_metrics:
+          dimensions:
+            - service.name
+            - http.method
+            - http.status_code
+        service_graphs:
+          dimensions:
+            - service.name
+
+    overrides:
+      defaults:
+        metrics_generator:
+          processors:
+            - span-metrics
+            - service-graphs
+---
+# -- Tempo Deployment --
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  namespace: af-observability
+  labels:
+    app: tempo
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+        app.kubernetes.io/part-of: agent-framework
+    spec:
+      containers:
+        - name: tempo
+          image: grafana/tempo:2.3.1
+          args:
+            - -config.file=/etc/tempo/tempo.yaml
+          ports:
+            - containerPort: 3200
+              name: http
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo
+            - name: data
+              mountPath: /tmp/tempo
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: tempo-config
+        - name: data
+          emptyDir: {}
+---
+# -- Tempo Service --
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  namespace: af-observability
+  labels:
+    app: tempo
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  type: ClusterIP
+  selector:
+    app: tempo
+  ports:
+    - port: 3200
+      targetPort: 3200
+      name: http
+    - port: 4317
+      targetPort: 4317
+      name: otlp-grpc
+    - port: 4318
+      targetPort: 4318
+      name: otlp-http
+
+---
+# =============================================================================
+# 4. PROMETHEUS — Metrics Collection
+# =============================================================================
+
+# -- Prometheus ServiceAccount + RBAC for Kubernetes service discovery --
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: af-observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: agent-framework
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: agent-framework
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["extensions", "networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: agent-framework
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: af-observability
+---
+# -- Prometheus configuration (scrape configs for pods, nodes, tempo, loki) --
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: af-observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: agent-framework
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      # --- Kubernetes Pods (annotation-based discovery) ---
+      # Pods must have prometheus.io/scrape: "true" annotation to be scraped.
+      # Optional: prometheus.io/port and prometheus.io/path annotations.
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels:
+              [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: app
+
+      # --- Kubernetes Nodes (kubelet metrics) ---
+      - job_name: kubernetes-nodes
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      # --- Tempo internal metrics ---
+      - job_name: tempo-metrics
+        static_configs:
+          - targets:
+              - tempo.af-observability.svc.cluster.local:3200
+
+      # --- Loki internal metrics ---
+      - job_name: loki-metrics
+        static_configs:
+          - targets:
+              - loki.af-observability.svc.cluster.local:3100
+---
+# -- Prometheus PVC --
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: af-observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 5Gi
+---
+# -- Prometheus Deployment --
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: af-observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        app.kubernetes.io/part-of: agent-framework
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.49.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+            - --web.enable-remote-write-receiver
+            - --web.console.libraries=/etc/prometheus/console_libraries
+            - --web.console.templates=/etc/prometheus/consoles
+          ports:
+            - containerPort: 9090
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+# -- Prometheus Service --
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: af-observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: http
+
+---
+# =============================================================================
+# 5. GRAFANA — Dashboards & Visualization
+# =============================================================================
+
+# -- Grafana datasource provisioning --
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: af-observability
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: agent-framework
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.af-observability.svc.cluster.local:3100
+        isDefault: false
+      - name: Tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.af-observability.svc.cluster.local:3200
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            filterByTraceID: true
+          nodeGraph:
+            enabled: true
+          serviceMap:
+            datasourceUid: prometheus
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.af-observability.svc.cluster.local:9090
+        isDefault: true
+---
+# -- Grafana dashboard provider configuration --
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: af-observability
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: agent-framework
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: Agent Framework
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: false
+---
+# -- Grafana pre-provisioned dashboards --
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: af-observability
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: agent-framework
+data:
+  # ---- Services Overview Dashboard ----
+  services-overview.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "id": 1,
+          "title": "Service Health",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 1 },
+                  { "color": "green", "value": 5 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "title": "Running Pods",
+          "type": "stat",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "count(up{namespace=~\"af-.*\"} == 1)",
+              "legendFormat": "pods",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.01 },
+                  { "color": "red", "value": 0.1 }
+                ]
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 },
+          "id": 3,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "title": "5xx Error Rate",
+          "type": "stat",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))",
+              "legendFormat": "errors/s",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+          "id": 4,
+          "title": "Logs",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": { "h": 10, "w": 12, "x": 0, "y": 8 },
+          "id": 5,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "title": "Recent Errors",
+          "type": "logs",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "loki" },
+              "expr": "{namespace=~\"af-.*\"} |= \"ERROR\"",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": { "h": 10, "w": 12, "x": 12, "y": 8 },
+          "id": 6,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "title": "All Service Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "loki" },
+              "expr": "{namespace=~\"af-.*\"}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+          "id": 7,
+          "title": "Traces",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
+          "id": 8,
+          "options": {
+            "showHeader": true,
+            "sortBy": []
+          },
+          "title": "Recent Traces",
+          "type": "table",
+          "targets": [
+            {
+              "datasource": { "type": "tempo", "uid": "tempo" },
+              "queryType": "traceql",
+              "query": "{}",
+              "limit": 20,
+              "refId": "A"
+            }
+          ]
+        }
+      ],
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["agent-framework", "overview"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Services Overview",
+      "uid": "af-services-overview",
+      "version": 1
+    }
+
+  # ---- Frontend Logs Dashboard ----
+  frontend-logs.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+          "id": 1,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "title": "Frontend Application Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "loki" },
+              "expr": "{namespace=\"af-edge\", app=\"frontend\"} | logfmt | level=~\"$level\"",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+          "id": 2,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "title": "Frontend API Errors",
+          "type": "logs",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "loki" },
+              "expr": "{namespace=\"af-edge\", app=\"frontend\"} |= \"error\" | json",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 5 },
+                  { "color": "red", "value": 20 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 6, "w": 8, "x": 0, "y": 22 },
+          "id": 3,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "title": "Frontend Errors (Last 1h)",
+          "type": "stat",
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "loki" },
+              "expr": "count_over_time({namespace=\"af-edge\", app=\"frontend\"} |= \"ERROR\"[1h])",
+              "refId": "A"
+            }
+          ]
+        }
+      ],
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["agent-framework", "frontend"],
+      "templating": {
+        "list": [
+          {
+            "current": { "selected": false, "text": "All", "value": "" },
+            "description": "Log level filter",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Level",
+            "name": "level",
+            "options": [
+              { "selected": true, "text": "All", "value": ".*" },
+              { "selected": false, "text": "error", "value": "error" },
+              { "selected": false, "text": "warn", "value": "warn" },
+              { "selected": false, "text": "info", "value": "info" },
+              { "selected": false, "text": "debug", "value": "debug" }
+            ],
+            "query": "",
+            "type": "custom"
+          },
+          {
+            "current": { "selected": false, "text": "All", "value": "" },
+            "description": "Source filter",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Source",
+            "name": "source",
+            "options": [
+              { "selected": true, "text": "All", "value": ".*" },
+              { "selected": false, "text": "frontend", "value": "frontend" },
+              { "selected": false, "text": "backend", "value": "backend" }
+            ],
+            "query": "",
+            "type": "custom"
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Frontend Logs",
+      "uid": "af-frontend-logs",
+      "version": 1
+    }
+---
+# -- Grafana PVC --
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: af-observability
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 1Gi
+---
+# -- Grafana Deployment --
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: af-observability
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+        app.kubernetes.io/part-of: agent-framework
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.3.1
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Viewer"
+            - name: GF_SERVER_ROOT_URL
+              value: "http://localhost/grafana/"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: data
+              mountPath: /var/lib/grafana
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+---
+# -- Grafana Service (port 3001 externally → 3000 container) --
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: af-observability
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  type: ClusterIP
+  selector:
+    app: grafana
+  ports:
+    - port: 3001
+      targetPort: 3000
+      name: http
+
+---
+# =============================================================================
+# 6. NODE EXPORTER — Host Metrics (DaemonSet)
+# =============================================================================
+
+# -- Node Exporter DaemonSet --
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: af-observability
+  labels:
+    app: node-exporter
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+        app.kubernetes.io/part-of: agent-framework
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.7.0
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($$|/)
+          ports:
+            - containerPort: 9100
+              name: metrics
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+---
+# -- Node Exporter Service --
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: af-observability
+  labels:
+    app: node-exporter
+    app.kubernetes.io/part-of: agent-framework
+spec:
+  type: ClusterIP
+  selector:
+    app: node-exporter
+  ports:
+    - port: 9100
+      targetPort: 9100
+      name: metrics
+---
+# =============================================================================
+# 7. Grafana Ingress — accessible at http://localhost/grafana
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: af-observability
+  labels:
+    app.kubernetes.io/part-of: agent-framework
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3001

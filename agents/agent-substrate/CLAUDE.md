@@ -293,6 +293,57 @@ Microservice ports: see `docker-compose.microservices.yml`.
 
 ---
 
+## Observability Stack (Kind cluster)
+
+All observability services run in `af-observability` namespace.
+Deploy: `kubectl apply -k k8s/overlays/kind/` (includes observability)
+
+| Component | Image | Internal Port | Purpose |
+|---|---|---|---|
+| Loki | `grafana/loki:2.9.4` | 3100 | Log aggregation |
+| Promtail | `grafana/promtail:2.9.4` | DaemonSet | Scrapes pod logs → Loki |
+| Tempo | `grafana/tempo:2.3.1` | 3200, 4317, 4318 | Distributed tracing (OTLP) |
+| Prometheus | `prom/prometheus:v2.49.1` | 9090 | Metrics collection |
+| Grafana | `grafana/grafana:10.3.1` | 3000→3001 | Dashboards at `http://localhost/grafana/` |
+| Node Exporter | `prom/node-exporter:v1.7.0` | 9100 | Host-level metrics |
+
+### Access
+- **Grafana**: `http://localhost/grafana/` (admin/admin, anonymous read)
+- **Pre-provisioned datasources**: Loki, Tempo, Prometheus (auto-configured)
+- **Pre-provisioned dashboards**: "Services Overview" + "Frontend Logs"
+
+### Traces
+All services send OTLP traces to `http://tempo.af-observability.svc.cluster.local:4318`.
+Set via `OTLP_ENDPOINT` env var (injected by kustomize patch for Kind).
+
+### Logs
+- Backend services output structured JSON via `core/logger.py` → Promtail scrapes stdout
+- Frontend sends warn/error logs to `/api/logs` → structured JSON stdout → Promtail
+- Query in Grafana via Loki: `{namespace=~"af-.*"}`
+
+---
+
+## CI/CD
+
+GitHub Actions workflows in `.github/workflows/ci.yml`:
+- **Lint**: Ruff check + format
+- **Type check**: Pyright (soft-fail)
+- **Test**: pytest with Postgres + Redis services
+- **Build**: Docker image to GHCR
+- **Security**: pip-audit
+
+---
+
+## Smoke Tests
+
+Run cluster smoke tests:
+```powershell
+./k8s/overlays/kind/smoke-test.ps1
+```
+Tests pod health, endpoints, chat flow, and observability stack.
+
+---
+
 ## Coding Standards
 
 - **Async everywhere** — every handler, service method, tool `execute()`, DB call is `async def`

@@ -7,10 +7,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$scriptDir  = Split-Path -Parent $PSScriptRoot   # k8s/microservices
-$repoRoot   = Split-Path -Parent (Split-Path -Parent $scriptDir)
+$scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path   # k8s/overlays/kind
+$k8sRoot    = Split-Path -Parent (Split-Path -Parent $scriptDir) # k8s/
+$repoRoot   = Split-Path -Parent $k8sRoot                       # repo root
 $frontendDir = Join-Path (Split-Path -Parent $repoRoot) "ai-chatbot-ui"
-$kindDir    = Join-Path $scriptDir "kind"
 
 Write-Host "=== Microservices Kind Deploy ===" -ForegroundColor Cyan
 Write-Host "Cluster       : $ClusterName"
@@ -29,14 +29,12 @@ foreach ($cmd in @("docker", "kind", "kubectl")) {
     }
 }
 
-# Verify cluster exists
 $clusters = kind get clusters 2>&1
 if ($clusters -notmatch $ClusterName) {
     Write-Error "Kind cluster '$ClusterName' not found. Create it first: kind create cluster --name $ClusterName"
     exit 1
 }
 
-# Switch kubectl context
 kubectl cluster-info --context "kind-$ClusterName" | Out-Null
 Write-Host "  kubectl context set to kind-$ClusterName" -ForegroundColor Green
 
@@ -65,7 +63,6 @@ if (-not $OPENAI_API_KEY) {
     exit 1
 }
 
-# Generate JWT secret and encryption key
 $JWT_SECRET = [System.Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }) -as [byte[]])
 $ENCRYPTION_KEY = & uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>$null
 if (-not $ENCRYPTION_KEY) { $ENCRYPTION_KEY = "dev-only-encryption-key-change-me" }
@@ -76,16 +73,14 @@ Write-Host "  JWT_SECRET      : $(($JWT_SECRET).Substring(0,8))..." -ForegroundC
 # ── 2. Build Docker images ───────────────────────────────────────────────────
 Write-Host "`nStep 2: Building Docker images..." -ForegroundColor Yellow
 
-# Backend (all microservices share single image)
 Write-Host "  Building backend image: $BackendImageTag"
 docker build -t $BackendImageTag -f (Join-Path $repoRoot "Dockerfile") $repoRoot
 if ($LASTEXITCODE -ne 0) { Write-Error "Backend Docker build failed"; exit 1 }
 
-# Frontend
 if (Test-Path $frontendDir) {
     Write-Host "  Building frontend image: $FrontendImageTag"
     docker build -t $FrontendImageTag `
-        --build-arg "NEXT_PUBLIC_API_URL=http://localhost" `
+        --build-arg "NEXT_PUBLIC_API_URL=" `
         -f (Join-Path $frontendDir "Dockerfile") $frontendDir
     if ($LASTEXITCODE -ne 0) { Write-Error "Frontend Docker build failed"; exit 1 }
 } else {
@@ -99,9 +94,10 @@ kind load docker-image $BackendImageTag --name $ClusterName
 kind load docker-image $FrontendImageTag --name $ClusterName
 Write-Host "  Images loaded" -ForegroundColor Green
 
-# ── 4. Apply infrastructure (namespaces, Postgres, Redis) ────────────────────
-Write-Host "`nStep 4: Deploying infrastructure..." -ForegroundColor Yellow
-kubectl apply -f (Join-Path $kindDir "infra.yaml")
+# ── 4. Apply namespaces + infrastructure (Postgres, Redis) ───────────────────
+Write-Host "`nStep 4: Deploying namespaces + infrastructure..." -ForegroundColor Yellow
+kubectl apply -f (Join-Path $k8sRoot "base\namespaces.yaml")
+kubectl apply -f (Join-Path $scriptDir "infra.yaml")
 Write-Host "  Waiting for Postgres..." -ForegroundColor Gray
 kubectl rollout status statefulset/postgres -n af-data --timeout=180s
 Write-Host "  Waiting for Redis..." -ForegroundColor Gray
@@ -133,27 +129,34 @@ foreach ($entry in $nsSecretMap.GetEnumerator()) {
     Write-Host "  $secretName in $ns" -ForegroundColor Green
 }
 
-# ── 6. Deploy all services ───────────────────────────────────────────────────
-Write-Host "`nStep 6: Deploying microservices..." -ForegroundColor Yellow
-kubectl apply -f (Join-Path $kindDir "services.yaml")
+# Frontend OAuth secrets (optional — read from .env if present)
+$googleClientId = $envVars["GOOGLE_CLIENT_ID"]
+$googleClientSecret = $envVars["GOOGLE_CLIENT_SECRET"]
+$spotifyClientId = $envVars["SPOTIFY_CLIENT_ID"]
+$spotifyClientSecret = $envVars["SPOTIFY_CLIENT_SECRET"]
 
-# ── 7. Deploy frontend ──────────────────────────────────────────────────────
-Write-Host "`nStep 7: Deploying frontend..." -ForegroundColor Yellow
-kubectl apply -f (Join-Path $kindDir "frontend.yaml")
-
-# ── 7b. Apply Pod Disruption Budgets ────────────────────────────────────────
-$pdbFile = Join-Path $scriptDir "91-pod-disruption-budgets.yaml"
-if (Test-Path $pdbFile) {
-    Write-Host "`nStep 7b: Applying PodDisruptionBudgets..." -ForegroundColor Yellow
-    kubectl apply -f $pdbFile
-    Write-Host "  PDBs applied" -ForegroundColor Green
+if ($googleClientId -or $spotifyClientId) {
+    kubectl create secret generic frontend-oauth-secrets `
+        --namespace=af-edge `
+        --from-literal="GOOGLE_CLIENT_ID=$googleClientId" `
+        --from-literal="GOOGLE_CLIENT_SECRET=$googleClientSecret" `
+        --from-literal="SPOTIFY_CLIENT_ID=$spotifyClientId" `
+        --from-literal="SPOTIFY_CLIENT_SECRET=$spotifyClientSecret" `
+        --dry-run=client -o yaml | kubectl apply -f -
+    Write-Host "  frontend-oauth-secrets in af-edge" -ForegroundColor Green
 }
 
-# ── 8. Force rollout restart (to catch same-tag image updates) ──────────────
-Write-Host "`nStep 8: Restarting deployments for fresh images..." -ForegroundColor Yellow
+# ── 6. Deploy everything via kustomize ───────────────────────────────────────
+Write-Host "`nStep 6: Deploying all services via kustomize..." -ForegroundColor Yellow
+kubectl apply -k $scriptDir
+Write-Host "  Kustomize apply complete" -ForegroundColor Green
+
+# ── 7. Force rollout restart (to catch same-tag image updates) ──────────────
+Write-Host "`nStep 7: Restarting deployments for fresh images..." -ForegroundColor Yellow
 
 $deployments = @(
     @{Name="gateway-bff";          NS="af-edge"},
+    @{Name="frontend";             NS="af-edge"},
     @{Name="identity-auth";        NS="af-platform"},
     @{Name="policy-authorization"; NS="af-platform"},
     @{Name="conversation";         NS="af-runtime"},
@@ -163,16 +166,15 @@ $deployments = @(
     @{Name="human-gate";           NS="af-runtime"},
     @{Name="live-stream";          NS="af-runtime"},
     @{Name="file-store";           NS="af-runtime"},
-    @{Name="admin";                NS="af-runtime"},
-    @{Name="frontend";             NS="af-edge"}
+    @{Name="admin";                NS="af-runtime"}
 )
 
 foreach ($d in $deployments) {
     kubectl rollout restart deployment/$($d.Name) -n $($d.NS) 2>$null
 }
 
-# ── 9. Wait for all rollouts ─────────────────────────────────────────────────
-Write-Host "`nStep 9: Waiting for all deployments to be ready..." -ForegroundColor Yellow
+# ── 8. Wait for all rollouts ─────────────────────────────────────────────────
+Write-Host "`nStep 8: Waiting for all deployments to be ready..." -ForegroundColor Yellow
 
 $failed = @()
 foreach ($d in $deployments) {
@@ -192,13 +194,13 @@ if ($failed.Count -gt 0) {
     Write-Host "Check logs: kubectl logs -n <namespace> deployment/<name>`n"
 }
 
-# ── 10. Summary ───────────────────────────────────────────────────────────────
+# ── 9. Summary ───────────────────────────────────────────────────────────────
 Write-Host "`n=== Deployment Summary ===" -ForegroundColor Cyan
 Write-Host "Namespaces:"
 kubectl get ns -l app.kubernetes.io/part-of=agent-framework -o custom-columns=NAME:.metadata.name --no-headers 2>$null | ForEach-Object { Write-Host "  $_" }
 
 Write-Host "`nAll pods:"
-foreach ($ns in @("af-data", "af-edge", "af-platform", "af-runtime")) {
+foreach ($ns in @("af-data", "af-edge", "af-platform", "af-runtime", "af-observability")) {
     $pods = kubectl get pods -n $ns --no-headers 2>$null
     if ($pods) {
         Write-Host "  [$ns]" -ForegroundColor Yellow
@@ -206,23 +208,10 @@ foreach ($ns in @("af-data", "af-edge", "af-platform", "af-runtime")) {
     }
 }
 
-Write-Host "`nPodDisruptionBudgets:" -ForegroundColor Cyan
-foreach ($ns in @("af-edge", "af-platform", "af-runtime")) {
-    $pdbs = kubectl get pdb -n $ns --no-headers 2>$null
-    if ($pdbs) {
-        Write-Host "  [$ns]" -ForegroundColor Yellow
-        $pdbs -split "`n" | ForEach-Object { Write-Host "    $_" }
-    }
-}
-
 Write-Host "`n=== Access ===" -ForegroundColor Cyan
-Write-Host "  Frontend (NodePort): http://localhost:30000"
-Write-Host "  Gateway  (port-fwd): kubectl port-forward -n af-edge svc/gateway-bff 8001:8001"
-Write-Host "  Frontend (port-fwd): kubectl port-forward -n af-edge svc/frontend 3001:3000"
-
-Write-Host "`n=== Access ===" -ForegroundColor Cyan
-Write-Host "Frontend    : kubectl port-forward -n af-edge svc/frontend 3000:3000"
-Write-Host "Gateway API : kubectl port-forward -n af-edge svc/gateway-bff 8001:8001"
-Write-Host "Or via NodePort: http://localhost:30000 (if Kind has extraPortMappings)"
+Write-Host "  Frontend     : http://localhost/"
+Write-Host "  Gateway API  : http://localhost/chat, /threads, /stream, ..."
+Write-Host "  Grafana      : http://localhost/grafana/"
+Write-Host "  Health check : http://localhost/health"
 Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Green

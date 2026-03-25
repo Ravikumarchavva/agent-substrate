@@ -1,12 +1,5 @@
 # Infrastructure for microservices on Kind: Postgres + Redis in af-data namespace
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: af-data
-  labels:
-    app.kubernetes.io/part-of: agent-framework
-    af.layer: data
+# (af-data namespace is defined in base/namespaces.yaml)
 ---
 # ── PostgreSQL ────────────────────────────────────────────────────────────────
 apiVersion: v1

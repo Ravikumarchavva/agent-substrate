@@ -16,7 +16,7 @@ shows a live Kanban task board, and supports HITL (human-in-the-loop) approvals.
 | Package mgr | **pnpm** |
 | State | React `useState` / `useReducer` (no external store) |
 | API comms | `fetch` + `EventSource` (SSE) |
-| Backend | `http://localhost:8001` (env: `NEXT_PUBLIC_API_URL`) |
+| Backend | `http://localhost:8000` (env: `NEXT_PUBLIC_API_URL`) |
 
 ---
 
@@ -29,7 +29,8 @@ src/
 │   ├── globals.css           ← CSS custom properties (--background, --card, etc.)
 │   └── api/
 │       ├── chat/route.ts     ← Proxy to backend /chat SSE
-│       └── chat/respond/[requestId]/route.ts ← HITL approval bridge
+│       ├── chat/respond/[requestId]/route.ts ← HITL approval bridge
+│       └── logs/route.ts     ← Frontend log collector for Loki
 ├── components/
 │   ├── Header.tsx            ← Top bar, theme toggle, settings menu
 │   ├── Sidebar.tsx           ← Thread list, new chat button
@@ -39,7 +40,8 @@ src/
 │   ├── HumanInputCard.tsx    ← HITL input prompt card
 │   └── ToolApprovalCard.tsx  ← Tool approval request card
 ├── lib/
-│   └── api.ts                ← All backend API calls (threads, tasks, chat, HITL)
+│   ├── api.ts                ← All backend API calls (threads, tasks, chat, HITL)
+│   └── logger.ts             ← Structured frontend logger (batches to /api/logs)
 ├── types/
 │   └── index.ts              ← Shared TypeScript types (Thread, Message, Task, etc.)
 └── contexts/
@@ -142,10 +144,40 @@ await api.deleteTask(listId, taskId)
 
 ## Environment Variables (`.env.local`)
 ```
-NEXT_PUBLIC_API_URL=http://localhost:8001
+NEXT_PUBLIC_API_URL=http://localhost:8000
+BACKEND_API_URL=http://localhost:8000     # server-side only (Next.js API routes)
 GOOGLE_CLIENT_ID=...       # optional, for Google OAuth
 GOOGLE_CLIENT_SECRET=...   # optional
 SPOTIFY_CLIENT_ID=...      # optional
 SPOTIFY_CLIENT_SECRET=...  # optional
 DATABASE_URL=...            # Prisma (for session / OAuth)
 ```
+
+### Docker / K8s Build Rules
+`NEXT_PUBLIC_API_URL` is **baked at build time** into the JS bundle.
+- **Local dev**: `http://localhost:8000`
+- **k8s (Kind)**: `""` (empty string) — browser uses relative paths, ingress routes to gateway
+- Pass via: `docker build --build-arg NEXT_PUBLIC_API_URL="" ...`
+- `BACKEND_API_URL` is read at runtime (server-side only) — safe to set via k8s env vars.
+
+---
+
+## Frontend Logger (`src/lib/logger.ts`)
+Structured logger singleton. Only `warn`/`error` are batched to `/api/logs` for Loki collection.
+```ts
+import { logger } from "@/lib/logger";
+
+logger.info("Thread opened", { component: "Sidebar", action: "open_thread" });
+logger.error("SSE failed", { component: "ChatStream", metadata: { status: 500 } });
+```
+
+---
+
+## CI/CD
+
+GitHub Actions workflow in `.github/workflows/ci.yml`:
+- **Lint**: ESLint
+- **Type check**: `tsc --noEmit`
+- **Build**: Next.js production build (with `NEXT_PUBLIC_API_URL=""`)
+- **Docker**: Image to GHCR with BuildKit cache
+- **Security**: `pnpm audit`

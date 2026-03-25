@@ -151,7 +151,7 @@ export function ToolApprovalCard({
             <div className="flex gap-2">
               <button
                 onClick={handleApprove}
-                className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors"
+              className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
                 style={{ background: "var(--accent)" }}
                 onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
                 onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
@@ -160,7 +160,7 @@ export function ToolApprovalCard({
               </button>
               <button
                 onClick={handleDeny}
-                className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors"
+              className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
                 style={{ background: "#dc2626" }}
                 onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
                 onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
@@ -170,7 +170,7 @@ export function ToolApprovalCard({
               {showModify ? (
                 <button
                   onClick={handleModifySubmit}
-                  className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors"
+                  className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
                   style={{ background: "#2563eb" }}
                   onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
                   onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
@@ -180,7 +180,7 @@ export function ToolApprovalCard({
               ) : (
                 <button
                   onClick={() => setShowModify(true)}
-                  className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
+                  className="rounded px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer"
                   style={{
                     background: "var(--card-hover)",
                     color: "var(--foreground)",

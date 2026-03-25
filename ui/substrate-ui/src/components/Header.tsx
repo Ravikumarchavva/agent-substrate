@@ -1,8 +1,6 @@
 ﻿"use client";
 
-import { PanelLeftOpen, Settings, Sun, Moon } from "lucide-react";
-import { useTheme } from "@/contexts/ThemeContext";
-import { AccountMenu } from "./AccountMenu";
+import { PanelLeftOpen } from "lucide-react";
 import type { SettingsTab } from "./SettingsPanel";
 
 interface HeaderProps {
@@ -14,11 +12,8 @@ interface HeaderProps {
 
 export function Header({
   onToggleSidebar,
-  sidebarOpen,
   threadName,
-  onOpenSettings,
 }: HeaderProps) {
-  const { theme, toggleTheme } = useTheme();
 
   return (
     <header
@@ -30,7 +25,7 @@ export function Header({
         {onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
-            className="p-1.5 hover:bg-(--card-hover) rounded-lg shrink-0"
+            className="p-1.5 hover:bg-(--card-hover) rounded-lg shrink-0 cursor-pointer"
             aria-label="Open sidebar"
           >
             <PanelLeftOpen
@@ -42,33 +37,6 @@ export function Header({
         <span className="text-sm font-medium truncate text-(--muted)">
           {threadName || "New Chat"}
         </span>
-      </div>
-
-      {/* Right: theme toggle, settings, account */}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={toggleTheme}
-          className="p-1.5 hover:bg-(--card-hover) rounded-lg transition-colors"
-          aria-label="Toggle theme"
-        >
-          {theme === "dark" ? (
-            <Sun className="w-4 h-4" />
-          ) : (
-            <Moon className="w-4 h-4" />
-          )}
-        </button>
-
-        <button
-          onClick={() => onOpenSettings("general")}
-          className="p-1.5 hover:bg-(--card-hover) rounded-lg transition-colors"
-          aria-label="Settings"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
-
-        <div className="ml-1">
-          <AccountMenu onOpenSettings={onOpenSettings} />
-        </div>
       </div>
     </header>
   );

@@ -84,7 +84,7 @@ function TaskRow({
 
       {/* Delete (hover only) */}
       <button
-        className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all hover:bg-(--card)"
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all hover:bg-(--card) cursor-pointer"
         style={{ color: "var(--muted)" }}
         onClick={(e) => {
           e.stopPropagation();
@@ -143,7 +143,7 @@ function AddTaskForm({ taskListId, onAdd }: { taskListId: string; onAdd: (id: st
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-lg w-full transition-colors hover:bg-(--card-hover)"
+        className="flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-lg w-full transition-colors hover:bg-(--card-hover) cursor-pointer"
         style={{ color: "var(--muted)" }}
       >
         <Plus className="w-3.5 h-3.5" />
@@ -168,14 +168,14 @@ function AddTaskForm({ taskListId, onAdd }: { taskListId: string; onAdd: (id: st
       />
       <button
         onClick={submit}
-        className="text-xs px-2.5 py-1.5 rounded-lg transition-colors text-white"
+        className="text-xs px-2.5 py-1.5 rounded-lg transition-colors text-white cursor-pointer"
         style={{ background: "var(--accent)" }}
       >
         Add
       </button>
       <button
         onClick={() => setOpen(false)}
-        className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors"
+        className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer"
         style={{ color: "var(--muted)" }}
       >
         <X className="w-3.5 h-3.5" />

@@ -78,7 +78,7 @@ export function PanelShell({
         {collapsible && (
           <button
             onClick={() => setCollapsed((c) => !c)}
-            className="p-1 rounded hover:bg-(--card-hover) transition-colors"
+            className="p-1 rounded hover:bg-(--card-hover) transition-colors cursor-pointer"
             style={{ color: "var(--muted)" }}
             aria-label={collapsed ? "Expand" : "Collapse"}
           >
@@ -89,7 +89,7 @@ export function PanelShell({
         {onDismiss && (
           <button
             onClick={onDismiss}
-            className="p-1 rounded hover:bg-(--card-hover) transition-colors"
+            className="p-1 rounded hover:bg-(--card-hover) transition-colors cursor-pointer"
             style={{ color: "var(--muted)" }}
             aria-label="Dismiss"
           >

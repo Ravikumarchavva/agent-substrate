@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   const { thread_id } = (await req.json()) as { thread_id: string };
 
   const BACKEND_URL =
-    process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+    process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const res = await fetch(`${BACKEND_URL}/chat/${thread_id}/cancel`, {
     method: "POST",

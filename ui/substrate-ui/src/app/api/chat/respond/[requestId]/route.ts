@@ -8,7 +8,7 @@ export async function POST(
   const body = await req.json();
 
   try {
-    const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+    const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const upstream = await fetch(
       `${BACKEND_URL}/chat/respond/${requestId}`,
       {

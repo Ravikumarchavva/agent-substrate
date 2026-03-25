@@ -21,7 +21,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
           <h2 className="text-xl font-semibold">Authentication</h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-(--card-hover) rounded-lg transition-colors"
+            className="p-1 hover:bg-(--card-hover) rounded-lg transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -69,7 +69,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
             {!googleAuth && (
               <button
                 onClick={loginWithGoogle}
-                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Mail className="w-4 h-4" />
                 Connect Google
@@ -96,7 +96,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
             {!spotifyAuth && (
               <button
                 onClick={loginWithSpotify}
-                className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Music className="w-4 h-4" />
                 Connect Spotify Premium
@@ -118,7 +118,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
                   await logout();
                   onClose();
                 }}
-                className="w-full py-2.5 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg font-medium transition-colors"
+                className="w-full py-2.5 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg font-medium transition-colors cursor-pointer"
               >
                 Logout from All Services
               </button>

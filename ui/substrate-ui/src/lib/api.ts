@@ -3,7 +3,7 @@ import { Thread, BackendMessage, Message, ToolCall, TaskList, TaskStatus, Upload
 // API service layer for backend communication
 // Use ?? (not ||) so that NEXT_PUBLIC_API_URL="" (k8s build) yields ""
 // enabling relative paths that the ingress routes to gateway-bff.
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export const api = {
   // Thread management

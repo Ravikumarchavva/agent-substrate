@@ -29,7 +29,7 @@ const WS_PROXY_URL =
     ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/api/audio/realtime-ws`
     : (process.env.NEXT_PUBLIC_WS_URL
         ? `${process.env.NEXT_PUBLIC_WS_URL}/audio/realtime`
-        : "ws://localhost:8001/audio/realtime");
+        : "ws://localhost:8000/audio/realtime");
 
 export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps) {
   const [sessionState, setSessionState] = useState<SessionState>("idle");
@@ -329,7 +329,7 @@ export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps)
           </div>
           <button
             onClick={() => { teardown(); onClose(); }}
-            className="p-1.5 rounded-full hover:bg-(--card-hover) transition-colors"
+            className="p-1.5 rounded-full hover:bg-(--card-hover) transition-colors cursor-pointer"
             style={{ color: "var(--muted)" }}
             aria-label="Close voice panel"
           >
@@ -358,7 +358,7 @@ export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps)
             <button
               onClick={handleToggle}
               disabled={sessionState === "connecting" || sessionState === "transcribing" as SessionState}
-              className="relative w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               style={{
                 background: isActive
                   ? "var(--accent)"

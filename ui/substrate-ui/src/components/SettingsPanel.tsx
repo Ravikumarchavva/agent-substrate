@@ -241,7 +241,7 @@ export function SettingsPanel({
           <h2 className="text-base font-semibold">Settings</h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-(--card-hover) rounded-lg transition-colors"
+            className="p-1.5 hover:bg-(--card-hover) rounded-lg transition-colors cursor-pointer"
             aria-label="Close settings"
           >
             <X className="w-4 h-4" />
@@ -256,7 +256,7 @@ export function SettingsPanel({
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
+                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left cursor-pointer ${
                   activeTab === id
                     ? "bg-(--accent)/10 text-(--accent) font-medium"
                     : "hover:bg-(--card-hover) text-foreground"
@@ -310,7 +310,7 @@ export function SettingsPanel({
                     <button
                       onClick={handleSaveInstructions}
                       disabled={isSaving}
-                      className="flex items-center gap-2 px-4 py-1.5 bg-(--accent) text-white rounded-lg text-sm disabled:opacity-50 hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-2 px-4 py-1.5 bg-(--accent) text-white rounded-lg text-sm disabled:opacity-50 hover:opacity-90 transition-opacity cursor-pointer"
                     >
                       {isSaving && <Loader2 className="w-3 h-3 animate-spin" />}
                       {isSaving ? "Checking…" : "Save Instructions"}
@@ -322,7 +322,7 @@ export function SettingsPanel({
                           localStorage.removeItem("system_instructions_override");
                           setSaveError(null);
                         }}
-                        className="px-4 py-1.5 border border-(--border) hover:bg-(--card-hover) rounded-lg text-sm transition-colors"
+                        className="px-4 py-1.5 border border-(--border) hover:bg-(--card-hover) rounded-lg text-sm transition-colors cursor-pointer"
                       >
                         Clear
                       </button>
@@ -374,7 +374,7 @@ export function SettingsPanel({
 
                     <button
                       onClick={() => setActiveTab("apps")}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-(--card) border border-(--border) rounded-xl text-sm hover:bg-(--card-hover) transition-colors"
+                      className="w-full flex items-center justify-between px-4 py-3 bg-(--card) border border-(--border) rounded-xl text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
                     >
                       <span>Manage connected apps</span>
                       <ChevronRight className="w-4 h-4 text-(--muted)" />
@@ -396,7 +396,7 @@ export function SettingsPanel({
                     </div>
                     <button
                       onClick={loginWithGoogle}
-                      className="flex items-center gap-2.5 mx-auto px-5 py-2.5 bg-white text-gray-800 rounded-xl text-sm font-medium hover:bg-gray-100 transition-colors shadow-md"
+                      className="flex items-center gap-2.5 mx-auto px-5 py-2.5 bg-white text-gray-800 rounded-xl text-sm font-medium hover:bg-gray-100 transition-colors shadow-md cursor-pointer"
                     >
                       <GoogleIcon />
                       Continue with Google
@@ -441,14 +441,14 @@ export function SettingsPanel({
                           });
                           window.location.reload();
                         }}
-                        className="text-xs text-red-400 hover:text-red-300 px-2.5 py-1 border border-red-700/30 rounded-lg transition-colors"
+                        className="text-xs text-red-400 hover:text-red-300 px-2.5 py-1 border border-red-700/30 rounded-lg transition-colors cursor-pointer"
                       >
                         Disconnect
                       </button>
                     ) : (
                       <button
                         onClick={loginWithGoogle}
-                        className="text-xs px-2.5 py-1 bg-(--accent) text-white rounded-lg transition-colors hover:opacity-90"
+                        className="text-xs px-2.5 py-1 bg-(--accent) text-white rounded-lg transition-colors hover:opacity-90 cursor-pointer"
                       >
                         Connect
                       </button>
@@ -484,14 +484,14 @@ export function SettingsPanel({
                           });
                           window.location.reload();
                         }}
-                        className="text-xs text-red-400 hover:text-red-300 px-2.5 py-1 border border-red-700/30 rounded-lg transition-colors"
+                        className="text-xs text-red-400 hover:text-red-300 px-2.5 py-1 border border-red-700/30 rounded-lg transition-colors cursor-pointer"
                       >
                         Disconnect
                       </button>
                     ) : (
                       <button
                         onClick={loginWithSpotify}
-                        className="text-xs px-2.5 py-1 bg-[#1DB954] text-white rounded-lg transition-colors hover:opacity-90"
+                        className="text-xs px-2.5 py-1 bg-[#1DB954] text-white rounded-lg transition-colors hover:opacity-90 cursor-pointer"
                       >
                         Connect
                       </button>
@@ -528,7 +528,7 @@ export function SettingsPanel({
                     <button
                       key={t}
                       onClick={() => setAdminTab(t)}
-                      className={`px-3 py-2 text-sm capitalize border-b-2 transition-colors -mb-px ${
+                      className={`px-3 py-2 text-sm capitalize border-b-2 transition-colors -mb-px cursor-pointer ${
                         adminTab === t
                           ? "border-(--accent) text-(--accent)"
                           : "border-transparent text-(--muted) hover:text-foreground"
@@ -540,7 +540,7 @@ export function SettingsPanel({
                   <button
                     onClick={loadAdminData}
                     disabled={adminLoading}
-                    className="ml-auto flex items-center gap-1 text-xs text-(--muted) hover:text-foreground px-2 py-1.5 rounded transition-colors disabled:opacity-50"
+                    className="ml-auto flex items-center gap-1 text-xs text-(--muted) hover:text-foreground px-2 py-1.5 rounded transition-colors disabled:opacity-50 cursor-pointer"
                     aria-label="Refresh admin data"
                   >
                     <RefreshCw className={`w-3 h-3 ${adminLoading ? "animate-spin" : ""}`} />
@@ -620,7 +620,7 @@ export function SettingsPanel({
                               <div className="flex items-center bg-(--card) hover:bg-(--card-hover) transition-colors">
                                 <button
                                   onClick={() => handleExpandThread(t.id)}
-                                  className="flex flex-1 items-center gap-2.5 p-3 text-left min-w-0"
+                                  className="flex flex-1 items-center gap-2.5 p-3 text-left min-w-0 cursor-pointer"
                                 >
                                   <ChevronRight
                                     className={`w-3.5 h-3.5 shrink-0 text-(--muted) transition-transform duration-150 ${
@@ -645,7 +645,7 @@ export function SettingsPanel({
                                 <button
                                   onClick={(e) => handleDeleteThread(t.id, e)}
                                   disabled={deletingThreadId === t.id}
-                                  className="shrink-0 p-2 mr-1 text-(--muted) hover:text-red-400 transition-colors disabled:opacity-40"
+                                  className="shrink-0 p-2 mr-1 text-(--muted) hover:text-red-400 transition-colors disabled:opacity-40 cursor-pointer"
                                   aria-label="Delete thread"
                                 >
                                   {deletingThreadId === t.id ? (

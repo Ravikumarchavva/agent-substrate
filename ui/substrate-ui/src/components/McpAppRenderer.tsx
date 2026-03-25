@@ -236,7 +236,7 @@ export function McpAppRenderer({
         {onClose && (
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 transition-colors px-1"
+            className="text-zinc-500 hover:text-zinc-300 transition-colors px-1 cursor-pointer"
             aria-label="Close MCP App"
           >
             ✕

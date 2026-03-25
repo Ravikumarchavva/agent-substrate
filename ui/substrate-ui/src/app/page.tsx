@@ -233,7 +233,7 @@ export default function ChatPage() {
       wsRef.current = null;
     }
     if (currentThreadId) {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
       fetch(`${apiBase}/chat/${currentThreadId}/cancel`, { method: "POST" }).catch(() => {});
     }
   }
@@ -286,36 +286,43 @@ export default function ChatPage() {
   async function doSendMessage(text: string) {
     if (!text.trim() || loading) return;
 
-    // If no thread exists, create one first
+    const currentInput = text;
+    const currentFileIds = attachedFiles.map((f) => f.id);
+
+    // Clear input and show user message immediately (optimistic — never blocked by async work)
+    setInput("");
+    setAttachedFiles([]);
+    setMessages((prev) => [
+      ...prev,
+      { id: nanoid(), role: "user" as const, content: currentInput, timestamp: new Date() },
+    ]);
+    setLoading(true);
+
+    // Ensure a thread exists before opening the stream
     let threadId = currentThreadId;
     if (!threadId) {
       try {
         const newThread = await api.createThread("New Chat");
-        setThreads([newThread]);
+        setThreads((prev) => [newThread, ...prev]);
         setCurrentThreadId(newThread.id);
         threadId = newThread.id;
       } catch (error) {
         console.error("Failed to create thread:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nanoid(),
+            role: "assistant" as const,
+            content: "⚠️ Could not reach the backend. Is it running on port 8000?",
+            timestamp: new Date(),
+          },
+        ]);
+        setLoading(false);
         return;
       }
     }
 
-    const userMessage: Message = {
-      id: nanoid(),
-      role: "user",
-      content: text,
-      timestamp: new Date(),
-    };
-
-    const nextMessages = [...messages, userMessage];
-    setMessages(nextMessages);
-    const currentInput = text;
-    setInput("");
-    const currentFileIds = attachedFiles.map((f) => f.id);
-    setAttachedFiles([]);
-    setLoading(true);
-
-    // Update thread name if it's the first message
+    // Update thread name on the first message
     if (messages.length === 0) {
       const name = currentInput.slice(0, 50) + (currentInput.length > 50 ? "..." : "");
       handleRenameThread(threadId, name);
@@ -333,7 +340,7 @@ export default function ChatPage() {
     setMessages((m) => [...m, assistantMessage]);
 
     // ── Start SSE stream from backend ────────────────────────────────────
-    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const abortController = new AbortController();
     wsRef.current = abortController;
 
@@ -572,6 +579,27 @@ export default function ChatPage() {
         return;
       }
 
+      // ── Run-level terminal events ───────────────────────────────────
+      if (data.type === "agent.run_completed") {
+        // Safety net: if no completion event fired (e.g. tool-only runs), stop loading.
+        setLoading(false);
+        loadThreads();
+        return;
+      }
+
+      if (data.type === "agent.run_failed") {
+        const errorMsg = String(data.error || "The agent encountered an error.");
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: msg.content + "\n\n⚠️ " + errorMsg, isToolExecuting: false }
+              : msg
+          )
+        );
+        setLoading(false);
+        return;
+      }
+
       if (data.type === "cancelled") {
         setMessages((m) =>
           m.map((msg) =>
@@ -719,7 +747,7 @@ export default function ChatPage() {
           </div>
           <button
             onClick={loginWithGoogle}
-            className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-xl text-sm font-semibold hover:bg-gray-100 transition-colors shadow-lg"
+            className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-xl text-sm font-semibold hover:bg-gray-100 transition-colors shadow-lg cursor-pointer"
           >
             {/* Google G */}
             <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -760,6 +788,7 @@ export default function ChatPage() {
           onDeleteThread={handleDeleteThread}
           onRenameThread={handleRenameThread}
           onCollapse={() => setSidebarOpen(false)}
+          onOpenSettings={openSettingsPanel}
         />
       </div>
 
@@ -806,7 +835,7 @@ export default function ChatPage() {
                     <button
                       key={idx}
                       onClick={() => doSendMessage(text)}
-                      className="flex items-center gap-2.5 p-3 rounded-xl text-left text-sm transition-colors hover:bg-(--card-hover)"
+                      className="flex items-center gap-2.5 p-3 rounded-xl text-left text-sm transition-colors hover:bg-(--card-hover) cursor-pointer"
                       style={{ background: "var(--card)", color: "var(--muted)" }}
                     >
                       <span style={{ color: "var(--accent)" }}>
@@ -950,7 +979,7 @@ export default function ChatPage() {
                       <button
                         type="button"
                         onClick={() => handleRemoveFile(f.id)}
-                        className="shrink-0 hover:opacity-70 transition-opacity"
+                        className="shrink-0 hover:opacity-70 transition-opacity cursor-pointer"
                         aria-label={`Remove ${f.name}`}
                       >
                         <X className="w-3 h-3" />
@@ -976,7 +1005,7 @@ export default function ChatPage() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingFile}
-                className="shrink-0 mb-0.5 p-1.5 rounded-full hover:bg-(--card-hover) transition-colors self-end disabled:opacity-40"
+                className="shrink-0 mb-0.5 p-1.5 rounded-full hover:bg-(--card-hover) transition-colors self-end disabled:opacity-40 cursor-pointer"
                 style={{ color: "var(--muted)" }}
                 aria-label="Attach file"
               >
@@ -1018,7 +1047,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     onClick={() => setRealtimeOpen(true)}
-                    className="p-1.5 rounded-full hover:bg-(--card-hover) transition-colors"
+                    className="p-1.5 rounded-full hover:bg-(--card-hover) transition-colors cursor-pointer"
                     style={{ color: "var(--muted)" }}
                     aria-label="Start speech-to-speech conversation"
                     title="Live voice conversation"
@@ -1031,7 +1060,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     onClick={handleStop}
-                    className="p-1.5 rounded-full transition-colors"
+                    className="p-1.5 rounded-full transition-colors cursor-pointer"
                     style={{ background: "var(--accent)", color: "#fff" }}
                     aria-label="Stop"
                   >
@@ -1042,7 +1071,7 @@ export default function ChatPage() {
                   <button
                     type="submit"
                     disabled={!input.trim()}
-                    className="p-1.5 rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="p-1.5 rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     style={{
                       background: input.trim() ? "var(--accent)" : "var(--card)",
                       color: input.trim() ? "#fff" : "var(--muted)",

@@ -81,7 +81,7 @@ export function HumanInputCard({
                 <button
                   key={opt.key}
                   onClick={() => handleSelectOption(opt)}
-                  className="rounded-md px-3 py-2 text-left text-xs transition-colors"
+                  className="rounded-md px-3 py-2 text-left text-xs transition-colors cursor-pointer"
                   style={{
                     background: "var(--card)",
                     border: "1px solid var(--border)",
@@ -130,7 +130,7 @@ export function HumanInputCard({
                     <button
                       onClick={handleFreeformSubmit}
                       disabled={!freeformText.trim()}
-                      className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
+                      className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50 cursor-pointer"
                       style={{ background: "var(--accent)" }}
                     >
                       Send
@@ -139,7 +139,7 @@ export function HumanInputCard({
                 ) : (
                   <button
                     onClick={() => setShowFreeform(true)}
-                    className="text-xs transition-colors"
+                    className="text-xs transition-colors cursor-pointer"
                     style={{ color: "var(--muted)" }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--foreground)")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}

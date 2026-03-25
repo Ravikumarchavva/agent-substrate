@@ -89,7 +89,7 @@ export function AudioPlayer({ text }: AudioPlayerProps) {
           ? "Pause"
           : "Listen"
       }
-      className="p-1.5 rounded hover:bg-(--card) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      className="p-1.5 rounded hover:bg-(--card) transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
       style={{
         color: playerState === "error" ? "#ef4444" : "var(--muted)",
       }}

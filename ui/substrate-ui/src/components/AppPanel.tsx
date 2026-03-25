@@ -334,7 +334,7 @@ export function AppPanel({
       <div className="fixed right-0 top-1/2 -translate-y-1/2 z-30">
         <button
           onClick={onToggleCollapse}
-          className="flex items-center gap-2 px-3 py-3 bg-zinc-800 border border-zinc-700 border-r-0 rounded-l-lg shadow-xl hover:bg-zinc-700 transition-colors"
+          className="flex items-center gap-2 px-3 py-3 bg-zinc-800 border border-zinc-700 border-r-0 rounded-l-lg shadow-xl hover:bg-zinc-700 transition-colors cursor-pointer"
           title="Open app panel"
         >
           <PanelRightOpen className="w-4 h-4 text-zinc-300" />
@@ -359,14 +359,14 @@ export function AppPanel({
         <div className="flex items-center gap-1">
           <button
             onClick={onToggleCollapse}
-            className="p-1.5 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="p-1.5 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
             title="Collapse panel"
           >
             <PanelRightClose className="w-4 h-4" />
           </button>
           <button
             onClick={onClosePanel}
-            className="p-1.5 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="p-1.5 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
             title="Close all apps"
           >
             <X className="w-4 h-4" />

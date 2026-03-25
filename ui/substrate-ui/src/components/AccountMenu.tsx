@@ -30,7 +30,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
       {/* Avatar trigger */}
       <button
         onClick={() => setIsOpen((o) => !o)}
-        className="flex items-center justify-center w-7 h-7 rounded-full overflow-hidden hover:ring-2 hover:ring-(--accent)/60 transition-all"
+        className="flex items-center justify-center w-7 h-7 rounded-full overflow-hidden hover:ring-2 hover:ring-(--accent)/60 transition-all cursor-pointer"
         aria-label="Account menu"
         aria-expanded={isOpen}
         aria-haspopup="true"
@@ -79,7 +79,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
               <div className="py-1" role="none">
                 <button
                   onClick={() => { setIsOpen(false); onOpenSettings("general"); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
                   role="menuitem"
                 >
                   <Settings className="w-3.5 h-3.5 text-(--muted)" />
@@ -87,7 +87,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
                 </button>
                 <button
                   onClick={() => { setIsOpen(false); onOpenSettings("profile"); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
                   role="menuitem"
                 >
                   <User className="w-3.5 h-3.5 text-(--muted)" />
@@ -96,7 +96,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
                 {isAdmin && (
                   <button
                     onClick={() => { setIsOpen(false); onOpenSettings("admin"); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
                     role="menuitem"
                   >
                     <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
@@ -112,7 +112,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
                     setIsOpen(false);
                     await logout();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-(--card-hover) transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-(--card-hover) transition-colors cursor-pointer"
                   role="menuitem"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -128,7 +128,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
               </div>
               <button
                 onClick={() => { setIsOpen(false); loginWithGoogle(); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
                 role="menuitem"
               >
                 {/* Google G */}

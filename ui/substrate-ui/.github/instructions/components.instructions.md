@@ -65,3 +65,4 @@ Always use the v4 variable shorthand:
 - Interactive elements must have `aria-label` or visible text.
 - Use semantic HTML: `<button>`, `<nav>`, `<aside>`, `<header>`, `<main>`.
 - Keyboard navigation: `onKeyDown` handlers for Enter/Space on custom interactive elements.
+- **Cursor**: Every `<button>`, `<a>`, and clickable `<div>` MUST include `cursor-pointer` in its `className`. Never rely on the browser default — always be explicit.

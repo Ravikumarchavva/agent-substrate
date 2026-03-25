@@ -197,7 +197,7 @@ export function MessageBubble({
                           {hasApp && (
                             <button
                               onClick={() => onOpenInPanel?.(tool)}
-                              className="flex items-center gap-1.5 text-xs py-1 transition-colors"
+                              className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer"
                               style={{ color: "var(--accent)" }}
                             >
                               <PanelRightOpen className="w-3.5 h-3.5" />
@@ -242,7 +242,7 @@ export function MessageBubble({
             <div className="flex items-center gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 onClick={copyToClipboard}
-                className="p-1.5 rounded hover:bg-(--card) transition-colors"
+                className="p-1.5 rounded hover:bg-(--card) transition-colors cursor-pointer"
                 style={{ color: "var(--muted)" }}
                 title="Copy"
               >
@@ -253,7 +253,7 @@ export function MessageBubble({
               {onRegenerate && (
                 <button
                   onClick={onRegenerate}
-                  className="p-1.5 rounded hover:bg-(--card) transition-colors"
+                  className="p-1.5 rounded hover:bg-(--card) transition-colors cursor-pointer"
                   style={{ color: "var(--muted)" }}
                   title="Regenerate"
                 >

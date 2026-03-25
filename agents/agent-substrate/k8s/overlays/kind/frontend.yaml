@@ -8,7 +8,7 @@ metadata:
   labels:
     app: frontend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: frontend
@@ -34,7 +34,7 @@ spec:
               name: http
           env:
             - name: NEXT_PUBLIC_API_URL
-              value: http://gateway-bff.af-edge.svc.cluster.local:8001
+              value: ""
             - name: BACKEND_API_URL
               value: http://gateway-bff.af-edge.svc.cluster.local:8001
             - name: DATABASE_URL

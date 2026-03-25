@@ -1,0 +1,35 @@
+# Production base manifests — kustomize base
+# This is the canonical definition of all microservices.
+# Environment-specific overlays (kind, staging, prod) layer on top.
+#
+# NOT included here (environment-specific):
+#   - secrets.yaml    — template only; overlays create real secrets
+#   - ingress.yaml    — production TLS ingress; each overlay brings its own
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Namespaces
+  - namespaces.yaml
+
+  # Edge layer (af-edge)
+  - edge/gateway-bff.yaml
+
+  # Platform layer (af-platform)
+  - platform/identity-auth.yaml
+  - platform/policy-authorization.yaml
+
+  # Runtime layer (af-runtime)
+  - runtime/conversation.yaml
+  - runtime/job-controller.yaml
+  - runtime/agent-runtime.yaml
+  - runtime/tool-executor.yaml
+  - runtime/code-interpreter.yaml
+  - runtime/human-gate.yaml
+  - runtime/live-stream.yaml
+  - runtime/file-store.yaml
+  - runtime/admin.yaml
+
+  # Policies
+  - policies/network-policies.yaml
+  - policies/pod-disruption-budgets.yaml

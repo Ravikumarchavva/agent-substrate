@@ -1,44 +1,29 @@
-# Kind cluster production overlay — kustomization.yaml
+# Kind cluster overlay — adapts production base for local development
 #
-# This overlay adapts the production base manifests for a Kind cluster:
-#   - Uses local Docker images (agent-microservices-kind:local)
+# What this overlay does:
+#   - Inherits all service manifests from ../../base
+#   - Adds Kind-only resources: infra (Postgres/Redis), frontend, observability
+#   - Overrides images to local tags (agent-microservices-kind:local)
 #   - Adds uvicorn commands (single image, per-service entrypoint)
-#   - Adds frontend deployment
 #   - Skips code-interpreter (requires KVM)
-#   - Skips ingress (use port-forward / NodePort instead)
-#   - Applies PDBs only for services with replicas > 1
+#   - Replaces production ingress with Kind-specific (no TLS)
 #
 # Usage:
-#   kubectl apply -k k8s/microservices/kind/
+#   kubectl apply -k k8s/overlays/kind/
 #   OR
-#   ./k8s/microservices/kind/deploy-microservices-kind.ps1
+#   ./k8s/overlays/kind/deploy.ps1
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  # Infrastructure (postgres, redis)
+  # Production base manifests (all services, namespaces, policies)
+  - ../../base
+  # Kind-only resources
   - infra.yaml
-  # Secrets are created by the deploy script, not from files
-  # Production base manifests
-  - ../00-namespaces.yaml
-  - ../10-gateway-bff.yaml
-  - ../11-identity-auth.yaml
-  - ../12-policy-authorization.yaml
-  - ../20-conversation.yaml
-  - ../21-job-controller.yaml
-  - ../30-agent-runtime.yaml
-  - ../31-tool-executor.yaml
-  # Skip 32-code-interpreter.yaml — requires KVM nodes
-  - ../40-human-gate.yaml
-  - ../41-live-stream.yaml
-  - ../42-file-store.yaml
-  - ../50-admin.yaml
-  - ../90-network-policies.yaml
-  - ../91-pod-disruption-budgets.yaml
-  # Ingress via nginx-ingress-controller (port 80 — no port-forwards needed)
-  - ingress.yaml
-  # Frontend (Kind-specific)
   - frontend.yaml
+  - observability.yaml
+  # Kind ingress overrides production ingress (same resource name)
+  - ingress.yaml
 
 images:
   - name: ghcr.io/example/agent-framework/gateway-bff
@@ -76,13 +61,54 @@ images:
     newTag: local
 
 patches:
-  # ── Set imagePullPolicy: IfNotPresent for all deployments ──
+  # ── Set imagePullPolicy: IfNotPresent for service deployments ──
   - target:
       kind: Deployment
-    patch: |
+      name: gateway-bff
+    patch: &pullpolicy-patch |
       - op: add
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: identity-auth
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: policy-authorization
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: conversation
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: job-controller
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: agent-runtime
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: tool-executor
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: human-gate
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: live-stream
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: file-store
+    patch: *pullpolicy-patch
+  - target:
+      kind: Deployment
+      name: admin
+    patch: *pullpolicy-patch
 
   # ── Add uvicorn commands (single image, per-service entrypoint) ──
   - target:
@@ -172,6 +198,57 @@ patches:
         path: /spec/template/spec/containers/0/env/9/value
         value: '["http://localhost","http://localhost:3000","http://localhost:3001","http://127.0.0.1:3000","http://frontend.af-edge.svc.cluster.local:3000"]'
 
+  # ── Inject OTLP_ENDPOINT for backend services → Tempo in af-observability ──
+  - target:
+      kind: Deployment
+      name: gateway-bff
+    patch: &otlp-patch |
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: OTLP_ENDPOINT
+          value: "http://tempo.af-observability.svc.cluster.local:4318"
+  - target:
+      kind: Deployment
+      name: identity-auth
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: policy-authorization
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: conversation
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: job-controller
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: agent-runtime
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: tool-executor
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: human-gate
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: live-stream
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: file-store
+    patch: *otlp-patch
+  - target:
+      kind: Deployment
+      name: admin
+    patch: *otlp-patch
+
   # ── Remove file-store PVC (use emptyDir for Kind) ──
   - target:
       kind: Deployment
@@ -182,3 +259,27 @@ patches:
         value:
           name: file-store-data
           emptyDir: {}
+
+  # ── Set HPA minReplicas=1 for Kind (single-node cluster, no memory for 2x each) ──
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+
+  # ── Set Deployment replicas=1 for Kind (single-node, no surge capacity) ──
+  - target:
+      kind: Deployment
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # ── Set StatefulSet replicas=1 for Kind (covers code-interpreter) ──
+  - target:
+      kind: StatefulSet
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1

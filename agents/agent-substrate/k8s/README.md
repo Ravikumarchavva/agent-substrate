@@ -36,7 +36,6 @@ k8s/
         ├── frontend.yaml          ← Next.js frontend (af-edge namespace)
         ├── ingress.yaml           ← nginx ingress (no TLS, port 80)
         ├── observability.yaml     ← Loki + Promtail + Tempo + Prometheus + Grafana + Node Exporter
-        ├── deploy.ps1             ← Full deploy script (build, load, secrets, apply)
         └── smoke-test.ps1         ← Cluster health smoke tests
 ```
 
@@ -52,15 +51,15 @@ k8s/
 
 ## Quick Start (Kind)
 
-```powershell
+```bash
 # Full deploy (builds images, loads into Kind, creates secrets, applies everything)
-./k8s/overlays/kind/deploy.ps1
+uv run python deploy.py
 
 # Or apply manually:
 kubectl apply -k k8s/overlays/kind/
 
-# Smoke tests
-./k8s/overlays/kind/smoke-test.ps1
+# Smoke tests (Windows PowerShell)
+.\k8s\overlays\kind\smoke-test.ps1
 ```
 
 ## Access (Kind)

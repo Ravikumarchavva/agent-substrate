@@ -20,12 +20,15 @@ Quick reference for deploying updates, checking status, reading logs, and debugg
 
 Use this when you want to rebuild both images and re-apply everything from scratch.
 
-```powershell
-# From repo root: agent-framework/
-./k8s/overlays/kind/deploy.ps1
+```bash
+# Works on Windows (PowerShell), Linux, macOS, and Git Bash
+uv run python deploy.py
+
+# Optional flags:
+uv run python deploy.py --cluster-name dev --backend-tag agent-microservices-kind:local --frontend-tag chatbot-frontend-kind:local
 ```
 
-This script automatically:
+The script automatically:
 1. Reads secrets from `.env`
 2. Builds backend Docker image (`agent-microservices-kind:local`)
 3. Builds frontend Docker image (`chatbot-frontend-kind:local`) from `../ai-chatbot-ui/`
@@ -225,9 +228,9 @@ kubectl delete pod <pod-name> -n <namespace> --grace-period=0 --force
 ## Secrets
 
 ### Recreate secrets (after `.env` change)
-```powershell
+```bash
 # Re-run deploy script — it uses --dry-run=client | apply so it's idempotent
-./k8s/overlays/kind/deploy.ps1
+uv run python deploy.py
 ```
 
 ### View current secret keys (not values)

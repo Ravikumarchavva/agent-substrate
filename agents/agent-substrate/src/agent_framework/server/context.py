@@ -22,9 +22,9 @@ from fastapi import Request
 from agent_framework.core.memory.redis_memory import RedisMemory
 from agent_framework.core.storage.base import FileStore
 from agent_framework.core.tools.registry import ToolRegistry
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
-from agent_framework.providers.audio.openai import OpenAIAudioClient
-from agent_framework.runtime.hitl import BridgeRegistry
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
+from agent_framework.integrations.audio.openai import OpenAIAudioClient
+from agent_framework.server.sse.bridge import BridgeRegistry
 
 
 @dataclass

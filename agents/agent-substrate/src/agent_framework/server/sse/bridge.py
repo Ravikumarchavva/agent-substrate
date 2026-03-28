@@ -34,7 +34,7 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
-from agent_framework.extensions.tools.human_input import (
+from agent_framework.tools.human_input import (
     CallbackApprovalHandler,
     CallbackHumanHandler,
     HumanInputRequest,

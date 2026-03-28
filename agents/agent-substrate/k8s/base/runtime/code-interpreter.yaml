@@ -122,6 +122,18 @@ spec:
         - name: fetch-kernel
           image: ghcr.io/example/agent-framework/ci-kernel-fetcher:0.1.0
           command: ["/bin/sh", "-c", "echo 'Kernel fetch skipped — use pre-baked node image'"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
           volumeMounts:
             - name: firecracker-assets
               mountPath: /opt/firecracker
@@ -133,7 +145,7 @@ spec:
             - uv
             - run
             - uvicorn
-            - agent_framework.code_interpreter_service.app:app
+            - agent_framework.services.code_interpreter.app:app
             - --host
             - "0.0.0.0"
             - --port
@@ -160,7 +172,11 @@ spec:
             - name: SERVICE_NAME
               value: code-interpreter
           securityContext:
-            privileged: true  # required for /dev/kvm + tuntap
+            # Firecracker needs /dev/kvm + tuntap — use specific caps instead of privileged
+            allowPrivilegeEscalation: true  # required for Firecracker jailer
+            capabilities:
+              add: ["SYS_ADMIN", "NET_ADMIN"]
+              drop: ["ALL"]
           resources:
             requests:
               cpu: 1000m

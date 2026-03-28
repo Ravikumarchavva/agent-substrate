@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_framework.shared.database.dependency import get_db_session
+
 from agent_framework.services.job_controller.service import (
     cancel_run,
     cleanup_cancel_signal,
@@ -61,19 +63,6 @@ class CancelOut(BaseModel):
     thread_id: str
 
 
-# ── Dependency ───────────────────────────────────────────────────────────────
-
-
-async def _get_db(request: Request):
-    async with request.app.state.session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
 def _run_to_out(run) -> RunOut:
     return RunOut(
         run_id=str(run.id),
@@ -95,7 +84,7 @@ def _run_to_out(run) -> RunOut:
 async def create_run_endpoint(
     body: RunCreateBody,
     request: Request,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create and dispatch a workflow run.
 
@@ -138,7 +127,7 @@ async def create_run_endpoint(
 @router.get("/runs/{run_id}")
 async def get_run_endpoint(
     run_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get the current status of a workflow run."""
     run = await get_run(db, run_id)
@@ -150,7 +139,7 @@ async def get_run_endpoint(
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run_endpoint(
     run_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Cancel an active workflow run."""
     run = await get_run(db, run_id)
@@ -179,7 +168,7 @@ async def cancel_run_endpoint(
 @router.post("/threads/{thread_id}/cancel")
 async def cancel_by_thread_endpoint(
     thread_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Cancel the active workflow run for a thread (convenience for Gateway).
 

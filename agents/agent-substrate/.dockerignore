@@ -1,0 +1,62 @@
+# ── Git & IDE ────────────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitignore.k8s
+.vscode
+.idea
+
+# ── Documentation (not needed in image) ─────────────────────────────────────
+*.md
+!README.md
+docs/
+public/
+ARCHITECTURE_DIAGRAMS.md
+OPERATIONS.md
+CLAUDE.md
+
+# ── Tests & examples ────────────────────────────────────────────────────────
+tests/
+examples/
+notebooks/
+
+# ── Kubernetes manifests ────────────────────────────────────────────────────
+k8s/
+
+# ── CI/CD & GitHub ──────────────────────────────────────────────────────────
+.github/
+
+# ── Environment & secrets ───────────────────────────────────────────────────
+.env
+.env.*
+ssl/
+
+# ── Python artifacts ────────────────────────────────────────────────────────
+__pycache__/
+*.py[codz]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg
+
+# ── Virtual environments ────────────────────────────────────────────────────
+.venv/
+venv/
+
+# ── Docker (avoid recursive copy) ───────────────────────────────────────────
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# ── Misc ────────────────────────────────────────────────────────────────────
+*.ipynb
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+builder/
+skills/

@@ -13,7 +13,7 @@ from typing import AsyncIterator, Optional
 
 from openai import AsyncOpenAI
 
-from agent_framework.providers.audio.base_audio_client import BaseAudioClient
+from agent_framework.integrations.audio.base_audio_client import BaseAudioClient
 
 logger = logging.getLogger(__name__)
 

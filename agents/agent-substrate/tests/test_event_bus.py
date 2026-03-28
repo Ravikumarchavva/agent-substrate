@@ -1,7 +1,4 @@
-"""Tests for EventBus typed event system and WebHITLBridge sentinel contracts.
-
-All async tests use asyncio.run() wrappers — no pytest-asyncio required.
-"""
+"""Tests for EventBus typed event system and WebHITLBridge sentinel contracts."""
 
 from __future__ import annotations
 
@@ -10,7 +7,7 @@ import json
 
 import pytest
 
-from agent_framework.runtime.events import (
+from agent_framework.server.sse.events import (
     BUS_CLOSED,
     CompletionEvent,
     ErrorEvent,
@@ -20,74 +17,55 @@ from agent_framework.runtime.events import (
     TextDeltaEvent,
     _BUS_DONE,
 )
-from agent_framework.runtime.hitl import BRIDGE_DONE, WebHITLBridge, _DONE
-
-
-def _run(coro):
-    """Sync wrapper for async tests (no pytest-asyncio needed)."""
-    return asyncio.run(coro)
+from agent_framework.server.sse.bridge import BRIDGE_DONE, WebHITLBridge, _DONE
 
 
 # ---------------------------------------------------------------------------
-# EventBus — emit / consume
+# EventBus -- emit / consume
 # ---------------------------------------------------------------------------
 
 
-def test_emit_and_consume_in_order():
-    async def _inner():
-        bus = EventBus()
-        await bus.emit(TextDeltaEvent(content="a"))
-        await bus.emit(TextDeltaEvent(content="b"))
-        bus.close()
-        collected = []
-        async for event in bus:
-            collected.append(event.content)
-        return collected
-
-    assert _run(_inner()) == ["a", "b"]
+async def test_emit_and_consume_in_order():
+    bus = EventBus()
+    await bus.emit(TextDeltaEvent(content="a"))
+    await bus.emit(TextDeltaEvent(content="b"))
+    bus.close()
+    collected = []
+    async for event in bus:
+        collected.append(event.content)
+    assert collected == ["a", "b"]
 
 
-def test_close_is_idempotent():
-    async def _inner():
-        bus = EventBus()
-        await bus.emit(TextDeltaEvent(content="x"))
-        bus.close()
-        bus.close()  # second close must not raise or push a duplicate sentinel
-        items = []
-        async for event in bus:
-            items.append(event)
-        return items
-
-    events = _run(_inner())
-    assert len(events) == 1
+async def test_close_is_idempotent():
+    bus = EventBus()
+    await bus.emit(TextDeltaEvent(content="x"))
+    bus.close()
+    bus.close()  # second close must not raise or push a duplicate sentinel
+    items = []
+    async for event in bus:
+        items.append(event)
+    assert len(items) == 1
 
 
-def test_emit_after_close_is_noop():
-    async def _inner():
-        bus = EventBus()
-        bus.close()
-        await bus.emit(TextDeltaEvent(content="dropped"))
-        items = []
-        async for event in bus:
-            items.append(event)
-        return items
-
-    assert _run(_inner()) == []
+async def test_emit_after_close_is_noop():
+    bus = EventBus()
+    bus.close()
+    await bus.emit(TextDeltaEvent(content="dropped"))
+    items = []
+    async for event in bus:
+        items.append(event)
+    assert items == []
 
 
-def test_emit_dict_produces_raw_dict_event():
-    async def _inner():
-        bus = EventBus()
-        await bus.emit_dict({"type": "task_updated", "value": 42})
-        bus.close()
-        items = []
-        async for event in bus:
-            items.append(event)
-        return items
-
-    events = _run(_inner())
-    assert len(events) == 1
-    evt = events[0]
+async def test_emit_dict_produces_raw_dict_event():
+    bus = EventBus()
+    await bus.emit_dict({"type": "task_updated", "value": 42})
+    bus.close()
+    items = []
+    async for event in bus:
+        items.append(event)
+    assert len(items) == 1
+    evt = items[0]
     assert isinstance(evt, RawDictEvent)
     assert evt.data["type"] == "task_updated"
     assert evt.data["value"] == 42
@@ -98,59 +76,45 @@ def test_emit_dict_produces_raw_dict_event():
 # ---------------------------------------------------------------------------
 
 
-def test_poll_returns_bus_closed_sentinel():
-    async def _inner():
-        bus = EventBus()
-        bus.close()
-        return await bus.poll(1.0)
-
-    assert _run(_inner()) is BUS_CLOSED
+async def test_poll_returns_bus_closed_sentinel():
+    bus = EventBus()
+    bus.close()
+    assert await bus.poll(1.0) is BUS_CLOSED
 
 
-def test_poll_raises_timeout_when_empty():
-    async def _inner():
-        bus = EventBus()
+async def test_poll_raises_timeout_when_empty():
+    bus = EventBus()
+    with pytest.raises(asyncio.TimeoutError):
         await bus.poll(0.05)
 
-    with pytest.raises(asyncio.TimeoutError):
-        _run(_inner())
 
-
-def test_poll_returns_event():
-    async def _inner():
-        bus = EventBus()
-        await bus.emit(TextDeltaEvent(content="hello"))
-        return await bus.poll(1.0)
-
-    event = _run(_inner())
+async def test_poll_returns_event():
+    bus = EventBus()
+    await bus.emit(TextDeltaEvent(content="hello"))
+    event = await bus.poll(1.0)
     assert isinstance(event, TextDeltaEvent)
     assert event.content == "hello"
 
 
-def test_poll_sequence_terminates_at_bus_closed():
+async def test_poll_sequence_terminates_at_bus_closed():
     """Consumer loop using poll() must stop when BUS_CLOSED is returned."""
+    bus = EventBus()
+    await bus.emit(TextDeltaEvent(content="one"))
+    await bus.emit(ReasoningDeltaEvent(content="two"))
+    bus.close()
 
-    async def _inner():
-        bus = EventBus()
-        await bus.emit(TextDeltaEvent(content="one"))
-        await bus.emit(ReasoningDeltaEvent(content="two"))
-        bus.close()
-
-        results = []
-        while True:
-            try:
-                item = await bus.poll(1.0)
-            except asyncio.TimeoutError:
-                break
-            if item is BUS_CLOSED:
-                break
-            results.append(item)
-        return results
-
-    items = _run(_inner())
-    assert len(items) == 2
-    assert items[0].content == "one"
-    assert items[1].content == "two"
+    results = []
+    while True:
+        try:
+            item = await bus.poll(1.0)
+        except asyncio.TimeoutError:
+            break
+        if item is BUS_CLOSED:
+            break
+        results.append(item)
+    assert len(results) == 2
+    assert results[0].content == "one"
+    assert results[1].content == "two"
 
 
 # ---------------------------------------------------------------------------
@@ -229,71 +193,54 @@ def test_raw_dict_event_to_dict_passthrough():
 # ---------------------------------------------------------------------------
 
 
-def test_cancel_all_pending_resolves_futures_with_session_disconnected():
-    async def _inner():
-        bridge = WebHITLBridge()
-        loop = asyncio.get_running_loop()
-        fut: asyncio.Future = loop.create_future()
-        bridge._pending["req-1"] = fut
-        bridge._pending_payloads["req-1"] = {"type": "tool_approval_request"}
+async def test_cancel_all_pending_resolves_futures_with_session_disconnected():
+    bridge = WebHITLBridge()
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future = loop.create_future()
+    bridge._pending["req-1"] = fut
+    bridge._pending_payloads["req-1"] = {"type": "tool_approval_request"}
 
-        count = bridge.cancel_all_pending("session_disconnected")
-        return count, fut.result()
-
-    count, result = _run(_inner())
+    count = bridge.cancel_all_pending("session_disconnected")
     assert count == 1
-    assert result["session_disconnected"] is True
-    assert result["reason"] == "session_disconnected"
+    assert fut.result()["session_disconnected"] is True
+    assert fut.result()["reason"] == "session_disconnected"
 
 
-def test_cancel_all_pending_clears_all_state():
-    async def _inner():
-        bridge = WebHITLBridge()
-        loop = asyncio.get_running_loop()
-        for i in range(3):
-            fut: asyncio.Future = loop.create_future()
-            bridge._pending[f"req-{i}"] = fut
-            bridge._pending_payloads[f"req-{i}"] = {}
-
-        bridge.cancel_all_pending()
-        return len(bridge._pending), len(bridge._pending_payloads)
-
-    pending, payloads = _run(_inner())
-    assert pending == 0
-    assert payloads == 0
-
-
-def test_cancel_all_pending_noop_when_empty():
-    async def _inner():
-        bridge = WebHITLBridge()
-        return bridge.cancel_all_pending("session_disconnected")
-
-    assert _run(_inner()) == 0
-
-
-def test_cancel_all_pending_skips_already_resolved_futures():
-    async def _inner():
-        bridge = WebHITLBridge()
-        loop = asyncio.get_running_loop()
+async def test_cancel_all_pending_clears_all_state():
+    bridge = WebHITLBridge()
+    loop = asyncio.get_running_loop()
+    for i in range(3):
         fut: asyncio.Future = loop.create_future()
-        fut.set_result({"approved": True})  # already resolved
-        bridge._pending["req-1"] = fut
+        bridge._pending[f"req-{i}"] = fut
+        bridge._pending_payloads[f"req-{i}"] = {}
 
-        return bridge.cancel_all_pending()
+    bridge.cancel_all_pending()
+    assert len(bridge._pending) == 0
+    assert len(bridge._pending_payloads) == 0
 
-    assert _run(_inner()) == 0
+
+async def test_cancel_all_pending_noop_when_empty():
+    bridge = WebHITLBridge()
+    assert bridge.cancel_all_pending("session_disconnected") == 0
 
 
-def test_cancel_all_pending_custom_reason():
-    async def _inner():
-        bridge = WebHITLBridge()
-        loop = asyncio.get_running_loop()
-        fut: asyncio.Future = loop.create_future()
-        bridge._pending["req-1"] = fut
+async def test_cancel_all_pending_skips_already_resolved_futures():
+    bridge = WebHITLBridge()
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future = loop.create_future()
+    fut.set_result({"approved": True})  # already resolved
+    bridge._pending["req-1"] = fut
 
-        bridge.cancel_all_pending("server_restart")
-        return fut.result()
+    assert bridge.cancel_all_pending() == 0
 
-    result = _run(_inner())
+
+async def test_cancel_all_pending_custom_reason():
+    bridge = WebHITLBridge()
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future = loop.create_future()
+    bridge._pending["req-1"] = fut
+
+    bridge.cancel_all_pending("server_restart")
+    result = fut.result()
     assert result["session_disconnected"] is True
     assert result["reason"] == "server_restart"

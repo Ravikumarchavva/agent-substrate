@@ -18,7 +18,7 @@ import logging
 from typing import Any, Awaitable, Callable, ClassVar, Dict, List, Optional
 
 from agent_framework.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from agent_framework.runtime.tasks.store import GlobalTaskStore, Task
+from agent_framework.shared.tasks.store import GlobalTaskStore, Task
 
 logger = logging.getLogger(__name__)
 
@@ -109,13 +109,6 @@ class TaskManagerTool(BaseTool):
         self._emit: Optional[EventEmitter] = event_emitter
         # task_list_id per conversation thread (supports concurrent requests)
         self._task_lists: Dict[str, Optional[str]] = {}  # thread_id -> task_list_id
-
-    # ------------------------------------------------------------------
-    # Public API: inject emitter after construction (used in main.py)
-    # ------------------------------------------------------------------
-
-    def set_event_emitter(self, emitter: EventEmitter) -> None:
-        self._emit = emitter
 
     def reset(self) -> None:
         """Reset between conversations (clears the given thread_id)."""

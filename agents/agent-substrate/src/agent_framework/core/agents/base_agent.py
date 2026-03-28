@@ -15,7 +15,7 @@ from typing import runtime_checkable, Protocol
 from agent_framework.core.agents.agent_result import AgentRunResult
 from agent_framework.core.context.base_context import ModelContext
 from agent_framework.core.tools.base_tool import BaseTool
-from agent_framework.providers.llm.base_client import BaseModelClient
+from agent_framework.integrations.llm.base_client import BaseModelClient
 from agent_framework.core.memory.base_memory import BaseMemory
 from agent_framework.core.memory.memory_scope import MemoryScope
 from agent_framework.core.guardrails.base_guardrail import BaseGuardrail

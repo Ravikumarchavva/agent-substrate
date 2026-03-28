@@ -30,7 +30,7 @@ class SkillManager:
     4. Provides context blocks for active skills.
 
     Example:
-        manager = SkillManager(skill_dirs=["./skills", "~/.claude/skills"])
+        manager = SkillManager()
         manager.discover()
 
         # Inject into system prompt:
@@ -46,7 +46,7 @@ class SkillManager:
         skill_dirs: Optional[List[str | Path]] = None,
         auto_discover: bool = True,
     ) -> None:
-        self._loader = SkillLoader(skill_dirs=skill_dirs or [])
+        self._loader = SkillLoader(skill_dirs=skill_dirs)
         self._active: Dict[str, Skill] = {}  # name -> fully loaded Skill
         self._discovered: List[SkillMetadata] = []
 

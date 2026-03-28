@@ -8,7 +8,7 @@ Previously, event dicts were created inline throughout ``chat.py``,
 
 Usage::
 
-    from agent_framework.runtime.events import EventBus, TextDeltaEvent, CompletionEvent
+    from agent_framework.server.sse.events import EventBus, TextDeltaEvent, CompletionEvent
 
     bus = EventBus()
 
@@ -30,7 +30,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union
 
-logger = logging.getLogger("agent_framework.runtime.events")
+logger = logging.getLogger("agent_framework.server.sse.events")
 
 # Sentinel that marks the end of the event stream
 _BUS_DONE = object()

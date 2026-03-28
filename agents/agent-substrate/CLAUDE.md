@@ -10,7 +10,7 @@ Trust it as the primary reference; only search the codebase if something here is
 Python async AI-agent framework with **two deployment modes**:
 
 1. **Monolith** — single FastAPI server at `src/agent_framework/server/`
-2. **Microservices** — 11 independent FastAPI services under `src/agent_framework/services/`
+2. **Microservices** — 12 independent FastAPI services under `src/agent_framework/services/`
 
 Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 16, Redis 7, OpenTelemetry → Tempo.
 
@@ -25,10 +25,10 @@ Package manager: **`uv`** (never `pip`).
 uv sync
 
 # Start infrastructure
-docker compose up -d postgres redis
+docker compose -f docker/docker-compose.yml up -d postgres redis
 
 # Optional: MCP SSE demo server (needed for examples 04/05/06)
-docker compose --profile mcp up -d mcp-server   # → localhost:9000/sse
+docker compose -f docker/docker-compose.yml --profile mcp up -d mcp-server   # → localhost:9000/sse
 
 # Start monolith backend
 uv run uvicorn agent_framework.server.app:app --port 8000 --reload
@@ -47,9 +47,43 @@ uv run ruff format .
 
 ```
 src/agent_framework/
+├── core/                      ← Framework primitives (pure engine, no external deps)
+│   ├── agents/                ← BaseAgent, ReActAgent, OrchestratorAgent, FlowAgent
+│   ├── memory/                ← RedisMemory, PostgresMemory, SlidingWindowMemory, SessionManager
+│   ├── tools/                 ← BaseTool, ToolResult, ToolRegistry (abstractions)
+│   ├── context/               ← RedisModelContext, build() for prompt assembly
+│   ├── messages/              ← SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, …
+│   ├── guardrails/            ← ContentFilter, PII, PromptInjection, MaxToken, ToolCallValidation
+│   ├── pipelines/             ← Codegen and sequential processing pipelines
+│   ├── storage/               ← Local, S3, encrypted, tenant-aware backends
+│   └── structured/            ← Structured output parsing
+│
+├── integrations/              ← ALL external adapters (LLM, audio, MCP, skills, APIs)
+│   ├── llm/                   ← BaseModelClient + OpenAI implementation
+│   │   ├── base_client.py     ← Abstract LLM client interface
+│   │   └── openai/            ← OpenAIClient — the only LLM provider currently wired
+│   ├── audio/                 ← BaseAudioClient + OpenAI implementation
+│   │   ├── base_audio_client.py
+│   │   └── openai/            ← OpenAIAudioClient
+│   ├── mcp/                   ← MCPClient, MCPTool wrappers, MCP App tools, app_tool_base
+│   ├── skills/                ← SkillManager, YAML frontmatter SKILL.md loader
+│   └── spotify/               ← SpotifyService, SpotifyAuthService
+│
+├── tools/                     ← Built-in tool implementations shipped with the framework
+│   ├── human_input.py         ← AskHumanTool, HITL handlers (approval, callback, CLI)
+│   ├── task_manager_tool.py   ← TaskManagerTool (Kanban board)
+│   ├── file_manager_tool.py   ← FileManagerTool (upload/download)
+│   ├── web_surfer.py          ← WebSurferTool (web browsing)
+│   └── code_interpreter/      ← CodeInterpreterTool (Firecracker VM HTTP client)
+│
 ├── server/                    ← Monolith FastAPI server
 │   ├── app.py                 ← Factory + lifespan; DI via app.state.*
 │   ├── routes/                ← 14 route files (chat, tasks, hitl, threads, mcp_apps, …)
+│   ├── security/              ← Thin wrappers delegating to shared/auth/ (binds settings)
+│   ├── services/              ← Business logic (thread_service.py, agent_service.py, …)
+│   ├── sse/                   ← SSE event bus + HITL bridge (monolith only)
+│   │   ├── bridge.py          ← WebHITLBridge, BridgeRegistry
+│   │   └── events.py          ← EventBus + typed SSE event dataclasses
 │   ├── models.py              ← SQLAlchemy ORM models
 │   ├── database.py            ← Async session factory
 │   └── schemas.py             ← Pydantic request/response models
@@ -66,28 +100,10 @@ src/agent_framework/
 │   ├── job_controller/        ← Job lifecycle: create/start/complete/fail/cancel (JobRun ORM model)
 │   ├── live_stream/           ← SSE projector — fans out events to connected clients
 │   ├── policy/                ← RBAC authorization checks
-│   └── tool_executor/         ← Executes individual tools in isolated contexts
+│   ├── tool_executor/         ← Executes individual tools in isolated contexts
+│   └── code_interpreter/      ← Firecracker VM sandbox for code execution
 │
-├── core/                      ← Framework primitives
-│   ├── agents/                ← BaseAgent, ReActAgent, OrchestratorAgent, FlowAgent
-│   ├── memory/                ← RedisMemory, PostgresMemory, SlidingWindowMemory, SessionManager
-│   ├── tools/                 ← BaseTool, ToolResult, ToolRegistry
-│   ├── context/               ← RedisModelContext, build() for prompt assembly
-│   ├── messages/              ← SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, …
-│   ├── guardrails/            ← ContentFilter, PII, PromptInjection, MaxToken, ToolCallValidation
-│   ├── pipelines/             ← Codegen and sequential processing pipelines
-│   ├── storage/               ← Local, S3, encrypted, tenant-aware backends
-│   └── structured/            ← Structured output parsing
-│
-├── providers/
-│   └── llm/openai/
-│       └── openai_client.py   ← OpenAIClient — the only LLM provider currently wired
-│
-├── extensions/
-│   ├── mcp/                   ← MCPClient, MCPTool wrappers, MCP App tools, app_tool_base
-│   └── skills/                ← SkillManager, YAML frontmatter SKILL.md loader
-│
-├── shared/                    ← Cross-microservice contracts and utilities
+├── shared/                    ← Cross-service infrastructure and contracts
 │   ├── contracts/             ← Pydantic DTOs per service domain
 │   │   ├── admin.py           ← AdminStats, UserSummary
 │   │   ├── auth.py            ← TokenPayload, LoginRequest
@@ -98,15 +114,14 @@ src/agent_framework/
 │   │   └── tool.py            ← ToolCallRequest, ToolCallResponse
 │   ├── events/
 │   │   ├── bus.py             ← EventBus (Redis pub/sub): connect/disconnect/publish/subscribe
-│   │   └── types.py           ← Event factories: workflow_started, workflow_completed,
-│   │                             workflow_failed, workflow_cancelled, agent_*, tool_*, hitl_*, …
-│   ├── auth/                  ← JWT verification utils
-│   └── database/              ← Shared SQLAlchemy session factory
+│   │   └── types.py           ← Event factories: workflow_started, workflow_completed, …
+│   ├── auth/                  ← Canonical JWT + auth middleware (AuthClaims, verify_token, get_current_user)
+│   ├── database/              ← Shared session factory + get_db_session dependency
+│   ├── observability/         ← OpenTelemetry setup (traces + metrics)
+│   └── tasks/                 ← In-memory TaskStore singleton
 │
 ├── configs/settings.py        ← Pydantic Settings (reads from .env)
 ├── evals/                     ← Evaluation framework (runner, judge, criteria, models)
-├── mcp_apps/                  ← Pre-built MCP App HTML widgets (kanban, spotify, visualizer, …)
-├── code_interpreter_service/  ← Firecracker VM sandbox (separate from services/)
 └── cli.py                     ← CLI entry: `agent-framework start/stop`
 ```
 
@@ -127,6 +142,7 @@ src/agent_framework/
 | `live_stream` | — | SSE projector, subscribed to EventBus |
 | `file_store` | `FileRecord` | File upload/download storage |
 | `admin` | `AdminLog` | Admin CRUD (users, stats) |
+| `code_interpreter` | — | Firecracker VM sandbox for code execution |
 
 ### Standard Service File Layout
 
@@ -168,22 +184,22 @@ Register in `server/app.py` lifespan under `app.state.tools`.
 
 ```python
 # ✅ Correct
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
 
 # ❌ Wrong — file does not exist
-from agent_framework.providers.llm.openai.client import OpenAIClient
+from agent_framework.integrations.llm.openai.client import OpenAIClient
 ```
 
 ### MCP Tools — load at runtime via MCPClient
 
 ```python
-from agent_framework.extensions.mcp import MCPClient
+from agent_framework.integrations.mcp import MCPClient
 
 client = MCPClient(url="http://localhost:9000/sse")
 tools = await client.discover_tools()   # returns list[MCPTool]
 ```
 
-There is **no** `extensions.mcp.loader` module. Do not import from it.
+There is **no** `integrations.mcp.loader` module. Do not import from it.
 
 ### Shared Event Bus — always use factory functions
 
@@ -200,7 +216,7 @@ Never construct event dicts manually — always use the factory functions from `
 ### SSE Event Bus (monolith only)
 
 ```python
-from agent_framework.web_hitl import WebHITLBridge
+from agent_framework.server.sse.bridge import WebHITLBridge
 
 bridge: WebHITLBridge = request.app.state.bridge
 await bridge.put_event({"type": "my_event", "data": {...}})
@@ -289,7 +305,7 @@ SYSTEM_INSTRUCTIONS=...     # per-agent system prompt override for agent_runtime
 | Tempo | 4318 | OTLP HTTP |
 | Grafana | 3001 | Dashboard |
 
-Microservice ports: see `docker-compose.microservices.yml`.
+Microservice ports: see `docker/docker-compose.microservices.yml`.
 
 ---
 
@@ -334,6 +350,27 @@ GitHub Actions workflows in `.github/workflows/ci.yml`:
 
 ---
 
+## Evaluation Framework (`evals/`)
+
+Measures agent quality via LLM-as-judge grading.
+
+| Module | Key Class | Purpose |
+|---|---|---|
+| `models.py` | `EvalCase`, `EvalDataset`, `EvalResult`, `EvalReport` | Data models for eval definition and results |
+| `judge.py` | `LLMJudge` | Grades agent outputs using an LLM |
+| `runner.py` | `EvalRunner` | Executes eval suites with concurrency + retries |
+| `criteria.py` | `CORRECTNESS`, `HELPFULNESS`, `SAFETY`, `RELEVANCE` | Built-in grading criteria |
+
+```python
+from agent_framework.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+
+runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
+report = await runner.run(dataset)
+runner.export_markdown()  # writes results/report.md
+```
+
+---
+
 ## Smoke Tests
 
 Run cluster smoke tests:
@@ -353,7 +390,21 @@ Tests pod health, endpoints, chat flow, and observability stack.
 - **`app.state.*`** is the DI container — inject in lifespan, read in routes
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **Snake_case** — files, modules, functions, variables
-- Do NOT modify `main.py` (legacy dev entry point)
 - New DB models → `server/models/`; new schemas → `server/schemas.py` (monolith) or service-local `models.py` (microservices)
-- Built-in skills → `skills/<name>/SKILL.md` with YAML frontmatter
+- Built-in skills → `src/agent_framework/skills/<name>/SKILL.md` with YAML frontmatter
 - MCP SSE server source → `docker/mcp_server/server.py` (FastMCP 2.x, pinned)
+- Canonical enum re-exports live in `core/__init__.py` (e.g. `from agent_framework.core import ToolRisk, RunStatus`).
+- **DB session dependency** — all microservice routes use `get_db_session` from `shared.database.dependency`. Never define a local `_get_db` helper.
+- **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: no `@pytest.mark.asyncio` decorator needed. Write `async def test_*` directly.
+
+---
+
+## Known Tech Debt
+
+| Area | Issue | Notes |
+|---|---|---|
+| `server/routes/spotify_oauth.py` | `session_id = "default_user"` hardcoded in 5 places | Should use real user identity from auth context (XSS/CSRF issues fixed in Phase 3) |
+| `shared/tasks/store.py` | `TaskStore` is in-memory only | Should be backed by Postgres for persistence across restarts |
+| `core/agents/react_agent.py` | `_run_inner()` is ~200 lines | Needs guardrail checks extracted into helper methods |
+| Test coverage | No tests for agents, context, skills, evals, HITL, most microservices | Major gap — only storage, structured, pipelines, event_bus are tested |
+

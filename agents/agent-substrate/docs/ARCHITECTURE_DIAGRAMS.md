@@ -37,10 +37,10 @@ graph TB
             FileSvc[file_service.py\nsave / extract / purge]
         end
 
-        subgraph Runtime["runtime/"]
+        subgraph SSE["server/sse/"]
             EB[EventBus\nevents.py]
-            HITL[WebHITLBridge\nhitl.py]
-            BR[BridgeRegistry\nhitl.py]
+            HITL[WebHITLBridge\nbridge.py]
+            BR[BridgeRegistry\nbridge.py]
         end
 
         subgraph Agent["core/agents/"]

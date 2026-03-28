@@ -50,7 +50,7 @@ def generate_code(config: PipelineConfig) -> str:
         from agent_framework.core.context.implementations import SlidingWindowContext
         from agent_framework.core.memory.unbounded_memory import UnboundedMemory
         from agent_framework.core.tools.base_tool import BaseTool, ToolResult
-        from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+        from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
     ''')
     )
 
@@ -83,7 +83,7 @@ def generate_code(config: PipelineConfig) -> str:
     if NodeType.SKILL in node_types_used:
         sections.append(
             textwrap.dedent("""\
-            from agent_framework.extensions.skills import SkillManager
+            from agent_framework.integrations.skills import SkillManager
         """)
         )
 
@@ -423,12 +423,12 @@ _TOOL_CLASS_MAP = {
 _TOOL_IMPORT_MAP = {
     "calculator": "from agent_framework.core.tools.builtin_tools import CalculatorTool",
     "get_current_time": "from agent_framework.core.tools.builtin_tools import GetCurrentTimeTool",
-    "data_visualizer": "from agent_framework.extensions.mcp.app_tools import DataVisualizerTool",
-    "markdown_previewer": "from agent_framework.extensions.mcp.app_tools import MarkdownPreviewerTool",
-    "json_explorer": "from agent_framework.extensions.mcp.app_tools import JsonExplorerTool",
-    "color_palette": "from agent_framework.extensions.mcp.app_tools import ColorPaletteTool",
-    "kanban_board": "from agent_framework.extensions.mcp.app_tools import KanbanBoardTool",
-    "spotify_player": "from agent_framework.extensions.mcp.app_tools import SpotifyPlayerTool",
+    "data_visualizer": "from agent_framework.integrations.mcp.app_tools import DataVisualizerTool",
+    "markdown_previewer": "from agent_framework.integrations.mcp.app_tools import MarkdownPreviewerTool",
+    "json_explorer": "from agent_framework.integrations.mcp.app_tools import JsonExplorerTool",
+    "color_palette": "from agent_framework.integrations.mcp.app_tools import ColorPaletteTool",
+    "kanban_board": "from agent_framework.integrations.mcp.app_tools import KanbanBoardTool",
+    "spotify_player": "from agent_framework.integrations.mcp.app_tools import SpotifyPlayerTool",
 }
 
 

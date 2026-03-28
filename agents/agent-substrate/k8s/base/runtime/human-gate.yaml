@@ -18,9 +18,19 @@ spec:
         af.service-role: human-gate
     spec:
       serviceAccountName: human-gate
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: human-gate
           image: ghcr.io/example/agent-framework/human-gate:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8016
               name: http

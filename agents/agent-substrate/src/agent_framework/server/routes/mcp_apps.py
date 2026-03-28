@@ -33,7 +33,9 @@ router = APIRouter(tags=["mcp-apps"])
 _ui_resources: Dict[str, Path] = {}
 
 # Built-in apps directory
-_APPS_DIR = Path(__file__).resolve().parent.parent.parent / "mcp_apps"
+_APPS_DIR = (
+    Path(__file__).resolve().parent.parent.parent / "integrations" / "mcp" / "apps"
+)
 
 
 def register_app_resource(name: str, html_path: Path) -> str:
@@ -74,7 +76,7 @@ def resolve_ui_uri(uri: str, base_url: str = "") -> str | None:
 
 
 def _discover_builtin_apps() -> None:
-    """Scan the mcp_apps/ directory for *.html files and register them."""
+    """Scan the bundled integrations/mcp/apps directory for *.html files."""
     if not _APPS_DIR.exists():
         return
     for html_file in _APPS_DIR.glob("*.html"):

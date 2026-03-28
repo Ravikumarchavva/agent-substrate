@@ -16,6 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_framework.shared.database.dependency import get_db_session
+
 from agent_framework.services.human_gate.service import (
     cancel_pending_for_thread,
     get_pending_for_thread,
@@ -47,16 +49,6 @@ class HITLRequestOut(BaseModel):
     resolved_at: Optional[str]
 
 
-async def _get_db(request: Request):
-    async with request.app.state.session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
 def _to_out(req) -> HITLRequestOut:
     return HITLRequestOut(
         request_id=req.request_id,
@@ -77,7 +69,7 @@ async def respond_to_request(
     request_id: str,
     body: HITLResponseBody,
     request: Request,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Respond to a pending HITL request."""
     req = await get_request(db, request_id)
@@ -113,7 +105,7 @@ async def respond_to_request(
 async def get_thread_status(
     thread_id: uuid.UUID,
     request: Request,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get all pending HITL requests for a thread."""
     pending = await get_pending_for_thread(db, thread_id)
@@ -127,7 +119,7 @@ async def get_thread_status(
 @router.get("/request/{request_id}")
 async def get_request_endpoint(
     request_id: str,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     req = await get_request(db, request_id)
     if not req:
@@ -139,7 +131,7 @@ async def get_request_endpoint(
 async def cancel_thread_requests(
     thread_id: uuid.UUID,
     request: Request,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Cancel all pending HITL requests for a thread."""
     count = await cancel_pending_for_thread(

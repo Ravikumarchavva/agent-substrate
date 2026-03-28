@@ -59,7 +59,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     thread_id: uuid.UUID
-    messages: List[ChatMessage]
+    messages: List[ChatMessage] = Field(min_length=1)
     system_instructions: Optional[str] = None
     file_ids: Optional[List[uuid.UUID]] = None
 

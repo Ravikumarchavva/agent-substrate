@@ -6,11 +6,11 @@ and MCP tools (like filesystem) together in a single agent.
 import asyncio
 import json
 from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_framework.extensions.mcp import MCPClient, MCPTool
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.integrations.mcp import MCPClient, MCPTool
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
 from agent_framework.core.memory.unbounded_memory import UnboundedMemory
-from agent_framework.core.messages.agent_messages import (
-    UserMessage, SystemMessage, ToolMessage
+from agent_framework.core.messages.client_messages import (
+    UserMessage, SystemMessage, ToolExecutionResultMessage,
 )
 
 
@@ -96,7 +96,7 @@ async def main():
                     print(f"   Result: {result[:100]}...")
                     
                     # Add tool result
-                    memory.add_message(ToolMessage(
+                    memory.add_message(ToolExecutionResultMessage(
                         content=result,
                         tool_call_id=tool_call.id,
                         name=tool_name

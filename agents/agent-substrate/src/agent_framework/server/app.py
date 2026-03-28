@@ -21,10 +21,10 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from agent_framework.configs.settings import settings
 from agent_framework.core.memory.redis_memory import RedisMemory
-from agent_framework.extensions.tools.human_input import AskHumanTool
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
-from agent_framework.providers.audio.openai import OpenAIAudioClient
-from agent_framework.runtime.observability.telemetry import (
+from agent_framework.tools.human_input import AskHumanTool
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
+from agent_framework.integrations.audio.openai import OpenAIAudioClient
+from agent_framework.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
 )
@@ -50,12 +50,12 @@ from agent_framework.core.tools.base_tool import ToolRisk
 from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from agent_framework.core.tools.registry import ToolRegistry
 from agent_framework.core.storage.factory import create_file_store
-from agent_framework.extensions.tools.code_interpreter import CodeInterpreterTool
-from agent_framework.extensions.tools.code_interpreter.http_client import (
+from agent_framework.tools.code_interpreter import CodeInterpreterTool
+from agent_framework.tools.code_interpreter.http_client import (
     CodeInterpreterClient,
 )
-from agent_framework.extensions.tools.file_manager_tool import FileManagerTool
-from agent_framework.extensions.mcp.app_tools import (
+from agent_framework.tools.file_manager_tool import FileManagerTool
+from agent_framework.integrations.mcp.app_tools import (
     ColorPaletteTool,
     DataVisualizerTool,
     JsonExplorerTool,
@@ -63,9 +63,9 @@ from agent_framework.extensions.mcp.app_tools import (
     MarkdownPreviewerTool,
     SpotifyPlayerTool,
 )
-from agent_framework.providers.integrations.spotify import SpotifyService
-from agent_framework.runtime.hitl import BridgeRegistry
-from agent_framework.extensions.tools.task_manager_tool import TaskManagerTool
+from agent_framework.integrations.spotify.client import SpotifyService
+from agent_framework.server.sse.bridge import BridgeRegistry
+from agent_framework.tools.task_manager_tool import TaskManagerTool
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
@@ -93,6 +93,9 @@ async def lifespan(app: FastAPI):
     await redis_memory.connect()
     app.state.redis_memory = redis_memory
 
+    # JWT secret for shared auth middleware
+    app.state.jwt_secret = settings.JWT_SECRET
+
     # Shared agent dependencies (injected into routes via app.state)
     app.state.model_client = OpenAIClient(
         model="gpt-4o-mini",
@@ -112,7 +115,7 @@ async def lifespan(app: FastAPI):
     # --- keep app.state.bridge as a sentinel-less stub for task SSE events ---
     # TaskManagerTool emits via a dynamic closure that routes through the
     # correct per-thread bridge at call time (safe with concurrent requests).
-    from agent_framework.extensions.tools.task_manager_tool import (
+    from agent_framework.tools.task_manager_tool import (
         current_thread_id as _task_thread_id,
     )
 

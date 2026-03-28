@@ -344,7 +344,7 @@ def extract_text_from_bytes(
             )
             return (
                 f"(PDF file: {name} — text extraction unavailable, "
-                "install pypdf to enable it. "
+                "run 'uv sync --group files' to enable it. "
                 "The file is available in the code interpreter at /data/{name})"
             )
         except Exception as exc:
@@ -373,7 +373,7 @@ def extract_text_from_bytes(
             )
             return (
                 f"(Excel file: {name} — text extraction unavailable, "
-                "install openpyxl to enable it. "
+                "run 'uv sync --group files' to enable it. "
                 f"The file is available in the code interpreter at /data/{name})"
             )
         except Exception as exc:

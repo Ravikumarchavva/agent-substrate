@@ -23,7 +23,7 @@ Architecture:
 
 Usage::
 
-    from agent_framework.extensions.tools.human_input import (
+    from agent_framework.tools.human_input import (
         CLIHumanHandler, AskHumanTool,
         CLIApprovalHandler,
     )

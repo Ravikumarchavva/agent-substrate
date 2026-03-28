@@ -55,9 +55,9 @@ from agent_framework.core.messages.client_messages import (
     ToolExecutionResultMessage,
     UserMessage,
 )
-from agent_framework.providers.llm.base_client import BaseModelClient
-from agent_framework.runtime.observability import global_metrics, global_tracer, logger
-from agent_framework.extensions.tools.human_input import (
+from agent_framework.integrations.llm.base_client import BaseModelClient
+from agent_framework.shared.observability import global_metrics, global_tracer, logger
+from agent_framework.tools.human_input import (
     ToolApprovalAction,
     ToolApprovalHandler,
     ToolApprovalRequest,
@@ -70,7 +70,7 @@ from agent_framework.core.resilience import (
     _calculate_delay,
 )
 from agent_framework.core.tools.base_tool import BaseTool, HitlMode, ToolResult
-from agent_framework.extensions.skills import SkillManager
+from agent_framework.integrations.skills import SkillManager
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ class ReActAgent(BaseAgent):
 
     def _reset_hitl_tools(self) -> None:
         """Reset AskHumanTool request counters between runs."""
-        from agent_framework.extensions.tools.human_input import AskHumanTool
+        from agent_framework.tools.human_input import AskHumanTool
 
         for tool in self.tools:
             if isinstance(tool, AskHumanTool):

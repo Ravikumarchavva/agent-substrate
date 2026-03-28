@@ -42,14 +42,14 @@ from agent_framework.server.services.file_service import (
     get_files_by_ids,
 )
 from agent_framework.server.routes.mcp_apps import resolve_ui_uri
-from agent_framework.extensions.tools.task_manager_tool import current_thread_id
-from agent_framework.extensions.tools.file_manager_tool import (
+from agent_framework.tools.task_manager_tool import current_thread_id
+from agent_framework.tools.file_manager_tool import (
     current_thread_id as file_thread_id,
 )
-from agent_framework.extensions.tools.web_surfer import WebSurferTool
-from agent_framework.extensions.tools.human_input import AskHumanTool
-from agent_framework.runtime.hitl import BRIDGE_DONE, BridgeRegistry, WebHITLBridge
-from agent_framework.runtime.events import (
+from agent_framework.tools.web_surfer import WebSurferTool
+from agent_framework.tools.human_input import AskHumanTool
+from agent_framework.server.sse.bridge import BRIDGE_DONE, BridgeRegistry, WebHITLBridge
+from agent_framework.server.sse.events import (
     EventBus,
     BUS_CLOSED,
     TextDeltaEvent,
@@ -79,7 +79,10 @@ async def _get_agent_deps(ctx: ServerContext, thread_id: str):
 
     # Only add WebSurferTool if not already present
     if not any(isinstance(t, WebSurferTool) for t in tools):
-        tools.append(WebSurferTool())
+        try:
+            tools.append(WebSurferTool())
+        except Exception:
+            logger.debug("WebSurferTool not available for this request")
 
     return {
         "model_client": ctx.model_client,

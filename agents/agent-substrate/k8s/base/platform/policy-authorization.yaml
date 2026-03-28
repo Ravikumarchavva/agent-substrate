@@ -18,9 +18,19 @@ spec:
         af.service-role: policy-authorization
     spec:
       serviceAccountName: policy-authorization
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: policy-authorization
           image: ghcr.io/example/agent-framework/policy-authorization:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8011
               name: http

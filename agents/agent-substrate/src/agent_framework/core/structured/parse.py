@@ -4,7 +4,7 @@ structured outputs when you don't need a full ReAct agent loop.
 Example::
 
     from agent_framework.core.structured import parse, ClassificationResult
-    from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+    from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
     from agent_framework.core.messages.client_messages import UserMessage
 
     client = OpenAIClient(model='gpt-4o-2024-08-06')
@@ -31,7 +31,7 @@ from agent_framework.core.messages.client_messages import SystemMessage
 if TYPE_CHECKING:
     from agent_framework.core.messages.base_message import BaseClientMessage
     from agent_framework.core.structured.result import StructuredOutputResult
-    from agent_framework.providers.llm.base_client import BaseModelClient
+    from agent_framework.integrations.llm.base_client import BaseModelClient
 
 T = TypeVar("T")
 

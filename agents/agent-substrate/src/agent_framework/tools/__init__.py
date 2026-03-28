@@ -1,1 +1,1 @@
-"""extensions.tools - concrete tool implementations."""
+"""tools - built-in tool implementations shipped with the framework."""

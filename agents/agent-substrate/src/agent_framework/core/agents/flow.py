@@ -42,7 +42,7 @@ from agent_framework.core.agents.base_agent import BaseAgent
 from agent_framework.core.agents.graph import FlowEdge, FlowGraph, FlowNode
 from agent_framework.core.memory.memory_scope import MemoryScope
 from agent_framework.core.hooks import HookEvent, HookManager
-from agent_framework.runtime.observability import logger
+from agent_framework.shared.observability import logger
 
 
 # ---------------------------------------------------------------------------

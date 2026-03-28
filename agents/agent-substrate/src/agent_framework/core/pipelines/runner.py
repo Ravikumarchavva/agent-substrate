@@ -46,10 +46,10 @@ from agent_framework.core.pipelines.while_runner import WhilePipelineRunner
 from agent_framework.core.structured.judge import LLMJudge
 from agent_framework.core.structured.router import StructuredRouter
 from agent_framework.core.tools.base_tool import BaseTool
-from agent_framework.extensions.skills import SkillManager
-from agent_framework.providers.llm.base_client import BaseModelClient
-from agent_framework.extensions.mcp.client import MCPClient
-from agent_framework.extensions.mcp.tool import MCPTool
+from agent_framework.integrations.skills import SkillManager
+from agent_framework.integrations.llm.base_client import BaseModelClient
+from agent_framework.integrations.mcp.client import MCPClient
+from agent_framework.integrations.mcp.tool import MCPTool
 
 logger = logging.getLogger("agent_framework.pipelines.runner")
 
@@ -346,7 +346,7 @@ class PipelineRunner:
         ]
         if approval_nodes and hitl_bridge is not None:
             try:
-                from agent_framework.extensions.tools.human_input import AskHumanTool
+                from agent_framework.tools.human_input import AskHumanTool
 
                 tools = [*tools, AskHumanTool(bridge=hitl_bridge)]
                 logger.info(
@@ -387,7 +387,9 @@ class PipelineRunner:
         if agent_model != getattr(model_client, "model", None):
             # Build a new client with the different model, preserving the API key.
             # Try multiple attribute paths: self.api_key → self.client.api_key → env var
-            from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+            from agent_framework.integrations.llm.openai.openai_client import (
+                OpenAIClient,
+            )
 
             api_key = (
                 getattr(model_client, "api_key", None)

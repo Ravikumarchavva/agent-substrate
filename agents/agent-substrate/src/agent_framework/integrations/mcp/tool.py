@@ -3,7 +3,7 @@
 from typing import Any
 
 from agent_framework.core.tools.base_tool import BaseTool, ToolResult
-from agent_framework.extensions.mcp.client import MCPClient
+from agent_framework.integrations.mcp.client import MCPClient
 
 
 class MCPTool(BaseTool):

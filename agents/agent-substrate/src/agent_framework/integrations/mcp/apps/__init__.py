@@ -1,1 +1,1 @@
-"""extensions.mcp_apps - MCP App HTML templates."""
+"""integrations.mcp.apps - MCP App HTML templates."""

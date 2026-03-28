@@ -49,6 +49,15 @@ cd agent-framework
 # Install with uv
 uv sync
 
+# Optional: install notebook support for examples/*.ipynb
+uv sync --group notebooks
+
+# Optional: install browser automation and file parsing extras
+uv sync --group browser --group files
+
+# Optional: install example-only service clients and demo tooling
+uv sync --group examples
+
 # Or with pip
 pip install -e .
 
@@ -60,9 +69,9 @@ export OPENAI_API_KEY="sk-your-key-here"
 
 ```python
 import asyncio
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
-from agent_framework.memory.unbounded_memory import UnboundedMemory
-from agent_framework.messages.agent_messages import UserMessage, SystemMessage
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
+from agent_framework.core.memory.unbounded_memory import UnboundedMemory
+from agent_framework.core.messages.agent_messages import UserMessage, SystemMessage
 
 async def main():
     # Initialize components
@@ -232,8 +241,10 @@ Check the `examples/` directory for complete examples:
 
 - **[Getting Started Guide](docs/GETTING_STARTED.md)** - 10-minute quickstart
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and principles
+- **[Architecture Diagrams](docs/ARCHITECTURE_DIAGRAMS.md)** - System maps and request flow diagrams
 - **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
 - **[Component Specifications](docs/COMPONENT_SPECS.md)** - Detailed specs
+- **[Operations Guide](docs/OPERATIONS.md)** - Kind cluster deploy and debugging workflows
 - **[Roadmap](docs/ROADMAP.md)** - Future plans and features
 
 ### Component Guides
@@ -275,22 +286,25 @@ from agent_framework.core.memory.unbounded_memory import UnboundedMemory
 from agent_framework.core.memory.session_manager import SessionManager
 from agent_framework.core.guardrails.base_guardrail import BaseGuardrail
 
-# Providers — LLM clients, audio, third-party APIs
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
-from agent_framework.providers.audio import BaseAudioClient
-from agent_framework.providers.integrations.spotify import SpotifyService
+# Integrations — LLM clients, audio, MCP, skills, third-party APIs
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
+from agent_framework.integrations.audio import BaseAudioClient
+from agent_framework.integrations.spotify.client import SpotifyService
+from agent_framework.integrations.mcp import MCPClient
+from agent_framework.integrations.skills import SkillManager
 
-# Extensions — tools, MCP, skills
-from agent_framework.extensions.tools.base_tool import BaseTool, ToolResult
-from agent_framework.extensions.tools.web_surfer import WebSurferTool
-from agent_framework.extensions.tools.human_input import AskHumanTool
-from agent_framework.extensions.tools.mcp_client import MCPClient
-from agent_framework.extensions.skills import SkillManager
+# Tools — built-in tool implementations
+from agent_framework.tools.human_input import AskHumanTool
+from agent_framework.tools.web_surfer import WebSurferTool
+from agent_framework.tools.file_manager_tool import FileManagerTool
 
-# Runtime — HITL, tasks, credentials, telemetry
-from agent_framework.runtime.hitl import WebHITLBridge
-from agent_framework.runtime.tasks.store import TaskStore
-from agent_framework.runtime.observability import configure_opentelemetry
+# Server SSE — event bus, HITL bridge
+from agent_framework.server.sse.bridge import WebHITLBridge
+from agent_framework.server.sse.events import EventBus
+
+# Shared — cross-service infra
+from agent_framework.shared.tasks.store import TaskStore
+from agent_framework.shared.observability import configure_opentelemetry
 ```
 
 ### Common extension tasks — quick reference

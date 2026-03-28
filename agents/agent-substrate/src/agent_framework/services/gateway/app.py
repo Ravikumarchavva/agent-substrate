@@ -90,7 +90,6 @@ async def lifespan(app):
         await app.state.code_interpreter_client.close()
 
 
-
 _cors_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
 _cors_origins = (
     _json.loads(_cors_raw)

@@ -1,6 +1,6 @@
-"""runtime.observability - OpenTelemetry setup."""
+"""shared.observability - OpenTelemetry setup."""
 
-from agent_framework.runtime.observability.telemetry import (
+from agent_framework.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
     Tracer,

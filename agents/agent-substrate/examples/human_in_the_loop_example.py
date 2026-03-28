@@ -13,9 +13,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from agent_framework.core.agents.react_agent import ReActAgent
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
 from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_framework.extensions.tools.human_input import CLIHumanHandler, AskHumanTool
+from agent_framework.tools.human_input import CLIHumanHandler, AskHumanTool
 
 
 async def main():

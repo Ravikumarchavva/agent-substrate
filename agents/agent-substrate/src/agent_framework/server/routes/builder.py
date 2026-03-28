@@ -126,7 +126,7 @@ async def get_registry(request: Request) -> RegistryResponse:
     # Skills — discover from SkillManager
     skills_list: List[RegistrySkill] = []
     try:
-        from agent_framework.extensions.skills import SkillManager
+        from agent_framework.integrations.skills import SkillManager
 
         mgr = SkillManager(auto_discover=True)
         for meta in mgr.list_available():

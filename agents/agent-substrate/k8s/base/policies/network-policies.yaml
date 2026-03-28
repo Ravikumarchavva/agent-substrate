@@ -1,0 +1,824 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: af-edge
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: af-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: af-runtime
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: af-data
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: af-data
+spec:
+  podSelector: {}
+  egress:
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: af-edge
+spec:
+  podSelector: {}
+  egress:
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: af-platform
+spec:
+  podSelector: {}
+  egress:
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: af-runtime
+spec:
+  podSelector: {}
+  egress:
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-egress-to-platform
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway-bff
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: platform
+      podSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - identity-auth
+          - policy-authorization
+    ports:
+    - protocol: TCP
+      port: 8010
+    - protocol: TCP
+      port: 8011
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-ingress-from-external
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway-bff
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 8001
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-egress-to-runtime
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway-bff
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: runtime
+      podSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - conversation
+          - job-controller
+          - human-gate
+          - live-stream
+          - file-store
+    ports:
+    - protocol: TCP
+      port: 8012
+    - protocol: TCP
+      port: 8013
+    - protocol: TCP
+      port: 8016
+    - protocol: TCP
+      port: 8017
+    - protocol: TCP
+      port: 8018
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-platform-ingress-from-gateway
+  namespace: af-platform
+spec:
+  podSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - identity-auth
+      - policy-authorization
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: edge
+      podSelector:
+        matchLabels:
+          app: gateway-bff
+    ports:
+    - protocol: TCP
+      port: 8010
+    - protocol: TCP
+      port: 8011
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-runtime-ingress-from-gateway
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - conversation
+      - job-controller
+      - human-gate
+      - live-stream
+      - file-store
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: edge
+      podSelector:
+        matchLabels:
+          app: gateway-bff
+    ports:
+    - protocol: TCP
+      port: 8012
+    - protocol: TCP
+      port: 8013
+    - protocol: TCP
+      port: 8016
+    - protocol: TCP
+      port: 8017
+    - protocol: TCP
+      port: 8018
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agent-runtime-egress-to-conversation
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-runtime
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: conversation
+    ports:
+    - protocol: TCP
+      port: 8012
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-conversation-ingress-from-agent-runtime
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: conversation
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: agent-runtime
+    ports:
+    - protocol: TCP
+      port: 8012
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-job-controller-egress-to-agent-runtime
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: job-controller
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: agent-runtime
+    ports:
+    - protocol: TCP
+      port: 8014
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agent-runtime-ingress-from-job-controller
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-runtime
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: job-controller
+    ports:
+    - protocol: TCP
+      port: 8014
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agent-runtime-egress-external-https
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-runtime
+  egress:
+  - ports:
+    - protocol: TCP
+      port: 443
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-data
+  namespace: af-edge
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-data
+  namespace: af-platform
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-data
+  namespace: af-runtime
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-from-services
+  namespace: af-data
+spec:
+  podSelector: {}
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          app.kubernetes.io/part-of: agent-framework
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-egress-to-gateway
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: gateway-bff
+    ports:
+    - protocol: TCP
+      port: 8001
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-egress-external-https
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  egress:
+  - ports:
+    - protocol: TCP
+      port: 443
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-egress-to-postgres
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          layer: data
+    ports:
+    - protocol: TCP
+      port: 5432
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-ingress-from-frontend
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway-bff
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+    ports:
+    - protocol: TCP
+      port: 8001
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-ingress-from-external
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 3000
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-admin-ingress-from-gateway
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: admin
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: edge
+      podSelector:
+        matchLabels:
+          app: gateway-bff
+    ports:
+    - protocol: TCP
+      port: 8019
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tool-executor-egress-to-code-interpreter
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: tool-executor
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: code-interpreter
+    ports:
+    - protocol: TCP
+      port: 8080
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-code-interpreter-ingress-from-tool-executor
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: code-interpreter
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: tool-executor
+    ports:
+    - protocol: TCP
+      port: 8080
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-platform-egress-to-data
+  namespace: af-platform
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-runtime-egress-to-data
+  namespace: af-runtime
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agent-runtime-egress-external
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-runtime
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ci-ingress-from-runtime-and-edge
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: code-interpreter
+  ingress:
+  - from:
+    - podSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - tool-executor
+          - agent-runtime
+    ports:
+    - protocol: TCP
+      port: 8080
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: edge
+      podSelector:
+        matchLabels:
+          app: gateway-bff
+    ports:
+    - protocol: TCP
+      port: 8080
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tool-executor-egress-to-ci
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: tool-executor
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: code-interpreter
+    ports:
+    - protocol: TCP
+      port: 8080
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tool-executor-egress-to-file-store
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: tool-executor
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: file-store
+    ports:
+    - protocol: TCP
+      port: 8018
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-egress-to-ci
+  namespace: af-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway-bff
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: runtime
+      podSelector:
+        matchLabels:
+          app: code-interpreter
+    ports:
+    - protocol: TCP
+      port: 8080
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-code-sandbox-egress-to-data-only
+  namespace: af-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: code-interpreter
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 9000
+    - protocol: TCP
+      port: 443
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-egress-to-kafka
+  namespace: af-edge
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 9092
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-platform-egress-to-kafka
+  namespace: af-platform
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 9092
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-runtime-egress-to-kafka
+  namespace: af-runtime
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          af.layer: data
+    ports:
+    - protocol: TCP
+      port: 9092
+  policyTypes:
+  - Egress

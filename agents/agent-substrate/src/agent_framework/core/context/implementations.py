@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from agent_framework.core.memory.base_memory import BaseMemory
     from agent_framework.core.memory.redis_memory import RedisMemory
     from agent_framework.core.memory.session_manager import SessionManager
-    from agent_framework.providers.llm.base_client import BaseModelClient
+    from agent_framework.integrations.llm.base_client import BaseModelClient
 
 _logger = logging.getLogger(__name__)
 

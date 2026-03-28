@@ -1,11 +1,11 @@
 """Unit tests for the pipeline system (schema, runner, codegen).
 
+Uses pytest-asyncio (asyncio_mode = "auto" in pyproject.toml).
 Uses mocks to avoid real API calls or Redis connections.
 """
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,16 +20,6 @@ from agent_framework.core.pipelines.schema import (
 )
 from agent_framework.core.pipelines.codegen import generate_code
 from agent_framework.core.pipelines.runner import PipelineRunner
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro):
-    """Sync wrapper for async tests (no pytest-asyncio needed)."""
-    return asyncio.run(coro)
 
 
 # ---------------------------------------------------------------------------
@@ -278,131 +268,107 @@ class TestCodegen:
 
 
 class TestPipelineRunner:
-    def test_build_simple_agent(self):
+    async def test_build_simple_agent(self):
         """Build a minimal pipeline with one agent → verifies ReActAgent returned."""
+        cfg = PipelineConfig(
+            name="Simple",
+            nodes=[_agent_node()],
+            edges=[],
+        )
+        runner = PipelineRunner()
+        agent = await runner.build(
+            cfg,
+            tools_registry=[],
+            model_client=_mock_model_client(),
+        )
+        from agent_framework.core.agents.react_agent import ReActAgent
 
-        async def _inner():
-            cfg = PipelineConfig(
-                name="Simple",
-                nodes=[_agent_node()],
-                edges=[],
-            )
-            runner = PipelineRunner()
-            agent = await runner.build(
-                cfg,
-                tools_registry=[],
-                model_client=_mock_model_client(),
-            )
-            from agent_framework.core.agents.react_agent import ReActAgent
+        assert isinstance(agent, ReActAgent)
+        assert agent.name == "TestAgent"
 
-            assert isinstance(agent, ReActAgent)
-            assert agent.name == "TestAgent"
-
-        _run(_inner())
-
-    def test_build_agent_with_tools(self):
+    async def test_build_agent_with_tools(self):
         """Agent connected to a tool → tool appears in agent.tools."""
+        mock_tool = _mock_tool("calculator")
+        cfg = PipelineConfig(
+            name="With Tools",
+            nodes=[_agent_node(), _tool_node()],
+            edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
+        )
+        runner = PipelineRunner()
+        agent = await runner.build(
+            cfg,
+            tools_registry=[mock_tool],
+            model_client=_mock_model_client(),
+        )
+        assert len(agent.tools) == 1
+        assert agent.tools[0].name == "calculator"
 
-        async def _inner():
-            mock_tool = _mock_tool("calculator")
-            cfg = PipelineConfig(
-                name="With Tools",
-                nodes=[_agent_node(), _tool_node()],
-                edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
-            )
-            runner = PipelineRunner()
-            agent = await runner.build(
-                cfg,
-                tools_registry=[mock_tool],
-                model_client=_mock_model_client(),
-            )
-            assert len(agent.tools) == 1
-            assert agent.tools[0].name == "calculator"
-
-        _run(_inner())
-
-    def test_build_agent_with_unbounded_memory(self):
+    async def test_build_agent_with_unbounded_memory(self):
         """Agent + unbounded memory node → uses UnboundedMemory."""
+        cfg = PipelineConfig(
+            name="With Memory",
+            nodes=[_agent_node(), _memory_node()],
+            edges=[_edge("agent_1", "mem_1", EdgeType.AGENT_MEMORY)],
+        )
+        runner = PipelineRunner()
+        agent = await runner.build(
+            cfg,
+            tools_registry=[],
+            model_client=_mock_model_client(),
+        )
+        from agent_framework.core.memory.unbounded_memory import UnboundedMemory
 
-        async def _inner():
-            cfg = PipelineConfig(
-                name="With Memory",
-                nodes=[_agent_node(), _memory_node()],
-                edges=[_edge("agent_1", "mem_1", EdgeType.AGENT_MEMORY)],
-            )
-            runner = PipelineRunner()
-            agent = await runner.build(
-                cfg,
-                tools_registry=[],
-                model_client=_mock_model_client(),
-            )
-            from agent_framework.core.memory.unbounded_memory import UnboundedMemory
+        assert isinstance(agent.memory, UnboundedMemory)
 
-            assert isinstance(agent.memory, UnboundedMemory)
-
-        _run(_inner())
-
-    def test_build_missing_agent_raises(self):
+    async def test_build_missing_agent_raises(self):
         """Pipeline with no agent or router → ValueError."""
-
-        async def _inner():
-            cfg = PipelineConfig(name="Empty", nodes=[_tool_node()], edges=[])
-            runner = PipelineRunner()
-            with pytest.raises(ValueError, match="no agent"):
-                await runner.build(
-                    cfg,
-                    tools_registry=[],
-                    model_client=_mock_model_client(),
-                )
-
-        _run(_inner())
-
-    def test_tool_not_in_registry_skipped(self):
-        """Tool node referencing an unregistered tool → silently skipped."""
-
-        async def _inner():
-            cfg = PipelineConfig(
-                name="Missing Tool",
-                nodes=[_agent_node(), _tool_node(tool_name="nonexistent")],
-                edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
-            )
-            runner = PipelineRunner()
-            agent = await runner.build(
-                cfg,
-                tools_registry=[_mock_tool("calculator")],  # not "nonexistent"
-                model_client=_mock_model_client(),
-            )
-            assert len(agent.tools) == 0  # tool was skipped
-
-        _run(_inner())
-
-    def test_build_router(self):
-        """Router node with 2 route edges → StructuredRouter returned."""
-
-        async def _inner():
-            cfg = PipelineConfig(
-                name="Router",
-                nodes=[
-                    _router_node(),
-                    _agent_node(id="a1"),
-                    _agent_node(id="a2"),
-                ],
-                edges=[
-                    _edge("router_1", "a1", EdgeType.ROUTER_ROUTE, label="greeting"),
-                    _edge("router_1", "a2", EdgeType.ROUTER_ROUTE, label="question"),
-                ],
-            )
-            runner = PipelineRunner()
-            result = await runner.build(
+        cfg = PipelineConfig(name="Empty", nodes=[_tool_node()], edges=[])
+        runner = PipelineRunner()
+        with pytest.raises(ValueError, match="no agent"):
+            await runner.build(
                 cfg,
                 tools_registry=[],
                 model_client=_mock_model_client(),
             )
-            from agent_framework.core.structured.router import StructuredRouter
 
-            assert isinstance(result, StructuredRouter)
+    async def test_tool_not_in_registry_skipped(self):
+        """Tool node referencing an unregistered tool → silently skipped."""
+        cfg = PipelineConfig(
+            name="Missing Tool",
+            nodes=[_agent_node(), _tool_node(tool_name="nonexistent")],
+            edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
+        )
+        runner = PipelineRunner()
+        agent = await runner.build(
+            cfg,
+            tools_registry=[_mock_tool("calculator")],  # not "nonexistent"
+            model_client=_mock_model_client(),
+        )
+        assert len(agent.tools) == 0  # tool was skipped
 
-        _run(_inner())
+    async def test_build_router(self):
+        """Router node with 2 route edges → StructuredRouter returned."""
+        cfg = PipelineConfig(
+            name="Router",
+            nodes=[
+                _router_node(),
+                _agent_node(id="a1"),
+                _agent_node(id="a2"),
+            ],
+            edges=[
+                _edge("router_1", "a1", EdgeType.ROUTER_ROUTE, label="greeting"),
+                _edge("router_1", "a2", EdgeType.ROUTER_ROUTE, label="question"),
+            ],
+        )
+        runner = PipelineRunner()
+        result = await runner.build(
+            cfg,
+            tools_registry=[],
+            model_client=_mock_model_client(),
+        )
+        from agent_framework.core.structured.router import StructuredRouter
+
+        assert isinstance(result, StructuredRouter)
 
     def test_build_routing_schema(self):
         """Dynamic Pydantic model from routing_fields config."""

@@ -30,7 +30,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 
-from agent_framework.providers.audio import BaseAudioClient
+from agent_framework.integrations.audio import BaseAudioClient
 from agent_framework.server.schemas import (
     RealtimeTokenResponse,
     TranscribeResponse,

@@ -5,7 +5,7 @@ Deploy as a separate k3s pod with privileged access to /dev/kvm.
 
 Quickstart::
 
-    uvicorn agent_framework.code_interpreter_service.app:app \\
+    uvicorn agent_framework.services.code_interpreter.app:app \\
         --host 0.0.0.0 --port 8080 --workers 1
 
 Environment variables (all prefixed with ``CI_``)::

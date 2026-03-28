@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Demo MCP SSE server — exposes tools at http://0.0.0.0:9000/sse.
 
-Start via:  docker compose --profile mcp up -d mcp-server
+Start via:  docker compose -f docker/docker-compose.yml --profile mcp up -d mcp-server
             python docker/mcp_server/server.py          (local dev)
 """
 

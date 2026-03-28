@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, List, Optional
 from agent_framework.core.messages.base_message import BaseClientMessage
 
 if TYPE_CHECKING:
-    from agent_framework.providers.llm.base_client import BaseModelClient
+    from agent_framework.integrations.llm.base_client import BaseModelClient
 
 
 class ModelContext(ABC):

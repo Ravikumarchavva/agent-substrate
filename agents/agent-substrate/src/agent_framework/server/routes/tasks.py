@@ -7,7 +7,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from agent_framework.runtime.tasks.store import GlobalTaskStore
+from agent_framework.shared.tasks.store import GlobalTaskStore
 from agent_framework.server.context import ServerContext, get_ctx
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])

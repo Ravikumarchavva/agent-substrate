@@ -112,7 +112,9 @@ async def get_thread(thread_id: str, request: Request):
 async def update_thread(thread_id: str, body: ThreadUpdate, request: Request):
     token = _get_auth_token(request)
     client = request.app.state.conversation_client
-    return await client.update_thread(token, thread_id, body.model_dump(exclude_none=True))
+    return await client.update_thread(
+        token, thread_id, body.model_dump(exclude_none=True)
+    )
 
 
 @thread_router.delete("/{thread_id}", status_code=204)
@@ -169,11 +171,15 @@ async def chat(body: ChatRequest, request: Request):
     try:
         run_result = await workflow.start_run(token, run_payload)
     except Exception as e:
-                # 409 = a run is already active for this thread (stale run, e.g. after page refresh).
+        # 409 = a run is already active for this thread (stale run, e.g. after page refresh).
         # Auto-cancel it, then retry once so the user doesn't have to.
         import httpx
+
         if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 409:
-            logger.warning("Stale run detected for thread %s — cancelling and retrying", body.thread_id)
+            logger.warning(
+                "Stale run detected for thread %s — cancelling and retrying",
+                body.thread_id,
+            )
             try:
                 await workflow.cancel_run(token, str(body.thread_id))
             except Exception:
@@ -182,7 +188,9 @@ async def chat(body: ChatRequest, request: Request):
                 run_result = await workflow.start_run(token, run_payload)
             except Exception as retry_err:
                 logger.exception("Retry after cancel failed")
-                raise HTTPException(status_code=502, detail=f"Workflow service error: {retry_err}")
+                raise HTTPException(
+                    status_code=502, detail=f"Workflow service error: {retry_err}"
+                )
         else:
             logger.exception("Failed to start workflow run")
             raise HTTPException(status_code=502, detail=f"Workflow service error: {e}")

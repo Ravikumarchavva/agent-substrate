@@ -41,7 +41,7 @@ uv run ruff format .
 |---|---|
 | Monolith FastAPI entry | `src/agent_framework/server/app.py` |
 | Microservices | `src/agent_framework/services/<name>/` |
-| LLM client | `src/agent_framework/providers/llm/openai/openai_client.py` |
+| LLM client | `src/agent_framework/integrations/llm/openai/openai_client.py` |
 | BaseTool | `src/agent_framework/core/tools/base_tool.py` |
 | RedisMemory | `src/agent_framework/core/memory/redis_memory.py` |
 | Event bus | `src/agent_framework/shared/events/bus.py` |
@@ -64,10 +64,10 @@ REDIS_SESSION_TTL=3600
 
 ```python
 # LLM client — file is openai_client.py, not client.py
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
 
 # MCP tools — no loader module exists; use MCPClient directly
-from agent_framework.extensions.mcp import MCPClient
+from agent_framework.integrations.mcp import MCPClient
 tools = await MCPClient(url=...).discover_tools()
 
 # Event bus — always use factory functions, never hand-build event dicts

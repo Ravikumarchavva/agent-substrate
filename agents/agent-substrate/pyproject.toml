@@ -12,8 +12,6 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "httpx>=0.27.0",
-    "ipykernel>=7.1.0",
-    "ipywidgets>=8.1.8",
     "mcp>=1.0.0",
     "openai>=2.15.0",
     "opentelemetry-api>=1.20.0",
@@ -21,30 +19,21 @@ dependencies = [
     "opentelemetry-exporter-otlp>=1.20.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
-    "pytest>=9.0.2",
     "python-json-logger>=2.0.7",
     "tiktoken>=0.12.0",
     "fastapi>=0.128.0",
     "opentelemetry-instrumentation-fastapi>=0.60b1",
     "pillow>=12.1.0",
     "fastmcp>=2.14.5",
-    "mcp-server-fetch>=2025.1.17",
-    "playwright>=1.58.0",
     "redis[hiredis]>=5.0.0",
     "sqlalchemy>=2.0.46",
     "asyncpg>=0.30.0",
     "uvicorn[standard]>=0.34.0",
-    "firecracker-python>=0.0.5",
     "pyyaml>=6.0",
-    "pypdf>=4.0.0",
-    "openpyxl>=3.1.0",
     "python-multipart>=0.0.9",
     "rich>=14.3.2",
     "pyjwt>=2.8.0",
     "cryptography>=45.0.0",
-    "pytest-asyncio>=1.3.0",
-    "minio>=7.2.20",
-    "kafka-python-ng>=2.2.3",
 ]
 
 [project.scripts]
@@ -57,22 +46,45 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "ruff>=0.15.7",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]
+
+notebooks = [
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+]
+
+browser = [
+    "playwright>=1.58.0",
+]
+
+files = [
+    "pypdf>=4.0.0",
+    "openpyxl>=3.1.0",
+]
+
+examples = [
+    "mcp-server-fetch>=2025.1.17",
+    "firecracker-python>=0.0.5",
+    "minio>=7.2.20",
+    "kafka-python-ng>=2.2.3",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [tool.ruff]
 exclude = [
     "notebooks/",
     "examples/",
     ".venv",
-    "builder/",
 ]
 
 [tool.ruff.lint]
 # E701/E702: single-line if/semicolons are intentional in dispatch tables
 # E402: mid-file imports are intentional in some route files
 [tool.ruff.lint.per-file-ignores]
-"src/agent_framework/extensions/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
+"src/agent_framework/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
 "src/agent_framework/services/conversation/routes.py" = ["E402"]

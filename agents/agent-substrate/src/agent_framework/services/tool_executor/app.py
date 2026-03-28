@@ -24,14 +24,14 @@ def _load_default_tools(ci_http_client=None) -> list:
     tools = []
 
     try:
-        from agent_framework.extensions.tools.web_surfer import WebSurferTool
+        from agent_framework.tools.web_surfer import WebSurferTool
 
         tools.append(WebSurferTool())
     except Exception:
         logger.debug("WebSurferTool not available")
 
     try:
-        from agent_framework.extensions.tools.task_manager_tool import TaskManagerTool
+        from agent_framework.tools.task_manager_tool import TaskManagerTool
 
         tools.append(TaskManagerTool())
     except Exception:
@@ -39,7 +39,7 @@ def _load_default_tools(ci_http_client=None) -> list:
 
     if ci_http_client is not None:
         try:
-            from agent_framework.extensions.tools.code_interpreter.tool import (
+            from agent_framework.tools.code_interpreter.tool import (
                 CodeInterpreterTool,
             )
 
@@ -76,7 +76,7 @@ async def lifespan(app):
     ci_client = None
     if ci_url:
         try:
-            from agent_framework.extensions.tools.code_interpreter.http_client import (
+            from agent_framework.tools.code_interpreter.http_client import (
                 CodeInterpreterClient,
             )
 

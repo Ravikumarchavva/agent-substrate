@@ -18,9 +18,19 @@ spec:
         af.service-role: job-controller
     spec:
       serviceAccountName: job-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: job-controller
           image: ghcr.io/example/agent-framework/job-controller:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8013
               name: http

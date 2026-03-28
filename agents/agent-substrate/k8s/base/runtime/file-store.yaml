@@ -18,9 +18,19 @@ spec:
         af.service-role: file-store
     spec:
       serviceAccountName: file-store
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: file-store
           image: ghcr.io/example/agent-framework/file-store:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8018
               name: http

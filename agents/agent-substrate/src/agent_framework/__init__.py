@@ -1,15 +1,16 @@
 """agent_framework - Async AI-agent framework built on FastAPI.
 
 Layer structure (dependencies flow downward only):
-    core        - agents, memory, messages, context, guardrails (pure logic)
-    providers   - LLM clients, audio clients, third-party APIs
-    extensions  - tools, skills, MCP apps
-    runtime     - HITL bridge, task store, credentials, telemetry
-    server      - FastAPI app, routes, DB models
+    core          - agents, memory, messages, context, guardrails (pure logic)
+    integrations  - LLM, audio, MCP, skills, third-party API adapters
+    tools         - built-in tool implementations
+    shared        - cross-service infrastructure (auth, events, database, observability)
+    server        - monolith FastAPI app, routes, DB models
+    services      - microservice FastAPI apps
 
 Recommended imports:
     from agent_framework.core.agents.react_agent import ReActAgent
-    from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+    from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
     from agent_framework.core.tools.base_tool import BaseTool, ToolResult
 
 Structured outputs quick-start:

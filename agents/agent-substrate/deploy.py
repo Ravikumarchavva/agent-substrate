@@ -10,6 +10,7 @@ Usage:
     uv run python deploy.py --cluster-name dev
     uv run python deploy.py --backend-tag my-backend:v2 --frontend-tag my-frontend:v2
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,20 +26,39 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 _ANSI = sys.stdout.isatty()
 
+
 def _c(text: str, code: str) -> str:
     return f"\033[{code}m{text}\033[0m" if _ANSI else text
 
-def header(msg: str) -> None:   print(_c(msg, "36"))   # cyan
-def step(msg: str) -> None:     print(_c(msg, "33"))   # yellow
-def ok(msg: str) -> None:       print(_c(msg, "32"))   # green
-def gray(msg: str) -> None:     print(_c(msg, "90"))   # dark gray
-def fail(msg: str) -> None:     print(_c(msg, "31"))   # red
+
+def header(msg: str) -> None:
+    print(_c(msg, "36"))  # cyan
+
+
+def step(msg: str) -> None:
+    print(_c(msg, "33"))  # yellow
+
+
+def ok(msg: str) -> None:
+    print(_c(msg, "32"))  # green
+
+
+def gray(msg: str) -> None:
+    print(_c(msg, "90"))  # dark gray
+
+
+def fail(msg: str) -> None:
+    print(_c(msg, "31"))  # red
+
 
 # ---------------------------------------------------------------------------
 # Subprocess helpers
 # ---------------------------------------------------------------------------
 
-def run(args: list[str], *, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
+
+def run(
+    args: list[str], *, check: bool = True, capture: bool = False
+) -> subprocess.CompletedProcess:
     return subprocess.run(args, check=check, capture_output=capture, text=True)
 
 
@@ -62,6 +82,7 @@ def require_command(cmd: str) -> None:
 # .env parser (simple key=value, ignores comments and blank lines)
 # ---------------------------------------------------------------------------
 
+
 def read_env_file(path: Path) -> dict[str, str]:
     env: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -77,23 +98,32 @@ def read_env_file(path: Path) -> dict[str, str]:
 # Main deploy logic
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Deploy agent-framework microservices to a local Kind cluster.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--cluster-name",  default="dev",                          help="Kind cluster name")
-    parser.add_argument("--backend-tag",   default="agent-microservices-kind:local", help="Backend Docker image tag")
-    parser.add_argument("--frontend-tag",  default="chatbot-frontend-kind:local",    help="Frontend Docker image tag")
+    parser.add_argument("--cluster-name", default="dev", help="Kind cluster name")
+    parser.add_argument(
+        "--backend-tag",
+        default="agent-microservices-kind:local",
+        help="Backend Docker image tag",
+    )
+    parser.add_argument(
+        "--frontend-tag",
+        default="chatbot-frontend-kind:local",
+        help="Frontend Docker image tag",
+    )
     args = parser.parse_args()
 
-    cluster_name:  str = args.cluster_name
-    backend_tag:   str = args.backend_tag
-    frontend_tag:  str = args.frontend_tag
+    cluster_name: str = args.cluster_name
+    backend_tag: str = args.backend_tag
+    frontend_tag: str = args.frontend_tag
 
-    repo_root    = Path(__file__).parent.resolve()
-    k8s_root     = repo_root / "k8s"
-    kind_dir     = k8s_root / "overlays" / "kind"
+    repo_root = Path(__file__).parent.resolve()
+    k8s_root = repo_root / "k8s"
+    kind_dir = k8s_root / "overlays" / "kind"
     frontend_dir = repo_root.parent / "ai-chatbot-ui"
 
     header("=== Microservices Kind Deploy ===")
@@ -141,8 +171,13 @@ def main() -> None:
     jwt_secret = base64.b64encode(secrets.token_bytes(32)).decode()
 
     enc_result = run(
-        [sys.executable, "-c", "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"],
-        capture=True, check=False,
+        [
+            sys.executable,
+            "-c",
+            "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())",
+        ],
+        capture=True,
+        check=False,
     )
     encryption_key = (
         enc_result.stdout.strip()
@@ -160,27 +195,43 @@ def main() -> None:
     step("Step 2: Building Docker images...")
 
     print(f"  Building backend: {backend_tag}")
-    run(["docker", "build", "-t", backend_tag, "-f", str(repo_root / "Dockerfile"), str(repo_root)])
+    run(
+        [
+            "docker",
+            "build",
+            "-t",
+            backend_tag,
+            "-f",
+            str(repo_root / "docker" / "backend.Dockerfile"),
+            str(repo_root),
+        ]
+    )
 
     if not frontend_dir.is_dir():
         fail(f"ERROR: Frontend directory not found at {frontend_dir}")
         sys.exit(1)
 
     print(f"  Building frontend: {frontend_tag}")
-    run([
-        "docker", "build",
-        "-t", frontend_tag,
-        "--build-arg", "NEXT_PUBLIC_API_URL=",
-        "-f", str(frontend_dir / "Dockerfile"),
-        str(frontend_dir),
-    ])
+    run(
+        [
+            "docker",
+            "build",
+            "-t",
+            frontend_tag,
+            "--build-arg",
+            "NEXT_PUBLIC_API_URL=",
+            "-f",
+            str(frontend_dir / "Dockerfile"),
+            str(frontend_dir),
+        ]
+    )
 
     # ------------------------------------------------------------------
     # Step 3 — Load images into Kind
     # ------------------------------------------------------------------
     print()
     step("Step 3: Loading images into Kind cluster...")
-    run(["kind", "load", "docker-image", backend_tag,  "--name", cluster_name])
+    run(["kind", "load", "docker-image", backend_tag, "--name", cluster_name])
     run(["kind", "load", "docker-image", frontend_tag, "--name", cluster_name])
     ok("  Images loaded")
 
@@ -192,9 +243,29 @@ def main() -> None:
     run(["kubectl", "apply", "-f", str(k8s_root / "base" / "namespaces.yaml")])
     run(["kubectl", "apply", "-f", str(kind_dir / "infra.yaml")])
     gray("  Waiting for Postgres...")
-    run(["kubectl", "rollout", "status", "statefulset/postgres", "-n", "af-data", "--timeout=180s"])
+    run(
+        [
+            "kubectl",
+            "rollout",
+            "status",
+            "statefulset/postgres",
+            "-n",
+            "af-data",
+            "--timeout=180s",
+        ]
+    )
     gray("  Waiting for Redis...")
-    run(["kubectl", "rollout", "status", "deployment/redis",     "-n", "af-data", "--timeout=60s"])
+    run(
+        [
+            "kubectl",
+            "rollout",
+            "status",
+            "deployment/redis",
+            "-n",
+            "af-data",
+            "--timeout=60s",
+        ]
+    )
 
     # ------------------------------------------------------------------
     # Step 5 — Kubernetes secrets
@@ -202,44 +273,56 @@ def main() -> None:
     print()
     step("Step 5: Creating secrets in all namespaces...")
 
-    db_url    = "postgresql+asyncpg://postgres:postgres@postgres.af-data.svc.cluster.local:5432/agentdb"
+    db_url = "postgresql+asyncpg://postgres:postgres@postgres.af-data.svc.cluster.local:5432/agentdb"
     redis_url = "redis://redis.af-data.svc.cluster.local:6379/0"
 
     def create_secret(namespace: str, secret_name: str) -> None:
         run_pipe(
             producer=[
-                "kubectl", "create", "secret", "generic", secret_name,
+                "kubectl",
+                "create",
+                "secret",
+                "generic",
+                secret_name,
                 f"--namespace={namespace}",
                 f"--from-literal=DATABASE_URL={db_url}",
                 f"--from-literal=REDIS_URL={redis_url}",
                 f"--from-literal=JWT_SECRET={jwt_secret}",
                 f"--from-literal=OPENAI_API_KEY={openai_key}",
                 f"--from-literal=ENCRYPTION_KEY={encryption_key}",
-                "--dry-run=client", "-o", "yaml",
+                "--dry-run=client",
+                "-o",
+                "yaml",
             ],
             consumer=["kubectl", "apply", "-f", "-"],
         )
         ok(f"  {secret_name} in {namespace}")
 
-    create_secret("af-edge",     "shared-secrets")
+    create_secret("af-edge", "shared-secrets")
     create_secret("af-platform", "platform-secrets")
-    create_secret("af-runtime",  "runtime-secrets")
+    create_secret("af-runtime", "runtime-secrets")
 
-    google_client_id     = env_vars.get("GOOGLE_CLIENT_ID", "")
+    google_client_id = env_vars.get("GOOGLE_CLIENT_ID", "")
     google_client_secret = env_vars.get("GOOGLE_CLIENT_SECRET", "")
-    spotify_client_id    = env_vars.get("SPOTIFY_CLIENT_ID", "")
+    spotify_client_id = env_vars.get("SPOTIFY_CLIENT_ID", "")
     spotify_client_secret = env_vars.get("SPOTIFY_CLIENT_SECRET", "")
 
     if google_client_id or spotify_client_id:
         run_pipe(
             producer=[
-                "kubectl", "create", "secret", "generic", "frontend-oauth-secrets",
+                "kubectl",
+                "create",
+                "secret",
+                "generic",
+                "frontend-oauth-secrets",
                 "--namespace=af-edge",
                 f"--from-literal=GOOGLE_CLIENT_ID={google_client_id}",
                 f"--from-literal=GOOGLE_CLIENT_SECRET={google_client_secret}",
                 f"--from-literal=SPOTIFY_CLIENT_ID={spotify_client_id}",
                 f"--from-literal=SPOTIFY_CLIENT_SECRET={spotify_client_secret}",
-                "--dry-run=client", "-o", "yaml",
+                "--dry-run=client",
+                "-o",
+                "yaml",
             ],
             consumer=["kubectl", "apply", "-f", "-"],
         )
@@ -260,23 +343,26 @@ def main() -> None:
     step("Step 7: Restarting deployments for fresh images...")
 
     deployments: list[tuple[str, str]] = [
-        ("af-edge",     "gateway-bff"),
-        ("af-edge",     "frontend"),
+        ("af-edge", "gateway-bff"),
+        ("af-edge", "frontend"),
         ("af-platform", "identity-auth"),
         ("af-platform", "policy-authorization"),
-        ("af-runtime",  "conversation"),
-        ("af-runtime",  "job-controller"),
-        ("af-runtime",  "agent-runtime"),
-        ("af-runtime",  "tool-executor"),
-        ("af-runtime",  "human-gate"),
-        ("af-runtime",  "live-stream"),
-        ("af-runtime",  "file-store"),
-        ("af-runtime",  "admin"),
+        ("af-runtime", "conversation"),
+        ("af-runtime", "job-controller"),
+        ("af-runtime", "agent-runtime"),
+        ("af-runtime", "tool-executor"),
+        ("af-runtime", "human-gate"),
+        ("af-runtime", "live-stream"),
+        ("af-runtime", "file-store"),
+        ("af-runtime", "admin"),
     ]
 
     for ns, name in deployments:
-        run(["kubectl", "rollout", "restart", f"deployment/{name}", "-n", ns],
-            check=False, capture=True)
+        run(
+            ["kubectl", "rollout", "restart", f"deployment/{name}", "-n", ns],
+            check=False,
+            capture=True,
+        )
 
     # ------------------------------------------------------------------
     # Step 8 — Wait for ready
@@ -288,8 +374,17 @@ def main() -> None:
     for ns, name in deployments:
         print(f"  Waiting: {name} ({ns})...", end="", flush=True)
         r = run(
-            ["kubectl", "rollout", "status", f"deployment/{name}", "-n", ns, "--timeout=180s"],
-            check=False, capture=True,
+            [
+                "kubectl",
+                "rollout",
+                "status",
+                f"deployment/{name}",
+                "-n",
+                ns,
+                "--timeout=180s",
+            ],
+            check=False,
+            capture=True,
         )
         if r.returncode != 0:
             print(_c(" FAILED", "31"))
@@ -311,10 +406,18 @@ def main() -> None:
     header("=== Deployment Summary ===")
     print("Namespaces:")
     r = run(
-        ["kubectl", "get", "ns",
-         "-l", "app.kubernetes.io/part-of=agent-framework",
-         "-o", "custom-columns=NAME:.metadata.name", "--no-headers"],
-        check=False, capture=True,
+        [
+            "kubectl",
+            "get",
+            "ns",
+            "-l",
+            "app.kubernetes.io/part-of=agent-framework",
+            "-o",
+            "custom-columns=NAME:.metadata.name",
+            "--no-headers",
+        ],
+        check=False,
+        capture=True,
     )
     for line in (r.stdout or "").splitlines():
         if line.strip():
@@ -322,8 +425,11 @@ def main() -> None:
 
     print("\nAll pods:")
     for ns in ("af-data", "af-edge", "af-platform", "af-runtime", "af-observability"):
-        r = run(["kubectl", "get", "pods", "-n", ns, "--no-headers"],
-                check=False, capture=True)
+        r = run(
+            ["kubectl", "get", "pods", "-n", ns, "--no-headers"],
+            check=False,
+            capture=True,
+        )
         pods = (r.stdout or "").strip()
         if pods:
             print(_c(f"  [{ns}]", "33"))

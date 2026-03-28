@@ -44,12 +44,12 @@ from agent_framework.core.guardrails.base_guardrail import BaseGuardrail
 from agent_framework.core.hooks import HookEvent, HookManager
 from agent_framework.core.memory.base_memory import BaseMemory
 from agent_framework.core.memory.memory_scope import MemoryScope
-from agent_framework.providers.llm.base_client import BaseModelClient
-from agent_framework.runtime.observability import logger
+from agent_framework.integrations.llm.base_client import BaseModelClient
+from agent_framework.shared.observability import logger
 from agent_framework.core.resilience import RetryPolicy
 from agent_framework.core.tools.base_tool import BaseTool, ToolResult
-from agent_framework.extensions.skills import SkillManager
-from agent_framework.extensions.tools.human_input import ToolApprovalHandler
+from agent_framework.integrations.skills import SkillManager
+from agent_framework.tools.human_input import ToolApprovalHandler
 
 
 # ---------------------------------------------------------------------------

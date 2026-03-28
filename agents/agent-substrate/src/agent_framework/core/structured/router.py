@@ -63,7 +63,7 @@ from agent_framework.core.structured.result import (
 if TYPE_CHECKING:
     from agent_framework.core.agents.base_agent import BaseAgent
     from agent_framework.core.messages.base_message import BaseClientMessage
-    from agent_framework.providers.llm.base_client import BaseModelClient
+    from agent_framework.integrations.llm.base_client import BaseModelClient
 
 logger = logging.getLogger("agent_framework.structured.router")
 

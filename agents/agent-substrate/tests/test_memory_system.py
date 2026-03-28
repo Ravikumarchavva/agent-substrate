@@ -1,4 +1,4 @@
-"""Integration test for the memory system.
+"""Integration tests for the memory system.
 
 Tests:
   1. Message serializer round-trips for all 5 message types
@@ -6,74 +6,111 @@ Tests:
   3. PostgresMemory CRUD (requires running Postgres)
   4. SessionManager full lifecycle (requires both)
 
-Usage:
-  uv run python examples/test_memory_system.py
+Run via pytest:
+  uv run pytest tests/test_memory_system.py
+
+Run standalone:
+  uv run python tests/test_memory_system.py
 """
+
+from __future__ import annotations
 
 import asyncio
 import os
+
+import pytest
+
+from agent_framework.core.memory.message_serializer import (
+    serialize_message,
+    deserialize_message,
+    serialize_messages,
+    deserialize_messages,
+)
+from agent_framework.core.messages.client_messages import (
+    SystemMessage,
+    UserMessage,
+    AssistantMessage,
+    ToolCallMessage,
+    ToolExecutionResultMessage,
+)
+
+
+def _redis_available() -> bool:
+    """Check Redis connectivity synchronously for skip markers."""
+    try:
+        import redis as _redis
+
+        r = _redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+        r.ping()
+        r.close()
+        return True
+    except Exception:
+        return False
+
+
+def _pg_available() -> bool:
+    """Check Postgres connectivity synchronously for skip markers."""
+    try:
+        from sqlalchemy import create_engine, text
+
+        db_url = os.getenv(
+            "DATABASE_URL",
+            "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
+        )
+        sync_url = db_url.replace("+asyncpg", "")
+        engine = create_engine(sync_url)
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        engine.dispose()
+        return True
+    except Exception:
+        return False
+
+
+requires_redis = pytest.mark.skipif(
+    not _redis_available(), reason="Redis not available"
+)
+requires_postgres = pytest.mark.skipif(
+    not _pg_available(), reason="Postgres not available"
+)
 
 # ---------------------------------------------------------------------------
 # 1. Message Serializer Tests (no external deps)
 # ---------------------------------------------------------------------------
 
 
-def test_serializer():
-    from agent_framework.core.memory.message_serializer import (
-        serialize_message,
-        deserialize_message,
-        serialize_messages,
-        deserialize_messages,
-    )
-    from agent_framework.core.messages.client_messages import (
-        SystemMessage,
-        UserMessage,
-        AssistantMessage,
-        ToolCallMessage,
-        ToolExecutionResultMessage,
-    )
+_SAMPLE_MESSAGES = [
+    SystemMessage(content="You are helpful"),
+    UserMessage(content=["Hello world"]),
+    AssistantMessage(content=["Hi there"], finish_reason="stop"),
+    ToolCallMessage(name="search", arguments={"q": "test"}),
+    ToolExecutionResultMessage(
+        tool_call_id="tc-1", name="search", content="result here"
+    ),
+]
 
-    print("=" * 60)
-    print("1. MESSAGE SERIALIZER TESTS")
-    print("=" * 60)
 
-    msgs = [
-        SystemMessage(content="You are helpful"),
-        UserMessage(content=["Hello world"]),
-        AssistantMessage(content=["Hi there"], finish_reason="stop"),
-        ToolCallMessage(name="search", arguments={"q": "test"}),
-        ToolExecutionResultMessage(
-            tool_call_id="tc-1", name="search", content="result here"
-        ),
-    ]
+@pytest.mark.parametrize("msg", _SAMPLE_MESSAGES, ids=lambda m: type(m).__name__)
+def test_serializer_single_roundtrip(msg):
+    d = serialize_message(msg)
+    restored = deserialize_message(d)
+    assert type(restored).__name__ == type(msg).__name__
 
-    # Single round-trip
-    for msg in msgs:
-        d = serialize_message(msg)
-        restored = deserialize_message(d)
-        assert type(restored).__name__ == type(msg).__name__
-        print(f"  ✓ {type(msg).__name__} round-trip")
 
-    # Bulk round-trip
-    json_str = serialize_messages(msgs)
-    restored_list = deserialize_messages(json_str)
-    assert len(restored_list) == len(msgs)
-    print(f"  ✓ Bulk serialization ({len(restored_list)} messages)")
+def test_serializer_bulk_roundtrip():
+    json_str = serialize_messages(_SAMPLE_MESSAGES)
+    restored = deserialize_messages(json_str)
+    assert len(restored) == len(_SAMPLE_MESSAGES)
 
-    # Error rejection
-    try:
+
+def test_serializer_rejects_unknown_type():
+    with pytest.raises(ValueError):
         deserialize_message({"type": "FakeMessage"})
-        assert False
-    except ValueError:
-        print("  ✓ Unknown type rejected")
 
-    try:
+
+def test_serializer_rejects_missing_type():
+    with pytest.raises(ValueError):
         deserialize_message({})
-        assert False
-    except ValueError:
-        print("  ✓ Missing type rejected")
-
-    print("  ALL SERIALIZER TESTS PASSED ✓\n")
 
 
 # ---------------------------------------------------------------------------
@@ -81,17 +118,9 @@ def test_serializer():
 # ---------------------------------------------------------------------------
 
 
+@requires_redis
 async def test_redis_memory():
     from agent_framework.core.memory.redis_memory import RedisMemory
-    from agent_framework.core.messages.client_messages import (
-        SystemMessage,
-        UserMessage,
-        AssistantMessage,
-    )
-
-    print("=" * 60)
-    print("2. REDIS MEMORY TESTS")
-    print("=" * 60)
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -109,7 +138,6 @@ async def test_redis_memory():
         await redis.store(
             session_id, AssistantMessage(content=["4"], finish_reason="stop")
         )
-        print("  ✓ Added 3 messages")
 
         # Read back
         messages = await redis.fetch(session_id)
@@ -177,6 +205,7 @@ async def test_redis_memory():
 # ---------------------------------------------------------------------------
 
 
+@requires_postgres
 async def test_postgres_memory():
     from agent_framework.core.memory.postgres_memory import PostgresMemory
     from agent_framework.core.messages.client_messages import (
@@ -264,6 +293,8 @@ async def test_postgres_memory():
 # ---------------------------------------------------------------------------
 
 
+@requires_redis
+@requires_postgres
 async def test_session_manager():
     from agent_framework.core.memory.redis_memory import RedisMemory
     from agent_framework.core.memory.postgres_memory import PostgresMemory
@@ -382,71 +413,35 @@ async def test_session_manager():
 
 
 # ---------------------------------------------------------------------------
-# Runner
+# Standalone runner (for `uv run python tests/test_memory_system.py`)
 # ---------------------------------------------------------------------------
 
 
 async def main():
-    print("\n🧠 AGENT FRAMEWORK — MEMORY SYSTEM TESTS\n")
+    print("\nAGENT FRAMEWORK - MEMORY SYSTEM TESTS\n")
 
     # Serializer always runs (no external deps)
-    test_serializer()
+    for msg in _SAMPLE_MESSAGES:
+        test_serializer_single_roundtrip(msg)
+    test_serializer_bulk_roundtrip()
+    test_serializer_rejects_unknown_type()
+    test_serializer_rejects_missing_type()
+    print("  Serializer tests passed\n")
 
-    # Check if Redis is available
-    redis_available = False
-    try:
-        import redis.asyncio as aioredis
-
-        r = aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
-        await r.ping()
-        await r.aclose()
-        redis_available = True
-    except Exception as e:
-        print(f"⚠ Redis not available ({e}), skipping Redis tests\n")
-
-    # Check if Postgres is available
-    pg_available = False
-    try:
-        from sqlalchemy.ext.asyncio import create_async_engine
-
-        db_url = os.getenv(
-            "DATABASE_URL",
-            "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
-        )
-        engine = create_async_engine(db_url)
-        async with engine.connect() as conn:
-            await conn.execute(
-                engine.dialect.statement_compiler(
-                    engine.dialect, None
-                ).__class__.__module__
-                and conn.connection
-            )
-        pg_available = True
-    except Exception:
-        try:
-            from sqlalchemy.ext.asyncio import create_async_engine
-            from sqlalchemy import text
-
-            engine = create_async_engine(db_url)
-            async with engine.connect() as conn:
-                await conn.execute(text("SELECT 1"))
-            await engine.dispose()
-            pg_available = True
-        except Exception as e:
-            print(f"⚠ Postgres not available ({e}), skipping Postgres tests\n")
-
-    if redis_available:
+    if _redis_available():
         await test_redis_memory()
+    else:
+        print("  Redis not available, skipping Redis tests\n")
 
-    if pg_available:
+    if _pg_available():
         await test_postgres_memory()
+    else:
+        print("  Postgres not available, skipping Postgres tests\n")
 
-    if redis_available and pg_available:
+    if _redis_available() and _pg_available():
         await test_session_manager()
 
-    print("=" * 60)
-    print("🎉 ALL AVAILABLE TESTS PASSED!")
-    print("=" * 60)
+    print("ALL AVAILABLE TESTS PASSED!")
 
 
 if __name__ == "__main__":

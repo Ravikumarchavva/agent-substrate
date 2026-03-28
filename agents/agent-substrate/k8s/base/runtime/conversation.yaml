@@ -18,9 +18,19 @@ spec:
         af.service-role: conversation
     spec:
       serviceAccountName: conversation
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: conversation
           image: ghcr.io/example/agent-framework/conversation:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8012
               name: http

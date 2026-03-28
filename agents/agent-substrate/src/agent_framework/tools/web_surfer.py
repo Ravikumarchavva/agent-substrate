@@ -49,7 +49,7 @@ class WebSurferTool(BaseTool):
         if not PLAYWRIGHT_AVAILABLE:
             raise ImportError(
                 "Playwright is required for WebSurferTool. "
-                "Install it with: pip install playwright && playwright install"
+                "Install it with: uv sync --group browser && uv run playwright install"
             )
 
         self.headless = headless

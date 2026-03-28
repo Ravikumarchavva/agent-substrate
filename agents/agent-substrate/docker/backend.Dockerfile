@@ -1,5 +1,7 @@
+# syntax=docker/dockerfile:1.7
+
 # Backend Dockerfile for Python FastAPI
-FROM python:3.13-slim AS base
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -8,21 +10,26 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-RUN pip install uv
-
 WORKDIR /app
+
+ENV PATH="/app/.venv/bin:$PATH"
+ENV UV_LINK_MODE=copy
 
 
 # Copy dependency files
 COPY pyproject.toml ./
+COPY uv.lock ./
 COPY README.md ./
 
-# Copy application code first
-COPY src ./src
+# Install locked dependencies before copying application source so this layer
+# stays cached across normal code changes.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
-# Install dependencies and package with uv
-RUN uv pip install --system -e .
+# Copy application code and install just the project on top of the cached env.
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 # Create non-root user
 RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app

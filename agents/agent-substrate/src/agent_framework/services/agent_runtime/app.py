@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 import redis.asyncio as aioredis
 
 from agent_framework.core.memory.redis_memory import RedisMemory
-from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
 from agent_framework.services.agent_runtime.routes import router
 from agent_framework.services.base import create_service_app
 from agent_framework.shared.events.bus import EventBus
@@ -22,9 +22,14 @@ logger = logging.getLogger(__name__)
 
 def _load_tools():
     """Load the default tool set for the agent runtime."""
-    from agent_framework.extensions.tools.web_surfer import WebSurferTool
+    tools = []
 
-    tools = [WebSurferTool()]
+    try:
+        from agent_framework.tools.web_surfer import WebSurferTool
+
+        tools.append(WebSurferTool())
+    except Exception:
+        logger.debug("WebSurferTool not available")
 
     return tools
 

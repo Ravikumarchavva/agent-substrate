@@ -1,5 +1,5 @@
-"""providers.audio - audio / speech clients."""
+"""integrations.audio - audio / speech clients."""
 
-from agent_framework.providers.audio.base_audio_client import BaseAudioClient
+from agent_framework.integrations.audio.base_audio_client import BaseAudioClient
 
 __all__ = ["BaseAudioClient"]

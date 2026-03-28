@@ -1,13 +1,12 @@
 """Unit tests for the structured outputs system.
 
-All tests use synchronous wrappers (asyncio.run) so the suite requires
-only core pytest with no asyncio plugin.  Higher-level integration tests
-(against live OpenAI) live in examples/10_structured_outputs.ipynb.
+Covers StructuredOutputResult, built-in schemas, parse(), LLMJudge,
+and StructuredRouter.  Higher-level integration tests (against live
+OpenAI) live in examples/10_structured_outputs.ipynb.
 """
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -119,7 +118,7 @@ class TestSchemas:
 
 
 class TestParseUtility:
-    def test_parse_calls_generate_structured(self):
+    async def test_parse_calls_generate_structured(self):
         """parse() must forward messages + schema to client.generate_structured."""
         parsed_val = ContentSafetyJudge(
             safe=True, reasoning="ok", violated_categories=[]
@@ -128,7 +127,7 @@ class TestParseUtility:
         client = _mock_client(fake_result)
         messages = _make_user_messages("is this safe?")
 
-        result = asyncio.run(parse(client, messages, ContentSafetyJudge))
+        result = await parse(client, messages, ContentSafetyJudge)
 
         client.generate_structured.assert_called_once()
         call_args = client.generate_structured.call_args
@@ -136,7 +135,7 @@ class TestParseUtility:
         assert call_args[0][1] is ContentSafetyJudge
         assert result.ok is True
 
-    def test_parse_prepends_system_message(self):
+    async def test_parse_prepends_system_message(self):
         """When ``system=`` is supplied, a SystemMessage must appear first."""
         fake_result = StructuredOutputResult(
             parsed=ContentSafetyJudge(safe=True, reasoning="ok", violated_categories=[])
@@ -144,19 +143,17 @@ class TestParseUtility:
         client = _mock_client(fake_result)
         messages = _make_user_messages("test")
 
-        asyncio.run(
-            parse(client, messages, ContentSafetyJudge, system="You are a judge.")
-        )
+        await parse(client, messages, ContentSafetyJudge, system="You are a judge.")
 
         sent_messages = client.generate_structured.call_args[0][0]
         assert isinstance(sent_messages[0], SystemMessage)
         assert "judge" in sent_messages[0].content.lower()
 
-    def test_parse_returns_refusal_result(self):
+    async def test_parse_returns_refusal_result(self):
         fake_result = StructuredOutputResult(parsed=None, refusal="I cannot help.")
         client = _mock_client(fake_result)
 
-        result = asyncio.run(parse(client, _make_user_messages(), ContentSafetyJudge))
+        result = await parse(client, _make_user_messages(), ContentSafetyJudge)
 
         assert result.refused is True
         assert result.parsed is None
@@ -180,77 +177,77 @@ class TestLLMJudge:
     def _output_ctx(self, text: str) -> GuardrailContext:
         return GuardrailContext(agent_name="test", output_text=text)
 
-    def test_pass_when_safe(self):
+    async def test_pass_when_safe(self):
         parsed = ContentSafetyJudge(
             safe=True, reasoning="clean", violated_categories=[]
         )
         client = _mock_client(StructuredOutputResult(parsed=parsed))
         judge = self._make_judge(client)
 
-        result = asyncio.run(judge.check(self._output_ctx("Nice weather today.")))
+        result = await judge.check(self._output_ctx("Nice weather today."))
 
         assert result.passed is True
         assert result.tripwire is False
 
-    def test_fail_when_unsafe(self):
+    async def test_fail_when_unsafe(self):
         parsed = ContentSafetyJudge(
             safe=False, reasoning="harmful", violated_categories=["violence"]
         )
         client = _mock_client(StructuredOutputResult(parsed=parsed))
         judge = self._make_judge(client)
 
-        result = asyncio.run(judge.check(self._output_ctx("Some bad content")))
+        result = await judge.check(self._output_ctx("Some bad content"))
 
         assert result.passed is False
         assert result.tripwire is False  # default tripwire_on_fail=False
 
-    def test_tripwire_when_configured(self):
+    async def test_tripwire_when_configured(self):
         parsed = ContentSafetyJudge(
             safe=False, reasoning="harmful", violated_categories=["violence"]
         )
         client = _mock_client(StructuredOutputResult(parsed=parsed))
         judge = self._make_judge(client, tripwire_on_fail=True)
 
-        result = asyncio.run(judge.check(self._output_ctx("bad content")))
+        result = await judge.check(self._output_ctx("bad content"))
 
         assert result.tripwire is True
 
-    def test_refusal_causes_fail(self):
+    async def test_refusal_causes_fail(self):
         client = _mock_client(StructuredOutputResult(parsed=None, refusal="No."))
         judge = self._make_judge(client)
 
-        result = asyncio.run(judge.check(self._output_ctx("something")))
+        result = await judge.check(self._output_ctx("something"))
 
         assert result.passed is False
         assert result.tripwire is True  # default tripwire_on_refusal=True
 
-    def test_empty_text_passes_through(self):
-        """No text to judge → pass without calling LLM."""
+    async def test_empty_text_passes_through(self):
+        """No text to judge -> pass without calling LLM."""
         client = _mock_client(StructuredOutputResult(parsed=None))
         judge = self._make_judge(client)
 
         ctx = GuardrailContext(agent_name="test", output_text=None)
-        result = asyncio.run(judge.check(ctx))
+        result = await judge.check(ctx)
 
         assert result.passed is True
         client.generate_structured.assert_not_called()
 
-    def test_api_error_surfaces_as_failed_result(self):
-        """Exceptions from generate_structured must not propagate — return failed result."""
+    async def test_api_error_surfaces_as_failed_result(self):
+        """Exceptions from generate_structured must not propagate -- return failed result."""
         client = MagicMock()
         client.generate_structured = AsyncMock(
             side_effect=RuntimeError("network error")
         )
         judge = self._make_judge(client)
 
-        result = asyncio.run(judge.check(self._output_ctx("some text")))
+        result = await judge.check(self._output_ctx("some text"))
 
         assert result.passed is False
         assert (
             "error" in result.message.lower() or "error" in str(result.metadata).lower()
         )
 
-    def test_input_guardrail_reads_input_text(self):
+    async def test_input_guardrail_reads_input_text(self):
         """INPUT-type judge must read ctx.input_text, not ctx.output_text."""
         parsed = ContentSafetyJudge(
             safe=True, reasoning="clean", violated_categories=[]
@@ -266,7 +263,7 @@ class TestLLMJudge:
         ctx = GuardrailContext(
             agent_name="test", input_text="hello", output_text="ignored"
         )
-        asyncio.run(judge.check(ctx))
+        await judge.check(ctx)
 
         sent_messages = client.generate_structured.call_args[0][0]
         # The user message text should be the input_text
@@ -302,7 +299,7 @@ class TestStructuredRouter:
         )
         return router, client
 
-    def test_dispatches_to_matching_callable(self):
+    async def test_dispatches_to_matching_callable(self):
         called_with = {}
 
         async def furnish_handler(input_text, decision):
@@ -311,22 +308,22 @@ class TestStructuredRouter:
             return "furnished"
 
         router, _ = self._make_router("furnish", {"furnish": furnish_handler})
-        decision, result = asyncio.run(
-            router.route(_make_user_messages("the living room needs furniture"))
+        decision, result = await router.route(
+            _make_user_messages("the living room needs furniture")
         )
 
         assert result == "furnished"
         assert called_with["category"] == "furnish"
 
-    def test_raises_on_unknown_route_without_fallback(self):
+    async def test_raises_on_unknown_route_without_fallback(self):
         router, _ = self._make_router(
             category="unknown_value",
             routes={"furnish": AsyncMock(return_value="ok")},
         )
         with pytest.raises(StructuredOutputError, match="no route"):
-            asyncio.run(router.route(_make_user_messages("something")))
+            await router.route(_make_user_messages("something"))
 
-    def test_fallback_used_when_no_match(self):
+    async def test_fallback_used_when_no_match(self):
         async def fallback(input_text, decision):
             return "fallback used"
 
@@ -335,10 +332,10 @@ class TestStructuredRouter:
             routes={"furnish": AsyncMock(return_value="furnished")},
             fallback=fallback,
         )
-        decision, result = asyncio.run(router.route(_make_user_messages("hmm")))
+        decision, result = await router.route(_make_user_messages("hmm"))
         assert result == "fallback used"
 
-    def test_refusal_raises_structured_output_error(self):
+    async def test_refusal_raises_structured_output_error(self):
         client = MagicMock()
         client.generate_structured = AsyncMock(
             return_value=StructuredOutputResult(parsed=None, refusal="Refused.")
@@ -351,16 +348,14 @@ class TestStructuredRouter:
             system_prompt="classify",
         )
         with pytest.raises(StructuredOutputError, match="refused"):
-            asyncio.run(router.route(_make_user_messages("bad input")))
+            await router.route(_make_user_messages("bad input"))
 
-    def test_returns_decision_and_result_tuple(self):
+    async def test_returns_decision_and_result_tuple(self):
         async def handler(text, decision):
             return {"dispatched": True, "cat": decision.parsed.category}
 
         router, _ = self._make_router("repair", {"repair": handler})
-        decision, result = asyncio.run(
-            router.route(_make_user_messages("fix the roof"))
-        )
+        decision, result = await router.route(_make_user_messages("fix the roof"))
 
         assert hasattr(decision, "parsed")
         assert decision.parsed.category == "repair"

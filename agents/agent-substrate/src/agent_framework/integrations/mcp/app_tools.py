@@ -13,7 +13,7 @@ import httpx
 
 from agent_framework.configs.settings import settings
 from agent_framework.core.tools.base_tool import ToolResult, ToolRisk
-from agent_framework.extensions.mcp.app_tool_base import McpAppTool
+from agent_framework.integrations.mcp.app_tool_base import McpAppTool
 
 logger = logging.getLogger(__name__)
 
@@ -497,7 +497,7 @@ class SpotifyPlayerTool(McpAppTool):
         except Exception as e:
             logger.debug("No OAuth token available from Next.js: %s", e)
 
-        from agent_framework.providers.integrations.spotify import SpotifyService
+        from agent_framework.integrations.spotify.client import SpotifyService
 
         if oauth_token:
             spotify = SpotifyService(

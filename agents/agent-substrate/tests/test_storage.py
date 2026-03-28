@@ -7,13 +7,10 @@ Covers:
   - EncryptedFileStore: round-trip put/get, head metadata, copy re-encryption
   - Factory: create_file_store for local and encryption wrappers
   - FileRef: immutable value object
-
-All async tests use asyncio.run() wrappers — no pytest-asyncio required.
 """
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import os
 
@@ -24,12 +21,7 @@ from agent_framework.core.storage.local import LocalFileStore
 from agent_framework.core.storage.tenant import FileScope, TenantContext
 
 
-def _run(coro):
-    """Sync wrapper for async tests."""
-    return asyncio.run(coro)
-
-
-# ── FileRef ──────────────────────────────────────────────────────────────────
+# -- FileRef -----------------------------------------------------------------
 
 
 def test_file_ref_immutable():
@@ -56,7 +48,7 @@ def test_file_ref_default_metadata():
     assert ref.created_at is not None
 
 
-# ── TenantContext ────────────────────────────────────────────────────────────
+# -- TenantContext -----------------------------------------------------------
 
 
 class TestTenantContext:
@@ -117,164 +109,157 @@ class TestTenantContext:
             ctx.org_id = "b"  # type: ignore[misc]
 
 
-# ── LocalFileStore ───────────────────────────────────────────────────────────
+# -- LocalFileStore ----------------------------------------------------------
 
 
 class TestLocalFileStore:
-    def _make_store(self, tmp_path):
+    async def _make_store(self, tmp_path):
         root = tmp_path / "filestore"
         store = LocalFileStore(root=str(root))
-        _run(store.startup())
+        await store.startup()
         return store
 
-    def test_put_and_get(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_put_and_get(self, tmp_path):
+        store = await self._make_store(tmp_path)
         data = b"hello world"
-        ref = _run(store.put("test/file.txt", data, content_type="text/plain"))
+        ref = await store.put("test/file.txt", data, content_type="text/plain")
 
         assert ref.object_key == "test/file.txt"
         assert ref.size_bytes == len(data)
         assert ref.content_type == "text/plain"
         assert ref.checksum_sha256 == hashlib.sha256(data).hexdigest()
 
-        retrieved = _run(store.get("test/file.txt"))
+        retrieved = await store.get("test/file.txt")
         assert retrieved == data
 
-    def test_get_stream(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_get_stream(self, tmp_path):
+        store = await self._make_store(tmp_path)
         data = b"A" * 10000
 
-        _run(store.put("big.bin", data))
+        await store.put("big.bin", data)
 
-        async def _collect():
-            chunks = []
-            stream = await store.get_stream("big.bin", chunk_size=1024)
-            async for chunk in stream:
-                chunks.append(chunk)
-            return chunks
-
-        chunks = _run(_collect())
+        chunks = []
+        stream = await store.get_stream("big.bin", chunk_size=1024)
+        async for chunk in stream:
+            chunks.append(chunk)
         assert b"".join(chunks) == data
         assert len(chunks) >= 2  # multiple chunks expected
 
-    def test_get_nonexistent_raises(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_get_nonexistent_raises(self, tmp_path):
+        store = await self._make_store(tmp_path)
         with pytest.raises(FileNotFoundError):
-            _run(store.get("does/not/exist.txt"))
+            await store.get("does/not/exist.txt")
 
-    def test_exists(self, tmp_path):
-        store = self._make_store(tmp_path)
-        assert not _run(store.exists("test/nope.txt"))
-        _run(store.put("test/yep.txt", b"x"))
-        assert _run(store.exists("test/yep.txt"))
+    async def test_exists(self, tmp_path):
+        store = await self._make_store(tmp_path)
+        assert not await store.exists("test/nope.txt")
+        await store.put("test/yep.txt", b"x")
+        assert await store.exists("test/yep.txt")
 
-    def test_head(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_head(self, tmp_path):
+        store = await self._make_store(tmp_path)
         data = b"metadata test"
-        _run(store.put("meta.txt", data, content_type="text/plain"))
+        await store.put("meta.txt", data, content_type="text/plain")
 
-        ref = _run(store.head("meta.txt"))
+        ref = await store.head("meta.txt")
         assert ref.size_bytes == len(data)
         assert ref.checksum_sha256 == hashlib.sha256(data).hexdigest()
 
-    def test_delete(self, tmp_path):
-        store = self._make_store(tmp_path)
-        _run(store.put("del.txt", b"temp"))
-        assert _run(store.exists("del.txt"))
+    async def test_delete(self, tmp_path):
+        store = await self._make_store(tmp_path)
+        await store.put("del.txt", b"temp")
+        assert await store.exists("del.txt")
 
-        _run(store.delete("del.txt"))
-        assert not _run(store.exists("del.txt"))
+        await store.delete("del.txt")
+        assert not await store.exists("del.txt")
 
-    def test_delete_nonexistent_noop(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_delete_nonexistent_noop(self, tmp_path):
+        store = await self._make_store(tmp_path)
         # Should not raise
-        _run(store.delete("ghost.txt"))
+        await store.delete("ghost.txt")
 
-    def test_delete_prefix(self, tmp_path):
-        store = self._make_store(tmp_path)
-        _run(store.put("prefix/a.txt", b"a"))
-        _run(store.put("prefix/b.txt", b"b"))
-        _run(store.put("other/c.txt", b"c"))
+    async def test_delete_prefix(self, tmp_path):
+        store = await self._make_store(tmp_path)
+        await store.put("prefix/a.txt", b"a")
+        await store.put("prefix/b.txt", b"b")
+        await store.put("other/c.txt", b"c")
 
-        count = _run(store.delete_prefix("prefix"))
+        count = await store.delete_prefix("prefix")
         assert count == 2
-        assert not _run(store.exists("prefix/a.txt"))
-        assert not _run(store.exists("prefix/b.txt"))
-        assert _run(store.exists("other/c.txt"))
+        assert not await store.exists("prefix/a.txt")
+        assert not await store.exists("prefix/b.txt")
+        assert await store.exists("other/c.txt")
 
-    def test_list_keys(self, tmp_path):
-        store = self._make_store(tmp_path)
-        _run(store.put("ns/x.txt", b"x"))
-        _run(store.put("ns/y.txt", b"y"))
-        _run(store.put("ns/sub/z.txt", b"z"))
-        _run(store.put("other/w.txt", b"w"))
+    async def test_list_keys(self, tmp_path):
+        store = await self._make_store(tmp_path)
+        await store.put("ns/x.txt", b"x")
+        await store.put("ns/y.txt", b"y")
+        await store.put("ns/sub/z.txt", b"z")
+        await store.put("other/w.txt", b"w")
 
-        keys, cursor = _run(store.list_keys("ns"))
+        keys, cursor = await store.list_keys("ns")
         assert set(keys) == {"ns/x.txt", "ns/y.txt", "ns/sub/z.txt"}
         assert cursor is None  # all fit in one page
 
-    def test_list_keys_pagination(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_list_keys_pagination(self, tmp_path):
+        store = await self._make_store(tmp_path)
         for i in range(5):
-            _run(store.put(f"pg/{i:03d}.txt", b"x"))
+            await store.put(f"pg/{i:03d}.txt", b"x")
 
-        keys, cursor = _run(store.list_keys("pg", limit=3))
+        keys, cursor = await store.list_keys("pg", limit=3)
         assert len(keys) == 3
         assert cursor is not None
 
-        keys2, cursor2 = _run(store.list_keys("pg", limit=3, cursor=cursor))
+        keys2, cursor2 = await store.list_keys("pg", limit=3, cursor=cursor)
         assert len(keys2) == 2
         assert cursor2 is None
 
-    def test_copy(self, tmp_path):
-        store = self._make_store(tmp_path)
-        _run(store.put("src.txt", b"original"))
+    async def test_copy(self, tmp_path):
+        store = await self._make_store(tmp_path)
+        await store.put("src.txt", b"original")
 
-        ref = _run(store.copy("src.txt", "dst.txt"))
+        ref = await store.copy("src.txt", "dst.txt")
         assert ref.object_key == "dst.txt"
 
-        assert _run(store.get("dst.txt")) == b"original"
-        assert _run(store.get("src.txt")) == b"original"
+        assert await store.get("dst.txt") == b"original"
+        assert await store.get("src.txt") == b"original"
 
-    def test_path_traversal_blocked(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_path_traversal_blocked(self, tmp_path):
+        store = await self._make_store(tmp_path)
         with pytest.raises(ValueError, match="Path traversal"):
-            _run(store.put("../../etc/passwd", b"evil"))
+            await store.put("../../etc/passwd", b"evil")
 
-    def test_get_url(self, tmp_path):
-        store = self._make_store(tmp_path)
-        _run(store.put("url_test.txt", b"data"))
-        url = _run(store.get_url("url_test.txt"))
+    async def test_get_url(self, tmp_path):
+        store = await self._make_store(tmp_path)
+        await store.put("url_test.txt", b"data")
+        url = await store.get_url("url_test.txt")
         assert url.startswith("file://")
 
-    def test_put_async_iterator(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_put_async_iterator(self, tmp_path):
+        store = await self._make_store(tmp_path)
 
-        async def _do():
-            async def gen():
-                yield b"chunk1"
-                yield b"chunk2"
+        async def gen():
+            yield b"chunk1"
+            yield b"chunk2"
 
-            return await store.put("stream.bin", gen())
-
-        ref = _run(_do())
+        ref = await store.put("stream.bin", gen())
         assert ref.size_bytes == 12  # len("chunk1chunk2")
 
-        data = _run(store.get("stream.bin"))
+        data = await store.get("stream.bin")
         assert data == b"chunk1chunk2"
 
-    def test_put_with_metadata(self, tmp_path):
-        store = self._make_store(tmp_path)
+    async def test_put_with_metadata(self, tmp_path):
+        store = await self._make_store(tmp_path)
         meta = {"author": "test", "version": "1"}
-        ref = _run(store.put("m.txt", b"data", metadata=meta))
+        ref = await store.put("m.txt", b"data", metadata=meta)
         assert ref.metadata == meta
 
 
-# ── EncryptedFileStore ───────────────────────────────────────────────────────
+# -- EncryptedFileStore ------------------------------------------------------
 
 
 class TestEncryptedFileStore:
-    def _make(self, tmp_path):
+    async def _make(self, tmp_path):
         from agent_framework.core.storage.encrypted import (
             EncryptedFileStore,
             LocalKeyProvider,
@@ -282,107 +267,99 @@ class TestEncryptedFileStore:
 
         root = tmp_path / "encstore"
         inner = LocalFileStore(root=str(root))
-        _run(inner.startup())
+        await inner.startup()
 
         key_hex = os.urandom(32).hex()
         kp = LocalKeyProvider(key_hex)
         enc = EncryptedFileStore(inner=inner, key_provider=kp)
         return enc, inner
 
-    def test_roundtrip(self, tmp_path):
-        enc, _ = self._make(tmp_path)
+    async def test_roundtrip(self, tmp_path):
+        enc, _ = await self._make(tmp_path)
         data = b"secret document content"
-        ref = _run(enc.put("secret.txt", data, content_type="text/plain"))
+        ref = await enc.put("secret.txt", data, content_type="text/plain")
 
         assert ref.size_bytes == len(data)
         assert ref.checksum_sha256 == hashlib.sha256(data).hexdigest()
 
-        decrypted = _run(enc.get("secret.txt"))
+        decrypted = await enc.get("secret.txt")
         assert decrypted == data
 
-    def test_encrypted_at_rest(self, tmp_path):
-        enc, inner = self._make(tmp_path)
+    async def test_encrypted_at_rest(self, tmp_path):
+        enc, inner = await self._make(tmp_path)
         data = b"this should be encrypted"
-        _run(enc.put("enc.txt", data))
+        await enc.put("enc.txt", data)
 
-        # Read raw bytes from the inner store — should NOT equal cleartext
-        raw = _run(inner.get("enc.txt"))
+        # Read raw bytes from the inner store -- should NOT equal cleartext
+        raw = await inner.get("enc.txt")
         assert raw != data
         assert len(raw) > len(data)  # envelope overhead
 
-    def test_head_returns_ref(self, tmp_path):
-        enc, _ = self._make(tmp_path)
+    async def test_head_returns_ref(self, tmp_path):
+        enc, _ = await self._make(tmp_path)
         data = b"short"
-        _run(enc.put("tiny.txt", data))
+        await enc.put("tiny.txt", data)
 
-        ref = _run(enc.head("tiny.txt"))
-        # NOTE: LocalFileStore does not persist metadata to disk, so
-        # EncryptedFileStore.head() cannot recover cleartext size/sha from
-        # inner metadata.  With S3 (which persists object metadata), this
-        # would correctly report cleartext size.
+        ref = await enc.head("tiny.txt")
         assert ref.size_bytes > 0
         assert ref.object_key == "tiny.txt"
 
-    def test_get_stream(self, tmp_path):
-        enc, _ = self._make(tmp_path)
+    async def test_get_stream(self, tmp_path):
+        enc, _ = await self._make(tmp_path)
         data = b"X" * 5000
-        _run(enc.put("stream.bin", data))
+        await enc.put("stream.bin", data)
 
-        async def _collect():
-            chunks = []
-            stream = await enc.get_stream("stream.bin", chunk_size=1024)
-            async for chunk in stream:
-                chunks.append(chunk)
-            return chunks
-
-        chunks = _run(_collect())
+        chunks = []
+        stream = await enc.get_stream("stream.bin", chunk_size=1024)
+        async for chunk in stream:
+            chunks.append(chunk)
         assert b"".join(chunks) == data
 
-    def test_copy_re_encrypts(self, tmp_path):
-        enc, _ = self._make(tmp_path)
+    async def test_copy_re_encrypts(self, tmp_path):
+        enc, _ = await self._make(tmp_path)
         data = b"important data"
-        _run(enc.put("orig.txt", data))
+        await enc.put("orig.txt", data)
 
-        ref = _run(enc.copy("orig.txt", "copy.txt"))
+        ref = await enc.copy("orig.txt", "copy.txt")
         assert ref.object_key == "copy.txt"
 
         # Both should decrypt to same content
-        assert _run(enc.get("orig.txt")) == data
-        assert _run(enc.get("copy.txt")) == data
+        assert await enc.get("orig.txt") == data
+        assert await enc.get("copy.txt") == data
 
-    def test_get_url_raises(self, tmp_path):
-        enc, _ = self._make(tmp_path)
-        _run(enc.put("no_url.txt", b"x"))
+    async def test_get_url_raises(self, tmp_path):
+        enc, _ = await self._make(tmp_path)
+        await enc.put("no_url.txt", b"x")
 
         with pytest.raises(NotImplementedError):
-            _run(enc.get_url("no_url.txt"))
+            await enc.get_url("no_url.txt")
 
-    def test_delete(self, tmp_path):
-        enc, _ = self._make(tmp_path)
-        _run(enc.put("rm.txt", b"bye"))
-        assert _run(enc.exists("rm.txt"))
-        _run(enc.delete("rm.txt"))
-        assert not _run(enc.exists("rm.txt"))
+    async def test_delete(self, tmp_path):
+        enc, _ = await self._make(tmp_path)
+        await enc.put("rm.txt", b"bye")
+        assert await enc.exists("rm.txt")
+        await enc.delete("rm.txt")
+        assert not await enc.exists("rm.txt")
 
-    def test_list_keys(self, tmp_path):
-        enc, _ = self._make(tmp_path)
-        _run(enc.put("ns/a.txt", b"a"))
-        _run(enc.put("ns/b.txt", b"b"))
+    async def test_list_keys(self, tmp_path):
+        enc, _ = await self._make(tmp_path)
+        await enc.put("ns/a.txt", b"a")
+        await enc.put("ns/b.txt", b"b")
 
-        keys, _ = _run(enc.list_keys("ns"))
+        keys, _ = await enc.list_keys("ns")
         assert set(keys) == {"ns/a.txt", "ns/b.txt"}
 
-    def test_delete_prefix(self, tmp_path):
-        enc, _ = self._make(tmp_path)
-        _run(enc.put("pfx/a.txt", b"a"))
-        _run(enc.put("pfx/b.txt", b"b"))
+    async def test_delete_prefix(self, tmp_path):
+        enc, _ = await self._make(tmp_path)
+        await enc.put("pfx/a.txt", b"a")
+        await enc.put("pfx/b.txt", b"b")
 
-        count = _run(enc.delete_prefix("pfx"))
+        count = await enc.delete_prefix("pfx")
         assert count == 2
-        assert not _run(enc.exists("pfx/a.txt"))
+        assert not await enc.exists("pfx/a.txt")
 
 
-# ── Factory ──────────────────────────────────────────────────────────────────
+# -- Factory -----------------------------------------------------------------
 
 
 class TestFactory:

@@ -12,20 +12,19 @@ applyTo: "tests/**"
 - Format before committing: `uv run ruff format . && uv run ruff check .`
 
 ## Async tests
+`pyproject.toml` sets `asyncio_mode = "auto"` — **no `@pytest.mark.asyncio` decorator needed**.
+Just write `async def test_*` and pytest-asyncio picks it up automatically:
 ```python
-import pytest
-
-@pytest.mark.asyncio
 async def test_something():
-    ...
+    result = await my_async_func()
+    assert result == expected
 ```
 
 ## Tool unit tests
 Test tools directly without spinning up the full server:
 ```python
-from agent_framework.tools.my_tool import MyTool
+from agent_framework.core.tools.base_tool import BaseTool, ToolResult
 
-@pytest.mark.asyncio
 async def test_my_tool():
     tool = MyTool()
     result = await tool.execute(param="value")
@@ -33,13 +32,12 @@ async def test_my_tool():
 ```
 
 ## Agent integration tests
-Use `MemoryClient` (or mock `OpenAIClient`) to avoid real API calls:
+Use mock `OpenAIClient` to avoid real API calls:
 ```python
 from unittest.mock import AsyncMock, patch
 
-@pytest.mark.asyncio
 async def test_agent_run():
-    with patch("agent_framework.model_clients.openai.openai_client.OpenAIClient") as mock:
+    with patch("agent_framework.integrations.llm.openai.openai_client.OpenAIClient") as mock:
         mock.return_value.stream = AsyncMock(...)
         agent = ReActAgent(model_client=mock.return_value, tools=[])
         async for chunk in agent.run_stream("hello"):
@@ -64,3 +62,10 @@ async for chunk in agent.run_stream("query"):
     events.append(chunk)
 assert any(isinstance(e, TextDeltaChunk) for e in events)
 ```
+
+## Shared test fixtures
+`tests/conftest.py` provides reusable fixtures:
+- `mock_llm_client` — `AsyncMock` of `OpenAIClient` (yields empty stream)
+- `redis_memory` — `RedisMemory` (skipped when Redis unavailable)
+- `tool_registry` — empty `ToolRegistry`
+- `tmp_file_store` — `LocalFileStore` backed by `tmp_path`

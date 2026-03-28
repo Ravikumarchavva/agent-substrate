@@ -144,8 +144,12 @@ class ConversationClient(ServiceClient):
         resp.raise_for_status()
         return resp.json()
 
-    async def update_thread(self, auth_token: str, thread_id: str, payload: dict) -> dict:
-        resp = await self.patch(f"/threads/{thread_id}", auth_token=auth_token, json=payload)
+    async def update_thread(
+        self, auth_token: str, thread_id: str, payload: dict
+    ) -> dict:
+        resp = await self.patch(
+            f"/threads/{thread_id}", auth_token=auth_token, json=payload
+        )
         resp.raise_for_status()
         return resp.json()
 

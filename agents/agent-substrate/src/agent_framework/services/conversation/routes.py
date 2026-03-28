@@ -21,6 +21,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_framework.shared.database.dependency import get_db_session
+
 from agent_framework.services.conversation.service import (
     create_feedback,
     create_step,
@@ -112,39 +114,6 @@ class FeedbackOut(BaseModel):
     created_at: str
 
 
-# ── Helper to get DB session from app state ──────────────────────────────────
-
-
-async def get_db(request=Depends()):
-    """Yield an async DB session from the app's session_factory."""
-    from fastapi import Request
-
-    async def _get_db(request: Request):
-        async with request.app.state.session_factory() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-
-    return _get_db
-
-
-# Use a proper FastAPI dependency
-from fastapi import Request as _Req
-
-
-async def _get_db(request: _Req):
-    async with request.app.state.session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
 # ── Thread routes ────────────────────────────────────────────────────────────
 
 thread_router = APIRouter(prefix="/threads", tags=["threads"])
@@ -153,7 +122,7 @@ thread_router = APIRouter(prefix="/threads", tags=["threads"])
 @thread_router.post("", status_code=201)
 async def create_thread_endpoint(
     body: ThreadCreateBody,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     user_uuid = uuid.UUID(body.user_id) if body.user_id else None
     thread = await create_thread(
@@ -180,7 +149,7 @@ async def list_threads_endpoint(
     limit: int = 50,
     offset: int = 0,
     user_id: Optional[str] = None,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     user_uuid = uuid.UUID(user_id) if user_id else None
     return await list_threads(db, user_id=user_uuid, limit=limit, offset=offset)
@@ -189,7 +158,7 @@ async def list_threads_endpoint(
 @thread_router.get("/{thread_id}")
 async def get_thread_endpoint(
     thread_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     thread = await get_thread(db, thread_id)
     if not thread:
@@ -210,7 +179,7 @@ async def get_thread_endpoint(
 async def update_thread_endpoint(
     thread_id: uuid.UUID,
     body: ThreadUpdateBody,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     thread = await update_thread(
         db,
@@ -236,7 +205,7 @@ async def update_thread_endpoint(
 @thread_router.delete("/{thread_id}", status_code=204)
 async def delete_thread_endpoint(
     thread_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     deleted = await delete_thread(db, thread_id)
     if not deleted:
@@ -249,7 +218,7 @@ async def delete_thread_endpoint(
 @thread_router.get("/{thread_id}/messages")
 async def get_messages_endpoint(
     thread_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get all user/assistant messages for a thread."""
     steps = await get_steps(
@@ -279,7 +248,7 @@ async def get_messages_endpoint(
 async def create_step_endpoint(
     thread_id: uuid.UUID,
     body: StepCreateBody,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a step (internal — used by Workflow/Agent services)."""
     parent_uuid = uuid.UUID(body.parent_id) if body.parent_id else None
@@ -314,7 +283,7 @@ async def create_step_endpoint(
 async def get_step_endpoint(
     thread_id: uuid.UUID,
     step_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     step = await get_step(db, step_id)
     if not step or step.thread_id != thread_id:
@@ -339,7 +308,7 @@ async def update_step_endpoint(
     thread_id: uuid.UUID,
     step_id: uuid.UUID,
     body: StepUpdateBody,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     step = await update_step(
         db,
@@ -373,7 +342,7 @@ async def update_step_endpoint(
 async def create_feedback_endpoint(
     thread_id: uuid.UUID,
     body: FeedbackBody,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     feedback = await create_feedback(
         db,
@@ -400,7 +369,7 @@ memory_router = APIRouter(prefix="/internal", tags=["internal"])
 @memory_router.get("/threads/{thread_id}/memory")
 async def get_memory_messages(
     thread_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Load steps formatted for agent memory reconstruction.
 

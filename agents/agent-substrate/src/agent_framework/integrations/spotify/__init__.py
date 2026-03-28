@@ -1,1 +1,1 @@
-"""providers.integrations - third-party API adapters."""
+"""integrations.spotify - Spotify API adapter."""

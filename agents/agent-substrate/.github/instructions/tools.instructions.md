@@ -1,7 +1,7 @@
 ---
 name: "Tool Authoring Rules"
 description: "BaseTool subclassing, input schema, SSE emission, thread-safety, and registration"
-applyTo: "src/agent_framework/core/tools/**,src/agent_framework/extensions/tools/**"
+applyTo: "src/agent_framework/core/tools/**,src/agent_framework/tools/**"
 ---
 
 # Tool Authoring Rules
@@ -56,7 +56,7 @@ Add the tool instance to `app.state.tools` in `server/app.py` lifespan.
 Tool names must be lowercase snake_case and globally unique.
 
 ## MCPTool schema methods
-`MCPTool` (from `agent_framework.extensions.mcp`) exposes three schema formats:
+`MCPTool` (from `agent_framework.integrations.mcp`) exposes three schema formats:
 ```python
 tool.get_schema()         # → Tool (internal object) — pass to ReActAgent(tools=[...])
 tool.get_openai_schema()  # → dict (OpenAI function format) — pass to client.generate(tools=[...])

@@ -18,9 +18,19 @@ spec:
         af.service-role: live-stream
     spec:
       serviceAccountName: live-stream
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: live-stream
           image: ghcr.io/example/agent-framework/live-stream:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8017
               name: http

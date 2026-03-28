@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+import json
 import logging
 from typing import Any, Dict, Optional
 
@@ -9,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from agent_framework.configs.settings import settings
-from agent_framework.providers.integrations.spotify_auth import SpotifyAuthService
+from agent_framework.integrations.spotify.auth import SpotifyAuthService
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,12 @@ router = APIRouter(prefix="/auth/spotify", tags=["spotify-oauth"])
 
 # In-memory token storage (use Redis/database in production)
 _user_tokens: Dict[str, Dict[str, Any]] = {}
+
+# In-memory CSRF state store keyed by state value (use Redis in production)
+_oauth_states: Dict[str, bool] = {}
+
+# Target origin for postMessage — prevents leaking tokens to other origins
+_FRONTEND_ORIGIN = settings.FRONTEND_URL
 
 
 def get_auth_service() -> SpotifyAuthService:
@@ -44,8 +52,8 @@ async def spotify_login(request: Request):
     auth_service = get_auth_service()
     auth_url, state = auth_service.get_authorization_url()
 
-    # Store state in session (simplified - use Redis in production)
-    request.app.state.spotify_oauth_state = state
+    # Store state for CSRF validation (per-request, not shared across users)
+    _oauth_states[state] = True
 
     logger.info("Redirecting to Spotify OAuth login")
     return RedirectResponse(auth_url)
@@ -63,18 +71,21 @@ async def spotify_callback(
     Exchanges authorization code for access + refresh tokens and closes popup.
     """
     if error:
-        logger.error(f"Spotify OAuth error: {error}")
+        safe_error = html.escape(error)
+        error_json = json.dumps(error)
+        origin_json = json.dumps(_FRONTEND_ORIGIN)
+        logger.error("Spotify OAuth error: %s", safe_error)
         return HTMLResponse(
             content=f"""
             <html>
                 <body>
                     <h1>Spotify Authentication Failed</h1>
-                    <p>Error: {error}</p>
+                    <p>Error: {safe_error}</p>
                     <script>
                         window.opener?.postMessage({{
                             type: 'spotify_auth_error',
-                            error: '{error}'
-                        }}, '*');
+                            error: {error_json}
+                        }}, {origin_json});
                         setTimeout(() => window.close(), 3000);
                     </script>
                 </body>
@@ -85,11 +96,11 @@ async def spotify_callback(
 
     auth_service = get_auth_service()
 
-    # Validate state to prevent CSRF
-    stored_state = getattr(request.app.state, "spotify_oauth_state", None)
-    if not stored_state or state != stored_state:
+    # Validate state to prevent CSRF (consume the state so it can't be replayed)
+    if state not in _oauth_states:
         logger.error("Invalid OAuth state parameter")
         raise HTTPException(status_code=400, detail="Invalid state parameter")
+    del _oauth_states[state]
 
     try:
         # Exchange code for tokens
@@ -104,7 +115,18 @@ async def spotify_callback(
             "scope": token_data.get("scope", ""),
         }
 
-        logger.info(f"Successfully stored Spotify tokens for session: {session_id}")
+        logger.info("Successfully stored Spotify tokens for session: %s", session_id)
+
+        # Serialize token data safely using json.dumps to prevent XSS
+        safe_tokens = json.dumps(
+            {
+                "access_token": token_data["access_token"],
+                "refresh_token": token_data.get("refresh_token", ""),
+                "expires_in": token_data.get("expires_in", 3600),
+                "scope": token_data.get("scope", ""),
+            }
+        )
+        origin_json = json.dumps(_FRONTEND_ORIGIN)
 
         # Return HTML that sends tokens to parent window and closes popup
         return HTMLResponse(
@@ -114,20 +136,15 @@ async def spotify_callback(
                     <title>Spotify Authentication Success</title>
                 </head>
                 <body>
-                    <h1>✅ Connected to Spotify!</h1>
+                    <h1>Connected to Spotify!</h1>
                     <p>You can close this window...</p>
                     <script>
                         // Send tokens to parent window (opener)
                         if (window.opener) {{
                             window.opener.postMessage({{
                                 type: 'spotify_auth_success',
-                                tokens: {{
-                                    access_token: '{token_data["access_token"]}',
-                                    refresh_token: '{token_data.get("refresh_token", "")}',
-                                    expires_in: {token_data.get("expires_in", 3600)},
-                                    scope: '{token_data.get("scope", "")}'
-                                }}
-                            }}, '*');
+                                tokens: {safe_tokens}
+                            }}, {origin_json});
                         }}
                         
                         // Auto-close after 2 seconds
@@ -142,8 +159,8 @@ async def spotify_callback(
         )
 
     except Exception as e:
-        logger.error(f"Failed to exchange OAuth code: {e}")
-        raise HTTPException(status_code=500, detail=f"Token exchange failed: {str(e)}")
+        logger.error("Failed to exchange OAuth code: %s", e)
+        raise HTTPException(status_code=500, detail="Token exchange failed")
 
 
 @router.get("/token")
@@ -199,7 +216,7 @@ async def refresh_token(request: Request):
             }
         )
 
-        logger.info(f"Refreshed access token for session: {session_id}")
+        logger.info("Refreshed access token for session: %s", session_id)
 
         return JSONResponse(
             {
@@ -209,8 +226,8 @@ async def refresh_token(request: Request):
         )
 
     except Exception as e:
-        logger.error(f"Failed to refresh token: {e}")
-        raise HTTPException(status_code=500, detail=f"Token refresh failed: {str(e)}")
+        logger.error("Failed to refresh token: %s", e)
+        raise HTTPException(status_code=500, detail="Token refresh failed")
 
 
 @router.post("/logout")
@@ -220,7 +237,7 @@ async def logout(request: Request):
 
     if session_id in _user_tokens:
         del _user_tokens[session_id]
-        logger.info(f"Logged out session: {session_id}")
+        logger.info("Logged out session: %s", session_id)
 
     return JSONResponse({"message": "Logged out successfully"})
 
@@ -273,7 +290,7 @@ async def restore_tokens(request: Request):
                 }
             )
         except Exception as e:
-            logger.warning(f"Could not refresh during restore: {e}")
+            logger.warning("Could not refresh during restore: %s", e)
 
     # Fall back to storing the provided access token as-is
     if access_token_val:

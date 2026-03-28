@@ -5,7 +5,7 @@ The main backend calls it via HTTP (see http_client.py).
 
 Usage::
 
-    uvicorn agent_framework.code_interpreter_service.app:app \
+    uvicorn agent_framework.services.code_interpreter.app:app \
         --host 0.0.0.0 --port 8080 --workers 1
 
 NOTE: Must run with ``--workers 1`` because SessionManager uses
@@ -21,10 +21,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agent_framework.extensions.tools.code_interpreter.config import (
+from agent_framework.tools.code_interpreter.config import (
     CodeInterpreterConfig,
 )
-from agent_framework.extensions.tools.code_interpreter.session_manager import (
+from agent_framework.tools.code_interpreter.session_manager import (
     SessionManager,
 )
 

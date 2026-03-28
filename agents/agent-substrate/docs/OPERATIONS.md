@@ -45,7 +45,7 @@ When you only change Python code in `agent-framework/`:
 
 ```powershell
 # 1. Rebuild backend image
-docker build -t agent-microservices-kind:local .
+docker build -f docker/backend.Dockerfile -t agent-microservices-kind:local .
 
 # 2. Load into Kind cluster
 kind load docker-image agent-microservices-kind:local --name dev
@@ -291,7 +291,7 @@ In Grafana → Explore → Tempo → Search
 ### Start backend (monolith mode)
 ```powershell
 cd agent-framework
-docker compose up -d postgres redis
+docker compose -f docker/docker-compose.yml up -d postgres redis
 uv run uvicorn agent_framework.server.app:app --port 8000 --reload
 ```
 
@@ -324,4 +324,4 @@ uv run ruff format .
 | PostgreSQL | 5432 | internal cluster only |
 | Redis | 6379 | internal cluster only |
 | Grafana | — | `http://localhost/grafana/` |
-| MCP demo server | 9000 | docker compose `--profile mcp` |
+| MCP demo server | 9000 | `docker compose -f docker/docker-compose.yml --profile mcp` |

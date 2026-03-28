@@ -225,3 +225,23 @@ examples/results/
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
+
+# ── Merged from .gitignore.k8s ──────────────────────────────────────────────
+# Kubernetes secrets (contain credentials)
+k8s/secrets.yaml
+
+# Additional env file variants
+.env.local
+.env.production
+.env.*.local
+
+# Docker overrides (local-only)
+docker-compose.override.yml
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Logs & temp files
+logs/
+*.tmp

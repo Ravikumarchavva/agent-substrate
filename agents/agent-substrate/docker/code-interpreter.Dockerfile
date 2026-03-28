@@ -1,6 +1,6 @@
-# Dockerfile.code-interpreter — Firecracker Code Interpreter Service
+# docker/code-interpreter.Dockerfile — Firecracker Code Interpreter Service
 #
-# Build:   docker build -f Dockerfile.code-interpreter -t code-interpreter:latest .
+# Build:   docker build -f docker/code-interpreter.Dockerfile -t code-interpreter:latest .
 # Run:     docker run --privileged --device /dev/kvm -v /path/to/data:/data -p 8080:8080 code-interpreter:latest
 #
 # NOTE: Requires --privileged for Firecracker KVM access.
@@ -35,5 +35,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=3 \
     CMD curl -f http://localhost:8080/v1/health || exit 1
 
-ENTRYPOINT ["uvicorn", "agent_framework.code_interpreter_service.app:app"]
+ENTRYPOINT ["uvicorn", "agent_framework.services.code_interpreter.app:app"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--log-level", "info"]

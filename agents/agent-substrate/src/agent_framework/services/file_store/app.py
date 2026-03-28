@@ -44,10 +44,12 @@ async def lifespan(app):
 
     storage_path = os.environ.get("FILE_STORAGE_PATH", "./data/files")
     app.state.file_store = LocalFileStore(root=storage_path)
+    await app.state.file_store.startup()
 
     logger.info("File Store service started")
     yield
 
+    await app.state.file_store.shutdown()
     await app.state.event_bus.disconnect()
     await app.state.redis.aclose()
     await engine.dispose()

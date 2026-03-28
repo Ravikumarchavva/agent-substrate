@@ -18,9 +18,19 @@ spec:
         af.service-role: tool-executor
     spec:
       serviceAccountName: tool-executor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: tool-executor
           image: ghcr.io/example/agent-framework/tool-executor:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8015
               name: http

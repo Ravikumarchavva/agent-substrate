@@ -14,9 +14,11 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from agent_framework.shared.database.dependency import get_db_session
 
 from agent_framework.services.admin.service import (
     create_tenant,
@@ -62,24 +64,11 @@ class AuditLogOut(BaseModel):
     created_at: str
 
 
-# ── Dependencies ─────────────────────────────────────────────────────────────
-
-
-async def _get_db(request: Request):
-    async with request.app.state.session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 
 @router.get("/stats")
-async def platform_stats(db: AsyncSession = Depends(_get_db)):
+async def platform_stats(db: AsyncSession = Depends(get_db_session)):
     """Get platform-wide statistics."""
     return await get_platform_stats(db)
 
@@ -91,7 +80,7 @@ async def audit_log(
     action: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Query the audit log."""
     logs = await get_audit_logs(
@@ -120,7 +109,7 @@ async def audit_log(
 @router.post("/tenants", status_code=201)
 async def create_tenant_endpoint(
     body: TenantCreateBody,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new tenant."""
     tenant = await create_tenant(
@@ -145,7 +134,7 @@ async def create_tenant_endpoint(
 async def list_tenants_endpoint(
     limit: int = 50,
     offset: int = 0,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     tenants = await list_tenants(db, limit=limit, offset=offset)
     return [
@@ -165,7 +154,7 @@ async def list_tenants_endpoint(
 @router.get("/tenants/{tenant_id}")
 async def get_tenant_endpoint(
     tenant_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     tenant = await get_tenant(db, tenant_id)
     if not tenant:

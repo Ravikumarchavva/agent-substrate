@@ -1,1 +1,1 @@
-"""providers.llm - LLM model clients."""
+"""integrations.llm - LLM model clients."""

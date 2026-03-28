@@ -34,7 +34,7 @@ from agent_framework.core.messages.client_messages import (
 )
 from agent_framework.core.messages.base_message import BaseClientMessage
 from agent_framework.core.tools.base_tool import BaseTool
-from agent_framework.providers.llm.base_client import BaseModelClient
+from agent_framework.integrations.llm.base_client import BaseModelClient
 from agent_framework.shared.events.bus import EventBus
 from agent_framework.shared.events.envelope import EventEnvelope
 

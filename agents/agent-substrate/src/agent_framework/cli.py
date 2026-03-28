@@ -174,7 +174,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     # Late imports so the CLI stays fast for server commands
     from agent_framework.core.console import Console
     from agent_framework.core.agents.react_agent import ReActAgent
-    from agent_framework.providers.llm.openai.openai_client import OpenAIClient
+    from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
     from agent_framework.core.memory.unbounded_memory import UnboundedMemory
     from agent_framework.core.context.implementations import UnboundedContext
 
@@ -216,7 +216,7 @@ def _load_mcp_tools(server_urls: list[str]) -> list:
     """
     tools: list = []
     try:
-        from agent_framework.extensions.mcp import MCPClient
+        from agent_framework.integrations.mcp import MCPClient
     except ImportError:
         print("⚠ MCP extension not available — skipping MCP tools.")
         return tools

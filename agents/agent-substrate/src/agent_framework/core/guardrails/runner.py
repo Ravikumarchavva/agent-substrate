@@ -21,7 +21,7 @@ from agent_framework.core.guardrails.base_guardrail import (
     GuardrailResult,
     GuardrailType,
 )
-from agent_framework.runtime.observability import global_metrics, global_tracer, logger
+from agent_framework.shared.observability import global_metrics, global_tracer, logger
 
 
 async def run_guardrails(

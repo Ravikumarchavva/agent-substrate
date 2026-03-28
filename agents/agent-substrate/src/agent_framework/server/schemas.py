@@ -1,4 +1,8 @@
-"""Pydantic request/response schemas for the chat server API."""
+"""Pydantic request/response schemas for the monolith chat server API.
+
+These schemas are specific to the monolith deployment (server/).
+For microservice-to-microservice DTOs, use shared/contracts/ instead.
+"""
 
 from __future__ import annotations
 

@@ -38,6 +38,12 @@ from .models import Skill, SkillMetadata
 logger = logging.getLogger(__name__)
 
 
+def _default_skill_dirs() -> List[Path]:
+    """Return built-in package skills plus the user's local skill directory."""
+    package_root = Path(__file__).resolve().parents[2]
+    return [package_root / "skills", Path("~/.claude/skills").expanduser()]
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -93,7 +99,7 @@ class SkillLoader:
     Discovers and loads Agent Skills from filesystem directories.
 
     Usage:
-        loader = SkillLoader(skill_dirs=["./skills", "~/.claude/skills"])
+        loader = SkillLoader()  # package skills + ~/.claude/skills
         metadatas = loader.discover_all()       # lightweight metadata only
         skill = loader.load_skill("skill-name") # full content on activation
     """
@@ -103,7 +109,8 @@ class SkillLoader:
         skill_dirs: Optional[List[str | Path]] = None,
     ) -> None:
         self._dirs: List[Path] = []
-        for d in skill_dirs or []:
+        configured_dirs = _default_skill_dirs() if skill_dirs is None else skill_dirs
+        for d in configured_dirs:
             p = Path(d).expanduser().resolve()
             if p.is_dir():
                 self._dirs.append(p)

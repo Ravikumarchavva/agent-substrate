@@ -14,9 +14,11 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from agent_framework.shared.database.dependency import get_db_session
 
 from agent_framework.services.file_store.service import (
     create_file_record,
@@ -41,16 +43,6 @@ class FileOut(BaseModel):
     created_at: str
 
 
-async def _get_db(request: Request):
-    async with request.app.state.session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
 def _to_out(f) -> FileOut:
     return FileOut(
         id=str(f.id),
@@ -69,7 +61,7 @@ async def upload_file(
     thread_id: uuid.UUID,
     request: Request,
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Upload a file and associate it with a thread."""
     file_store = request.app.state.file_store
@@ -77,7 +69,11 @@ async def upload_file(
 
     # Store file
     storage_key = f"{thread_id}/{uuid.uuid4()}/{file.filename}"
-    await file_store.write(storage_key, content)
+    await file_store.put(
+        storage_key,
+        content,
+        content_type=file.content_type or "application/octet-stream",
+    )
 
     # Create metadata record
     record = await create_file_record(
@@ -95,7 +91,7 @@ async def upload_file(
 @router.get("/{thread_id}/files")
 async def list_thread_files(
     thread_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     files = await list_files(db, thread_id)
     return [_to_out(f) for f in files]
@@ -104,7 +100,7 @@ async def list_thread_files(
 @router.get("/files/{file_id}")
 async def get_file_metadata(
     file_id: uuid.UUID,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     f = await get_file(db, file_id)
     if not f:
@@ -116,7 +112,7 @@ async def get_file_metadata(
 async def download_file(
     file_id: uuid.UUID,
     request: Request,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Download a file by ID."""
     from fastapi.responses import StreamingResponse
@@ -127,7 +123,7 @@ async def download_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     file_store = request.app.state.file_store
-    content = await file_store.read(f.storage_key)
+    content = await file_store.get(f.storage_key)
 
     return StreamingResponse(
         content=io.BytesIO(content),
@@ -140,7 +136,7 @@ async def download_file(
 async def delete_file_endpoint(
     file_id: uuid.UUID,
     request: Request,
-    db: AsyncSession = Depends(_get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     f = await get_file(db, file_id)
     if not f:

@@ -44,7 +44,7 @@ from agent_framework.core.guardrails.base_guardrail import (
 from agent_framework.core.messages.client_messages import SystemMessage, UserMessage
 
 if TYPE_CHECKING:
-    from agent_framework.providers.llm.base_client import BaseModelClient
+    from agent_framework.integrations.llm.base_client import BaseModelClient
 
 logger = logging.getLogger("agent_framework.structured.judge")
 

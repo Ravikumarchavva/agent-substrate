@@ -35,7 +35,7 @@ from agent_framework.core.agents.react_agent import ReActAgent
 from agent_framework.core.context.base_context import ModelContext
 from agent_framework.core.context.implementations import SlidingWindowContext
 from agent_framework.core.guardrails.prebuilt import MaxTokenGuardrail
-from agent_framework.extensions.tools.human_input import ToolApprovalHandler
+from agent_framework.tools.human_input import ToolApprovalHandler
 from agent_framework.core.memory.base_memory import BaseMemory
 from agent_framework.core.memory.redis_memory import RedisMemory
 from agent_framework.core.memory.unbounded_memory import UnboundedMemory
@@ -47,7 +47,7 @@ from agent_framework.core.messages.client_messages import (
     UserMessage,
 )
 from agent_framework.core.messages.base_message import BaseClientMessage
-from agent_framework.providers.llm.base_client import BaseModelClient
+from agent_framework.integrations.llm.base_client import BaseModelClient
 from agent_framework.core.tools.base_tool import BaseTool
 
 from agent_framework.server.services import (

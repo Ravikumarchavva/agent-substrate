@@ -25,7 +25,7 @@ from typing import Any
 
 import httpx
 
-from agent_framework.code_interpreter_service.schemas import (
+from agent_framework.services.code_interpreter.schemas import (
     ExecuteResponse,
     FileReadResponse,
     HealthResponse,

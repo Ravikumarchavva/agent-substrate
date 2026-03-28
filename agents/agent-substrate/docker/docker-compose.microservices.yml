@@ -1,7 +1,7 @@
 ## Docker Compose — Microservice Deployment
 ##
 ## Usage:
-##   docker compose -f docker-compose.microservices.yml up -d
+##   docker compose -f docker/docker-compose.microservices.yml up -d
 ##
 ## Infrastructure services (postgres, redis) are shared.
 ## Each microservice gets its own container.
@@ -27,8 +27,8 @@ x-common-env: &common-env
 
 x-service-base: &service-base
   build:
-    context: .
-    dockerfile: Dockerfile
+    context: ..
+    dockerfile: docker/backend.Dockerfile
   depends_on:
     postgres:
       condition: service_healthy
@@ -185,7 +185,7 @@ services:
       - uv
       - run
       - uvicorn
-      - agent_framework.code_interpreter_service.app:app
+      - agent_framework.services.code_interpreter.app:app
       - --host
       - "0.0.0.0"
       - --port
@@ -306,7 +306,7 @@ services:
 
   mcp-server:
     build:
-      context: ./docker/mcp_server
+      context: ./mcp_server
       dockerfile: Dockerfile
     ports:
       - "9000:9000"

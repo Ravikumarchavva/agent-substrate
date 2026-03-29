@@ -25,10 +25,10 @@ Package manager: **`uv`** (never `pip`).
 uv sync
 
 # Start infrastructure
-docker compose -f docker/docker-compose.yml up -d postgres redis
+docker compose -f deployment/docker/docker-compose.yml up -d postgres redis
 
 # Optional: MCP SSE demo server (needed for examples 04/05/06)
-docker compose -f docker/docker-compose.yml --profile mcp up -d mcp-server   # → localhost:9000/sse
+docker compose -f deployment/docker/docker-compose.yml --profile mcp up -d mcp-server   # → localhost:9000/sse
 
 # Start monolith backend
 uv run uvicorn raavan.server.app:app --port 8000 --reload
@@ -44,6 +44,27 @@ uv run ruff format .
 ---
 
 ## Full Directory Map
+
+```
+raavan/                            ← repo root
+├── src/raavan/                    ← Python package (all application code)
+├── deployment/                    ← All deployment artefacts
+│   ├── docker/                    ← Dockerfiles + Compose files
+│   │   ├── backend.Dockerfile     ← Production backend image
+│   │   ├── code-interpreter.Dockerfile
+│   │   ├── docker-compose.yml     ← Local dev (monolith + infra)
+│   │   ├── docker-compose.microservices.yml
+│   │   ├── mcp_server/            ← FastMCP 2.x demo SSE server
+│   │   └── tempo/                 ← Tempo OTLP config
+│   └── k8s/                       ← Kubernetes / Kustomize manifests
+│       ├── base/                  ← Production-ready base (kustomize base)
+│       └── overlays/kind/         ← Kind cluster overlay + smoke-test.ps1
+├── deploy.py                      ← Cross-platform Kind deploy script
+├── docs/                          ← Architecture, operations, design patterns
+├── examples/                      ← Jupyter notebooks (01–14)
+├── tests/                         ← pytest suite
+└── pyproject.toml                 ← uv project + ruff + pyright config
+```
 
 ```
 src/raavan/
@@ -69,16 +90,25 @@ src/raavan/
 │   ├── skills/                ← SkillManager, YAML frontmatter SKILL.md loader
 │   └── spotify/               ← SpotifyService, SpotifyAuthService
 │
-├── tools/                     ← Built-in tool implementations shipped with the framework
-│   ├── human_input.py         ← AskHumanTool, HITL handlers (approval, callback, CLI)
-│   ├── task_manager_tool.py   ← TaskManagerTool (Kanban board)
-│   ├── file_manager_tool.py   ← FileManagerTool (upload/download)
-│   ├── web_surfer.py          ← WebSurferTool (web browsing)
-│   └── code_interpreter/      ← CodeInterpreterTool (Firecracker VM HTTP client)
+├── catalog/                   ← Unified capability system (tools, skills, connectors, pipelines)
+│   ├── tools/                 ← BaseTool implementations (human_input, task_manager, web_surfer, …)
+│   │   ├── human_input/       ← AskHumanTool, HITL handlers
+│   │   ├── task_manager/      ← TaskManagerTool (Kanban board)
+│   │   ├── web_surfer/        ← WebSurferTool (web browsing)
+│   │   ├── code_interpreter/  ← CodeInterpreterTool (Firecracker VM HTTP client)
+│   │   └── …                  ← capability_search, file_manager, email_sender, etc.
+│   ├── skills/                ← SKILL.md prompt-skill packages (debugging, code_review, …)
+│   ├── connectors/            ← External service connectors (email, postgres_query, …)
+│   ├── _chain_runtime.py      ← ChainRuntime + AdapterProxy (Proxy pattern)
+│   ├── _scanner.py            ← Convention discovery scanner (anchors on last raavan in path)
+│   ├── _data_ref.py           ← DataRef / DataRefStore
+│   ├── _pipeline.py           ← PipelineDef, PipelineEngine, PipelineStore
+│   ├── _temporal/             ← Temporal.io workflow integration (activities, worker, workflows)
+│   └── _triggers/             ← Trigger system (conditions, scheduler, webhooks)
 │
 ├── server/                    ← Monolith FastAPI server
 │   ├── app.py                 ← Factory + lifespan; DI via app.state.*
-│   ├── routes/                ← 14 route files (chat, tasks, hitl, threads, mcp_apps, …)
+│   ├── routes/                ← 18 route files (chat, tasks, hitl, threads, mcp_apps, workflows, triggers, …)
 │   ├── security/              ← Thin wrappers delegating to shared/auth/ (binds settings)
 │   ├── services/              ← Business logic (thread_service.py, agent_service.py, …)
 │   ├── sse/                   ← SSE event bus + HITL bridge (monolith only)
@@ -305,14 +335,14 @@ SYSTEM_INSTRUCTIONS=...     # per-agent system prompt override for agent_runtime
 | Tempo | 4318 | OTLP HTTP |
 | Grafana | 3001 | Dashboard |
 
-Microservice ports: see `docker/docker-compose.microservices.yml`.
+Microservice ports: see `deployment/docker/docker-compose.microservices.yml`.
 
 ---
 
 ## Observability Stack (Kind cluster)
 
 All observability services run in `af-observability` namespace.
-Deploy: `kubectl apply -k k8s/overlays/kind/` (includes observability)
+Deploy: `kubectl apply -k deployment/k8s/overlays/kind/` (includes observability)
 
 | Component | Image | Internal Port | Purpose |
 |---|---|---|---|
@@ -375,7 +405,7 @@ runner.export_markdown()  # writes results/report.md
 
 Run cluster smoke tests:
 ```powershell
-./k8s/overlays/kind/smoke-test.ps1
+./deployment/k8s/overlays/kind/smoke-test.ps1
 ```
 Tests pod health, endpoints, chat flow, and observability stack.
 
@@ -431,8 +461,8 @@ Tests pod health, endpoints, chat flow, and observability stack.
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **Snake_case** — files, modules, functions, variables
 - New DB models → `server/models/`; new schemas → `server/schemas.py` (monolith) or service-local `models.py` (microservices)
-- Built-in skills → `src/raavan/skills/<name>/SKILL.md` with YAML frontmatter
-- MCP SSE server source → `docker/mcp_server/server.py` (FastMCP 2.x, pinned)
+- Built-in skills → `src/raavan/catalog/skills/<name>/SKILL.md` with YAML frontmatter
+- MCP SSE server source → `deployment/docker/mcp_server/server.py` (FastMCP 2.x, pinned)
 - Canonical enum re-exports live in `core/__init__.py` (e.g. `from raavan.core import ToolRisk, RunStatus`).
 - **DB session dependency** — all microservice routes use `get_db_session` from `shared.database.dependency`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: no `@pytest.mark.asyncio` decorator needed. Write `async def test_*` directly.

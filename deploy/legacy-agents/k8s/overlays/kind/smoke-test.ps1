@@ -8,7 +8,7 @@
     and the message flow works end-to-end.
     
 .EXAMPLE
-    ./k8s/overlays/kind/smoke-test.ps1
+    ./deployment/k8s/overlays/kind/smoke-test.ps1
 #>
 
 $ErrorActionPreference = "Stop"

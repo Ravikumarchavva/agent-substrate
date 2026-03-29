@@ -56,7 +56,7 @@ k8s/
 uv run python deploy.py
 
 # Or apply manually:
-kubectl apply -k k8s/overlays/kind/
+kubectl apply -k deployment/k8s/overlays/kind/
 
 # Smoke tests (Windows PowerShell)
 .\k8s\overlays\kind\smoke-test.ps1
@@ -75,9 +75,9 @@ kubectl apply -k k8s/overlays/kind/
 
 ```bash
 # Apply base manifests directly (after configuring secrets + ingress)
-kubectl apply -k k8s/base/
+kubectl apply -k deployment/k8s/base/
 
-# Or create a production overlay under k8s/overlays/prod/
+# Or create a production overlay under deployment/k8s/overlays/prod/
 ```
 
 ## How Kustomize Works Here

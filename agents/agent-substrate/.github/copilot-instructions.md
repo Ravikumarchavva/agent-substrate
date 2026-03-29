@@ -15,15 +15,22 @@ Stack: Python 3.13, `uv` (never pip), SQLAlchemy 2 async, asyncpg, OpenTelemetry
 
 ## Repository Structure (top-level)
 ```
-src/raavan/
-├── core/            ← Framework primitives (agents, memory, tools, context, messages, guardrails)
-├── integrations/    ← External adapters (LLM, audio, MCP, skills, Spotify)
-├── tools/           ← Built-in tool implementations (human_input, task_manager, web_surfer, …)
-├── shared/          ← Cross-service contracts, auth, events, database, observability, tasks
-├── server/          ← Monolith FastAPI server (app.py, routes/, security/, services/, sse/)
-├── services/        ← 12 microservices (gateway, identity, agent_runtime, conversation, …)
-├── configs/         ← Pydantic Settings
-└── evals/           ← LLM-as-judge evaluation framework
+raavan/
+├── src/raavan/          ← Python package
+│   ├── core/            ← Framework primitives (agents, memory, tools, context, messages, guardrails)
+│   ├── integrations/    ← External adapters (LLM, audio, MCP, skills, Spotify)
+│   ├── catalog/         ← Unified capability system (tools/, skills/, connectors/, pipelines)
+│   ├── shared/          ← Cross-service contracts, auth, events, database, observability, tasks
+│   ├── server/          ← Monolith FastAPI server (app.py, routes/, security/, services/, sse/)
+│   ├── services/        ← 12 microservices (gateway, identity, agent_runtime, conversation, …)
+│   ├── configs/         ← Pydantic Settings
+│   └── evals/           ← LLM-as-judge evaluation framework
+├── deployment/
+│   ├── docker/          ← Dockerfiles, docker-compose.yml, docker-compose.microservices.yml
+│   └── k8s/             ← Kustomize base + Kind overlay, smoke-test.ps1
+├── deploy.py            ← Cross-platform Kind cluster deploy script
+├── docs/                ← Architecture, operations, design patterns
+└── examples/            ← Jupyter notebooks (01–14)
 ```
 
 ---

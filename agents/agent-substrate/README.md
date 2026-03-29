@@ -43,8 +43,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/agent-framework.git
-cd agent-framework
+git clone https://github.com/Ravikumarchavva/raavan.git
+cd raavan
 
 # Install with uv
 uv sync
@@ -54,6 +54,9 @@ uv sync --group notebooks
 
 # Optional: install browser automation and file parsing extras
 uv sync --group browser --group files
+
+# Optional: install S3-compatible object storage support
+uv sync --group storage
 
 # Optional: install example-only service clients and demo tooling
 uv sync --group examples
@@ -69,9 +72,9 @@ export OPENAI_API_KEY="sk-your-key-here"
 
 ```python
 import asyncio
-from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
-from agent_framework.core.memory.unbounded_memory import UnboundedMemory
-from agent_framework.core.messages.agent_messages import UserMessage, SystemMessage
+from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from raavan.core.memory.unbounded_memory import UnboundedMemory
+from raavan.core.messages.agent_messages import UserMessage, SystemMessage
 
 async def main():
     # Initialize components
@@ -100,10 +103,10 @@ asyncio.run(main())
 ```python
 import asyncio
 import json
-from agent_framework.model_clients.openai_client import OpenAIClient
-from agent_framework.memory.unbounded_memory import UnboundedMemory
-from agent_framework.messages.agent_messages import UserMessage, ToolMessage
-from agent_framework.tools.builtin_tools import CalculatorTool
+from raavan.model_clients.openai_client import OpenAIClient
+from raavan.memory.unbounded_memory import UnboundedMemory
+from raavan.messages.agent_messages import UserMessage, ToolMessage
+from raavan.tools.builtin_tools import CalculatorTool
 
 async def main():
     client = OpenAIClient(model="gpt-4o")
@@ -149,7 +152,7 @@ asyncio.run(main())
 Structured communication between agents, users, and tools:
 
 ```python
-from agent_framework.messages.agent_messages import (
+from raavan.messages.agent_messages import (
     SystemMessage,    # System instructions
     UserMessage,      # User inputs
     AssistantMessage, # Agent responses
@@ -162,7 +165,7 @@ from agent_framework.messages.agent_messages import (
 Abstraction layer for different LLM providers:
 
 ```python
-from agent_framework.model_clients.openai_client import OpenAIClient
+from raavan.model_clients.openai_client import OpenAIClient
 
 client = OpenAIClient(
     model="gpt-4o",
@@ -176,7 +179,7 @@ client = OpenAIClient(
 Function calling with JSON Schema validation:
 
 ```python
-from agent_framework.tools.base_tool import BaseTool
+from raavan.tools.base_tool import BaseTool
 
 class MyTool(BaseTool):
     async def execute(self, **kwargs):
@@ -193,7 +196,7 @@ class MyTool(BaseTool):
 Conversation history management:
 
 ```python
-from agent_framework.memory.unbounded_memory import UnboundedMemory
+from raavan.memory.unbounded_memory import UnboundedMemory
 
 memory = UnboundedMemory()
 memory.add_message(message)
@@ -205,7 +208,7 @@ messages = memory.get_messages()
 Connect to external tools via Model Context Protocol:
 
 ```python
-from agent_framework.tools import MCPClient, MCPTool
+from raavan.tools import MCPClient, MCPTool
 
 # Connect to MCP server
 mcp_client = MCPClient()
@@ -280,31 +283,31 @@ server        ← FastAPI routes, DB models, DI wiring
 
 ```python
 # Core — agents, base classes, memory
-from agent_framework.core.agents.react_agent import ReActAgent
-from agent_framework.core.agents.orchestrator_agent import OrchestratorAgent
-from agent_framework.core.memory.unbounded_memory import UnboundedMemory
-from agent_framework.core.memory.session_manager import SessionManager
-from agent_framework.core.guardrails.base_guardrail import BaseGuardrail
+from raavan.core.agents.react_agent import ReActAgent
+from raavan.core.agents.orchestrator_agent import OrchestratorAgent
+from raavan.core.memory.unbounded_memory import UnboundedMemory
+from raavan.core.memory.session_manager import SessionManager
+from raavan.core.guardrails.base_guardrail import BaseGuardrail
 
 # Integrations — LLM clients, audio, MCP, skills, third-party APIs
-from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
-from agent_framework.integrations.audio import BaseAudioClient
-from agent_framework.integrations.spotify.client import SpotifyService
-from agent_framework.integrations.mcp import MCPClient
-from agent_framework.integrations.skills import SkillManager
+from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from raavan.integrations.audio import BaseAudioClient
+from raavan.integrations.spotify.client import SpotifyService
+from raavan.integrations.mcp import MCPClient
+from raavan.integrations.skills import SkillManager
 
 # Tools — built-in tool implementations
-from agent_framework.tools.human_input import AskHumanTool
-from agent_framework.tools.web_surfer import WebSurferTool
-from agent_framework.tools.file_manager_tool import FileManagerTool
+from raavan.tools.human_input import AskHumanTool
+from raavan.tools.web_surfer import WebSurferTool
+from raavan.tools.file_manager_tool import FileManagerTool
 
 # Server SSE — event bus, HITL bridge
-from agent_framework.server.sse.bridge import WebHITLBridge
-from agent_framework.server.sse.events import EventBus
+from raavan.server.sse.bridge import WebHITLBridge
+from raavan.server.sse.events import EventBus
 
 # Shared — cross-service infra
-from agent_framework.shared.tasks.store import TaskStore
-from agent_framework.shared.observability import configure_opentelemetry
+from raavan.shared.tasks.store import TaskStore
+from raavan.shared.observability import configure_opentelemetry
 ```
 
 ### Common extension tasks — quick reference
@@ -351,7 +354,7 @@ Ideal for workflows that require multiple domain experts working under a single 
 ![OrchestratorAgent Architecture](public/diagrams/multi-agent-orchestrator.svg)
 
 ```python
-from agent_framework import OrchestratorAgent, ReActAgent
+from raavan import OrchestratorAgent, ReActAgent
 
 orchestrator = OrchestratorAgent(
     name="coordinator",
@@ -371,7 +374,7 @@ Perfect for ETL pipelines, report generation, and multi-stage transformation wor
 ![SequentialFlow Architecture](public/diagrams/multi-agent-sequential.svg)
 
 ```python
-from agent_framework import SequentialFlow
+from raavan import SequentialFlow
 
 pipeline = SequentialFlow(
     name="etl_pipeline",
@@ -389,7 +392,7 @@ Ideal for independent analyses, multi-perspective reviews, and latency-critical 
 ![ParallelFlow Architecture](public/diagrams/multi-agent-parallel.svg)
 
 ```python
-from agent_framework import ParallelFlow
+from raavan import ParallelFlow
 
 reviewer = ParallelFlow(
     name="code_review",
@@ -408,7 +411,7 @@ Branches can themselves be any agent or flow, enabling arbitrarily deep decision
 ![ConditionalFlow Architecture](public/diagrams/multi-agent-conditional.svg)
 
 ```python
-from agent_framework import ConditionalFlow
+from raavan import ConditionalFlow
 
 router = ConditionalFlow(
     name="smart_router",
@@ -459,7 +462,7 @@ LOG_LEVEL=INFO
 pytest
 
 # With coverage
-pytest --cov=agent_framework
+pytest --cov=raavan
 
 # Run specific test
 pytest tests/test_messages.py

@@ -6,10 +6,10 @@ This example demonstrates how to:
 3. Use MCP tools with an agent
 """
 import asyncio
-from agent_framework.integrations.mcp import MCPClient, MCPTool
-from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
-from agent_framework.core.memory.unbounded_memory import UnboundedMemory
-from agent_framework.core.messages.client_messages import UserMessage, SystemMessage
+from raavan.integrations.mcp import MCPClient, MCPTool
+from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from raavan.core.memory.unbounded_memory import UnboundedMemory
+from raavan.core.messages.client_messages import UserMessage, SystemMessage
 
 
 async def main():

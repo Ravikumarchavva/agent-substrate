@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Smoke tests for the agent-framework Kind cluster deployment.
+    Smoke tests for the raavan Kind cluster deployment.
     
 .DESCRIPTION
     Validates that all services are running, endpoints respond correctly,

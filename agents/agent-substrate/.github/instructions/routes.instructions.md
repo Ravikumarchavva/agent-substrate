@@ -1,7 +1,7 @@
 ---
 name: "Server Route Conventions"
 description: "FastAPI server patterns, dependency injection, SSE streaming, and route registration"
-applyTo: "src/agent_framework/server/**"
+applyTo: "src/raavan/server/**"
 ---
 
 # Server & Route Conventions

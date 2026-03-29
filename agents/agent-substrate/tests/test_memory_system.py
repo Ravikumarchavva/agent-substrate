@@ -20,13 +20,13 @@ import os
 
 import pytest
 
-from agent_framework.core.memory.message_serializer import (
+from raavan.core.memory.message_serializer import (
     serialize_message,
     deserialize_message,
     serialize_messages,
     deserialize_messages,
 )
-from agent_framework.core.messages.client_messages import (
+from raavan.core.messages.client_messages import (
     SystemMessage,
     UserMessage,
     AssistantMessage,
@@ -120,7 +120,7 @@ def test_serializer_rejects_missing_type():
 
 @requires_redis
 async def test_redis_memory():
-    from agent_framework.core.memory.redis_memory import RedisMemory
+    from raavan.core.memory.redis_memory import RedisMemory
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -207,8 +207,8 @@ async def test_redis_memory():
 
 @requires_postgres
 async def test_postgres_memory():
-    from agent_framework.core.memory.postgres_memory import PostgresMemory
-    from agent_framework.core.messages.client_messages import (
+    from raavan.core.memory.postgres_memory import PostgresMemory
+    from raavan.core.messages.client_messages import (
         SystemMessage,
         UserMessage,
         AssistantMessage,
@@ -296,13 +296,13 @@ async def test_postgres_memory():
 @requires_redis
 @requires_postgres
 async def test_session_manager():
-    from agent_framework.core.memory.redis_memory import RedisMemory
-    from agent_framework.core.memory.postgres_memory import PostgresMemory
-    from agent_framework.core.memory.session_manager import (
+    from raavan.core.memory.redis_memory import RedisMemory
+    from raavan.core.memory.postgres_memory import PostgresMemory
+    from raavan.core.memory.session_manager import (
         SessionManager,
         SessionStatus,
     )
-    from agent_framework.core.messages.client_messages import (
+    from raavan.core.messages.client_messages import (
         SystemMessage,
         UserMessage,
         AssistantMessage,

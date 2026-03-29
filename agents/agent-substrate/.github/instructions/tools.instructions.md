@@ -1,13 +1,13 @@
 ---
 name: "Tool Authoring Rules"
 description: "BaseTool subclassing, input schema, SSE emission, thread-safety, and registration"
-applyTo: "src/agent_framework/core/tools/**,src/agent_framework/tools/**"
+applyTo: "src/raavan/core/tools/**,src/raavan/tools/**"
 ---
 
 # Tool Authoring Rules
 
 ## Every tool MUST:
-1. Subclass `BaseTool` from `agent_framework.core.tools.base_tool`.
+1. Subclass `BaseTool` from `raavan.core.tools.base_tool`.
 2. Call `super().__init__(name, description, input_schema)` in `__init__` — never store a `Tool` Pydantic model on `self.tool_schema` instead. Bypassing `super().__init__()` means `self.annotations`, `self.name`, `self.description`, and `self.input_schema` never exist on the instance, causing `AttributeError` at runtime when the agent loop accesses them.
 3. Implement `async def execute(self, **kwargs) -> ToolResult`.
 4. Document each `input_schema` property with a `"description"` field.
@@ -56,7 +56,7 @@ Add the tool instance to `app.state.tools` in `server/app.py` lifespan.
 Tool names must be lowercase snake_case and globally unique.
 
 ## MCPTool schema methods
-`MCPTool` (from `agent_framework.integrations.mcp`) exposes three schema formats:
+`MCPTool` (from `raavan.integrations.mcp`) exposes three schema formats:
 ```python
 tool.get_schema()         # → Tool (internal object) — pass to ReActAgent(tools=[...])
 tool.get_openai_schema()  # → dict (OpenAI function format) — pass to client.generate(tools=[...])

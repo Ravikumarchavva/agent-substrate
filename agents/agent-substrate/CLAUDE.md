@@ -9,8 +9,8 @@ Trust it as the primary reference; only search the codebase if something here is
 
 Python async AI-agent framework with **two deployment modes**:
 
-1. **Monolith** — single FastAPI server at `src/agent_framework/server/`
-2. **Microservices** — 12 independent FastAPI services under `src/agent_framework/services/`
+1. **Monolith** — single FastAPI server at `src/raavan/server/`
+2. **Microservices** — 12 independent FastAPI services under `src/raavan/services/`
 
 Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 16, Redis 7, OpenTelemetry → Tempo.
 
@@ -31,7 +31,7 @@ docker compose -f docker/docker-compose.yml up -d postgres redis
 docker compose -f docker/docker-compose.yml --profile mcp up -d mcp-server   # → localhost:9000/sse
 
 # Start monolith backend
-uv run uvicorn agent_framework.server.app:app --port 8000 --reload
+uv run uvicorn raavan.server.app:app --port 8000 --reload
 
 # Run tests
 uv run pytest
@@ -46,7 +46,7 @@ uv run ruff format .
 ## Full Directory Map
 
 ```
-src/agent_framework/
+src/raavan/
 ├── core/                      ← Framework primitives (pure engine, no external deps)
 │   ├── agents/                ← BaseAgent, ReActAgent, OrchestratorAgent, FlowAgent
 │   ├── memory/                ← RedisMemory, PostgresMemory, SlidingWindowMemory, SessionManager
@@ -164,7 +164,7 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 ### Tool Creation — always subclass `BaseTool`
 
 ```python
-from agent_framework.core.tools.base_tool import BaseTool, ToolResult
+from raavan.core.tools.base_tool import BaseTool, ToolResult
 
 class MyTool(BaseTool):
     def __init__(self):
@@ -184,16 +184,16 @@ Register in `server/app.py` lifespan under `app.state.tools`.
 
 ```python
 # ✅ Correct
-from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
+from raavan.integrations.llm.openai.openai_client import OpenAIClient
 
 # ❌ Wrong — file does not exist
-from agent_framework.integrations.llm.openai.client import OpenAIClient
+from raavan.integrations.llm.openai.client import OpenAIClient
 ```
 
 ### MCP Tools — load at runtime via MCPClient
 
 ```python
-from agent_framework.integrations.mcp import MCPClient
+from raavan.integrations.mcp import MCPClient
 
 client = MCPClient(url="http://localhost:9000/sse")
 tools = await client.discover_tools()   # returns list[MCPTool]
@@ -204,8 +204,8 @@ There is **no** `integrations.mcp.loader` module. Do not import from it.
 ### Shared Event Bus — always use factory functions
 
 ```python
-from agent_framework.shared.events.bus import EventBus
-from agent_framework.shared.events.types import workflow_started, workflow_failed
+from raavan.shared.events.bus import EventBus
+from raavan.shared.events.types import workflow_started, workflow_failed
 
 bus: EventBus = app.state.bus
 await bus.publish(workflow_started(job_id=job.id, run_id=run.id))
@@ -216,7 +216,7 @@ Never construct event dicts manually — always use the factory functions from `
 ### SSE Event Bus (monolith only)
 
 ```python
-from agent_framework.server.sse.bridge import WebHITLBridge
+from raavan.server.sse.bridge import WebHITLBridge
 
 bridge: WebHITLBridge = request.app.state.bridge
 await bridge.put_event({"type": "my_event", "data": {...}})
@@ -232,7 +232,7 @@ await bridge.put_event({"type": "my_event", "data": {...}})
 ## Memory — `RedisMemory`
 
 ```python
-from agent_framework.core.memory import RedisMemory
+from raavan.core.memory import RedisMemory
 
 mem = RedisMemory(session_id="conv-abc-123", redis_url=REDIS_URL)
 await mem.connect()
@@ -362,7 +362,7 @@ Measures agent quality via LLM-as-judge grading.
 | `criteria.py` | `CORRECTNESS`, `HELPFULNESS`, `SAFETY`, `RELEVANCE` | Built-in grading criteria |
 
 ```python
-from agent_framework.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+from raavan.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
 
 runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
 report = await runner.run(dataset)
@@ -381,6 +381,46 @@ Tests pod health, endpoints, chat flow, and observability stack.
 
 ---
 
+## Design Patterns
+
+> Full catalogue with file locations and anti-patterns organized by category: [`docs/design_patterns.md`](docs/design_patterns.md)
+
+### Creational (Object Creation)
+
+| Pattern | Location | Rule |
+|---|---|---|
+| **Factory Method** | `core/storage/factory.py` | Use `create_file_store(settings)` — never import concrete store classes directly. |
+| **Registry** | `core/tools/catalog.py` | Register tools via `catalog.register_tool(tool, category=..., tags=[...])`. Search is global. |
+| **Convention Discovery** | `catalog/_scanner.py` | Walks `catalog/tools/`; anchors on **last** `raavan` in path (Windows fix). |
+
+### Structural (Object Composition)
+
+| Pattern | Location | Rule |
+|---|---|---|
+| **Abstract Base Class** | `core/storage/base.py`, `core/agents/base_agent.py` | Subclasses implement contracts via abstract methods. |
+| **Adapter** | `integrations/mcp/` | `MCPTool.get_schema()` → framework, `get_openai_schema()` → OpenAI, `get_mcp_schema()` → MCP. |
+| **Proxy** | `catalog/_chain_runtime.py` | `ChainRuntime` builds tool namespace from `CapabilityRegistry`. |
+| **Decorator** | `core/storage/encrypted.py` | `EncryptedFileStore` wraps any `FileStore` for transparent encryption. |
+
+### Behavioral (Object Interaction)
+
+| Pattern | Location | Rule |
+|---|---|---|
+| **Template Method** | `core/tools/base_tool.py` | Subclass `BaseTool`, implement `execute()` with `# type: ignore[override]` for keyword-only params. |
+| **Strategy** | `core/tools/base_tool.py` | Set `risk = ToolRisk.CRITICAL` and `hitl_mode = HitlMode.BLOCKING` as class-level attributes. |
+| **Observer/Event Bus** | `server/sse/events.py`, `shared/events/types.py` | Always use factory functions (`workflow_started(...)`) — never build event dicts manually. |
+| **Protocol duck typing** | `core/agents/base_agent.py` | `PromptEnricher` is `@runtime_checkable` — `core/` stays free of `integrations/` imports. |
+| **Pipeline Builder** | `core/pipelines/runner.py` | JSON graph → live objects via topology detection. |
+| **ReAct Agent Loop** | `core/agents/react_agent.py` | Think → Act → Observe; guardrails at INPUT, OUTPUT, TOOL_CALL injection points. |
+
+### Architectural (System-wide)
+
+| Pattern | Location | Rule |
+|---|---|---|
+| **DI via `app.state`** | `server/app.py` | Mount all shared objects in `lifespan`. Read via `request.app.state.*` in routes. No global singletons. |
+
+---
+
 ## Coding Standards
 
 - **Async everywhere** — every handler, service method, tool `execute()`, DB call is `async def`
@@ -391,9 +431,9 @@ Tests pod health, endpoints, chat flow, and observability stack.
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **Snake_case** — files, modules, functions, variables
 - New DB models → `server/models/`; new schemas → `server/schemas.py` (monolith) or service-local `models.py` (microservices)
-- Built-in skills → `src/agent_framework/skills/<name>/SKILL.md` with YAML frontmatter
+- Built-in skills → `src/raavan/skills/<name>/SKILL.md` with YAML frontmatter
 - MCP SSE server source → `docker/mcp_server/server.py` (FastMCP 2.x, pinned)
-- Canonical enum re-exports live in `core/__init__.py` (e.g. `from agent_framework.core import ToolRisk, RunStatus`).
+- Canonical enum re-exports live in `core/__init__.py` (e.g. `from raavan.core import ToolRisk, RunStatus`).
 - **DB session dependency** — all microservice routes use `get_db_session` from `shared.database.dependency`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: no `@pytest.mark.asyncio` decorator needed. Write `async def test_*` directly.
 

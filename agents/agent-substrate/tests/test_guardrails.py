@@ -1,7 +1,7 @@
 """Test suite for the guardrail system."""
 
 import asyncio
-from agent_framework.core.guardrails import (
+from raavan.core.guardrails import (
     BaseGuardrail,
     GuardrailContext,
     GuardrailResult,
@@ -13,7 +13,7 @@ from agent_framework.core.guardrails import (
     MaxTokenGuardrail,
     ToolCallValidationGuardrail,
 )
-from agent_framework.core.exceptions import GuardrailTripwireError
+from raavan.core.exceptions import GuardrailTripwireError
 
 
 async def test_content_filter():

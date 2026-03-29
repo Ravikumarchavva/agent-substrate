@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agent_framework.core.messages import UserMessage, AssistantMessage, SystemMessage
+from raavan.core.messages import UserMessage, AssistantMessage, SystemMessage
 
 
 class TestMessageTypes:
@@ -39,9 +39,9 @@ class TestRedisMemory:
     @pytest.mark.asyncio
     async def test_memory_lifecycle(self) -> None:
         """Test connect → add → get → disconnect cycle."""
-        from agent_framework.core.memory import RedisMemory
+        from raavan.core.memory import RedisMemory
 
-        with patch("agent_framework.core.memory.redis_memory.aioredis") as mock_redis:
+        with patch("raavan.core.memory.redis_memory.aioredis") as mock_redis:
             mock_conn = AsyncMock()
             mock_conn.ping = AsyncMock()
             mock_conn.lrange = AsyncMock(return_value=[])

@@ -81,7 +81,7 @@ services:
 
   identity:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.identity.app:app", "--host", "0.0.0.0", "--port", "8010"]
+    command: ["uv", "run", "uvicorn", "raavan.services.identity.app:app", "--host", "0.0.0.0", "--port", "8010"]
     ports:
       - "8010:8010"
     environment:
@@ -90,7 +90,7 @@ services:
 
   policy:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.policy.app:app", "--host", "0.0.0.0", "--port", "8011"]
+    command: ["uv", "run", "uvicorn", "raavan.services.policy.app:app", "--host", "0.0.0.0", "--port", "8011"]
     ports:
       - "8011:8011"
     environment:
@@ -99,7 +99,7 @@ services:
 
   gateway:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.gateway.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    command: ["uv", "run", "uvicorn", "raavan.services.gateway.app:app", "--host", "0.0.0.0", "--port", "8001"]
     ports:
       - "8001:8001"
     environment:
@@ -130,7 +130,7 @@ services:
 
   conversation:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.conversation.app:app", "--host", "0.0.0.0", "--port", "8012"]
+    command: ["uv", "run", "uvicorn", "raavan.services.conversation.app:app", "--host", "0.0.0.0", "--port", "8012"]
     ports:
       - "8012:8012"
     environment:
@@ -139,7 +139,7 @@ services:
 
   job-controller:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.job_controller.app:app", "--host", "0.0.0.0", "--port", "8013"]
+    command: ["uv", "run", "uvicorn", "raavan.services.job_controller.app:app", "--host", "0.0.0.0", "--port", "8013"]
     ports:
       - "8013:8013"
     environment:
@@ -152,7 +152,7 @@ services:
 
   agent-runtime:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.agent_runtime.app:app", "--host", "0.0.0.0", "--port", "8014"]
+    command: ["uv", "run", "uvicorn", "raavan.services.agent_runtime.app:app", "--host", "0.0.0.0", "--port", "8014"]
     ports:
       - "8014:8014"
     environment:
@@ -163,7 +163,7 @@ services:
 
   tool-executor:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.tool_executor.app:app", "--host", "0.0.0.0", "--port", "8015"]
+    command: ["uv", "run", "uvicorn", "raavan.services.tool_executor.app:app", "--host", "0.0.0.0", "--port", "8015"]
     ports:
       - "8015:8015"
     environment:
@@ -185,7 +185,7 @@ services:
       - uv
       - run
       - uvicorn
-      - agent_framework.services.code_interpreter.app:app
+      - raavan.services.code_interpreter.app:app
       - --host
       - "0.0.0.0"
       - --port
@@ -224,7 +224,7 @@ services:
 
   human-gate:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.human_gate.app:app", "--host", "0.0.0.0", "--port", "8016"]
+    command: ["uv", "run", "uvicorn", "raavan.services.human_gate.app:app", "--host", "0.0.0.0", "--port", "8016"]
     ports:
       - "8016:8016"
     environment:
@@ -233,7 +233,7 @@ services:
 
   live-stream:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.live_stream.app:app", "--host", "0.0.0.0", "--port", "8017"]
+    command: ["uv", "run", "uvicorn", "raavan.services.live_stream.app:app", "--host", "0.0.0.0", "--port", "8017"]
     ports:
       - "8017:8017"
     environment:
@@ -242,7 +242,7 @@ services:
 
   file-store:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.file_store.app:app", "--host", "0.0.0.0", "--port", "8018"]
+    command: ["uv", "run", "uvicorn", "raavan.services.file_store.app:app", "--host", "0.0.0.0", "--port", "8018"]
     ports:
       - "8018:8018"
     environment:
@@ -258,7 +258,7 @@ services:
 
   admin:
     <<: *service-base
-    command: ["uv", "run", "uvicorn", "agent_framework.services.admin.app:app", "--host", "0.0.0.0", "--port", "8019"]
+    command: ["uv", "run", "uvicorn", "raavan.services.admin.app:app", "--host", "0.0.0.0", "--port", "8019"]
     ports:
       - "8019:8019"
     environment:

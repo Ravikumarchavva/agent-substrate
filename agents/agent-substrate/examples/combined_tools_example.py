@@ -5,11 +5,11 @@ and MCP tools (like filesystem) together in a single agent.
 """
 import asyncio
 import json
-from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_framework.integrations.mcp import MCPClient, MCPTool
-from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
-from agent_framework.core.memory.unbounded_memory import UnboundedMemory
-from agent_framework.core.messages.client_messages import (
+from raavan.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from raavan.integrations.mcp import MCPClient, MCPTool
+from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from raavan.core.memory.unbounded_memory import UnboundedMemory
+from raavan.core.messages.client_messages import (
     UserMessage, SystemMessage, ToolExecutionResultMessage,
 )
 

@@ -1,8 +1,8 @@
 [tool.hatch.build.targets.wheel]
-packages = ["src/agent_framework"]
+packages = ["src/raavan"]
 
 [project]
-name = "agent-framework"
+name = "raavan"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -34,10 +34,12 @@ dependencies = [
     "rich>=14.3.2",
     "pyjwt>=2.8.0",
     "cryptography>=45.0.0",
+    "temporalio>=1.11.0",
+    "apscheduler>=4.0.0a5",
 ]
 
 [project.scripts]
-agent-framework = "agent_framework.cli:main"
+raavan = "raavan.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -64,6 +66,10 @@ files = [
     "openpyxl>=3.1.0",
 ]
 
+storage = [
+    "aiobotocore>=2.25.0",
+]
+
 examples = [
     "mcp-server-fetch>=2025.1.17",
     "firecracker-python>=0.0.5",
@@ -86,5 +92,5 @@ exclude = [
 # E701/E702: single-line if/semicolons are intentional in dispatch tables
 # E402: mid-file imports are intentional in some route files
 [tool.ruff.lint.per-file-ignores]
-"src/agent_framework/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
-"src/agent_framework/services/conversation/routes.py" = ["E402"]
+"src/raavan/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
+"src/raavan/services/conversation/routes.py" = ["E402"]

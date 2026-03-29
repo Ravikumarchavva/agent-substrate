@@ -1,11 +1,11 @@
 import asyncio
 import os
-from agent_framework.core.agents.react_agent import ReActAgent
-from agent_framework.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_framework.integrations.llm.openai.openai_client import OpenAIClient
-from agent_framework.core.memory.unbounded_memory import UnboundedMemory
-from agent_framework.shared.observability.telemetry import configure_opentelemetry
-from agent_framework.configs.settings import Settings
+from raavan.core.agents.react_agent import ReActAgent
+from raavan.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from raavan.core.memory.unbounded_memory import UnboundedMemory
+from raavan.shared.observability.telemetry import configure_opentelemetry
+from raavan.configs.settings import Settings
 
 async def main():
     # 0. Configure Observability (OpenTelemetry) with Tempo

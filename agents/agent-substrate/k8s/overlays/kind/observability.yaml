@@ -28,7 +28,7 @@ metadata:
   namespace: af-observability
   labels:
     app: loki
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 data:
   local-config.yaml: |
     auth_enabled: false
@@ -83,7 +83,7 @@ metadata:
   namespace: af-observability
   labels:
     app: loki
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   serviceName: loki
   replicas: 1
@@ -94,7 +94,7 @@ spec:
     metadata:
       labels:
         app: loki
-        app.kubernetes.io/part-of: agent-framework
+        app.kubernetes.io/part-of: raavan
     spec:
       containers:
         - name: loki
@@ -150,7 +150,7 @@ metadata:
   namespace: af-observability
   labels:
     app: loki
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   type: ClusterIP
   selector:
@@ -173,7 +173,7 @@ metadata:
   namespace: af-observability
   labels:
     app: promtail
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -181,7 +181,7 @@ metadata:
   name: promtail
   labels:
     app: promtail
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 rules:
   - apiGroups: [""]
     resources: ["nodes", "nodes/proxy", "services", "endpoints", "pods"]
@@ -193,7 +193,7 @@ metadata:
   name: promtail
   labels:
     app: promtail
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -211,7 +211,7 @@ metadata:
   namespace: af-observability
   labels:
     app: promtail
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 data:
   promtail.yaml: |
     server:
@@ -272,7 +272,7 @@ metadata:
   namespace: af-observability
   labels:
     app: promtail
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   selector:
     matchLabels:
@@ -281,7 +281,7 @@ spec:
     metadata:
       labels:
         app: promtail
-        app.kubernetes.io/part-of: agent-framework
+        app.kubernetes.io/part-of: raavan
     spec:
       serviceAccountName: promtail
       containers:
@@ -335,7 +335,7 @@ metadata:
   namespace: af-observability
   labels:
     app: tempo
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 data:
   tempo.yaml: |
     server:
@@ -402,7 +402,7 @@ metadata:
   namespace: af-observability
   labels:
     app: tempo
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   replicas: 1
   selector:
@@ -412,7 +412,7 @@ spec:
     metadata:
       labels:
         app: tempo
-        app.kubernetes.io/part-of: agent-framework
+        app.kubernetes.io/part-of: raavan
     spec:
       containers:
         - name: tempo
@@ -465,7 +465,7 @@ metadata:
   namespace: af-observability
   labels:
     app: tempo
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   type: ClusterIP
   selector:
@@ -494,7 +494,7 @@ metadata:
   namespace: af-observability
   labels:
     app: prometheus
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -502,7 +502,7 @@ metadata:
   name: prometheus
   labels:
     app: prometheus
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 rules:
   - apiGroups: [""]
     resources: ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods"]
@@ -519,7 +519,7 @@ metadata:
   name: prometheus
   labels:
     app: prometheus
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -537,7 +537,7 @@ metadata:
   namespace: af-observability
   labels:
     app: prometheus
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 data:
   prometheus.yml: |
     global:
@@ -869,7 +869,7 @@ metadata:
   namespace: af-observability
   labels:
     app: prometheus
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: standard
@@ -885,7 +885,7 @@ metadata:
   namespace: af-observability
   labels:
     app: prometheus
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   replicas: 1
   selector:
@@ -895,7 +895,7 @@ spec:
     metadata:
       labels:
         app: prometheus
-        app.kubernetes.io/part-of: agent-framework
+        app.kubernetes.io/part-of: raavan
     spec:
       serviceAccountName: prometheus
       containers:
@@ -951,7 +951,7 @@ metadata:
   namespace: af-observability
   labels:
     app: prometheus
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   type: ClusterIP
   selector:
@@ -974,7 +974,7 @@ metadata:
   namespace: af-observability
   labels:
     app: grafana
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 data:
   datasources.yaml: |
     apiVersion: 1
@@ -1013,7 +1013,7 @@ metadata:
   namespace: af-observability
   labels:
     app: grafana
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 data:
   dashboards.yaml: |
     apiVersion: 1
@@ -1036,7 +1036,7 @@ metadata:
   namespace: af-observability
   labels:
     app: grafana
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 data:
   # ═══════════════════════════════════════════════════════════════════════
   # Dashboard 1: Service RED Metrics (Rate / Errors / Duration)
@@ -1161,7 +1161,7 @@ data:
           ]
         }
       ],
-      "schemaVersion": 39, "tags": ["agent-framework", "red", "sre"],
+      "schemaVersion": 39, "tags": ["raavan", "red", "sre"],
       "templating": { "list": [] },
       "time": { "from": "now-1h", "to": "now" },
       "title": "Service RED Metrics",
@@ -1273,7 +1273,7 @@ data:
           ]
         }
       ],
-      "schemaVersion": 39, "tags": ["agent-framework", "infrastructure", "sre"],
+      "schemaVersion": 39, "tags": ["raavan", "infrastructure", "sre"],
       "templating": { "list": [] },
       "time": { "from": "now-1h", "to": "now" },
       "title": "Infrastructure & Resources",
@@ -1329,7 +1329,7 @@ data:
           "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "expr": "{namespace=~\"af-$namespace\", app=~\"$service\"}", "refId": "A" }]
         }
       ],
-      "schemaVersion": 39, "tags": ["agent-framework", "logs", "sre"],
+      "schemaVersion": 39, "tags": ["raavan", "logs", "sre"],
       "templating": {
         "list": [
           { "current": { "selected": true, "text": "All", "value": ".*" }, "hide": 0, "includeAll": true, "allValue": ".*", "label": "Namespace", "name": "namespace", "options": [{ "selected": true, "text": "All", "value": ".*" }, { "text": "edge", "value": "edge" }, { "text": "platform", "value": "platform" }, { "text": "runtime", "value": "runtime" }, { "text": "data", "value": "data" }, { "text": "observability", "value": "observability" }], "type": "custom" },
@@ -1382,7 +1382,7 @@ data:
           "targets": [{ "expr": "histogram_quantile(0.95, sum by (service_name, le) (rate(traces_spanmetrics_duration_seconds_bucket[5m])))", "legendFormat": "{{ service_name }}", "refId": "A" }]
         }
       ],
-      "schemaVersion": 39, "tags": ["agent-framework", "tracing", "sre"],
+      "schemaVersion": 39, "tags": ["raavan", "tracing", "sre"],
       "templating": { "list": [] },
       "time": { "from": "now-1h", "to": "now" },
       "title": "Distributed Tracing",
@@ -1453,7 +1453,7 @@ data:
           "targets": [{ "expr": "sum by (alertname) (ALERTS{alertstate=\"firing\"})", "legendFormat": "{{ alertname }}", "refId": "A" }]
         }
       ],
-      "schemaVersion": 39, "tags": ["agent-framework", "alerts", "sre"],
+      "schemaVersion": 39, "tags": ["raavan", "alerts", "sre"],
       "templating": { "list": [] },
       "time": { "from": "now-6h", "to": "now" },
       "title": "Alerts Overview",
@@ -1469,7 +1469,7 @@ metadata:
   namespace: af-observability
   labels:
     app: grafana
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: standard
@@ -1485,7 +1485,7 @@ metadata:
   namespace: af-observability
   labels:
     app: grafana
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   replicas: 1
   selector:
@@ -1495,7 +1495,7 @@ spec:
     metadata:
       labels:
         app: grafana
-        app.kubernetes.io/part-of: agent-framework
+        app.kubernetes.io/part-of: raavan
     spec:
       containers:
         - name: grafana
@@ -1566,7 +1566,7 @@ metadata:
   namespace: af-observability
   labels:
     app: grafana
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   type: ClusterIP
   selector:
@@ -1589,7 +1589,7 @@ metadata:
   namespace: af-observability
   labels:
     app: node-exporter
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   selector:
     matchLabels:
@@ -1598,7 +1598,7 @@ spec:
     metadata:
       labels:
         app: node-exporter
-        app.kubernetes.io/part-of: agent-framework
+        app.kubernetes.io/part-of: raavan
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9100"
@@ -1648,7 +1648,7 @@ metadata:
   namespace: af-observability
   labels:
     app: node-exporter
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
 spec:
   type: ClusterIP
   selector:
@@ -1667,7 +1667,7 @@ metadata:
   name: grafana-ingress
   namespace: af-observability
   labels:
-    app.kubernetes.io/part-of: agent-framework
+    app.kubernetes.io/part-of: raavan
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:

@@ -1,7 +1,7 @@
 ---
 name: "Microservice Conventions"
 description: "Service structure, event bus, shared contracts, and FastAPI lifespan wiring for microservices"
-applyTo: "src/agent_framework/services/**"
+applyTo: "src/raavan/services/**"
 ---
 
 ## Microservice Structure Conventions
@@ -29,8 +29,8 @@ Services intentionally omitting `models.py`/`service.py` by design:
 from __future__ import annotations
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from agent_framework.configs.settings import get_settings
-from agent_framework.shared.events.bus import EventBus
+from raavan.configs.settings import get_settings
+from raavan.shared.events.bus import EventBus
 from .routes import router
 
 settings = get_settings()
@@ -51,8 +51,8 @@ app.include_router(router)
 Always emit events via `EventBus` after committed DB writes:
 
 ```python
-from agent_framework.shared.events.bus import EventBus
-from agent_framework.shared.events.types import workflow_started, workflow_failed
+from raavan.shared.events.bus import EventBus
+from raavan.shared.events.types import workflow_started, workflow_failed
 
 bus: EventBus = request.app.state.bus
 await bus.publish(workflow_started(job_id=job.id, run_id=run.id))
@@ -65,9 +65,9 @@ Use factory functions from `shared/events/types.py` — **never** build event di
 All cross-service DTOs live in `shared/contracts/<service_name>.py`:
 
 ```python
-from agent_framework.shared.contracts.job_controller import JobRunRequest
-from agent_framework.shared.contracts.human_gate import HITLResponse
-from agent_framework.shared.contracts.file_store import FileUploadResponse
+from raavan.shared.contracts.job_controller import JobRunRequest
+from raavan.shared.contracts.human_gate import HITLResponse
+from raavan.shared.contracts.file_store import FileUploadResponse
 ```
 
 ## Database Access

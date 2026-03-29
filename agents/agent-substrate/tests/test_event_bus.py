@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from agent_framework.server.sse.events import (
+from raavan.server.sse.events import (
     BUS_CLOSED,
     CompletionEvent,
     ErrorEvent,
@@ -17,7 +17,7 @@ from agent_framework.server.sse.events import (
     TextDeltaEvent,
     _BUS_DONE,
 )
-from agent_framework.server.sse.bridge import BRIDGE_DONE, WebHITLBridge, _DONE
+from raavan.server.sse.bridge import BRIDGE_DONE, WebHITLBridge, _DONE
 
 
 # ---------------------------------------------------------------------------

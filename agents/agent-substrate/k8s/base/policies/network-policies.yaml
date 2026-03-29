@@ -427,7 +427,7 @@ spec:
   - from:
     - namespaceSelector:
         matchLabels:
-          app.kubernetes.io/part-of: agent-framework
+          app.kubernetes.io/part-of: raavan
     ports:
     - protocol: TCP
       port: 5432

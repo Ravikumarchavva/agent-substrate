@@ -2,8 +2,8 @@
 
 import asyncio
 import json
-from agent_framework.core.tools.base_tool import BaseTool, ToolResult
-from agent_framework.core.messages.client_messages import ToolExecutionResultMessage
+from raavan.core.tools.base_tool import BaseTool, ToolResult
+from raavan.core.messages.client_messages import ToolExecutionResultMessage
 
 
 class SimpleTool(BaseTool):
@@ -66,7 +66,7 @@ async def test_mcp_native_tool():
         tool_call_id="test_call_123",
         name="add_numbers",
         content=result.content,
-        isError=result.is_error,
+        is_error=result.is_error,
     )
     print(f"Message type: {type(msg).__name__}")
     print(f"Tool Call ID: {msg.tool_call_id}")

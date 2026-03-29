@@ -12,24 +12,24 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel
 
-from agent_framework.core.structured.result import (
+from raavan.core.structured.result import (
     StructuredOutputError,
     StructuredOutputResult,
 )
-from agent_framework.core.structured.schemas import (
+from raavan.core.structured.schemas import (
     ClassificationResult,
     ContentSafetyJudge,
     ExtractionResult,
     RelevanceJudge,
 )
-from agent_framework.core.structured.parse import parse
-from agent_framework.core.structured.judge import LLMJudge
-from agent_framework.core.structured.router import StructuredRouter
-from agent_framework.core.guardrails.base_guardrail import (
+from raavan.core.structured.parse import parse
+from raavan.core.structured.judge import LLMJudge
+from raavan.core.structured.router import StructuredRouter
+from raavan.core.guardrails.base_guardrail import (
     GuardrailContext,
     GuardrailType,
 )
-from agent_framework.core.messages.client_messages import (
+from raavan.core.messages.client_messages import (
     SystemMessage,
     UserMessage,
 )
@@ -42,6 +42,7 @@ from agent_framework.core.messages.client_messages import (
 
 def _mock_client(result: StructuredOutputResult) -> MagicMock:
     client = MagicMock()
+    client.generate = AsyncMock(return_value=result)
     client.generate_structured = AsyncMock(return_value=result)
     return client
 
@@ -118,8 +119,8 @@ class TestSchemas:
 
 
 class TestParseUtility:
-    async def test_parse_calls_generate_structured(self):
-        """parse() must forward messages + schema to client.generate_structured."""
+    async def test_parse_calls_generate(self):
+        """parse() must forward messages + schema to client.generate."""
         parsed_val = ContentSafetyJudge(
             safe=True, reasoning="ok", violated_categories=[]
         )
@@ -129,10 +130,10 @@ class TestParseUtility:
 
         result = await parse(client, messages, ContentSafetyJudge)
 
-        client.generate_structured.assert_called_once()
-        call_args = client.generate_structured.call_args
-        # First positional arg is messages, second is schema
-        assert call_args[0][1] is ContentSafetyJudge
+        client.generate.assert_called_once()
+        call_args = client.generate.call_args
+        # First positional arg is messages, response_format kwarg is schema
+        assert call_args.kwargs["response_format"] is ContentSafetyJudge
         assert result.ok is True
 
     async def test_parse_prepends_system_message(self):
@@ -145,7 +146,7 @@ class TestParseUtility:
 
         await parse(client, messages, ContentSafetyJudge, system="You are a judge.")
 
-        sent_messages = client.generate_structured.call_args[0][0]
+        sent_messages = client.generate.call_args[0][0]
         assert isinstance(sent_messages[0], SystemMessage)
         assert "judge" in sent_messages[0].content.lower()
 
@@ -230,14 +231,12 @@ class TestLLMJudge:
         result = await judge.check(ctx)
 
         assert result.passed is True
-        client.generate_structured.assert_not_called()
+        client.generate.assert_not_called()
 
     async def test_api_error_surfaces_as_failed_result(self):
-        """Exceptions from generate_structured must not propagate -- return failed result."""
+        """Exceptions from generate must not propagate -- return failed result."""
         client = MagicMock()
-        client.generate_structured = AsyncMock(
-            side_effect=RuntimeError("network error")
-        )
+        client.generate = AsyncMock(side_effect=RuntimeError("network error"))
         judge = self._make_judge(client)
 
         result = await judge.check(self._output_ctx("some text"))
@@ -265,7 +264,7 @@ class TestLLMJudge:
         )
         await judge.check(ctx)
 
-        sent_messages = client.generate_structured.call_args[0][0]
+        sent_messages = client.generate.call_args[0][0]
         # The user message text should be the input_text
         user_content = sent_messages[-1].content
         if isinstance(user_content, list) and user_content:
@@ -337,7 +336,7 @@ class TestStructuredRouter:
 
     async def test_refusal_raises_structured_output_error(self):
         client = MagicMock()
-        client.generate_structured = AsyncMock(
+        client.generate = AsyncMock(
             return_value=StructuredOutputResult(parsed=None, refusal="Refused.")
         )
         router = StructuredRouter(

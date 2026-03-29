@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 # Use a test client for the gateway app
-from agent_framework.services.gateway.app import app
+from raavan.services.gateway.app import app
 
 
 @pytest.fixture

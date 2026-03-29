@@ -145,7 +145,7 @@ spec:
             - uv
             - run
             - uvicorn
-            - agent_framework.services.code_interpreter.app:app
+            - raavan.services.code_interpreter.app:app
             - --host
             - "0.0.0.0"
             - --port

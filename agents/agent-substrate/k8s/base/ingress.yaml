@@ -25,7 +25,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: agent-framework-ingress
+  name: raavan-ingress
   namespace: af-edge
   annotations:
     # Ingress class
@@ -58,7 +58,7 @@ spec:
   tls:
     - hosts:
         - app.example.com  # CHANGE ME
-      secretName: agent-framework-tls
+      secretName: raavan-tls
   rules:
     - host: app.example.com  # CHANGE ME
       http:

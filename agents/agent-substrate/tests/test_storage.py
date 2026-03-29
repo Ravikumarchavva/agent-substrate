@@ -16,9 +16,9 @@ import os
 
 import pytest
 
-from agent_framework.core.storage.base import FileRef
-from agent_framework.core.storage.local import LocalFileStore
-from agent_framework.core.storage.tenant import FileScope, TenantContext
+from raavan.core.storage.base import FileRef
+from raavan.core.storage.local import LocalFileStore
+from raavan.core.storage.tenant import FileScope, TenantContext
 
 
 # -- FileRef -----------------------------------------------------------------
@@ -260,7 +260,7 @@ class TestLocalFileStore:
 
 class TestEncryptedFileStore:
     async def _make(self, tmp_path):
-        from agent_framework.core.storage.encrypted import (
+        from raavan.core.storage.encrypted import (
             EncryptedFileStore,
             LocalKeyProvider,
         )
@@ -366,7 +366,7 @@ class TestFactory:
     def test_create_local_store(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from agent_framework.core.storage.factory import create_file_store
+        from raavan.core.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"
@@ -380,8 +380,8 @@ class TestFactory:
     def test_create_encrypted_local_store(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from agent_framework.core.storage.encrypted import EncryptedFileStore
-        from agent_framework.core.storage.factory import create_file_store
+        from raavan.core.storage.encrypted import EncryptedFileStore
+        from raavan.core.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"
@@ -396,7 +396,7 @@ class TestFactory:
     def test_unknown_backend_raises(self):
         from unittest.mock import MagicMock
 
-        from agent_framework.core.storage.factory import create_file_store
+        from raavan.core.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "unknown"
@@ -408,7 +408,7 @@ class TestFactory:
     def test_envelope_without_kek_raises(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from agent_framework.core.storage.factory import create_file_store
+        from raavan.core.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"

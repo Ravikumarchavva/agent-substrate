@@ -4,7 +4,7 @@ TEST_REDIS_URL ?= redis://localhost:6379/0
 TEST_OPENAI_API_KEY ?= sk-test-placeholder
 
 ifeq ($(OS),Windows_NT)
-RUN_TEST_CI = powershell -NoProfile -ExecutionPolicy Bypass -Command "$$env:DATABASE_URL='$(TEST_DATABASE_URL)'; $$env:REDIS_URL='$(TEST_REDIS_URL)'; $$env:OPENAI_API_KEY='$(TEST_OPENAI_API_KEY)'; uv run pytest --tb=short -q --junitxml=test-results.xml"
+RUN_TEST_CI = cmd /C "set VIRTUAL_ENV=&&set DATABASE_URL=$(TEST_DATABASE_URL)&&set REDIS_URL=$(TEST_REDIS_URL)&&set OPENAI_API_KEY=$(TEST_OPENAI_API_KEY)&&uv run python -m pytest --tb=short -q --junitxml=test-results.xml"
 else
 RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) uv run pytest --tb=short -q --junitxml=test-results.xml
 endif
@@ -33,7 +33,7 @@ format-check:
 	uv run ruff format --check .
 
 typecheck:
-	uv run --with pyright pyright src/
+	uv run --group browser --group files --group storage --with pyright pyright src/
 
 typecheck-soft:
 	@$(MAKE) typecheck || echo "Non-blocking: typecheck failures ignored by ci target"

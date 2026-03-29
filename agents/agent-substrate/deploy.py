@@ -101,7 +101,7 @@ def read_env_file(path: Path) -> dict[str, str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Deploy agent-framework microservices to a local Kind cluster.",
+        description="Deploy raavan microservices to a local Kind cluster.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--cluster-name", default="dev", help="Kind cluster name")
@@ -411,7 +411,7 @@ def main() -> None:
             "get",
             "ns",
             "-l",
-            "app.kubernetes.io/part-of=agent-framework",
+            "app.kubernetes.io/part-of=raavan",
             "-o",
             "custom-columns=NAME:.metadata.name",
             "--no-headers",

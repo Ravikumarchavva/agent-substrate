@@ -1,7 +1,7 @@
 ## Docker Compose — Microservice Deployment
 ##
 ## Usage:
-##   docker compose -f docker/docker-compose.microservices.yml up -d
+##   docker compose -f deployment/docker/docker-compose.microservices.yml up -d
 ##
 ## Infrastructure services (postgres, redis) are shared.
 ## Each microservice gets its own container.
@@ -28,7 +28,7 @@ x-common-env: &common-env
 x-service-base: &service-base
   build:
     context: ..
-    dockerfile: docker/backend.Dockerfile
+    dockerfile: deployment/docker/backend.Dockerfile
   depends_on:
     postgres:
       condition: service_healthy
@@ -274,8 +274,8 @@ services:
     user: root
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
-      - ./docker/tempo/tempo.yaml:/etc/tempo.yaml
-      - ./docker/tempo/data:/tmp/tempo
+      - ./tempo/tempo.yaml:/etc/tempo.yaml
+      - ./tempo/data:/tmp/tempo
     ports:
       - "3200:3200"
       - "4317:4317"

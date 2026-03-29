@@ -2,7 +2,7 @@
 """
 deploy.py — Cross-platform Kind cluster deploy script.
 
-Replaces k8s/overlays/kind/deploy.ps1 and deploy.sh.
+Replaces deployment/k8s/overlays/kind/deploy.ps1 and deploy.sh.
 Requires: docker, kind, kubectl, uv on PATH. Python is already a project dep.
 
 Usage:
@@ -122,7 +122,7 @@ def main() -> None:
     frontend_tag: str = args.frontend_tag
 
     repo_root = Path(__file__).parent.resolve()
-    k8s_root = repo_root / "k8s"
+    k8s_root = repo_root / "deployment" / "k8s"
     kind_dir = k8s_root / "overlays" / "kind"
     frontend_dir = repo_root.parent / "ai-chatbot-ui"
 
@@ -202,7 +202,7 @@ def main() -> None:
             "-t",
             backend_tag,
             "-f",
-            str(repo_root / "docker" / "backend.Dockerfile"),
+            str(repo_root / "deployment" / "docker" / "backend.Dockerfile"),
             str(repo_root),
         ]
     )

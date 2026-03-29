@@ -45,7 +45,7 @@ test-ci:
 	$(RUN_TEST_CI)
 
 build:
-	docker build -f ./docker/backend.Dockerfile .
+	docker build -f ./deployment/docker/backend.Dockerfile .
 
 security:
 	uv run --with pip-audit pip-audit

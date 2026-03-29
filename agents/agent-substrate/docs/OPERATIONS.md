@@ -35,7 +35,7 @@ The script automatically:
 4. Loads both images into the Kind cluster `dev`
 5. Deploys namespaces and infra (Postgres, Redis)
 6. Creates secrets in all namespaces
-7. Applies all k8s manifests via `kubectl apply -k k8s/overlays/kind`
+7. Applies all k8s manifests via `kubectl apply -k deployment/k8s/overlays/kind`
 
 ---
 
@@ -45,7 +45,7 @@ When you only change Python code in `agent-framework/`:
 
 ```powershell
 # 1. Rebuild backend image
-docker build -f docker/backend.Dockerfile -t agent-microservices-kind:local .
+docker build -f deployment/docker/backend.Dockerfile -t agent-microservices-kind:local .
 
 # 2. Load into Kind cluster
 kind load docker-image agent-microservices-kind:local --name dev
@@ -89,10 +89,10 @@ kubectl rollout status deployment/frontend -n af-edge --timeout=120s
 
 ## Apply k8s Manifest Changes Only
 
-When you edit YAML files in `k8s/` but don't need to rebuild images:
+When you edit YAML files in `deployment/k8s/` but don't need to rebuild images:
 
 ```powershell
-kubectl apply -k k8s/overlays/kind
+kubectl apply -k deployment/k8s/overlays/kind
 ```
 
 ---
@@ -142,7 +142,7 @@ curl http://localhost/health
 curl http://localhost/threads
 
 # Full smoke test
-./k8s/overlays/kind/smoke-test.ps1
+./deployment/k8s/overlays/kind/smoke-test.ps1
 ```
 
 ---
@@ -291,7 +291,7 @@ In Grafana → Explore → Tempo → Search
 ### Start backend (monolith mode)
 ```powershell
 cd agent-framework
-docker compose -f docker/docker-compose.yml up -d postgres redis
+docker compose -f deployment/docker/docker-compose.yml up -d postgres redis
 uv run uvicorn raavan.server.app:app --port 8000 --reload
 ```
 
@@ -324,4 +324,4 @@ uv run ruff format .
 | PostgreSQL | 5432 | internal cluster only |
 | Redis | 6379 | internal cluster only |
 | Grafana | — | `http://localhost/grafana/` |
-| MCP demo server | 9000 | `docker compose -f docker/docker-compose.yml --profile mcp` |
+| MCP demo server | 9000 | `docker compose -f deployment/docker/docker-compose.yml --profile mcp` |

@@ -19,9 +19,9 @@
 - **🔒 Type-Safe**: Pydantic models throughout with comprehensive type hints
 - **🎨 Extensible**: Protocol-oriented design for easy customization
 
-![Architecture Diagram](public/diagrams/architecture.drawio.png)
+![Architecture Diagram](docs/public/diagrams/architecture.drawio.png)
 
-![Kubernetes-Architecture Diagram](public/diagrams/production-system.drawio.png)
+![Kubernetes-Architecture Diagram](docs/public/diagrams/production-system.drawio.png)
 
 ## 📋 Table of Contents
 
@@ -325,9 +325,9 @@ from raavan.shared.observability import configure_opentelemetry
 
 ### Single-Agent Architecture
 
-![Single-Agent Architecture](public/diagrams/single-agent.svg)
+![Single-Agent Architecture](docs/public/diagrams/single-agent.svg)
 
-Editable source: [agent-architectures.drawio](public/diagrams/agent-architectures.drawio) (page: "Single Agent")
+Editable source: [agent-architectures.drawio](docs/public/diagrams/agent-architectures.drawio) (page: "Single Agent")
 
 **Key Design Principles:**
 
@@ -344,14 +344,14 @@ Editable source: [agent-architectures.drawio](public/diagrams/agent-architecture
 The framework supports four first-class multi-agent composition patterns.
 Each pattern is a first-class Python class — compose them freely and nest arbitrarily.
 
-Editable source for all diagrams: [agent-architectures.drawio](public/diagrams/agent-architectures.drawio)
+Editable source for all diagrams: [agent-architectures.drawio](docs/public/diagrams/agent-architectures.drawio)
 
 ### OrchestratorAgent — Hub & Spoke
 
 An `OrchestratorAgent` routes tasks to specialised sub-agents and aggregates their results.
 Ideal for workflows that require multiple domain experts working under a single coordinator.
 
-![OrchestratorAgent Architecture](public/diagrams/multi-agent-orchestrator.svg)
+![OrchestratorAgent Architecture](docs/public/diagrams/multi-agent-orchestrator.svg)
 
 ```python
 from raavan import OrchestratorAgent, ReActAgent
@@ -371,7 +371,7 @@ orchestrator = OrchestratorAgent(
 Agents execute one after another; each agent receives the output of the previous step.
 Perfect for ETL pipelines, report generation, and multi-stage transformation workflows.
 
-![SequentialFlow Architecture](public/diagrams/multi-agent-sequential.svg)
+![SequentialFlow Architecture](docs/public/diagrams/multi-agent-sequential.svg)
 
 ```python
 from raavan import SequentialFlow
@@ -389,7 +389,7 @@ pipeline = SequentialFlow(
 All branch agents run simultaneously; results are merged according to a configurable strategy.
 Ideal for independent analyses, multi-perspective reviews, and latency-critical workflows.
 
-![ParallelFlow Architecture](public/diagrams/multi-agent-parallel.svg)
+![ParallelFlow Architecture](docs/public/diagrams/multi-agent-parallel.svg)
 
 ```python
 from raavan import ParallelFlow
@@ -408,7 +408,7 @@ reviewer = ParallelFlow(
 A predicate function inspects the input and routes execution to either `if_true` or `if_false`.
 Branches can themselves be any agent or flow, enabling arbitrarily deep decision trees.
 
-![ConditionalFlow Architecture](public/diagrams/multi-agent-conditional.svg)
+![ConditionalFlow Architecture](docs/public/diagrams/multi-agent-conditional.svg)
 
 ```python
 from raavan import ConditionalFlow

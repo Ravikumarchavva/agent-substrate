@@ -12,6 +12,7 @@ export async function POST(req: Request) {
       messages: body.messages,
       ...(body.system_instructions ? { system_instructions: body.system_instructions } : {}),
       ...(body.file_ids?.length ? { file_ids: body.file_ids } : {}),
+      ...(body.model ? { model: body.model } : {}),
     }),
   });
 

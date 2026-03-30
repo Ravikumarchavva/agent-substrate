@@ -193,6 +193,8 @@ export const api = {
       : "webm";
     const form = new FormData();
     form.append("file", blob, `recording.${ext}`);
+    const sttModel = localStorage.getItem("stt_model")?.trim();
+    if (sttModel) form.append("model", sttModel);
     const res = await fetch("/api/audio/transcribe", { method: "POST", body: form });
     if (!res.ok) throw new Error(`Transcription failed: ${res.statusText}`);
     return res.json();

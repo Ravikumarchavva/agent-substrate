@@ -81,6 +81,10 @@ export function SettingsPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // ── Model state ──
+  const [chatModel, setChatModel] = useState("");
+  const [sttModel, setSttModel] = useState("");
+
   // ── Admin tab state ──
   const [adminThreads, setAdminThreads] = useState<AdminThread[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
@@ -96,6 +100,8 @@ export function SettingsPanel({
     setCustomInstructions(
       localStorage.getItem("system_instructions_override") ?? ""
     );
+    setChatModel(localStorage.getItem("chat_model") ?? "");
+    setSttModel(localStorage.getItem("stt_model") ?? "");
   }, []);
 
   // Sync tab when initialTab changes (opened via AccountMenu shortcut)
@@ -327,6 +333,66 @@ export function SettingsPanel({
                         Clear
                       </button>
                     )}
+                  </div>
+                </div>
+
+                {/* ── Models ─────────────────────────────────────────── */}
+                <div>
+                  <h3 className="font-semibold mb-1">Model</h3>
+                  <p className="text-xs text-(--muted) mb-3 leading-relaxed">
+                    Override the LLM for chat and the STT model for voice transcription.
+                    Leave blank to use the server defaults (<code className="font-mono text-[11px]">CHAT_MODEL</code> /{" "}
+                    <code className="font-mono text-[11px]">STT_MODEL</code> in <code className="font-mono text-[11px]">.env</code>).
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1" style={{ color: "var(--foreground)" }}>
+                        Chat model
+                      </label>
+                      <input
+                        type="text"
+                        value={chatModel}
+                        onChange={(e) => setChatModel(e.target.value)}
+                        placeholder="e.g. gpt-4o, gpt-4o-mini, o3-mini"
+                        className="w-full bg-(--input-bg) border border-(--border) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-(--accent)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1" style={{ color: "var(--foreground)" }}>
+                        Voice transcription (STT) model
+                      </label>
+                      <input
+                        type="text"
+                        value={sttModel}
+                        onChange={(e) => setSttModel(e.target.value)}
+                        placeholder="e.g. whisper-1, gpt-4o-transcribe"
+                        className="w-full bg-(--input-bg) border border-(--border) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-(--accent)"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          if (chatModel.trim()) localStorage.setItem("chat_model", chatModel.trim());
+                          else localStorage.removeItem("chat_model");
+                          if (sttModel.trim()) localStorage.setItem("stt_model", sttModel.trim());
+                          else localStorage.removeItem("stt_model");
+                        }}
+                        className="px-4 py-1.5 bg-(--accent) text-white rounded-lg text-sm hover:opacity-90 transition-opacity cursor-pointer"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setChatModel("");
+                          setSttModel("");
+                          localStorage.removeItem("chat_model");
+                          localStorage.removeItem("stt_model");
+                        }}
+                        className="px-4 py-1.5 border border-(--border) hover:bg-(--card-hover) rounded-lg text-sm transition-colors cursor-pointer"
+                      >
+                        Reset to defaults
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

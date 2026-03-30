@@ -27,6 +27,8 @@ export type Message = {
   toolCalls?: ToolCall[];
   isToolExecuting?: boolean;
   metadata?: Record<string, unknown>;
+  /** True for assistant bubbles that continue after a HITL step — suppresses duplicate avatar */
+  isContinuation?: boolean;
 };
 
 export type Thread = {

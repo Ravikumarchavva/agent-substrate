@@ -121,10 +121,14 @@ export default function ChatPage() {
   async function loadMessages(threadId: string) {
     try {
       const fetchedMessages = await api.getMessages(threadId);
-      setMessages(fetchedMessages);
+      // Guard: don't overwrite optimistic messages while a stream is active.
+      // Race: when doSendMessage creates a new thread and calls setCurrentThreadId,
+      // the currentThreadId useEffect fires loadMessages. By then wsRef is already
+      // set, so we preserve the optimistic user+assistant messages in flight.
+      setMessages((current) => (wsRef.current ? current : fetchedMessages));
     } catch (error) {
       console.error("Failed to load messages:", error);
-      setMessages([]);
+      setMessages((current) => (wsRef.current ? current : []));
     }
   }
 
@@ -328,16 +332,33 @@ export default function ChatPage() {
       handleRenameThread(threadId, name);
     }
 
-    // Create an assistant placeholder message immediately
-    const assistantId = nanoid();
-    const assistantMessage: Message = {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      reasoning: "",
-      timestamp: new Date(),
+    // ── Mutable bubble tracking ──────────────────────────────────────────
+    // After a step that uses tools (and triggers HITL cards), the agent's
+    // NEXT text response must appear BELOW those cards — not update the old
+    // placeholder that sits above them. We track this with a plain mutable
+    // object (not React state) so handlers can mutate it synchronously.
+    const msgState = {
+      activeAssistantId: nanoid() as string,
+      needsNewBubble: false,
     };
-    setMessages((m) => [...m, assistantMessage]);
+    setMessages((m) => [
+      ...m,
+      { id: msgState.activeAssistantId, role: "assistant" as const, content: "", reasoning: "", timestamp: new Date() },
+    ]);
+
+    // Call before any handler that writes streaming content. If a tool step
+    // just finished (needsNewBubble=true), inserts a fresh bubble at the
+    // tail of the message list and updates activeAssistantId to point at it.
+    function ensureActiveBubble() {
+      if (!msgState.needsNewBubble) return;
+      const newId = nanoid();
+      msgState.activeAssistantId = newId;
+      msgState.needsNewBubble = false;
+      setMessages((m) => [
+        ...m,
+        { id: newId, role: "assistant" as const, content: "", reasoning: "", timestamp: new Date(), isContinuation: true },
+      ]);
+    }
 
     // ── Start SSE stream from backend ────────────────────────────────────
     const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -345,7 +366,6 @@ export default function ChatPage() {
     wsRef.current = abortController;
 
     // processEvent handles every server-sent event type.
-    // Defined as a nested function so it closes over assistantId, setMessages, etc.
     const processEvent = (data: Record<string, unknown>) => {
       // ── Keepalive / end marker ────────────────────────────────────────
       if (data.type === "pong" || data.type === "done") return;
@@ -434,10 +454,18 @@ export default function ChatPage() {
         // Skip rendering if an MCP App UI is already showing this tool's output
         if (data.has_app && !data.is_error) return;
 
-        // Attach result back to the matching tool call in the assistant message
+        // Attach result to whichever assistant message owns this tool call.
+        // Search all assistant messages (not just the current one) so results
+        // from earlier steps still land in the correct bubble.
         setMessages((m) =>
           m.map((msg) => {
-            if (msg.id !== assistantId || !msg.toolCalls) return msg;
+            if (msg.role !== "assistant" || !msg.toolCalls) return msg;
+            const hasMatch = msg.toolCalls.some(
+              (tc) =>
+                (data.tool_call_id && tc.id === data.tool_call_id) ||
+                tc.name === data.tool_name
+            );
+            if (!hasMatch) return msg;
             const updatedCalls = msg.toolCalls.map((tc) => {
               const matchById = data.tool_call_id && tc.id === data.tool_call_id;
               const matchByName = tc.name === data.tool_name;
@@ -495,10 +523,11 @@ export default function ChatPage() {
 
       // ── Streaming text ──────────────────────────────────────────────
       if (data.type === "text_delta") {
+        ensureActiveBubble();
         const textContent = String(data.content || "");
         setMessages((m) =>
           m.map((msg) =>
-            msg.id === assistantId
+            msg.id === msgState.activeAssistantId
               ? { ...msg, content: msg.content + textContent, isToolExecuting: false }
               : msg
           )
@@ -507,10 +536,11 @@ export default function ChatPage() {
       }
 
       if (data.type === "reasoning_delta") {
+        ensureActiveBubble();
         const reasoningContent = String(data.content || "");
         setMessages((m) =>
           m.map((msg) =>
-            msg.id === assistantId
+            msg.id === msgState.activeAssistantId
               ? { ...msg, reasoning: (msg.reasoning || "") + reasoningContent }
               : msg
           )
@@ -541,7 +571,7 @@ export default function ChatPage() {
 
         setMessages((m) =>
           m.map((msg) =>
-            msg.id === assistantId
+            msg.id === msgState.activeAssistantId
               ? {
                   ...msg,
                   content: finalContent || msg.content,
@@ -553,7 +583,11 @@ export default function ChatPage() {
           )
         );
 
-        if (!hasToolCalls) {
+        if (hasToolCalls) {
+          // Agent will continue after tool execution — next text should go
+          // into a new bubble so it appears below any HITL cards.
+          msgState.needsNewBubble = true;
+        } else {
           setLoading(false);
           loadThreads();
         }
@@ -562,6 +596,7 @@ export default function ChatPage() {
 
       if (data.type === "tool_call") {
         if (data.tool_name === "manage_tasks") return;
+        ensureActiveBubble();
         const toolCall = {
           id: (data.tool_call_id as string) || nanoid(),
           name: (data.tool_name as string) || "tool",
@@ -571,7 +606,7 @@ export default function ChatPage() {
         };
         setMessages((m) =>
           m.map((msg) =>
-            msg.id === assistantId
+            msg.id === msgState.activeAssistantId
               ? { ...msg, toolCalls: [...(msg.toolCalls || []), toolCall], isToolExecuting: true }
               : msg
           )
@@ -591,7 +626,7 @@ export default function ChatPage() {
         const errorMsg = String(data.error || "The agent encountered an error.");
         setMessages((m) =>
           m.map((msg) =>
-            msg.id === assistantId
+            msg.id === msgState.activeAssistantId
               ? { ...msg, content: msg.content + "\n\n⚠️ " + errorMsg, isToolExecuting: false }
               : msg
           )
@@ -603,7 +638,7 @@ export default function ChatPage() {
       if (data.type === "cancelled") {
         setMessages((m) =>
           m.map((msg) =>
-            msg.id === assistantId ? { ...msg, isToolExecuting: false } : msg
+            msg.id === msgState.activeAssistantId ? { ...msg, isToolExecuting: false } : msg
           )
         );
         setLoading(false);
@@ -614,7 +649,7 @@ export default function ChatPage() {
         const errorMsg = String(data.error || "Unknown error");
         setMessages((m) =>
           m.map((msg) =>
-            msg.id === assistantId
+            msg.id === msgState.activeAssistantId
               ? { ...msg, content: msg.content + "\n\n⚠️ " + errorMsg, isToolExecuting: false }
               : msg
           )
@@ -635,6 +670,9 @@ export default function ChatPage() {
           ...(currentFileIds.length ? { file_ids: currentFileIds } : {}),
           ...(localStorage.getItem("system_instructions_override")?.trim()
             ? { system_instructions: localStorage.getItem("system_instructions_override")!.trim() }
+            : {}),
+          ...(localStorage.getItem("chat_model")?.trim()
+            ? { model: localStorage.getItem("chat_model")!.trim() }
             : {}),
         }),
         signal: abortController.signal,
@@ -665,7 +703,7 @@ export default function ChatPage() {
       if ((err as { name?: string }).name !== "AbortError") {
         setMessages((m) =>
           m.map((msg) =>
-            msg.id === assistantId
+            msg.id === msgState.activeAssistantId
               ? { ...msg, content: msg.content + "\n\n⚠️ Connection error.", isToolExecuting: false }
               : msg
           )
@@ -852,7 +890,11 @@ export default function ChatPage() {
               {messages.map((m) => {
                 if (m.role === "tool_approval" && m.metadata) {
                   return (
-                    <div key={m.id} className="py-1">
+                    <div key={m.id} className="px-4 py-2">
+                      <div className="max-w-3xl mx-auto">
+                      <div className="flex gap-3">
+                        <div className="w-7 shrink-0" />
+                        <div className="flex-1 min-w-0">
                       <ToolApprovalCard
                         requestId={m.metadata.requestId as string}
                         toolName={m.metadata.toolName as string}
@@ -860,13 +902,20 @@ export default function ChatPage() {
                         context={m.metadata.context as string | undefined}
                         onRespond={respondToHITL}
                       />
+                        </div>
+                      </div>
+                      </div>
                     </div>
                   );
                 }
 
                 if (m.role === "human_input" && m.metadata) {
                   return (
-                    <div key={m.id} className="py-1">
+                    <div key={m.id} className="px-4 py-1">
+                      <div className="max-w-3xl mx-auto">
+                      <div className="flex gap-3">
+                        <div className="w-7 shrink-0" />
+                        <div className="flex-1 min-w-0">
                       <HumanInputCard
                         requestId={m.metadata.requestId as string}
                         question={m.metadata.question as string}
@@ -879,6 +928,9 @@ export default function ChatPage() {
                         allowFreeform={m.metadata.allowFreeform as boolean | undefined}
                         onRespond={respondToHITL}
                       />
+                        </div>
+                      </div>
+                      </div>
                     </div>
                   );
                 }
@@ -918,6 +970,7 @@ export default function ChatPage() {
                       timestamp={m.timestamp}
                       toolCalls={m.toolCalls}
                       isToolExecuting={m.isToolExecuting}
+                      isContinuation={m.isContinuation}
                       onMcpAppResult={handleMcpAppResult}
                       onOpenInPanel={(tool) => {
                         const args = typeof tool.arguments === "string"
@@ -964,7 +1017,8 @@ export default function ChatPage() {
           <div className="max-w-3xl mx-auto px-4">
             <form
               onSubmit={sendMessage}
-              className="flex flex-col rounded-3xl border border-(--border) bg-(--input-bg) px-3 py-2 shadow-sm"
+              className="flex flex-col border border-(--border) bg-(--input-bg) px-3 py-2 shadow-sm"
+              style={{ borderRadius: "12px" }}
             >
               {/* File chips row — shown when files are attached */}
               {attachedFiles.length > 0 && (
@@ -972,7 +1026,7 @@ export default function ChatPage() {
                   {attachedFiles.map((f) => (
                     <span
                       key={f.id}
-                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-(--border) bg-(--card)"
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-(--border) bg-(--card)"
                       style={{ color: "var(--foreground)" }}
                     >
                       <span className="max-w-32 truncate">{f.name}</span>

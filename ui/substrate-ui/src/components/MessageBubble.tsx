@@ -16,6 +16,7 @@ type Props = {
   timestamp?: Date;
   toolCalls?: ToolCall[];
   isToolExecuting?: boolean;
+  isContinuation?: boolean;
   onRegenerate?: () => void;
   /** Called when an MCP App sends a context update (submitResult / ui/update-model-context) */
   onMcpAppResult?: (toolName: string, result: unknown) => void;
@@ -30,6 +31,7 @@ export function MessageBubble({
   timestamp, 
   toolCalls,
   isToolExecuting,
+  isContinuation,
   onRegenerate,
   onMcpAppResult,
   onOpenInPanel
@@ -65,7 +67,7 @@ export function MessageBubble({
             style={{
               background: "var(--user-bubble)",
               border: "1px solid var(--border)",
-              borderRadius: "18px 18px 4px 18px",
+              borderRadius: "12px 12px 4px 12px",
             }}
           >
             {safeContent}
@@ -84,14 +86,18 @@ export function MessageBubble({
   return (
     <div className="group relative px-4 py-4">
       <div className="max-w-3xl mx-auto flex gap-3">
-        {/* AI avatar */}
+        {/* AI avatar — hidden for continuation bubbles to avoid duplicate icons */}
         <div className="shrink-0 mt-0.5">
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
-            style={{ background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))" }}
-          >
-            AI
-          </div>
+          {isContinuation ? (
+            <div className="w-7 h-7" />
+          ) : (
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+              style={{ background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))" }}
+            >
+              AI
+            </div>
+          )}
         </div>
 
         {/* Content column */}
@@ -134,7 +140,7 @@ export function MessageBubble({
                   return (
                     <div key={tool.id}>
                       {idx > 0 && <div style={{ borderTop: "1px solid var(--border)" }} />}
-                      <details>
+                      <details className="group">
                         <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-(--card-hover) transition-colors list-none">
                           <span className="shrink-0">
                             {!isDone ? (

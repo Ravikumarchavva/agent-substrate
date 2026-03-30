@@ -133,14 +133,7 @@ services:
     # profiles:
     #   - events
 
-volumes:
-  pgdata:
-  redisdata:
-  miniodata:
-  kafkadata:
-  temporaldata:
-
-# ── Temporal (durable workflow engine) ──────────────────────────────────
+  # ── Temporal (durable workflow engine) ────────────────────────────────
   temporal:
     image: temporalio/auto-setup:latest
     ports:
@@ -157,6 +150,8 @@ volumes:
         condition: service_healthy
     volumes:
       - temporaldata:/tmp/temporal
+    profiles:
+      - temporal
 
   temporal-ui:
     image: temporalio/ui:latest
@@ -166,3 +161,12 @@ volumes:
       - TEMPORAL_ADDRESS=temporal:7233
     depends_on:
       - temporal
+    profiles:
+      - temporal
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  kafkadata:
+  temporaldata:

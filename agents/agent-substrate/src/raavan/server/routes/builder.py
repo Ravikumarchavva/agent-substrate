@@ -126,7 +126,7 @@ async def get_registry(request: Request) -> RegistryResponse:
     # Skills — discover from SkillManager
     skills_list: List[RegistrySkill] = []
     try:
-        from raavan.integrations.skills import SkillManager
+        from raavan.catalog import SkillManager
 
         mgr = SkillManager(auto_discover=True)
         mgr.discover()

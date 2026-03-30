@@ -44,7 +44,7 @@ from raavan.core.guardrails.base_guardrail import (
 from raavan.core.messages.client_messages import SystemMessage, UserMessage
 
 if TYPE_CHECKING:
-    from raavan.integrations.llm.base_client import BaseModelClient
+    from raavan.core.llm.base_client import BaseModelClient
 
 logger = logging.getLogger("raavan.structured.judge")
 

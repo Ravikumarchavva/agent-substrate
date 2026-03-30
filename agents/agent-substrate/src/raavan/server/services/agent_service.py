@@ -37,7 +37,7 @@ from raavan.core.context.implementations import SlidingWindowContext
 from raavan.core.guardrails.prebuilt import MaxTokenGuardrail
 from raavan.catalog.tools.human_input.tool import ToolApprovalHandler
 from raavan.core.memory.base_memory import BaseMemory
-from raavan.core.memory.redis_memory import RedisMemory
+from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.core.memory.unbounded_memory import UnboundedMemory
 from raavan.core.messages.client_messages import (
     AssistantMessage,
@@ -47,7 +47,7 @@ from raavan.core.messages.client_messages import (
     UserMessage,
 )
 from raavan.core.messages.base_message import BaseClientMessage
-from raavan.integrations.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.tools.base_tool import BaseTool
 
 from raavan.server.services import (

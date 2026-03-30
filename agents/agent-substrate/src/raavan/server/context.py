@@ -19,11 +19,10 @@ from typing import Any, Optional
 
 from fastapi import Request
 
-from raavan.core.memory.redis_memory import RedisMemory
+from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.core.storage.base import FileStore
 from raavan.core.tools.catalog import CapabilityRegistry
 from raavan.integrations.llm.openai.openai_client import OpenAIClient
-from raavan.integrations.audio.openai import OpenAIAudioClient
 from raavan.server.sse.bridge import BridgeRegistry
 
 
@@ -32,8 +31,7 @@ class ServerContext:
     """All shared dependencies available to route handlers.
 
     Attributes:
-        model_client: The default LLM client used to construct agents.
-        audio_client: Provider-agnostic audio client (transcription / TTS / realtime).
+        model_client: The default LLM client (text, vision, STT, TTS, Realtime S2S, image gen).
         redis_memory: Global Redis memory factory (connect/disconnect lifecycle).
         tools: Registry of all available agent tools.
         bridge_registry: Per-thread SSE event bus registry (HITL, streaming).
@@ -49,7 +47,6 @@ class ServerContext:
     """
 
     model_client: OpenAIClient
-    audio_client: OpenAIAudioClient
     redis_memory: RedisMemory
     tools: CapabilityRegistry
     bridge_registry: BridgeRegistry

@@ -18,7 +18,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 
-from raavan.core.logger import setup_logging
+from raavan.shared.observability.logger import setup_logging
 
 # ------------------------------------------------------------------------------
 # Logging — auto-detects JSON (server) vs pretty (notebook / CLI)

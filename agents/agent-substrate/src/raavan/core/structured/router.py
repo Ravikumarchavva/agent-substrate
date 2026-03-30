@@ -63,7 +63,7 @@ from raavan.core.structured.result import (
 if TYPE_CHECKING:
     from raavan.core.agents.base_agent import BaseAgent
     from raavan.core.messages.base_message import BaseClientMessage
-    from raavan.integrations.llm.base_client import BaseModelClient
+    from raavan.core.llm.base_client import BaseModelClient
 
 logger = logging.getLogger("raavan.structured.router")
 

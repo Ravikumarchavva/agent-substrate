@@ -50,7 +50,7 @@ class AgentConfig:
     )
 
     # Execution limits
-    max_iterations: int = 10
+    max_iterations: int = 50
     run_timeout: Optional[float] = None  # seconds; None = no limit
     tool_timeout: float = 30.0  # per-tool timeout in seconds
     verbose: bool = True

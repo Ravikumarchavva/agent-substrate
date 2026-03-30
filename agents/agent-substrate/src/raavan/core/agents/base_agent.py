@@ -15,7 +15,7 @@ from typing import runtime_checkable, Protocol
 from raavan.core.agents.agent_result import AgentRunResult
 from raavan.core.context.base_context import ModelContext
 from raavan.core.tools.base_tool import BaseTool
-from raavan.integrations.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.memory.base_memory import BaseMemory
 from raavan.core.memory.memory_scope import MemoryScope
 from raavan.core.guardrails.base_guardrail import BaseGuardrail

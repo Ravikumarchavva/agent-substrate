@@ -44,11 +44,11 @@ from raavan.core.guardrails.base_guardrail import BaseGuardrail
 from raavan.core.hooks import HookEvent, HookManager
 from raavan.core.memory.base_memory import BaseMemory
 from raavan.core.memory.memory_scope import MemoryScope
-from raavan.integrations.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.shared.observability import logger
 from raavan.core.resilience import RetryPolicy
 from raavan.core.tools.base_tool import BaseTool, ToolResult
-from raavan.integrations.skills import SkillManager
+from raavan.catalog import SkillManager
 from raavan.catalog.tools.human_input.tool import ToolApprovalHandler
 
 
@@ -171,7 +171,7 @@ class OrchestratorAgent(ReActAgent):
         memory: Optional[BaseMemory] = None,
         memory_scope: MemoryScope = MemoryScope.ISOLATED,
         model_context: Optional[ModelContext] = None,
-        max_iterations: int = 15,
+        max_iterations: int = 50,
         handoff_guardrails: Optional[List[BaseGuardrail]] = None,
         hooks: Optional[HookManager] = None,
         extra_tools: Optional[List[BaseTool]] = None,

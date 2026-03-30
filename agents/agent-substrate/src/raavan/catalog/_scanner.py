@@ -227,7 +227,7 @@ class CatalogScanner:
     def _load_skill_metadata(self, skill_dir: Path, skill_md: Path) -> Optional[Any]:
         """Parse SKILL.md using the existing SkillLoader helper."""
         try:
-            from raavan.integrations.skills.loader import (
+            from raavan.catalog._skill_loader import (
                 SkillLoader,
             )
 

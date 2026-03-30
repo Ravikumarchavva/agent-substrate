@@ -39,7 +39,7 @@ def create_file_store(settings: Settings) -> FileStore:
         logger.info("FileStore: local → %s", root)
 
     elif backend == "s3":
-        from raavan.core.storage.s3 import S3FileStore
+        from raavan.integrations.storage.s3 import S3FileStore
 
         store = S3FileStore(
             bucket=settings.FILE_STORE_BUCKET,

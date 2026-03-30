@@ -18,7 +18,7 @@ import httpx
 from raavan.core.agents.react_agent import ReActAgent
 from raavan.core.context.implementations import SlidingWindowContext
 from raavan.core.guardrails.prebuilt import MaxTokenGuardrail
-from raavan.core.memory.redis_memory import RedisMemory
+from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.core.memory.unbounded_memory import UnboundedMemory
 from raavan.core.memory.base_memory import BaseMemory
 from raavan.core.messages import (
@@ -34,7 +34,7 @@ from raavan.core.messages.client_messages import (
 )
 from raavan.core.messages.base_message import BaseClientMessage
 from raavan.core.tools.base_tool import BaseTool
-from raavan.integrations.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.shared.events.bus import EventBus
 from raavan.shared.events.envelope import EventEnvelope
 

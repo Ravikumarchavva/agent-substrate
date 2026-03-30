@@ -49,9 +49,9 @@ from raavan.core.messages.client_messages import SystemMessage
 
 if TYPE_CHECKING:
     from raavan.core.memory.base_memory import BaseMemory
-    from raavan.core.memory.redis_memory import RedisMemory
+    from raavan.integrations.memory.redis_memory import RedisMemory
     from raavan.core.memory.session_manager import SessionManager
-    from raavan.integrations.llm.base_client import BaseModelClient
+    from raavan.core.llm.base_client import BaseModelClient
 
 _logger = logging.getLogger(__name__)
 

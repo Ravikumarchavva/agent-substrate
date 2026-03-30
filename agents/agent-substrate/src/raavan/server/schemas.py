@@ -85,6 +85,7 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     system_instructions: Optional[str] = None  # appended to base prompt when provided
     file_ids: Optional[List[uuid.UUID]] = None  # IDs of files to inject for this turn
+    model: Optional[str] = None  # per-request LLM override (e.g. "gpt-4o")
 
 
 # ── Feedback schemas ─────────────────────────────────────────────────────────

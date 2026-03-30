@@ -20,10 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from raavan.configs.settings import settings
-from raavan.core.memory.redis_memory import RedisMemory
+from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.catalog.tools.human_input.tool import AskHumanTool
 from raavan.integrations.llm.openai.openai_client import OpenAIClient
-from raavan.integrations.audio.openai import OpenAIAudioClient
 from raavan.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
@@ -101,12 +100,7 @@ async def lifespan(app: FastAPI):
 
     # Shared agent dependencies (injected into routes via app.state)
     app.state.model_client = OpenAIClient(
-        model="gpt-4o-mini",
-        api_key=settings.OPENAI_API_KEY,
-    )
-
-    # Provider-agnostic audio client (transcription, TTS, realtime)
-    app.state.audio_client = OpenAIAudioClient(
+        model=settings.CHAT_MODEL,
         api_key=settings.OPENAI_API_KEY,
     )
 
@@ -288,6 +282,7 @@ async def lifespan(app: FastAPI):
     # the per-thread bridge acquired from bridge_registry.
     app.state.tools_requiring_approval = [
         e.name for e in app.state.tools.by_risk(ToolRisk.CRITICAL)
+        if e.name != "ask_human"  # ask_human IS the human interaction — never needs separate approval
     ]
     app.state.tool_timeout = 300.0  # match HITL bridge timeout
 
@@ -384,7 +379,6 @@ async def lifespan(app: FastAPI):
     # Existing routes continue to work via the app.state.* assignments above.
     app.state.ctx = ServerContext(
         model_client=app.state.model_client,
-        audio_client=app.state.audio_client,
         redis_memory=app.state.redis_memory,
         tools=app.state.tools,
         bridge_registry=app.state.bridge_registry,

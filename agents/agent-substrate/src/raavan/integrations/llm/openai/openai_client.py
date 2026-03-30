@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
+import io
+import logging
+from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional
 import json
 from openai import AsyncOpenAI
 from openai.types.responses.response_completed_event import ResponseCompletedEvent
@@ -17,15 +19,43 @@ from raavan.core.messages.client_messages import (
     AssistantMessage,
 )
 
-from ..base_client import BaseModelClient
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.messages.base_message import BaseClientMessage
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
+
+# ── MIME helper ───────────────────────────────────────────────────────────────
+
+def _mime_for(filename: str) -> str:
+    """Return a plausible MIME type based on the file extension."""
+    ext = filename.rsplit(".", 1)[-1].lower()
+    return {
+        "mp3": "audio/mpeg",
+        "mp4": "audio/mp4",
+        "m4a": "audio/mp4",
+        "mpeg": "audio/mpeg",
+        "mpga": "audio/mpeg",
+        "wav": "audio/wav",
+        "webm": "audio/webm",
+        "ogg": "audio/ogg",
+        "flac": "audio/flac",
+    }.get(ext, "application/octet-stream")
+
 
 class OpenAIClient(BaseModelClient):
-    """OpenAI API client with support for chat completions and tool calling."""
+    """OpenAI API client — text, vision, and audio in one place.
+
+    A single ``AsyncOpenAI`` instance is used for all operations:
+      • ``generate`` / ``generate_stream`` → Responses API (text + vision)
+      • ``transcribe``                      → ``client.audio.transcriptions``
+      • ``stream_tts``                      → ``client.audio.speech``
+      • ``create_s2s_session`` / ``s2s_ws_url`` → OpenAI Realtime API
+    """
+
+    _REALTIME_UPSTREAM = "wss://api.openai.com/v1/realtime"
 
     def __init__(
         self,
@@ -33,12 +63,33 @@ class OpenAIClient(BaseModelClient):
         api_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        *,
+        default_stt_model: str = "whisper-1",
+        default_tts_model: str = "gpt-4o-mini-tts",
+        default_voice: str = "coral",
+        default_tts_format: str = "mp3",
+        realtime_model: str = "gpt-4o-realtime-preview-2024-12-17",
         **kwargs,
     ):
         super().__init__(model, temperature, max_tokens, **kwargs)
         self.api_key = api_key  # stored so PipelineRunner can build sibling clients
         self.client = AsyncOpenAI(api_key=api_key)
+        self._default_stt_model = default_stt_model
+        self._default_tts_model = default_tts_model
+        self._default_voice = default_voice
+        self._default_tts_format = default_tts_format
+        self._realtime_model = realtime_model
         self._encoding = None
+
+    # ── Audio capability flags ────────────────────────────────────────────────
+
+    @property
+    def supports_audio(self) -> bool:
+        return True
+
+    @property
+    def supports_s2s(self) -> bool:
+        return True
 
     def _get_encoding(self):
         """Lazy load tiktoken encoding."""
@@ -511,3 +562,184 @@ class OpenAIClient(BaseModelClient):
 
         num_tokens += 2  # Every reply is primed with <im_start>assistant
         return num_tokens
+
+    # ── Audio: Transcription (STT) ────────────────────────────────────────────
+
+    async def transcribe(
+        self,
+        *,
+        audio_bytes: bytes,
+        filename: str,
+        model: str = "",
+        language: Optional[str] = None,
+        prompt: Optional[str] = None,
+    ) -> str:
+        """Transcribe audio via Whisper / GPT-4o-transcribe."""
+        effective_model = model or self._default_stt_model
+        logger.info(
+            "Transcribing audio: file=%s model=%s bytes=%d",
+            filename, effective_model, len(audio_bytes),
+        )
+        kwargs: dict = {}
+        if language:
+            kwargs["language"] = language
+        if prompt:
+            kwargs["prompt"] = prompt
+        file_tuple = (filename, io.BytesIO(audio_bytes), _mime_for(filename))
+        result = await self.client.audio.transcriptions.create(
+            model=effective_model,
+            file=file_tuple,
+            response_format="text",
+            **kwargs,
+        )
+        text: str = (
+            result if isinstance(result, str) else getattr(result, "text", str(result))
+        )
+        logger.info("Transcription complete: %d chars", len(text))
+        return text.strip()
+
+    # ── Audio: Text-to-Speech (TTS) ───────────────────────────────────────────
+
+    async def stream_tts(
+        self,
+        *,
+        text: str,
+        voice: str = "",
+        model: str = "",
+        response_format: str = "",
+        instructions: Optional[str] = None,
+    ) -> AsyncGenerator[bytes, None]:
+        """Stream TTS audio chunks via OpenAI's speech synthesis API."""
+        effective_model = model or self._default_tts_model
+        effective_voice = voice or self._default_voice
+        effective_fmt = response_format or self._default_tts_format
+        logger.info(
+            "TTS request: model=%s voice=%s format=%s chars=%d",
+            effective_model, effective_voice, effective_fmt, len(text),
+        )
+        kwargs: dict = {}
+        if instructions and effective_model == "gpt-4o-mini-tts":
+            kwargs["instructions"] = instructions
+        async with self.client.audio.speech.with_streaming_response.create(
+            model=effective_model,
+            voice=effective_voice,
+            input=text,
+            response_format=effective_fmt,  # type: ignore[arg-type]
+            **kwargs,
+        ) as resp:
+            async for chunk in resp.iter_bytes(chunk_size=4096):
+                yield chunk
+
+    # ── Audio: Speech-to-Speech (S2S / Realtime) ─────────────────────────────
+
+    async def create_s2s_session(
+        self,
+        *,
+        model: str = "",
+        voice: str = "",
+        instructions: Optional[str] = None,
+    ) -> dict:
+        """Mint a short-lived ephemeral token for an OpenAI Realtime S2S session."""
+        import httpx
+
+        effective_model = model or self._realtime_model
+        effective_voice = voice or self._default_voice
+        logger.info(
+            "Creating S2S session: model=%s voice=%s", effective_model, effective_voice
+        )
+        body: dict = {
+            "model": effective_model,
+            "voice": effective_voice,
+            "modalities": ["audio", "text"],
+            "turn_detection": {"type": "server_vad"},
+        }
+        if instructions:
+            body["instructions"] = instructions
+        async with httpx.AsyncClient() as http:
+            resp = await http.post(
+                "https://api.openai.com/v1/realtime/sessions",
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {self.client.api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        logger.info("S2S session created, expires_at=%s", data.get("expires_at"))
+        return data
+
+    def s2s_ws_url(self, model: str) -> str:
+        """Return the OpenAI Realtime WebSocket URL for S2S sessions."""
+        return f"{self._REALTIME_UPSTREAM}?model={model}"
+
+    # ── Vision: Image generation ──────────────────────────────────────────────
+
+    @property
+    def supports_image_generation(self) -> bool:
+        return True
+
+    async def generate_image(
+        self,
+        prompt: str,
+        *,
+        n: int = 1,
+        size: str = "1024x1024",
+        quality: str = "standard",
+        style: Optional[str] = None,
+        model: str = "dall-e-3",
+        **kwargs,
+    ) -> list[str]:
+        """Generate images from a text prompt via the OpenAI Images API.
+
+        Returns a list of URLs (for DALL-E 3, always length 1 per request) or
+        base-64 data URL strings when ``response_format="b64_json"`` is passed
+        in ``kwargs``.
+
+        Examples::
+
+            urls = await client.generate_image("a cat wearing a space helmet")
+            urls = await client.generate_image(
+                "product shot on white background",
+                model="gpt-image-1",
+                size="1024x1024",
+                quality="high",
+            )
+        """
+        effective_model = model or "dall-e-3"
+        logger.info(
+            "Generating image: model=%s n=%d size=%s quality=%s",
+            effective_model, n, size, quality,
+        )
+
+        params: dict = {
+            "model": effective_model,
+            "prompt": prompt,
+            "n": n,
+            "size": size,
+        }
+
+        # ``gpt-image-1`` uses ``quality`` with values "low"/"medium"/"high"/"auto".
+        # DALL-E 3 uses "standard" / "hd"; DALL-E 2 ignores the param.
+        if quality:
+            params["quality"] = quality
+
+        # ``style`` only supported by DALL-E 3 ("vivid" / "natural").
+        if style and effective_model == "dall-e-3":
+            params["style"] = style
+
+        # Allow callers to override response_format, etc.
+        params.update(kwargs)
+
+        response = await self.client.images.generate(**params)
+
+        results: list[str] = []
+        for item in response.data:
+            if getattr(item, "url", None):
+                results.append(item.url)  # type: ignore[arg-type]
+            elif getattr(item, "b64_json", None):
+                results.append(f"data:image/png;base64,{item.b64_json}")
+        logger.info("Image generation complete: %d result(s)", len(results))
+        return results
+

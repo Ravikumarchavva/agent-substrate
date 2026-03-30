@@ -17,10 +17,13 @@ Stack: Python 3.13, `uv` (never pip), SQLAlchemy 2 async, asyncpg, OpenTelemetry
 ```
 raavan/
 ├── src/raavan/          ← Python package
-│   ├── core/            ← Framework primitives (agents, memory, tools, context, messages, guardrails)
-│   ├── integrations/    ← External adapters (LLM, audio, MCP, skills, Spotify)
-│   ├── catalog/         ← Unified capability system (tools/, skills/, connectors/, pipelines)
-│   ├── shared/          ← Cross-service contracts, auth, events, database, observability, tasks
+│   ├── core/            ← Framework primitives (agents, memory abstractions, tools base, context, messages, guardrails)
+│   │                        Includes: core/llm/ (BaseModelClient ABC — text + audio + vision)
+│   ├── integrations/    ← External adapters (LLM, audio, MCP, Spotify) + concrete backends
+│   │                        Includes: integrations/memory/ (RedisMemory, PostgresMemory)
+│   │                                  integrations/storage/ (S3FileStore)
+│   ├── catalog/         ← Unified capability system (tools/, skills/, connectors/, _skill_*.py)
+│   ├── shared/          ← Cross-service contracts, auth, events, database, observability (incl. logger.py)
 │   ├── server/          ← Monolith FastAPI server (app.py, routes/, security/, services/, sse/)
 │   ├── services/        ← 12 microservices (gateway, identity, agent_runtime, conversation, …)
 │   ├── configs/         ← Pydantic Settings
@@ -149,8 +152,15 @@ Never add inline comments after integer values.
 ---
 
 ## Non-obvious Rules
-- LLM import: `from raavan.integrations.llm.openai.openai_client import OpenAIClient`
-- MCP import: `from raavan.integrations.mcp import MCPClient` (no `.loader` module)
+| **LLM abstract base** | `core/llm/base_client.py` | `BaseModelClient` ABC lives in `core/` — no external deps. Audio methods (`transcribe`, `stream_tts`, `create_s2s_session`, `s2s_ws_url`) are optional (raise `NotImplementedError`). |
+| **LLM concrete impl** | `integrations/llm/openai/openai_client.py` | `OpenAIClient` handles text + vision + image generation + STT + TTS + Realtime S2S. Import: `from raavan.integrations.llm.openai.openai_client import OpenAIClient` |
+| **Audio in routes** | `server/routes/audio.py` | Use `request.app.state.model_client` (not `audio_client`). Check `model_client.supports_s2s` before S2S calls. |
+| **Image input** | `core/messages/_types.py` | Use `ImageContent(url=...)`, `ImageContent(file_id=...)`, or `ImageContent(data=bytes)` in `UserMessage.content`. PIL `Image.Image` also accepted. |
+| **Image generation** | `integrations/llm/openai/openai_client.py` | `await client.generate_image(prompt, model="dall-e-3")` — check `client.supports_image_generation` first. Returns `list[str]` (URLs or data URLs). |
+| **Memory backends** | `integrations/memory/` | `RedisMemory`, `PostgresMemory` — concrete SDK-backed stores. |
+| **S3 storage** | `integrations/storage/s3.py` | `S3FileStore` — concrete aiobotocore adapter. |
+| **Skills infra** | `catalog/_skill_manager.py`, `_skill_loader.py`, `_skill_models.py` | Import via `from raavan.catalog import SkillManager` |
+| **Logging** | `shared/observability/logger.py` | `setup_logging()` — structured JSON + pretty formatter. |
 - Event factory functions only — never build event dicts manually.
 - `server/security/` delegates to `shared/auth/` (thin wrapper binding settings).
 - DB session: use `get_db_session` from `shared.database.dependency` — never local `_get_db`.

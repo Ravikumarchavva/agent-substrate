@@ -1,7 +1,7 @@
 """raavan CLI
 
 Usage:
-    raavan start          # start server on default port 8001
+    raavan start          # start server on default port 8000
     raavan start --port 9000 --reload
     raavan stop           # stop a running server (via PID file)
     raavan status         # check if server is running
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ctypes
 import os
 import signal
 import subprocess
@@ -47,12 +48,23 @@ def _remove_pid() -> None:
 
 def _is_running(pid: int) -> bool:
     """Return True if a process with *pid* is alive."""
-    try:
-        # signal 0 just checks existence; works on Windows & POSIX.
-        os.kill(pid, 0)
-        return True
-    except (ProcessLookupError, PermissionError):
+    if sys.platform == "win32":
+        # Windows: OpenProcess with limited info access to check existence
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
         return False
+    else:
+        # POSIX: signal 0 checks process existence
+        try:
+            os.kill(pid, 0)
+            return True
+        except (ProcessLookupError, PermissionError):
+            return False
 
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -120,7 +132,56 @@ def cmd_start(args: argparse.Namespace) -> None:
     _write_pid(proc.pid)
     print(f"  PID        : {proc.pid}")
     print(f"  Log file   : {log_file}")
-    print("  Stop with  : raavan stop")
+
+    # Verify the process survives startup by polling the HTTP health endpoint.
+    import socket
+    import time
+
+    sys.stdout.write("  Starting   : ")
+    sys.stdout.flush()
+    deadline = time.monotonic() + 35.0
+    confirmed = False
+    while time.monotonic() < deadline:
+        time.sleep(0.3)
+        if not _is_running(proc.pid):
+            print("FAILED")
+            print(f"\n  Server exited. Last lines of {log_file}:")
+            try:
+                lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                for line in lines[-20:]:
+                    print(f"    {line}")
+            except OSError:
+                print("    (log unavailable)")
+            _remove_pid()
+            sys.exit(1)
+        try:
+            with socket.create_connection((host, port), timeout=0.2):
+                confirmed = True
+                break
+        except OSError:
+            sys.stdout.write(".")
+            sys.stdout.flush()
+
+    if confirmed:
+        print(f" OK  (http://{host}:{port})")
+        print("  Stop with  : raavan stop")
+    else:
+        # After deadline: differentiate between dead process vs slow startup
+        if not _is_running(proc.pid):
+            print(" FAILED")
+            print(f"\n  Server exited. Last lines of {log_file}:")
+            try:
+                lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                for line in lines[-20:]:
+                    print(f"    {line}")
+            except OSError:
+                print("    (log unavailable)")
+            _remove_pid()
+            sys.exit(1)
+        else:
+            print(f" TIMEOUT  (process alive but port {port} still not responding after 15s)")
+            print(f"  Check logs : {log_file}")
+            print("  Stop with  : raavan stop")
 
 
 def cmd_stop(args: argparse.Namespace) -> None:
@@ -254,7 +315,7 @@ def main() -> None:
         "--host", default="127.0.0.1", help="Bind host  (default: 127.0.0.1)"
     )
     p_start.add_argument(
-        "--port", "-p", default=8001, type=int, help="Bind port  (default: 8001)"
+        "--port", "-p", default=8000, type=int, help="Bind port  (default: 8000)"
     )
     p_start.add_argument(
         "--reload",
@@ -310,7 +371,7 @@ def main() -> None:
     # ── restart ────────────────────────────────────────────────────────────
     p_restart = sub.add_parser("restart", help="Stop then start the server")
     p_restart.add_argument("--host", default="127.0.0.1", help="Bind host")
-    p_restart.add_argument("--port", "-p", default=8001, type=int, help="Bind port")
+    p_restart.add_argument("--port", "-p", default=8000, type=int, help="Bind port")
     p_restart.add_argument("--reload", action="store_true")
     p_restart.add_argument("--workers", default=1, type=int)
     p_restart.add_argument("--foreground", action="store_true")

@@ -22,7 +22,7 @@ from typing import List, Optional
 
 from raavan.evals.criteria import EvalCriterion
 from raavan.evals.models import EvalScore
-from raavan.integrations.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.messages.client_messages import (
     SystemMessage,
     UserMessage,

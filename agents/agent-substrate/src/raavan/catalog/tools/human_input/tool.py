@@ -309,9 +309,7 @@ class AskHumanTool(BaseTool):
         )
     """
 
-    risk: ClassVar[ToolRisk] = (
-        ToolRisk.CRITICAL
-    )  # interrupts workflow, demands user action
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE  # ask_human IS the human — never needs separate approval
 
     def __init__(
         self,

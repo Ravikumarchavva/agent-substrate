@@ -41,7 +41,7 @@ class TestRedisMemory:
         """Test connect → add → get → disconnect cycle."""
         from raavan.core.memory import RedisMemory
 
-        with patch("raavan.core.memory.redis_memory.aioredis") as mock_redis:
+        with patch("raavan.integrations.memory.redis_memory.aioredis") as mock_redis:
             mock_conn = AsyncMock()
             mock_conn.ping = AsyncMock()
             mock_conn.lrange = AsyncMock(return_value=[])

@@ -70,25 +70,26 @@ raavan/                            ← repo root
 src/raavan/
 ├── core/                      ← Framework primitives (pure engine, no external deps)
 │   ├── agents/                ← BaseAgent, ReActAgent, OrchestratorAgent, FlowAgent
-│   ├── memory/                ← RedisMemory, PostgresMemory, SlidingWindowMemory, SessionManager
+│   ├── memory/                ← BaseMemory, UnboundedMemory, SlidingWindowMemory, SessionManager
 │   ├── tools/                 ← BaseTool, ToolResult, ToolRegistry (abstractions)
 │   ├── context/               ← RedisModelContext, build() for prompt assembly
 │   ├── messages/              ← SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, …
 │   ├── guardrails/            ← ContentFilter, PII, PromptInjection, MaxToken, ToolCallValidation
 │   ├── pipelines/             ← Codegen and sequential processing pipelines
-│   ├── storage/               ← Local, S3, encrypted, tenant-aware backends
-│   └── structured/            ← Structured output parsing
+│   ├── storage/               ← FileStore ABC, LocalFileStore, EncryptedFileStore
+│   ├── structured/            ← Structured output parsing
+│   └── llm/                   ← BaseModelClient ABC (base_client.py — no external deps)
 │
-├── integrations/              ← ALL external adapters (LLM, audio, MCP, skills, APIs)
-│   ├── llm/                   ← BaseModelClient + OpenAI implementation
-│   │   ├── base_client.py     ← Abstract LLM client interface
-│   │   └── openai/            ← OpenAIClient — the only LLM provider currently wired
-│   ├── audio/                 ← BaseAudioClient + OpenAI implementation
-│   │   ├── base_audio_client.py
-│   │   └── openai/            ← OpenAIAudioClient
+├── integrations/              ← External/SDK-backed adapters
+│   ├── llm/
+│   │   └── openai/            ← OpenAIClient — text, vision, STT, TTS, Realtime S2S, image gen
 │   ├── mcp/                   ← MCPClient, MCPTool wrappers, MCP App tools, app_tool_base
-│   ├── skills/                ← SkillManager, YAML frontmatter SKILL.md loader
-│   └── spotify/               ← SpotifyService, SpotifyAuthService
+│   ├── memory/                ← Concrete memory backends
+│   │   ├── redis_memory.py    ← RedisMemory (uses redis.asyncio)
+│   │   └── postgres_memory.py ← PostgresMemory (uses sqlalchemy + asyncpg)
+│   ├── skills/                ← Backward-compat re-exports (SkillManager, SkillLoader now in catalog/)
+│   ├── spotify/               ← SpotifyService, SpotifyAuthService
+│   └── storage/               ← S3FileStore (S3-compatible backend, uses aiobotocore)
 │
 ├── catalog/                   ← Unified capability system (tools, skills, connectors, pipelines)
 │   ├── tools/                 ← BaseTool implementations (human_input, task_manager, web_surfer, …)
@@ -103,6 +104,9 @@ src/raavan/
 │   ├── _scanner.py            ← Convention discovery scanner (anchors on last raavan in path)
 │   ├── _data_ref.py           ← DataRef / DataRefStore
 │   ├── _pipeline.py           ← PipelineDef, PipelineEngine, PipelineStore
+│   ├── _skill_loader.py       ← SkillLoader (filesystem scanner + YAML parser)
+│   ├── _skill_manager.py      ← SkillManager (discovery + system-prompt injection)
+│   ├── _skill_models.py       ← SkillMetadata, Skill (pure data classes)
 │   ├── _temporal/             ← Temporal.io workflow integration (activities, worker, workflows)
 │   └── _triggers/             ← Trigger system (conditions, scheduler, webhooks)
 │
@@ -147,7 +151,7 @@ src/raavan/
 │   │   └── types.py           ← Event factories: workflow_started, workflow_completed, …
 │   ├── auth/                  ← Canonical JWT + auth middleware (AuthClaims, verify_token, get_current_user)
 │   ├── database/              ← Shared session factory + get_db_session dependency
-│   ├── observability/         ← OpenTelemetry setup (traces + metrics)
+│   ├── observability/         ← OpenTelemetry setup + structured logging (logger.py)
 │   └── tasks/                 ← In-memory TaskStore singleton
 │
 ├── configs/settings.py        ← Pydantic Settings (reads from .env)
@@ -216,8 +220,8 @@ Register in `server/app.py` lifespan under `app.state.tools`.
 # ✅ Correct
 from raavan.integrations.llm.openai.openai_client import OpenAIClient
 
-# ❌ Wrong — file does not exist
-from raavan.integrations.llm.openai.client import OpenAIClient
+# Abstract base is now in core:
+from raavan.core.llm.base_client import BaseModelClient
 ```
 
 ### MCP Tools — load at runtime via MCPClient
@@ -287,11 +291,44 @@ await mem.disconnect()       # ← correct method name
 | Type | `content` | Note |
 |---|---|---|
 | `SystemMessage` | `str` | Plain string |
-| `UserMessage` | `list[ContentPart]` | Always a list |
+| `UserMessage` | `list[MediaType]` | List of `str`, `Image.Image`, `ImageContent`, `AudioContent`, `VideoContent` |
 | `AssistantMessage` | `Optional[list[MediaType]]` | List or `None` (tool-call-only turn) |
 | `ToolExecutionResultMessage` | `str` | Plus `tool_call_id`, `name` fields |
 
 `ToolCallMessage` fields: `tc.name`, `tc.arguments` (dict) — **not** `tc.function['name']`.
+
+### `ImageContent` — image inputs without loading into PIL
+
+```python
+from raavan.core.messages import ImageContent
+
+# URL (public or presigned)
+ImageContent(url="https://example.com/photo.jpg", detail="high")
+
+# Files-API ID
+ImageContent(file_id="file-abc123")
+
+# Raw bytes
+ImageContent(data=b"...", media_type="image/jpeg")
+```
+
+`detail` values: `"low"` | `"high"` | `"original"` | `"auto"` (default).
+
+### Image generation
+
+```python
+urls = await client.generate_image("a cat in a spacesuit")
+
+# gpt-image-1 (quality: "low"/"medium"/"high"/"auto")
+urls = await client.generate_image(
+    "product shot on white",
+    model="gpt-image-1",
+    size="1024x1024",
+    quality="high",
+)
+```
+
+Check `client.supports_image_generation` before calling. Returns `list[str]` (URLs or `data:image/png;base64,...`).
 
 ### MCPTool Schema Methods
 

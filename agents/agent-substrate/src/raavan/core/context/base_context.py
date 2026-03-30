@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, List, Optional
 from raavan.core.messages.base_message import BaseClientMessage
 
 if TYPE_CHECKING:
-    from raavan.integrations.llm.base_client import BaseModelClient
+    from raavan.core.llm.base_client import BaseModelClient
 
 
 class ModelContext(ABC):

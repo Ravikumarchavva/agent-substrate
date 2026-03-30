@@ -1,6 +1,50 @@
-from PIL import Image
-from typing import Dict, Any, Optional, Union
+from __future__ import annotations
+
+import base64
+import io
 from pathlib import Path
+from typing import Dict, Any, Literal, Optional, Union
+
+from PIL import Image
+
+
+# Image content wrapper — for URL, file-ID, or raw-bytes inputs
+class ImageContent:
+    """Wrapper for image inputs that aren't already PIL Image objects.
+
+    Three source types are supported, matching the OpenAI Responses API::
+
+        ImageContent(url="https://example.com/photo.jpg")          # public URL
+        ImageContent(file_id="file-abc123")                        # Files-API ID
+        ImageContent(data=b"...", media_type="image/jpeg")         # raw bytes
+
+    Optionally set ``detail`` to ``"low"``, ``"high"``, ``"original"``, or
+    ``"auto"`` (default) to control tokenisation cost.
+    """
+
+    def __init__(
+        self,
+        *,
+        url: Optional[str] = None,
+        file_id: Optional[str] = None,
+        data: Optional[bytes] = None,
+        media_type: str = "image/jpeg",
+        detail: Literal["low", "high", "original", "auto"] = "auto",
+    ):
+        if sum(x is not None for x in (url, file_id, data)) != 1:
+            raise ValueError("Exactly one of url, file_id, or data must be provided")
+        self.url = url
+        self.file_id = file_id
+        self.data = data
+        self.media_type = media_type
+        self.detail = detail
+
+    def __repr__(self) -> str:
+        if self.url:
+            return f"ImageContent(url={self.url!r}, detail={self.detail!r})"
+        if self.file_id:
+            return f"ImageContent(file_id={self.file_id!r}, detail={self.detail!r})"
+        return f"ImageContent(bytes={len(self.data or b'')} bytes, detail={self.detail!r})"
 
 
 # Audio content wrapper
@@ -31,7 +75,7 @@ class VideoContent:
         return f"VideoContent(bytes={len(self.data)} bytes, format={self.format})"
 
 
-MediaType = Union[str, Image.Image, AudioContent, VideoContent]
+MediaType = Union[str, Image.Image, ImageContent, AudioContent, VideoContent]
 
 
 # Streaming event types
@@ -73,31 +117,41 @@ class CompletionChunk(StreamChunk):
         self.message = message
 
 
+def _pil_to_data_url(image: Image.Image) -> str:
+    """Encode a PIL Image as a PNG data URL (base64)."""
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{b64}"
+
+
 def serialize_media_content(content: MediaType, role: str = "user") -> Dict[str, Any]:
-    """Serialize media content for messages in OpenAI format.
+    """Serialize media content for messages in OpenAI Responses API format.
 
     Args:
         content: The media content to serialize
         role: The message role (affects type names for OpenAI Responses API)
     """
     if isinstance(content, Image.Image):
-        import io
-        import base64
-
-        buffered = io.BytesIO()
-        content.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-
-        # Use appropriate type based on role
-        img_type = "input_image" if role == "user" else "output_image"
-
+        # PIL Image → base64 PNG data URL (Responses API ``input_image``)
         return {
-            "type": img_type,
-            "source": {"type": "base64", "media_type": "image/png", "data": img_str},
+            "type": "input_image",
+            "image_url": _pil_to_data_url(content),
         }
-    elif isinstance(content, AudioContent):
-        import base64
 
+    if isinstance(content, ImageContent):
+        block: Dict[str, Any] = {"type": "input_image"}
+        if content.url:
+            block["image_url"] = content.url
+        elif content.file_id:
+            block["file_id"] = content.file_id
+        else:  # raw bytes
+            b64 = base64.b64encode(content.data or b"").decode("utf-8")
+            block["image_url"] = f"data:{content.media_type};base64,{b64}"
+        if content.detail != "auto":
+            block["detail"] = content.detail
+        return block
+    if isinstance(content, AudioContent):
         # Load audio data
         if isinstance(content.data, (str, Path)):
             with open(content.data, "rb") as f:
@@ -116,9 +170,7 @@ def serialize_media_content(content: MediaType, role: str = "user") -> Dict[str,
                 "data": audio_str,
             },
         }
-    elif isinstance(content, VideoContent):
-        import base64
-
+    if isinstance(content, VideoContent):
         # Load video data
         if isinstance(content.data, (str, Path)):
             with open(content.data, "rb") as f:
@@ -137,12 +189,11 @@ def serialize_media_content(content: MediaType, role: str = "user") -> Dict[str,
                 "data": video_str,
             },
         }
-    elif isinstance(content, str):
+    if isinstance(content, str):
         # Use appropriate type based on role for OpenAI Responses API
         text_type = "input_text" if role == "user" else "output_text"
         return {"type": text_type, "text": content}
-    else:
-        raise ValueError(f"Unsupported media content type: {type(content)}")
+    raise ValueError(f"Unsupported media content type: {type(content)}")
 
 
 def deserialize_media_content(data: Union[str, Dict[str, Any]]) -> MediaType:
@@ -156,60 +207,55 @@ def deserialize_media_content(data: Union[str, Dict[str, Any]]) -> MediaType:
 
         # Handle image content
         elif content_type in ("image_url", "input_image", "output_image"):
-            import io
-            import base64
+            # URL or file_id variant → reconstruct as ImageContent
+            if "file_id" in data:
+                return ImageContent(file_id=data["file_id"], detail=data.get("detail", "auto"))  # type: ignore[arg-type]
 
-            # New format with source
+            image_url = data.get("image_url", "")
+            if isinstance(image_url, dict):  # Chat-Completions format
+                image_url = image_url.get("url", "")
+
+            if image_url.startswith("data:"):
+                # data URL — decode to PIL Image
+                header, encoded = image_url.split(",", 1)
+                img_data = base64.b64decode(encoded)
+                return Image.open(io.BytesIO(img_data))
+
+            if image_url:
+                # Regular URL — preserve as ImageContent so callers can pass it back
+                return ImageContent(url=image_url, detail=data.get("detail", "auto"))  # type: ignore[arg-type]
+
+            # Old Anthropic-style ``source`` block
             if "source" in data:
                 source = data["source"]
                 if source.get("type") == "base64":
                     img_data = base64.b64decode(source["data"])
-                    image = Image.open(io.BytesIO(img_data))
-                    return image
-
-            # Old format with image_url
-            elif "image_url" in data:
-                url = data["image_url"].get("url", "")
-                if url.startswith("data:image/png;base64,"):
-                    img_data = base64.b64decode(url.split(",", 1)[1])
-                    image = Image.open(io.BytesIO(img_data))
-                    return image
-                else:
-                    # Return URL as string for now
-                    return url
+                    return Image.open(io.BytesIO(img_data))
 
         # Handle audio content
         elif content_type in ("input_audio", "output_audio"):
-            import base64
-
             if "source" in data:
                 source = data["source"]
                 if source.get("type") == "base64":
                     audio_data = base64.b64decode(source["data"])
                     media_type = source.get("media_type", "audio/mp3")
-                    format = media_type.split("/")[-1]
-                    return AudioContent(data=audio_data, format=format)
+                    fmt = media_type.split("/")[-1]
+                    return AudioContent(data=audio_data, format=fmt)
 
         # Handle video content
         elif content_type in ("input_video", "output_video"):
-            import base64
-
             if "source" in data:
                 source = data["source"]
                 if source.get("type") == "base64":
                     video_data = base64.b64decode(source["data"])
                     media_type = source.get("media_type", "video/mp4")
-                    format = media_type.split("/")[-1]
-                    return VideoContent(data=video_data, format=format)
+                    fmt = media_type.split("/")[-1]
+                    return VideoContent(data=video_data, format=fmt)
 
         # Legacy format
         elif content_type == "image/png":
-            import io
-            import base64
-
             img_data = base64.b64decode(data["data"])
-            image = Image.open(io.BytesIO(img_data))
-            return image
+            return Image.open(io.BytesIO(img_data))
 
     elif isinstance(data, str):
         return data

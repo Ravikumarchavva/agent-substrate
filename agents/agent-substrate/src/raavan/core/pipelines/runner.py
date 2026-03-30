@@ -33,7 +33,7 @@ from raavan.core.agents.react_agent import ReActAgent
 from raavan.core.context.base_context import ModelContext
 from raavan.core.guardrails.base_guardrail import BaseGuardrail
 from raavan.core.memory.base_memory import BaseMemory
-from raavan.core.memory.redis_memory import RedisMemory
+from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.core.memory.unbounded_memory import UnboundedMemory
 from raavan.core.pipelines.schema import (
     EdgeType,
@@ -46,8 +46,8 @@ from raavan.core.pipelines.while_runner import WhilePipelineRunner
 from raavan.core.structured.judge import LLMJudge
 from raavan.core.structured.router import StructuredRouter
 from raavan.core.tools.base_tool import BaseTool
-from raavan.integrations.skills import SkillManager
-from raavan.integrations.llm.base_client import BaseModelClient
+from raavan.catalog import SkillManager
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.integrations.mcp.client import MCPClient
 from raavan.integrations.mcp.tool import MCPTool
 

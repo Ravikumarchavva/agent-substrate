@@ -24,6 +24,9 @@ from raavan.catalog._pipeline import (
     PipelineStore,
 )
 from raavan.catalog._scanner import CatalogPackage, CatalogScanner
+from raavan.catalog._skill_manager import SkillManager
+from raavan.catalog._skill_loader import SkillLoader
+from raavan.catalog._skill_models import Skill, SkillMetadata
 
 __all__ = [
     "CatalogPackage",
@@ -34,4 +37,8 @@ __all__ = [
     "PipelineDef",
     "PipelineEngine",
     "PipelineStore",
+    "Skill",
+    "SkillLoader",
+    "SkillManager",
+    "SkillMetadata",
 ]

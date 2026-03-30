@@ -41,8 +41,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from raavan.core.messages.base_message import BaseClientMessage
-from raavan.core.memory.redis_memory import RedisMemory
-from raavan.core.memory.postgres_memory import PostgresMemory
+from raavan.integrations.memory.redis_memory import RedisMemory
+from raavan.integrations.memory.postgres_memory import PostgresMemory
 
 logger = logging.getLogger("raavan.core.memory.session")
 

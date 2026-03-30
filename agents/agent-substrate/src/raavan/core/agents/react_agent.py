@@ -55,7 +55,7 @@ from raavan.core.messages.client_messages import (
     ToolExecutionResultMessage,
     UserMessage,
 )
-from raavan.integrations.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.shared.observability import global_metrics, global_tracer, logger
 from raavan.catalog.tools.human_input.tool import (
     ToolApprovalAction,
@@ -71,7 +71,7 @@ from raavan.core.resilience import (
 )
 from raavan.core.tools.base_tool import BaseTool, HitlMode, ToolResult
 from raavan.core.tools.catalog import CapabilityRegistry
-from raavan.integrations.skills import SkillManager
+from raavan.catalog import SkillManager
 from raavan.catalog.tools.capability_search.tool import CapabilitySearchTool
 
 
@@ -128,7 +128,7 @@ class ReActAgent(BaseAgent):
         memory: Optional[BaseMemory] = None,
         memory_scope: MemoryScope = MemoryScope.ISOLATED,
         model_context: ModelContext,
-        max_iterations: int = 10,
+        max_iterations: int = 50,
         verbose: bool = True,
         input_guardrails: Optional[List[BaseGuardrail]] = None,
         output_guardrails: Optional[List[BaseGuardrail]] = None,

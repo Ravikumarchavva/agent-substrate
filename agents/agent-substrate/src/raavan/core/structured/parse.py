@@ -31,7 +31,7 @@ from raavan.core.messages.client_messages import SystemMessage
 if TYPE_CHECKING:
     from raavan.core.messages.base_message import BaseClientMessage
     from raavan.core.structured.result import StructuredOutputResult
-    from raavan.integrations.llm.base_client import BaseModelClient
+    from raavan.core.llm.base_client import BaseModelClient
 
 T = TypeVar("T")
 

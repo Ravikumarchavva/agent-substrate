@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
-from raavan.core.memory.redis_memory import RedisMemory
+from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.integrations.llm.openai.openai_client import OpenAIClient
 from raavan.services.agent_runtime.routes import router
 from raavan.services.base import create_service_app

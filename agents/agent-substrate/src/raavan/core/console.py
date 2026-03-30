@@ -33,7 +33,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.theme import Theme
 
-from raavan.core.logger import setup_logging
+from raavan.shared.observability.logger import setup_logging
 
 # ---------------------------------------------------------------------------
 # Theme

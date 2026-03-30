@@ -13,6 +13,7 @@ from .client_messages import (
 )
 from ._types import (
     MediaType,
+    ImageContent,
     AudioContent,
     VideoContent,
     StreamChunk,
@@ -32,6 +33,7 @@ __all__ = [
     "ToolCallMessage",
     "ToolExecutionResultMessage",
     "MediaType",
+    "ImageContent",
     "AudioContent",
     "VideoContent",
     "StreamChunk",

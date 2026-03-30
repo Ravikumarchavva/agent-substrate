@@ -7,8 +7,8 @@ POST  /audio/tts                 TTS streaming → audio/mpeg
 GET   /audio/realtime-token      Mint ephemeral Realtime session token
 WS    /audio/realtime            Backend proxy to provider Realtime WS
 
-All audio operations are delegated to ``request.app.state.audio_client``
-(a ``BaseAudioClient`` instance) so routes contain zero provider-specific code.
+All audio operations are delegated to ``request.app.state.model_client``
+(a ``BaseModelClient`` instance) so routes contain zero provider-specific code.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 
-from raavan.integrations.audio import BaseAudioClient
+from raavan.core.llm import BaseModelClient
 from raavan.server.schemas import (
     RealtimeTokenResponse,
     TranscribeResponse,
@@ -58,15 +58,18 @@ async def transcribe_audio(
     file: Annotated[
         UploadFile, File(description="Audio file (mp3/wav/webm/m4a, max 25 MB)")
     ],
-    model: Annotated[str, Form()] = "whisper-1",
+    model: Annotated[str, Form()] = "",
     language: Annotated[str | None, Form()] = None,
     prompt: Annotated[str | None, Form()] = None,
 ):
     """Transcribe an uploaded audio file to text.
 
-    Delegates to ``app.state.audio_client`` (a ``BaseAudioClient``) so the
+    Delegates to ``app.state.model_client`` (a ``BaseModelClient``) so the
     route is fully provider-agnostic.
     """
+    from raavan.configs.settings import settings as _settings
+    effective_model = model.strip() if model and model.strip() else _settings.STT_MODEL
+
     raw = await file.read()
     if len(raw) > _MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="Audio file exceeds 25 MB limit")
@@ -74,13 +77,13 @@ async def transcribe_audio(
     if not raw:
         raise HTTPException(status_code=400, detail="Empty audio file")
 
-    audio_client: BaseAudioClient = request.app.state.audio_client
+    model_client: BaseModelClient = request.app.state.model_client
 
     try:
-        text = await audio_client.transcribe(
+        text = await model_client.transcribe(
             audio_bytes=raw,
             filename=file.filename or "audio.webm",
-            model=model,
+            model=effective_model,
             language=language or None,
             prompt=prompt or None,
         )
@@ -111,14 +114,14 @@ async def text_to_speech(request: Request, body: TTSRequest):
     The client should treat it as a blob and play it via the Web Audio API
     or an ``<audio>`` element.
 
-    Delegates to ``app.state.audio_client`` — provider-agnostic.
+    Delegates to ``app.state.model_client`` — provider-agnostic.
     """
-    audio_client: BaseAudioClient = request.app.state.audio_client
+    model_client: BaseModelClient = request.app.state.model_client
     fmt = body.response_format or "mp3"
     content_type = _TTS_CONTENT_TYPE.get(fmt, "audio/mpeg")
 
     try:
-        audio_iter = audio_client.stream_tts(
+        audio_iter = model_client.stream_tts(
             text=body.text,
             voice=body.voice or "coral",
             model=body.model or "gpt-4o-mini-tts",
@@ -149,19 +152,19 @@ async def get_realtime_token(request: Request):
     The browser uses this token to authenticate the ``/audio/realtime``
     WebSocket proxy without ever receiving the server's main API key.
 
-    Delegates to ``app.state.audio_client`` — provider-agnostic.
+    Delegates to ``app.state.model_client`` — provider-agnostic.
     """
-    audio_client: BaseAudioClient = request.app.state.audio_client
+    model_client: BaseModelClient = request.app.state.model_client
     system_instructions: str = getattr(request.app.state, "system_instructions", "")
 
-    if not audio_client.supports_s2s:
+    if not model_client.supports_s2s:
         raise HTTPException(
             status_code=501,
             detail="Speech-to-speech not supported by the configured audio provider",
         )
 
     try:
-        session = await audio_client.create_s2s_session(
+        session = await model_client.create_s2s_session(
             instructions=system_instructions or None,
         )
     except NotImplementedError as exc:
@@ -227,9 +230,9 @@ async def realtime_proxy(websocket: WebSocket):
 
     # Ask the audio client for the upstream URL — keeps provider details out
     # of this route.
-    audio_client: BaseAudioClient = websocket.app.state.audio_client
+    model_client: BaseModelClient = websocket.app.state.model_client
     try:
-        upstream_url = audio_client.s2s_ws_url(model)
+        upstream_url = model_client.s2s_ws_url(model)
     except NotImplementedError:
         await websocket.close(
             code=4005, reason="Realtime not supported by this audio provider"

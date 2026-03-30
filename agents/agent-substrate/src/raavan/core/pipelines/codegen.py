@@ -83,7 +83,7 @@ def generate_code(config: PipelineConfig) -> str:
     if NodeType.SKILL in node_types_used:
         sections.append(
             textwrap.dedent("""\
-            from raavan.integrations.skills import SkillManager
+            from raavan.catalog import SkillManager
         """)
         )
 
@@ -95,7 +95,7 @@ def generate_code(config: PipelineConfig) -> str:
         if _has_redis:
             sections.append(
                 textwrap.dedent("""\
-                from raavan.core.memory.redis_memory import RedisMemory
+                from raavan.integrations.memory.redis_memory import RedisMemory
             """)
             )
 

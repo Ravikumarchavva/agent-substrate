@@ -14,8 +14,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .loader import SkillLoader
-from .models import Skill, SkillMetadata
+from raavan.catalog._skill_loader import SkillLoader
+from raavan.catalog._skill_models import Skill, SkillMetadata
 
 logger = logging.getLogger(__name__)
 

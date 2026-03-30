@@ -26,7 +26,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .models import Skill, SkillMetadata
+from raavan.catalog._skill_models import Skill, SkillMetadata
 
 yaml: Any = None  # optional dependency; assigned below if available
 try:

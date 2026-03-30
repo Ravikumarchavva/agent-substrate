@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     SESSION_MAX_MESSAGES: int = 200
     SESSION_AUTO_CHECKPOINT: int = 50  # flush to Postgres every N messages (0 = off)
 
+    # LLM models
+    # Override these in .env to switch globally, or let the frontend per-request
+    # override take precedence (Settings → General → Model).
+    CHAT_MODEL: str = "gpt-5.4-mini"
+    STT_MODEL: str = "whisper-1"
+
     # Model context window — how many messages (non-system) to include in each
     # LLM call.  System message is always prepended.  Older messages stay in
     # Redis (full history) but are excluded from the context sent to the model.

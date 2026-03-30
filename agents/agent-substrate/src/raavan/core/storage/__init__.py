@@ -10,9 +10,11 @@ Public surface::
         FileRef,            # returned by put / get
         TenantContext,      # org/user/thread path builder
         LocalFileStore,     # local-disk driver
-        S3FileStore,        # S3-compatible driver
         EncryptedFileStore, # envelope-encryption decorator
     )
+
+    # S3-compatible driver lives in integrations:
+    from raavan.integrations.storage import S3FileStore
 """
 
 from __future__ import annotations
@@ -20,7 +22,6 @@ from __future__ import annotations
 from raavan.core.storage.base import FileRef, FileStore
 from raavan.core.storage.tenant import FileScope, TenantContext
 from raavan.core.storage.local import LocalFileStore
-from raavan.core.storage.s3 import S3FileStore
 from raavan.core.storage.encrypted import (
     EncryptedFileStore,
     KeyProvider,
@@ -33,7 +34,6 @@ __all__ = [
     "FileScope",
     "TenantContext",
     "LocalFileStore",
-    "S3FileStore",
     "EncryptedFileStore",
     "KeyProvider",
     "LocalKeyProvider",

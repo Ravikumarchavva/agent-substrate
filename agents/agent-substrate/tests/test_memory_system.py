@@ -120,7 +120,7 @@ def test_serializer_rejects_missing_type():
 
 @requires_redis
 async def test_redis_memory():
-    from raavan.core.memory.redis_memory import RedisMemory
+    from raavan.integrations.memory.redis_memory import RedisMemory
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -207,7 +207,7 @@ async def test_redis_memory():
 
 @requires_postgres
 async def test_postgres_memory():
-    from raavan.core.memory.postgres_memory import PostgresMemory
+    from raavan.integrations.memory.postgres_memory import PostgresMemory
     from raavan.core.messages.client_messages import (
         SystemMessage,
         UserMessage,
@@ -296,8 +296,8 @@ async def test_postgres_memory():
 @requires_redis
 @requires_postgres
 async def test_session_manager():
-    from raavan.core.memory.redis_memory import RedisMemory
-    from raavan.core.memory.postgres_memory import PostgresMemory
+    from raavan.integrations.memory.redis_memory import RedisMemory
+    from raavan.integrations.memory.postgres_memory import PostgresMemory
     from raavan.core.memory.session_manager import (
         SessionManager,
         SessionStatus,

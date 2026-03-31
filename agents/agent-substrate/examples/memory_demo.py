@@ -10,8 +10,8 @@ import asyncio
 import os
 from datetime import datetime
 
-from raavan.core.memory.redis_memory import RedisMemory
-from raavan.core.memory.postgres_memory import PostgresMemory
+from raavan.integrations.memory.redis_memory import RedisMemory
+from raavan.integrations.memory.postgres_memory import PostgresMemory
 from raavan.core.memory.session_manager import SessionManager
 from raavan.core.messages.client_messages import (
     SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, ToolExecutionResultMessage,

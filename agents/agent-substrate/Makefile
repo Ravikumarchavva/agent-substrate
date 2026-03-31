@@ -25,7 +25,10 @@ sync:
 	uv python install $(PYTHON_VERSION)
 	uv sync
 
+lint-apply:
+	uv run ruff format .
 lint:
+
 	uv run ruff check .
 	uv run ruff format --check .
 

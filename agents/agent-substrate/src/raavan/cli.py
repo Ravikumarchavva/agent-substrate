@@ -147,7 +147,9 @@ def cmd_start(args: argparse.Namespace) -> None:
             print("FAILED")
             print(f"\n  Server exited. Last lines of {log_file}:")
             try:
-                lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = log_file.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
                 for line in lines[-20:]:
                     print(f"    {line}")
             except OSError:
@@ -171,7 +173,9 @@ def cmd_start(args: argparse.Namespace) -> None:
             print(" FAILED")
             print(f"\n  Server exited. Last lines of {log_file}:")
             try:
-                lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = log_file.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
                 for line in lines[-20:]:
                     print(f"    {line}")
             except OSError:
@@ -179,7 +183,9 @@ def cmd_start(args: argparse.Namespace) -> None:
             _remove_pid()
             sys.exit(1)
         else:
-            print(f" TIMEOUT  (process alive but port {port} still not responding after 15s)")
+            print(
+                f" TIMEOUT  (process alive but port {port} still not responding after 15s)"
+            )
             print(f"  Check logs : {log_file}")
             print("  Stop with  : raavan stop")
 

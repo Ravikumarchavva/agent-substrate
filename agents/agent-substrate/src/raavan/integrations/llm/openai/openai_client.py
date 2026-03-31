@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # ── MIME helper ───────────────────────────────────────────────────────────────
 
+
 def _mime_for(filename: str) -> str:
     """Return a plausible MIME type based on the file extension."""
     ext = filename.rsplit(".", 1)[-1].lower()
@@ -578,7 +579,9 @@ class OpenAIClient(BaseModelClient):
         effective_model = model or self._default_stt_model
         logger.info(
             "Transcribing audio: file=%s model=%s bytes=%d",
-            filename, effective_model, len(audio_bytes),
+            filename,
+            effective_model,
+            len(audio_bytes),
         )
         kwargs: dict = {}
         if language:
@@ -615,7 +618,10 @@ class OpenAIClient(BaseModelClient):
         effective_fmt = response_format or self._default_tts_format
         logger.info(
             "TTS request: model=%s voice=%s format=%s chars=%d",
-            effective_model, effective_voice, effective_fmt, len(text),
+            effective_model,
+            effective_voice,
+            effective_fmt,
+            len(text),
         )
         kwargs: dict = {}
         if instructions and effective_model == "gpt-4o-mini-tts":
@@ -710,7 +716,10 @@ class OpenAIClient(BaseModelClient):
         effective_model = model or "dall-e-3"
         logger.info(
             "Generating image: model=%s n=%d size=%s quality=%s",
-            effective_model, n, size, quality,
+            effective_model,
+            n,
+            size,
+            quality,
         )
 
         params: dict = {
@@ -742,4 +751,3 @@ class OpenAIClient(BaseModelClient):
                 results.append(f"data:image/png;base64,{item.b64_json}")
         logger.info("Image generation complete: %d result(s)", len(results))
         return results
-

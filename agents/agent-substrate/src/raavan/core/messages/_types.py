@@ -44,7 +44,9 @@ class ImageContent:
             return f"ImageContent(url={self.url!r}, detail={self.detail!r})"
         if self.file_id:
             return f"ImageContent(file_id={self.file_id!r}, detail={self.detail!r})"
-        return f"ImageContent(bytes={len(self.data or b'')} bytes, detail={self.detail!r})"
+        return (
+            f"ImageContent(bytes={len(self.data or b'')} bytes, detail={self.detail!r})"
+        )
 
 
 # Audio content wrapper
@@ -209,7 +211,9 @@ def deserialize_media_content(data: Union[str, Dict[str, Any]]) -> MediaType:
         elif content_type in ("image_url", "input_image", "output_image"):
             # URL or file_id variant → reconstruct as ImageContent
             if "file_id" in data:
-                return ImageContent(file_id=data["file_id"], detail=data.get("detail", "auto"))  # type: ignore[arg-type]
+                return ImageContent(
+                    file_id=data["file_id"], detail=data.get("detail", "auto")
+                )  # type: ignore[arg-type]
 
             image_url = data.get("image_url", "")
             if isinstance(image_url, dict):  # Chat-Completions format

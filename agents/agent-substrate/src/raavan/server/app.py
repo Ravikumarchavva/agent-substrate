@@ -281,8 +281,10 @@ async def lifespan(app: FastAPI):
     # Note: tool_approval_handler is set per-request in _get_agent_deps using
     # the per-thread bridge acquired from bridge_registry.
     app.state.tools_requiring_approval = [
-        e.name for e in app.state.tools.by_risk(ToolRisk.CRITICAL)
-        if e.name != "ask_human"  # ask_human IS the human interaction — never needs separate approval
+        e.name
+        for e in app.state.tools.by_risk(ToolRisk.CRITICAL)
+        if e.name
+        != "ask_human"  # ask_human IS the human interaction — never needs separate approval
     ]
     app.state.tool_timeout = 300.0  # match HITL bridge timeout
 

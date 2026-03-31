@@ -68,6 +68,7 @@ async def transcribe_audio(
     route is fully provider-agnostic.
     """
     from raavan.configs.settings import settings as _settings
+
     effective_model = model.strip() if model and model.strip() else _settings.STT_MODEL
 
     raw = await file.read()

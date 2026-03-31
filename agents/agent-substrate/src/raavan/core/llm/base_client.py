@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Literal, Optional, Type
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    AsyncGenerator,
+    AsyncIterator,
+    Literal,
+    Optional,
+    Type,
+)
 
 from raavan.core.messages.client_messages import (
     BaseClientMessage,
@@ -24,8 +32,19 @@ STT_MODEL = Literal[
 ]
 
 TTS_VOICE = Literal[
-    "alloy", "ash", "ballad", "coral", "echo", "fable",
-    "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar",
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "fable",
+    "nova",
+    "onyx",
+    "sage",
+    "shimmer",
+    "verse",
+    "marin",
+    "cedar",
 ]
 
 TTS_FORMAT = Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]

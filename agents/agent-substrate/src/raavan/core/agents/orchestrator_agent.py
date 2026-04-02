@@ -50,6 +50,7 @@ from raavan.core.resilience import RetryPolicy
 from raavan.core.tools.base_tool import BaseTool, ToolResult
 from raavan.catalog import SkillManager
 from raavan.catalog.tools.human_input.tool import ToolApprovalHandler
+from raavan.core.runtime._protocol import AgentId, AgentRuntime
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +73,9 @@ class _HandoffTool(BaseTool):
     name itself encodes that (``handoff_<agent_name>``).
     """
 
-    def __init__(self, agent: BaseAgent) -> None:
+    def __init__(
+        self, agent: BaseAgent, runtime: Optional[AgentRuntime] = None
+    ) -> None:
         super().__init__(
             name=f"handoff_{agent.name}",
             description=(
@@ -99,19 +102,42 @@ class _HandoffTool(BaseTool):
             },
         )
         self._agent = agent
+        self._runtime = runtime
 
     @property
     def target_agent(self) -> BaseAgent:
         return self._agent
 
     async def execute(self, *, input: str, reason: str = "", **_kwargs) -> ToolResult:  # noqa: A002
-        """Run the sub-agent and return its output as a ToolResult."""
+        """Run the sub-agent and return its output as a ToolResult.
+
+        When a runtime is available and the sub-agent has an ``agent_id``,
+        dispatches via ``runtime.send_message()`` instead of calling
+        ``agent.run()`` directly.  This enables distributed execution.
+        """
         logger.debug(
             "Handoff → %s | reason: %s | input: %.80s…",
             self._agent.name,
             reason,
             input,
         )
+
+        # Distributed path: dispatch via runtime
+        if self._runtime is not None and self._agent.agent_id is not None:
+            output_text = await self._runtime.send_message(
+                input,
+                sender=None,
+                recipient=self._agent.agent_id,
+            )
+            if isinstance(output_text, list):
+                output_text = "\n".join(
+                    str(p) for p in output_text if isinstance(p, str)
+                )
+            return ToolResult(
+                content=[{"type": "text", "text": str(output_text) or "(no output)"}],
+            )
+
+        # Local path: call run() directly (backward compatible)
         result: AgentRunResult = await self._agent.run(input)
         output_text = result.output
         if isinstance(output_text, list):
@@ -158,6 +184,8 @@ class OrchestratorAgent(ReActAgent):
         skill_dirs:           Skill directories.
         skill_manager:        Explicit skill manager.
         verbose:              Enable debug logging.
+        runtime:              Optional runtime for distributed sub-agent dispatch.
+        agent_id:             Identity for this orchestrator in the runtime.
     """
 
     def __init__(
@@ -184,13 +212,15 @@ class OrchestratorAgent(ReActAgent):
         skill_dirs: Optional[List[str]] = None,
         skill_manager: Optional[SkillManager] = None,
         verbose: bool = True,
+        runtime: Optional[AgentRuntime] = None,
+        agent_id: Optional[AgentId] = None,
     ) -> None:
         if not sub_agents:
             raise ValueError("OrchestratorAgent requires at least one sub_agent")
 
         # Build handoff tools from sub-agents
         handoff_tools: List[_HandoffTool] = [
-            _HandoffTool(agent) for agent in sub_agents
+            _HandoffTool(agent, runtime=runtime) for agent in sub_agents
         ]
         all_tools = handoff_tools + (extra_tools or [])
 
@@ -227,6 +257,8 @@ class OrchestratorAgent(ReActAgent):
             tools_requiring_approval=tools_requiring_approval,
             skill_dirs=skill_dirs,
             skill_manager=skill_manager,
+            runtime=runtime,
+            agent_id=agent_id,
         )
 
         self.sub_agents = sub_agents

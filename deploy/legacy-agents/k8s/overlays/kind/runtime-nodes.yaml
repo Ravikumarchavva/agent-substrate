@@ -1,0 +1,150 @@
+# Runtime gRPC nodes — lightweight agent pods for distributed runtime testing.
+#
+# Node A:  echo + greeter  agents  → runtime-node-a.af-runtime.svc:50051
+# Node B:  summarizer + translator → runtime-node-b.af-runtime.svc:50051
+#
+# Apply:  kubectl apply -f runtime-nodes.yaml
+# Remove: kubectl delete -f runtime-nodes.yaml
+
+# ── Node A ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-node-a
+  namespace: af-runtime
+  labels:
+    app: runtime-node-a
+    component: grpc-runtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: runtime-node-a
+  template:
+    metadata:
+      labels:
+        app: runtime-node-a
+        component: grpc-runtime
+    spec:
+      containers:
+        - name: runtime-node
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - raavan.integrations.runtime.grpc.node
+            - --listen
+            - "0.0.0.0:50051"
+            - --agents
+            - "echo,greeter"
+          ports:
+            - containerPort: 50051
+              name: grpc
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runtime-node-a
+  namespace: af-runtime
+  labels:
+    app: runtime-node-a
+    component: grpc-runtime
+spec:
+  selector:
+    app: runtime-node-a
+  ports:
+    - port: 50051
+      targetPort: 50051
+      name: grpc
+      protocol: TCP
+
+# ── Node B ────────────────────────────────────────────────────────────────
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-node-b
+  namespace: af-runtime
+  labels:
+    app: runtime-node-b
+    component: grpc-runtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: runtime-node-b
+  template:
+    metadata:
+      labels:
+        app: runtime-node-b
+        component: grpc-runtime
+    spec:
+      containers:
+        - name: runtime-node
+          image: agent-microservices-kind:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - raavan.integrations.runtime.grpc.node
+            - --listen
+            - "0.0.0.0:50051"
+            - --agents
+            - "summarizer,translator"
+          ports:
+            - containerPort: 50051
+              name: grpc
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runtime-node-b
+  namespace: af-runtime
+  labels:
+    app: runtime-node-b
+    component: grpc-runtime
+spec:
+  selector:
+    app: runtime-node-b
+  ports:
+    - port: 50051
+      targetPort: 50051
+      name: grpc
+      protocol: TCP

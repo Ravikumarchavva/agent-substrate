@@ -92,6 +92,7 @@ async def _get_agent_deps(ctx: ServerContext, thread_id: str):
         "tools_requiring_approval": ctx.tools_requiring_approval,
         "tool_timeout": ctx.tool_timeout,
         "bridge": bridge,
+        "runtime": ctx.runtime,
     }
 
 
@@ -370,6 +371,7 @@ async def chat(
             tool_approval_handler=deps["tool_approval_handler"],
             tools_requiring_approval=deps["tools_requiring_approval"],
             tool_timeout=deps["tool_timeout"],
+            runtime=deps["runtime"],
         )
 
         # 4. Extract user content from last message

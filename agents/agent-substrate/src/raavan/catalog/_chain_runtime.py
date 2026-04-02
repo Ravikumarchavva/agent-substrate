@@ -195,7 +195,7 @@ class ChainRuntime:
                 if isinstance(item, DataRef):
                     data_refs.append(item)
 
-            duration = int((time.monotonic() - start) * 1000)
+            duration = max(1, int((time.monotonic() - start) * 1000))
             return ChainResult(
                 outputs=results_collector,
                 data_refs=data_refs,
@@ -204,14 +204,14 @@ class ChainRuntime:
             )
 
         except asyncio.TimeoutError:
-            duration = int((time.monotonic() - start) * 1000)
+            duration = max(1, int((time.monotonic() - start) * 1000))
             return ChainResult(
                 logs="\n".join(log_lines),
                 error=f"Script timed out after {timeout}s",
                 duration_ms=duration,
             )
         except Exception as exc:
-            duration = int((time.monotonic() - start) * 1000)
+            duration = max(1, int((time.monotonic() - start) * 1000))
             return ChainResult(
                 logs="\n".join(log_lines),
                 error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}",

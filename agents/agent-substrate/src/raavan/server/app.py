@@ -21,6 +21,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from raavan.configs.settings import settings
 from raavan.integrations.memory.redis_memory import RedisMemory
+from raavan.core.runtime import LocalRuntime
 from raavan.catalog.tools.human_input.tool import AskHumanTool
 from raavan.integrations.llm.openai.openai_client import OpenAIClient
 from raavan.shared.observability.telemetry import (
@@ -94,6 +95,14 @@ async def lifespan(app: FastAPI):
     )
     await redis_memory.connect()
     app.state.redis_memory = redis_memory
+
+    # Agent runtime — actor-based message dispatch (in-process by default)
+    runtime = LocalRuntime()
+    await runtime.start()
+    app.state.runtime = runtime
+
+    # ToolExecutorHandler — registered on runtime after catalog is populated
+    # (deferred: see below after catalog setup)
 
     # JWT secret for shared auth middleware
     app.state.jwt_secret = settings.JWT_SECRET
@@ -377,6 +386,18 @@ async def lifespan(app: FastAPI):
         aliases=["pipeline_tool"],
     )
 
+    # ── ToolExecutorHandler — registered on runtime for distributed dispatch ──
+    from raavan.catalog.tools._tool_executor import ToolExecutorHandler
+
+    tool_executor_handler = ToolExecutorHandler(
+        tools={t.name: t for t in catalog.all_tools()},
+        tool_timeout=app.state.tool_timeout,
+        tools_requiring_approval=app.state.tools_requiring_approval,
+    )
+    # Register handler as factory — LocalRuntime uses it directly as the
+    # message handler for AgentId("tool_executor", <thread_id>).
+    await runtime.register("tool_executor", tool_executor_handler)
+
     # Typed context — new code should prefer app.state.ctx over individual attrs.
     # Existing routes continue to work via the app.state.* assignments above.
     app.state.ctx = ServerContext(
@@ -387,6 +408,7 @@ async def lifespan(app: FastAPI):
         tools_requiring_approval=app.state.tools_requiring_approval,
         system_instructions=app.state.system_instructions,
         tool_timeout=app.state.tool_timeout,
+        runtime=app.state.runtime,
         cancel_registry=app.state.cancel_registry,
         mcp_servers=app.state.mcp_servers,
         session_factory=app.state.session_factory,
@@ -401,6 +423,9 @@ async def lifespan(app: FastAPI):
     yield
 
     # ---------- SHUTDOWN ----------
+    # Runtime
+    if getattr(app.state, "runtime", None):
+        await app.state.runtime.stop()
     # Triggers
     if getattr(app.state, "trigger_scheduler", None):
         await app.state.trigger_scheduler.stop()

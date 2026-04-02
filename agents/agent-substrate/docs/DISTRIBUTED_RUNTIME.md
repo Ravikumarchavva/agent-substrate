@@ -1,13 +1,23 @@
-# Distributed Runtime — Future Plan
+# Distributed Runtime
 
-## Current State
+> **Status:** Architecture finalised. See [`DISTRIBUTED_ARCHITECTURE.md`](DISTRIBUTED_ARCHITECTURE.md) for full design
+> and [`DISTRIBUTED_IMPLEMENTATION_PLAN.md`](DISTRIBUTED_IMPLEMENTATION_PLAN.md) for phased implementation.
 
-Raavan is a **single-process** framework. Both the monolith (`server/`) and the microservices (`services/`) run agents in-process within the same Python event loop. This means:
+## Architecture Summary
 
-- All agent state lives in memory or Redis — no cross-process agent communication.
-- Sub-agents handed off via `OrchestratorAgent` run in the same event loop on the same machine.
-- If a worker process restarts mid-run, the run is lost (Redis preserves the conversation messages but not the agent's mid-loop execution state).
-- You cannot run individual agents on separate machines or scale them independently.
+**Restate** (durable execution engine) + **NATS JetStream** (real-time SSE streaming).
+Agents run as HTTP service workers, each ReAct step is checkpointed via `ctx.run()`,
+HITL uses `ctx.promise()` for zero-resource suspension, and crash recovery replays
+from the Restate journal without re-executing completed steps.
+
+## Previous State
+
+Raavan was a **single-process** framework. Both the monolith (`server/`) and the microservices (`services/`) ran agents in-process within the same Python event loop. This meant:
+
+- All agent state lived in memory or Redis — no cross-process agent communication.
+- Sub-agents handed off via `OrchestratorAgent` ran in the same event loop on the same machine.
+- If a worker process restarted mid-run, the run was lost (Redis preserved the conversation messages but not the agent's mid-loop execution state).
+- You could not run individual agents on separate machines or scale them independently.
 
 ---
 

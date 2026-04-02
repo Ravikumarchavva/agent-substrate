@@ -164,9 +164,45 @@ services:
     profiles:
       - temporal
 
+  # ── Restate (durable workflow engine — runtime backend) ────────────────
+  restate:
+    image: docker.io/restatedev/restate:latest
+    ports:
+      - "8080:8080"
+      - "9070:9070"
+      - "9071:9071"
+    volumes:
+      - restatedata:/target/restate-data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9070/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - runtime
+
+  # ── NATS (JetStream for event streaming — runtime backend) ────────────
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--jetstream", "--store_dir=/data", "-m", "8222"]
+    volumes:
+      - natsdata:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - runtime
+
 volumes:
   pgdata:
   redisdata:
   miniodata:
   kafkadata:
   temporaldata:
+  restatedata:
+  natsdata:

@@ -19,6 +19,8 @@ from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.memory.base_memory import BaseMemory
 from raavan.core.memory.memory_scope import MemoryScope
 from raavan.core.guardrails.base_guardrail import BaseGuardrail
+from raavan.core.runtime._protocol import AgentId, AgentRuntime
+from raavan.core.runtime._types import MessageContext
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +59,9 @@ class BaseAgent(ABC):
         output_guardrails: Optional[List[BaseGuardrail]] = None,
         # Prompt enrichment (replaces skill_manager / skill_dirs coupling)
         prompt_enricher: Optional[PromptEnricher] = None,
+        # Runtime — makes the agent distributable
+        runtime: Optional[AgentRuntime] = None,
+        agent_id: Optional[AgentId] = None,
     ):
         self.name = name
         self.description = description
@@ -69,6 +74,8 @@ class BaseAgent(ABC):
         self.input_guardrails = input_guardrails or []
         self.output_guardrails = output_guardrails or []
         self.prompt_enricher: Optional[PromptEnricher] = prompt_enricher
+        self.runtime: Optional[AgentRuntime] = runtime
+        self.agent_id: Optional[AgentId] = agent_id
 
     def get_effective_system_prompt(self) -> str:
         """Return the system prompt, enriched by prompt_enricher if set."""
@@ -89,6 +96,15 @@ class BaseAgent(ABC):
         ...
 
     # -- Helpers --------------------------------------------------------------
+
+    async def handle_message(self, ctx: MessageContext, payload: Any) -> Any:
+        """Adapter that makes this agent a valid ``MessageHandler``.
+
+        Default implementation calls ``self.run()`` and returns the output.
+        Subclasses may override for streaming or custom routing.
+        """
+        result = await self.run(str(payload))
+        return result.output
 
     async def reset(self) -> None:
         """Clear memory and return agent to initial state."""

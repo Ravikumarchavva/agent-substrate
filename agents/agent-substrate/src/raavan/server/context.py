@@ -20,6 +20,7 @@ from typing import Any, Optional
 from fastapi import Request
 
 from raavan.integrations.memory.redis_memory import RedisMemory
+from raavan.core.runtime import AgentRuntime
 from raavan.core.storage.base import FileStore
 from raavan.core.tools.catalog import CapabilityRegistry
 from raavan.integrations.llm.openai.openai_client import OpenAIClient
@@ -53,6 +54,7 @@ class ServerContext:
     tools_requiring_approval: list[str]
     system_instructions: str
     tool_timeout: float
+    runtime: Optional[AgentRuntime] = None
     cancel_registry: dict[str, Any] = field(default_factory=dict)
     thread_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     mcp_servers: dict[str, dict] = field(default_factory=dict)

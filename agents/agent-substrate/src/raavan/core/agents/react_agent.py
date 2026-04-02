@@ -27,6 +27,7 @@ from uuid import uuid4
 from opentelemetry.trace import Status, StatusCode
 
 from raavan.core.agents.base_agent import BaseAgent
+from raavan.core.runtime._protocol import AgentId, AgentRuntime
 from raavan.core.agents.agent_result import (
     AgentRunResult,
     AggregatedUsage,
@@ -144,6 +145,9 @@ class ReActAgent(BaseAgent):
         # Skills
         skill_dirs: Optional[List[str]] = None,
         skill_manager: Optional[SkillManager] = None,
+        # Runtime
+        runtime: Optional[AgentRuntime] = None,
+        agent_id: Optional[AgentId] = None,
     ):
         provided_tools = list(tools or [])
 
@@ -184,6 +188,8 @@ class ReActAgent(BaseAgent):
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
             prompt_enricher=_skill_manager,
+            runtime=runtime,
+            agent_id=agent_id,
         )
         # Narrow type: self.memory is always non-None in ReActAgent.
         self.memory: BaseMemory = _resolved_memory
@@ -628,6 +634,19 @@ class ReActAgent(BaseAgent):
         self._reset_tool_activation_state()
         run_id = str(uuid4())
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
+
+        # Optional: publish chunks to a topic for remote subscribers
+        _stream_pub = None
+        if self.runtime is not None and self.agent_id is not None:
+            from raavan.core.runtime._stream import StreamPublisher
+            from raavan.core.runtime._protocol import TopicId
+
+            _stream_pub = StreamPublisher(
+                self.runtime,
+                TopicId(type="stream", source=self.agent_id.key),
+                sender=self.agent_id,
+            )
+
         with global_tracer.start_span("agent_run_stream", attrs):
             global_metrics.increment_counter("agent_runs", tags={"name": self.name})
             if self.verbose:
@@ -664,6 +683,8 @@ class ReActAgent(BaseAgent):
                     ),
                     metadata={"guardrail_tripped": True, "guardrail": e.guardrail_name},
                 )
+                if _stream_pub is not None:
+                    await _stream_pub.close("guardrail_tripped")
                 return
 
             for step_num in range(1, self.max_iterations + 1):
@@ -700,6 +721,8 @@ class ReActAgent(BaseAgent):
                             ):
                                 # Yield the chunk to user
                                 yield chunk
+                                if _stream_pub is not None:
+                                    await _stream_pub.emit(chunk)
 
                                 # Track partial text and final completion
                                 if isinstance(chunk, TextDeltaChunk):
@@ -782,7 +805,11 @@ class ReActAgent(BaseAgent):
                                     "guardrail": e.guardrail_name,
                                 },
                             )
+                            if _stream_pub is not None:
+                                await _stream_pub.close("guardrail_tripped")
                             return
+                        if _stream_pub is not None:
+                            await _stream_pub.close()
                         break
 
                     # ACT — execute tools
@@ -843,11 +870,15 @@ class ReActAgent(BaseAgent):
                                 )
                                 await self.memory.add_message(tool_msg)
                                 yield tool_msg
+                                if _stream_pub is not None:
+                                    await _stream_pub.emit(tool_msg)
 
                             if not tool_blocked:
                                 _, tool_msg = await self._execute_tool(parsed, step_num)
                                 await self.memory.add_message(tool_msg)
                                 yield tool_msg
+                                if _stream_pub is not None:
+                                    await _stream_pub.emit(tool_msg)
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
@@ -1065,6 +1096,14 @@ class ReActAgent(BaseAgent):
                 },
             )
 
+            # ── RUNTIME DISPATCH PATH ────────────────────────────────
+            # When a runtime is available, delegate to ToolExecutorHandler
+            # running as a separate actor. This enables distributed and
+            # durable tool execution via pluggable runtime backends.
+            if self.runtime is not None and self.agent_id is not None:
+                return await self._execute_tool_via_runtime(parsed, step_num, t0, span)
+
+            # ── DIRECT EXECUTION PATH (no runtime) ───────────────────
             # Find tool
             tool = self._find_tool(parsed.name)
 
@@ -1339,6 +1378,100 @@ class ReActAgent(BaseAgent):
             is_error=True,
             duration_ms=duration_ms,
         )
+        return record, tool_msg
+
+    async def _execute_tool_via_runtime(
+        self,
+        parsed: _ParsedToolCall,
+        step_num: int,
+        t0: float,
+        span: Any,
+    ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
+        """Dispatch tool execution through the agent runtime.
+
+        Sends a message to ``AgentId("tool_executor", <thread_key>)``
+        and converts the response dict back into the expected return types.
+        """
+        assert self.runtime is not None
+        assert self.agent_id is not None
+
+        payload = {
+            "tool_name": parsed.name,
+            "arguments": parsed.arguments,
+            "call_id": parsed.call_id,
+        }
+
+        # Check if the tool declares a custom agent_id for routing
+        tool = self._find_tool(parsed.name)
+        target_agent_id = getattr(tool, "agent_id", None)
+        if target_agent_id is None:
+            target_agent_id = AgentId("tool_executor", self.agent_id.key)
+
+        try:
+            response = await self.runtime.send_message(
+                payload,
+                sender=self.agent_id,
+                recipient=target_agent_id,
+            )
+        except Exception as exc:
+            result = self._tool_error(
+                parsed,
+                step_num,
+                t0,
+                span,
+                f"Runtime dispatch failed: {exc}",
+                "tool_runtime_errors",
+            )
+            await self.hooks.dispatch(
+                HookEvent.TOOL_END,
+                {
+                    "event": "on_tool_end",
+                    "agent_name": self.name,
+                    "tool_name": parsed.name,
+                    "is_error": True,
+                    "error": str(exc),
+                    "duration_ms": (time.monotonic() - t0) * 1000,
+                },
+            )
+            return result
+
+        # Parse response dict from ToolExecutorHandler
+        duration_ms = (time.monotonic() - t0) * 1000
+        is_error = response.get("is_error", False)
+
+        content = response.get("content", [])
+        tool_msg = ToolExecutionResultMessage(
+            content=content,
+            tool_call_id=parsed.call_id,
+            name=parsed.name,
+            is_error=is_error,
+        )
+        if response.get("app_data"):
+            tool_msg.app_data = response["app_data"]
+
+        record = ToolCallRecord(
+            tool_name=parsed.name,
+            call_id=parsed.call_id,
+            arguments=parsed.arguments,
+            result=self._content_to_str(content),
+            is_error=is_error,
+            duration_ms=duration_ms,
+        )
+
+        self._activate_tool_names([parsed.name])
+
+        await self.hooks.dispatch(
+            HookEvent.TOOL_END,
+            {
+                "event": "on_tool_end",
+                "agent_name": self.name,
+                "tool_name": parsed.name,
+                "is_error": is_error,
+                "duration_ms": duration_ms,
+                "step": step_num,
+            },
+        )
+
         return record, tool_msg
 
     def _find_tool(self, name: str) -> Optional[Any]:

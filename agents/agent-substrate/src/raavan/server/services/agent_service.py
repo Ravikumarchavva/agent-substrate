@@ -48,6 +48,7 @@ from raavan.core.messages.client_messages import (
 )
 from raavan.core.messages.base_message import BaseClientMessage
 from raavan.core.llm.base_client import BaseModelClient
+from raavan.core.runtime import AgentId, AgentRuntime
 from raavan.core.tools.base_tool import BaseTool
 
 from raavan.server.services import (
@@ -152,6 +153,8 @@ def create_agent_for_thread(
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
+    runtime: Optional[AgentRuntime] = None,
+    agent_id: Optional[AgentId] = None,
 ) -> ReActAgent:
     """Create a ReActAgent with pre-loaded per-session memory.
 
@@ -191,6 +194,10 @@ def create_agent_for_thread(
         kwargs["tools_requiring_approval"] = tools_requiring_approval
     if tool_timeout is not None:
         kwargs["tool_timeout"] = tool_timeout
+    if runtime is not None:
+        kwargs["runtime"] = runtime
+    if agent_id is not None:
+        kwargs["agent_id"] = agent_id
     return ReActAgent(**kwargs)
 
 
@@ -209,6 +216,7 @@ async def load_agent_for_thread(
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
+    runtime: Optional[AgentRuntime] = None,
 ) -> ReActAgent:
     """Load a per-session agent whose history comes from Redis (hot) or Postgres (cold).
 
@@ -300,6 +308,8 @@ async def load_agent_for_thread(
         tools_requiring_approval=tools_requiring_approval,
         tool_timeout=tool_timeout,
         max_input_tokens=max_input_tokens,
+        runtime=runtime,
+        agent_id=AgentId("chat_agent", session_id) if runtime else None,
     )
     return agent
 

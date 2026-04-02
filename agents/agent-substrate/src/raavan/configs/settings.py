@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     # Max upload size in bytes (default 200 MB)
     FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
 
+    # ── Distributed Runtime (Restate + NATS) ─────────────────────────────
+    RESTATE_INGRESS_URL: str = "http://localhost:8080"
+    RESTATE_ADMIN_URL: str = "http://localhost:9070"
+    NATS_URL: str = "nats://localhost:4222"
+
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
         env_file_encoding="utf-8",

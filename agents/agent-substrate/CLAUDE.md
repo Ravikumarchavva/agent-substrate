@@ -490,6 +490,7 @@ Tests pod health, endpoints, chat flow, and observability stack.
 
 ## Coding Standards
 
+- **No backward compatibility** — never add shims, deprecation warnings, or legacy code paths unless explicitly requested. Delete old code, rename cleanly, break APIs freely.
 - **Async everywhere** — every handler, service method, tool `execute()`, DB call is `async def`
 - **`from __future__ import annotations`** at the top of every file
 - **Type-annotate everything** — no untyped arguments or return values

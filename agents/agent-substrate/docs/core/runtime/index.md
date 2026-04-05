@@ -414,8 +414,14 @@ You type *"Summarise the latest AI news"* and hit send. Here is every hop.
     The API route calls `RestateWorkflowClient.start_agent_workflow()`.
     The Client serialises the payload and `POST`s it to Restate's ingress. It returns a `workflow_id` immediately.
 
-    ```
-    Browser → API route → Client → Restate ingress
+    ```mermaid
+    graph LR
+        B["Browser"] --> R["API Route"]
+        R --> C["Client"]
+        C --> RS["Restate ingress"]
+        RS -.->|"workflow_id (immediate)"| C
+        C -.-> R
+        style RS fill:#2b1a0d,stroke:#fb923c,color:#e2ecff
     ```
 
     ```python
@@ -432,8 +438,13 @@ You type *"Summarise the latest AI news"* and hit send. Here is every hop.
 
     Restate routes the message to `AgentWorkflow.agent_run()` based on the service name in the URL. The journal for this workflow is created. From this moment on, every step that completes is recorded.
 
-    ```
-    Restate ingress → Restate App → AgentWorkflow.agent_run()
+    ```mermaid
+    graph LR
+        RS["Restate ingress"] --> RA["Restate App\n(URL → service mapping)"]
+        RA --> WF["AgentWorkflow\nagent_run()"]
+        WF --> J[("Journal\ncreated")]
+        style J fill:#0d2b2b,stroke:#2dd4bf,color:#e2ecff
+        style WF fill:#1a1a2e,stroke:#818cf8,color:#e2ecff
     ```
 
 === "Step 3 — Memory restore"
@@ -449,6 +460,18 @@ You type *"Summarise the latest AI news"* and hit send. Here is every hop.
 === "Step 4 — Think"
 
     The thinker sends the history + tool schemas to Activities to call the LLM. Activities calls `model_client.generate()`, streams `text_delta` events to the frontend via NATS, and returns the LLM response. Journaled.
+
+    ```mermaid
+    flowchart LR
+        H["Message history\n+ tool schemas"] --> LLM["LLM\nmodel_client.generate()"]
+        LLM --> FE["SSE text_delta\n→ Frontend"]
+        LLM --> D{Response type?}
+        D -->|"tool_calls"| TC["➡ Step 5 — Act"]
+        D -->|"text only"| FIN["✅ Step 6 — Complete"]
+        style LLM fill:#1a1a2e,stroke:#818cf8,color:#e2ecff
+        style FIN fill:#1a2b1a,stroke:#4ade80,color:#e2ecff
+        style TC  fill:#2b1a0d,stroke:#fb923c,color:#e2ecff
+    ```
 
     ```python
     llm_result = await ctx.run(f"llm_call",

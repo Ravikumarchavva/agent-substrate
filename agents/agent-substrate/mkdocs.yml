@@ -164,6 +164,13 @@ nav:
     - Runtime:
       - The Runtime: core/runtime/index.md
       - Scaling Out: core/runtime/scaling.md
+    - Agents: core/agents/index.md
+    - Tools: core/tools/index.md
+    - Memory: core/memory/index.md
+    - Context: core/context/index.md
+    - LLM Client: core/llm/index.md
+    - Guardrails: core/guardrails/index.md
+    - Messages: core/messages/index.md
 
   - Deploy:
     - Overview: deploy/index.md

@@ -12,8 +12,8 @@ copyright: Copyright &copy; 2024–2026 Ravikumar Chavva
 # ── Theme ────────────────────────────────────────────────────────────────────
 theme:
   name: material
-  logo: public/diagrams/ai-agent.svg
-  favicon: public/diagrams/ai-agent.svg
+  logo: public/brand/raavan-mark.svg
+  favicon: public/brand/raavan-mark.svg
   palette:
     # System-preference aware
     - media: "(prefers-color-scheme: dark)"
@@ -64,6 +64,7 @@ plugins:
             members_order: source
   - git-revision-date-localized:
       enable_creation_date: true
+      enable_git_follow: false
       type: timeago
   - minify:
       minify_html: true
@@ -142,21 +143,52 @@ extra:
 nav:
   - Home: index.md
 
+  - Getting Started:
+    - Overview: getting-started/index.md
+    - Installation: getting-started/installation.md
+    - Quickstart: getting-started/quickstart.md
+    - First Durable Run: getting-started/first-runtime.md
+    - Troubleshooting: getting-started/troubleshooting.md
+
+  - Tutorials:
+    - Overview: tutorials/index.md
+    - Create A Tool: tutorials/create-tool.md
+    - Add HITL Approval: tutorials/hitl-approval.md
+    - Connect MCP Tools: tutorials/mcp-tools.md
+
+  - Concepts:
+    - Overview: concepts/index.md
+    - Agent Lifecycle: concepts/agent-lifecycle.md
+    - Tools And HITL: concepts/tools-and-hitl.md
+    - Memory And Context: concepts/memory-and-context.md
+    - Streaming And Events: concepts/streaming-and-events.md
+    - Durable Runtime: concepts/durable-runtime.md
+
+  - Deploy:
+    - Overview: deploy/index.md
+    - Local And Kind: deploy/local-and-kind.md
+    - Microservices: deploy/microservices.md
+
+  - Operate:
+    - Overview: operate/index.md
+    - Observability: operate/observability.md
+    - Runbook: operate/runbook.md
+
+  - Reference:
+    - Overview: reference/index.md
+    - Configuration: reference/configuration.md
+    - Events: reference/events.md
+    - Message Model: reference/message-model.md
+
   - Architecture:
-    - Distributed Architecture: DISTRIBUTED_ARCHITECTURE.md
-    - Execution Pipeline: execution_pipeline.md
-    - Distributed Runtime: DISTRIBUTED_RUNTIME.md
-    - Architecture Diagrams: ARCHITECTURE_DIAGRAMS.md
-    - Distributed Implementation Plan: DISTRIBUTED_IMPLEMENTATION_PLAN.md
+    - Overview: architecture/index.md
+    - Diagrams: architecture/diagrams.md
+    - Legacy Deep Dives: architecture/legacy-deep-dives.md
 
-  - Design And Operations:
-    - Design Patterns: design_patterns.md
-    - Future UI: FUTURE_UI.md
-    - Operations: OPERATIONS.md
+  - Examples: examples/index.md
+  - Archive: archive/index.md
 
-  - Microservices:
-    - Overview: microservices/README.md
-    - Topology And Service Catalog: microservices/01-topology-and-service-catalog.md
-    - Role And Responsibility Matrix: microservices/02-role-and-responsibility-matrix.md
-    - Data Ownership And Contract Standards: microservices/03-data-ownership-and-contract-standards.md
-    - Implementation Waves: microservices/04-implementation-waves.md
+  - GitHub:
+    - Repository: https://github.com/Ravikumarchavva/raavan
+    - Notebooks: https://github.com/Ravikumarchavva/raavan/tree/main/examples
+    - Frontend UI: https://github.com/Ravikumarchavva/raavan-ui

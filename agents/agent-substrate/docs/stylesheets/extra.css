@@ -1,9 +1,9 @@
 /* ── Custom styles for Raavan docs ── */
 
-/* Logo: always white on teal primary header */
+/* Logo: remove forced white — SVG now uses orange (#F97316) + white nodes */
 .md-header .md-logo img,
 .md-header .md-logo svg {
-  filter: brightness(0) invert(1);
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.4));
 }
 
 /* Hero section on landing page */

@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raavan Runtime Explorer</title>
+<style>
+/* === SINGLE DARK THEME ONLY === */
+:root {
+  --bg:       #0a1628;
+  --surf:     #0f1e35;
+  --surf2:    #152540;
+  --surf3:    #1b2e4e;
+  --text:     #e2ecff;
+  --text2:    #8daacf;
+  --muted:    #5b789c;
+  --border:   #1e3154;
+  --line:     #2c4a72;
+  --c-entry:  #38bdf8;
+  --c-wf:     #a78bfa;
+  --c-exec:   #34d399;
+  --c-ctrl:   #fb923c;
+  --g-entry:  rgba(56,189,248,0.14);
+  --g-wf:     rgba(167,139,250,0.14);
+  --g-exec:   rgba(52,211,153,0.14);
+  --g-ctrl:   rgba(251,146,60,0.14);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:"Segoe UI",Inter,-apple-system,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ─── LAYOUT ─────────────────────────────────────────────── */
+.shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ─── HEADER ─────────────────────────────────────────────── */
+.hdr{
+  background:var(--surf);
+  border-bottom:1px solid var(--border);
+  padding:16px 22px 0;
+  flex-shrink:0;
+}
+.eyebrow{
+  font-size:10px;font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:4px;
+}
+.hdr h1{font-size:20px;font-weight:800;letter-spacing:-.02em;margin-bottom:5px}
+.hdr p{font-size:12.5px;color:var(--text2);line-height:1.5;max-width:700px}
+.hdr code{
+  font-family:Consolas,"Cascadia Code",monospace;font-size:11px;
+  background:var(--surf2);border:1px solid var(--border);
+  border-radius:4px;padding:1px 5px;color:var(--c-entry);
+}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:12px 0 0}
+.litem{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted)}
+.ldot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ─── TABS ───────────────────────────────────────────────── */
+.tabs{
+  display:flex;gap:2px;margin-top:14px;
+  overflow-x:auto;scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  flex-shrink:0;padding:7px 18px;
+  background:transparent;border:none;cursor:pointer;
+  font-size:12px;font-weight:700;color:var(--muted);
+  border-bottom:3px solid transparent;
+  border-radius:5px 5px 0 0;
+  transition:color .13s,background .13s,border-color .13s;
+  margin-bottom:-1px;
+}
+.tab:hover{background:var(--surf2);color:var(--text)}
+.tab.on{color:var(--text);background:var(--surf2);border-bottom-color:var(--tc,var(--c-entry))}
+
+/* ─── BODY SPLIT ─────────────────────────────────────────── */
+.body{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 360px;
+  flex:1;overflow:hidden;
+}
+@media(max-width:1080px){
+  .body{grid-template-columns:1fr}
+  .side{border-left:none;border-top:1px solid var(--border);max-height:44vh}
+}
+
+/* ─── DIAGRAM SCROLL ─────────────────────────────────────── */
+.diag{
+  overflow:auto;padding:18px;background:var(--bg);
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
+
+/* ─── BOARD ──────────────────────────────────────────────── */
+.board{
+  position:relative;
+  width:960px;min-width:960px;height:680px;
+  background:var(--surf);
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:0 4px 32px rgba(0,0,0,.45);
+}
+
+/* ─── ZONES ──────────────────────────────────────────────── */
+.zone{
+  position:absolute;
+  border:1px dashed rgba(94,135,172,.3);
+  border-radius:12px;
+  background:rgba(15,30,53,.38);
+}
+.zlbl{
+  position:absolute;top:8px;left:12px;
+  font-size:9px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);
+}
+
+/* ─── SVG ────────────────────────────────────────────────── */
+.links{
+  position:absolute;inset:0;
+  pointer-events:none;width:960px;height:680px;
+}
+
+/* ─── NODES ──────────────────────────────────────────────── */
+.node{
+  position:absolute;
+  background:var(--surf2);
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  padding:11px 13px 13px;
+  cursor:pointer;text-align:left;
+  transition:transform .16s cubic-bezier(.2,.8,.3,1),
+             border-color .16s,
+             box-shadow .16s,
+             opacity .2s;
+}
+.node:hover{
+  transform:translateY(-3px);
+  border-color:var(--nc,var(--border));
+  box-shadow:0 0 0 3px var(--ng,transparent),0 8px 28px rgba(0,0,0,.5);
+}
+.node.active{
+  transform:translateY(-4px);
+  border-color:var(--nc);
+  box-shadow:0 0 0 4px var(--ng),0 10px 32px rgba(0,0,0,.6);
+  background:var(--surf3);
+}
+/* dim: other actors fade but remain readable */
+.node.dim{opacity:.35;transform:none !important;pointer-events:none;filter:grayscale(.5)}
+/* hi: actor involved in scenario (not current step) */
+.node.hi{
+  opacity:1;
+  border-color:var(--nc);
+  box-shadow:0 0 0 2px var(--ng);
+}
+/* step: actor in the currently selected step */
+.node.step{
+  opacity:1;
+  transform:translateY(-4px);
+  border-color:var(--nc);
+  box-shadow:0 0 0 5px var(--ng),0 10px 32px rgba(0,0,0,.6);
+  background:var(--surf3);
+}
+
+.ntag{
+  font-size:9px;font-weight:800;letter-spacing:.07em;
+  text-transform:uppercase;
+  color:var(--nc,var(--muted));
+  margin-bottom:5px;
+}
+.nname{
+  font-size:12.5px;font-weight:800;
+  line-height:1.2;margin-bottom:4px;
+  color:var(--text);
+}
+.ndesc{
+  font-size:11px;line-height:1.4;color:var(--text2);
+}
+
+/* ─── SIDE PANEL ─────────────────────────────────────────── */
+.side{
+  border-left:1px solid var(--border);
+  background:var(--surf);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.side-inner{
+  flex:1;overflow-y:auto;padding:18px 16px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
+.peyebrow{
+  font-size:9.5px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:5px;
+}
+.ptitle  {font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:8px}
+.psummary{font-size:12.5px;color:var(--text2);line-height:1.6}
+.psec{margin-top:15px;padding-top:14px;border-top:1px solid var(--border)}
+.psec h3{
+  font-size:9.5px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:7px;
+}
+.psec ul{padding-left:16px}
+.psec li{font-size:12px;line-height:1.55;margin-bottom:5px;color:var(--text)}
+.pfile{
+  display:flex;align-items:center;gap:8px;
+  background:var(--surf2);border:1px solid var(--border);border-radius:8px;
+  padding:8px 10px;text-decoration:none;
+  font-family:Consolas,"Cascadia Code",monospace;
+  font-size:11px;color:var(--text2);
+  word-break:break-all;
+  transition:border-color .13s,color .13s;
+}
+.pfile:hover{border-color:var(--c-entry);color:var(--text)}
+.pfile svg{flex-shrink:0}
+
+/* code block */
+.codeblock{
+  position:relative;
+  background:#0a1628;
+  border:1px solid var(--border);
+  border-radius:10px;overflow:hidden;margin-top:5px;
+}
+.codeblock pre{
+  padding:12px 14px;overflow-x:auto;margin:0;
+  font-family:Consolas,"Cascadia Code",monospace;
+  font-size:11px;line-height:1.65;color:var(--text2);
+  scrollbar-width:thin;
+}
+.cbtn{
+  position:absolute;top:7px;right:8px;
+  background:var(--surf2);border:1px solid var(--border);border-radius:5px;
+  padding:2px 8px;font-size:9.5px;font-weight:700;
+  color:var(--muted);cursor:pointer;
+  transition:color .12s,border-color .12s;
+}
+.cbtn:hover{color:var(--text);border-color:var(--c-entry)}
+.cbtn.ok{color:var(--c-exec);border-color:var(--c-exec)}
+
+/* syntax highlighting */
+.kw{color:var(--c-wf);font-weight:600}
+.fn{color:var(--c-entry)}
+.st{color:var(--c-exec)}
+.cm{color:var(--muted);font-style:italic}
+.cl{color:var(--c-ctrl);font-weight:600}
+.nu{color:var(--c-ctrl)}
+code{
+  font-family:Consolas,"Cascadia Code",monospace;
+  font-size:11px;background:var(--surf2);
+  border:1px solid var(--border);border-radius:4px;
+  padding:1px 5px;color:var(--text2);
+}
+
+/* step list */
+.slist{list-style:none}
+.sitem{
+  display:flex;gap:10px;padding:7px 6px;
+  border-radius:8px;cursor:pointer;
+  transition:background .12s;align-items:flex-start;
+}
+.sitem:hover{background:var(--surf2)}
+.sitem.on{background:var(--surf3)}
+.snum{
+  flex-shrink:0;width:20px;height:20px;border-radius:50%;
+  background:var(--surf3);border:1.5px solid var(--border);
+  font-size:9.5px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);margin-top:1px;
+}
+.sitem.on .snum{
+  background:var(--scolor,var(--c-entry));
+  border-color:var(--scolor,var(--c-entry));
+  color:#fff;
+}
+.sbody strong{display:block;font-size:12px;margin-bottom:2px;color:var(--text)}
+.sbody span   {font-size:11.5px;color:var(--text2);line-height:1.5}
+
+/* empty state */
+.empty{color:var(--text2);font-size:12.5px;line-height:1.7}
+.sug{list-style:none}
+.sug li{padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)}
+.sug li:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="eyebrow">Raavan Core</div>
+  <h1>Restate Runtime Explorer</h1>
+  <p>Scoped to <code>src/raavan/integrations/runtime/restate/</code>. Click any actor to inspect it, or pick a scenario tab to trace an execution flow step by step.</p>
+  <div class="legend">
+    <div class="litem"><span class="ldot" style="background:var(--c-entry)"></span>Entry / Control</div>
+    <div class="litem"><span class="ldot" style="background:var(--c-wf)"></span>Durable Workflows</div>
+    <div class="litem"><span class="ldot" style="background:var(--c-exec)"></span>Execution Layer</div>
+    <div class="litem"><span class="ldot" style="background:var(--c-ctrl)"></span>HITL / Policy</div>
+  </div>
+  <nav class="tabs">
+    <button class="tab on"  data-s="all"      style="--tc:var(--c-entry)">All Actors</button>
+    <button class="tab"     data-s="agent"     style="--tc:var(--c-entry)">Agent Run</button>
+    <button class="tab"     data-s="hitl"      style="--tc:var(--c-ctrl)" >HITL Approval</button>
+    <button class="tab"     data-s="pipeline"  style="--tc:var(--c-wf)"   >Pipeline Run</button>
+  </nav>
+</div>
+
+<!-- BODY -->
+<div class="body">
+
+  <!-- DIAGRAM -->
+  <div class="diag">
+    <div class="board" id="board">
+
+      <!-- Zones -->
+      <div class="zone" style="left:16px;top:20px;width:238px;height:250px"><div class="zlbl">Entry + Transport</div></div>
+      <div class="zone" style="left:271px;top:20px;width:673px;height:250px"><div class="zlbl">Durable Workflow Layer</div></div>
+      <div class="zone" style="left:16px;top:287px;width:928px;height:164px"><div class="zlbl">Execution Layer</div></div>
+      <div class="zone" style="left:16px;top:468px;width:928px;height:196px"><div class="zlbl">Control + Wait State</div></div>
+
+      <!-- SVG arrows -->
+      <svg class="links" viewBox="0 0 960 680" aria-hidden="true">
+        <defs>
+          <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,1 L7,4 L0,7" stroke="var(--line)" stroke-width="1.5" fill="none"/>
+          </marker>
+        </defs>
+        <!-- client → restate app -->
+        <line x1="216" y1="100" x2="280" y2="100" stroke="var(--line)" stroke-width="2" marker-end="url(#ah)"/>
+        <!-- agent ↓ activities -->
+        <path d="M487 148 C487 210 440 278 435 320" stroke="var(--line)" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+        <!-- pipeline ↓ activities -->
+        <path d="M641 148 C638 218 490 295 455 320" stroke="var(--line)" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+        <!-- chain ↓ activities -->
+        <path d="M797 148 C794 232 554 310 473 320" stroke="var(--line)" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+        <!-- worker → activities -->
+        <line x1="216" y1="368" x2="360" y2="368" stroke="var(--line)" stroke-width="2" marker-end="url(#ah)"/>
+        <!-- activities → toolpolicy -->
+        <line x1="524" y1="368" x2="600" y2="368" stroke="var(--line)" stroke-width="2" marker-end="url(#ah)"/>
+        <!-- activities ↓ promise gate -->
+        <path d="M415 451 C410 490 220 510 160 530" stroke="var(--line)" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+        <!-- activities ↓ promise resolver -->
+        <path d="M465 451 C468 492 508 510 512 530" stroke="var(--line)" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+        <!-- gate → resolver -->
+        <line x1="248" y1="572" x2="428" y2="572" stroke="var(--line)" stroke-width="2" marker-end="url(#ah)"/>
+        <!-- resolver returns (dashed) -->
+        <line x1="610" y1="564" x2="808" y2="564" stroke="var(--line)" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+      </svg>
+
+      <!-- NODES -->
+      <button class="node" data-id="workflow-client" style="left:36px;top:56px;width:178px;--nc:var(--c-entry);--ng:var(--g-entry)">
+        <div class="ntag">Entry</div>
+        <div class="nname">RestateWorkflowClient</div>
+        <div class="ndesc">HTTP client for dispatch, query, cancel, and promise resolution.</div>
+      </button>
+
+      <button class="node" data-id="runtime" style="left:36px;top:168px;width:178px;--nc:var(--c-entry);--ng:var(--g-entry)">
+        <div class="ntag">Transport</div>
+        <div class="nname">RestateRuntime</div>
+        <div class="ndesc">Remote adapter for durable agent-to-agent dispatch.</div>
+      </button>
+
+      <button class="node" data-id="restate-app" style="left:286px;top:56px;width:144px;--nc:var(--c-wf);--ng:var(--g-wf)">
+        <div class="ntag">Host</div>
+        <div class="nname">Restate App</div>
+        <div class="ndesc">ASGI surface exposing workflow services.</div>
+      </button>
+
+      <button class="node" data-id="agent-workflow" style="left:444px;top:56px;width:152px;--nc:var(--c-wf);--ng:var(--g-wf)">
+        <div class="ntag">Workflow</div>
+        <div class="nname">AgentWorkflow</div>
+        <div class="ndesc">Durable ReAct loop with HITL wait states.</div>
+      </button>
+
+      <button class="node" data-id="pipeline-workflow" style="left:608px;top:56px;width:152px;--nc:var(--c-wf);--ng:var(--g-wf)">
+        <div class="ntag">Workflow</div>
+        <div class="nname">PipelineWorkflow</div>
+        <div class="ndesc">Checkpointed sequential adapter execution.</div>
+      </button>
+
+      <button class="node" data-id="chain-workflow" style="left:772px;top:56px;width:152px;--nc:var(--c-wf);--ng:var(--g-wf)">
+        <div class="ntag">Workflow</div>
+        <div class="nname">ChainWorkflow</div>
+        <div class="ndesc">Durable wrapper around code-chain execution.</div>
+      </button>
+
+      <button class="node" data-id="worker" style="left:36px;top:320px;width:178px;--nc:var(--c-exec);--ng:var(--g-exec)">
+        <div class="ntag">Bootstrap</div>
+        <div class="nname">Worker</div>
+        <div class="ndesc">DI wiring, tool scanning, deployment registration, uvicorn host.</div>
+      </button>
+
+      <button class="node" data-id="activities" style="left:360px;top:320px;width:162px;--nc:var(--c-exec);--ng:var(--g-exec)">
+        <div class="ntag">Execution</div>
+        <div class="nname">Activities</div>
+        <div class="ndesc">Journaled side-effect functions behind every workflow step.</div>
+      </button>
+
+      <button class="node" data-id="tool-policy" style="left:600px;top:320px;width:162px;--nc:var(--c-ctrl);--ng:var(--g-ctrl)">
+        <div class="ntag">Policy</div>
+        <div class="nname">ToolPolicy</div>
+        <div class="ndesc">Timeout, approval, retry, and idempotency rules per tool.</div>
+      </button>
+
+      <button class="node" data-id="promise-gate" style="left:72px;top:524px;width:170px;--nc:var(--c-ctrl);--ng:var(--g-ctrl)">
+        <div class="ntag">Wait State</div>
+        <div class="nname">Promise Gate</div>
+        <div class="ndesc">Durable suspension point for HITL approval and human input.</div>
+      </button>
+
+      <button class="node" data-id="promise-resolver" style="left:428px;top:524px;width:176px;--nc:var(--c-ctrl);--ng:var(--g-ctrl)">
+        <div class="ntag">Resolver</div>
+        <div class="nname">Promise Resolver</div>
+        <div class="ndesc">External callback that resumes a suspended workflow.</div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <aside class="side">
+    <div class="side-inner" id="panel"></div>
+  </aside>
+
+</div><!-- /body -->
+</div><!-- /shell -->
+
+<script>
+const REPO = "https://github.com/Ravikumarchavva/raavan/blob/main/";
+
+// ────────────────────────────────────────────────────────────
+//  ACTOR DATA
+// ────────────────────────────────────────────────────────────
+const actors = {
+  "workflow-client": {
+    title:"RestateWorkflowClient", color:"var(--c-entry)",
+    file:"src/raavan/integrations/runtime/restate/client.py",
+    summary:"Thin HTTP wrapper around Restate ingress and admin APIs. The single entry-point for dispatching a workflow, querying its state, cancelling it, or resolving an external promise.",
+    why:"Keeps Restate HTTP details out of routes, services, and higher-level callers. Any code that needs to trigger or interact with a durable run goes through this client.",
+    receives:["start_agent_workflow(thread_id, user_content, claims, model, ...)","start_pipeline_workflow(name, definition, thread_id)","start_chain_workflow(code, timeout)","query_workflow(workflow_id)","cancel_workflow(workflow_id)","resolve_promise(workflow_id, promise_name, value)"],
+    sends:["HTTP POST → Restate ingress /run or /send","HTTP calls → admin API for deployment registration","Blocking HTTP result when get_result() is awaited"],
+    methods:["connect() / disconnect()","start_agent_workflow(...) → str","start_pipeline_workflow(...)","start_chain_workflow(...)","query_workflow(wf_id) → dict","cancel_workflow(wf_id)","resolve_promise(wf_id, name, value)","register_deployment(endpoint_url)"],
+    code:`<span class="kw">from</span> raavan.integrations.runtime.restate.client <span class="kw">import</span> <span class="cl">RestateWorkflowClient</span>
+
+client = <span class="cl">RestateWorkflowClient</span>(settings)
+<span class="kw">await</span> client.<span class="fn">connect</span>()
+
+<span class="cm"># Dispatch a durable agent run</span>
+wf_id = <span class="kw">await</span> client.<span class="fn">start_agent_workflow</span>(
+    thread_id=<span class="st">"conv-abc-123"</span>,
+    user_content=<span class="st">"Summarise the latest AI news."</span>,
+    claims={<span class="st">"sub"</span>: <span class="st">"user-1"</span>},
+    model=<span class="st">"gpt-4o"</span>,
+    max_iterations=<span class="nu">12</span>,
+)
+
+<span class="cm"># Resolve a pending HITL promise</span>
+<span class="kw">await</span> client.<span class="fn">resolve_promise</span>(
+    workflow_id=wf_id,
+    promise_name=<span class="st">f"approval-{req_id}"</span>,
+    value={<span class="st">"approved"</span>: <span class="kw">True</span>},
+)`
+  },
+  "runtime": {
+    title:"RestateRuntime", color:"var(--c-entry)",
+    file:"src/raavan/integrations/runtime/restate/runtime.py",
+    summary:"Transport adapter implementing the framework BaseRuntime interface against Restate. Used when agents or orchestrators need to dispatch durable runs from inside the framework.",
+    why:"Provides runtime-facing abstraction for remote durable dispatch without leaking Restate HTTP details into agent or orchestration code.",
+    receives:["send_message(payload, sender, recipient)","resolve_promise(workflow_id, promise_name, value)","cancel_workflow(workflow_id)","start() / stop()"],
+    sends:["HTTP POST to virtual-object endpoints via _remote_send","Promise resolution to workflow endpoints","Deployment registration to admin API on startup"],
+    methods:["start()","stop()","_remote_send(endpoint, payload)","resolve_promise(wf_id, name, value)","cancel_workflow(wf_id)"],
+    code:`<span class="kw">from</span> raavan.integrations.runtime.restate.runtime <span class="kw">import</span> <span class="cl">RestateRuntime</span>
+
+runtime = <span class="cl">RestateRuntime</span>(settings)
+<span class="kw">await</span> runtime.<span class="fn">start</span>()
+
+<span class="cm"># Send a durable message between agents</span>
+<span class="kw">await</span> runtime.<span class="fn">send_message</span>(
+    payload={<span class="st">"thread_id"</span>: <span class="st">"t-abc"</span>, <span class="st">"content"</span>: <span class="st">"..."</span>},
+    sender=<span class="st">"orchestrator"</span>,
+    recipient=<span class="st">"summariser-agent"</span>,
+)
+<span class="kw">await</span> runtime.<span class="fn">stop</span>()`
+  },
+  "restate-app": {
+    title:"Restate App", color:"var(--c-wf)",
+    file:"src/raavan/integrations/runtime/restate/app.py",
+    summary:"ASGI surface built with restate.app() that wraps registered workflow services. Restate's server discovers and routes all calls through this surface.",
+    why:"The minimal serving surface Restate needs to dispatch into workflow objects with durable state, journaling, and promise semantics.",
+    receives:["Invocations routed by Restate ingress","Payloads for AgentWorkflow, PipelineWorkflow, ChainWorkflow"],
+    sends:["Execution into workflow handler functions","Durable state transitions via Restate runtime"],
+    methods:["restate.app(services=[pipeline_workflow, chain_workflow, agent_workflow])"],
+    code:`<span class="kw">import</span> restate
+<span class="kw">from</span> .workflows <span class="kw">import</span> agent_workflow, pipeline_workflow, chain_workflow
+
+<span class="cm"># ASGI app served by Worker via uvicorn</span>
+app = restate.<span class="fn">app</span>(
+    services=[
+        pipeline_workflow,
+        chain_workflow,
+        agent_workflow,
+    ]
+)`
+  },
+  "agent-workflow": {
+    title:"AgentWorkflow", color:"var(--c-wf)",
+    file:"src/raavan/integrations/runtime/restate/workflows.py",
+    summary:"Durable ReAct agent loop. Restores memory, calls the LLM, executes tools, persists results — all via journaled ctx.run() calls. Suspends on HITL gates using ctx.promise().",
+    why:"Owns the durable state machine for every agent run. Every transition is replay-safe via Restate journaling, so crashes produce the same result without re-calling external APIs.",
+    receives:["thread_id, user_content, model, max_iterations, system_instructions","Promise resolutions for approval-{id} and human-{id} wait states"],
+    sends:["ctx.run() → activities (LLM call, tool exec, persist)","ctx.promise(...).value() to suspend on HITL","Completion event via activities.publish_event(...)"],
+    methods:["agent_run(ctx, payload)","loop: restore_memory → do_llm_call → do_tool_exec → persist_tool_result","ctx.promise(name).value() — zero-resource wait state"],
+    code:`<span class="cm"># Simplified from AgentWorkflow.agent_run</span>
+<span class="kw">async def</span> <span class="fn">agent_run</span>(ctx: <span class="cl">WorkflowContext</span>, payload: dict):
+    thread_id = payload[<span class="st">"thread_id"</span>]
+
+    history = <span class="kw">await</span> ctx.<span class="fn">run</span>(<span class="st">"restore_memory"</span>,
+        activities.restore_memory, args=[thread_id])
+
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(payload[<span class="st">"max_iterations"</span>]):
+        result = <span class="kw">await</span> ctx.<span class="fn">run</span>(<span class="st">"do_llm_call"</span>,
+            activities.do_llm_call, args=[...])
+        <span class="kw">if</span> result[<span class="st">"done"</span>]: <span class="kw">break</span>
+
+        <span class="cm"># HITL: suspend — zero worker resources held</span>
+        <span class="kw">if</span> policy.requires_approval:
+            req_id = <span class="fn">str</span>(ctx.rand.<span class="fn">uuid4</span>())
+            approval = <span class="kw">await</span> ctx.<span class="fn">promise</span>(<span class="st">f"approval-{req_id}"</span>).<span class="fn">value</span>()
+            <span class="kw">if not</span> approval[<span class="st">"approved"</span>]: <span class="kw">break</span>`
+  },
+  "pipeline-workflow": {
+    title:"PipelineWorkflow", color:"var(--c-wf)",
+    file:"src/raavan/integrations/runtime/restate/workflows.py",
+    summary:"Sequential durable pipeline runner. Executes adapter steps one by one with journaled checkpoints. Only incomplete steps re-run on crash/resume.",
+    why:"Multi-step adapter chains with proper retry and checkpoint semantics without duplicating orchestration logic in application code.",
+    receives:["Pipeline definition: name, steps[], adapter_name, action, input_mapping"],
+    sends:["ctx.run() → activities.execute_adapter_step() per step","Final result with completed_steps count"],
+    methods:["pipeline_run(ctx, definition)","_resolve_refs(value, context) — resolves {{step_N.field}} template refs"],
+    code:`definition = {
+    <span class="st">"name"</span>: <span class="st">"research-pipeline"</span>,
+    <span class="st">"steps"</span>: [
+        {<span class="st">"adapter"</span>: <span class="st">"web_search"</span>, <span class="st">"action"</span>: <span class="st">"search"</span>,
+         <span class="st">"input_mapping"</span>: {<span class="st">"query"</span>: <span class="st">"{{input.topic}}"</span>}},
+        {<span class="st">"adapter"</span>: <span class="st">"llm_summariser"</span>, <span class="st">"action"</span>: <span class="st">"summarise"</span>,
+         <span class="st">"input_mapping"</span>: {<span class="st">"text"</span>: <span class="st">"{{step_0.results}}"</span>}},
+    ],
+}
+wf_id = <span class="kw">await</span> client.<span class="fn">start_pipeline_workflow</span>(
+    name=<span class="st">"research-pipeline"</span>,
+    definition=definition,
+    thread_id=<span class="st">"pipe-xyz"</span>,
+)`
+  },
+  "chain-workflow": {
+    title:"ChainWorkflow", color:"var(--c-wf)",
+    file:"src/raavan/integrations/runtime/restate/workflows.py",
+    summary:"Thin durable wrapper around code-chain execution. Delegates entirely to a single journaled activities.execute_code_chain() call with configurable timeout.",
+    why:"Durifies code-driven chains while keeping heavy work inside a single activity boundary — simple, predictable, easy to retry.",
+    receives:["params: {code, timeout} from client dispatch"],
+    sends:["ctx.run('execute_chain', activities.execute_code_chain, args=[params])"],
+    methods:["chain_run(ctx, params)"],
+    code:`wf_id = <span class="kw">await</span> client.<span class="fn">start_chain_workflow</span>(
+    code=<span class="st">"""
+import httpx
+resp = httpx.get("https://api.example.com/data")
+return resp.json()
+"""</span>,
+    timeout=<span class="nu">30</span>,
+    thread_id=<span class="st">"chain-abc"</span>,
+)`
+  },
+  "worker": {
+    title:"Worker", color:"var(--c-exec)",
+    file:"src/raavan/integrations/runtime/restate/worker.py",
+    summary:"Bootstrap entry-point. Assembles runtime dependencies, calls activities.configure() to inject them as globals, registers the deployment with Restate, then serves via uvicorn.",
+    why:"One-time dependency wiring so workflow handlers stay pure. Scan tools, create model client, connect Redis — all at startup in one place.",
+    receives:["CLI host and port args","Settings: OPENAI_API_KEY, REDIS_URL, NATS_URL, RESTATE_ADMIN_URL"],
+    sends:["Configured DI globals into activities module","Deployment registration to Restate admin API","uvicorn hosting of the Restate ASGI app"],
+    methods:["main() — CLI entry-point","_setup() — build services and wire DI","_scan_tools() — discover catalog tools","_register_with_restate(endpoint_url)","_teardown() — graceful shutdown"],
+    code:`<span class="cm"># uv run python -m raavan.integrations.runtime.restate.worker</span>
+<span class="cm">#   --host 0.0.0.0 --port 9080</span>
+
+<span class="kw">async def</span> <span class="fn">_setup</span>(self):
+    self.model_client = <span class="cl">OpenAIClient</span>(self.settings)
+    self.redis = <span class="kw">await</span> <span class="fn">create_redis</span>(self.settings.REDIS_URL)
+    self.tools = self.<span class="fn">_scan_tools</span>()
+
+    activities.<span class="fn">configure</span>(
+        model_client=self.model_client,
+        redis=self.redis,
+        tools=self.tools,
+    )
+    <span class="kw">await</span> self.<span class="fn">_register_with_restate</span>(
+        <span class="st">f"http://host.docker.internal:{self.port}"</span>
+    )`
+  },
+  "activities": {
+    title:"Activities", color:"var(--c-exec)",
+    file:"src/raavan/integrations/runtime/restate/activities.py",
+    summary:"All side-effect work that workflows offload via ctx.run(). Each function is journaled — Restate records the output on first call so retries and replays skip re-execution.",
+    why:"Separates replay-safe workflow orchestration from impure work (model calls, tool execution, Redis writes, event publishing). Crash-safe via journal replay.",
+    receives:["thread_id, model name, tool schemas, arguments","Persistence payloads (messages, tool results)","Adapter step definitions for pipeline execution"],
+    sends:["Redis memory restore and writes","model_client.generate() calls","tool.run() execution","SSE events via publish_event()","JSON-serialisable results back to workflow journal"],
+    methods:["configure(model_client, redis, tools)","restore_memory(thread_id) → list","do_llm_call(thread_id, messages, ...) → dict","do_tool_exec(tool_name, arguments) → dict","persist_message(thread_id, message)","persist_tool_result(thread_id, result)","publish_event(event_dict)","execute_adapter_step(step, context) → dict","execute_code_chain(params) → dict"],
+    code:`<span class="cm"># Workflows call activities through ctx.run()</span>
+<span class="cm"># Results are journaled — safe to replay</span>
+
+result = <span class="kw">await</span> ctx.<span class="fn">run</span>(
+    <span class="st">"do_llm_call"</span>,
+    activities.do_llm_call,
+    args=[thread_id, messages, model, tools, system],
+)
+
+<span class="cm"># Inside activities.do_llm_call:</span>
+<span class="kw">async def</span> <span class="fn">do_llm_call</span>(thread_id, messages, model, tools, system):
+    response = <span class="kw">await</span> _model_client.<span class="fn">generate</span>(
+        messages=messages, tools=tools,
+        model=model, system=system,
+    )
+    <span class="kw">return</span> {<span class="st">"content"</span>: response.content,
+            <span class="st">"tool_calls"</span>: response.tool_calls,
+            <span class="st">"done"</span>: <span class="kw">not</span> response.tool_calls}`
+  },
+  "tool-policy": {
+    title:"ToolPolicy", color:"var(--c-ctrl)",
+    file:"src/raavan/integrations/runtime/restate/policies.py",
+    summary:"Dataclass holding execution governance for a tool: timeout, retry limit, whether approval is required, whether it's a human-input gate, and idempotency expectations.",
+    why:"Keeps execution rules out of workflow code and tool business logic. AgentWorkflow consults the policy before executing any tool — trust decisions are centralised.",
+    receives:["tool name via get_policy(tool_name)","BaseTool instance via derive_policy_from_tool(tool)"],
+    sends:["ToolPolicy(timeout, retries, requires_approval, is_hitl_input, idempotent)"],
+    methods:["ToolPolicy — dataclass","TOOL_POLICIES — registry dict","derive_policy_from_tool(tool) → ToolPolicy","get_policy(tool_name) → ToolPolicy"],
+    code:`<span class="kw">from</span> raavan.integrations.runtime.restate.policies <span class="kw">import</span> <span class="cl">ToolPolicy</span>, get_policy
+
+<span class="cm"># Derives from BaseTool.risk attribute</span>
+policy = <span class="fn">get_policy</span>(<span class="st">"send_email"</span>)
+<span class="cm"># ToolPolicy(timeout=30, retries=1, requires_approval=True, ...)</span>
+
+<span class="cm"># Register a custom policy</span>
+TOOL_POLICIES[<span class="st">"my_critical_tool"</span>] = <span class="cl">ToolPolicy</span>(
+    timeout=<span class="nu">60</span>, retries=<span class="nu">0</span>,
+    requires_approval=<span class="kw">True</span>,
+    is_hitl_input=<span class="kw">False</span>,
+    idempotent=<span class="kw">False</span>,
+)`
+  },
+  "promise-gate": {
+    title:"Promise Gate", color:"var(--c-ctrl)",
+    file:"src/raavan/integrations/runtime/restate/workflows.py",
+    summary:"Durable wait state created by ctx.promise(name).value() inside a workflow. The workflow suspends — no thread, no memory, no worker resources — until an external resolver delivers the value.",
+    why:"Lets an agent pause for human approval or input without polling, spinning, or holding expensive resources. Restate stores the suspension; the workflow resumes exactly where it left off.",
+    receives:["Promise names: approval-{request_id} or human-{request_id}","ctx.rand.uuid4() for deterministic, replay-safe IDs"],
+    sends:["Blocked workflow state persisted in Restate","Resolved payload back into the workflow on resume"],
+    methods:["ctx.promise(name).value() — suspends here","ctx.rand.uuid4() — deterministic ID generation"],
+    code:`<span class="cm"># AgentWorkflow — HITL approval gate</span>
+req_id = <span class="fn">str</span>(ctx.rand.<span class="fn">uuid4</span>())   <span class="cm"># deterministic</span>
+
+<span class="cm"># Publish request event (journaled side-effect)</span>
+<span class="kw">await</span> ctx.<span class="fn">run</span>(<span class="st">"publish_request"</span>, activities.publish_event,
+             args=[{<span class="st">"type"</span>: <span class="st">"tool_approval_request"</span>,
+                    <span class="st">"requestId"</span>: req_id, <span class="st">"tool_name"</span>: tool_name}])
+
+<span class="cm"># Suspend — zero resources held</span>
+decision = <span class="kw">await</span> ctx.<span class="fn">promise</span>(<span class="st">f"approval-{req_id}"</span>).<span class="fn">value</span>()
+<span class="cm"># Resumes when resolve_promise() is called externally</span>
+<span class="kw">return</span> decision[<span class="st">"approved"</span>]`
+  },
+  "promise-resolver": {
+    title:"Promise Resolver", color:"var(--c-ctrl)",
+    file:"src/raavan/integrations/runtime/restate/client.py",
+    summary:"The external handoff mechanism. resolve_promise() makes an HTTP call to Restate that fulfils a named promise, waking the workflow at its exact suspension point.",
+    why:"Bridges an out-of-band HITL response (user clicking Approve) back into the durable workflow. Full workflow state is preserved by Restate.",
+    receives:["workflow_id, promise_name, value from an external caller","Approval or human-input decision payload"],
+    sends:["HTTP POST to Restate — resolves the named promise","Workflow resumes at ctx.promise().value() call site"],
+    methods:["RestateWorkflowClient.resolve_promise(wf_id, name, value)","RestateRuntime.resolve_promise(wf_id, name, value)"],
+    code:`<span class="cm"># From a HITL route handler (POST /chat/respond/{requestId})</span>
+<span class="kw">async def</span> <span class="fn">respond_to_hitl</span>(
+    request_id: str,
+    approved: bool,
+    client: <span class="cl">RestateWorkflowClient</span>,
+):
+    <span class="kw">await</span> client.<span class="fn">resolve_promise</span>(
+        workflow_id=thread_id,
+        promise_name=<span class="st">f"approval-{request_id}"</span>,
+        value={<span class="st">"approved"</span>: approved},
+    )
+    <span class="cm"># Suspended AgentWorkflow immediately resumes</span>
+    <span class="cm"># at its ctx.promise(...).value() call site.</span>`
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+//  SCENARIO DATA
+// ────────────────────────────────────────────────────────────
+const scenarios = {
+  agent: {
+    title:"Agent Run", color:"var(--c-entry)",
+    summary:"A durable agent run from client dispatch through the journaled ReAct loop.",
+    steps:[
+      {label:"Client dispatches",      desc:"RestateWorkflowClient.start_agent_workflow() posts to Restate ingress. Returns a workflow_id.", actors:["workflow-client","restate-app"]},
+      {label:"Workflow starts",         desc:"Restate routes to AgentWorkflow.agent_run(). Durable journal begins.", actors:["restate-app","agent-workflow"]},
+      {label:"DI ready from Worker",    desc:"Activities already have model_client, Redis, tools injected by Worker at startup.", actors:["worker","activities"]},
+      {label:"Memory restore + LLM",    desc:"ctx.run('restore_memory') reloads history. ctx.run('do_llm_call') calls the model. Both journaled.", actors:["agent-workflow","activities"]},
+      {label:"Tool exec + policy",      desc:"ctx.run('do_tool_exec') runs the tool. ToolPolicy checks approval before execution.", actors:["activities","tool-policy"]},
+      {label:"Loop until done",         desc:"Repeats until no tool calls or max_iterations. Each iteration adds a new journal entry.", actors:["agent-workflow"]},
+    ],
+    code:`wf_id = <span class="kw">await</span> client.<span class="fn">start_agent_workflow</span>(
+    thread_id=<span class="st">"conv-abc-123"</span>,
+    user_content=<span class="st">"Summarise the latest AI news."</span>,
+    claims={<span class="st">"sub"</span>: <span class="st">"user-1"</span>},
+    model=<span class="st">"gpt-4o"</span>,
+    max_iterations=<span class="nu">12</span>,
+)
+
+<span class="cm"># Poll status</span>
+state = <span class="kw">await</span> client.<span class="fn">query_workflow</span>(wf_id)
+<span class="cm"># {"status": "running", "iteration": 2, ...}</span>`
+  },
+  hitl: {
+    title:"HITL Approval", color:"var(--c-ctrl)",
+    summary:"The workflow suspends at zero resource cost when a CRITICAL tool needs human approval, then resumes via external resolver.",
+    steps:[
+      {label:"Policy check",           desc:"AgentWorkflow calls get_policy(tool_name). ToolPolicy.requires_approval is True for CRITICAL tools.", actors:["agent-workflow","tool-policy"]},
+      {label:"Publish request event",  desc:"ctx.run() → activities.publish_event() emits tool_approval_request SSE to the UI.", actors:["activities"]},
+      {label:"Workflow suspends",       desc:"ctx.promise('approval-{id}').value() — zero thread, memory, or worker resources held.", actors:["agent-workflow","promise-gate"]},
+      {label:"Human approves in UI",   desc:"User clicks Approve in the UI. Frontend POSTs to /chat/respond/{requestId}.", actors:["promise-gate"]},
+      {label:"Promise resolved",        desc:"Server calls resolve_promise(wf_id, 'approval-{id}', {approved:true}). Restate wakes workflow.", actors:["promise-resolver","workflow-client"]},
+      {label:"Workflow resumes",        desc:"AgentWorkflow receives the decision exactly at the suspension point. Tool executes or is skipped.", actors:["agent-workflow","activities"]},
+    ],
+    code:`<span class="cm"># AgentWorkflow — check policy, suspend, resume</span>
+policy = <span class="fn">get_policy</span>(tool_name)
+<span class="kw">if</span> policy.requires_approval:
+    req_id = <span class="fn">str</span>(ctx.rand.<span class="fn">uuid4</span>())
+    <span class="kw">await</span> ctx.<span class="fn">run</span>(<span class="st">"pub_req"</span>, activities.publish_event,
+        args=[{<span class="st">"type"</span>: <span class="st">"tool_approval_request"</span>,
+               <span class="st">"requestId"</span>: req_id, <span class="st">"tool_name"</span>: tool_name}])
+    decision = <span class="kw">await</span> ctx.<span class="fn">promise</span>(<span class="st">f"approval-{req_id}"</span>).<span class="fn">value</span>()
+
+<span class="cm"># HITL route resolves the promise</span>
+<span class="kw">await</span> client.<span class="fn">resolve_promise</span>(
+    workflow_id=thread_id,
+    promise_name=<span class="st">f"approval-{req_id}"</span>,
+    value={<span class="st">"approved"</span>: <span class="kw">True</span>},
+)`
+  },
+  pipeline: {
+    title:"Pipeline Run", color:"var(--c-wf)",
+    summary:"Multi-step adapter chain execution with journaled checkpoints and template-based input mapping between steps.",
+    steps:[
+      {label:"Client dispatches",       desc:"start_pipeline_workflow(name, definition, thread_id) posts the full definition to Restate ingress.", actors:["workflow-client","restate-app"]},
+      {label:"Workflow receives def",   desc:"PipelineWorkflow.pipeline_run(ctx, definition) starts. Ordered steps array drives the run.", actors:["pipeline-workflow"]},
+      {label:"Step 1 executes",          desc:"ctx.run('step_0', execute_adapter_step, [step, ctx_data]). Result stored in Restate journal.", actors:["pipeline-workflow","activities"]},
+      {label:"Input mapping resolved",   desc:"_resolve_refs() substitutes {{step_0.field}} template refs from prior step result.", actors:["pipeline-workflow"]},
+      {label:"Remaining steps run",      desc:"Each step is a separate ctx.run(). Crash between steps — only pending steps re-run on resume.", actors:["pipeline-workflow","activities"]},
+      {label:"Completion",               desc:"Final result returned with completed_steps count reflecting successful journal entries.", actors:["pipeline-workflow"]},
+    ],
+    code:`definition = {
+    <span class="st">"name"</span>: <span class="st">"research-pipeline"</span>,
+    <span class="st">"steps"</span>: [
+        {<span class="st">"adapter"</span>: <span class="st">"web_search"</span>, <span class="st">"action"</span>: <span class="st">"search"</span>,
+         <span class="st">"input_mapping"</span>: {<span class="st">"query"</span>: <span class="st">"{{input.topic}}"</span>}},
+        {<span class="st">"adapter"</span>: <span class="st">"llm_summariser"</span>, <span class="st">"action"</span>: <span class="st">"summarise"</span>,
+         <span class="st">"input_mapping"</span>: {<span class="st">"text"</span>: <span class="st">"{{step_0.results}}"</span>}},
+    ],
+}
+wf_id = <span class="kw">await</span> client.<span class="fn">start_pipeline_workflow</span>(
+    name=<span class="st">"research"</span>, definition=definition, thread_id=<span class="st">"pipe-xyz"</span>
+)`
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+//  STATE
+// ────────────────────────────────────────────────────────────
+let activeScenario = "all";
+let activeStep = -1;
+let activeActor = null;
+
+const panel = document.getElementById("panel");
+const nodes = [...document.querySelectorAll(".node")];
+const tabs  = [...document.querySelectorAll(".tab")];
+
+// ────────────────────────────────────────────────────────────
+//  HELPERS
+// ────────────────────────────────────────────────────────────
+function applyStates(hiIds, stepIds) {
+  nodes.forEach(n => {
+    const id = n.dataset.id;
+    n.classList.remove("active","dim","hi","step");
+    if (stepIds && stepIds.includes(id))       n.classList.add("step");
+    else if (hiIds && hiIds.length) {
+      if (hiIds.includes(id)) n.classList.add("hi");
+      else                    n.classList.add("dim");
+    }
+  });
+}
+function resetStates(keepId) {
+  nodes.forEach(n => {
+    n.classList.remove("dim","hi","step","active");
+    if (keepId && n.dataset.id === keepId) n.classList.add("active");
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+//  PANEL RENDERERS
+// ────────────────────────────────────────────────────────────
+function renderEmpty() {
+  panel.innerHTML = `
+    <div class="peyebrow">Runtime Actor</div>
+    <div class="ptitle">Click a node</div>
+    <p class="empty">Select any actor on the diagram to inspect its purpose, inputs, outputs, and a code example.<br><br>Or pick a <strong>scenario tab</strong> above to trace an execution flow step by step.</p>
+    <div class="psec">
+      <h3>Suggested reading order</h3>
+      <ul class="sug">
+        <li>Start with <code>RestateWorkflowClient</code> — the dispatch entry point.</li>
+        <li>Then <code>AgentWorkflow</code> for the durable ReAct loop.</li>
+        <li>Open <code>Activities</code> to see the side-effect boundary.</li>
+        <li>Finish with <code>Promise Gate</code> + <code>Promise Resolver</code> for HITL flows.</li>
+      </ul>
+    </div>`;
+}
+
+function renderActor(id) {
+  const a = actors[id]; if (!a) return;
+  panel.innerHTML = `
+    <div class="peyebrow" style="color:${a.color}">Runtime Actor</div>
+    <div class="ptitle">${a.title}</div>
+    <p class="psummary">${a.summary}</p>
+    <div class="psec">
+      <h3>Why it exists</h3>
+      <p style="font-size:12px;line-height:1.6;color:var(--text)">${a.why}</p>
+    </div>
+    <div class="psec">
+      <h3>Source file</h3>
+      <a class="pfile" href="${REPO}${a.file}" target="_blank" rel="noopener">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75A.75.75 0 012.75 1h8.69c.268 0 .524.107.713.296l2.56 2.56A.997.997 0 0115 4.57v9.43a.75.75 0 01-.75.75H2.75a.75.75 0 01-.75-.75V1.75zM4 2.5v11h9V5h-2.5A.75.75 0 019.75 4.25V2.5H4z"/></svg>
+        ${a.file}
+      </a>
+    </div>
+    <div class="psec">
+      <h3>Receives</h3><ul>${a.receives.map(x=>`<li>${x}</li>`).join("")}</ul>
+    </div>
+    <div class="psec">
+      <h3>Sends</h3><ul>${a.sends.map(x=>`<li>${x}</li>`).join("")}</ul>
+    </div>
+    <div class="psec">
+      <h3>Key methods</h3><ul>${a.methods.map(x=>`<li><code>${x}</code></li>`).join("")}</ul>
+    </div>
+    <div class="psec">
+      <h3>Code example</h3>
+      <div class="codeblock">
+        <pre>${a.code}</pre>
+        <button class="cbtn" onclick="cpy(this)">Copy</button>
+      </div>
+    </div>`;
+}
+
+function renderScenario(key, stepIdx) {
+  const s = scenarios[key]; if (!s) { renderEmpty(); return; }
+  const all  = [...new Set(s.steps.flatMap(st=>st.actors))];
+  const step = stepIdx >= 0 ? s.steps[stepIdx].actors : [];
+  applyStates(all, step);
+
+  panel.innerHTML = `
+    <div class="peyebrow" style="color:${s.color}">Scenario</div>
+    <div class="ptitle">${s.title}</div>
+    <p class="psummary">${s.summary}</p>
+    <div class="psec">
+      <h3>Execution flow — click a step</h3>
+      <ul class="slist">
+        ${s.steps.map((st,i)=>`
+          <li class="sitem${i===stepIdx?" on":""}" data-i="${i}" style="--scolor:${s.color}">
+            <div class="snum">${i+1}</div>
+            <div class="sbody"><strong>${st.label}</strong><span>${st.desc}</span></div>
+          </li>`).join("")}
+      </ul>
+    </div>
+    <div class="psec">
+      <h3>Code example</h3>
+      <div class="codeblock">
+        <pre>${s.code}</pre>
+        <button class="cbtn" onclick="cpy(this)">Copy</button>
+      </div>
+    </div>`;
+
+  panel.querySelectorAll(".sitem").forEach(el=>{
+    el.addEventListener("click",()=>{
+      const i = parseInt(el.dataset.i);
+      activeStep = (activeStep===i) ? -1 : i;
+      renderScenario(activeScenario, activeStep);
+    });
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+//  COPY
+// ────────────────────────────────────────────────────────────
+window.cpy = function(btn) {
+  navigator.clipboard.writeText(btn.previousElementSibling.textContent).then(()=>{
+    btn.textContent="Copied!"; btn.classList.add("ok");
+    setTimeout(()=>{btn.textContent="Copy"; btn.classList.remove("ok");}, 1700);
+  });
+};
+
+// ────────────────────────────────────────────────────────────
+//  EVENTS
+// ────────────────────────────────────────────────────────────
+tabs.forEach(tab=>{
+  tab.addEventListener("click",()=>{
+    tabs.forEach(t=>t.classList.remove("on")); tab.classList.add("on");
+    activeScenario=tab.dataset.s; activeStep=-1; activeActor=null;
+    if (activeScenario==="all") { resetStates(null); renderEmpty(); }
+    else renderScenario(activeScenario,-1);
+  });
+});
+
+nodes.forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    const id=btn.dataset.id;
+    if (activeScenario!=="all") {
+      // Scenario mode: show actor detail, keep dims
+      if (activeActor===id) { activeActor=null; renderScenario(activeScenario,activeStep); return; }
+      activeActor=id;
+      nodes.forEach(n=>n.classList.remove("active","step"));
+      btn.classList.remove("dim","hi"); btn.classList.add("step");
+      renderActor(id); return;
+    }
+    const wasActive=(activeActor===id);
+    activeActor=wasActive?null:id;
+    resetStates(activeActor);
+    wasActive ? renderEmpty() : renderActor(id);
+  });
+});
+
+renderEmpty();
+</script>
+</body>
+</html>

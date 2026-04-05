@@ -62,10 +62,6 @@ plugins:
             show_signature_annotations: true
             show_root_heading: true
             members_order: source
-  - git-revision-date-localized:
-      enable_creation_date: true
-      enable_git_follow: false
-      type: timeago
   - minify:
       minify_html: true
 
@@ -163,6 +159,9 @@ nav:
     - Memory And Context: concepts/memory-and-context.md
     - Streaming And Events: concepts/streaming-and-events.md
     - Durable Runtime: concepts/durable-runtime.md
+
+  - Core:
+    - Runtime: core/runtime/index.md
 
   - Deploy:
     - Overview: deploy/index.md

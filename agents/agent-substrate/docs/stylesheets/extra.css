@@ -1,5 +1,11 @@
 /* ── Custom styles for Raavan docs ── */
 
+/* Logo: always white on teal primary header */
+.md-header .md-logo img,
+.md-header .md-logo svg {
+  filter: brightness(0) invert(1);
+}
+
 /* Hero section on landing page */
 .md-typeset h1 {
   font-weight: 900;

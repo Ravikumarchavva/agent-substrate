@@ -1,0 +1,40 @@
+/* ── Custom styles for Raavan docs ── */
+
+/* Hero section on landing page */
+.md-typeset h1 {
+  font-weight: 900;
+}
+
+/* Card grid — make equal height */
+.md-typeset .grid.cards > * {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Wider content area */
+.md-grid {
+  max-width: 1440px;
+}
+
+/* Inline code contrast boost */
+.md-typeset code {
+  background-color: var(--md-code-bg-color);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+/* Admonition — custom "restate" type */
+.md-typeset .admonition.restate,
+.md-typeset details.restate {
+  border-color: #0d9488;
+}
+.md-typeset .restate > .admonition-title,
+.md-typeset .restate > summary {
+  background-color: rgba(13, 148, 136, 0.1);
+}
+.md-typeset .restate > .admonition-title::before,
+.md-typeset .restate > summary::before {
+  background-color: #0d9488;
+  -webkit-mask-image: var(--md-admonition-icon--tip);
+          mask-image: var(--md-admonition-icon--tip);
+}

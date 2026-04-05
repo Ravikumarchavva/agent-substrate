@@ -38,6 +38,20 @@ from raavan.core.structured import (
     parse,
 )
 
+# Root-level primitives (canonical locations)
+from raavan.exceptions import (  # noqa: F401
+    AgentError,
+    AgentExecutionError,
+    ConfigurationError,
+    ContextLimitExceededError,
+    GuardrailError,
+    GuardrailTripwireError,
+    ModelProviderError,
+    ToolError,
+    ToolExecutionError,
+    ToolNotFoundError,
+)
+
 __all__ = [
     "parse",
     "LLMJudge",

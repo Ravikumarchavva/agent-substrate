@@ -1,0 +1,208 @@
+site_name: Raavan Agent Framework
+site_description: Production-ready Python framework for building autonomous AI agents with tool calling, memory management, and durable execution.
+site_url: https://ravikumarchavva.github.io/raavan
+repo_url: https://github.com/Ravikumarchavva/raavan
+repo_name: Ravikumarchavva/raavan
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2024–2026 Ravikumar Chavva
+
+# ── Theme ────────────────────────────────────────────────────────────────────
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  palette:
+    # System-preference aware
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.instant        # SPA-style page loads
+    - navigation.instant.progress
+    - navigation.tracking       # URL updates on scroll
+    - navigation.tabs           # top-level tabs
+    - navigation.tabs.sticky
+    - navigation.sections       # collapse-able sidebar sections
+    - navigation.expand
+    - navigation.indexes        # section index pages
+    - navigation.top            # back-to-top button
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy         # copy button on code blocks
+    - content.code.annotate     # inline code annotations
+    - content.tabs.link         # synced content tabs
+    - toc.follow
+    - header.autohide
+
+# ── Plugins ──────────────────────────────────────────────────────────────────
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_signature_annotations: true
+            show_root_heading: true
+            members_order: source
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+  - minify:
+      minify_html: true
+
+# ── Extensions ───────────────────────────────────────────────────────────────
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - tables
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      normalize_issue_symbols: true
+      repo_url_shorthand: true
+      user: Ravikumarchavva
+      repo: raavan
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      auto_append:
+        - includes/abbreviations.md
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+extra_css:
+  - stylesheets/extra.css
+
+# ── Extra ─────────────────────────────────────────────────────────────────────
+extra:
+  version:
+    provider: mike
+    default: latest
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Ravikumarchavva/raavan
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/raavan/
+  analytics:
+    provider: google
+    property: !ENV [GOOGLE_ANALYTICS_ID, ""]
+
+# ── Navigation ────────────────────────────────────────────────────────────────
+nav:
+  - Home: index.md
+
+  - Getting Started:
+      - getting-started/index.md
+      - Quick Start: getting-started/quickstart.md
+      - Installation: getting-started/installation.md
+      - Configuration: getting-started/configuration.md
+
+  - Core Concepts:
+      - concepts/index.md
+      - Architecture: concepts/architecture.md
+      - ReAct Agent Loop: concepts/react-agent.md
+      - Memory System: concepts/memory.md
+      - Tool System: concepts/tools.md
+      - Guardrails: concepts/guardrails.md
+      - MCP Integration: concepts/mcp.md
+      - SSE Streaming: concepts/sse-streaming.md
+
+  - Durable Runtime:
+      - runtime/index.md
+      - Restate Integration: runtime/restate.md
+      - Workflows: runtime/workflows.md
+      - Activities: runtime/activities.md
+      - Tool Policies: runtime/tool-policies.md
+
+  - Tools Reference:
+      - tools/index.md
+      - Building a Tool: tools/building-a-tool.md
+      - Human Input (HITL): tools/human-input.md
+      - Task Manager: tools/task-manager.md
+      - Web Surfer: tools/web-surfer.md
+      - Code Interpreter: tools/code-interpreter.md
+
+  - Deployment:
+      - deployment/index.md
+      - Monolith (local): deployment/monolith.md
+      - Docker Compose: deployment/docker.md
+      - Kubernetes (Kind): deployment/kubernetes.md
+      - Microservices: deployment/microservices.md
+
+  - Observability:
+      - observability/index.md
+      - Logging: observability/logging.md
+      - Tracing (OpenTelemetry): observability/tracing.md
+      - Grafana Dashboards: observability/grafana.md
+
+  - Evaluation:
+      - evals/index.md
+      - Running Evals: evals/running.md
+      - Custom Criteria: evals/criteria.md
+
+  - Design Patterns:
+      - design-patterns/index.md
+      - Creational: design-patterns/creational.md
+      - Structural: design-patterns/structural.md
+      - Behavioral: design-patterns/behavioral.md
+
+  - API Reference:
+      - api/index.md
+      - core.agents: api/core-agents.md
+      - core.tools: api/core-tools.md
+      - core.memory: api/core-memory.md
+      - core.guardrails: api/core-guardrails.md
+      - integrations.llm: api/integrations-llm.md
+      - integrations.memory: api/integrations-memory.md
+      - integrations.mcp: api/integrations-mcp.md
+
+  - Changelog: changelog.md

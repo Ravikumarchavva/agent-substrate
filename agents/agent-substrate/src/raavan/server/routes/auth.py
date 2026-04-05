@@ -14,7 +14,6 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
 
 from raavan.configs.settings import settings
 from raavan.server.security.deps import get_current_user
@@ -25,39 +24,18 @@ from raavan.server.security.jwt import (
     create_refresh_token,
     verify_token,
 )
+from raavan.shared.contracts.auth import (
+    AgentTokenRequest,
+    RefreshRequest,
+    TokenExchangeRequest,
+    TokenResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Redis key prefix for valid refresh-token JTIs
 _REFRESH_PREFIX = "rt:"
-
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
-
-
-class TokenExchangeRequest(BaseModel):
-    """Carry the Next.js-issued session token to the backend."""
-
-    frontend_token: str  # JWT signed by INTERNAL_AUTH_SECRET on the frontend
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    expires_in: int  # seconds until access token expires
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
-class AgentTokenRequest(BaseModel):
-    thread_id: str
-    permissions: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -71,29 +49,29 @@ def _redis_key(jti: str) -> str:
 
 async def _store_refresh_jti(request: Request, jti: str, expires_at: datetime) -> None:
     """Persist a valid refresh JTI in Redis with automatic expiry."""
-    redis = getattr(request.app.state, "redis_memory", None)
+    redis = getattr(request.app.state, "redis_client", None)
     if redis is None:
         return
     ttl = int((expires_at - datetime.now(UTC)).total_seconds())
-    await redis._client.setex(_redis_key(jti), ttl, "1")
+    await redis.setex(_redis_key(jti), ttl, "1")
 
 
 async def _revoke_refresh_jti(request: Request, jti: str) -> None:
     """Delete a refresh JTI from Redis (rotation / logout)."""
-    redis = getattr(request.app.state, "redis_memory", None)
+    redis = getattr(request.app.state, "redis_client", None)
     if redis is None:
         return
-    await redis._client.delete(_redis_key(jti))
+    await redis.delete(_redis_key(jti))
 
 
 async def _is_refresh_jti_valid(request: Request, jti: str) -> bool:
     """Return True if the JTI exists in Redis (i.e. not yet rotated/revoked)."""
-    redis = getattr(request.app.state, "redis_memory", None)
+    redis = getattr(request.app.state, "redis_client", None)
     if redis is None:
         # Fallback: accept without Redis-side revocation check (dev mode)
         logger.warning("Redis unavailable; skipping refresh-token revocation check")
         return True
-    result = await redis._client.get(_redis_key(jti))
+    result = await redis.get(_redis_key(jti))
     return result is not None
 
 

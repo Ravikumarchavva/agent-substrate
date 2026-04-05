@@ -18,13 +18,13 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 
-from raavan.shared.observability.logger import setup_logging
+from raavan.logger import setup_logging
 
 # ------------------------------------------------------------------------------
-# Logging — auto-detects JSON (server) vs pretty (notebook / CLI)
+# Logging — deferred to configure_opentelemetry() or explicit call.
+# No module-level side effects.
 # ------------------------------------------------------------------------------
 
-setup_logging(mode="auto")
 logger = logging.getLogger("raavan")
 
 # ------------------------------------------------------------------------------
@@ -54,6 +54,9 @@ def configure_opentelemetry(
     if _OTEL_CONFIGURED:
         logger.debug("OpenTelemetry already configured, skipping re-init")
         return
+
+    # Configure structured logging first (auto-detects server vs interactive)
+    setup_logging(mode="auto")
 
     logger.info("Configuring OpenTelemetry")
 

@@ -145,6 +145,7 @@ class AssistantMessage(BaseClientMessage):
     finish_reason: str = "stop"  # e.g., "stop", "tool_call", etc.
     usage: Optional[UsageStats] = None
     cached: bool = False  # Indicates if response used input caching or not
+    parsed: Optional[Any] = None  # Structured output parsed Pydantic instance
 
     @model_serializer
     def ser_model(self) -> Dict[str, Any]:

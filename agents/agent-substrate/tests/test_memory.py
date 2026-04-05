@@ -39,7 +39,7 @@ class TestRedisMemory:
     @pytest.mark.asyncio
     async def test_memory_lifecycle(self) -> None:
         """Test connect → add → get → disconnect cycle."""
-        from raavan.core.memory import RedisMemory
+        from raavan.integrations.memory.redis_memory import RedisMemory
 
         with patch("raavan.integrations.memory.redis_memory.aioredis") as mock_redis:
             mock_conn = AsyncMock()

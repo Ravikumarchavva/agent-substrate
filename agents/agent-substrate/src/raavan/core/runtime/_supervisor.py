@@ -151,11 +151,14 @@ class Supervisor:
     async def _restart_all(self) -> None:
         """Restart every supervised agent (one_for_all strategy)."""
         logger.info("one_for_all: restarting all %d agents", len(self._tasks))
-        # Cancel all current tasks
-        for task in self._tasks.values():
+        # Exclude the current task — it's the one that called us and is still
+        # running; cancelling it here would cause a recursive-cancel loop.
+        current = asyncio.current_task()
+        tasks_to_cancel = [t for t in self._tasks.values() if t is not current]
+        for task in tasks_to_cancel:
             task.cancel()
-        if self._tasks:
-            await asyncio.gather(*self._tasks.values(), return_exceptions=True)
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
 
         # M2 fix: re-spawn each independently — one failure doesn't stop others
         agent_ids = list(self._factories.keys())

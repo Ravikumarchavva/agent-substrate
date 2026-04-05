@@ -19,7 +19,7 @@ from raavan.core.messages.client_messages import (
     ToolExecutionResultMessage,
     UserMessage,
 )
-from raavan.server.services.agent_service import _rebuild_messages
+from raavan.shared.execution import rebuild_messages_from_steps
 
 
 SYSTEM_PROMPT = "You are a helpful agent."
@@ -31,7 +31,9 @@ SYSTEM_PROMPT = "You are a helpful agent."
 
 
 async def test_rebuild_messages_empty_rows_yields_only_system():
-    msgs = await _rebuild_messages([], SYSTEM_PROMPT)
+    msgs = await rebuild_messages_from_steps(
+        [], SYSTEM_PROMPT, include_mcp_app_context=True
+    )
     assert len(msgs) == 1
     assert isinstance(msgs[0], SystemMessage)
     assert msgs[0].content == SYSTEM_PROMPT
@@ -47,7 +49,9 @@ async def test_rebuild_messages_user_and_assistant():
             "generation": {"finish_reason": "stop"},
         },
     ]
-    msgs = await _rebuild_messages(rows, SYSTEM_PROMPT)
+    msgs = await rebuild_messages_from_steps(
+        rows, SYSTEM_PROMPT, include_mcp_app_context=True
+    )
     assert len(msgs) == 3
     assert isinstance(msgs[0], SystemMessage)
     assert isinstance(msgs[1], UserMessage)
@@ -77,7 +81,9 @@ async def test_rebuild_messages_user_assistant_tool_result_four_messages():
             "metadata": {"tool_call_id": "tc-1"},
         },
     ]
-    msgs = await _rebuild_messages(rows, SYSTEM_PROMPT)
+    msgs = await rebuild_messages_from_steps(
+        rows, SYSTEM_PROMPT, include_mcp_app_context=True
+    )
     # system + user + assistant(tool_calls) + tool_result → 4 messages
     assert len(msgs) == 4
     assert isinstance(msgs[0], SystemMessage)
@@ -96,7 +102,9 @@ async def test_rebuild_messages_skips_duplicate_system_row():
         {"type": "system_message", "input": "old prompt", "metadata": {}},
         {"type": "user_message", "input": "Hello", "metadata": {}},
     ]
-    msgs = await _rebuild_messages(rows, SYSTEM_PROMPT)
+    msgs = await rebuild_messages_from_steps(
+        rows, SYSTEM_PROMPT, include_mcp_app_context=True
+    )
     system_msgs = [m for m in msgs if isinstance(m, SystemMessage)]
     assert len(system_msgs) == 1, "System message must appear exactly once"
     assert system_msgs[0].content == SYSTEM_PROMPT
@@ -107,7 +115,9 @@ async def test_rebuild_messages_standalone_tool_call_row_skipped():
     rows: List[Dict[str, Any]] = [
         {"type": "tool_call", "name": "noop", "input": "{}", "metadata": {}},
     ]
-    msgs = await _rebuild_messages(rows, SYSTEM_PROMPT)
+    msgs = await rebuild_messages_from_steps(
+        rows, SYSTEM_PROMPT, include_mcp_app_context=True
+    )
     # Only the prepended system message
     assert len(msgs) == 1
     assert isinstance(msgs[0], SystemMessage)
@@ -122,7 +132,9 @@ async def test_rebuild_messages_mcp_app_context_becomes_user_message():
             "metadata": {},
         }
     ]
-    msgs = await _rebuild_messages(rows, SYSTEM_PROMPT)
+    msgs = await rebuild_messages_from_steps(
+        rows, SYSTEM_PROMPT, include_mcp_app_context=True
+    )
     assert len(msgs) == 2
     user_msg = msgs[1]
     assert isinstance(user_msg, UserMessage)
@@ -144,7 +156,9 @@ async def test_rebuild_messages_tool_result_is_error_flag():
             "metadata": {"tool_call_id": "tc-err"},
         }
     ]
-    msgs = await _rebuild_messages(rows, SYSTEM_PROMPT)
+    msgs = await rebuild_messages_from_steps(
+        rows, SYSTEM_PROMPT, include_mcp_app_context=True
+    )
     tool_result = msgs[1]
     assert isinstance(tool_result, ToolExecutionResultMessage)
     assert tool_result.is_error is True
@@ -163,7 +177,9 @@ async def test_rebuild_messages_assistant_none_content():
             },
         }
     ]
-    msgs = await _rebuild_messages(rows, SYSTEM_PROMPT)
+    msgs = await rebuild_messages_from_steps(
+        rows, SYSTEM_PROMPT, include_mcp_app_context=True
+    )
     assistant = msgs[1]
     assert isinstance(assistant, AssistantMessage)
     assert assistant.content is None
@@ -190,7 +206,7 @@ async def test_load_agent_hot_path_calls_restore_without_limit():
             return_value=mock_per_request,
         ),
         patch(
-            "raavan.server.services.agent_service.create_agent_for_thread",
+            "raavan.server.services.agent_service.create_react_agent",
             return_value=MagicMock(),
         ),
         patch(
@@ -250,7 +266,7 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
             return_value=rows,
         ),
         patch(
-            "raavan.server.services.agent_service.create_agent_for_thread",
+            "raavan.server.services.agent_service.create_react_agent",
             return_value=MagicMock(),
         ),
     ):
@@ -301,7 +317,7 @@ async def test_load_agent_no_redis_uses_unbounded_memory():
             return_value=rows,
         ),
         patch(
-            "raavan.server.services.agent_service.create_agent_for_thread",
+            "raavan.server.services.agent_service.create_react_agent",
             side_effect=_capture_agent,
         ),
     ):

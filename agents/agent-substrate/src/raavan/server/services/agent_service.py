@@ -34,22 +34,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from raavan.core.agents.react_agent import ReActAgent
 from raavan.core.context.base_context import ModelContext
 from raavan.core.context.implementations import SlidingWindowContext
-from raavan.core.guardrails.prebuilt import MaxTokenGuardrail
 from raavan.catalog.tools.human_input.tool import ToolApprovalHandler
-from raavan.core.memory.base_memory import BaseMemory
 from raavan.integrations.memory.redis_memory import RedisMemory
-from raavan.core.memory.unbounded_memory import UnboundedMemory
-from raavan.core.messages.client_messages import (
-    AssistantMessage,
-    SystemMessage,
-    ToolCallMessage,
-    ToolExecutionResultMessage,
-    UserMessage,
-)
-from raavan.core.messages.base_message import BaseClientMessage
+from raavan.core.messages.client_messages import AssistantMessage
 from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.runtime import AgentId, AgentRuntime
 from raavan.core.tools.base_tool import BaseTool
+from raavan.shared.execution import create_react_agent, load_session_memory
 
 from raavan.server.services import (
     create_step,
@@ -57,148 +48,6 @@ from raavan.server.services import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-async def _rebuild_messages(
-    step_rows: List[Dict[str, Any]],
-    system_instructions: str,
-) -> List[BaseClientMessage]:
-    """Rebuild a message list from persisted Postgres step rows.
-
-    Maps each step type back to the proper framework message object.
-    Used only on the cold path (Redis miss) to seed Redis with the
-    full Postgres history.
-
-    Returns:
-        Ordered list of ``BaseClientMessage`` starting with the system prompt.
-    """
-    messages: List[BaseClientMessage] = []
-
-    # Always start with system message
-    messages.append(SystemMessage(content=system_instructions))
-
-    for row in step_rows:
-        step_type = row["type"]
-        meta = row.get("metadata") or {}
-
-        if step_type == "system_message":
-            # Skip – we already added the system message above
-            continue
-
-        elif step_type == "user_message":
-            content_text = row.get("input") or ""
-            messages.append(UserMessage(content=[content_text]))
-
-        elif step_type == "assistant_message":
-            output_text = row.get("output")
-            content = [output_text] if output_text else None
-
-            # Rebuild tool calls if stored
-            tool_calls = None
-            gen = row.get("generation") or {}
-            if gen.get("tool_calls"):
-                tool_calls = [ToolCallMessage(**tc) for tc in gen["tool_calls"]]
-
-            messages.append(
-                AssistantMessage(
-                    content=content,
-                    tool_calls=tool_calls,
-                    finish_reason=gen.get("finish_reason", "stop"),
-                )
-            )
-
-        elif step_type == "tool_call":
-            # Tool calls are embedded in assistant message, skip standalone
-            pass
-
-        elif step_type == "tool_result":
-            tool_call_id = meta.get("tool_call_id", "")
-            tool_name = row.get("name", "")
-            output = row.get("output") or ""
-            is_error = row.get("is_error") or False
-            messages.append(
-                ToolExecutionResultMessage(
-                    tool_call_id=tool_call_id,
-                    name=tool_name,
-                    content=[{"type": "text", "text": output}],
-                    is_error=is_error,
-                )
-            )
-
-        elif step_type == "mcp_app_context":
-            # MCP App context update — inject as a user message so the LLM
-            # is aware of user interactions within interactive widgets.
-            tool_name = row.get("name", "mcp_app")
-            context_data = row.get("output") or ""
-            context_msg = (
-                f"[MCP App Update — {tool_name}] "
-                f"The user interacted with the {tool_name} widget. "
-                f"Current state:\n{context_data}"
-            )
-            messages.append(UserMessage(content=[context_msg]))
-
-    return messages
-
-
-def create_agent_for_thread(
-    *,
-    model_client: BaseModelClient,
-    tools: List[BaseTool],
-    system_instructions: str,
-    memory: BaseMemory,
-    model_context: ModelContext,
-    max_iterations: int = 30,
-    verbose: bool = True,
-    tool_approval_handler: Optional[ToolApprovalHandler] = None,
-    tools_requiring_approval: Optional[List[str]] = None,
-    tool_timeout: Optional[float] = None,
-    max_input_tokens: int = 16_000,
-    runtime: Optional[AgentRuntime] = None,
-    agent_id: Optional[AgentId] = None,
-) -> ReActAgent:
-    """Create a ReActAgent with pre-loaded per-session memory.
-
-    Args:
-        memory:        Per-request memory (``RedisMemory`` or ``UnboundedMemory``).
-        model_context: Windowing strategy that filters messages before each LLM
-                       call.  Typically ``SlidingWindowContext(max_messages=N)``.
-
-    A ``MaxTokenGuardrail`` is always installed as a default input guardrail
-    to prevent runaway context costs and prompt injection via oversized inputs.
-    The limit can be tuned via ``max_input_tokens`` (default: 16 000 tokens).
-    """
-    # Default input guardrail — accurate token counting via tiktoken
-    default_input_guardrails = [
-        MaxTokenGuardrail(
-            max_tokens=max_input_tokens,
-            model="gpt-4o",
-            tripwire=True,
-        )
-    ]
-
-    kwargs: Dict[str, Any] = dict(
-        name="ChatBot",
-        description="A helpful AI assistant with tool access.",
-        model_client=model_client,
-        model_context=model_context,
-        tools=tools,
-        system_instructions=system_instructions,
-        memory=memory,
-        max_iterations=max_iterations,
-        verbose=verbose,
-        input_guardrails=default_input_guardrails,
-    )
-    if tool_approval_handler is not None:
-        kwargs["tool_approval_handler"] = tool_approval_handler
-    if tools_requiring_approval is not None:
-        kwargs["tools_requiring_approval"] = tools_requiring_approval
-    if tool_timeout is not None:
-        kwargs["tool_timeout"] = tool_timeout
-    if runtime is not None:
-        kwargs["runtime"] = runtime
-    if agent_id is not None:
-        kwargs["agent_id"] = agent_id
-    return ReActAgent(**kwargs)
 
 
 async def load_agent_for_thread(
@@ -238,65 +87,23 @@ async def load_agent_for_thread(
                               with ``UnboundedMemory``.
         model_context_window: Max non-system messages passed to the LLM per
                               turn via ``SlidingWindowContext``.
-        …                     All other kwargs forwarded to ``create_agent_for_thread``.
+        …                     All other kwargs forwarded to the shared agent factory.
 
     Returns:
         A configured ``ReActAgent`` ready for ``run_stream()``.
     """
     session_id = str(thread_id)
-    memory: BaseMemory
     context: ModelContext = SlidingWindowContext(max_messages=model_context_window)
+    memory = await load_session_memory(
+        session_id=session_id,
+        system_instructions=system_instructions,
+        redis_memory=redis_memory,
+        include_mcp_app_context=True,
+        cold_store_name="Postgres",
+        load_persisted_steps=lambda: load_messages_for_memory(db, thread_id),
+    )
 
-    if redis_memory is not None:
-        # Create a per-request RedisMemory bound to this session, sharing
-        # the parent's connection pool (no new TCP connections).
-        per_request_mem = RedisMemory.for_session(redis_memory, session_id)
-
-        in_redis = await redis_memory.exists(session_id)
-
-        if in_redis:
-            # ── Hot path: restore ALL messages from Redis ────────────────────
-            # Redis holds the full thread history (capped at max_messages).
-            # SlidingWindowContext is responsible for selecting the last
-            # model_context_window messages to send to the LLM — that
-            # filtering happens at LLM-call time, not here.
-            count = await per_request_mem.restore()
-            logger.debug(
-                "Redis hit for session %s — %d messages restored",
-                session_id,
-                count,
-            )
-        else:
-            # ── Cold path: rebuild from Postgres, seed Redis, then restore ───
-            logger.debug(
-                "Redis miss for session %s — seeding from Postgres", session_id
-            )
-            step_rows = await load_messages_for_memory(db, thread_id)
-            all_messages = await _rebuild_messages(step_rows, system_instructions)
-
-            # Seed Redis with the full Postgres history so future requests are fast
-            if all_messages:
-                await redis_memory.store_many(session_id, all_messages)
-                logger.debug(
-                    "Seeded Redis session %s with %d messages from Postgres",
-                    session_id,
-                    len(all_messages),
-                )
-
-            # Restore into the per-request memory (loads from Redis)
-            await per_request_mem.restore()
-
-        memory = per_request_mem
-    else:
-        # ── Fallback: Postgres only (no Redis configured) ────────────────
-        step_rows = await load_messages_for_memory(db, thread_id)
-        all_messages = await _rebuild_messages(step_rows, system_instructions)
-        fallback_mem = UnboundedMemory()
-        for msg in all_messages:
-            await fallback_mem.add_message(msg)
-        memory = fallback_mem
-
-    agent = create_agent_for_thread(
+    agent = create_react_agent(
         model_client=model_client,
         tools=tools,
         system_instructions=system_instructions,

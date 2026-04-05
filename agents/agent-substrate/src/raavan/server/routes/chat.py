@@ -10,21 +10,20 @@ import asyncio
 import json
 import logging
 from typing import AsyncIterator
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from raavan.configs.settings import settings
-from raavan.core.messages import (
-    CompletionChunk,
-    ReasoningDeltaChunk,
-    TextDeltaChunk,
-)
+from raavan.core.messages import ReasoningDeltaChunk, TextDeltaChunk
+from raavan.core.execution.context import ExecutionContext
 from raavan.core.messages.client_messages import (
     AssistantMessage,
     ToolExecutionResultMessage,
 )
+from raavan.shared.execution import stream_agent_run
 from raavan.server.context import ServerContext, get_ctx
 from raavan.server.database import get_db
 from raavan.server.hooks import ChatContext, hooks
@@ -422,6 +421,7 @@ async def chat(
         tool_meta_map = _build_tool_meta_map(agent.tools)
         bus: EventBus = EventBus()
         bridge_signaled = False
+        chat_run_id = str(uuid4())
 
         # Per-request cancel signal — set by POST /chat/{thread_id}/cancel
         # Key MUST be str to match cancel.py which receives thread_id as a path param.
@@ -432,65 +432,77 @@ async def chat(
             """Run agent; emit typed events and persist inline to Postgres."""
             nonlocal bridge_signaled
             try:
-                async for chunk in agent.run_stream(user_content):
-                    if isinstance(chunk, TextDeltaChunk):
-                        await bus.emit(TextDeltaEvent(content=chunk.text, partial=True))
 
-                    elif isinstance(chunk, ReasoningDeltaChunk):
-                        await bus.emit(
-                            ReasoningDeltaEvent(content=chunk.text, partial=True)
-                        )
+                async def _emit_text_delta(chunk: TextDeltaChunk) -> None:
+                    await bus.emit(TextDeltaEvent(content=chunk.text, partial=True))
 
-                    elif isinstance(chunk, CompletionChunk):
-                        payload = _build_completion_payload(
-                            chunk.message, tool_meta_map
-                        )
-                        # Persist BEFORE emitting so Postgres and SSE stay in sync
-                        try:
-                            async with ctx.session_factory() as persist_db:
-                                await persist_assistant_message(
-                                    persist_db,
-                                    body.thread_id,
-                                    chunk.message,
-                                    tool_meta_map=tool_meta_map,
-                                )
-                                await persist_db.commit()
-                        except Exception:
-                            logger.exception("Failed to persist assistant message")
-                        await bus.emit_dict(payload)
+                async def _emit_reasoning_delta(chunk: ReasoningDeltaChunk) -> None:
+                    await bus.emit(
+                        ReasoningDeltaEvent(content=chunk.text, partial=True)
+                    )
 
-                    elif isinstance(chunk, ToolExecutionResultMessage):
-                        payload = _build_tool_result_payload(chunk, tool_meta_map)
-                        raw_content = payload.pop("_raw_content", "")
-                        # Persist BEFORE emitting
-                        try:
-                            async with ctx.session_factory() as persist_db:
-                                await persist_tool_result(
-                                    persist_db,
-                                    body.thread_id,
-                                    tool_call_id=getattr(chunk, "tool_call_id", ""),
-                                    tool_name=getattr(chunk, "name", "unknown"),
-                                    output=raw_content,
-                                    is_error=getattr(
-                                        chunk,
-                                        "is_error",
-                                        False,
-                                    ),
-                                )
-                                await persist_db.commit()
-                        except Exception:
-                            logger.exception("Failed to persist tool result")
-                        await bus.emit_dict(payload)
+                async def _emit_completion(message: AssistantMessage) -> None:
+                    payload = _build_completion_payload(message, tool_meta_map)
+                    try:
+                        async with ctx.session_factory() as persist_db:
+                            await persist_assistant_message(
+                                persist_db,
+                                body.thread_id,
+                                message,
+                                tool_meta_map=tool_meta_map,
+                            )
+                            await persist_db.commit()
+                    except Exception:
+                        logger.exception("Failed to persist assistant message")
+                    await bus.emit_dict(payload)
 
-                    else:
-                        await bus.emit_dict(
-                            {"type": "unknown", "content": str(chunk), "partial": True}
-                        )
+                async def _emit_tool_result(
+                    chunk: ToolExecutionResultMessage,
+                ) -> None:
+                    payload = _build_tool_result_payload(chunk, tool_meta_map)
+                    raw_content = payload.pop("_raw_content", "")
+                    try:
+                        async with ctx.session_factory() as persist_db:
+                            await persist_tool_result(
+                                persist_db,
+                                body.thread_id,
+                                tool_call_id=getattr(chunk, "tool_call_id", ""),
+                                tool_name=getattr(chunk, "name", "unknown"),
+                                output=raw_content,
+                                is_error=getattr(chunk, "is_error", False),
+                            )
+                            await persist_db.commit()
+                    except Exception:
+                        logger.exception("Failed to persist tool result")
+                    await bus.emit_dict(payload)
+
+                async def _emit_unknown(chunk: object) -> None:
+                    await bus.emit_dict(
+                        {"type": "unknown", "content": str(chunk), "partial": True}
+                    )
+
+                async def _emit_error(exc: Exception) -> None:
+                    await bus.emit(ErrorEvent(message=str(exc)))
+
+                await stream_agent_run(
+                    agent=agent,
+                    user_content=user_content,
+                    execution_context=ExecutionContext(
+                        run_id=chat_run_id,
+                        correlation_id=chat_run_id,
+                        thread_id=str(body.thread_id),
+                        input_text=user_content,
+                    ),
+                    on_text_delta=_emit_text_delta,
+                    on_reasoning_delta=_emit_reasoning_delta,
+                    on_completion=_emit_completion,
+                    on_tool_result=_emit_tool_result,
+                    on_unknown=_emit_unknown,
+                    on_error=_emit_error,
+                )
 
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
-                await bus.emit(ErrorEvent(message=str(exc)))
             finally:
                 # Signal HITL worker to stop; it will close the bus after draining
                 if not bridge_signaled:

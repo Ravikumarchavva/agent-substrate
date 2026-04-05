@@ -243,7 +243,7 @@ def cmd_status(args: argparse.Namespace) -> None:  # noqa: ARG001
 def cmd_chat(args: argparse.Namespace) -> None:
     """Launch an interactive CLI chat session with a ReAct agent."""
     # Late imports so the CLI stays fast for server commands
-    from raavan.core.console import Console
+    from raavan.console import Console
     from raavan.core.agents.react_agent import ReActAgent
     from raavan.integrations.llm.openai.openai_client import OpenAIClient
     from raavan.core.memory.unbounded_memory import UnboundedMemory

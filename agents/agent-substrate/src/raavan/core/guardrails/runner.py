@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 from typing import List, Optional
 
-from raavan.core.exceptions import GuardrailTripwireError
+from raavan.exceptions import GuardrailTripwireError
 from raavan.core.guardrails.base_guardrail import (
     BaseGuardrail,
     GuardrailContext,

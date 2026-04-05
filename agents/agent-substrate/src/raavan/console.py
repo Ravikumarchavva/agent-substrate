@@ -5,7 +5,7 @@ execution including streaming text, tool calls, reasoning traces, and results.
 
 Usage (single task)::
 
-    from raavan.core.console import Console
+    from raavan.console import Console
 
     result = await Console(agent).run("What is 2+2?")
 
@@ -33,7 +33,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.theme import Theme
 
-from raavan.shared.observability.logger import setup_logging
+from raavan.logger import setup_logging
 
 # ---------------------------------------------------------------------------
 # Theme

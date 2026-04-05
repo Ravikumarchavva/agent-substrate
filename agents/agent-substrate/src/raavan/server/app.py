@@ -19,6 +19,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
+import redis.asyncio as aioredis
+
 from raavan.configs.settings import settings
 from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.core.runtime import LocalRuntime
@@ -95,6 +97,10 @@ async def lifespan(app: FastAPI):
     )
     await redis_memory.connect()
     app.state.redis_memory = redis_memory
+
+    # Standalone Redis client for non-memory operations (auth token JTIs, etc.)
+    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    app.state.redis_client = redis_client
 
     # Agent runtime — actor-based message dispatch (in-process by default)
     runtime = LocalRuntime()
@@ -310,7 +316,7 @@ async def lifespan(app: FastAPI):
     # Populated at runtime via POST /builder/mcp-servers (in-memory, not persisted).
     app.state.mcp_servers = {}  # dict[str, dict]
 
-    # ── Adapter infrastructure (DataRef, Chains, Pipelines, Temporal, Triggers) ──
+    # ── Adapter infrastructure (DataRef, Chains, Pipelines, Restate, Triggers) ──
     from raavan.catalog._data_ref import DataRefStore
     from raavan.catalog._chain_runtime import ChainRuntime
     from raavan.catalog._pipeline import PipelineEngine, PipelineStore
@@ -333,19 +339,24 @@ async def lifespan(app: FastAPI):
     app.state.pipeline_engine = pipeline_engine
     app.state.pipeline_store = pipeline_store
 
-    # Temporal — durable workflow orchestration (optional, graceful if unavailable)
-    temporal_host = os.environ.get("TEMPORAL_HOST", "localhost:7233")
+    # Restate — durable workflow orchestration (optional, graceful if unavailable)
+    restate_ingress = os.environ.get("RESTATE_INGRESS_URL", "http://localhost:8080")
+    restate_admin = os.environ.get("RESTATE_ADMIN_URL", "http://localhost:9070")
     try:
-        from raavan.catalog._temporal.client import TemporalClient
+        from raavan.integrations.runtime.restate.client import RestateWorkflowClient
 
-        temporal = TemporalClient(host=temporal_host)
-        await temporal.connect()
-        app.state.temporal = temporal
-        logging.getLogger(__name__).info("Temporal connected at %s", temporal_host)
+        workflow_client = RestateWorkflowClient(
+            ingress_url=restate_ingress, admin_url=restate_admin
+        )
+        await workflow_client.connect()
+        app.state.workflow_client = workflow_client
+        logging.getLogger(__name__).info(
+            "Restate connected (ingress=%s, admin=%s)", restate_ingress, restate_admin
+        )
     except Exception as exc:
-        app.state.temporal = None
+        app.state.workflow_client = None
         logging.getLogger(__name__).warning(
-            "Temporal unavailable (%s) — workflow routes disabled", exc
+            "Restate unavailable (%s) — workflow routes disabled", exc
         )
 
     # Triggers — autonomous scheduling (cron/interval, webhooks, conditions)
@@ -353,10 +364,10 @@ async def lifespan(app: FastAPI):
     webhook_registry = WebhookRegistry()
     condition_monitor = ConditionMonitor()
 
-    if app.state.temporal:
-        trigger_scheduler.set_temporal(app.state.temporal)
-        webhook_registry.set_temporal(app.state.temporal)
-        condition_monitor.set_temporal(app.state.temporal)
+    if app.state.workflow_client:
+        trigger_scheduler.set_temporal(app.state.workflow_client)
+        webhook_registry.set_temporal(app.state.workflow_client)
+        condition_monitor.set_temporal(app.state.workflow_client)
 
     try:
         await trigger_scheduler.start()
@@ -426,6 +437,9 @@ async def lifespan(app: FastAPI):
     # Runtime
     if getattr(app.state, "runtime", None):
         await app.state.runtime.stop()
+    # Workflow client (Restate)
+    if getattr(app.state, "workflow_client", None):
+        await app.state.workflow_client.disconnect()
     # Triggers
     if getattr(app.state, "trigger_scheduler", None):
         await app.state.trigger_scheduler.stop()
@@ -440,6 +454,8 @@ async def lifespan(app: FastAPI):
         await app.state.ci_client.close()  # type: ignore[union-attr]
     if getattr(app.state, "redis_memory", None):
         await app.state.redis_memory.disconnect()
+    if getattr(app.state, "redis_client", None):
+        await app.state.redis_client.aclose()
     for tool in app.state.tools.all_tools():
         if hasattr(tool, "stop"):
             try:

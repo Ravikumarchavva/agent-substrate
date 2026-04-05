@@ -36,13 +36,15 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 from raavan.core.messages.base_message import BaseClientMessage
-from raavan.integrations.memory.redis_memory import RedisMemory
-from raavan.integrations.memory.postgres_memory import PostgresMemory
+
+if TYPE_CHECKING:
+    from raavan.integrations.memory.redis_memory import RedisMemory
+    from raavan.integrations.memory.postgres_memory import PostgresMemory
 
 logger = logging.getLogger("raavan.core.memory.session")
 

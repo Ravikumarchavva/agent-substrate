@@ -1,8 +1,8 @@
-"""Standalone Restate worker — ``python -m raavan.distributed.worker``.
+"""Restate worker entry-point — ``python -m raavan.integrations.runtime.restate.worker``.
 
 Lifecycle:
-1. **Setup** — create model client, NATS bridge, Redis memory, scan
-   tools, call ``activities.configure()``.
+1. **Setup** — create model client, optional NATS bridge, Redis memory,
+   scan tools, create catalog + chain runtime, call ``activities.configure()``.
 2. **Register** — POST deployment URL to Restate admin.
 3. **Serve** — run the Restate ASGI app via uvicorn.
 4. **Teardown** — disconnect NATS, Redis on SIGTERM.
@@ -29,33 +29,35 @@ from raavan.configs.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# ── Module-level handles for teardown ────────────────────────────────────
-_nats: Any = None
+_streaming: Any = None
 _redis_memory: Any = None
 
 
 async def _setup() -> Dict[str, Any]:
-    """Initialise all dependencies and configure activities.
+    """Initialise all dependencies and configure activities."""
+    global _streaming, _redis_memory
 
-    Returns a dict of live objects for teardown.
-    """
-    global _nats, _redis_memory
-
-    from raavan.distributed import activities
-    from raavan.distributed.client import RestateClient
-    from raavan.distributed.streaming import NATSStreamingBridge
+    from raavan.integrations.runtime.restate import activities
+    from raavan.integrations.runtime.restate.client import RestateWorkflowClient
     from raavan.integrations.llm.openai.openai_client import OpenAIClient
     from raavan.integrations.memory.redis_memory import RedisMemory
 
-    # ── Model client ─────────────────────────────────────────────────
     model_client = OpenAIClient(api_key=settings.OPENAI_API_KEY)
 
-    # ── NATS streaming bridge ────────────────────────────────────────
-    _nats = NATSStreamingBridge(nats_url=settings.NATS_URL)
-    await _nats.connect()
-    logger.info("Connected to NATS at %s", settings.NATS_URL)
+    # Optional NATS streaming bridge
+    try:
+        from raavan.integrations.runtime.nats.bridge import NATSBridge
 
-    # ── Redis memory (connection pool) ───────────────────────────────
+        _streaming = NATSBridge(nats_url=settings.NATS_URL)
+        await _streaming.connect()
+        logger.info("Connected to NATS at %s", settings.NATS_URL)
+    except (ImportError, Exception) as exc:
+        logger.info(
+            "NATS streaming unavailable (%s) — running without SSE fan-out", exc
+        )
+        _streaming = None
+
+    # Redis memory pool
     _redis_memory = RedisMemory(
         session_id="worker-pool",
         redis_url=settings.REDIS_URL,
@@ -63,36 +65,58 @@ async def _setup() -> Dict[str, Any]:
     await _redis_memory.connect()
     logger.info("Connected to Redis at %s", settings.REDIS_URL)
 
-    # ── Tool catalog ─────────────────────────────────────────────────
+    # Tool catalog
     tools: Dict[str, Any] = _scan_tools()
     logger.info("Discovered %d tools", len(tools))
 
-    # ── Configure activities DI ──────────────────────────────────────
+    # Catalog + chain runtime (for pipeline/chain workflows)
+    catalog = None
+    data_store = None
+    chain_runtime = None
+    try:
+        from raavan.catalog._chain_runtime import ChainRuntime
+        from raavan.catalog._data_ref import DataRefStore
+
+        data_store = DataRefStore(redis_url=settings.REDIS_URL)
+        await data_store.connect()
+
+        from raavan.core.tools.catalog import ToolRegistry
+
+        catalog = ToolRegistry()
+        for tool in tools.values():
+            catalog.register_tool(tool)
+
+        chain_runtime = ChainRuntime(catalog=catalog, data_store=data_store)
+    except Exception as exc:
+        logger.warning("Pipeline/chain support unavailable: %s", exc)
+
+    # Configure activities DI
     activities.configure(
-        nats=_nats,
+        streaming=_streaming,
         model_client=model_client,
         tools=tools,
         redis_memory=_redis_memory,
+        catalog=catalog,
+        data_store=data_store,
+        chain_runtime=chain_runtime,
     )
 
-    # ── Register with Restate ────────────────────────────────────────
-    restate_client = RestateClient(
-        admin_url=settings.RESTATE_ADMIN_URL,
+    # Restate client for admin registration
+    restate_client = RestateWorkflowClient(
+        admin_url=getattr(settings, "RESTATE_ADMIN_URL", "http://localhost:9070"),
     )
+    await restate_client.connect()
 
-    return {
-        "model_client": model_client,
-        "restate_client": restate_client,
-    }
+    return {"model_client": model_client, "restate_client": restate_client}
 
 
 async def _teardown() -> None:
     """Clean up connections on shutdown."""
-    global _nats, _redis_memory
+    global _streaming, _redis_memory
 
-    if _nats is not None:
-        await _nats.disconnect()
-        _nats = None
+    if _streaming is not None:
+        await _streaming.disconnect()
+        _streaming = None
 
     if _redis_memory is not None:
         await _redis_memory.disconnect()
@@ -102,13 +126,8 @@ async def _teardown() -> None:
 
 
 def _scan_tools() -> Dict[str, Any]:
-    """Discover and instantiate all available tools.
-
-    Uses the catalog scanner if available, otherwise returns a minimal
-    set of built-in tools.
-    """
+    """Discover and instantiate all available tools."""
     tools: Dict[str, Any] = {}
-
     try:
         from raavan.catalog._scanner import scan_tools
 
@@ -117,7 +136,6 @@ def _scan_tools() -> Dict[str, Any]:
             tools[tool.name] = tool
     except Exception as exc:
         logger.warning("Tool scan failed, using empty catalog: %s", exc)
-
     return tools
 
 
@@ -137,10 +155,10 @@ async def _register_with_restate(
 
 
 def main() -> None:
-    """Entry-point: ``python -m raavan.distributed.worker``."""
+    """Entry-point: ``python -m raavan.integrations.runtime.restate.worker``."""
     import argparse
 
-    from raavan.shared.observability.logger import setup_logging
+    from raavan.logger import setup_logging
 
     parser = argparse.ArgumentParser(description="Restate agent worker")
     parser.add_argument("--host", default="0.0.0.0", help="Bind host")
@@ -155,10 +173,8 @@ def main() -> None:
         deps = await _setup()
         await _register_with_restate(deps["restate_client"], worker_url)
 
-    # Setup before uvicorn starts
     asyncio.run(_start())
 
-    # Graceful shutdown on SIGTERM
     def _handle_sigterm(signum: int, frame: Any) -> None:
         logger.info("Received SIGTERM, shutting down")
         asyncio.run(_teardown())
@@ -166,9 +182,8 @@ def main() -> None:
 
     signal.signal(signal.SIGTERM, _handle_sigterm)
 
-    # Serve the Restate ASGI app
     uvicorn.run(
-        "raavan.distributed.restate_app:app",
+        "raavan.integrations.runtime.restate.app:app",
         host=args.host,
         port=args.port,
         log_level="info",

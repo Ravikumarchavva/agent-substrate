@@ -119,6 +119,18 @@ class CompletionChunk(StreamChunk):
         self.message = message
 
 
+class StructuredOutputChunk(StreamChunk):
+    """Yielded at the end of a streaming run when ``response_schema`` is set.
+
+    Contains the validated Pydantic instance alongside the raw JSON text.
+    Consumers can check ``chunk.result.ok`` before accessing ``chunk.result.parsed``.
+    """
+
+    def __init__(self, result: Any, metadata: Optional[Dict[str, Any]] = None):
+        super().__init__("structured_output", result, metadata)
+        self.result = result
+
+
 def _pil_to_data_url(image: Image.Image) -> str:
     """Encode a PIL Image as a PNG data URL (base64)."""
     buf = io.BytesIO()

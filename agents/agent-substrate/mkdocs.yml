@@ -7,7 +7,7 @@ edit_uri: edit/main/docs/
 exclude_docs: |
   includes/
 
-copyright: Copyright &copy; 2024–2026 Ravikumar Chavva
+copyright: Copyright &copy; 2025–2026 Ravikumar Chavva
 
 # ── Theme ────────────────────────────────────────────────────────────────────
 theme:
@@ -18,15 +18,15 @@ theme:
     # System-preference aware
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: deep purple
-      accent: cyan
+      primary: teal
+      accent: deep orange
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: deep purple
-      accent: cyan
+      primary: teal
+      accent: deep orange
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
@@ -161,7 +161,9 @@ nav:
     - Durable Runtime: concepts/durable-runtime.md
 
   - Core:
-    - Runtime: core/runtime/index.md
+    - Runtime:
+      - The Runtime: core/runtime/index.md
+      - Scaling Out: core/runtime/scaling.md
 
   - Deploy:
     - Overview: deploy/index.md

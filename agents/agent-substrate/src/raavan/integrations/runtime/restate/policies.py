@@ -86,7 +86,7 @@ def derive_policy_from_tool(tool: Any) -> ToolPolicy:
     if name in TOOL_POLICIES:
         return TOOL_POLICIES[name]
 
-    # Lazy import to avoid pulling core into distributed at module level
+    # Lazy import to avoid pulling core at module level
     from raavan.core.tools.base_tool import HitlMode, ToolRisk
 
     risk = getattr(tool, "risk", ToolRisk.SAFE)

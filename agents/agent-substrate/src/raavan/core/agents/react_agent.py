@@ -27,6 +27,7 @@ from uuid import uuid4
 from opentelemetry.trace import Status, StatusCode
 
 from raavan.core.agents.base_agent import BaseAgent
+from raavan.core.execution.context import ExecutionContext
 from raavan.core.runtime._protocol import AgentId, AgentRuntime
 from raavan.core.agents.agent_result import (
     AgentRunResult,
@@ -36,7 +37,7 @@ from raavan.core.agents.agent_result import (
     ToolCallRecord,
 )
 from raavan.core.context.base_context import ModelContext
-from raavan.core.exceptions import GuardrailTripwireError
+from raavan.exceptions import GuardrailTripwireError
 from raavan.core.guardrails.base_guardrail import (
     BaseGuardrail,
     GuardrailContext,
@@ -48,6 +49,11 @@ from raavan.core.hooks import HookEvent, HookManager
 from raavan.core.memory.base_memory import BaseMemory
 from raavan.core.memory.memory_scope import MemoryScope
 from raavan.core.memory.unbounded_memory import UnboundedMemory
+from raavan.core.middleware.base import (
+    BaseMiddleware,
+    MiddlewareContext,
+    MiddlewareStage,
+)
 from raavan.core.structured import StructuredOutputResult
 from raavan.core.messages.client_messages import (
     AssistantMessage,
@@ -145,6 +151,12 @@ class ReActAgent(BaseAgent):
         # Skills
         skill_dirs: Optional[List[str]] = None,
         skill_manager: Optional[SkillManager] = None,
+        # Structured output: when set, run() / run_stream() parse the final
+        # answer into this Pydantic model.
+        response_schema: Optional[type] = None,
+        # Middleware: opt-in composable pipeline for pre/post processing.
+        middleware: Optional[List[BaseMiddleware]] = None,
+        execution_context: Optional[ExecutionContext] = None,
         # Runtime
         runtime: Optional[AgentRuntime] = None,
         agent_id: Optional[AgentId] = None,
@@ -188,6 +200,9 @@ class ReActAgent(BaseAgent):
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
             prompt_enricher=_skill_manager,
+            response_schema=response_schema,
+            middleware=middleware,
+            execution_context=execution_context,
             runtime=runtime,
             agent_id=agent_id,
         )
@@ -250,18 +265,48 @@ class ReActAgent(BaseAgent):
         """Clear the currently advertised tool subset between runs."""
         self._active_tool_names.clear()
 
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+    def _resolve_run_id(self) -> str:
+        """Return the active execution run id or create a new one."""
+        if self.execution_context is not None and self.execution_context.run_id:
+            return self.execution_context.run_id
+        return str(uuid4())
+
+    def _current_middleware_run_id(self) -> str:
+        current = getattr(self, "_current_run_id", "")
+        if current:
+            return current
+        if self.execution_context is not None and self.execution_context.run_id:
+            return self.execution_context.run_id
+        return ""
+
+    async def run(
+        self,
+        input_text: str,
+        *,
+        response_schema: Optional[type] = None,
+        **kwargs,
+    ) -> AgentRunResult:
         self._reset_tool_activation_state()
+        _schema = (
+            response_schema if response_schema is not None else self.response_schema
+        )
         # Apply run-level timeout if configured
         if self.run_timeout:
             return await asyncio.wait_for(
-                self._run_inner(input_text, **kwargs),
+                self._run_inner(input_text, response_schema=_schema, **kwargs),
                 timeout=self.run_timeout,
             )
-        return await self._run_inner(input_text, **kwargs)
+        return await self._run_inner(input_text, response_schema=_schema, **kwargs)
 
-    async def _run_inner(self, input_text: str, **kwargs) -> AgentRunResult:
-        run_id = str(uuid4())
+    async def _run_inner(
+        self,
+        input_text: str,
+        *,
+        response_schema: Optional[type] = None,
+        **kwargs,
+    ) -> AgentRunResult:
+        run_id = self._resolve_run_id()
+        self._current_run_id = run_id
         run_start = datetime.now(timezone.utc)
         usage = AggregatedUsage()
         steps: List[StepResult] = []
@@ -274,560 +319,152 @@ class ReActAgent(BaseAgent):
 
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
 
-        with global_tracer.start_span("agent_run", attrs) as run_span:
-            global_metrics.increment_counter("agent_runs", tags={"name": self.name})
-            if self.verbose:
-                logger.info(f"[{self.name}] Starting run: {input_text[:80]}...")
-
-            # ── LIFECYCLE HOOK: RUN_START ─────────────────────────────
-            await self.hooks.dispatch(
-                HookEvent.RUN_START,
-                {
-                    "event": "on_run_start",
-                    "agent_name": self.name,
-                    "run_id": run_id,
-                    "input_text": input_text,
-                },
-            )
-
-            # Ensure system prompt is loaded (lazy seed for async memory)
-            await self._seed_system_message()
-
-            # 1. Add user message
-            await self.memory.add_message(UserMessage(content=[input_text]))
-
-            # ── INPUT GUARDRAILS ─────────────────────────────────────────
-            try:
-                if self.input_guardrails:
-                    ctx = GuardrailContext(
-                        agent_name=self.name,
-                        run_id=run_id,
-                        input_text=input_text,
-                    )
-                    results = await run_guardrails(
-                        self.input_guardrails,
-                        ctx,
-                        guardrail_type=GuardrailType.INPUT,
-                    )
-                    guardrail_results.extend(results)
-            except GuardrailTripwireError as e:
-                logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
-                run_end = datetime.now(timezone.utc)
-                return AgentRunResult(
-                    run_id=run_id,
-                    agent_name=self.name,
-                    output=[f"Request blocked: {e.message}"],
-                    status=RunStatus.GUARDRAIL_TRIPPED,
-                    steps=steps,
-                    usage=usage,
-                    start_time=run_start,
-                    end_time=run_end,
-                    duration_seconds=(run_end - run_start).total_seconds(),
-                    max_iterations=self.max_iterations,
-                    error=e.message,
-                    guardrail_results=guardrail_results
-                    + ([e.details["result"]] if "result" in e.details else []),
-                )
-
-            # 2. ReAct loop
-            for step_num in range(1, self.max_iterations + 1):
-                with global_tracer.start_span(f"step_{step_num}", {"step": step_num}):
-                    # A. THINK — call LLM
-                    response = await self._call_llm(current_input=input_text, **kwargs)
-                    usage.add(response.usage)
-                    await self.memory.add_message(response)
-
-                    # Extract content (can be multimodal)
-                    thought_content = response.content if response.content else None
-
-                    # B. No tool calls → final answer
-                    if not response.tool_calls:
-                        if self.verbose:
-                            logger.info(f"[{self.name}] Step {step_num}: final answer")
-                        run_span.set_attribute("final_step", step_num)
-
-                        # ── OUTPUT GUARDRAILS ────────────────────────────
-                        output_text = self._extract_text(response)
-                        try:
-                            if self.output_guardrails:
-                                ctx = GuardrailContext(
-                                    agent_name=self.name,
-                                    run_id=run_id,
-                                    output_text=output_text,
-                                    raw_message=response,
-                                )
-                                results = await run_guardrails(
-                                    self.output_guardrails,
-                                    ctx,
-                                    guardrail_type=GuardrailType.OUTPUT,
-                                )
-                                guardrail_results.extend(results)
-                        except GuardrailTripwireError as e:
-                            logger.error(
-                                f"[{self.name}] Output guardrail tripwire: {e.message}"
-                            )
-                            run_end = datetime.now(timezone.utc)
-                            return AgentRunResult(
-                                run_id=run_id,
-                                agent_name=self.name,
-                                output=[f"Response blocked: {e.message}"],
-                                status=RunStatus.GUARDRAIL_TRIPPED,
-                                steps=steps,
-                                usage=usage,
-                                start_time=run_start,
-                                end_time=run_end,
-                                duration_seconds=(run_end - run_start).total_seconds(),
-                                max_iterations=self.max_iterations,
-                                error=e.message,
-                                guardrail_results=guardrail_results
-                                + (
-                                    [e.details["result"]]
-                                    if "result" in e.details
-                                    else []
-                                ),
-                            )
-
-                        steps.append(
-                            StepResult(
-                                step=step_num,
-                                thought=thought_content,
-                                tool_calls=[],
-                                usage=response.usage,
-                                finish_reason=response.finish_reason or "stop",
-                            )
-                        )
-                        final_output = thought_content or []
-                        break
-
-                    # C. ACT — execute tool calls
-                    if self.verbose:
-                        names = [
-                            self._parse_tool_call(tc).name for tc in response.tool_calls
-                        ]
-                        logger.info(
-                            f"[{self.name}] Step {step_num}: tool calls → {names}"
-                        )
-
-                    tool_records: List[ToolCallRecord] = []
-                    for tc_raw in response.tool_calls:
-                        parsed = self._parse_tool_call(tc_raw)
-
-                        # ── TOOL-CALL GUARDRAILS ─────────────────────────
-                        tool_blocked = False
-                        try:
-                            all_guardrails = (
-                                self.input_guardrails + self.output_guardrails
-                            )
-                            tool_guardrails = [
-                                g
-                                for g in all_guardrails
-                                if g.guardrail_type == GuardrailType.TOOL_CALL
-                            ]
-                            if tool_guardrails:
-                                ctx = GuardrailContext(
-                                    agent_name=self.name,
-                                    run_id=run_id,
-                                    tool_name=parsed.name,
-                                    tool_arguments=parsed.arguments,
-                                )
-                                results = await run_guardrails(
-                                    tool_guardrails,
-                                    ctx,
-                                    guardrail_type=GuardrailType.TOOL_CALL,
-                                )
-                                guardrail_results.extend(results)
-                        except GuardrailTripwireError as e:
-                            logger.error(
-                                f"[{self.name}] Tool-call guardrail tripwire: {e.message}"
-                            )
-                            tool_blocked = True
-                            # Create error tool message so the LLM sees it was blocked
-                            tool_msg = ToolExecutionResultMessage(
-                                content=[
-                                    {
-                                        "type": "text",
-                                        "text": json.dumps(
-                                            {"error": f"Tool blocked: {e.message}"}
-                                        ),
-                                    }
-                                ],
-                                tool_call_id=parsed.call_id,
-                                name=parsed.name,
-                                is_error=True,
-                            )
-                            await self.memory.add_message(tool_msg)
-                            tool_records.append(
-                                ToolCallRecord(
-                                    tool_name=parsed.name,
-                                    call_id=parsed.call_id,
-                                    arguments=parsed.arguments,
-                                    result=f"Blocked by guardrail: {e.message}",
-                                    is_error=True,
-                                )
-                            )
-                            guardrail_results.extend(
-                                [e.details["result"]] if "result" in e.details else []
-                            )
-
-                        if not tool_blocked:
-                            record, tool_msg = await self._execute_tool(
-                                parsed, step_num
-                            )
-                            await self.memory.add_message(tool_msg)
-                            tool_records.append(record)
-
-                        # Tally
-                        tool_calls_by_name[parsed.name] = (
-                            tool_calls_by_name.get(parsed.name, 0) + 1
-                        )
-                        total_tool_calls += 1
-
-                    steps.append(
-                        StepResult(
-                            step=step_num,
-                            thought=thought_content,
-                            tool_calls=tool_records,
-                            usage=response.usage,
-                            finish_reason="tool_calls",
-                        )
-                    )
-
-            else:
-                # Loop exhausted without breaking → max iterations
-                status = RunStatus.MAX_ITERATIONS
-                if self.verbose:
-                    logger.warning(
-                        f"[{self.name}] Hit max iterations ({self.max_iterations})"
-                    )
-                # Try to extract whatever the last response said
-                if steps and steps[-1].thought:
-                    final_output = steps[-1].thought
-
-            # 3. Build result
-            run_end = datetime.now(timezone.utc)
-            duration = (run_end - run_start).total_seconds()
-
-            result = AgentRunResult(
-                run_id=run_id,
-                agent_name=self.name,
-                output=final_output,
-                status=status,
-                steps=steps,
-                usage=usage,
-                tool_calls_total=total_tool_calls,
-                tool_calls_by_name=tool_calls_by_name,
-                start_time=run_start,
-                end_time=run_end,
-                duration_seconds=duration,
-                max_iterations=self.max_iterations,
-                error=error_msg,
-                guardrail_results=guardrail_results,
-            )
-
-            # ── LIFECYCLE HOOK: RUN_END ──────────────────────────────
-            await self.hooks.dispatch(
-                HookEvent.RUN_END,
-                {
-                    "event": "on_run_end",
-                    "agent_name": self.name,
-                    "run_id": run_id,
-                    "status": status.value,
-                    "steps_used": len(steps),
-                    "tool_calls_total": total_tool_calls,
-                    "tokens_used": usage.total_tokens,
-                    "duration_seconds": duration,
-                },
-            )
-
-            return result
-
-    # ── Structured-output run ────────────────────────────────────────────────
-
-    async def run_structured(
-        self,
-        input_text: str,
-        schema: "type",
-        *,
-        max_iterations: Optional[int] = None,
-        **kwargs,
-    ) -> "StructuredOutputResult":
-        """Run the full ReAct loop and then emit a typed final answer.
-
-        Combines tool use, memory, and guardrails with a structured final
-        extraction step.  The agent reasons freely (with tool calls if
-        needed) for up to ``max_iterations`` steps, then one additional
-        ``generate(response_format=...)`` call is made with the accumulated
-        conversation context so the final answer is validated against
-        ``schema``.
-
-        This lets you write deterministic workflows on top of a reasoning
-        agent::
-
-            class BookingDecision(BaseModel):
-                approved: bool
-                reason: str
-                suggested_date: Optional[str] = None
-
-            result = await agent.run_structured(
-                'Book a flight from NYC to London for next Friday',
-                schema=BookingDecision,
-            )
-            if result.ok:
-                decision = result.parsed
-                if decision.approved:
-                    await confirm_booking(decision.suggested_date)
-
-        Args:
-            input_text: User input to process.
-            schema: Pydantic ``BaseModel`` subclass for the final answer.
-            max_iterations: Override the agent's default ``max_iterations``.
-            **kwargs: Passed to the underlying ``_run_inner()`` call.
-
-        Returns:
-            ``StructuredOutputResult[schema]`` with the typed final answer.
-
-        Raises:
-            ``StructuredOutputError`` if the model cannot produce a valid
-            structured output after the ReAct loop.
-        """
-
-        # Run the full ReAct loop (with tools, memory, guardrails)
-        _saved_max = self.max_iterations
-        if max_iterations is not None:
-            self.max_iterations = max_iterations
         try:
-            await self._run_inner(input_text, **kwargs)
-        finally:
-            self.max_iterations = _saved_max
+            with global_tracer.start_span("agent_run", attrs) as run_span:
+                global_metrics.increment_counter("agent_runs", tags={"name": self.name})
+                if self.verbose:
+                    logger.info(f"[{self.name}] Starting run: {input_text[:80]}...")
 
-        # Collect the conversation window built by the loop
-        context_messages = await self.model_context.build(
-            session_id=getattr(self, "_session_id", self.name),
-            current_input=input_text,
-            raw_messages=await self.memory.get_messages(),
-        )
-
-        # One final structured-output call to extract the typed answer
-        structured_result: StructuredOutputResult = await self.model_client.generate(
-            context_messages,
-            response_format=schema,
-            **{
-                k: v
-                for k, v in kwargs.items()
-                if k not in ("temperature", "tools", "tool_choice")
-            },
-        )
-        return structured_result
-
-    # ── Streaming run ────────────────────────────────────────────────────────
-
-    async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
-        """Streaming variant — yields partial chunks and tool results.
-
-        Guardrails are applied at the same points as run():
-          - Input guardrails: before first LLM call
-          - Output guardrails: after final response (on CompletionChunk)
-          - Tool-call guardrails: before each tool.execute()
-
-        If an input guardrail trips, yields a single error message and returns.
-        """
-        self._reset_tool_activation_state()
-        run_id = str(uuid4())
-        attrs = {"agent_name": self.name, "input_length": len(input_text)}
-
-        # Optional: publish chunks to a topic for remote subscribers
-        _stream_pub = None
-        if self.runtime is not None and self.agent_id is not None:
-            from raavan.core.runtime._stream import StreamPublisher
-            from raavan.core.runtime._protocol import TopicId
-
-            _stream_pub = StreamPublisher(
-                self.runtime,
-                TopicId(type="stream", source=self.agent_id.key),
-                sender=self.agent_id,
-            )
-
-        with global_tracer.start_span("agent_run_stream", attrs):
-            global_metrics.increment_counter("agent_runs", tags={"name": self.name})
-            if self.verbose:
-                logger.info(
-                    f"[{self.name}] Starting streaming run: {input_text[:80]}..."
+                # ── LIFECYCLE HOOK: RUN_START ─────────────────────────────
+                await self.hooks.dispatch(
+                    HookEvent.RUN_START,
+                    {
+                        "event": "on_run_start",
+                        "agent_name": self.name,
+                        "run_id": run_id,
+                        "input_text": input_text,
+                    },
                 )
 
-            # Ensure system prompt is loaded (lazy seed for async memory)
-            await self._seed_system_message()
-            await self.memory.add_message(UserMessage(content=[input_text]))
+                # Ensure system prompt is loaded (lazy seed for async memory)
+                await self._seed_system_message()
 
-            # ── INPUT GUARDRAILS ─────────────────────────────────────────
-            try:
-                if self.input_guardrails:
-                    ctx = GuardrailContext(
-                        agent_name=self.name,
+                # 1. Add user message
+                await self.memory.add_message(UserMessage(content=[input_text]))
+
+                # ── INPUT GUARDRAILS ─────────────────────────────────────────
+                try:
+                    if self.input_guardrails:
+                        ctx = GuardrailContext(
+                            agent_name=self.name,
+                            run_id=run_id,
+                            input_text=input_text,
+                        )
+                        results = await run_guardrails(
+                            self.input_guardrails,
+                            ctx,
+                            guardrail_type=GuardrailType.INPUT,
+                        )
+                        guardrail_results.extend(results)
+                except GuardrailTripwireError as e:
+                    logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
+                    run_end = datetime.now(timezone.utc)
+                    return AgentRunResult(
                         run_id=run_id,
-                        input_text=input_text,
-                    )
-                    await run_guardrails(
-                        self.input_guardrails,
-                        ctx,
-                        guardrail_type=GuardrailType.INPUT,
-                    )
-            except GuardrailTripwireError as e:
-                logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
-                from raavan.core.messages._types import CompletionChunk
-
-                yield CompletionChunk(
-                    message=AssistantMessage(
-                        role="assistant",
-                        content=[f"Request blocked: {e.message}"],
-                        finish_reason="guardrail_tripped",
-                    ),
-                    metadata={"guardrail_tripped": True, "guardrail": e.guardrail_name},
-                )
-                if _stream_pub is not None:
-                    await _stream_pub.close("guardrail_tripped")
-                return
-
-            for step_num in range(1, self.max_iterations + 1):
-                with global_tracer.start_span(f"step_{step_num}", {"step": step_num}):
-                    # THINK
-                    tool_schemas = self._build_tool_schemas(current_input=input_text)
-                    messages = await self.model_context.build(
-                        session_id=getattr(self, "_session_id", self.name),
-                        current_input=input_text,
-                        raw_messages=await self.memory.get_messages(),
-                        model_client=self.model_client,
+                        agent_name=self.name,
+                        output=[f"Request blocked: {e.message}"],
+                        status=RunStatus.GUARDRAIL_TRIPPED,
+                        steps=steps,
+                        usage=usage,
+                        start_time=run_start,
+                        end_time=run_end,
+                        duration_seconds=(run_end - run_start).total_seconds(),
+                        max_iterations=self.max_iterations,
+                        error=e.message,
+                        guardrail_results=guardrail_results
+                        + ([e.details["result"]] if "result" in e.details else []),
                     )
 
+                # 2. ReAct loop
+                for step_num in range(1, self.max_iterations + 1):
                     with global_tracer.start_span(
-                        "llm_generate_stream", {"msg_count": len(messages)}
+                        f"step_{step_num}", {"step": step_num}
                     ):
-                        from raavan.core.messages._types import (
-                            CompletionChunk,
-                            TextDeltaChunk,
+                        # A. THINK — call LLM
+                        response = await self._call_llm(
+                            current_input=input_text,
+                            response_schema=response_schema,
+                            **kwargs,
                         )
+                        usage.add(response.usage)
+                        await self.memory.add_message(response)
 
-                        llm_t0 = asyncio.get_event_loop().time()
-                        final_response_obj = None
-                        # Accumulate partial text so we can persist it if cancelled
-                        # mid-stream before a CompletionChunk is received.
-                        partial_text: str = ""
+                        thought_content = response.content if response.content else None
 
-                        try:
-                            async for chunk in self.model_client.generate_stream(
-                                messages=messages,
-                                tools=tool_schemas or None,
-                                tool_choice="auto" if tool_schemas else None,
-                                **kwargs,
-                            ):
-                                # Yield the chunk to user
-                                yield chunk
-                                if _stream_pub is not None:
-                                    await _stream_pub.emit(chunk)
-
-                                # Track partial text and final completion
-                                if isinstance(chunk, TextDeltaChunk):
-                                    partial_text += chunk.text
-                                elif isinstance(chunk, CompletionChunk):
-                                    final_response_obj = chunk.message
-
-                            # After stream completes, add final message to memory
-                            if final_response_obj:
-                                await self.memory.add_message(final_response_obj)
-
-                            llm_t1 = asyncio.get_event_loop().time()
-                            global_metrics.record_histogram(
-                                "llm_latency",
-                                llm_t1 - llm_t0,
-                                tags={
-                                    "model": getattr(
-                                        self.model_client, "model", "unknown"
-                                    )
-                                },
-                            )
-                        except asyncio.CancelledError:
-                            # Agent task was cancelled — persist whatever content we
-                            # have so the conversation history stays coherent.
-                            if final_response_obj is not None:
-                                await self.memory.add_message(final_response_obj)
-                            elif partial_text:
-                                await self.memory.add_message(
-                                    AssistantMessage(
-                                        role="assistant",
-                                        content=[partial_text],
-                                        finish_reason="cancelled",
-                                    )
+                        if not response.tool_calls:
+                            if self.verbose:
+                                logger.info(
+                                    f"[{self.name}] Step {step_num}: final answer"
                                 )
-                            raise  # Must re-raise so the asyncio.Task is properly cancelled
-                        except Exception as e:
-                            global_metrics.increment_counter(
-                                "llm_errors", tags={"error": type(e).__name__}
-                            )
-                            raise
+                            run_span.set_attribute("final_step", step_num)
 
-                    # Use the final response from streaming (should always exist)
-                    response = final_response_obj or AssistantMessage(
-                        role="assistant",
-                        content=None,
-                    )
-
-                    # No tool calls → done
-                    if not response.tool_calls:
-                        if self.verbose:
-                            logger.info(f"[{self.name}] [stream] Step {step_num}: done")
-
-                        # ── OUTPUT GUARDRAILS (stream) ───────────────────
-                        try:
-                            if self.output_guardrails:
-                                output_text = self._extract_text(response)
-                                ctx = GuardrailContext(
-                                    agent_name=self.name,
+                            output_text = self._extract_text(response)
+                            try:
+                                if self.output_guardrails:
+                                    ctx = GuardrailContext(
+                                        agent_name=self.name,
+                                        run_id=run_id,
+                                        output_text=output_text,
+                                        raw_message=response,
+                                    )
+                                    results = await run_guardrails(
+                                        self.output_guardrails,
+                                        ctx,
+                                        guardrail_type=GuardrailType.OUTPUT,
+                                    )
+                                    guardrail_results.extend(results)
+                            except GuardrailTripwireError as e:
+                                logger.error(
+                                    f"[{self.name}] Output guardrail tripwire: {e.message}"
+                                )
+                                run_end = datetime.now(timezone.utc)
+                                return AgentRunResult(
                                     run_id=run_id,
-                                    output_text=output_text,
-                                    raw_message=response,
+                                    agent_name=self.name,
+                                    output=[f"Response blocked: {e.message}"],
+                                    status=RunStatus.GUARDRAIL_TRIPPED,
+                                    steps=steps,
+                                    usage=usage,
+                                    start_time=run_start,
+                                    end_time=run_end,
+                                    duration_seconds=(
+                                        run_end - run_start
+                                    ).total_seconds(),
+                                    max_iterations=self.max_iterations,
+                                    error=e.message,
+                                    guardrail_results=guardrail_results
+                                    + (
+                                        [e.details["result"]]
+                                        if "result" in e.details
+                                        else []
+                                    ),
                                 )
-                                await run_guardrails(
-                                    self.output_guardrails,
-                                    ctx,
-                                    guardrail_type=GuardrailType.OUTPUT,
+
+                            steps.append(
+                                StepResult(
+                                    step=step_num,
+                                    thought=thought_content,
+                                    tool_calls=[],
+                                    usage=response.usage,
+                                    finish_reason=response.finish_reason or "stop",
                                 )
-                        except GuardrailTripwireError as e:
-                            logger.error(
-                                f"[{self.name}] Output guardrail tripwire (stream): {e.message}"
                             )
-                            yield CompletionChunk(
-                                message=AssistantMessage(
-                                    role="assistant",
-                                    content=[f"Response blocked: {e.message}"],
-                                    finish_reason="guardrail_tripped",
-                                ),
-                                metadata={
-                                    "guardrail_tripped": True,
-                                    "guardrail": e.guardrail_name,
-                                },
+                            final_output = thought_content or []
+                            break
+
+                        if self.verbose:
+                            names = [
+                                self._parse_tool_call(tc).name
+                                for tc in response.tool_calls
+                            ]
+                            logger.info(
+                                f"[{self.name}] Step {step_num}: tool calls → {names}"
                             )
-                            if _stream_pub is not None:
-                                await _stream_pub.close("guardrail_tripped")
-                            return
-                        if _stream_pub is not None:
-                            await _stream_pub.close()
-                        break
 
-                    # ACT — execute tools
-                    if self.verbose:
-                        names = [
-                            self._parse_tool_call(tc).name for tc in response.tool_calls
-                        ]
-                        logger.info(
-                            f"[{self.name}] [stream] Step {step_num}: tools → {names}"
-                        )
-
-                    with global_tracer.start_span(
-                        "execute_tools_stream", {"count": len(response.tool_calls)}
-                    ):
+                        tool_records: List[ToolCallRecord] = []
                         for tc_raw in response.tool_calls:
                             parsed = self._parse_tool_call(tc_raw)
 
-                            # ── TOOL-CALL GUARDRAILS (stream) ────────────
                             tool_blocked = False
                             try:
                                 all_guardrails = (
@@ -845,14 +482,15 @@ class ReActAgent(BaseAgent):
                                         tool_name=parsed.name,
                                         tool_arguments=parsed.arguments,
                                     )
-                                    await run_guardrails(
+                                    results = await run_guardrails(
                                         tool_guardrails,
                                         ctx,
                                         guardrail_type=GuardrailType.TOOL_CALL,
                                     )
+                                    guardrail_results.extend(results)
                             except GuardrailTripwireError as e:
                                 logger.error(
-                                    f"[{self.name}] Tool-call guardrail tripwire (stream): {e.message}"
+                                    f"[{self.name}] Tool-call guardrail tripwire: {e.message}"
                                 )
                                 tool_blocked = True
                                 tool_msg = ToolExecutionResultMessage(
@@ -860,7 +498,11 @@ class ReActAgent(BaseAgent):
                                         {
                                             "type": "text",
                                             "text": json.dumps(
-                                                {"error": f"Tool blocked: {e.message}"}
+                                                {
+                                                    "error": (
+                                                        f"Tool blocked: {e.message}"
+                                                    )
+                                                }
                                             ),
                                         }
                                     ],
@@ -869,16 +511,502 @@ class ReActAgent(BaseAgent):
                                     is_error=True,
                                 )
                                 await self.memory.add_message(tool_msg)
-                                yield tool_msg
-                                if _stream_pub is not None:
-                                    await _stream_pub.emit(tool_msg)
+                                tool_records.append(
+                                    ToolCallRecord(
+                                        tool_name=parsed.name,
+                                        call_id=parsed.call_id,
+                                        arguments=parsed.arguments,
+                                        result=f"Blocked by guardrail: {e.message}",
+                                        is_error=True,
+                                    )
+                                )
+                                guardrail_results.extend(
+                                    [e.details["result"]]
+                                    if "result" in e.details
+                                    else []
+                                )
 
                             if not tool_blocked:
-                                _, tool_msg = await self._execute_tool(parsed, step_num)
+                                record, tool_msg = await self._execute_tool(
+                                    parsed, step_num
+                                )
                                 await self.memory.add_message(tool_msg)
-                                yield tool_msg
+                                tool_records.append(record)
+
+                            tool_calls_by_name[parsed.name] = (
+                                tool_calls_by_name.get(parsed.name, 0) + 1
+                            )
+                            total_tool_calls += 1
+
+                        steps.append(
+                            StepResult(
+                                step=step_num,
+                                thought=thought_content,
+                                tool_calls=tool_records,
+                                usage=response.usage,
+                                finish_reason="tool_calls",
+                            )
+                        )
+
+                else:
+                    # Loop exhausted without breaking → max iterations
+                    status = RunStatus.MAX_ITERATIONS
+                    if self.verbose:
+                        logger.warning(
+                            f"[{self.name}] Hit max iterations ({self.max_iterations})"
+                        )
+                    # Try to extract whatever the last response said
+                    if steps and steps[-1].thought:
+                        final_output = steps[-1].thought
+
+                # 3. Build result
+                run_end = datetime.now(timezone.utc)
+                duration = (run_end - run_start).total_seconds()
+
+                result = AgentRunResult(
+                    run_id=run_id,
+                    agent_name=self.name,
+                    output=final_output,
+                    status=status,
+                    steps=steps,
+                    usage=usage,
+                    tool_calls_total=total_tool_calls,
+                    tool_calls_by_name=tool_calls_by_name,
+                    start_time=run_start,
+                    end_time=run_end,
+                    duration_seconds=duration,
+                    max_iterations=self.max_iterations,
+                    error=error_msg,
+                    guardrail_results=guardrail_results,
+                )
+
+                # 4. Structured extraction (native — no extra LLM call)
+                if response_schema is not None and status == RunStatus.COMPLETED:
+                    # The model was given `text.format` + `tools` in each LLM
+                    # call; the final answer's text is already schema-conformant.
+                    # Check AssistantMessage.parsed first (set by generate()).
+                    _last_msg = steps[-1] if steps else None
+                    _parsed = None
+                    if _last_msg is not None:
+                        # response is still the last LLM AssistantMessage from
+                        # the loop; its `.parsed` was populated by generate().
+                        _parsed = getattr(response, "parsed", None)
+
+                    if _parsed is not None:
+                        from raavan.core.structured.result import StructuredOutputResult
+
+                        raw_text = self._extract_text(response)
+                        result.structured_output = StructuredOutputResult(
+                            parsed=_parsed,
+                            raw_text=raw_text,
+                            model=getattr(self.model_client, "model", None),
+                        )
+                    else:
+                        # Fallback: extra LLM call (when the model didn't
+                        # produce valid structured text in its final answer).
+                        context_messages = await self.model_context.build(
+                            session_id=getattr(self, "_session_id", self.name),
+                            current_input=input_text,
+                            raw_messages=await self.memory.get_messages(),
+                            model_client=self.model_client,
+                        )
+                        result.structured_output = await self.model_client.generate(
+                            context_messages,
+                            response_format=response_schema,
+                        )
+
+                # ── LIFECYCLE HOOK: RUN_END ──────────────────────────────
+                await self.hooks.dispatch(
+                    HookEvent.RUN_END,
+                    {
+                        "event": "on_run_end",
+                        "agent_name": self.name,
+                        "run_id": run_id,
+                        "status": status.value,
+                        "steps_used": len(steps),
+                        "tool_calls_total": total_tool_calls,
+                        "tokens_used": usage.total_tokens,
+                        "duration_seconds": duration,
+                    },
+                )
+
+                return result
+        finally:
+            self._current_run_id = ""
+
+    # ── Structured-output run ────────────────────────────────────────────────
+
+    async def run_structured(
+        self,
+        input_text: str,
+        schema: "type",
+        *,
+        max_iterations: Optional[int] = None,
+        **kwargs,
+    ) -> "StructuredOutputResult":
+        """Run the full ReAct loop and then emit a typed final answer.
+
+        Delegates to ``run(response_schema=schema)`` — the structured
+        extraction is now built into the core loop.
+
+        Args:
+            input_text: User input to process.
+            schema: Pydantic ``BaseModel`` subclass for the final answer.
+            max_iterations: Override the agent's default ``max_iterations``.
+            **kwargs: Passed through to ``run()``.
+
+        Returns:
+            ``StructuredOutputResult[schema]`` with the typed final answer.
+
+        Raises:
+            ``StructuredOutputError`` if the model cannot produce a valid
+            structured output after the ReAct loop.
+        """
+        _saved_max = self.max_iterations
+        if max_iterations is not None:
+            self.max_iterations = max_iterations
+        try:
+            result = await self.run(input_text, response_schema=schema, **kwargs)
+        finally:
+            self.max_iterations = _saved_max
+
+        if result.structured_output is None:
+            from raavan.core.structured import StructuredOutputError
+
+            raise StructuredOutputError(
+                "Structured extraction did not produce a result "
+                f"(status={result.status.value})"
+            )
+        return result.structured_output
+
+    # ── Streaming run ────────────────────────────────────────────────────────
+
+    async def run_stream(
+        self,
+        input_text: str,
+        *,
+        response_schema: Optional[type] = None,
+        **kwargs,
+    ) -> AsyncIterator[Any]:
+        """Streaming variant — yields partial chunks and tool results.
+
+        Guardrails are applied at the same points as run():
+          - Input guardrails: before first LLM call
+          - Output guardrails: after final response (on CompletionChunk)
+          - Tool-call guardrails: before each tool.execute()
+
+        If an input guardrail trips, yields a single error message and returns.
+        """
+        self._reset_tool_activation_state()
+        run_id = self._resolve_run_id()
+        self._current_run_id = run_id
+        attrs = {"agent_name": self.name, "input_length": len(input_text)}
+
+        # Optional: publish chunks to a topic for remote subscribers
+        _stream_pub = None
+        if self.runtime is not None and self.agent_id is not None:
+            from raavan.core.runtime._stream import StreamPublisher
+            from raavan.core.runtime._protocol import TopicId
+
+            _stream_pub = StreamPublisher(
+                self.runtime,
+                TopicId(type="stream", source=self.agent_id.key),
+                sender=self.agent_id,
+            )
+
+        try:
+            with global_tracer.start_span("agent_run_stream", attrs):
+                global_metrics.increment_counter("agent_runs", tags={"name": self.name})
+                if self.verbose:
+                    logger.info(
+                        f"[{self.name}] Starting streaming run: {input_text[:80]}..."
+                    )
+
+                # Ensure system prompt is loaded (lazy seed for async memory)
+                await self._seed_system_message()
+                await self.memory.add_message(UserMessage(content=[input_text]))
+
+                # ── INPUT GUARDRAILS ─────────────────────────────────────────
+                try:
+                    if self.input_guardrails:
+                        ctx = GuardrailContext(
+                            agent_name=self.name,
+                            run_id=run_id,
+                            input_text=input_text,
+                        )
+                        await run_guardrails(
+                            self.input_guardrails,
+                            ctx,
+                            guardrail_type=GuardrailType.INPUT,
+                        )
+                except GuardrailTripwireError as e:
+                    logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
+                    from raavan.core.messages._types import CompletionChunk
+
+                    yield CompletionChunk(
+                        message=AssistantMessage(
+                            role="assistant",
+                            content=[f"Request blocked: {e.message}"],
+                            finish_reason="guardrail_tripped",
+                        ),
+                        metadata={
+                            "guardrail_tripped": True,
+                            "guardrail": e.guardrail_name,
+                        },
+                    )
+                    if _stream_pub is not None:
+                        await _stream_pub.close("guardrail_tripped")
+                    return
+
+                for step_num in range(1, self.max_iterations + 1):
+                    with global_tracer.start_span(
+                        f"step_{step_num}", {"step": step_num}
+                    ):
+                        # THINK
+                        tool_schemas = self._build_tool_schemas(
+                            current_input=input_text
+                        )
+                        messages = await self.model_context.build(
+                            session_id=getattr(self, "_session_id", self.name),
+                            current_input=input_text,
+                            raw_messages=await self.memory.get_messages(),
+                            model_client=self.model_client,
+                        )
+
+                        with global_tracer.start_span(
+                            "llm_generate_stream", {"msg_count": len(messages)}
+                        ):
+                            from raavan.core.messages._types import (
+                                CompletionChunk,
+                                TextDeltaChunk,
+                            )
+
+                            llm_t0 = asyncio.get_event_loop().time()
+                            final_response_obj = None
+                            # Accumulate partial text so we can persist it if cancelled
+                            # mid-stream before a CompletionChunk is received.
+                            partial_text: str = ""
+
+                            try:
+                                async for chunk in self.model_client.generate_stream(
+                                    messages=messages,
+                                    tools=tool_schemas or None,
+                                    tool_choice="auto" if tool_schemas else None,
+                                    response_format=(
+                                        response_schema
+                                        if response_schema is not None
+                                        else self.response_schema
+                                    ),
+                                    **kwargs,
+                                ):
+                                    yield chunk
+                                    if _stream_pub is not None:
+                                        await _stream_pub.emit(chunk)
+
+                                    if isinstance(chunk, TextDeltaChunk):
+                                        partial_text += chunk.text
+                                    elif isinstance(chunk, CompletionChunk):
+                                        final_response_obj = chunk.message
+
+                                if final_response_obj:
+                                    await self.memory.add_message(final_response_obj)
+
+                                llm_t1 = asyncio.get_event_loop().time()
+                                global_metrics.record_histogram(
+                                    "llm_latency",
+                                    llm_t1 - llm_t0,
+                                    tags={
+                                        "model": getattr(
+                                            self.model_client, "model", "unknown"
+                                        )
+                                    },
+                                )
+                            except asyncio.CancelledError:
+                                if final_response_obj is not None:
+                                    await self.memory.add_message(final_response_obj)
+                                elif partial_text:
+                                    await self.memory.add_message(
+                                        AssistantMessage(
+                                            role="assistant",
+                                            content=[partial_text],
+                                            finish_reason="cancelled",
+                                        )
+                                    )
+                                raise
+                            except Exception as e:
+                                global_metrics.increment_counter(
+                                    "llm_errors", tags={"error": type(e).__name__}
+                                )
+                                raise
+
+                        response = final_response_obj or AssistantMessage(
+                            role="assistant",
+                            content=None,
+                        )
+
+                        if not response.tool_calls:
+                            if self.verbose:
+                                logger.info(
+                                    f"[{self.name}] [stream] Step {step_num}: done"
+                                )
+
+                            try:
+                                if self.output_guardrails:
+                                    output_text = self._extract_text(response)
+                                    ctx = GuardrailContext(
+                                        agent_name=self.name,
+                                        run_id=run_id,
+                                        output_text=output_text,
+                                        raw_message=response,
+                                    )
+                                    await run_guardrails(
+                                        self.output_guardrails,
+                                        ctx,
+                                        guardrail_type=GuardrailType.OUTPUT,
+                                    )
+                            except GuardrailTripwireError as e:
+                                logger.error(
+                                    f"[{self.name}] Output guardrail tripwire (stream): {e.message}"
+                                )
+                                yield CompletionChunk(
+                                    message=AssistantMessage(
+                                        role="assistant",
+                                        content=[f"Response blocked: {e.message}"],
+                                        finish_reason="guardrail_tripped",
+                                    ),
+                                    metadata={
+                                        "guardrail_tripped": True,
+                                        "guardrail": e.guardrail_name,
+                                    },
+                                )
                                 if _stream_pub is not None:
-                                    await _stream_pub.emit(tool_msg)
+                                    await _stream_pub.close("guardrail_tripped")
+                                return
+                            if _stream_pub is not None:
+                                await _stream_pub.close()
+
+                            _schema = (
+                                response_schema
+                                if response_schema is not None
+                                else self.response_schema
+                            )
+                            if _schema is not None:
+                                from raavan.core.messages._types import (
+                                    StructuredOutputChunk,
+                                )
+
+                                _parsed = getattr(response, "parsed", None)
+                                if _parsed is not None:
+                                    from raavan.core.structured.result import (
+                                        StructuredOutputResult,
+                                    )
+
+                                    raw_text = self._extract_text(response)
+                                    yield StructuredOutputChunk(
+                                        result=StructuredOutputResult(
+                                            parsed=_parsed,
+                                            raw_text=raw_text,
+                                            model=getattr(
+                                                self.model_client, "model", None
+                                            ),
+                                        )
+                                    )
+                                else:
+                                    context_messages = await self.model_context.build(
+                                        session_id=getattr(
+                                            self, "_session_id", self.name
+                                        ),
+                                        current_input=input_text,
+                                        raw_messages=await self.memory.get_messages(),
+                                        model_client=self.model_client,
+                                    )
+                                    structured_result = (
+                                        await self.model_client.generate(
+                                            context_messages,
+                                            response_format=_schema,
+                                        )
+                                    )
+                                    yield StructuredOutputChunk(
+                                        result=structured_result
+                                    )
+
+                            break
+
+                        if self.verbose:
+                            names = [
+                                self._parse_tool_call(tc).name
+                                for tc in response.tool_calls
+                            ]
+                            logger.info(
+                                f"[{self.name}] [stream] Step {step_num}: tools → {names}"
+                            )
+
+                        with global_tracer.start_span(
+                            "execute_tools_stream",
+                            {"count": len(response.tool_calls)},
+                        ):
+                            for tc_raw in response.tool_calls:
+                                parsed = self._parse_tool_call(tc_raw)
+
+                                tool_blocked = False
+                                try:
+                                    all_guardrails = (
+                                        self.input_guardrails + self.output_guardrails
+                                    )
+                                    tool_guardrails = [
+                                        g
+                                        for g in all_guardrails
+                                        if g.guardrail_type == GuardrailType.TOOL_CALL
+                                    ]
+                                    if tool_guardrails:
+                                        ctx = GuardrailContext(
+                                            agent_name=self.name,
+                                            run_id=run_id,
+                                            tool_name=parsed.name,
+                                            tool_arguments=parsed.arguments,
+                                        )
+                                        await run_guardrails(
+                                            tool_guardrails,
+                                            ctx,
+                                            guardrail_type=GuardrailType.TOOL_CALL,
+                                        )
+                                except GuardrailTripwireError as e:
+                                    logger.error(
+                                        f"[{self.name}] Tool-call guardrail tripwire (stream): {e.message}"
+                                    )
+                                    tool_blocked = True
+                                    tool_msg = ToolExecutionResultMessage(
+                                        content=[
+                                            {
+                                                "type": "text",
+                                                "text": json.dumps(
+                                                    {
+                                                        "error": (
+                                                            f"Tool blocked: {e.message}"
+                                                        )
+                                                    }
+                                                ),
+                                            }
+                                        ],
+                                        tool_call_id=parsed.call_id,
+                                        name=parsed.name,
+                                        is_error=True,
+                                    )
+                                    await self.memory.add_message(tool_msg)
+                                    yield tool_msg
+                                    if _stream_pub is not None:
+                                        await _stream_pub.emit(tool_msg)
+
+                                if not tool_blocked:
+                                    _, tool_msg = await self._execute_tool(
+                                        parsed, step_num
+                                    )
+                                    await self.memory.add_message(tool_msg)
+                                    yield tool_msg
+                                    if _stream_pub is not None:
+                                        await _stream_pub.emit(tool_msg)
+        finally:
+            self._current_run_id = ""
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
@@ -940,7 +1068,13 @@ class ReActAgent(BaseAgent):
                 schemas.append(t)
         return schemas
 
-    async def _call_llm(self, current_input: str = "", **kwargs) -> AssistantMessage:
+    async def _call_llm(
+        self,
+        current_input: str = "",
+        *,
+        response_schema: Optional[type] = None,
+        **kwargs,
+    ) -> AssistantMessage:
         """Single LLM call with retry, hooks, and observability."""
         tool_schemas = self._build_tool_schemas(current_input=current_input)
         messages = await self.model_context.build(
@@ -967,11 +1101,41 @@ class ReActAgent(BaseAgent):
 
             for attempt in range(self.llm_retry_policy.max_retries + 1):
                 try:
-                    response = await self.model_client.generate(
-                        messages=messages,
-                        tools=tool_schemas or None,
-                        tool_choice="auto" if tool_schemas else None,
-                    )
+                    generate_kwargs: dict[str, Any] = {
+                        "messages": messages,
+                        "tools": tool_schemas or None,
+                        "tool_choice": "auto" if tool_schemas else None,
+                    }
+                    if response_schema is not None:
+                        generate_kwargs["response_format"] = response_schema
+
+                    # Wrap with middleware pipeline when middleware is configured
+                    if self.middleware_pipeline.middleware:
+                        mw_ctx = MiddlewareContext(
+                            stage=MiddlewareStage.LLM_CALL,
+                            agent_name=self.name,
+                            run_id=self._current_middleware_run_id(),
+                            correlation_id=self._current_middleware_run_id(),
+                            input_text=current_input,
+                            response_schema=response_schema,
+                            metadata=(
+                                self.execution_context.inherited_metadata()
+                                if self.execution_context is not None
+                                else {}
+                            ),
+                            parent_context=self.execution_context,
+                        )
+
+                        async def _do_generate(
+                            ctx: MiddlewareContext,
+                        ) -> AssistantMessage:
+                            return await self.model_client.generate(**generate_kwargs)
+
+                        response = await self.middleware_pipeline.run(
+                            mw_ctx, _do_generate
+                        )
+                    else:
+                        response = await self.model_client.generate(**generate_kwargs)
                     llm_t1 = asyncio.get_event_loop().time()
                     global_metrics.record_histogram(
                         "llm_latency",
@@ -1229,14 +1393,41 @@ class ReActAgent(BaseAgent):
                             f"[{self.name}] Executing {parsed.name}({parsed.arguments})"
                         )
 
-                    # Apply per-tool timeout
-                    if self.tool_timeout:
-                        exec_result: ToolResult = await asyncio.wait_for(
-                            tool.execute(**parsed.arguments),
-                            timeout=self.tool_timeout,
+                    # Build the actual execution coroutine
+                    async def _run_tool() -> ToolResult:
+                        if self.tool_timeout:
+                            return await asyncio.wait_for(
+                                tool.execute(**parsed.arguments),
+                                timeout=self.tool_timeout,
+                            )
+                        return await tool.execute(**parsed.arguments)
+
+                    # Wrap with middleware pipeline when middleware is configured
+                    if self.middleware_pipeline.middleware:
+                        mw_ctx = MiddlewareContext(
+                            stage=MiddlewareStage.TOOL_EXECUTION,
+                            agent_name=self.name,
+                            run_id=self._current_middleware_run_id(),
+                            correlation_id=self._current_middleware_run_id(),
+                            input_text="",
+                            tool_name=parsed.name,
+                            tool_args=parsed.arguments,
+                            metadata=(
+                                self.execution_context.inherited_metadata()
+                                if self.execution_context is not None
+                                else {}
+                            ),
+                            parent_context=self.execution_context,
+                        )
+
+                        async def _do_tool(ctx: MiddlewareContext) -> ToolResult:
+                            return await _run_tool()
+
+                        exec_result: ToolResult = await self.middleware_pipeline.run(
+                            mw_ctx, _do_tool
                         )
                     else:
-                        exec_result = await tool.execute(**parsed.arguments)
+                        exec_result = await _run_tool()
 
                     self._activate_tool_names([parsed.name])
                     if parsed.name == self._tool_search_name and exec_result.app_data:

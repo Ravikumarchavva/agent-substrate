@@ -46,6 +46,59 @@ def _mime_for(filename: str) -> str:
     }.get(ext, "application/octet-stream")
 
 
+def _normalize_strict_json_schema(schema: Any) -> Any:
+    """Recursively normalize a JSON schema for OpenAI strict mode.
+
+    OpenAI's strict structured-output mode requires every object schema to
+    declare ``additionalProperties: false``. Pydantic's ``model_json_schema()``
+    does not guarantee that on all nested object nodes, so we add it here.
+    """
+    if isinstance(schema, dict):
+        normalized = {
+            key: _normalize_strict_json_schema(value) for key, value in schema.items()
+        }
+
+        if normalized.get("type") == "object":
+            normalized.setdefault("additionalProperties", False)
+
+        for key in ("properties", "$defs", "definitions"):
+            if key in normalized and isinstance(normalized[key], dict):
+                normalized[key] = {
+                    item_key: _normalize_strict_json_schema(item_value)
+                    for item_key, item_value in normalized[key].items()
+                }
+
+        for key in ("items", "additionalProperties", "not"):
+            if key in normalized:
+                normalized[key] = _normalize_strict_json_schema(normalized[key])
+
+        for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+            if key in normalized and isinstance(normalized[key], list):
+                normalized[key] = [
+                    _normalize_strict_json_schema(item) for item in normalized[key]
+                ]
+
+        return normalized
+
+    if isinstance(schema, list):
+        return [_normalize_strict_json_schema(item) for item in schema]
+
+    return schema
+
+
+def _build_openai_text_format(response_format: type["BaseModel"]) -> dict[str, Any]:
+    """Convert a Pydantic model to OpenAI Responses API text.format config."""
+    schema_dict = _normalize_strict_json_schema(response_format.model_json_schema())
+    return {
+        "format": {
+            "type": "json_schema",
+            "name": response_format.__name__,
+            "strict": True,
+            "schema": schema_dict,
+        }
+    }
+
+
 class OpenAIClient(BaseModelClient):
     """OpenAI API client — text, vision, and audio in one place.
 
@@ -261,6 +314,119 @@ class OpenAIClient(BaseModelClient):
         """Generate a single response from OpenAI using Responses API."""
         instructions, conversation_input = self._serialize_messages(messages)
 
+        # ── Unified path: tools + response_format together ────────────────
+        # OpenAI Responses API supports both `tools` and `text.format`
+        # in the same `responses.create()` call.  The model uses tools
+        # when needed and produces schema-conformant text in its final
+        # answer.  When a tool-call step is returned, `parsed` stays
+        # None; the agent loop continues until the model answers with
+        # text, which is then validated against the schema.
+        transformed_tools = self._serialize_tools(tools)
+
+        if response_format is not None and transformed_tools:
+            text_format = _build_openai_text_format(response_format)
+
+            params: dict[str, Any] = {
+                "model": kwargs.get("model", self.model),
+                "input": conversation_input,
+                "tools": transformed_tools,
+                "text": text_format,
+            }
+
+            if "temperature" in kwargs:
+                params["temperature"] = kwargs["temperature"]
+            elif not self.model.startswith("gpt-5"):
+                params["temperature"] = self.temperature
+
+            if instructions:
+                params["instructions"] = instructions
+            if self.max_tokens:
+                params["max_output_tokens"] = kwargs.get("max_tokens", self.max_tokens)
+            if tool_choice:
+                params["tool_choice"] = tool_choice
+
+            params.update(
+                {
+                    k: v
+                    for k, v in kwargs.items()
+                    if k
+                    not in {
+                        "model",
+                        "input",
+                        "instructions",
+                        "max_output_tokens",
+                        "max_tokens",
+                        "temperature",
+                        "tools",
+                        "text",
+                        "tool_choice",
+                    }
+                }
+            )
+
+            response = await self.client.responses.create(**params)
+
+            # Extract tool calls
+            tool_calls_obj = None
+            if response.output:
+                for item in response.output:
+                    if item.type == "function_call":
+                        if tool_calls_obj is None:
+                            tool_calls_obj = []
+                        tool_calls_obj.append(
+                            ToolCallMessage(
+                                id=getattr(item, "call_id", "")
+                                or getattr(item, "id", ""),
+                                name=item.name,
+                                arguments=json.loads(item.arguments)
+                                if isinstance(item.arguments, str)
+                                else item.arguments,
+                            )
+                        )
+
+            # Extract text content
+            final_content_text = getattr(response, "output_text", "") or ""
+            final_content: Optional[list[Any]] = (
+                [final_content_text] if final_content_text else None
+            )
+
+            # Try to parse structured output from text (only on final text answer)
+            parsed_obj = None
+            if final_content_text and not tool_calls_obj:
+                try:
+                    parsed_obj = response_format.model_validate_json(final_content_text)
+                except Exception:
+                    logger.debug(
+                        f"Failed to parse structured output from text: "
+                        f"{final_content_text[:200]}"
+                    )
+
+            usage_dict = None
+            if getattr(response, "usage", None):
+                from raavan.core.messages.base_message import UsageStats
+
+                usage_dict = UsageStats(
+                    prompt_tokens=response.usage.input_tokens,
+                    completion_tokens=response.usage.output_tokens,
+                    total_tokens=response.usage.total_tokens,
+                )
+
+            finish_reason = "stop"
+            if tool_calls_obj:
+                finish_reason = "tool_calls"
+            elif getattr(response, "finish_reason", None):
+                finish_reason = getattr(response, "finish_reason", "stop")
+
+            return AssistantMessage(
+                role="assistant",
+                content=final_content,
+                tool_calls=tool_calls_obj,
+                usage=usage_dict,
+                finish_reason=finish_reason,
+                parsed=parsed_obj,
+            )
+
+        # ── Structured-only path (no tools) ──────────────────────────────
         if response_format is not None:
             import openai
             from raavan.core.structured.result import (
@@ -322,7 +488,7 @@ class OpenAIClient(BaseModelClient):
                         refusal = item_refusal
                         parsed = None
                         break
-                    for block in getattr(item, "content", []):
+                    for block in getattr(item, "content", None) or []:
                         if getattr(block, "type", None) == "refusal":
                             refusal = getattr(block, "refusal", str(block))
                             parsed = None
@@ -413,6 +579,8 @@ class OpenAIClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict]] = None,
         tool_choice: Optional[str | dict] = None,
+        *,
+        response_format: Optional[type["BaseModel"]] = None,
         **kwargs,
     ) -> AsyncIterator[Any]:
         """Generate a streaming response from OpenAI using Responses API.
@@ -452,6 +620,12 @@ class OpenAIClient(BaseModelClient):
             params["tools"] = transformed_tools
             if tool_choice:
                 params["tool_choice"] = tool_choice
+
+        # When response_format is set alongside tools, include text.format
+        # so the model produces schema-conformant text in its final answer.
+        if response_format is not None and transformed_tools:
+            params["text"] = _build_openai_text_format(response_format)
+
         params.update({k: v for k, v in kwargs.items() if k not in params})
 
         # Stream and yield deltas, collect final Response object
@@ -540,6 +714,22 @@ class OpenAIClient(BaseModelClient):
                 usage=usage_dict,
                 finish_reason=finish_reason,
             )
+
+            # Parse structured output from final text when schema is set
+            if (
+                response_format is not None
+                and final_content_text
+                and not tool_calls_obj
+            ):
+                try:
+                    final_message.parsed = response_format.model_validate_json(
+                        final_content_text
+                    )
+                except Exception:
+                    logger.debug(
+                        f"Stream: failed to parse structured output: "
+                        f"{final_content_text[:200]}"
+                    )
 
         # Yield final completion
         yield CompletionChunk(message=final_message)

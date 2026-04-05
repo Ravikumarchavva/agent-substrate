@@ -13,7 +13,7 @@ from raavan.core.guardrails import (
     MaxTokenGuardrail,
     ToolCallValidationGuardrail,
 )
-from raavan.core.exceptions import GuardrailTripwireError
+from raavan.exceptions import GuardrailTripwireError
 
 
 async def test_content_filter():

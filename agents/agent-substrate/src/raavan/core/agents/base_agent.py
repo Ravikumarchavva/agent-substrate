@@ -8,7 +8,7 @@ The contract is deliberately minimal:
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, List, Optional
+from typing import Any, AsyncIterator, List, Optional, Type
 from abc import ABC, abstractmethod
 from typing import runtime_checkable, Protocol
 
@@ -19,6 +19,9 @@ from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.memory.base_memory import BaseMemory
 from raavan.core.memory.memory_scope import MemoryScope
 from raavan.core.guardrails.base_guardrail import BaseGuardrail
+from raavan.core.execution.context import ExecutionContext
+from raavan.core.middleware.base import BaseMiddleware
+from raavan.core.middleware.runner import MiddlewarePipeline
 from raavan.core.runtime._protocol import AgentId, AgentRuntime
 from raavan.core.runtime._types import MessageContext
 
@@ -59,6 +62,12 @@ class BaseAgent(ABC):
         output_guardrails: Optional[List[BaseGuardrail]] = None,
         # Prompt enrichment (replaces skill_manager / skill_dirs coupling)
         prompt_enricher: Optional[PromptEnricher] = None,
+        # Structured output: when set, run() / run_stream() parse the final
+        # answer into this Pydantic model before returning.
+        response_schema: Optional[Type[Any]] = None,
+        # Middleware: opt-in composable pipeline for pre/post processing.
+        middleware: Optional[List[BaseMiddleware]] = None,
+        execution_context: Optional[ExecutionContext] = None,
         # Runtime — makes the agent distributable
         runtime: Optional[AgentRuntime] = None,
         agent_id: Optional[AgentId] = None,
@@ -74,6 +83,9 @@ class BaseAgent(ABC):
         self.input_guardrails = input_guardrails or []
         self.output_guardrails = output_guardrails or []
         self.prompt_enricher: Optional[PromptEnricher] = prompt_enricher
+        self.response_schema: Optional[Type[Any]] = response_schema
+        self.middleware_pipeline = MiddlewarePipeline(middleware)
+        self.execution_context: Optional[ExecutionContext] = execution_context
         self.runtime: Optional[AgentRuntime] = runtime
         self.agent_id: Optional[AgentId] = agent_id
 
@@ -86,13 +98,34 @@ class BaseAgent(ABC):
     # -- Core lifecycle -------------------------------------------------------
 
     @abstractmethod
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
-        """Execute the agent to completion and return a structured result."""
+    async def run(
+        self,
+        input_text: str,
+        *,
+        response_schema: Optional[Type[Any]] = None,
+        **kwargs: Any,
+    ) -> AgentRunResult:
+        """Execute the agent to completion and return a structured result.
+
+        If ``response_schema`` is provided (or set on the instance), the final
+        LLM answer is validated against that Pydantic model and stored in
+        ``AgentRunResult.structured_output``.
+        """
         ...
 
     @abstractmethod
-    def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
-        """Execute the agent, yielding events/chunks as they happen."""
+    def run_stream(
+        self,
+        input_text: str,
+        *,
+        response_schema: Optional[Type[Any]] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[Any]:
+        """Execute the agent, yielding events/chunks as they happen.
+
+        When ``response_schema`` is set, a ``StructuredOutputChunk`` is yielded
+        as the final event after the ``CompletionChunk``.
+        """
         ...
 
     # -- Helpers --------------------------------------------------------------

@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raavan Agent Framework — Interactive Architecture Explorer</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070d1c;--bg-card:#0f1829;--bg-card-h:#162032;--bg-drawer:#0b1322;
+  --border:#1c2b42;--text:#e2e8f0;--muted:#7a90aa;--faint:#374151;
+  --drawer-w:500px;--ease:.22s cubic-bezier(.4,0,.2,1);
+}
+html,body{height:100%;overflow-x:hidden}
+body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── Layout ── */
+.layout{display:flex;min-height:100vh;transition:padding-right var(--ease)}
+.layout.open{padding-right:var(--drawer-w)}
+.main{flex:1;padding:28px 36px;min-width:0}
+
+/* ── Header ── */
+.hdr{text-align:center;margin-bottom:26px}
+.hdr-title{font-size:24px;font-weight:900;letter-spacing:-.5px;
+  background:linear-gradient(130deg,#e2e8f0 0%,#818cf8 55%,#38bdf8 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hdr-sub{font-size:12px;color:var(--muted);margin-top:5px}
+.hdr-hint{display:inline-flex;align-items:center;gap:6px;margin-top:10px;
+  padding:5px 14px;background:var(--bg-card);border:1px solid var(--border);
+  border-radius:20px;font-size:10px;color:var(--faint)}
+.pulse{width:6px;height:6px;border-radius:50%;background:#38bdf8;
+  animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ── Legend ── */
+.legend{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:22px}
+.leg{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--muted)}
+.leg-dot{width:8px;height:8px;border-radius:2px}
+
+/* ── Zone band ── */
+.zone{border-radius:14px;border:1.5px solid;padding:16px 18px;margin-bottom:4px}
+.zone-hdr{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.zone-label{font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase}
+.zone-count{font-size:9px;color:var(--faint);margin-left:auto}
+.zone-actors{display:flex;gap:10px;flex-wrap:wrap}
+
+/* ── Actor card ── */
+.card{background:var(--bg-card);border:1.5px solid var(--border);border-radius:12px;
+  padding:12px 14px;cursor:pointer;transition:all var(--ease);
+  flex:1;min-width:120px;max-width:180px;position:relative;user-select:none}
+.card:hover{background:var(--bg-card-h);transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.card.active{background:var(--bg-card-h)}
+.card-accent{position:absolute;top:0;left:0;right:0;height:3px;border-radius:12px 12px 0 0;opacity:0;transition:opacity var(--ease)}
+.card.active .card-accent{opacity:1}
+.card-icon{font-size:18px;line-height:1;margin-bottom:6px}
+.card-name{font-size:11px;font-weight:700;margin-bottom:2px}
+.card-sub{font-size:9px;color:var(--faint);line-height:1.4}
+.card-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:8px}
+.tag{font-size:7px;font-weight:700;padding:2px 5px;border-radius:3px}
+
+/* ── Connector ── */
+.conn{display:flex;align-items:center;justify-content:center;height:26px;position:relative}
+.conn::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;
+  background:linear-gradient(to bottom,transparent,var(--border),transparent)}
+.conn-msg{background:var(--bg);padding:1px 10px;border-radius:10px;
+  border:1px solid var(--border);font-size:9px;font-weight:600;color:var(--faint);position:relative;z-index:1}
+
+/* ── Drawer ── */
+.drawer{position:fixed;top:0;right:0;bottom:0;width:var(--drawer-w);
+  background:var(--bg-drawer);border-left:1px solid var(--border);
+  overflow-y:auto;transform:translateX(100%);transition:transform var(--ease);
+  z-index:100;display:flex;flex-direction:column}
+.drawer.open{transform:translateX(0)}
+
+.drw-hdr{padding:18px 18px 14px;border-bottom:1px solid var(--border);
+  position:sticky;top:0;background:var(--bg-drawer);z-index:10}
+.drw-close{position:absolute;top:14px;right:14px;background:none;
+  border:1px solid var(--border);color:var(--muted);width:26px;height:26px;
+  border-radius:6px;cursor:pointer;font-size:13px;display:flex;
+  align-items:center;justify-content:center;transition:all .15s}
+.drw-close:hover{background:var(--bg-card);color:var(--text)}
+
+.drw-zone{font-size:8px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+  padding:2px 8px;border-radius:4px;display:inline-block;margin-bottom:8px}
+.drw-title{font-size:19px;font-weight:800;display:flex;align-items:center;gap:9px;margin-bottom:3px}
+.drw-sub{font-size:11px;color:var(--muted)}
+
+.drw-body{padding:14px 18px;flex:1}
+.drw-desc{font-size:11px;color:var(--muted);line-height:1.75;margin-bottom:16px;
+  padding:12px 14px;background:rgba(255,255,255,.03);border-radius:8px;
+  border-left:3px solid #333}
+
+/* ── Collapsible sections ── */
+.sec{margin-bottom:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.sec-hdr{display:flex;align-items:center;gap:8px;padding:9px 13px;
+  background:rgba(255,255,255,.03);cursor:pointer;user-select:none;
+  transition:background .15s;font-size:10px;font-weight:700;color:var(--text)}
+.sec-hdr:hover{background:rgba(255,255,255,.06)}
+.sec-hdr .chev{margin-left:auto;color:var(--faint);transition:transform .2s;font-size:10px}
+.sec.open .sec-hdr .chev{transform:rotate(180deg)}
+.sec-body{display:none;padding:8px 13px 12px}
+.sec.open .sec-body{display:block}
+
+/* ── Items ── */
+.item{display:flex;align-items:flex-start;gap:7px;padding:5px 0;
+  border-bottom:1px solid rgba(255,255,255,.04);font-size:10px;
+  color:var(--muted);line-height:1.6}
+.item:last-child{border-bottom:none}
+.idot{width:4px;height:4px;border-radius:50%;background:#555;margin-top:5px;flex-shrink:0}
+.item code{font-family:'Cascadia Code','JetBrains Mono',monospace;font-size:9px;
+  background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px;color:#d1d5db}
+
+/* ── Code block ── */
+.cblock{background:#040810;border:1px solid var(--border);border-radius:8px;
+  padding:11px 13px;font-family:'Cascadia Code','JetBrains Mono',monospace;
+  font-size:9.5px;line-height:1.8;color:#cbd5e1;overflow-x:auto;white-space:pre;margin-top:8px}
+.kw{color:#818cf8}.fn{color:#38bdf8}.st{color:#4ade80}.cm{color:#374151}.ty{color:#f59e0b}.num{color:#fb923c}
+
+/* ── File path tag ── */
+.fpath{font-family:'Cascadia Code',monospace;font-size:8px;color:#4b6075;
+  background:#04080f;padding:2px 7px;border-radius:4px;
+  border:1px solid var(--border);display:inline-block;margin:2px 0}
+
+/* ── Empty drawer state ── */
+.drw-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:40px 20px;text-align:center;color:var(--faint);gap:14px}
+.drw-empty-icon{font-size:36px;opacity:.3}
+.drw-empty-text{font-size:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="layout" id="layout">
+  <div class="main">
+    <div class="hdr">
+      <div class="hdr-title">🏗️ Raavan Agent Framework — Architecture Explorer</div>
+      <div class="hdr-sub">Actor model · Deployment boundaries · Core internals</div>
+      <div class="hdr-hint"><span class="pulse"></span>Click any component card to explore source files, API contracts, and implementation details</div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div id="diagram"></div>
+  </div>
+  <div class="drawer" id="drawer">
+    <div class="drw-hdr" id="drw-hdr">
+      <button class="drw-close" onclick="closeDrawer()">✕</button>
+      <div id="drw-hdr-content">
+        <div class="drw-empty-icon" style="font-size:28px;opacity:.3;margin-bottom:6px">👆</div>
+        <div style="font-size:11px;color:var(--faint)">Select a component</div>
+      </div>
+    </div>
+    <div class="drw-body" id="drw-body">
+      <div class="drw-empty">
+        <div class="drw-empty-icon">🔍</div>
+        <div class="drw-empty-text">Click any component in the diagram to see its source files, API contracts, core classes, and implementation details.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  ZONES
+// ═══════════════════════════════════════════════════
+const ZONES = [
+  { id:'client', label:'Client Tier', color:'#3b82f6', bg:'rgba(59,130,246,.07)',
+    actors:['browser','bff'], conn:'HTTP POST / SSE stream' },
+  { id:'api', label:'API Tier', color:'#7c3aed', bg:'rgba(124,58,237,.07)',
+    actors:['fastapi','bridge','restate_client'], conn:'HTTP invoke · NATS events' },
+  { id:'exec', label:'Durable Execution Tier', color:'#0d9488', bg:'rgba(13,148,136,.07)',
+    actors:['restate_cluster','worker','activities','tool_policy'], conn:'ReAct loop · Activity calls' },
+  { id:'core', label:'Agent Core', color:'#f59e0b', bg:'rgba(245,158,11,.07)',
+    actors:['react_agent','base_tool','guardrails','memory_core'], conn:'SDK calls · async I/O' },
+  { id:'infra', label:'Infrastructure Tier', color:'#e11d48', bg:'rgba(225,29,72,.07)',
+    actors:['redis','postgres','nats','openai'], conn:null },
+];
+
+// ═══════════════════════════════════════════════════
+//  ACTOR DATA
+// ═══════════════════════════════════════════════════
+const ACTORS = {
+
+  browser: {
+    icon:'🌐', name:'Browser', sub:'React UI + EventSource', zone:'client',
+    tags:[{l:'📬 SSE events', bg:'#0f2b4a', fg:'#38bdf8'},{l:'📤 POST /chat', bg:'#0f2e1a', fg:'#4ade80'}],
+    desc:'The browser is a pure React client. It holds all chat state in useState/useReducer (no external store). It opens an EventSource to /api/chat which delivers streaming SSE tokens. When tool_approval_request arrives it renders a ToolApprovalCard; when human_input_request arrives it renders HumanInputCard. KanbanPanel is driven by task_list_created / task_updated events.',
+    files:[
+      'raavan-ui/src/app/page.tsx — main state + SSE loop + layout',
+      'raavan-ui/src/app/layout.tsx — root layout + ThemeProvider',
+      'raavan-ui/src/components/MessageBubble.tsx — markdown, tool calls, tool results',
+      'raavan-ui/src/components/ToolApprovalCard.tsx — HITL approval UI',
+      'raavan-ui/src/components/HumanInputCard.tsx — ask_human prompt UI',
+      'raavan-ui/src/components/KanbanPanel.tsx — live Kanban from agent tasks',
+      'raavan-ui/src/components/AppPanel.tsx — MCP App widget host',
+      'raavan-ui/src/lib/api.ts — all API calls (never raw fetch in components)',
+    ],
+    receives:[
+      'SSE: text_delta { content, partial }',
+      'SSE: reasoning_delta { content, partial }',
+      'SSE: tool_call { tool_name, input }',
+      'SSE: tool_result { tool_name, result, metadata }',
+      'SSE: tool_approval_request { requestId, tool_name, input }',
+      'SSE: human_input_request { requestId, prompt, options }',
+      'SSE: task_list_created { task_list }',
+      'SSE: task_updated { task_list_id, task }',
+      'SSE: task_added { task_list_id, task }',
+      'SSE: completion { message }',
+      'SSE: error { message }',
+    ],
+    sends:[
+      'POST /api/chat { message, threadId, conversationId }',
+      'GET  /api/chat — SSE EventSource connect',
+      'POST /api/chat/respond/{requestId} { approved, value }',
+      'POST /api/settings — update settings',
+    ],
+    classes:[
+      'EventSource — native browser SSE client (no polling)',
+      'useState / useReducer — local state only, no Redux/Zustand',
+      '`import { api } from "@/lib"` — all backend calls go through api.*',
+      'ThemeContext — dark/light theme toggle',
+      'AuthContext — session state from NextAuth',
+    ],
+    rules:[
+      'Never call fetch() directly inside a component — use api.* from src/lib/api.ts',
+      'Every interactive component needs "use client" directive at top',
+      'CSS variables for all colours — never hardcode hex in className',
+      'Tailwind v4: use bg-(--var) not bg-[var(--var)], use bg-background not bg-[var(--background)]',
+    ],
+    code:`<span class="kw">// page.tsx — SSE loop (simplified)</span>
+<span class="kw">const</span> <span class="fn">es</span> = <span class="kw">new</span> <span class="ty">EventSource</span>(<span class="st">\`/api/chat?conv=\${convId}\`</span>);
+es.addEventListener(<span class="st">'text_delta'</span>, (e) => {
+  <span class="kw">const</span> { content } = <span class="ty">JSON</span>.parse(e.data);
+  setMessages(prev => appendToken(prev, content));
+});
+es.addEventListener(<span class="st">'tool_approval_request'</span>, (e) => {
+  <span class="kw">const</span> req = <span class="ty">JSON</span>.parse(e.data);
+  setHitlRequest(req); <span class="cm">// renders ToolApprovalCard</span>
+});`,
+  },
+
+  bff: {
+    icon:'⚡', name:'Next.js BFF', sub:'Proxy + SSE passthrough', zone:'client',
+    tags:[{l:'📬 browser req', bg:'#1e1a30', fg:'#a78bfa'},{l:'📤 proxy', bg:'#0f2b4a', fg:'#38bdf8'}],
+    desc:'The BFF is a thin passthrough. chat/route.ts opens a fetch() to FastAPI /chat and pipes the raw response bytes—including SSE keep-alive frames—directly to the browser ReadableStream. No business logic lives here. respond/[requestId]/route.ts forwards HITL approval payloads to the backend.',
+    files:[
+      'raavan-ui/src/app/api/chat/route.ts — SSE proxy to FastAPI',
+      'raavan-ui/src/app/api/chat/respond/[requestId]/route.ts — HITL bridge',
+      'raavan-ui/src/app/api/logs/route.ts — Loki log collector',
+      'raavan-ui/src/app/api/audio/transcribe/route.ts — STT proxy',
+      'raavan-ui/src/app/api/audio/tts/route.ts — TTS proxy',
+      'raavan-ui/src/lib/logger.ts — structured logger, batches warn/error to /api/logs',
+    ],
+    receives:[
+      'POST /api/chat { message, threadId }  ← browser',
+      'GET  /api/chat                        ← browser SSE connect',
+      'POST /api/chat/respond/{requestId}    ← browser approval',
+    ],
+    sends:[
+      'POST ${BACKEND_API_URL}/chat         → FastAPI (server-side)',
+      'ReadableStream pipe                  → browser EventSource',
+      'POST ${BACKEND_API_URL}/hitl/respond → FastAPI',
+    ],
+    classes:[
+      'NextRequest / NextResponse — App Router',
+      'ReadableStream — SSE byte passthrough',
+      'NEXT_PUBLIC_API_URL — baked at BUILD TIME into JS bundle',
+      'BACKEND_API_URL — runtime only, server-side routes',
+      'logger.info/warn/error — structured JSON, batched to /api/logs',
+    ],
+    rules:[
+      'NEXT_PUBLIC_API_URL="" for k8s Kind — browser uses relative paths, ingress routes',
+      'BACKEND_API_URL is safe to set via k8s env vars (server-side only, never in bundle)',
+      'logger.warn/error are the only levels sent to Loki — info stays local',
+    ],
+    code:`<span class="kw">// chat/route.ts — SSE passthrough</span>
+<span class="kw">export async function</span> <span class="fn">POST</span>(req: <span class="ty">NextRequest</span>) {
+  <span class="kw">const</span> target = <span class="st">\`\${process.env.BACKEND_API_URL}/chat\`</span>;
+  <span class="kw">const</span> upstream = <span class="kw">await</span> <span class="fn">fetch</span>(target, {
+    method: <span class="st">'POST'</span>, body: req.body,
+    headers: { <span class="st">'Content-Type'</span>: <span class="st">'application/json'</span> },
+  });
+  <span class="kw">return new</span> <span class="ty">Response</span>(upstream.body, {
+    headers: { <span class="st">'Content-Type'</span>: <span class="st">'text/event-stream'</span> }
+  });
+}`,
+  },
+
+  fastapi: {
+    icon:'🔌', name:'FastAPI Server', sub:'create_app() + lifespan DI', zone:'api',
+    tags:[{l:'📬 HTTP routes', bg:'#1e1a30', fg:'#a78bfa'},{l:'🗃️ app.state.*', bg:'#1a2e0f', fg:'#86efac'}],
+    desc:'FastAPI is the monolith backend entry point. All dependencies (model client, tools, bridge, DB engine, workflow client) are wired in lifespan() and accessed via request.app.state.*. There are no global singletons. Routes are thin — business logic lives in server/services/. The DI container is the FastAPI app object itself.',
+    files:[
+      'src/raavan/server/app.py — create_app() factory + lifespan()',
+      'src/raavan/server/routes/chat.py — POST /chat SSE endpoint',
+      'src/raavan/server/routes/hitl.py — POST /hitl/respond',
+      'src/raavan/server/routes/threads.py — CRUD /threads',
+      'src/raavan/server/routes/tasks.py — CRUD /tasks',
+      'src/raavan/server/routes/workflows.py — workflow management',
+      'src/raavan/server/routes/mcp_apps.py — MCP App registry',
+      'src/raavan/server/security/ — JWT + OAuth (delegates to shared/auth/)',
+      'src/raavan/server/models.py — SQLAlchemy ORM: Thread, Message',
+      'src/raavan/server/schemas.py — Pydantic request/response models',
+      'src/raavan/server/database.py — async session factory',
+    ],
+    receives:[
+      'POST /chat { message, thread_id }',
+      'POST /hitl/respond/{requestId} { approved, value }',
+      'GET  /threads',
+      'POST /threads { title }',
+      'DELETE /threads/{id}',
+      'GET  /tasks/{conversation_id}',
+      'PUT  /tasks/{list_id}/{task_id}',
+    ],
+    sends:[
+      'workflow_client.start_agent_workflow() → Restate',
+      'workflow_client.resolve_promise()     → Restate',
+      'EventSourceResponse via bridge.put_event()',
+    ],
+    classes:[
+      'create_app() → FastAPI  — factory, never instantiate directly',
+      'lifespan(app) — wires all app.state.* in startup, teardown in shutdown',
+      'app.state.workflow_client — RestateWorkflowClient instance',
+      'app.state.bridge — WebHITLBridge (SSE fan-out)',
+      'app.state.model_client — OpenAIClient',
+      'app.state.tools — dict[str, BaseTool]',
+      'app.state.redis_client — aioredis.Redis instance',
+      'get_db_session — shared.database.dependency (NEVER define local _get_db)',
+      'get_current_user — shared.auth.verify_token',
+    ],
+    rules:[
+      'All handlers and service methods are async def',
+      'from __future__ import annotations at top of every file',
+      'No bare except: — always catch specific exceptions',
+      'app.state.* is the DI container — inject in lifespan, read in routes',
+      'New route: create routes/my_feature.py then mount in create_app()',
+      'server/security/ is thin wrappers only — canonical code in shared/auth/',
+    ],
+    code:`<span class="kw">@asynccontextmanager</span>
+<span class="kw">async def</span> <span class="fn">lifespan</span>(app: <span class="ty">FastAPI</span>):
+    <span class="cm"># ── startup ──</span>
+    app.state.model_client = <span class="ty">OpenAIClient</span>(api_key=settings.openai_api_key)
+    app.state.redis_client = <span class="kw">await</span> <span class="fn">aioredis.from_url</span>(settings.redis_url)
+    app.state.bridge = <span class="ty">WebHITLBridge</span>()
+    app.state.workflow_client = <span class="ty">RestateWorkflowClient</span>(
+        ingress_url=settings.restate_ingress_url)
+    <span class="kw">await</span> app.state.workflow_client.<span class="fn">connect</span>()
+    <span class="kw">yield</span>
+    <span class="cm"># ── shutdown ──</span>
+    <span class="kw">await</span> app.state.workflow_client.<span class="fn">disconnect</span>()`,
+  },
+
+  bridge: {
+    icon:'🌊', name:'WebHITL Bridge', sub:'NATS → SSE fan-out per conversation', zone:'api',
+    tags:[{l:'📬 NATS events', bg:'#0f2b4a', fg:'#38bdf8'},{l:'📤 SSE push', bg:'#1e1a30', fg:'#a78bfa'}],
+    desc:'The bridge decouples NATS message delivery from SSE client connections. Each conversation gets an asyncio.Queue registered at connection time. Worker activities publish to NATS → NATSBridge subscriber calls bridge.put_event() → chat route reads the queue and yields SSE frames. Never build event dicts manually — always use factory functions from shared/events/types.py.',
+    files:[
+      'src/raavan/server/sse/bridge.py — WebHITLBridge, BridgeRegistry',
+      'src/raavan/server/sse/events.py — EventBus + typed SSE event dataclasses',
+      'src/raavan/shared/events/types.py — event factory functions',
+      'src/raavan/shared/events/bus.py — EventBus (Redis pub/sub, microservices mode)',
+    ],
+    receives:[
+      'bridge.register(conv_id, queue)  ← chat route on connect',
+      'bridge.put_event(event_dict)     ← NATS subscriber callback',
+      'bridge.unregister(conv_id)       ← chat route on disconnect',
+    ],
+    sends:[
+      'asyncio.Queue.put(event) — per-conversation queue',
+      'SSE frame bytes via EventSourceResponse (sse-starlette)',
+    ],
+    classes:[
+      'WebHITLBridge — central fan-out hub',
+      'BridgeRegistry — dict[conv_id, asyncio.Queue]',
+      'bridge.put_event(event: dict) — async, routes to correct queue',
+      'EventSourceResponse(generator) — sse-starlette response',
+      'workflow_started(job_id, run_id) — factory fn (never raw dict)',
+    ],
+    rules:[
+      'ALWAYS use factory functions from shared/events/types.py — never build dicts manually',
+      'One queue per conversation — not per user, not global',
+      'bridge is mounted as app.state.bridge in lifespan',
+    ],
+    code:`<span class="kw">async def</span> <span class="fn">stream_chat</span>(conv_id: <span class="ty">str</span>, bridge: <span class="ty">WebHITLBridge</span>):
+    queue: asyncio.<span class="ty">Queue</span> = asyncio.<span class="fn">Queue</span>()
+    bridge.<span class="fn">register</span>(conv_id, queue)
+    <span class="kw">try</span>:
+        <span class="kw">while True</span>:
+            event = <span class="kw">await</span> queue.<span class="fn">get</span>()
+            <span class="kw">yield</span> <span class="fn">format_sse</span>(event)
+    <span class="kw">finally</span>:
+        bridge.<span class="fn">unregister</span>(conv_id)`,
+  },
+
+  restate_client: {
+    icon:'🔗', name:'RestateWorkflowClient', sub:'HTTP client for Restate ingress + admin', zone:'api',
+    tags:[{l:'📤 HTTP invoke', bg:'#0b1d2e', fg:'#38bdf8'},{l:'📬 start/resolve', bg:'#1a0b2e', fg:'#a78bfa'}],
+    desc:'Unified HTTP client wrapping all Restate ingress and admin API calls. Replaces both the old TemporalClient and the previous RestateClient. URL path segments are percent-encoded. Uses a persistent httpx.AsyncClient for connection pooling. Wired as app.state.workflow_client in lifespan.',
+    files:[
+      'src/raavan/integrations/runtime/restate/client.py',
+    ],
+    receives:[
+      'start_agent_workflow(conversation_id, user_message, context) → handle',
+      'start_pipeline_workflow(pipeline_id, steps, context) → handle',
+      'start_chain_workflow(chain_id, code, inputs, context) → handle',
+      'resolve_promise(workflow_name, workflow_id, promise_key, value)',
+      'signal_workflow(workflow_name, workflow_id, signal_name, payload)',
+      'query_workflow(workflow_name, workflow_id, handler) → any',
+      'cancel_workflow(workflow_name, workflow_id)',
+      'get_result(workflow_name, workflow_id) → any',
+      'register_deployment(worker_url) — POST to admin API',
+    ],
+    sends:[
+      'POST http://restate:8080/invoke/AgentWorkflow/{conv_id}/agent_run',
+      'POST http://restate:8080/invoke/AgentWorkflow/{conv_id}/resolve_approval',
+      'POST http://restate:9070/deployments  (admin: register worker)',
+      'DELETE http://restate:8080/... (cancel)',
+    ],
+    classes:[
+      'RestateWorkflowClient(ingress_url, admin_url)',
+      '_http: httpx.AsyncClient — persistent, shared across calls',
+      '_invoke(method, path, payload?) → dict | None  — private helper',
+      'connect() / disconnect() — lifecycle',
+      'RESTATE_INGRESS_URL — default http://localhost:8080',
+      'RESTATE_ADMIN_URL  — default http://localhost:9070',
+    ],
+    rules:[
+      'Always URL-encode workflow_id path segment (conv IDs may contain slashes)',
+      'Replaces app.state.temporal — the new name is app.state.workflow_client',
+      'connect() must be called in lifespan startup, disconnect() in shutdown',
+    ],
+    code:`<span class="kw">class</span> <span class="ty">RestateWorkflowClient</span>:
+    <span class="kw">async def</span> <span class="fn">start_agent_workflow</span>(
+        self, conversation_id: <span class="ty">str</span>,
+        user_message: <span class="ty">str</span>,
+        context: <span class="ty">dict</span>,
+    ) -> <span class="ty">AgentWorkflowHandle</span>:
+        wid = <span class="fn">quote</span>(conversation_id, safe=<span class="st">""</span>)
+        <span class="kw">await</span> self.<span class="fn">_invoke</span>(<span class="st">"POST"</span>,
+            <span class="st">f"/invoke/AgentWorkflow/{wid}/agent_run"</span>,
+            {<span class="st">"message"</span>: user_message, <span class="st">"context"</span>: context})
+        <span class="kw">return</span> <span class="ty">AgentWorkflowHandle</span>(workflow_id=conversation_id)`,
+  },
+
+  restate_cluster: {
+    icon:'💾', name:'Restate Cluster', sub:'Durable journal + promise store', zone:'exec',
+    tags:[{l:'🗃️ journal', bg:'#0b1d1a', fg:'#2dd4bf'},{l:'⏸️ promises', bg:'#1a0b2e', fg:'#a78bfa'}],
+    desc:'Restate stores a durable execution journal. Every ctx.run() call is persisted before and after. If the Worker crashes, Restate replays from the last committed activity — skipping already-completed steps. HITL uses ctx.promise() which creates a named durable promise; the workflow suspends until resolve_approval or resolve_human_input is called.',
+    files:[
+      'src/raavan/integrations/runtime/restate/app.py — ASGI app mount',
+      'src/raavan/integrations/runtime/restate/workflows.py — 3 workflow types',
+      'deployment/docker/docker-compose.yml — restate service (port 8080/9070)',
+      'deployment/k8s/ — Restate k8s manifests',
+    ],
+    receives:[
+      'POST /invoke/AgentWorkflow/{conv_id}/agent_run',
+      'POST /invoke/PipelineWorkflow/{pipe_id}/pipeline_run',
+      'POST /invoke/ChainWorkflow/{chain_id}/chain_run',
+      'POST /invoke/AgentWorkflow/{id}/resolve_approval',
+      'POST /invoke/AgentWorkflow/{id}/resolve_human_input',
+    ],
+    sends:[
+      'Dispatch workflow task to Worker over ASGI',
+      'Resume suspended workflow on promise resolve',
+      'Journal: persist every ctx.run() result before returning',
+    ],
+    classes:[
+      'restate.Workflow("AgentWorkflow")   — agent_run, resolve_approval, resolve_human_input',
+      'restate.Workflow("PipelineWorkflow") — pipeline_run (sequential adapter steps)',
+      'restate.Workflow("ChainWorkflow")    — chain_run (LLM-written code)',
+      'ctx.run(name, fn, *args) — journalled activity, exactly-once',
+      'ctx.promise(key) — durable promise, workflow suspends on .get()',
+      'restate.app(services=[...]) — ASGI mount in app.py',
+    ],
+    rules:[
+      'ctx.run() result is persisted — even if worker crashes mid-loop, result is replayed',
+      'ctx.promise() creates a named promise scoped to the workflow instance (conv_id)',
+      'Port 8080: ingress (workflow calls), Port 9070: admin (register deployments)',
+    ],
+    code:`<span class="cm"># workflows.py — AgentWorkflow</span>
+agent_workflow = restate.<span class="fn">Workflow</span>(<span class="st">"AgentWorkflow"</span>)
+
+<span class="kw">@</span>agent_workflow.<span class="fn">main</span>()
+<span class="kw">async def</span> <span class="fn">agent_run</span>(ctx: <span class="ty">WorkflowContext</span>, inp: <span class="ty">dict</span>):
+    history = <span class="kw">await</span> ctx.<span class="fn">run</span>(<span class="st">"restore"</span>, restore_memory, inp[<span class="st">"conv_id"</span>])
+    <span class="kw">while True</span>:
+        reply = <span class="kw">await</span> ctx.<span class="fn">run</span>(<span class="st">"llm"</span>, do_llm_call, history)
+        <span class="kw">if</span> reply.stop_reason == <span class="st">"end_turn"</span>: <span class="kw">break</span>
+        result = <span class="kw">await</span> ctx.<span class="fn">run</span>(<span class="st">"tool"</span>, do_tool_exec, reply.tool_calls)
+
+<span class="kw">@</span>agent_workflow.<span class="fn">handler</span>()
+<span class="kw">async def</span> <span class="fn">resolve_approval</span>(ctx: <span class="ty">SharedWorkflowContext</span>, v: <span class="ty">dict</span>):
+    <span class="kw">await</span> ctx.<span class="fn">promise</span>(v[<span class="st">"key"</span>]).<span class="fn">resolve</span>(v[<span class="st">"value"</span>])`,
+  },
+
+  worker: {
+    icon:'⚙️', name:'Worker Process', sub:'python -m raavan.integrations.runtime.restate.worker', zone:'exec',
+    tags:[{l:'⚙️ activities', bg:'#0b1d1a', fg:'#2dd4bf'},{l:'📤 NATS/Redis', bg:'#1a200b', fg:'#a3e635'}],
+    desc:'The Worker is a standalone async Python process. On startup it connects to all infrastructure (Redis, NATS, PostgreSQL, OpenAI), calls activities.configure() to inject all dependencies, registers the workflow endpoint with the Restate admin API, then starts serving workflow tasks. It hosts the Restate ASGI app over HTTP on a bound port.',
+    files:[
+      'src/raavan/integrations/runtime/restate/worker.py — main(), _setup(), _teardown()',
+      'src/raavan/integrations/runtime/restate/activities.py — all activity functions',
+      'src/raavan/integrations/runtime/restate/policies.py — ToolPolicy',
+      'src/raavan/integrations/runtime/nats/bridge.py — NATSBridge',
+    ],
+    receives:[
+      'Workflow task dispatch from Restate (over ASGI/HTTP)',
+      'Activity invocations via ctx.run() inside workflow handlers',
+    ],
+    sends:[
+      'LLM calls → OpenAI API via model_client.generate()',
+      'Tool executions → catalog tools[name].run(**args)',
+      'NATS publish → NATSBridge.publish(subject, event)',
+      'Redis writes → memory.add_message()',
+      'PostgreSQL writes → session.add(Message(...))',
+      'register_deployment(url) → Restate admin API at startup',
+    ],
+    classes:[
+      'main() — orchestrates full startup/teardown',
+      '_setup() → dict  — builds OpenAIClient, RedisMemory, NATSBridge, tool catalog',
+      '_scan_tools() — CapabilityScanner auto-discovers catalog/tools/ via convention',
+      '_register_with_restate(url) — POST to admin API',
+      '_teardown(deps) — clean disconnect of all resources',
+      'configure(streaming, model_client, tools, redis_memory, ...) — DI injection',
+    ],
+    rules:[
+      'configure() must be called once at startup before Restate starts dispatching',
+      '_scan_tools() anchors on last "raavan" in path — Windows path safe',
+      'Worker runs on a separate port from FastAPI (default worker port: 9080)',
+    ],
+    code:`<span class="kw">async def</span> <span class="fn">main</span>():
+    deps = <span class="kw">await</span> <span class="fn">_setup</span>()          <span class="cm"># connect all infra</span>
+    <span class="fn">configure</span>(**deps)              <span class="cm"># inject into activities</span>
+    <span class="kw">await</span> <span class="fn">_register_with_restate</span>() <span class="cm"># tell Restate our URL</span>
+    app = restate.<span class="fn">app</span>(services=[
+        pipeline_workflow, chain_workflow, agent_workflow])
+    <span class="kw">await</span> <span class="fn">serve</span>(app, port=<span class="num">9080</span>)    <span class="cm"># host ASGI</span>
+    <span class="kw">await</span> <span class="fn">_teardown</span>(deps)`,
+  },
+
+  activities: {
+    icon:'🔬', name:'Activities', sub:'Journalled ReAct loop steps', zone:'exec',
+    tags:[{l:'🔁 journalled', bg:'#0b1d1a', fg:'#2dd4bf'},{l:'📤 LLM/tools', bg:'#1a1200', fg:'#fbbf24'}],
+    desc:'Activities are pure async functions called via ctx.run() inside workflows. Each call is journalled — Restate persists the result before returning. All dependencies (model client, tools, memory, NATS bridge) are injected once via configure() at worker startup using module-level globals. There are no per-request dependency containers.',
+    files:[
+      'src/raavan/integrations/runtime/restate/activities.py',
+    ],
+    receives:[
+      'ctx.run("restore_memory", restore_memory, conv_id)',
+      'ctx.run("do_llm_call",    do_llm_call,    messages, tool_schemas)',
+      'ctx.run("do_tool_exec",   do_tool_exec,   tool_name, args, policy)',
+      'ctx.run("persist_message",persist_message, conv_id, message)',
+      'ctx.run("publish_event",  publish_event,  conv_id, event_dict)',
+      'ctx.run("execute_adapter_step", execute_adapter_step, step, inputs)',
+      'ctx.run("execute_code_chain",   execute_code_chain,   chain_id, code, inputs)',
+    ],
+    sends:[
+      '→ Redis:    memory.get_messages() / memory.add_message()',
+      '→ OpenAI:   model_client.generate(messages, tools)',
+      '→ Tool:     tools[name].run(**args) → ToolResult',
+      '→ PG:       session.add(Message(...))',
+      '→ NATS:     streaming.publish(f"events.{conv_id}", event)',
+    ],
+    classes:[
+      'configure(streaming, model_client, tools, redis_memory, catalog, data_store, chain_runtime)',
+      'restore_memory(conv_id) → list[Message]',
+      'do_llm_call(messages, tool_schemas) → AssistantMessage',
+      'do_tool_exec(tool_name, args, policy: ToolPolicy) → ToolResult',
+      'persist_message(conv_id, message) → None',
+      'publish_event(conv_id, event_dict) → None',
+      'execute_adapter_step(step, resolved_inputs) → dict',
+      'execute_code_chain(chain_id, code, inputs) → dict',
+    ],
+    rules:[
+      'Activities must be deterministic given same inputs (Restate replays them)',
+      'Avoid side effects that cannot be idempotency-keyed (use ToolPolicy.needs_idempotency)',
+      'Module-level globals (_model_client etc.) set ONCE by configure() — never overwrite',
+      'All functions are async def — always await memory/db/network calls',
+    ],
+    code:`<span class="cm"># Module-level DI globals</span>
+_model_client: <span class="ty">BaseModelClient</span> | <span class="ty">None</span> = <span class="kw">None</span>
+_tools: <span class="ty">dict</span>[<span class="ty">str</span>, <span class="ty">BaseTool</span>] = {}
+
+<span class="kw">def</span> <span class="fn">configure</span>(*, model_client, tools, redis_memory, streaming, ...):
+    <span class="kw">global</span> _model_client, _tools, ...
+    _model_client = model_client
+
+<span class="kw">async def</span> <span class="fn">do_tool_exec</span>(tool_name: <span class="ty">str</span>, args: <span class="ty">dict</span>,
+                        policy: <span class="ty">ToolPolicy</span>) -> <span class="ty">ToolResult</span>:
+    tool = _tools[tool_name]
+    <span class="kw">return await</span> asyncio.<span class="fn">wait_for</span>(
+        tool.<span class="fn">run</span>(**args), timeout=policy.timeout)`,
+  },
+
+  tool_policy: {
+    icon:'🛡️', name:'ToolPolicy', sub:'Per-tool durable execution governance', zone:'exec',
+    tags:[{l:'🔒 frozen', bg:'#1a0b2e', fg:'#a78bfa'},{l:'⚙️ governs exec', bg:'#0b1d1a', fg:'#2dd4bf'}],
+    desc:'ToolPolicy is a frozen dataclass that controls how each tool runs inside a durable workflow. It governs timeout, idempotency requirements, approval gates, and HITL input triggers. Unknown tools fall back to derive_policy_from_tool() which reads tool.risk and tool.hitl_mode attributes.',
+    files:[
+      'src/raavan/integrations/runtime/restate/policies.py',
+    ],
+    receives:[
+      'get_policy(tool_name: str) → ToolPolicy  — lookup from TOOL_POLICIES',
+      'derive_policy_from_tool(tool: BaseTool) → ToolPolicy  — fallback',
+    ],
+    sends:[
+      'ToolPolicy(timeout, needs_idempotency, requires_approval, is_hitl_input, large_payload, max_retries)',
+    ],
+    classes:[
+      '@dataclass(frozen=True) ToolPolicy  — immutable after creation',
+      'TOOL_POLICIES: dict[str, ToolPolicy]  — static lookup table',
+      '"ask_human"     → is_hitl_input=True,      timeout=86400',
+      '"send_email"    → requires_approval=True,  needs_idempotency=True',
+      '"web_surfer"    → timeout=120,              large_payload=True',
+      '"code_interp"   → timeout=300,              needs_idempotency=True',
+      '"task_manager"  → timeout=30,               standard',
+      'derive_policy_from_tool(tool): tool.risk==CRITICAL → requires_approval=True',
+    ],
+    rules:[
+      'ToolPolicy is frozen — mutation raises AttributeError, intentional',
+      'Decouples execution policy from tool business logic',
+      'tool.risk and tool.hitl_mode are class-level attributes (Strategy pattern)',
+    ],
+    code:`<span class="kw">@dataclass</span>(frozen=<span class="kw">True</span>)
+<span class="kw">class</span> <span class="ty">ToolPolicy</span>:
+    timeout: <span class="ty">float</span> = <span class="num">60.0</span>
+    needs_idempotency: <span class="ty">bool</span> = <span class="kw">False</span>
+    requires_approval: <span class="ty">bool</span> = <span class="kw">False</span>
+    is_hitl_input: <span class="ty">bool</span> = <span class="kw">False</span>
+    large_payload: <span class="ty">bool</span> = <span class="kw">False</span>
+    max_retries: <span class="ty">int</span> = <span class="num">3</span>
+
+TOOL_POLICIES = {
+    <span class="st">"ask_human"</span>: <span class="ty">ToolPolicy</span>(is_hitl_input=<span class="kw">True</span>, timeout=<span class="num">86400</span>),
+    <span class="st">"send_email"</span>: <span class="ty">ToolPolicy</span>(requires_approval=<span class="kw">True</span>, needs_idempotency=<span class="kw">True</span>),
+}`,
+  },
+
+  react_agent: {
+    icon:'🤖', name:'ReActAgent', sub:'Think → Act → Observe loop', zone:'core',
+    tags:[{l:'🔁 ReAct loop', bg:'#1a1200', fg:'#fbbf24'},{l:'🛡️ guardrails', bg:'#1a0a0a', fg:'#fb7185'}],
+    desc:'ReActAgent implements the ReAct (Reasoning + Acting) loop. Each iteration: build prompt, call LLM, if stop_reason==tool_use call tool, append result to memory, loop. Guardrails run at 3 injection points. Max iterations capped. The same agent.run() entrypoint is used regardless of which runtime is configured — runtime is a strategy injected at construction.',
+    files:[
+      'src/raavan/core/agents/react_agent.py — _run_inner(), _run_tool_call()',
+      'src/raavan/core/agents/base_agent.py — BaseAgent ABC, PromptEnricher protocol',
+      'src/raavan/core/messages/_types.py — SystemMessage, UserMessage, AssistantMessage, ...',
+      'src/raavan/core/guardrails/ — ContentFilter, PII, PromptInjection, MaxToken',
+      'src/raavan/core/context/ — RedisModelContext.build()',
+    ],
+    receives:[
+      'agent.run(user_message: str) → str  — public entrypoint',
+      'runtime.dispatch(agent, message)    — called by runtime layer',
+    ],
+    sends:[
+      'model_client.generate(messages, tool_schemas) → AssistantMessage',
+      'tool.run(**args)                              → ToolResult',
+      'memory.add_message(msg)                       — async',
+      'guardrail.check(INPUT|OUTPUT|TOOL_CALL)       → GuardResult',
+    ],
+    classes:[
+      'ReActAgent(model_client, memory, runtime, tools, system_prompt)',
+      '_run_inner(messages) → str  — main ReAct loop (~200 lines)',
+      '_run_tool_call(tc: ToolCallMessage) → ToolExecutionResultMessage',
+      'ToolCallMessage.tc.name / tc.arguments — NOT tc.function["name"]',
+      'AssistantMessage.content: Optional[list[MediaType]]  — None on tool-only turns',
+      'ToolExecutionResultMessage(tool_call_id, name, content: str)',
+      'PromptEnricher — @runtime_checkable Protocol, keeps core/ free of integrations/',
+    ],
+    rules:[
+      'ToolCallMessage: access tc.name and tc.arguments — NOT tc.function["name"]',
+      'AssistantMessage.content can be None (tool-call-only turn)',
+      'Guardrails run at INPUT (before LLM), OUTPUT (after LLM), TOOL_CALL (before tool)',
+      'Guardrails are injected at construction — agent has no knowledge of which are active',
+      '_run_inner() is ~200 lines — known tech debt (guardrail checks need extraction)',
+    ],
+    code:`<span class="kw">async def</span> <span class="fn">_run_inner</span>(self, messages):
+    max_iter, i = <span class="num">10</span>, <span class="num">0</span>
+    <span class="kw">while</span> i < max_iter:
+        <span class="cm"># ── INPUT guardrail ──</span>
+        <span class="kw">await</span> self.<span class="fn">_run_guardrails</span>(GuardPoint.INPUT, messages)
+        
+        reply = <span class="kw">await</span> self.model_client.<span class="fn">generate</span>(messages, self.tool_schemas)
+        
+        <span class="cm"># ── OUTPUT guardrail ──</span>
+        <span class="kw">await</span> self.<span class="fn">_run_guardrails</span>(GuardPoint.OUTPUT, reply)
+        
+        <span class="kw">if</span> reply.stop_reason == <span class="st">"end_turn"</span>:
+            <span class="kw">return</span> reply.text_content()
+        
+        <span class="kw">for</span> tc <span class="kw">in</span> reply.tool_calls:
+            result = <span class="kw">await</span> self.<span class="fn">_run_tool_call</span>(tc)
+            messages.append(result)
+        i += <span class="num">1</span>`,
+  },
+
+  base_tool: {
+    icon:'🔧', name:'BaseTool', sub:'Tool subclassing contract', zone:'core',
+    tags:[{l:'📋 schema', bg:'#1a1200', fg:'#fbbf24'},{l:'⚙️ execute()', bg:'#0b1d1a', fg:'#2dd4bf'}],
+    desc:'BaseTool is the base class for all tools in the catalog. Subclasses implement execute() with keyword-only args. BaseTool.run() validates inputs against input_schema before calling execute(). Risk level and HITL mode are class-level attributes (Strategy pattern) used by ToolPolicy derivation.',
+    files:[
+      'src/raavan/core/tools/base_tool.py — BaseTool, ToolResult, ToolRisk, HitlMode',
+      'src/raavan/core/tools/catalog.py — ToolRegistry',
+      'src/raavan/catalog/tools/ — all built-in tool implementations',
+      'src/raavan/catalog/tools/human_input/ — AskHumanTool',
+      'src/raavan/catalog/tools/task_manager/ — TaskManagerTool',
+      'src/raavan/catalog/tools/web_surfer/ — WebSurferTool',
+      'src/raavan/catalog/tools/code_interpreter/ — CodeInterpreterTool',
+    ],
+    receives:[
+      'tool.run(**kwargs) — validates inputs then calls execute()',
+      'tool.get_schema() → Tool  — framework format for ReActAgent',
+      'tool.get_openai_schema() → dict  — OpenAI function-calling format',
+      'tool.get_mcp_schema() → dict  — MCP wire format',
+    ],
+    sends:[
+      'ToolResult(content, app_data, metadata)',
+    ],
+    classes:[
+      'class MyTool(BaseTool): — subclass pattern',
+      'risk = ToolRisk.CRITICAL  — class-level (Strategy), not in __init__',
+      'hitl_mode = HitlMode.BLOCKING  — class-level (Strategy)',
+      'async def execute(self, *, param: str) → ToolResult  — keyword-only args',
+      '# type: ignore[override]  — required on execute() due to *-only args',
+      'ToolResult(content=[{"type":"text","text":"..."}], app_data={...})',
+      'from raavan.core import ToolRisk, RunStatus  — canonical re-exports',
+    ],
+    rules:[
+      'Use app_data for structured output, not metadata (metadata is legacy)',
+      'keyword-only args on execute() require # type: ignore[override]',
+      'risk and hitl_mode must be class-level attributes, not constructor args',
+      'Register tool in server/app.py lifespan under app.state.tools',
+    ],
+    code:`<span class="kw">class</span> <span class="ty">EmailSenderTool</span>(<span class="ty">BaseTool</span>):
+    risk = <span class="ty">ToolRisk</span>.CRITICAL        <span class="cm"># class-level</span>
+    hitl_mode = <span class="ty">HitlMode</span>.BLOCKING   <span class="cm"># class-level</span>
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        <span class="fn">super().__init__</span>(name=<span class="st">"send_email"</span>,
+            description=<span class="st">"Send email"</span>,
+            input_schema={<span class="st">"type"</span>: <span class="st">"object"</span>, ...})
+
+    <span class="kw">async def</span> <span class="fn">execute</span>(self, *, to: <span class="ty">str</span>, body: <span class="ty">str</span>  <span class="cm"># type: ignore[override]</span>
+    ) -> <span class="ty">ToolResult</span>:
+        <span class="kw">return</span> <span class="ty">ToolResult</span>(content=[{<span class="st">"type"</span>:<span class="st">"text"</span>,<span class="st">"text"</span>:<span class="st">"sent"</span>}],
+                           app_data={<span class="st">"to"</span>: to})`,
+  },
+
+  guardrails: {
+    icon:'🛡️', name:'Guardrails', sub:'3 injection points on every agent turn', zone:'core',
+    tags:[{l:'INPUT', bg:'#1a0a0a', fg:'#fb7185'},{l:'OUTPUT', bg:'#0f2b10', fg:'#4ade80'},{l:'TOOL_CALL', bg:'#1a1200', fg:'#fbbf24'}],
+    desc:'Guardrails run at 3 injection points: INPUT (before LLM call), OUTPUT (after LLM response), and TOOL_CALL (before tool execution). Each guardrail returns a GuardResult — if any returns BLOCK the agent stops that turn. Guardrails are pure strategy objects injected at agent construction time.',
+    files:[
+      'src/raavan/core/guardrails/ — all guardrail implementations',
+      'src/raavan/core/guardrails/content_filter.py — toxic/harmful content',
+      'src/raavan/core/guardrails/pii.py — PII detection and redaction',
+      'src/raavan/core/guardrails/prompt_injection.py — injection detection',
+      'src/raavan/core/guardrails/max_token.py — token budget enforcement',
+      'src/raavan/core/guardrails/tool_call_validation.py — schema validation',
+    ],
+    receives:[
+      'guardrail.check(GuardPoint.INPUT, messages) → GuardResult',
+      'guardrail.check(GuardPoint.OUTPUT, response) → GuardResult',
+      'guardrail.check(GuardPoint.TOOL_CALL, tool_call) → GuardResult',
+    ],
+    sends:[
+      'GuardResult(action=ALLOW|BLOCK|MODIFY, reason?)',
+    ],
+    classes:[
+      'GuardPoint.INPUT — before LLM call (check user message)',
+      'GuardPoint.OUTPUT — after LLM response (check model output)',
+      'GuardPoint.TOOL_CALL — before tool execution (validate args)',
+      'GuardResult.action: GuardAction.ALLOW | BLOCK | MODIFY',
+      'ContentFilter — detects harmful/toxic content',
+      'PIIGuardrail — detects and optionally redacts PII',
+      'PromptInjectionGuardrail — detects prompt injection attempts',
+    ],
+    rules:[
+      'Guardrails are injected at ReActAgent construction — agent.guardrails=[...]',
+      'All guardrails are async — they may do LLM-as-judge calls',
+      'BLOCK action stops the agent turn immediately',
+      'MODIFY action can sanitize the content before proceeding',
+    ],
+    code:`<span class="cm"># Inject at construction</span>
+agent = <span class="ty">ReActAgent</span>(
+    ...
+    guardrails=[
+        <span class="ty">ContentFilter</span>(),
+        <span class="ty">PIIGuardrail</span>(redact=<span class="kw">True</span>),
+        <span class="ty">PromptInjectionGuardrail</span>(),
+    ]
+)
+
+<span class="cm"># Inside _run_inner()</span>
+<span class="kw">for</span> g <span class="kw">in</span> self.guardrails:
+    result = <span class="kw">await</span> g.<span class="fn">check</span>(<span class="ty">GuardPoint</span>.INPUT, messages)
+    <span class="kw">if</span> result.action == <span class="ty">GuardAction</span>.BLOCK:
+        <span class="kw">raise</span> <span class="ty">GuardBlockError</span>(result.reason)`,
+  },
+
+  memory_core: {
+    icon:'🧩', name:'Memory System', sub:'BaseMemory → UnboundedMemory / SlidingWindow', zone:'core',
+    tags:[{l:'async only', bg:'#1a1200', fg:'#fbbf24'},{l:'🧠 Redis-backed', bg:'#0b1d1a', fg:'#2dd4bf'}],
+    desc:'The memory system has a clean hierarchy. BaseMemory defines the async interface. UnboundedMemory holds messages in RAM (notebooks/tests). SlidingWindowMemory trims to a fixed window. RedisMemory is the production backend — all public methods are async, lifecycle is connect/restore/use/disconnect. There is no close() method.',
+    files:[
+      'src/raavan/core/memory/ — BaseMemory, UnboundedMemory, SlidingWindowMemory',
+      'src/raavan/core/memory/session_manager.py — SessionManager',
+      'src/raavan/integrations/memory/redis_memory.py — RedisMemory',
+      'src/raavan/integrations/memory/postgres_memory.py — PostgresMemory',
+      'src/raavan/core/context/ — RedisModelContext.build()',
+    ],
+    receives:[
+      'await memory.add_message(msg: Message) — ALWAYS await',
+      'await memory.get_messages() → list[Message]',
+      'await memory.restore()  — reload from Redis into RAM',
+      'await memory.connect()  — startup lifecycle',
+      'await memory.disconnect() — shutdown lifecycle (NOT .close())',
+    ],
+    sends:[
+      'list[Message] — full conversation history for context building',
+    ],
+    classes:[
+      'RedisMemory(session_id, redis_url) — ONE class, no wrappers',
+      'UnboundedMemory() — RAM only, no infrastructure',
+      'SlidingWindowMemory(max_messages) — RAM, trimmed',
+      'RedisModelContext.build(memory, system_prompt) → list[Message]',
+      'SESSION_MAX_MESSAGES=200, SESSION_AUTO_CHECKPOINT=50',
+      'REDIS_SESSION_TTL=3600  — no inline comments after int values!',
+    ],
+    rules:[
+      'ALL memory methods are async — always await them',
+      'NEVER add add_message_sync() or any sync/async pair variants',
+      'Lifecycle: connect() → restore() → use → disconnect()',
+      'There is NO .close() method — only disconnect()',
+      'One Redis class: RedisMemory — do not create a RedisBackedMemory wrapper',
+      'RedisModelContext.build() reads via await memory.get_messages()',
+    ],
+    code:`<span class="kw">from</span> raavan.integrations.memory <span class="kw">import</span> <span class="ty">RedisMemory</span>
+
+mem = <span class="ty">RedisMemory</span>(session_id=<span class="st">"conv-001"</span>, redis_url=REDIS_URL)
+<span class="kw">await</span> mem.<span class="fn">connect</span>()
+<span class="kw">await</span> mem.<span class="fn">restore</span>()         <span class="cm"># reload history from Redis</span>
+<span class="kw">await</span> mem.<span class="fn">add_message</span>(msg)  <span class="cm"># async — always await</span>
+msgs = <span class="kw">await</span> mem.<span class="fn">get_messages</span>()
+<span class="kw">await</span> mem.<span class="fn">disconnect</span>()      <span class="cm"># NOT .close()</span>`,
+  },
+
+  redis: {
+    icon:'🟥', name:'Redis', sub:'Conversation memory + pub/sub', zone:'infra',
+    tags:[{l:'🗃️ memory', bg:'#2a1010', fg:'#f87171'},{l:'📡 pub/sub', bg:'#0f2b4a', fg:'#38bdf8'}],
+    desc:'Redis serves two roles: session memory storage (RedisMemory) and pub/sub event bus (EventBus in microservices mode). Memory keys are scoped by session_id with a TTL. All operations go through the RedisMemory class — never access the raw Redis client from business logic.',
+    files:[
+      'src/raavan/integrations/memory/redis_memory.py — RedisMemory',
+      'src/raavan/shared/events/bus.py — EventBus (Redis pub/sub)',
+    ],
+    receives:[
+      'HSET/RPUSH per session_id (from RedisMemory.add_message)',
+      'HGETALL per session_id (from RedisMemory.restore)',
+      'PSUBSCRIBE/PUBLISH (from EventBus in microservices mode)',
+    ],
+    sends:[
+      'JSON-serialized message history under session_id key',
+      'Pub/sub event payloads to subscribers',
+    ],
+    classes:[
+      'redis.asyncio.Redis — async client (not redis.Redis)',
+      'await redis.from_url(REDIS_URL) — factory, not direct constructor',
+      'REDIS_URL=redis://localhost:6379/0',
+      'REDIS_SESSION_TTL=3600 — no inline comment after value!',
+    ],
+    rules:[
+      'app.state.redis_client is the aioredis.Redis instance — never the private _client',
+      'REDIS_SESSION_TTL must not have inline comments: ✓ =3600  ✗ =3600 # seconds',
+      'python-dotenv passes the whole string including comment to Pydantic → ValidationError',
+    ],
+    code:`<span class="cm"># .env — NEVER inline comments after integers</span>
+REDIS_URL=<span class="st">redis://localhost:6379/0</span>
+REDIS_SESSION_TTL=<span class="num">3600</span>          <span class="cm"># ← DON'T do this (ValidationError!)</span>
+REDIS_SESSION_TTL=<span class="num">3600</span>          <span class="cm"># ← just: REDIS_SESSION_TTL=3600</span>
+
+<span class="cm"># In lifespan:</span>
+app.state.redis_client = <span class="kw">await</span> aioredis.<span class="fn">from_url</span>(settings.redis_url)`,
+  },
+
+  postgres: {
+    icon:'🐘', name:'PostgreSQL', sub:'Thread + message persistence', zone:'infra',
+    tags:[{l:'🗃️ threads', bg:'#0f1a2e', fg:'#60a5fa'},{l:'🗃️ messages', bg:'#0f1a2e', fg:'#818cf8'}],
+    desc:'PostgreSQL stores durable thread and message history via SQLAlchemy 2 async. The ORM models (Thread, Message) live in server/models.py. Prisma is used separately for Next.js OAuth session storage only. All microservice routes must use get_db_session from shared.database.dependency — never define a local _get_db helper.',
+    files:[
+      'src/raavan/server/models.py — Thread, Message SQLAlchemy ORM',
+      'src/raavan/server/database.py — async session factory',
+      'src/raavan/shared/database/ — get_db_session dependency',
+      'raavan-ui/prisma/schema.prisma — Next.js OAuth session store (separate schema)',
+    ],
+    receives:[
+      'session.add(Thread(...))   — create thread',
+      'session.add(Message(...))  — persist message',
+      'session.execute(select(Thread).where(...))  — query',
+    ],
+    sends:[
+      'Thread(id, title, created_at)',
+      'Message(id, role, content, thread_id, tool_calls, created_at)',
+    ],
+    classes:[
+      'Thread — ORM model: id, title, user_id, created_at',
+      'Message — ORM model: id, role, content, thread_id, tool_calls',
+      'AsyncSession — SQLAlchemy 2 async',
+      'get_db_session — shared.database.dependency (Depends(get_db_session))',
+      'DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb',
+      'asyncpg — driver (never psycopg2 or psycopg3)',
+    ],
+    rules:[
+      'ALWAYS use get_db_session from shared.database.dependency',
+      'NEVER define a local _get_db() helper — import the shared one',
+      'New ORM models go in server/models/ (monolith) or service-local models.py (microservices)',
+      'After adding Prisma models: npx prisma generate (Next.js only)',
+    ],
+    code:`<span class="kw">from</span> raavan.shared.database.dependency <span class="kw">import</span> get_db_session
+
+<span class="kw">@router.post</span>(<span class="st">"/threads"</span>)
+<span class="kw">async def</span> <span class="fn">create_thread</span>(
+    body: <span class="ty">ThreadCreate</span>,
+    db: <span class="ty">AsyncSession</span> = <span class="ty">Depends</span>(get_db_session),
+):
+    thread = <span class="ty">Thread</span>(title=body.title)
+    db.<span class="fn">add</span>(thread)
+    <span class="kw">await</span> db.<span class="fn">commit</span>()
+    <span class="kw">return</span> thread`,
+  },
+
+  nats: {
+    icon:'📡', name:'NATS', sub:'Pub/sub event bus — activity → SSE', zone:'infra',
+    tags:[{l:'📬 subscribe', bg:'#0b1d1a', fg:'#2dd4bf'},{l:'📤 publish', bg:'#1a1200', fg:'#fbbf24'}],
+    desc:'NATS decouples Worker activity output from SSE client connections. Worker publishes to subject events.{conv_id}. The WebHITLBridge subscribes and forwards to the appropriate asyncio.Queue. This means Workers can run on separate machines from the API server. In microservices mode EventBus uses Redis pub/sub instead.',
+    files:[
+      'src/raavan/integrations/runtime/nats/bridge.py — NATSBridge',
+      'src/raavan/shared/events/bus.py — EventBus (Redis pub/sub fallback)',
+      'src/raavan/shared/events/types.py — event factory functions',
+    ],
+    receives:[
+      'bridge.publish(subject, event_dict)  ← Worker activities',
+    ],
+    sends:[
+      'Subscriber callbacks → WebHITLBridge.put_event(event)',
+      'Fan-out to all connected SSE clients for that conv_id',
+    ],
+    classes:[
+      'NATSBridge(nats_url) — connect/disconnect/publish/subscribe',
+      'bridge.publish(f"events.{conv_id}", event_dict) — from activities',
+      'bridge.subscribe(pattern, callback) — from WebHITLBridge',
+      'EventBus(redis_url) — drop-in for microservices mode',
+      'workflow_started(job_id, run_id) — ALWAYS use factory functions',
+      'NEVER build event dicts manually: ✓ workflow_started(...)  ✗ {"type":"workflow_started"}',
+    ],
+    rules:[
+      'Always use factory functions from shared/events/types.py — never manual dicts',
+      'Subject naming convention: events.{conv_id} for per-conversation events',
+      'NATSBridge.connect() must be called before any publish/subscribe',
+    ],
+    code:`<span class="cm"># Worker activity</span>
+<span class="kw">async def</span> <span class="fn">publish_event</span>(conv_id: <span class="ty">str</span>, event: <span class="ty">dict</span>) -> <span class="kw">None</span>:
+    <span class="kw">await</span> _streaming.<span class="fn">publish</span>(<span class="st">f"events.{conv_id}"</span>, event)
+
+<span class="cm"># ✓ Use factory functions</span>
+<span class="kw">from</span> raavan.shared.events.types <span class="kw">import</span> workflow_started
+event = <span class="fn">workflow_started</span>(job_id=job.id, run_id=run.id)
+
+<span class="cm"># ✗ Never build dicts manually</span>
+event = {<span class="st">"type"</span>: <span class="st">"workflow_started"</span>, ...}  <span class="cm"># WRONG</span>`,
+  },
+
+  openai: {
+    icon:'🤖', name:'OpenAI API', sub:'LLM · STT · TTS · vision · image gen', zone:'infra',
+    tags:[{l:'🤖 LLM', bg:'#1a0a0a', fg:'#fb7185'},{l:'🎨 image gen', bg:'#1a1200', fg:'#fbbf24'}],
+    desc:'OpenAIClient is the single concrete LLM adapter. It implements BaseModelClient ABC which lives in core/ with no external deps. Supports text generation, vision (ImageContent), STT (transcribe), TTS (stream_tts), image generation (generate_image), and Realtime S2S. Audio methods are optional and raise NotImplementedError if not supported.',
+    files:[
+      'src/raavan/integrations/llm/openai/openai_client.py — OpenAIClient',
+      'src/raavan/core/llm/base_client.py — BaseModelClient ABC (no external deps)',
+      'src/raavan/core/messages/_types.py — ImageContent, AudioContent, VideoContent',
+    ],
+    receives:[
+      'generate(messages, tools?, stream?) → AssistantMessage',
+      'transcribe(audio_bytes, content_type?) → str  [STT]',
+      'stream_tts(text, voice?) → AsyncIterator[bytes]  [TTS]',
+      'generate_image(prompt, model?, size?, quality?) → list[str]  [URLs]',
+      'create_s2s_session() / s2s_ws_url() → str  [Realtime S2S]',
+    ],
+    sends:[
+      'AssistantMessage(content=list[MediaType]|None, tool_calls=[...])',
+      'stop_reason: "end_turn" | "tool_use" | "max_tokens"',
+      'list[str] of URLs or "data:image/png;base64,..." strings',
+    ],
+    classes:[
+      'OpenAIClient(api_key, model="gpt-4o")',
+      'from raavan.integrations.llm.openai.openai_client import OpenAIClient  ← EXACT PATH',
+      'from raavan.core.llm.base_client import BaseModelClient  ← abstract base',
+      'client.supports_image_generation — check before generate_image()',
+      'client.supports_s2s — check before S2S calls',
+      'ImageContent(url="...", detail="high")  — no PIL needed',
+      'ImageContent(data=b"...", media_type="image/jpeg")',
+      'detail: "low"|"high"|"original"|"auto" (default)',
+    ],
+    rules:[
+      'Import path: from raavan.integrations.llm.openai.openai_client import OpenAIClient',
+      'BaseModelClient ABC is in core.llm.base_client — no external deps',
+      'Always check supports_image_generation before calling generate_image()',
+      'Audio methods in routes: use request.app.state.model_client (not audio_client)',
+      'Check model_client.supports_s2s before any S2S calls',
+    ],
+    code:`<span class="kw">from</span> raavan.integrations.llm.openai.openai_client <span class="kw">import</span> <span class="ty">OpenAIClient</span>
+
+client = <span class="ty">OpenAIClient</span>(api_key=<span class="st">"sk-..."</span>, model=<span class="st">"gpt-4o"</span>)
+
+<span class="cm"># Text generation</span>
+reply = <span class="kw">await</span> client.<span class="fn">generate</span>(messages, tools=schemas)
+
+<span class="cm"># Vision — no PIL needed</span>
+<span class="kw">from</span> raavan.core.messages <span class="kw">import</span> <span class="ty">ImageContent</span>
+msg = <span class="ty">UserMessage</span>(content=[
+    <span class="st">"Describe this image:"</span>,
+    <span class="ty">ImageContent</span>(url=<span class="st">"https://..."</span>, detail=<span class="st">"high"</span>)])
+
+<span class="cm"># Image generation</span>
+<span class="kw">if</span> client.supports_image_generation:
+    urls = <span class="kw">await</span> client.<span class="fn">generate_image</span>(<span class="st">"a cat"</span>, model=<span class="st">"dall-e-3"</span>)`,
+  },
+
+};
+
+// ═══════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════
+let selectedId = null;
+
+function renderLegend() {
+  const el = document.getElementById('legend');
+  el.innerHTML = ZONES.map(z =>
+    `<div class="leg">
+       <div class="leg-dot" style="background:${z.color}"></div>
+       ${z.label}
+     </div>`
+  ).join('');
+}
+
+function renderDiagram() {
+  const el = document.getElementById('diagram');
+  el.innerHTML = ZONES.map((z, zi) => `
+    <div class="zone" style="border-color:${z.color}20;background:${z.bg}" id="zone-${z.id}">
+      <div class="zone-hdr">
+        <div class="zone-label" style="color:${z.color}">${z.label}</div>
+        <div class="zone-count">${z.actors.length} component${z.actors.length>1?'s':''}</div>
+      </div>
+      <div class="zone-actors">
+        ${z.actors.map(id => renderCard(id, z.color)).join('')}
+      </div>
+    </div>
+    ${z.conn ? `<div class="conn"><div class="conn-msg">↕ ${z.conn}</div></div>` : ''}
+  `).join('');
+}
+
+function renderCard(id, zoneColor) {
+  const a = ACTORS[id];
+  return `
+    <div class="card" id="card-${id}" onclick="selectActor('${id}')"
+         style="--active-color:${zoneColor}">
+      <div class="card-accent" style="background:${zoneColor}"></div>
+      <div class="card-icon">${a.icon}</div>
+      <div class="card-name">${a.name}</div>
+      <div class="card-sub">${a.sub}</div>
+      <div class="card-tags">
+        ${(a.tags||[]).map(t=>`<span class="tag" style="background:${t.bg};color:${t.fg}">${t.l}</span>`).join('')}
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+//  INTERACTIONS
+// ═══════════════════════════════════════════════════
+function selectActor(id) {
+  if (selectedId === id) { closeDrawer(); return; }
+  if (selectedId) document.getElementById('card-'+selectedId)?.classList.remove('active');
+  selectedId = id;
+  document.getElementById('card-'+id)?.classList.add('active');
+  openDrawer(id);
+}
+
+function closeDrawer() {
+  if (selectedId) document.getElementById('card-'+selectedId)?.classList.remove('active');
+  selectedId = null;
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('layout').classList.remove('open');
+  renderEmptyDrawer();
+}
+
+function openDrawer(id) {
+  renderDrawerContent(ACTORS[id]);
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('layout').classList.add('open');
+  document.getElementById('drawer').scrollTop = 0;
+}
+
+function renderEmptyDrawer() {
+  document.getElementById('drw-hdr-content').innerHTML = `
+    <div style="font-size:28px;opacity:.3;margin-bottom:6px">👆</div>
+    <div style="font-size:11px;color:var(--faint)">Select a component</div>`;
+  document.getElementById('drw-body').innerHTML = `
+    <div class="drw-empty">
+      <div class="drw-empty-icon">🔍</div>
+      <div class="drw-empty-text">Click any component in the diagram to see its source files, API contracts, core classes, and implementation details.</div>
+    </div>`;
+}
+
+function renderDrawerContent(a) {
+  const zone = ZONES.find(z => z.actors.includes(Object.keys(ACTORS).find(k=>ACTORS[k]===a)));
+  const color = zone?.color || '#3b82f6';
+
+  document.getElementById('drw-hdr-content').innerHTML = `
+    <div class="drw-zone" style="background:${color}18;color:${color};border:1px solid ${color}40">${zone?.label||''}</div>
+    <div class="drw-title">${a.icon} ${a.name}</div>
+    <div class="drw-sub">${a.sub}</div>`;
+
+  document.getElementById('drw-body').innerHTML = `
+    <div class="drw-desc" style="border-left-color:${color}">${a.desc}</div>
+    ${sec('📁 Source Files', renderFiles(a.files, color), true)}
+    ${sec('📬 Receives', renderItems(a.receives, color), true)}
+    ${sec('📤 Sends', renderItems(a.sends, color), true)}
+    ${sec('🔬 Core Classes &amp; Methods', renderClasses(a.classes, color), true)}
+    ${a.rules ? sec('📋 Key Rules', renderItems(a.rules, '#f59e0b'), false) : ''}
+    ${a.code ? sec('💡 Code Example', `<div class="cblock">${a.code}</div>`, false) : ''}
+  `;
+
+  // activate first sections open
+  document.querySelectorAll('#drw-body .sec').forEach(s => {
+    if(s.dataset.open === 'true') s.classList.add('open');
+  });
+}
+
+function sec(title, body, defaultOpen) {
+  return `
+    <div class="sec ${defaultOpen?'open':''}" data-open="${defaultOpen}">
+      <div class="sec-hdr" onclick="this.parentElement.classList.toggle('open')">
+        ${title} <span class="chev">▾</span>
+      </div>
+      <div class="sec-body">${body}</div>
+    </div>`;
+}
+
+function renderFiles(files, color) {
+  return files.map(f => {
+    const parts = f.split(' — ');
+    return `<div class="item">
+      <div class="idot" style="background:${color}"></div>
+      <div><span class="fpath">${parts[0]}</span>${parts[1] ? `<br><span style="font-size:9px;color:var(--faint)">${parts[1]}</span>` : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderItems(items, color) {
+  return items.map(t => `
+    <div class="item">
+      <div class="idot" style="background:${color}"></div>
+      <div>${t.replace(/`([^`]+)`/g, '<code>$1</code>')}</div>
+    </div>`).join('');
+}
+
+function renderClasses(classes, color) {
+  return classes.map(c => {
+    const parts = c.split(' — ');
+    const main = parts[0].replace(/`([^`]+)`/g, '<code>$1</code>');
+    const note = parts[1] ? `<span style="color:var(--faint);font-size:9px"> — ${parts[1]}</span>` : '';
+    return `<div class="item">
+      <div class="idot" style="background:${color}"></div>
+      <div><code>${main}</code>${note}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+renderLegend();
+renderDiagram();
+
+// keyboard close
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeDrawer(); });
+</script>
+</body>
+</html>

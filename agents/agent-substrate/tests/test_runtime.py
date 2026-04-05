@@ -636,13 +636,13 @@ class TestOrchestratorRuntimeIntegration:
             assert tool._runtime is rt
 
 
-class TestDistributedPackage:
-    """The distributed/ package provides durable agent execution."""
+class TestRestatePackage:
+    """The Restate integration provides durable agent execution."""
 
     def test_import_succeeds(self) -> None:
         import importlib
 
-        mod = importlib.import_module("raavan.distributed")
-        assert hasattr(mod, "NATSStreamingBridge")
-        assert hasattr(mod, "RestateClient")
+        mod = importlib.import_module("raavan.integrations.runtime.restate")
+        assert hasattr(mod, "RestateRuntime")
+        assert hasattr(mod, "RestateWorkflowClient")
         assert hasattr(mod, "ToolPolicy")

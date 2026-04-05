@@ -14,10 +14,10 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from raavan.services.agent_runtime.runner import (
+from raavan.services.agent_runtime.service import (
     create_agent,
+    execute_agent_run,
     load_memory_for_thread,
-    run_agent_stream,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ async def start_agent_run(body: RunRequest, request: Request):
 
     # Run asynchronously
     asyncio.create_task(
-        run_agent_stream(
+        execute_agent_run(
             agent=agent,
             user_content=body.user_content,
             run_id=body.run_id,

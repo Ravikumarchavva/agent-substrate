@@ -166,6 +166,9 @@ class AgentRunResult(BaseModel):
     # Guardrail audit trail
     guardrail_results: List[Any] = Field(default_factory=list)
 
+    # Structured output (only set when response_schema was passed to run())
+    structured_output: Optional[Any] = None
+
     # Config snapshot
     max_iterations: int = 0
 

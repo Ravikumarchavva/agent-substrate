@@ -1,0 +1,516 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.ar-root {
+  font-family: 'Inter', sans-serif;
+  background: #0f172a;
+  border-radius: 20px;
+  padding: 30px 32px 28px;
+  max-width: 1120px;
+  margin: 0 auto;
+  box-shadow: 0 12px 60px rgba(0,0,0,0.5);
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+.ar-hdr { text-align: center; margin-bottom: 22px; }
+.ar-hdr-title {
+  font-size: 21px; font-weight: 900; letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #e2e8f0 0%, #818cf8 60%, #38bdf8 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.ar-hdr-sub {
+  font-size: 11px; color: #64748b; margin-top: 5px; letter-spacing: 0.3px;
+}
+.ar-hdr-pill {
+  display: inline-block; background: #1e293b; border: 1px solid #334155;
+  border-radius: 20px; padding: 3px 12px; margin: 8px 4px 0;
+  font-size: 10px; font-weight: 600; color: #94a3b8;
+}
+
+/* ── 4-zone grid ─────────────────────────────────────────────── */
+.ar-zones {
+  display: grid;
+  grid-template-columns: 1fr 36px 1fr 36px 1fr 36px 1fr;
+  gap: 0;
+  margin-bottom: 10px;
+  align-items: stretch;
+}
+.ar-zone {
+  border-radius: 14px; padding: 14px 14px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.z-client  { background: #0c1a35; border: 1.5px solid #3b82f6; }
+.z-api     { background: #160c2e; border: 1.5px solid #7c3aed; }
+.z-exec    { background: #0d1634; border: 1.5px solid #4f46e5; }
+.z-infra   { background: #0b1f1e; border: 1.5px solid #0d9488; }
+
+.ar-zone-label {
+  font-size: 9px; font-weight: 800; letter-spacing: 1.8px;
+  text-transform: uppercase; margin-bottom: 2px;
+}
+.z-client .ar-zone-label  { color: #60a5fa; }
+.z-api    .ar-zone-label  { color: #a78bfa; }
+.z-exec   .ar-zone-label  { color: #818cf8; }
+.z-infra  .ar-zone-label  { color: #2dd4bf; }
+
+/* ── Actor cards ─────────────────────────────────────────────── */
+.ar-actor {
+  background: #1e293b; border-radius: 10px;
+  padding: 10px 12px; border-left: 3px solid transparent;
+}
+.ar-actor-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.ar-actor-icon  { font-size: 18px; flex-shrink: 0; line-height: 1; }
+.ar-actor-name  { font-size: 11px; font-weight: 700; color: #e2e8f0; line-height: 1.2; }
+.ar-actor-role  { font-size: 9px; color: #64748b; margin-top: 1px; }
+
+/* mailbox tag row */
+.ar-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.ar-tag  {
+  font-size: 8px; font-weight: 700; padding: 2px 5px;
+  border-radius: 4px; white-space: nowrap; letter-spacing: 0.2px;
+}
+.tag-recv { background: #0f2b4a; color: #38bdf8; border: 1px solid #0369a1; }
+.tag-send { background: #0f2e1a; color: #4ade80; border: 1px solid #166534; }
+.tag-store{ background: #1e1b3a; color: #a78bfa; border: 1px solid #4f46e5; }
+
+/* actor colour accents */
+.a-blue   { border-left-color: #3b82f6; }
+.a-sky    { border-left-color: #0ea5e9; }
+.a-violet { border-left-color: #7c3aed; }
+.a-purple { border-left-color: #9333ea; }
+.a-indigo { border-left-color: #4f46e5; }
+.a-teal   { border-left-color: #0d9488; }
+.a-amber  { border-left-color: #d97706; }
+.a-green  { border-left-color: #059669; }
+
+/* ── Zone connectors ─────────────────────────────────────────── */
+.ar-conn {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 5px; padding: 4px 0;
+}
+.ar-conn-msg {
+  font-size: 8px; font-weight: 700; color: #475569; text-align: center;
+  background: #1e293b; border: 1px solid #334155; border-radius: 5px;
+  padding: 3px 4px; line-height: 1.4; white-space: nowrap;
+}
+.ar-conn-arrow { font-size: 14px; color: #475569; line-height: 1; }
+.ar-conn-back  { font-size: 8px; color: #475569; font-weight: 600; text-align:center; }
+
+/* ── Infra actors row (inside z-infra) ───────────────────────── */
+.ar-infra-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  height: 100%;
+}
+
+/* ── Separator ───────────────────────────────────────────────── */
+.ar-sep {
+  height: 1px; background: #1e293b; margin: 8px 0;
+}
+
+/* ── Flows section ───────────────────────────────────────────── */
+.ar-flows {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-bottom: 10px;
+}
+.ar-flow-card {
+  border-radius: 12px; padding: 16px 16px 12px;
+}
+.fc-normal { background: #071d12; border: 1.5px solid #16a34a; }
+.fc-hitl   { background: #1a1200; border: 1.5px solid #d97706; }
+.ar-flow-title {
+  font-size: 10px; font-weight: 800; letter-spacing: 1px;
+  text-transform: uppercase; margin-bottom: 12px;
+}
+.fc-normal .ar-flow-title { color: #4ade80; }
+.fc-hitl   .ar-flow-title { color: #fbbf24; }
+
+.ar-step {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px;
+}
+.ar-step:last-child { margin-bottom: 0; }
+.ar-step-num {
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  font-size: 9px; font-weight: 800; color: #0f172a;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 1px;
+}
+.fc-normal .ar-step-num { background: #4ade80; }
+.fc-hitl   .ar-step-num { background: #fbbf24; }
+.ar-step-body { flex: 1; }
+.ar-step-who {
+  font-size: 9px; font-weight: 700;
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  margin-right: 4px; margin-bottom: 2px;
+}
+.fc-normal .ar-step-who { background: #0f2e1a; color: #4ade80; }
+.fc-hitl   .ar-step-who { background: #2b1a00; color: #fbbf24; }
+.ar-step-text { font-size: 10px; color: #cbd5e1; line-height: 1.5; }
+
+/* ── Crash banner ─────────────────────────────────────────────── */
+.ar-crash {
+  background: linear-gradient(90deg, #1e293b 0%, #1a1a2e 100%);
+  border: 1px solid #334155; border-radius: 12px;
+  padding: 14px 20px; display: flex; align-items: center; gap: 14px;
+  margin-top: 2px;
+}
+.ar-crash-icon { font-size: 28px; flex-shrink: 0; }
+.ar-crash-title { font-size: 12px; font-weight: 800; color: #e2e8f0; }
+.ar-crash-body  { font-size: 10px; color: #64748b; margin-top: 2px; line-height: 1.5; }
+.hi { color: #f8fafc; font-weight: 700; }
+</style>
+
+<div class="ar-root">
+  <!-- ════════ HEADER ════════ -->
+  <div class="ar-hdr">
+    <div class="ar-hdr-title">🏗️ Agent Framework — Actor Model &amp; System Architecture</div>
+    <div class="ar-hdr-sub">Every box is an isolated actor · Arrows are the only way actors communicate · Zones are deployment boundaries</div>
+    <span class="ar-hdr-pill">📬 Receives</span>
+    <span class="ar-hdr-pill">📤 Sends</span>
+    <span class="ar-hdr-pill">🗃️ Persists</span>
+  </div>
+
+  <!-- ════════ ZONE GRID ════════ -->
+  <div class="ar-zones">
+
+    <!-- ── ZONE 1: CLIENT ── -->
+    <div class="ar-zone z-client">
+      <div class="ar-zone-label">① Client Tier</div>
+
+      <div class="ar-actor a-blue">
+        <div class="ar-actor-head">
+          <div class="ar-actor-icon">🌐</div>
+          <div><div class="ar-actor-name">Browser</div><div class="ar-actor-role">React UI</div></div>
+        </div>
+        <div class="ar-tags">
+          <span class="ar-tag tag-recv">📬 SSE tokens</span>
+          <span class="ar-tag tag-recv">📬 tool_approval</span>
+          <span class="ar-tag tag-send">📤 POST /chat</span>
+          <span class="ar-tag tag-send">📤 POST /hitl</span>
+        </div>
+      </div>
+
+      <div class="ar-actor a-sky">
+        <div class="ar-actor-head">
+          <div class="ar-actor-icon">⚡</div>
+          <div><div class="ar-actor-name">Next.js BFF</div><div class="ar-actor-role">Proxy + SSE pipe</div></div>
+        </div>
+        <div class="ar-tags">
+          <span class="ar-tag tag-recv">📬 browser req</span>
+          <span class="ar-tag tag-send">📤 proxy to API</span>
+          <span class="ar-tag tag-send">📤 fwd SSE stream</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONNECTOR 1 ── -->
+    <div class="ar-conn">
+      <div class="ar-conn-msg">HTTP POST</div>
+      <div class="ar-conn-arrow">⟶</div>
+      <div class="ar-conn-msg">SSE stream</div>
+      <div class="ar-conn-arrow">⟵</div>
+    </div>
+
+    <!-- ── ZONE 2: API ── -->
+    <div class="ar-zone z-api">
+      <div class="ar-zone-label">② API Tier</div>
+
+      <div class="ar-actor a-violet">
+        <div class="ar-actor-head">
+          <div class="ar-actor-icon">🔌</div>
+          <div><div class="ar-actor-name">FastAPI Server</div><div class="ar-actor-role">Routes + auth + DI</div></div>
+        </div>
+        <div class="ar-tags">
+          <span class="ar-tag tag-recv">📬 POST /chat</span>
+          <span class="ar-tag tag-recv">📬 POST /hitl/respond</span>
+          <span class="ar-tag tag-send">📤 start_workflow</span>
+          <span class="ar-tag tag-send">📤 resolve_promise</span>
+        </div>
+      </div>
+
+      <div class="ar-actor a-purple">
+        <div class="ar-actor-head">
+          <div class="ar-actor-icon">🌊</div>
+          <div><div class="ar-actor-name">WebHITL Bridge</div><div class="ar-actor-role">NATS → SSE fanout</div></div>
+        </div>
+        <div class="ar-tags">
+          <span class="ar-tag tag-recv">📬 NATS events</span>
+          <span class="ar-tag tag-send">📤 push SSE per conv</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONNECTOR 2 ── -->
+    <div class="ar-conn">
+      <div class="ar-conn-msg">HTTP<br>invoke</div>
+      <div class="ar-conn-arrow">⟶</div>
+      <div class="ar-conn-msg">NATS<br>events</div>
+      <div class="ar-conn-arrow">⟵</div>
+    </div>
+
+    <!-- ── ZONE 3: DURABLE EXEC ── -->
+    <div class="ar-zone z-exec">
+      <div class="ar-zone-label">③ Durable Execution Tier</div>
+
+      <div class="ar-actor a-indigo">
+        <div class="ar-actor-head">
+          <div class="ar-actor-icon">💾</div>
+          <div><div class="ar-actor-name">Restate Cluster</div><div class="ar-actor-role">Journal + promises</div></div>
+        </div>
+        <div class="ar-tags">
+          <span class="ar-tag tag-recv">📬 workflow start</span>
+          <span class="ar-tag tag-recv">📬 promise resolve</span>
+          <span class="ar-tag tag-send">📤 dispatch task</span>
+          <span class="ar-tag tag-store">🗃️ durable journal</span>
+        </div>
+      </div>
+
+      <div class="ar-actor a-teal">
+        <div class="ar-actor-head">
+          <div class="ar-actor-icon">⚙️</div>
+          <div><div class="ar-actor-name">Worker + ReAct Loop</div><div class="ar-actor-role">Agent activities</div></div>
+        </div>
+        <div class="ar-tags">
+          <span class="ar-tag tag-recv">📬 workflow tasks</span>
+          <span class="ar-tag tag-send">📤 LLM call</span>
+          <span class="ar-tag tag-send">📤 tool exec</span>
+          <span class="ar-tag tag-send">📤 NATS publish</span>
+          <span class="ar-tag tag-store">🗃️ Redis + PG</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONNECTOR 3 ── -->
+    <div class="ar-conn">
+      <div class="ar-conn-msg">async<br>calls</div>
+      <div class="ar-conn-arrow">⟶</div>
+      <div class="ar-conn-msg">results</div>
+      <div class="ar-conn-arrow">⟵</div>
+    </div>
+
+    <!-- ── ZONE 4: INFRA ── -->
+    <div class="ar-zone z-infra">
+      <div class="ar-zone-label">④ Infrastructure Tier</div>
+      <div class="ar-infra-grid">
+
+        <div class="ar-actor a-amber">
+          <div class="ar-actor-head">
+            <div class="ar-actor-icon">🧠</div>
+            <div><div class="ar-actor-name">Redis</div><div class="ar-actor-role">Conversation memory</div></div>
+          </div>
+          <div class="ar-tags">
+            <span class="ar-tag tag-store">🗃️ message history</span>
+            <span class="ar-tag tag-store">🗃️ session TTL</span>
+          </div>
+        </div>
+
+        <div class="ar-actor a-green">
+          <div class="ar-actor-head">
+            <div class="ar-actor-icon">🗃️</div>
+            <div><div class="ar-actor-name">PostgreSQL</div><div class="ar-actor-role">Persistent store</div></div>
+          </div>
+          <div class="ar-tags">
+            <span class="ar-tag tag-store">🗃️ threads</span>
+            <span class="ar-tag tag-store">🗃️ messages</span>
+          </div>
+        </div>
+
+        <div class="ar-actor a-sky">
+          <div class="ar-actor-head">
+            <div class="ar-actor-icon">📡</div>
+            <div><div class="ar-actor-name">NATS</div><div class="ar-actor-role">Event bus</div></div>
+          </div>
+          <div class="ar-tags">
+            <span class="ar-tag tag-recv">📬 worker events</span>
+            <span class="ar-tag tag-send">📤 fanout all subs</span>
+          </div>
+        </div>
+
+        <div class="ar-actor a-violet">
+          <div class="ar-actor-head">
+            <div class="ar-actor-icon">🤖</div>
+            <div><div class="ar-actor-name">OpenAI API</div><div class="ar-actor-role">LLM inference</div></div>
+          </div>
+          <div class="ar-tags">
+            <span class="ar-tag tag-recv">📬 messages array</span>
+            <span class="ar-tag tag-send">📤 AssistantMessage</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- end zone grid -->
+
+  <div class="ar-sep"></div>
+
+  <!-- ════════ FLOWS ════════ -->
+  <div class="ar-flows">
+
+    <!-- NORMAL FLOW -->
+    <div class="ar-flow-card fc-normal">
+      <div class="ar-flow-title">✅ Normal Execution Flow — 11 steps</div>
+
+      <div class="ar-step">
+        <div class="ar-step-num">1</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Browser</span>
+          <div class="ar-step-text">User types message → POST /api/chat with threadId &amp; message</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">2</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Next.js BFF</span>
+          <div class="ar-step-text">Proxies request, opens persistent SSE pipe back to browser</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">3</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">FastAPI</span>
+          <div class="ar-step-text">Registers SSE channel keyed by conversationId, calls RestateWorkflowClient</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">4</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Restate</span>
+          <div class="ar-step-text">Durably accepts workflow start, journals it, dispatches to Worker</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">5</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Worker</span>
+          <div class="ar-step-text">restore_memory() → loads full conversation history from Redis</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">6</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">OpenAI</span>
+          <div class="ar-step-text">do_llm_call() → AssistantMessage returned, result journalled by Restate</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">7</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Worker</span>
+          <div class="ar-step-text">do_tool_exec() → tool runs, result journalled; loop repeats until end_turn</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">8</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Redis + PG</span>
+          <div class="ar-step-text">persist_message() → message written to both stores atomically</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">9</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">NATS</span>
+          <div class="ar-step-text">publish_event() → text_delta / tool_result event fanned out to all subscribers</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">10</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">SSE Bridge</span>
+          <div class="ar-step-text">WebHITLBridge receives NATS event, pushes to matching SSE channel</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">11</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Browser</span>
+          <div class="ar-step-text">EventSource fires, token/tool bubble rendered in real time ✨</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HITL FLOW -->
+    <div class="ar-flow-card fc-hitl">
+      <div class="ar-flow-title">⏸️ HITL Approval Flow — 7 steps</div>
+
+      <div class="ar-step">
+        <div class="ar-step-num">1</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Worker</span>
+          <div class="ar-step-text">Agent selects a tool with <strong>requires_approval=True</strong> (e.g. send_email)</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">2</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Restate</span>
+          <div class="ar-step-text"><code>ctx.promise("hitl-{id}")</code> created — Worker thread suspends, freed</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">3</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">NATS → Bridge</span>
+          <div class="ar-step-text">tool_approval_request event published and pushed over SSE</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">4</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Browser</span>
+          <div class="ar-step-text">ToolApprovalCard rendered with tool name, inputs, and Approve / Reject buttons</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">5</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Browser</span>
+          <div class="ar-step-text">User clicks Approve → POST /api/chat/respond/{requestId}</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">6</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">FastAPI → Restate</span>
+          <div class="ar-step-text">resolve_promise("hitl-{id}", approved:true) — Restate wakes the workflow instantly</div>
+        </div>
+      </div>
+      <div class="ar-step">
+        <div class="ar-step-num">7</div>
+        <div class="ar-step-body">
+          <span class="ar-step-who">Worker</span>
+          <div class="ar-step-text">ctx.promise().get() returns approved value — tool executes from exact pause point</div>
+        </div>
+      </div>
+
+      <!-- bonus: ask_human note -->
+      <div style="margin-top:12px; padding:10px 12px; background:#1c1500; border-radius:8px; border:1px solid #92400e;">
+        <div style="font-size:9px; font-weight:800; color:#fbbf24; letter-spacing:0.8px; text-transform:uppercase; margin-bottom:4px;">
+          Same pattern for ask_human tool
+        </div>
+        <div style="font-size:10px; color:#a16207; line-height:1.5;">
+          Instead of ToolApprovalCard → HumanInputCard shown. User types answer. Same promise resolution path. Worker receives text answer as ToolExecutionResultMessage.
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end flows -->
+
+  <!-- ════════ CRASH BANNER ════════ -->
+  <div class="ar-crash">
+    <div class="ar-crash-icon">🛡️</div>
+    <div>
+      <div class="ar-crash-title">Why Restate? — Crash-Safe by Construction</div>
+      <div class="ar-crash-body">
+        If the Worker process dies between any two activity steps, Restate <span class="hi">replays the durable journal</span> and resumes
+        from the last committed result. The LLM is <span class="hi">never called twice</span>.
+        Tool side-effects are <span class="hi">idempotency-keyed</span>. HITL promises survive restarts.
+        Your conversation state is <span class="hi">never lost</span> — even during deploys.
+      </div>
+    </div>
+  </div>
+
+</div>

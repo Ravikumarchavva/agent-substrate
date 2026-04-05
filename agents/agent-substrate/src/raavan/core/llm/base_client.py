@@ -103,6 +103,8 @@ class BaseModelClient(ABC):
         self,
         messages: list[BaseClientMessage],
         tools: Optional[list[dict]] = None,
+        *,
+        response_format: Optional["Type[BaseModel]"] = None,
         **kwargs,
     ) -> AsyncIterator[AssistantMessage]:
         """Generate a streaming response from the model."""

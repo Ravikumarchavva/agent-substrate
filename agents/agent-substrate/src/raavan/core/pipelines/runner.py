@@ -27,29 +27,32 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
+from raavan.catalog import SkillManager
 from raavan.core.agents.react_agent import ReActAgent
 from raavan.core.context.base_context import ModelContext
 from raavan.core.guardrails.base_guardrail import BaseGuardrail
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.memory.base_memory import BaseMemory
-from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.core.memory.unbounded_memory import UnboundedMemory
+from raavan.core.pipelines.middleware import BaseWorkflowMiddleware, WorkflowRunnable
+from raavan.core.pipelines.condition_runner import ConditionPipelineRunner
 from raavan.core.pipelines.schema import (
     EdgeType,
     NodeConfig,
     NodeType,
     PipelineConfig,
 )
-from raavan.core.pipelines.condition_runner import ConditionPipelineRunner
 from raavan.core.pipelines.while_runner import WhilePipelineRunner
 from raavan.core.structured.judge import LLMJudge
 from raavan.core.structured.router import StructuredRouter
 from raavan.core.tools.base_tool import BaseTool
-from raavan.catalog import SkillManager
-from raavan.core.llm.base_client import BaseModelClient
-from raavan.integrations.mcp.client import MCPClient
-from raavan.integrations.mcp.tool import MCPTool
+
+if TYPE_CHECKING:
+    from raavan.integrations.mcp.client import MCPClient
+    from raavan.integrations.mcp.tool import MCPTool
+    from raavan.integrations.memory.redis_memory import RedisMemory
 
 logger = logging.getLogger("raavan.pipelines.runner")
 
@@ -82,6 +85,7 @@ class PipelineRunner:
         *,
         tools_registry: List[BaseTool],
         model_client: BaseModelClient,
+        workflow_middleware: Optional[List[BaseWorkflowMiddleware]] = None,
         redis_memory: Optional[RedisMemory] = None,
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
@@ -101,9 +105,16 @@ class PipelineRunner:
         always skipped at runtime.
         """
         # While-loop pipeline
+        runnable: Union[
+            ReActAgent,
+            StructuredRouter,
+            "ConditionPipelineRunner",
+            "WhilePipelineRunner",
+        ]
+
         while_nodes = config.nodes_by_type(NodeType.WHILE)
         if while_nodes:
-            return await self._build_while_pipeline(
+            runnable = await self._build_while_pipeline(
                 config,
                 while_nodes[0],
                 tools_registry=tools_registry,
@@ -115,48 +126,58 @@ class PipelineRunner:
             )
 
         # Condition-based branching pipeline
-        condition_nodes = config.nodes_by_type(NodeType.CONDITION)
-        if condition_nodes:
-            return await self._build_condition_pipeline(
-                config,
-                condition_nodes[0],
-                tools_registry=tools_registry,
-                model_client=model_client,
-                redis_memory=redis_memory,
-                model_context=model_context,
-                session_id=session_id,
-                hitl_bridge=hitl_bridge,
+        else:
+            condition_nodes = config.nodes_by_type(NodeType.CONDITION)
+            if condition_nodes:
+                runnable = await self._build_condition_pipeline(
+                    config,
+                    condition_nodes[0],
+                    tools_registry=tools_registry,
+                    model_client=model_client,
+                    redis_memory=redis_memory,
+                    model_context=model_context,
+                    session_id=session_id,
+                    hitl_bridge=hitl_bridge,
+                )
+            else:
+                router_nodes = config.nodes_by_type(NodeType.ROUTER)
+                if router_nodes:
+                    runnable = await self._build_router(
+                        config,
+                        router_nodes[0],
+                        tools_registry=tools_registry,
+                        model_client=model_client,
+                        redis_memory=redis_memory,
+                        model_context=model_context,
+                        session_id=session_id,
+                    )
+                else:
+                    agent_nodes = config.nodes_by_type(NodeType.AGENT)
+                    if not agent_nodes:
+                        raise ValueError(
+                            "Pipeline has no agent, router, or condition node"
+                        )
+
+                    runnable = await self._build_agent(
+                        config,
+                        agent_nodes[0],
+                        tools_registry=tools_registry,
+                        model_client=model_client,
+                        redis_memory=redis_memory,
+                        model_context=model_context,
+                        session_id=session_id,
+                        hitl_bridge=hitl_bridge,
+                    )
+
+        if workflow_middleware:
+            return WorkflowRunnable(
+                runnable,
+                pipeline_name=config.name,
+                pipeline_id=config.id,
+                middleware=workflow_middleware,
             )
 
-        # LLM-based routing
-        router_nodes = config.nodes_by_type(NodeType.ROUTER)
-        if router_nodes:
-            return await self._build_router(
-                config,
-                router_nodes[0],
-                tools_registry=tools_registry,
-                model_client=model_client,
-                redis_memory=redis_memory,
-                model_context=model_context,
-                session_id=session_id,
-            )
-
-        # Single agent (possibly with approval HITL)
-        agent_nodes = config.nodes_by_type(NodeType.AGENT)
-        if not agent_nodes:
-            raise ValueError("Pipeline has no agent, router, or condition node")
-
-        agent = await self._build_agent(
-            config,
-            agent_nodes[0],
-            tools_registry=tools_registry,
-            model_client=model_client,
-            redis_memory=redis_memory,
-            model_context=model_context,
-            session_id=session_id,
-            hitl_bridge=hitl_bridge,
-        )
-        return agent
+        return runnable
 
     # ── Agent builder ────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ Scope: Kubernetes-only, microservice-based target architecture
 
 ## 1. Topology Overview
 
-![`01-topology`](../../public/diagrams/01-topology.png)
+![`01-topology`](../public/diagrams/01-topology.png)
 
 <details><summary>Mermaid fallback (text-based, auto-layout)</summary>
 

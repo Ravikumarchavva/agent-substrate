@@ -4,14 +4,16 @@ site_url: https://ravikumarchavva.github.io/raavan
 repo_url: https://github.com/Ravikumarchavva/raavan
 repo_name: Ravikumarchavva/raavan
 edit_uri: edit/main/docs/
+exclude_docs: |
+  includes/
 
 copyright: Copyright &copy; 2024–2026 Ravikumar Chavva
 
 # ── Theme ────────────────────────────────────────────────────────────────────
 theme:
   name: material
-  logo: assets/logo.svg
-  favicon: assets/logo.svg
+  logo: public/diagrams/ai-agent.svg
+  favicon: public/diagrams/ai-agent.svg
   palette:
     # System-preference aware
     - media: "(prefers-color-scheme: dark)"
@@ -140,69 +142,21 @@ extra:
 nav:
   - Home: index.md
 
-  - Getting Started:
-      - getting-started/index.md
-      - Quick Start: getting-started/quickstart.md
-      - Installation: getting-started/installation.md
-      - Configuration: getting-started/configuration.md
+  - Architecture:
+    - Distributed Architecture: DISTRIBUTED_ARCHITECTURE.md
+    - Execution Pipeline: execution_pipeline.md
+    - Distributed Runtime: DISTRIBUTED_RUNTIME.md
+    - Architecture Diagrams: ARCHITECTURE_DIAGRAMS.md
+    - Distributed Implementation Plan: DISTRIBUTED_IMPLEMENTATION_PLAN.md
 
-  - Core Concepts:
-      - concepts/index.md
-      - Architecture: concepts/architecture.md
-      - ReAct Agent Loop: concepts/react-agent.md
-      - Memory System: concepts/memory.md
-      - Tool System: concepts/tools.md
-      - Guardrails: concepts/guardrails.md
-      - MCP Integration: concepts/mcp.md
-      - SSE Streaming: concepts/sse-streaming.md
+  - Design And Operations:
+    - Design Patterns: design_patterns.md
+    - Future UI: FUTURE_UI.md
+    - Operations: OPERATIONS.md
 
-  - Durable Runtime:
-      - runtime/index.md
-      - Restate Integration: runtime/restate.md
-      - Workflows: runtime/workflows.md
-      - Activities: runtime/activities.md
-      - Tool Policies: runtime/tool-policies.md
-
-  - Tools Reference:
-      - tools/index.md
-      - Building a Tool: tools/building-a-tool.md
-      - Human Input (HITL): tools/human-input.md
-      - Task Manager: tools/task-manager.md
-      - Web Surfer: tools/web-surfer.md
-      - Code Interpreter: tools/code-interpreter.md
-
-  - Deployment:
-      - deployment/index.md
-      - Monolith (local): deployment/monolith.md
-      - Docker Compose: deployment/docker.md
-      - Kubernetes (Kind): deployment/kubernetes.md
-      - Microservices: deployment/microservices.md
-
-  - Observability:
-      - observability/index.md
-      - Logging: observability/logging.md
-      - Tracing (OpenTelemetry): observability/tracing.md
-      - Grafana Dashboards: observability/grafana.md
-
-  - Evaluation:
-      - evals/index.md
-      - Running Evals: evals/running.md
-      - Custom Criteria: evals/criteria.md
-
-  - Design Patterns:
-      - design-patterns/index.md
-      - Creational: design-patterns/creational.md
-      - Structural: design-patterns/structural.md
-      - Behavioral: design-patterns/behavioral.md
-
-  - API Reference:
-      - api/index.md
-      - core.agents: api/core-agents.md
-      - core.tools: api/core-tools.md
-      - core.memory: api/core-memory.md
-      - core.guardrails: api/core-guardrails.md
-      - integrations.llm: api/integrations-llm.md
-      - integrations.memory: api/integrations-memory.md
-      - integrations.mcp: api/integrations-mcp.md
-
-  - Changelog: changelog.md
+  - Microservices:
+    - Overview: microservices/README.md
+    - Topology And Service Catalog: microservices/01-topology-and-service-catalog.md
+    - Role And Responsibility Matrix: microservices/02-role-and-responsibility-matrix.md
+    - Data Ownership And Contract Standards: microservices/03-data-ownership-and-contract-standards.md
+    - Implementation Waves: microservices/04-implementation-waves.md

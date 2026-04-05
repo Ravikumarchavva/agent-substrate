@@ -1,5 +1,8 @@
 ---
 hide:
+    - navigation
+    - toc
+---
 # Raavan Agent Framework
 
 Production-ready infrastructure for building agent systems that can reason, call tools, stream progress, wait for humans, and resume safely after failures.
@@ -57,8 +60,6 @@ Production-ready infrastructure for building agent systems that can reason, call
 3. Extend the system with [Create A Tool](tutorials/create-tool.md) and [Connect MCP Tools](tutorials/mcp-tools.md).
 4. Move to the durable flow in [First Durable Run](getting-started/first-runtime.md) and [Local And Kind](deploy/local-and-kind.md).
 5. Use [Observability](operate/observability.md) and [Runbook](operate/runbook.md) when you deploy or debug.
-
-</div>
 
 ---
 
@@ -125,17 +126,16 @@ graph LR
 
 ---
 
-## Why Raavan?
+## Features
 
-| Feature | Raavan | LangChain | LlamaIndex | Google ADK |
-|---|---|---|---|---|
-| Durable execution (crash-safe) | ✅ Restate | ❌ | ❌ | ❌ |
-| Human-in-the-loop | ✅ native | ⚠️ DIY | ⚠️ DIY | ✅ |
-| MCP tool support | ✅ | ✅ | ✅ | ✅ |
-| Async-first | ✅ | ⚠️ partial | ⚠️ partial | ✅ |
-| Streaming UI | ✅ SSE | ⚠️ | ⚠️ | ✅ |
-| Built-in eval framework | ✅ | ⚠️ | ✅ | ✅ |
-| Observability (OTEL) | ✅ native | ⚠️ plugin | ⚠️ plugin | ✅ |
+- Durable execution with Restate-backed workflows and resumable runtime state.
+- Human-in-the-loop approvals and structured human input flows.
+- Tool calling with JSON-schema validation and MCP integration support.
+- Async-first architecture across agents, tools, memory, and services.
+- Streaming responses and event-driven UI updates over SSE.
+- Built-in observability with structured logs, tracing, and dashboards.
+- Multiple deployment paths: local monolith, Docker Compose, and Kind/Kubernetes.
+- Notebook and example coverage for onboarding, tools, runtime, and operations.
 
 ---
 

@@ -12,33 +12,33 @@ hide:
 
     ---
 
-    Install with `uv`, connect to OpenAI, and run your first ReAct agent in under 5 minutes.
+    Install with `uv`, connect to OpenAI, and understand the durable runtime and execution flow quickly.
 
-    [:octicons-arrow-right-24: Quick Start](getting-started/quickstart.md)
+    [:octicons-arrow-right-24: Execution Pipeline](execution_pipeline.md)
 
--   :material-robot-outline: **Multiple agent types**
-
-    ---
-
-    ReAct, Orchestrator, FlowAgent, and Pipeline agents — pick the right loop for your use case.
-
-    [:octicons-arrow-right-24: Core Concepts](concepts/index.md)
-
--   :material-tools: **60+ built-in tools**
+-   :material-robot-outline: **Distributed architecture**
 
     ---
 
-    Web browsing, code execution, file management, task tracking, email, and MCP protocol support.
+    See how the UI, FastAPI server, Restate runtime, workers, memory, and event streaming fit together.
 
-    [:octicons-arrow-right-24: Tools Reference](tools/index.md)
+    [:octicons-arrow-right-24: Architecture](DISTRIBUTED_ARCHITECTURE.md)
 
--   :material-shield-check-outline: **HITL + Guardrails**
+-   :material-tools: **Design patterns**
 
     ---
 
-    Content filtering, PII detection, prompt injection guards, and human-in-the-loop approvals baked in.
+    Review the core implementation patterns used across storage, tools, workflows, adapters, and runtime wiring.
 
-    [:octicons-arrow-right-24: Guardrails](concepts/guardrails.md)
+    [:octicons-arrow-right-24: Design Patterns](design_patterns.md)
+
+-   :material-shield-check-outline: **Interactive explorer**
+
+    ---
+
+    Open the standalone interactive architecture explorer for drill-down, click-to-expand runtime details.
+
+    [:octicons-arrow-right-24: Open Explorer](architecture_interactive.html)
 
 -   :material-database-clock-outline: **Durable execution**
 
@@ -46,15 +46,15 @@ hide:
 
     Restate-backed workflows — crash-safe, exactly-once tool execution, automatic replay.
 
-    [:octicons-arrow-right-24: Durable Runtime](runtime/index.md)
+    [:octicons-arrow-right-24: Durable Runtime](DISTRIBUTED_RUNTIME.md)
 
--   :material-chart-line: **Full observability**
+-   :material-chart-line: **Operations guide**
 
     ---
 
-    OpenTelemetry traces, structured logs to Loki, Grafana dashboards out of the box.
+    Deployment, observability, infrastructure, and operational references in one place.
 
-    [:octicons-arrow-right-24: Observability](observability/index.md)
+    [:octicons-arrow-right-24: Operations](OPERATIONS.md)
 
 </div>
 

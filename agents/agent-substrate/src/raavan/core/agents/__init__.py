@@ -1,4 +1,5 @@
 from .base_agent import BaseAgent, PromptEnricher
+from .default_agent import Agent
 from .react_agent import ReActAgent
 from .orchestrator_agent import OrchestratorAgent
 from .config import AgentConfig
@@ -14,6 +15,7 @@ from .agent_result import (
 
 __all__ = [
     # Core agents
+    "Agent",
     "BaseAgent",
     "PromptEnricher",
     "ReActAgent",

@@ -333,23 +333,20 @@ async def chat(
         deps = await _get_agent_deps(ctx, str(body.thread_id))
 
         # Per-request model override — if the frontend sends a different model,
-        # create a fresh client for this request only.
+        # create a fresh client for this request only (supports any provider).
         if (
             body.model
             and body.model.strip()
             and body.model.strip() != getattr(deps["model_client"], "model", None)
         ):
-            from raavan.integrations.llm.openai.openai_client import (
-                OpenAIClient as _OAI,
-            )
+            from raavan.integrations.llm.factory import create_model_client
 
-            _mc = deps["model_client"]
-            _key = (
-                getattr(_mc, "api_key", None)
-                or getattr(getattr(_mc, "client", None), "api_key", None)
-                or ""
+            _api_keys = getattr(ctx, "api_keys", None) or getattr(
+                request.app.state, "api_keys", {}
             )
-            deps["model_client"] = _OAI(model=body.model.strip(), api_key=_key or None)
+            deps["model_client"] = create_model_client(
+                body.model.strip(), api_keys=_api_keys
+            )
 
         # Append per-request custom instructions if provided by the frontend
         if body.system_instructions and body.system_instructions.strip():

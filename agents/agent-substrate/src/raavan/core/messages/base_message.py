@@ -15,11 +15,14 @@ class UsageStats(BaseModel):
     """Token usage statistics for a single LLM call.
 
     Pydantic model (not dataclass) so it serializes cleanly everywhere.
+    The ``extra`` dict holds provider-specific metrics (e.g. Anthropic
+    ``cache_read_input_tokens``, ``cache_creation_input_tokens``).
     """
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    extra: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"frozen": False}
 

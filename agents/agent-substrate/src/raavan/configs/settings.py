@@ -6,6 +6,9 @@ from typing import List, Optional
 class Settings(BaseSettings):
     ROOT_DIR: Path = Path(__file__).parent.parent.parent.parent
     OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+    OPENAI_BASE_URL: str = ""
     DATABASE_URL: str = ""
 
     # Redis (short-term memory)
@@ -20,6 +23,7 @@ class Settings(BaseSettings):
     # Override these in .env to switch globally, or let the frontend per-request
     # override take precedence (Settings → General → Model).
     CHAT_MODEL: str = "gpt-5.4-mini"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
     STT_MODEL: str = "whisper-1"
 
     # Model context window — how many messages (non-system) to include in each
@@ -27,6 +31,12 @@ class Settings(BaseSettings):
     # Redis (full history) but are excluded from the context sent to the model.
     # Tune this to balance cost vs. context quality.
     MODEL_CONTEXT_WINDOW: int = 40
+
+    # Semantic cache — embedding-based response caching.
+    # When enabled, LLM responses are cached by query similarity.
+    SEMANTIC_CACHE_ENABLED: bool = False
+    SEMANTIC_CACHE_THRESHOLD: float = 0.95
+    SEMANTIC_CACHE_TTL: int = 3600
 
     # Spotify API credentials
     SPOTIFY_CLIENT_ID: str = ""

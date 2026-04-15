@@ -25,7 +25,12 @@ from raavan.configs.settings import settings
 from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.core.runtime import LocalRuntime
 from raavan.catalog.tools.human_input.tool import AskHumanTool
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from raavan.integrations.llm.factory import (
+    create_model_client,
+    create_embedding_client,
+    detect_provider,
+)
+from raavan.core.llm.provider import ProviderConfig
 from raavan.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
@@ -51,6 +56,7 @@ from raavan.server.routes.tasks import router as tasks_router
 from raavan.server.routes.threads import router as threads_router
 from raavan.server.routes.triggers import router as triggers_router
 from raavan.server.routes.workflows import router as workflows_router
+from raavan.server.routes.rag import router as rag_router
 from raavan.core.tools.base_tool import ToolRisk
 from raavan.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from raavan.core.tools.catalog import CapabilityRegistry
@@ -114,10 +120,48 @@ async def lifespan(app: FastAPI):
     app.state.jwt_secret = settings.JWT_SECRET
 
     # Shared agent dependencies (injected into routes via app.state)
-    app.state.model_client = OpenAIClient(
-        model=settings.CHAT_MODEL,
-        api_key=settings.OPENAI_API_KEY,
+    default_provider = detect_provider(settings.CHAT_MODEL)
+    api_keys = {
+        "openai": settings.OPENAI_API_KEY,
+        "anthropic": settings.ANTHROPIC_API_KEY,
+        "google": settings.GOOGLE_API_KEY,
+    }
+    app.state.model_client = create_model_client(
+        settings.CHAT_MODEL,
+        provider_config=ProviderConfig(
+            provider=default_provider,
+            api_key=api_keys.get(default_provider)
+            or api_keys.get(
+                "google" if default_provider == "gemini" else default_provider
+            ),
+            base_url=settings.OPENAI_BASE_URL or None,
+        ),
     )
+
+    # Store API keys for per-request model overrides (chat route)
+    app.state.api_keys = api_keys
+
+    # Embedding client — used by RAG pipeline, semantic cache, etc.
+    app.state.embedding_client = create_embedding_client(
+        settings.EMBEDDING_MODEL,
+        api_keys=api_keys,
+    )
+
+    # Vector store + RAG pipeline (pgvector-backed)
+    from raavan.integrations.vector.pgvector_store import PgVectorStore
+    from raavan.core.rag.pipeline import RAGPipeline
+
+    vector_store = PgVectorStore(
+        session_factory=get_session_factory(),
+        dimensions=1536,
+    )
+    app.state.vector_store = vector_store
+
+    rag_pipeline = RAGPipeline(
+        embedding_client=app.state.embedding_client,
+        vector_store=vector_store,
+    )
+    app.state.rag_pipeline = rag_pipeline
 
     # HITL bridge registry: one WebHITLBridge per active thread (conversation).
     # Bridges are created lazily on SSE stream start and destroyed on close.
@@ -419,6 +463,7 @@ async def lifespan(app: FastAPI):
         tools_requiring_approval=app.state.tools_requiring_approval,
         system_instructions=app.state.system_instructions,
         tool_timeout=app.state.tool_timeout,
+        api_keys=app.state.api_keys,
         runtime=app.state.runtime,
         cancel_registry=app.state.cancel_registry,
         mcp_servers=app.state.mcp_servers,
@@ -504,6 +549,7 @@ def create_app() -> FastAPI:
     app.include_router(pipelines_router)
     app.include_router(workflows_router)
     app.include_router(triggers_router)
+    app.include_router(rag_router)
 
     # Visual Builder — only mounted when ENABLE_BUILDER=true (zero prod footprint)
     if settings.ENABLE_BUILDER:

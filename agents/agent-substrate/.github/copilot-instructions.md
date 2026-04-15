@@ -38,6 +38,20 @@ raavan/
 
 ---
 
+## CI — CRITICAL RULE
+
+Every repo has a `Makefile` with a `make ci` target that runs the full local preflight:
+**sync → lint → typecheck-soft → test-ci → security-soft**
+
+**After making any code changes, always run `make ci` to verify nothing is broken.**
+This is mandatory before committing or considering work complete.
+
+```bash
+make ci
+```
+
+---
+
 ## Key Patterns
 
 > Full reference: [`docs/design_patterns.md`](../docs/design_patterns.md)

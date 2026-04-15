@@ -118,6 +118,10 @@ class OpenAIClient(BaseModelClient):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         *,
+        base_url: Optional[str] = None,
+        organization: Optional[str] = None,
+        extra_headers: Optional[dict[str, str]] = None,
+        timeout: Optional[float] = None,
         default_stt_model: str = "whisper-1",
         default_tts_model: str = "gpt-4o-mini-tts",
         default_voice: str = "coral",
@@ -127,7 +131,23 @@ class OpenAIClient(BaseModelClient):
     ):
         super().__init__(model, temperature, max_tokens, **kwargs)
         self.api_key = api_key  # stored so PipelineRunner can build sibling clients
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.base_url = base_url
+
+        # Build AsyncOpenAI with optional overrides (base_url enables
+        # vLLM, Ollama, Together, Perplexity, etc.)
+        client_kwargs: dict[str, Any] = {}
+        if api_key:
+            client_kwargs["api_key"] = api_key
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        if organization:
+            client_kwargs["organization"] = organization
+        if extra_headers:
+            client_kwargs["default_headers"] = extra_headers
+        if timeout is not None:
+            client_kwargs["timeout"] = timeout
+
+        self.client = AsyncOpenAI(**client_kwargs)
         self._default_stt_model = default_stt_model
         self._default_tts_model = default_tts_model
         self._default_voice = default_voice

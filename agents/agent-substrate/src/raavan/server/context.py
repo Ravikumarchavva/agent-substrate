@@ -23,7 +23,7 @@ from raavan.integrations.memory.redis_memory import RedisMemory
 from raavan.core.runtime import AgentRuntime
 from raavan.core.storage.base import FileStore
 from raavan.core.tools.catalog import CapabilityRegistry
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from raavan.core.llm.base_client import BaseModelClient
 from raavan.server.sse.bridge import BridgeRegistry
 
 
@@ -47,13 +47,14 @@ class ServerContext:
         file_store: Pluggable file storage backend (local / S3 / encrypted).
     """
 
-    model_client: OpenAIClient
+    model_client: BaseModelClient
     redis_memory: RedisMemory
     tools: CapabilityRegistry
     bridge_registry: BridgeRegistry
     tools_requiring_approval: list[str]
     system_instructions: str
     tool_timeout: float
+    api_keys: dict[str, str] = field(default_factory=dict)
     runtime: Optional[AgentRuntime] = None
     cancel_registry: dict[str, Any] = field(default_factory=dict)
     thread_locks: dict[str, asyncio.Lock] = field(default_factory=dict)

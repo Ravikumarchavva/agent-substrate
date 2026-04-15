@@ -38,6 +38,44 @@ from raavan.core.structured import (
     parse,
 )
 
+# Default agent — the simplest way to use raavan:
+#   from raavan import Agent
+#   agent = Agent(name="Bot", model="claude-sonnet-4-20250514")
+#   result = await agent.run("Hello!")
+from raavan.core.agents.default_agent import Agent  # noqa: F401
+
+# Batch processing:
+#   from raavan import BatchProcessor, BatchConfig
+#   processor = BatchProcessor(fn=my_fn, config=BatchConfig(max_concurrency=5))
+#   result = await processor.run(inputs)
+from raavan.core.batch import BatchConfig, BatchProcessor  # noqa: F401
+
+# Structured data extraction:
+#   from raavan import Extractor, Invoice
+#   extractor = Extractor(schema=Invoice, client=client)
+#   result = await extractor.extract("Invoice text ...")
+from raavan.core.extraction import Extractor  # noqa: F401
+from raavan.core.extraction.schemas import (  # noqa: F401
+    BusinessCard,
+    Contract,
+    Invoice,
+    Receipt,
+    Resume,
+)
+
+# Model client factory + model metadata:
+#   from raavan import create_model_client, ModelProfile, ProviderConfig
+#   client = create_model_client("gemini/gemini-2.5-flash")
+from raavan.integrations.llm.factory import create_model_client  # noqa: F401
+from raavan.core.llm.models import (  # noqa: F401
+    ModelProfile,
+    get_model_profile,
+    get_context_length,
+    estimate_cost,
+    list_models,
+)
+from raavan.core.llm.provider import ProviderConfig  # noqa: F401
+
 # Root-level primitives (canonical locations)
 from raavan.exceptions import (  # noqa: F401
     AgentError,
@@ -53,6 +91,22 @@ from raavan.exceptions import (  # noqa: F401
 )
 
 __all__ = [
+    "Agent",
+    "BatchConfig",
+    "BatchProcessor",
+    "BusinessCard",
+    "Contract",
+    "Extractor",
+    "Invoice",
+    "ModelProfile",
+    "ProviderConfig",
+    "Receipt",
+    "Resume",
+    "create_model_client",
+    "estimate_cost",
+    "get_context_length",
+    "get_model_profile",
+    "list_models",
     "parse",
     "LLMJudge",
     "StructuredRouter",

@@ -72,6 +72,7 @@ export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps)
   useEffect(() => {
     if (!isOpen) {
       teardown("panel closed");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate cleanup on prop change
       setSessionState("idle");
       setTranscript([]);
       transcriptRef.current = [];
@@ -167,7 +168,7 @@ export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps)
     let token: Awaited<ReturnType<typeof api.getRealtimeToken>>;
     try {
       token = await api.getRealtimeToken();
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to get session token");
       setSessionState("error");
       return;

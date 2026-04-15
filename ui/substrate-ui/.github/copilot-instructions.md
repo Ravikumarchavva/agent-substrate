@@ -70,6 +70,20 @@ npx prisma generate
 
 ---
 
+## CI — CRITICAL RULE
+
+Every repo has a `Makefile` with a `make ci` target that runs the full local preflight:
+**install → lint → typecheck → build → security-soft**
+
+**After making any code changes, always run `make ci` to verify nothing is broken.**
+This is mandatory before committing or considering work complete.
+
+```bash
+make ci
+```
+
+---
+
 ## Tailwind CSS v4 — CRITICAL RULES
 Tailwind v4 changed CSS variable syntax. **Always use the new format:**
 

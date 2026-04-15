@@ -8,7 +8,7 @@ export type ToolCallMeta = {
 export type ToolCall = {
   id: string;
   name: string;
-  arguments: string | Record<string, any>;
+  arguments: string | Record<string, unknown>;
   result?: string;
   isError?: boolean;
   _meta?: ToolCallMeta;
@@ -51,11 +51,11 @@ export type BackendMessage = {
     tool_calls?: Array<{
       id: string;
       name: string;
-      arguments: string | Record<string, any>;
+      arguments: string | Record<string, unknown>;
       _meta?: ToolCallMeta;
     }>;
   };
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   is_error?: boolean;
 };
 

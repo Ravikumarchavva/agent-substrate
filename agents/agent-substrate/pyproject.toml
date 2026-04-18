@@ -45,6 +45,7 @@ dependencies = [
 
 [project.scripts]
 raavan = "raavan.cli:main"
+start = "raavan.cli:start_main"
 
 [build-system]
 requires = ["hatchling"]

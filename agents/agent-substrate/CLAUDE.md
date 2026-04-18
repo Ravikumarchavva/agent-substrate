@@ -12,7 +12,7 @@ Python async AI-agent framework with **two deployment modes**:
 1. **Monolith** — single FastAPI server at `src/raavan/server/`
 2. **Microservices** — 12 independent FastAPI services under `src/raavan/services/`
 
-Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 16, Redis 7, OpenTelemetry → Tempo.
+Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 18, Redis 7, OpenTelemetry → Tempo.
 
 Package manager: **`uv`** (never `pip`).
 
@@ -25,7 +25,7 @@ Package manager: **`uv`** (never `pip`).
 uv sync
 
 # Start infrastructure
-docker compose -f deployment/docker/docker-compose.yml up -d postgres redis
+make infra-up
 
 # Optional: MCP SSE demo server (needed for examples 04/05/06)
 docker compose -f deployment/docker/docker-compose.yml --profile mcp up -d mcp-server   # → localhost:9000/sse
@@ -69,9 +69,9 @@ raavan/                            ← repo root
 ```
 src/raavan/
 ├── core/                      ← Framework primitives (pure engine, no external deps)
-│   ├── agents/                ← BaseAgent, ReActAgent, OrchestratorAgent, FlowAgent
+│   ├── agents/                ← BaseAgent, ReActAgent (+ _tool_execution, _guardrail_runner, _stream_handler), OrchestratorAgent, FlowAgent
 │   ├── memory/                ← BaseMemory, UnboundedMemory, SlidingWindowMemory, SessionManager
-│   ├── tools/                 ← BaseTool, ToolResult, ToolRegistry (abstractions)
+│   ├── tools/                 ← BaseTool, ToolResult, CapabilityRegistry (abstractions)
 │   ├── context/               ← RedisModelContext, build() for prompt assembly
 │   ├── messages/              ← SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, …
 │   ├── guardrails/            ← ContentFilter, PII, PromptInjection, MaxToken, ToolCallValidation
@@ -112,6 +112,7 @@ src/raavan/
 │
 ├── server/                    ← Monolith FastAPI server
 │   ├── app.py                 ← Factory + lifespan; DI via app.state.*
+│   ├── _lifespan.py           ← Extracted init functions (init_llm_clients, init_infrastructure, init_tool_registry, init_runtime_services)
 │   ├── routes/                ← 18 route files (chat, tasks, hitl, threads, mcp_apps, workflows, triggers, …)
 │   ├── security/              ← Thin wrappers delegating to shared/auth/ (binds settings)
 │   ├── services/              ← Business logic (thread_service.py, agent_service.py, …)
@@ -151,7 +152,7 @@ src/raavan/
 │   │   └── types.py           ← Event factories: workflow_started, workflow_completed, …
 │   ├── auth/                  ← Canonical JWT + auth middleware (AuthClaims, verify_token, get_current_user)
 │   ├── database/              ← Shared session factory + get_db_session dependency
-│   ├── observability/         ← OpenTelemetry setup + structured logging (logger.py)
+│   ├── observability/         ← OpenTelemetry setup + telemetry (logger instance re-exported here; setup_logging() lives in raavan/logger.py)
 │   └── tasks/                 ← In-memory TaskStore singleton
 │
 ├── configs/settings.py        ← Pydantic Settings (reads from .env)
@@ -400,7 +401,7 @@ All services send OTLP traces to `http://tempo.af-observability.svc.cluster.loca
 Set via `OTLP_ENDPOINT` env var (injected by kustomize patch for Kind).
 
 ### Logs
-- Backend services output structured JSON via `core/logger.py` → Promtail scrapes stdout
+- Backend services output structured JSON via `raavan/logger.py` → Promtail scrapes stdout
 - Frontend sends warn/error logs to `/api/logs` → structured JSON stdout → Promtail
 - Query in Grafana via Loki: `{namespace=~"af-.*"}`
 

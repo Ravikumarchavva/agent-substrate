@@ -20,6 +20,20 @@ Public surface::
 from __future__ import annotations
 
 from raavan.core.storage.base import FileRef, FileStore
+from raavan.core.storage.document import (
+    ArchiveDocument,
+    AudioDocument,
+    BinaryDocument,
+    Document,
+    ImageDocument,
+    JsonDocument,
+    PdfDocument,
+    SpreadsheetDocument,
+    TextDocument,
+    VideoDocument,
+    create_document,
+    store_document,
+)
 from raavan.core.storage.tenant import FileScope, TenantContext
 from raavan.core.storage.local import LocalFileStore
 from raavan.core.storage.encrypted import (
@@ -31,6 +45,18 @@ from raavan.core.storage.encrypted import (
 __all__ = [
     "FileRef",
     "FileStore",
+    "Document",
+    "TextDocument",
+    "JsonDocument",
+    "SpreadsheetDocument",
+    "PdfDocument",
+    "ImageDocument",
+    "AudioDocument",
+    "VideoDocument",
+    "ArchiveDocument",
+    "BinaryDocument",
+    "create_document",
+    "store_document",
     "FileScope",
     "TenantContext",
     "LocalFileStore",

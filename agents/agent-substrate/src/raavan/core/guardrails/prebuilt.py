@@ -505,7 +505,7 @@ class LLMJudgeGuardrail(BaseGuardrail):
                 SystemMessage(content=self._judge_prompt),
                 UserMessage(content=[text]),
             ]
-            response = await self._model_client.generate(messages=messages)
+            response = await self._model_client.generate_text(messages=messages)
 
             # Parse judge response
             response_text = ""

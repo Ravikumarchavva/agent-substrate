@@ -32,6 +32,7 @@ async def stream_agent_run(
     on_unknown: Optional[UnknownChunkHandler] = None,
     on_finished: Optional[FinishedHandler] = None,
     on_error: Optional[ErrorHandler] = None,
+    **agent_run_kwargs: Any,
 ) -> int:
     """Run ``agent.run_stream()`` and dispatch chunks via callbacks."""
     step_count = 0
@@ -40,7 +41,7 @@ async def stream_agent_run(
         agent.execution_context = execution_context
 
     try:
-        async for chunk in agent.run_stream(user_content):
+        async for chunk in agent.run_stream(user_content, **agent_run_kwargs):
             if isinstance(chunk, TextDeltaChunk):
                 if on_text_delta is not None:
                     await on_text_delta(chunk)

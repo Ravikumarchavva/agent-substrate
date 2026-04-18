@@ -101,9 +101,19 @@ async def _save_ci_file_outputs(
                         "file_id": file_id,
                         "name": filename,
                         "content_type": content_type,
+                        "document_type": file_meta.get("document_type"),
+                        "document_class": file_meta.get("document_class"),
                     }
                 )
-                saved.append({"type": "file_ref", "file_id": file_id, "name": filename})
+                saved.append(
+                    {
+                        "type": "file_ref",
+                        "file_id": file_id,
+                        "name": filename,
+                        "document_type": file_meta.get("document_type"),
+                        "document_class": file_meta.get("document_class"),
+                    }
+                )
         except Exception as exc:
             logger.warning("Failed to save CI file output '%s': %s", filename, exc)
             saved.append(item)  # leave original on failure

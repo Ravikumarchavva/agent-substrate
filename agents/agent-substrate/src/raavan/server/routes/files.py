@@ -42,6 +42,19 @@ def _require_file_store(ctx: ServerContext) -> FileStore:
     return ctx.file_store
 
 
+def _to_file_out(meta) -> FileOut:
+    props = meta.props or {}
+    return FileOut(
+        id=meta.id,
+        thread_id=meta.thread_id,
+        name=meta.original_name,
+        mime=meta.content_type,
+        size=meta.size_bytes,
+        document_type=props.get("document_type"),
+        document_class=props.get("document_class"),
+    )
+
+
 @router.post("/{thread_id}/files", response_model=FileOut, status_code=201)
 async def upload_file(
     thread_id: uuid.UUID,
@@ -86,13 +99,7 @@ async def upload_file(
     )
     await db.commit()
 
-    return FileOut(
-        id=meta.id,
-        thread_id=meta.thread_id,
-        name=meta.original_name,
-        mime=meta.content_type,
-        size=meta.size_bytes,
-    )
+    return _to_file_out(meta)
 
 
 @router.get("/{thread_id}/files", response_model=List[FileOut])
@@ -106,16 +113,7 @@ async def list_thread_files(
         raise HTTPException(status_code=404, detail="Thread not found")
 
     files = await list_files(db, thread_id)
-    return [
-        FileOut(
-            id=f.id,
-            thread_id=f.thread_id,
-            name=f.original_name,
-            mime=f.content_type,
-            size=f.size_bytes,
-        )
-        for f in files
-    ]
+    return [_to_file_out(f) for f in files]
 
 
 @router.delete("/{thread_id}/files/{file_id}", status_code=204)
@@ -147,11 +145,14 @@ async def download_file(
 
     file_store = _require_file_store(ctx)
     raw = await get_file_content(file_store, meta)
+    disposition = (
+        "inline" if (meta.content_type or "").startswith("image/") else "attachment"
+    )
     return Response(
         content=raw,
         media_type=meta.content_type or "application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{meta.original_name}"',
+            "Content-Disposition": f'{disposition}; filename="{meta.original_name}"',
         },
     )
 

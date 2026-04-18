@@ -23,6 +23,9 @@ SPOTIFY_SCOPES = [
     "user-read-private",  # Read subscription type (Premium required)
     "user-modify-playback-state",  # Control playback (play/pause/skip)
     "user-read-playback-state",  # Read current playback state
+    "playlist-read-private",  # Read user's private playlists
+    "playlist-read-collaborative",  # Read collaborative playlists
+    "user-library-read",  # Read liked songs / saved tracks
 ]
 
 

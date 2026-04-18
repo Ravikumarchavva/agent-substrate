@@ -29,6 +29,7 @@ from raavan.core.pipelines.runner import PipelineRunner
 
 def _agent_node(
     id: str = "agent_1",
+    label: str = "TestAgent",
     model: str = "gpt-4o-mini",
     system_prompt: str = "You are helpful.",
     max_iterations: int = 5,
@@ -36,7 +37,7 @@ def _agent_node(
     return NodeConfig(
         id=id,
         node_type=NodeType.AGENT,
-        label="TestAgent",
+        label=label,
         position=Position(x=0, y=0),
         config={
             "model": model,
@@ -261,6 +262,30 @@ class TestCodegen:
         assert "greeting" in code
         compile(code, "<generated>", "exec")
 
+    def test_includes_parallel_agent_flow(self):
+        cfg = PipelineConfig(
+            name="Swarm Pipeline",
+            nodes=[
+                _agent_node(id="dispatch", label="Dispatch Coordinator"),
+                _agent_node(id="facts", label="Evidence Analyst"),
+                _agent_node(id="risk", label="Risk Analyst"),
+                _agent_node(id="actions", label="Action Planner"),
+                _agent_node(id="join", label="Synthesis Lead"),
+            ],
+            edges=[
+                _edge("dispatch", "facts", EdgeType.AGENT_FLOW),
+                _edge("dispatch", "risk", EdgeType.AGENT_FLOW),
+                _edge("dispatch", "actions", EdgeType.AGENT_FLOW),
+                _edge("facts", "join", EdgeType.AGENT_FLOW),
+                _edge("risk", "join", EdgeType.AGENT_FLOW),
+                _edge("actions", "join", EdgeType.AGENT_FLOW),
+            ],
+        )
+        code = generate_code(cfg)
+        assert "ParallelFlow" in code
+        assert "SequentialFlow" in code
+        compile(code, "<generated>", "exec")
+
 
 # ===========================================================================
 # Runner tests
@@ -302,6 +327,64 @@ class TestPipelineRunner:
         )
         tool_names = [t.name for t in agent.tools]
         assert "calculator" in tool_names
+
+    async def test_build_agent_with_registry_like_tools_source(self):
+        """Builder accepts registry objects that expose all_tools()."""
+
+        class _Registry:
+            def __init__(self, tools: list[MagicMock]) -> None:
+                self._tools = tools
+
+            def all_tools(self) -> list[MagicMock]:
+                return self._tools
+
+        mock_tool = _mock_tool("calculator")
+        cfg = PipelineConfig(
+            name="With Tools",
+            nodes=[_agent_node(), _tool_node()],
+            edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
+        )
+        runner = PipelineRunner()
+        agent = await runner.build(
+            cfg,
+            tools_registry=_Registry([mock_tool]),
+            model_client=_mock_model_client(),
+        )
+        tool_names = [t.name for t in agent.tools]
+        assert "calculator" in tool_names
+
+    async def test_build_parallel_agent_flow(self):
+        cfg = PipelineConfig(
+            name="Swarm",
+            nodes=[
+                _agent_node(id="dispatch", label="Dispatch Coordinator"),
+                _agent_node(id="facts", label="Evidence Analyst"),
+                _agent_node(id="risk", label="Risk Analyst"),
+                _agent_node(id="actions", label="Action Planner"),
+                _agent_node(id="join", label="Synthesis Lead"),
+            ],
+            edges=[
+                _edge("dispatch", "facts", EdgeType.AGENT_FLOW),
+                _edge("dispatch", "risk", EdgeType.AGENT_FLOW),
+                _edge("dispatch", "actions", EdgeType.AGENT_FLOW),
+                _edge("facts", "join", EdgeType.AGENT_FLOW),
+                _edge("risk", "join", EdgeType.AGENT_FLOW),
+                _edge("actions", "join", EdgeType.AGENT_FLOW),
+            ],
+        )
+        runner = PipelineRunner()
+        flow = await runner.build(
+            cfg,
+            tools_registry=[],
+            model_client=_mock_model_client(),
+        )
+
+        from raavan.core.agents.flow import ParallelFlow, SequentialFlow
+
+        assert isinstance(flow, SequentialFlow)
+        assert len(flow.steps) == 3
+        assert isinstance(flow.steps[1], ParallelFlow)
+        assert len(flow.steps[1].branches) == 3
 
     async def test_build_agent_with_unbounded_memory(self):
         """Agent + unbounded memory node → uses UnboundedMemory."""

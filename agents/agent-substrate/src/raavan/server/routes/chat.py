@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,7 +17,22 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from raavan.configs.settings import settings
-from raavan.core.messages import ReasoningDeltaChunk, TextDeltaChunk
+from raavan.integrations.llm.factory import (
+    CHAT_MODEL_FALLBACKS,
+    create_model_client,
+    detect_provider,
+    has_provider_api_key,
+    model_supports_vision,
+    resolve_model_for_available_credentials,
+    resolve_vision_model_for_available_credentials,
+    strip_provider_prefix,
+)
+from raavan.core.messages import (
+    ImageContent,
+    MediaType,
+    ReasoningDeltaChunk,
+    TextDeltaChunk,
+)
 from raavan.core.execution.context import ExecutionContext
 from raavan.core.messages.client_messages import (
     AssistantMessage,
@@ -60,6 +75,57 @@ from raavan.server.sse.events import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+
+ATTACHMENT_ANALYSIS_INSTRUCTIONS = (
+    "When the user asks about attached files, images, or documents, inspect the "
+    "attachment directly and answer in a normal assistant response. Avoid "
+    "creating task lists, plans, or workflow-style tool loops unless the user "
+    "explicitly asks for planning, task tracking, or automation. "
+    "When presenting structured data, always use proper Markdown tables with "
+    "pipe (|) syntax and header separator rows (|---|). Never use plain text "
+    "or HTML tags like <br> for tabular data."
+)
+
+ATTACHMENT_PLANNING_KEYWORDS = (
+    "plan",
+    "planning",
+    "task",
+    "tasks",
+    "todo",
+    "to-do",
+    "checklist",
+    "workflow",
+    "steps",
+    "roadmap",
+    "organize",
+    "organise",
+)
+
+
+def _tool_name(tool: Any) -> str:
+    try:
+        return tool.get_schema().name
+    except Exception:
+        return str(getattr(tool, "name", ""))
+
+
+def _should_allow_task_planning_for_attachment(user_text: str) -> bool:
+    normalized = user_text.lower()
+    return any(keyword in normalized for keyword in ATTACHMENT_PLANNING_KEYWORDS)
+
+
+def _serialize_attached_file(meta: Any) -> dict[str, Any]:
+    """Return a JSON-safe attachment descriptor for message metadata."""
+    props = meta.props or {}
+    return {
+        "id": str(meta.id),
+        "thread_id": str(meta.thread_id) if meta.thread_id else None,
+        "name": meta.original_name,
+        "mime": meta.content_type,
+        "size": meta.size_bytes,
+        "document_type": props.get("document_type"),
+        "document_class": props.get("document_class"),
+    }
 
 
 async def _get_agent_deps(ctx: ServerContext, thread_id: str):
@@ -211,18 +277,18 @@ async def _build_file_context(
     body: ChatRequest,
     request: Request,
     ctx: ServerContext,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[ImageContent], list[dict[str, Any]]]:
     """Load file IDs from the request, extract text and push to CI VM.
 
     Returns:
-        (file_context_block, image_descriptions) where
+        (file_context_block, image_inputs, attachments) where
         - file_context_block is a formatted string to prepend to the user
           message (empty string when no files were requested), and
-        - image_descriptions is a list of human-readable image annotations
-          (e.g. '[Image: photo.png is available at /data/photo.png]').
+        - image_inputs is a list of multimodal image payloads for the LLM, and
+        - attachments contains JSON-safe file metadata for UI rendering.
     """
     if not body.file_ids:
-        return "", []
+        return "", [], []
 
     store = ctx.file_store
     if store is None:
@@ -230,19 +296,22 @@ async def _build_file_context(
 
     files = await get_files_by_ids(db, body.file_ids, body.thread_id)
     if not files:
-        return "", []
+        return "", [], []
 
     text_parts: list[str] = []
-    image_notes: list[str] = []
+    image_inputs: list[ImageContent] = []
+    attachments = [_serialize_attached_file(meta) for meta in files]
 
     for meta in files:
         extracted = await extract_text(store, meta)
         if extracted is not None:
             text_parts.append(f"### File: {meta.original_name}\n```\n{extracted}\n```")
         elif (meta.content_type or "").startswith("image/"):
-            image_notes.append(
-                f"[Image attached: {meta.original_name} — "
-                f"available at /data/{meta.original_name} in the code interpreter]"
+            image_inputs.append(
+                ImageContent(
+                    data=await get_file_content(store, meta),
+                    media_type=meta.content_type or "image/png",
+                )
             )
         else:
             # Unknown binary — just note it exists in the CI VM
@@ -279,8 +348,15 @@ async def _build_file_context(
                     "Failed to push %s to CI VM: %s", meta.original_name, exc
                 )
 
-    if not text_parts and not image_notes:
-        return "", image_notes
+    if not text_parts:
+        if image_inputs:
+            names = ", ".join(m.original_name for m in files)
+            block = (
+                f"The user attached {len(image_inputs)} image file(s): {names}. "
+                "Use the attached image content directly when answering."
+            )
+            return block, image_inputs, attachments
+        return "", image_inputs, attachments
 
     names = ", ".join(m.original_name for m in files)
     sections = "\n\n".join(text_parts)
@@ -288,7 +364,7 @@ async def _build_file_context(
         f"The user has attached {len(files)} file(s): {names}.\n"
         f"File contents:\n\n{sections}"
     )
-    return block, image_notes
+    return block, image_inputs, attachments
 
 
 @router.post("/chat")
@@ -331,22 +407,97 @@ async def chat(
     # is never orphaned (sse_generator's finally only runs once iterated).
     try:
         deps = await _get_agent_deps(ctx, str(body.thread_id))
+        file_block, image_inputs, attachments = await _build_file_context(
+            db,
+            body,
+            request,
+            ctx,
+        )
+        if not body.messages:
+            raise HTTPException(status_code=422, detail="messages[] must not be empty")
+        display_content = body.messages[-1].content
+
+        selected_model = (
+            body.model or getattr(request.app.state, "chat_model", "")
+        ).strip()
+        _api_keys = getattr(ctx, "api_keys", None) or getattr(
+            request.app.state, "api_keys", {}
+        )
+        model_resolver = (
+            resolve_vision_model_for_available_credentials
+            if image_inputs
+            else resolve_model_for_available_credentials
+        )
+        resolved_model = model_resolver(
+            selected_model or getattr(request.app.state, "chat_model", ""),
+            api_keys=_api_keys,
+            fallback_models=(
+                getattr(request.app.state, "chat_model", ""),
+                *CHAT_MODEL_FALLBACKS,
+            ),
+        )
+        resolved_provider = detect_provider(resolved_model)
+        if not has_provider_api_key(resolved_provider, _api_keys):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "No LLM provider credentials are configured for chat. "
+                    "Set GROQ_API_KEY or GROK_API_KEY, "
+                    "OPENROUTER_API_KEY, "
+                    "GOOGLE_API_KEY or GEMINI_API_KEY, OPENAI_API_KEY, "
+                    "or ANTHROPIC_API_KEY."
+                ),
+            )
+        if image_inputs and not model_supports_vision(resolved_model):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Image uploads require a vision-capable chat model. "
+                    "Configure GOOGLE_API_KEY or GEMINI_API_KEY, OPENAI_API_KEY, "
+                    "ANTHROPIC_API_KEY, or OPENROUTER_API_KEY."
+                ),
+            )
+        if selected_model and resolved_model != selected_model:
+            if image_inputs:
+                logger.warning(
+                    "Requested model %s is unavailable or lacks vision support for attachments; using %s instead",
+                    selected_model,
+                    resolved_model,
+                )
+            else:
+                logger.warning(
+                    "Requested model %s is unavailable with current credentials; using %s instead",
+                    selected_model,
+                    resolved_model,
+                )
+
+        if attachments:
+            deps["system_instructions"] = (
+                deps["system_instructions"]
+                + "\n\n---\n**Attachment handling instructions:**\n"
+                + ATTACHMENT_ANALYSIS_INSTRUCTIONS
+            )
+            if not _should_allow_task_planning_for_attachment(display_content):
+                deps["tools"] = [
+                    tool for tool in deps["tools"] if _tool_name(tool) != "manage_tasks"
+                ]
 
         # Per-request model override — if the frontend sends a different model,
         # create a fresh client for this request only (supports any provider).
-        if (
-            body.model
-            and body.model.strip()
-            and body.model.strip() != getattr(deps["model_client"], "model", None)
-        ):
-            from raavan.integrations.llm.factory import create_model_client
-
-            _api_keys = getattr(ctx, "api_keys", None) or getattr(
-                request.app.state, "api_keys", {}
-            )
-            deps["model_client"] = create_model_client(
-                body.model.strip(), api_keys=_api_keys
-            )
+        if resolved_model:
+            requested_provider = detect_provider(resolved_model)
+            requested_bare_model = strip_provider_prefix(resolved_model)
+            current_provider = getattr(deps["model_client"], "provider", None)
+            current_model = getattr(deps["model_client"], "model", None)
+            if (
+                requested_provider != current_provider
+                or requested_bare_model != current_model
+            ):
+                deps["model_client"] = create_model_client(
+                    resolved_model,
+                    api_keys=_api_keys,
+                    **getattr(request.app.state, "model_client_kwargs", {}),
+                )
 
         # Append per-request custom instructions if provided by the frontend
         if body.system_instructions and body.system_instructions.strip():
@@ -371,16 +522,15 @@ async def chat(
         )
 
         # 4. Extract user content from last message
-        if not body.messages:
-            raise HTTPException(status_code=422, detail="messages[] must not be empty")
-        user_content = body.messages[-1].content
-
-        # 4a. Inject attached file context (text extraction + CI VM push)
-        file_block, image_notes = await _build_file_context(db, body, request, ctx)
+        user_content = display_content
         if file_block:
             user_content = f"{file_block}\n\n---\n\n{user_content}"
-        if image_notes:
-            user_content = "\n".join(image_notes) + "\n\n" + user_content
+        user_input_content: list[MediaType] | None = None
+        if image_inputs:
+            user_input_content = []
+            if user_content:
+                user_input_content.append(user_content)
+            user_input_content.extend(image_inputs)
 
         # Fire on_message hook
         hook_ctx = ChatContext(
@@ -391,7 +541,20 @@ async def chat(
         await hooks.fire_message(hook_ctx, user_content)
 
         # Persist user message
-        await persist_user_message(db, body.thread_id, user_content)
+        user_metadata = (
+            {
+                "display_content": display_content,
+                "attachments": attachments,
+            }
+            if attachments
+            else None
+        )
+        await persist_user_message(
+            db,
+            body.thread_id,
+            user_content,
+            metadata=user_metadata,
+        )
         await db.commit()
 
     except Exception:
@@ -484,6 +647,7 @@ async def chat(
                 await stream_agent_run(
                     agent=agent,
                     user_content=user_content,
+                    input_content=user_input_content,
                     execution_context=ExecutionContext(
                         run_id=chat_run_id,
                         correlation_id=chat_run_id,

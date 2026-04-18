@@ -19,7 +19,7 @@ Usage::
 from __future__ import annotations
 
 import textwrap
-from typing import List
+from typing import List, Optional
 
 from raavan.core.pipelines.schema import (
     EdgeType,
@@ -56,6 +56,7 @@ def generate_code(config: PipelineConfig) -> str:
 
     # Conditional imports based on node types
     node_types_used = {n.node_type for n in config.nodes}
+    edge_types_used = {e.edge_type for e in config.edges}
 
     if NodeType.GUARDRAIL in node_types_used:
         sections.append(
@@ -70,6 +71,13 @@ def generate_code(config: PipelineConfig) -> str:
             textwrap.dedent("""\
             from raavan.core.structured.router import StructuredRouter
             from pydantic import BaseModel, Field, create_model
+        """)
+        )
+
+    if EdgeType.AGENT_FLOW in edge_types_used:
+        sections.append(
+            textwrap.dedent("""\
+            from raavan.core.agents.flow import ParallelFlow, SequentialFlow
         """)
         )
 
@@ -253,6 +261,7 @@ def generate_code(config: PipelineConfig) -> str:
     # Build router if present
     router_nodes = config.nodes_by_type(NodeType.ROUTER)
     condition_nodes = config.nodes_by_type(NodeType.CONDITION)
+    agent_flow_expr = _build_agent_flow_expression(config, agent_vars)
     if router_nodes:
         rn = router_nodes[0]
         rcfg = rn.config
@@ -372,6 +381,11 @@ def generate_code(config: PipelineConfig) -> str:
             '    result = await condition_runner.run("Hello! How can I help?")'
         )
         main_lines.append("    print(result)")
+    elif agent_flow_expr:
+        main_lines.append("    workflow = " + agent_flow_expr)
+        main_lines.append("")
+        main_lines.append('    result = await workflow.run("Hello! What can you do?")')
+        main_lines.append("    print(result.output)")
     elif agent_vars:
         first_var = list(agent_vars.values())[0]
         main_lines.append(
@@ -407,6 +421,138 @@ def _model_var(model: str) -> str:
 
 def _escape(s: str) -> str:
     return s.replace('"', '\\"').replace("\n", "\\n")
+
+
+def _build_agent_flow_expression(
+    config: PipelineConfig,
+    agent_vars: dict[str, str],
+) -> Optional[str]:
+    agent_ids = {node.id for node in config.nodes_by_type(NodeType.AGENT)}
+    flow_edges = [
+        edge
+        for edge in config.edges
+        if edge.edge_type == EdgeType.AGENT_FLOW
+        and edge.source in agent_ids
+        and edge.target in agent_ids
+    ]
+    if not flow_edges:
+        return None
+
+    incoming = {agent_id: [] for agent_id in agent_ids}
+    outgoing = {agent_id: [] for agent_id in agent_ids}
+    for edge in flow_edges:
+        incoming[edge.target].append(edge.source)
+        outgoing[edge.source].append(edge.target)
+
+    ordered_agents = [node.id for node in config.nodes_by_type(NodeType.AGENT)]
+    roots = [agent_id for agent_id in ordered_agents if not incoming[agent_id]]
+    if len(roots) != 1:
+        return None
+
+    return _build_agent_flow_step_expression(
+        roots[0],
+        agent_vars=agent_vars,
+        incoming=incoming,
+        outgoing=outgoing,
+    )
+
+
+def _build_agent_flow_step_expression(
+    agent_id: str,
+    *,
+    agent_vars: dict[str, str],
+    incoming: dict[str, list[str]],
+    outgoing: dict[str, list[str]],
+    blocked_targets: Optional[set[str]] = None,
+) -> str:
+    blocked = blocked_targets or set()
+    current_expr = agent_vars[agent_id]
+    next_targets = [
+        target_id
+        for target_id in outgoing.get(agent_id, [])
+        if target_id not in blocked
+    ]
+    if not next_targets:
+        return current_expr
+
+    if len(next_targets) == 1:
+        next_id = next_targets[0]
+        if len(incoming.get(next_id, [])) > 1:
+            return current_expr
+
+        next_expr = _build_agent_flow_step_expression(
+            next_id,
+            agent_vars=agent_vars,
+            incoming=incoming,
+            outgoing=outgoing,
+            blocked_targets=blocked,
+        )
+        return (
+            f"SequentialFlow(steps=[{current_expr}, {next_expr}], "
+            f'name="{_safe_var(agent_id)}_sequence", '
+            'description="Sequential multi-agent flow")'
+        )
+
+    join_id = _find_direct_join(
+        branch_ids=next_targets, outgoing=outgoing, blocked_targets=blocked
+    )
+    branch_blocked = blocked | ({join_id} if join_id else set())
+    branch_exprs = [
+        _build_agent_flow_step_expression(
+            branch_id,
+            agent_vars=agent_vars,
+            incoming=incoming,
+            outgoing=outgoing,
+            blocked_targets=branch_blocked,
+        )
+        for branch_id in next_targets
+    ]
+    parallel_expr = (
+        f"ParallelFlow(branches=[{', '.join(branch_exprs)}], "
+        f'name="{_safe_var(agent_id)}_parallel", '
+        'description="Parallel specialist execution")'
+    )
+    steps = [current_expr, parallel_expr]
+    if join_id:
+        steps.append(
+            _build_agent_flow_step_expression(
+                join_id,
+                agent_vars=agent_vars,
+                incoming=incoming,
+                outgoing=outgoing,
+                blocked_targets=blocked,
+            )
+        )
+    return (
+        f"SequentialFlow(steps=[{', '.join(steps)}], "
+        f'name="{_safe_var(agent_id)}_flow", '
+        'description="Agent flow pipeline")'
+    )
+
+
+def _find_direct_join(
+    *,
+    branch_ids: list[str],
+    outgoing: dict[str, list[str]],
+    blocked_targets: set[str],
+) -> Optional[str]:
+    join_targets: list[str] = []
+    for branch_id in branch_ids:
+        candidates = [
+            target_id
+            for target_id in outgoing.get(branch_id, [])
+            if target_id not in blocked_targets
+        ]
+        if len(candidates) != 1:
+            return None
+        join_targets.append(candidates[0])
+
+    candidate = join_targets[0]
+    if candidate in branch_ids:
+        return None
+    if all(target_id == candidate for target_id in join_targets[1:]):
+        return candidate
+    return None
 
 
 _TOOL_CLASS_MAP = {

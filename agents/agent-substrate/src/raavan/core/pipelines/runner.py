@@ -30,6 +30,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from raavan.catalog import SkillManager
+from raavan.core.agents.flow import BaseFlow, FlowStep, ParallelFlow, SequentialFlow
 from raavan.core.agents.react_agent import ReActAgent
 from raavan.core.context.base_context import ModelContext
 from raavan.core.guardrails.base_guardrail import BaseGuardrail
@@ -83,7 +84,7 @@ class PipelineRunner:
         self,
         config: PipelineConfig,
         *,
-        tools_registry: List[BaseTool],
+        tools_registry: Any,
         model_client: BaseModelClient,
         workflow_middleware: Optional[List[BaseWorkflowMiddleware]] = None,
         redis_memory: Optional[RedisMemory] = None,
@@ -91,7 +92,12 @@ class PipelineRunner:
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
     ) -> Union[
-        ReActAgent, StructuredRouter, "ConditionPipelineRunner", "WhilePipelineRunner"
+        WorkflowRunnable,
+        ReActAgent,
+        BaseFlow,
+        StructuredRouter,
+        "ConditionPipelineRunner",
+        "WhilePipelineRunner",
     ]:
         """Build the pipeline graph into a runnable agent or router.
 
@@ -99,7 +105,8 @@ class PipelineRunner:
         1. ``while`` node     → ``WhilePipelineRunner`` (repeat-until loop)
         2. ``condition`` node  → ``ConditionPipelineRunner`` (expression-based branching)
         3. ``router`` node     → ``StructuredRouter`` (LLM-based routing)
-        4. First ``agent``     → single ``ReActAgent``
+        4. ``agent_flow`` edges → ``SequentialFlow`` / ``ParallelFlow``
+        5. First ``agent``      → single ``ReActAgent``
 
         ``start``, ``end``, and ``note`` nodes are structural-only and are
         always skipped at runtime.
@@ -107,17 +114,19 @@ class PipelineRunner:
         # While-loop pipeline
         runnable: Union[
             ReActAgent,
+            BaseFlow,
             StructuredRouter,
             "ConditionPipelineRunner",
             "WhilePipelineRunner",
         ]
+        tools_list = self._normalize_tools_registry(tools_registry)
 
         while_nodes = config.nodes_by_type(NodeType.WHILE)
         if while_nodes:
             runnable = await self._build_while_pipeline(
                 config,
                 while_nodes[0],
-                tools_registry=tools_registry,
+                tools_registry=tools_list,
                 model_client=model_client,
                 redis_memory=redis_memory,
                 model_context=model_context,
@@ -132,7 +141,7 @@ class PipelineRunner:
                 runnable = await self._build_condition_pipeline(
                     config,
                     condition_nodes[0],
-                    tools_registry=tools_registry,
+                    tools_registry=tools_list,
                     model_client=model_client,
                     redis_memory=redis_memory,
                     model_context=model_context,
@@ -145,29 +154,61 @@ class PipelineRunner:
                     runnable = await self._build_router(
                         config,
                         router_nodes[0],
-                        tools_registry=tools_registry,
+                        tools_registry=tools_list,
                         model_client=model_client,
                         redis_memory=redis_memory,
                         model_context=model_context,
                         session_id=session_id,
                     )
                 else:
+                    flow_edges = [
+                        edge
+                        for edge in config.edges
+                        if edge.edge_type == EdgeType.AGENT_FLOW
+                    ]
                     agent_nodes = config.nodes_by_type(NodeType.AGENT)
                     if not agent_nodes:
                         raise ValueError(
                             "Pipeline has no agent, router, or condition node"
                         )
 
-                    runnable = await self._build_agent(
-                        config,
-                        agent_nodes[0],
-                        tools_registry=tools_registry,
-                        model_client=model_client,
-                        redis_memory=redis_memory,
-                        model_context=model_context,
-                        session_id=session_id,
-                        hitl_bridge=hitl_bridge,
-                    )
+                    if flow_edges:
+                        try:
+                            runnable = await self._build_agent_flow_pipeline(
+                                config,
+                                tools_registry=tools_list,
+                                model_client=model_client,
+                                redis_memory=redis_memory,
+                                model_context=model_context,
+                                session_id=session_id,
+                                hitl_bridge=hitl_bridge,
+                            )
+                        except ValueError as exc:
+                            logger.warning(
+                                "Unsupported agent-flow topology; falling back to first agent: %s",
+                                exc,
+                            )
+                            runnable = await self._build_agent(
+                                config,
+                                agent_nodes[0],
+                                tools_registry=tools_list,
+                                model_client=model_client,
+                                redis_memory=redis_memory,
+                                model_context=model_context,
+                                session_id=session_id,
+                                hitl_bridge=hitl_bridge,
+                            )
+                    else:
+                        runnable = await self._build_agent(
+                            config,
+                            agent_nodes[0],
+                            tools_registry=tools_list,
+                            model_client=model_client,
+                            redis_memory=redis_memory,
+                            model_context=model_context,
+                            session_id=session_id,
+                            hitl_bridge=hitl_bridge,
+                        )
 
         if workflow_middleware:
             return WorkflowRunnable(
@@ -178,6 +219,234 @@ class PipelineRunner:
             )
 
         return runnable
+
+    def _normalize_tools_registry(self, tools_registry: Any) -> List[BaseTool]:
+        """Return a concrete list of tools from either a registry or iterable."""
+        if tools_registry is None:
+            return []
+
+        if hasattr(tools_registry, "all_tools"):
+            try:
+                return list(tools_registry.all_tools())
+            except Exception:
+                logger.exception("Failed to enumerate tools via all_tools()")
+                return []
+
+        try:
+            return list(tools_registry)
+        except TypeError:
+            logger.warning(
+                "Unsupported tools_registry type %s; continuing with no tools",
+                type(tools_registry).__name__,
+            )
+            return []
+
+    async def _build_agent_flow_pipeline(
+        self,
+        config: PipelineConfig,
+        *,
+        tools_registry: List[BaseTool],
+        model_client: BaseModelClient,
+        redis_memory: Optional[RedisMemory] = None,
+        model_context: Optional[ModelContext] = None,
+        session_id: Optional[str] = None,
+        hitl_bridge: Optional[Any] = None,
+    ) -> Union[BaseFlow, ReActAgent]:
+        """Build a simple agent-to-agent flow graph.
+
+        Supported shapes today:
+        - linear agent chains
+        - one agent fan-out → parallel specialists → optional join agent
+        """
+        agent_nodes = {node.id: node for node in config.nodes_by_type(NodeType.AGENT)}
+        flow_edges = [
+            edge
+            for edge in config.edges
+            if edge.edge_type == EdgeType.AGENT_FLOW
+            and edge.source in agent_nodes
+            and edge.target in agent_nodes
+        ]
+        if not flow_edges:
+            raise ValueError("Pipeline has no agent_flow edges")
+
+        incoming: Dict[str, List[str]] = {node_id: [] for node_id in agent_nodes}
+        outgoing: Dict[str, List[str]] = {node_id: [] for node_id in agent_nodes}
+        for edge in flow_edges:
+            incoming[edge.target].append(edge.source)
+            outgoing[edge.source].append(edge.target)
+
+        roots = [
+            node
+            for node in config.nodes_by_type(NodeType.AGENT)
+            if not incoming[node.id]
+        ]
+        if len(roots) != 1:
+            raise ValueError("Agent-flow pipelines require exactly one root agent")
+
+        return await self._build_agent_flow_step(
+            config,
+            roots[0],
+            incoming=incoming,
+            outgoing=outgoing,
+            tools_registry=tools_registry,
+            model_client=model_client,
+            redis_memory=redis_memory,
+            model_context=model_context,
+            session_id=session_id,
+            hitl_bridge=hitl_bridge,
+        )
+
+    async def _build_agent_flow_step(
+        self,
+        config: PipelineConfig,
+        agent_node: NodeConfig,
+        *,
+        incoming: Dict[str, List[str]],
+        outgoing: Dict[str, List[str]],
+        tools_registry: List[BaseTool],
+        model_client: BaseModelClient,
+        redis_memory: Optional[RedisMemory] = None,
+        model_context: Optional[ModelContext] = None,
+        session_id: Optional[str] = None,
+        hitl_bridge: Optional[Any] = None,
+        blocked_targets: Optional[set[str]] = None,
+    ) -> Union[BaseFlow, ReActAgent]:
+        blocked = blocked_targets or set()
+        current_agent = await self._build_agent(
+            config,
+            agent_node,
+            tools_registry=tools_registry,
+            model_client=model_client,
+            redis_memory=redis_memory,
+            model_context=model_context,
+            session_id=session_id,
+            hitl_bridge=hitl_bridge,
+        )
+
+        next_targets = [
+            target_id
+            for target_id in outgoing.get(agent_node.id, [])
+            if target_id not in blocked
+        ]
+        if not next_targets:
+            return current_agent
+
+        if len(next_targets) == 1:
+            next_id = next_targets[0]
+            if len(incoming.get(next_id, [])) > 1:
+                return current_agent
+
+            next_node = config.node_by_id(next_id)
+            if next_node is None or next_node.node_type != NodeType.AGENT:
+                return current_agent
+
+            next_flow = await self._build_agent_flow_step(
+                config,
+                next_node,
+                incoming=incoming,
+                outgoing=outgoing,
+                tools_registry=tools_registry,
+                model_client=model_client,
+                redis_memory=redis_memory,
+                model_context=model_context,
+                session_id=session_id,
+                hitl_bridge=hitl_bridge,
+                blocked_targets=blocked,
+            )
+            return SequentialFlow(
+                steps=[current_agent, next_flow],
+                name=self._flow_name(agent_node, "sequence"),
+                description=f"Sequential flow from {agent_node.label or agent_node.id}",
+            )
+
+        join_id = self._find_direct_join(next_targets, outgoing, blocked)
+        branch_flows: List[FlowStep] = []
+        branch_blocked = blocked | ({join_id} if join_id else set())
+        for target_id in next_targets:
+            target_node = config.node_by_id(target_id)
+            if target_node is None or target_node.node_type != NodeType.AGENT:
+                continue
+            branch_flows.append(
+                await self._build_agent_flow_step(
+                    config,
+                    target_node,
+                    incoming=incoming,
+                    outgoing=outgoing,
+                    tools_registry=tools_registry,
+                    model_client=model_client,
+                    redis_memory=redis_memory,
+                    model_context=model_context,
+                    session_id=session_id,
+                    hitl_bridge=hitl_bridge,
+                    blocked_targets=branch_blocked,
+                )
+            )
+
+        if not branch_flows:
+            return current_agent
+
+        steps: List[FlowStep] = [
+            current_agent,
+            ParallelFlow(
+                branches=branch_flows,
+                name=self._flow_name(agent_node, "parallel"),
+                description=f"Parallel branches from {agent_node.label or agent_node.id}",
+            ),
+        ]
+
+        if join_id:
+            join_node = config.node_by_id(join_id)
+            if join_node is not None and join_node.node_type == NodeType.AGENT:
+                steps.append(
+                    await self._build_agent_flow_step(
+                        config,
+                        join_node,
+                        incoming=incoming,
+                        outgoing=outgoing,
+                        tools_registry=tools_registry,
+                        model_client=model_client,
+                        redis_memory=redis_memory,
+                        model_context=model_context,
+                        session_id=session_id,
+                        hitl_bridge=hitl_bridge,
+                        blocked_targets=blocked,
+                    )
+                )
+
+        return SequentialFlow(
+            steps=steps,
+            name=self._flow_name(agent_node, "flow"),
+            description=f"Agent flow rooted at {agent_node.label or agent_node.id}",
+        )
+
+    def _find_direct_join(
+        self,
+        branch_ids: List[str],
+        outgoing: Dict[str, List[str]],
+        blocked_targets: set[str],
+    ) -> Optional[str]:
+        """Return the shared direct join target for a fan-out, if present."""
+        join_targets: List[str] = []
+        for branch_id in branch_ids:
+            candidates = [
+                target_id
+                for target_id in outgoing.get(branch_id, [])
+                if target_id not in blocked_targets
+            ]
+            if len(candidates) != 1:
+                return None
+            join_targets.append(candidates[0])
+
+        candidate = join_targets[0]
+        if candidate in branch_ids:
+            return None
+        if all(target_id == candidate for target_id in join_targets[1:]):
+            return candidate
+        return None
+
+    def _flow_name(self, agent_node: NodeConfig, suffix: str) -> str:
+        base = (agent_node.label or agent_node.id).strip().lower().replace(" ", "_")
+        return f"{base}_{suffix}"
 
     # ── Agent builder ────────────────────────────────────────────────────
 

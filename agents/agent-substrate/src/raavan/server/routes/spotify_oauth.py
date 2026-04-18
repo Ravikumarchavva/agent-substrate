@@ -163,6 +163,24 @@ async def spotify_callback(
         raise HTTPException(status_code=500, detail="Token exchange failed")
 
 
+@router.post("/set-token")
+async def set_access_token_from_frontend(request: Request):
+    """Accept and store an OAuth token pushed from the frontend after user-facing OAuth.
+
+    Called by the Next.js callback route so the backend always has the latest user
+    OAuth token without requiring the user to go through the backend OAuth flow.
+    """
+    session_id = "default_user"
+    body = await request.json()
+    _user_tokens[session_id] = {
+        "access_token": body["access_token"],
+        "refresh_token": body.get("refresh_token"),
+        "expires_in": body.get("expires_in", 3600),
+    }
+    logger.info("Spotify OAuth token stored from frontend push")
+    return JSONResponse({"status": "ok"})
+
+
 @router.get("/token")
 async def get_access_token(request: Request):
     """Get current user's Spotify access token.

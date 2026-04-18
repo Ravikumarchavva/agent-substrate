@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Literal
-from pydantic import ConfigDict, field_validator, model_serializer, Field
+from pydantic import (
+    BaseModel as PydanticBaseModel,
+    ConfigDict,
+    field_validator,
+    model_serializer,
+    Field,
+)
 from .base_message import BaseClientMessage, CLIENT_ROLES, UsageStats
 from raavan.core.tools.base_tool import ToolResult
 import json
@@ -14,22 +20,22 @@ from raavan.core.messages._types import (
 )
 
 
-class SystemMessage(BaseClientMessage):
+class SystemMessage(BaseClientMessage[str]):
     """System message for agent instructions."""
 
     role: CLIENT_ROLES = "system"
     content: str
     type: Literal["SystemMessage"] = "SystemMessage"  # type: ignore[override]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, Any]:
         return {"role": self.role, "content": self.content, "type": self.type}
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "SystemMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> "SystemMessage":
         return cls(content=data["content"])
 
 
-class UserMessage(BaseClientMessage):
+class UserMessage(BaseClientMessage[List[MediaType]]):
     """User message with text or multimodal content."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -53,12 +59,12 @@ class UserMessage(BaseClientMessage):
             msg["name"] = self.name
         return msg
 
-    def to_dict(self) -> Dict:
-        """Convert to dictionary format."""
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary format for storage."""
         return self.ser_model()
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "UserMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> "UserMessage":
         """Create from dictionary."""
         return cls(**data)
 
@@ -70,7 +76,7 @@ class UserMessage(BaseClientMessage):
             raise ValueError("Content must be a list")
 
 
-class ToolCallMessage(BaseClientMessage):
+class ToolCallMessage(BaseClientMessage[Optional[str]]):
     """Represents a single tool call (MCP-compatible)."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -103,12 +109,12 @@ class ToolCallMessage(BaseClientMessage):
             "arguments": self.arguments,
         }
 
-    def to_dict(self) -> Dict:
-        """Convert to dictionary format."""
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary format for storage."""
         return self.ser_model()
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "ToolCallMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> "ToolCallMessage":
         """Create from dictionary."""
         return cls(**data)
 
@@ -120,7 +126,11 @@ class ToolCallMessage(BaseClientMessage):
         }
 
     def to_openai_format(self) -> Dict[str, Any]:
-        """Convert to OpenAI tool call format."""
+        """Convert to OpenAI Chat Completions tool call format.
+
+        .. deprecated::
+            Prefer using ``encoders.openai.encode_messages()`` instead.
+        """
         return {
             "id": self.id,
             "type": "function",
@@ -131,8 +141,13 @@ class ToolCallMessage(BaseClientMessage):
         }
 
 
-class AssistantMessage(BaseClientMessage):
-    """Assistant message with optional tool calls."""
+class AssistantMessage(BaseClientMessage[Optional[List[MediaType]]]):
+    """Assistant message with optional tool calls.
+
+    Provider-specific serialisation is handled by the encoder modules
+    in ``core.messages.encoders``.  The ``to_dict()`` / ``ser_model()``
+    methods produce a provider-agnostic storage format.
+    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -145,7 +160,7 @@ class AssistantMessage(BaseClientMessage):
     finish_reason: str = "stop"  # e.g., "stop", "tool_call", etc.
     usage: Optional[UsageStats] = None
     cached: bool = False  # Indicates if response used input caching or not
-    parsed: Optional[Any] = None  # Structured output parsed Pydantic instance
+    parsed: Optional[PydanticBaseModel] = None  # Structured output Pydantic instance
 
     @model_serializer
     def ser_model(self) -> Dict[str, Any]:
@@ -165,46 +180,22 @@ class AssistantMessage(BaseClientMessage):
             ]
             msg["content"] = serialized_content
         if self.tool_calls is not None:
-            serialized_tool_calls: List[Dict[str, Any]] = []
-            for tc in self.tool_calls:
-                if isinstance(tc, ToolCallMessage):
-                    serialized_tool_calls.append(tc.ser_model())
-                elif hasattr(tc, "model_dump"):
-                    # ToolCallDataclass or any other Pydantic model
-                    serialized_tool_calls.append(tc.model_dump())
-                elif isinstance(tc, dict):
-                    serialized_tool_calls.append(tc)
-                else:
-                    serialized_tool_calls.append(
-                        {
-                            "name": getattr(tc, "name", None),
-                            "arguments": getattr(tc, "arguments", None),
-                        }
-                    )
-            msg["tool_calls"] = serialized_tool_calls
+            msg["tool_calls"] = [tc.ser_model() for tc in self.tool_calls]
         if self.usage is not None:
-            msg["usage"] = (
-                self.usage.model_dump()
-                if hasattr(self.usage, "model_dump")
-                else {
-                    "prompt_tokens": self.usage.prompt_tokens,
-                    "completion_tokens": self.usage.completion_tokens,
-                    "total_tokens": self.usage.total_tokens,
-                }
-            )
+            msg["usage"] = self.usage.model_dump()
         return msg
 
-    def to_dict(self) -> Dict:
-        """Convert to dictionary format."""
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary format for storage."""
         return self.ser_model()
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "AssistantMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> "AssistantMessage":
         """Create from dictionary."""
         return cls(**data)
 
 
-class ToolExecutionResultMessage(BaseClientMessage):
+class ToolExecutionResultMessage(BaseClientMessage[List[Dict[str, Any]]]):
     """Tool execution result message (MCP-compatible)."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -243,12 +234,12 @@ class ToolExecutionResultMessage(BaseClientMessage):
             # Convert to text content block
             return [{"type": "text", "text": str(v)}]
 
-    def to_dict(self) -> Dict:
-        """Convert to dictionary format."""
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary format for storage."""
         return self.ser_model()
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "ToolExecutionResultMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> "ToolExecutionResultMessage":
         """Create from dictionary."""
         return cls(**data)
 

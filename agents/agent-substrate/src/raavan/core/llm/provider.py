@@ -27,8 +27,8 @@ class ProviderConfig:
     """Connection configuration for an LLM provider.
 
     Attributes:
-        provider: Provider identifier — ``"openai"``, ``"anthropic"``, or
-            ``"gemini"``.
+        provider: Provider identifier — ``"openai"``, ``"anthropic"``,
+            ``"gemini"``, or ``"openrouter"``.
         api_key: API key for the provider.  ``None`` means "use the default
             from environment variables" (provider SDK default behaviour).
         base_url: Override the default API endpoint.  Only meaningful for

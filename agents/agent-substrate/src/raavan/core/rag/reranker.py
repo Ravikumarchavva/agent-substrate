@@ -76,7 +76,7 @@ class LLMReranker:
         ]
 
         try:
-            response = await self._client.generate(messages)
+            response = await self._client.generate_text(messages)
             text = ""
             if response.content:
                 text = "".join(

@@ -19,12 +19,13 @@ raavan/
 ├── src/raavan/          ← Python package
 │   ├── core/            ← Framework primitives (agents, memory abstractions, tools base, context, messages, guardrails)
 │   │                        Includes: core/llm/ (BaseModelClient ABC — text + audio + vision)
+│   │                        Includes: core/agents/ (_tool_execution, _guardrail_runner, _stream_handler)
 │   ├── integrations/    ← External adapters (LLM, audio, MCP, Spotify) + concrete backends
 │   │                        Includes: integrations/memory/ (RedisMemory, PostgresMemory)
 │   │                                  integrations/storage/ (S3FileStore)
 │   ├── catalog/         ← Unified capability system (tools/, skills/, connectors/, _skill_*.py)
 │   ├── shared/          ← Cross-service contracts, auth, events, database, observability (incl. logger.py)
-│   ├── server/          ← Monolith FastAPI server (app.py, routes/, security/, services/, sse/)
+│   ├── server/          ← Monolith FastAPI server (app.py, _lifespan.py, routes/, security/, services/, sse/)
 │   ├── services/        ← 12 microservices (gateway, identity, agent_runtime, conversation, …)
 │   ├── configs/         ← Pydantic Settings
 │   └── evals/           ← LLM-as-judge evaluation framework

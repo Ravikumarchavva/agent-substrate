@@ -18,6 +18,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from raavan.core.storage.document import store_document
+from raavan.core.storage.tenant import FileScope, TenantContext
 from raavan.shared.database.dependency import get_db_session
 
 from raavan.services.file_store.service import (
@@ -41,9 +43,12 @@ class FileOut(BaseModel):
     storage_backend: str
     metadata: Optional[Dict[str, Any]]
     created_at: str
+    document_type: Optional[str] = None
+    document_class: Optional[str] = None
 
 
 def _to_out(f) -> FileOut:
+    metadata = f.metadata_ or {}
     return FileOut(
         id=str(f.id),
         thread_id=str(f.thread_id),
@@ -51,8 +56,10 @@ def _to_out(f) -> FileOut:
         content_type=f.content_type,
         size_bytes=f.size_bytes,
         storage_backend=f.storage_backend,
-        metadata=f.metadata_,
+        metadata=metadata,
         created_at=f.created_at.isoformat(),
+        document_type=metadata.get("document_type"),
+        document_class=metadata.get("document_class"),
     )
 
 
@@ -66,23 +73,27 @@ async def upload_file(
     """Upload a file and associate it with a thread."""
     file_store = request.app.state.file_store
     content = await file.read()
-
-    # Store file
-    storage_key = f"{thread_id}/{uuid.uuid4()}/{file.filename}"
-    await file_store.put(
-        storage_key,
-        content,
-        content_type=file.content_type or "application/octet-stream",
+    tenant = TenantContext(thread_id=str(thread_id))
+    document = await store_document(
+        file_store,
+        tenant=tenant,
+        name=file.filename or "unknown",
+        content=content,
+        content_type=file.content_type,
+        scope=FileScope.UPLOADS,
+        metadata={"source": FileScope.UPLOADS.value},
     )
 
     # Create metadata record
     record = await create_file_record(
         db,
         thread_id=thread_id,
-        original_name=file.filename or "unknown",
-        storage_key=storage_key,
-        content_type=file.content_type,
-        size_bytes=len(content),
+        original_name=document.name,
+        storage_key=document.object_key or "",
+        content_type=document.content_type,
+        size_bytes=document.size_bytes,
+        storage_backend=getattr(request.app.state, "file_store_backend", "local"),
+        document=document,
     )
 
     return _to_out(record)

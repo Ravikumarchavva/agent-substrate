@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional
-import json
+
 from openai import AsyncOpenAI
 from openai.types.responses.response_completed_event import ResponseCompletedEvent
 from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
@@ -19,8 +20,17 @@ from raavan.core.messages.client_messages import (
     AssistantMessage,
 )
 
-from raavan.core.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import (
+    BaseModelClient,
+    GenerateResult,
+    ModelStreamEvent,
+)
 from raavan.core.messages.base_message import BaseClientMessage
+from raavan.core.messages._types import MediaType
+from raavan.core.messages.encoders.openai import (
+    encode_messages as _encode_messages,
+    encode_tools as _encode_tools,
+)
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -177,160 +187,55 @@ class OpenAIClient(BaseModelClient):
     def _messages_to_openai_format(
         self, messages: list[BaseClientMessage]
     ) -> list[dict]:
-        """Convert framework messages to OpenAI API format."""
+        """Convert framework messages to OpenAI API format.
+
+        .. deprecated:: Use ``_serialize_messages`` instead.
+        """
         return [msg.to_dict() for msg in messages]
 
     def _tools_to_openai_format(
-        self, tools: Optional[list[dict]]
-    ) -> Optional[list[dict]]:
-        """Convert tools to OpenAI function calling format."""
+        self, tools: Optional[list[dict[str, Any]]]
+    ) -> Optional[list[dict[str, Any]]]:
+        """Convert tools to OpenAI function calling format.
+
+        .. deprecated:: Use ``_serialize_tools`` instead.
+        """
         if not tools:
             return None
         return tools
 
     # ------------------------------------------------------------------
-    # Private helpers — shared serialisation logic
+    # Private helpers — delegates to ``core.messages.encoders.openai``
     # ------------------------------------------------------------------
 
     def _serialize_messages(
         self, messages: list[BaseClientMessage]
-    ) -> tuple[str, list[dict]]:
+    ) -> tuple[str, list[dict[str, Any]]]:
         """Serialise framework messages into (instructions, conversation_input).
 
-        Returns:
-            instructions: Concatenated system prompt text for the Responses API.
-            conversation_input: List of Responses-API input items.
+        Delegates to the centralised OpenAI encoder so that message
+        serialisation logic lives in one place.
         """
-        instructions = ""
-        conversation_input: list[dict] = []
+        return _encode_messages(messages)
 
-        for msg in messages:
-            if msg.role == "system":
-                instructions += f"{msg.content}\n"
-            elif msg.role == "user":
-                msg_dict = msg.to_dict()
-                conversation_input.append(
-                    {
-                        "type": "message",
-                        "role": "user",
-                        "content": msg_dict.get("content", []),
-                    }
-                )
-            elif msg.role == "assistant":
-                msg_dict = msg.to_dict()
-                if msg.content:
-                    serialized_content = msg_dict.get("content", [])
-                    if serialized_content:
-                        conversation_input.append(
-                            {
-                                "type": "message",
-                                "role": "assistant",
-                                "content": serialized_content,
-                            }
-                        )
-                tool_calls = getattr(msg, "tool_calls", None)
-                if tool_calls:
-                    for tc in tool_calls:
-                        if not (hasattr(tc, "name") and hasattr(tc, "arguments")):
-                            continue
-                        tc_args = tc.arguments
-                        if isinstance(tc_args, dict):
-                            tc_args = json.dumps(tc_args)
-                        conversation_input.append(
-                            {
-                                "type": "function_call",
-                                "call_id": tc.id,
-                                "name": tc.name,
-                                "arguments": tc_args,
-                            }
-                        )
-            elif msg.role in ("tool_response", "tool"):
-                content_str = ""
-                if hasattr(msg, "content") and msg.content:
-                    if isinstance(msg.content, list):
-                        content_str = "\n".join(
-                            block.get("text", "")
-                            for block in msg.content
-                            if isinstance(block, dict) and block.get("type") == "text"
-                        )
-                    elif isinstance(msg.content, str):
-                        content_str = msg.content
-                conversation_input.append(
-                    {
-                        "type": "function_call_output",
-                        "call_id": getattr(msg, "tool_call_id", None),
-                        "output": content_str,
-                    }
-                )
-
-        return instructions.strip(), conversation_input
-
-    def _serialize_tools(self, tools: Optional[list[dict]]) -> Optional[list[dict]]:
+    def _serialize_tools(
+        self, tools: Optional[list[dict[str, Any]]]
+    ) -> Optional[list[dict[str, Any]]]:
         """Normalise tool dicts to Responses API flattened format.
 
-        Accepts OpenAI nested format, MCP format, or already-flattened format.
-        Returns None when *tools* is falsy.
+        Delegates to the centralised OpenAI encoder.
         """
-        if not tools:
-            return None
-
-        result: list[dict] = []
-        for tool in tools:
-            # Already flattened Responses-API format
-            if "type" in tool and "name" in tool and "parameters" in tool:
-                result.append(tool)
-            # OpenAI nested Chat Completions format
-            elif tool.get("type") == "function" and "function" in tool:
-                fn = tool["function"]
-                result.append(
-                    {
-                        "type": "function",
-                        "name": fn.get("name"),
-                        "description": fn.get("description", ""),
-                        "parameters": fn.get(
-                            "parameters", {"type": "object", "properties": {}}
-                        ),
-                    }
-                )
-            # MCP format with inputSchema
-            elif "name" in tool and "inputSchema" in tool:
-                result.append(
-                    {
-                        "type": "function",
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                        "parameters": tool["inputSchema"],
-                    }
-                )
-            # Generic named tool — best-effort
-            elif "name" in tool:
-                result.append(
-                    {
-                        "type": "function",
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                        "parameters": (
-                            tool.get("parameters")
-                            or tool.get("inputSchema")
-                            or {"type": "object", "properties": {}}
-                        ),
-                    }
-                )
-            else:
-                # Unknown format — pass through and let the API handle it
-                result.append(tool)
-
-        return result
+        return _encode_tools(tools)
 
     async def generate(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         response_format: Optional[type["BaseModel"]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
-        **kwargs,
-    ) -> Any:
+        **kwargs: Any,
+    ) -> GenerateResult:
         """Generate a single response from OpenAI using Responses API."""
         instructions, conversation_input = self._serialize_messages(messages)
 
@@ -406,7 +311,7 @@ class OpenAIClient(BaseModelClient):
 
             # Extract text content
             final_content_text = getattr(response, "output_text", "") or ""
-            final_content: Optional[list[Any]] = (
+            final_content_list: Optional[list[MediaType]] = (
                 [final_content_text] if final_content_text else None
             )
 
@@ -439,7 +344,7 @@ class OpenAIClient(BaseModelClient):
 
             return AssistantMessage(
                 role="assistant",
-                content=final_content,
+                content=final_content_list,
                 tool_calls=tool_calls_obj,
                 usage=usage_dict,
                 finish_reason=finish_reason,
@@ -550,7 +455,7 @@ class OpenAIClient(BaseModelClient):
         response = await self.client.responses.create(**params)
 
         final_content_text = getattr(response, "output_text", "") or ""
-        final_content: Optional[list[Any]] = (
+        final_content_main: Optional[list[MediaType]] = (
             [final_content_text] if final_content_text else None
         )
 
@@ -588,7 +493,7 @@ class OpenAIClient(BaseModelClient):
 
         return AssistantMessage(
             role="assistant",
-            content=final_content,
+            content=final_content_main,
             tool_calls=tool_calls_obj,
             usage=usage_dict,
             finish_reason=finish_reason,
@@ -597,12 +502,12 @@ class OpenAIClient(BaseModelClient):
     async def generate_stream(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
-        tool_choice: Optional[str | dict] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
+        tool_choice: Optional[str | dict[str, Any]] = None,
         *,
         response_format: Optional[type["BaseModel"]] = None,
-        **kwargs,
-    ) -> AsyncIterator[Any]:
+        **kwargs: Any,
+    ) -> AsyncIterator[ModelStreamEvent]:
         """Generate a streaming response from OpenAI using Responses API.
 
         Yields StreamChunk objects:
@@ -672,84 +577,79 @@ class OpenAIClient(BaseModelClient):
 
         # Use the Response object to build final message (same as generate())
         if final_response is None:
-            # Fallback if no completion event
-            final_message = AssistantMessage(
-                role="assistant",
-                content=None,
-                tool_calls=None,
-                usage=None,
-                finish_reason="error",
+            logger.error(
+                "No ResponseCompletedEvent received from model %s — "
+                "the provider may not support the Responses API. "
+                "Set use_responses_api=False for this provider.",
+                self.model,
             )
-        else:
-            # Extract content text
-            final_content_text = (
-                final_response.output_text
-                if hasattr(final_response, "output_text")
-                else ""
+            raise RuntimeError(
+                f"LLM stream for model '{self.model}' ended without producing "
+                f"a completion. The provider may not support the OpenAI "
+                f"Responses API. Check server logs for details."
             )
-            final_content: Optional[list[Any]] = (
-                [final_content_text] if final_content_text else None
-            )
+        # Extract content text
+        final_content_text = (
+            final_response.output_text if hasattr(final_response, "output_text") else ""
+        )
+        final_content: Optional[list[MediaType]] = (
+            [final_content_text] if final_content_text else None
+        )
 
-            # Extract tool calls from output
-            tool_calls_obj = None
-            if final_response.output:
-                for item in final_response.output:
-                    if item.type == "function_call":
-                        if tool_calls_obj is None:
-                            tool_calls_obj = []
-                        tool_calls_obj.append(
-                            ToolCallMessage(
-                                id=getattr(item, "call_id", "")
-                                or getattr(item, "id", ""),
-                                name=item.name,
-                                arguments=json.loads(item.arguments)
-                                if isinstance(item.arguments, str)
-                                else item.arguments,
-                            )
+        # Extract tool calls from output
+        tool_calls_obj = None
+        if final_response.output:
+            for item in final_response.output:
+                if item.type == "function_call":
+                    if tool_calls_obj is None:
+                        tool_calls_obj = []
+                    tool_calls_obj.append(
+                        ToolCallMessage(
+                            id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                            name=item.name,
+                            arguments=json.loads(item.arguments)
+                            if isinstance(item.arguments, str)
+                            else item.arguments,
                         )
+                    )
 
-            # Extract usage
-            usage_dict = None
-            if hasattr(final_response, "usage") and final_response.usage:
-                from raavan.core.messages.base_message import UsageStats
+        # Extract usage
+        usage_dict = None
+        if hasattr(final_response, "usage") and final_response.usage:
+            from raavan.core.messages.base_message import UsageStats
 
-                usage_dict = UsageStats(
-                    prompt_tokens=final_response.usage.input_tokens,
-                    completion_tokens=final_response.usage.output_tokens,
-                    total_tokens=final_response.usage.total_tokens,
-                )
-
-            # Determine finish reason
-            finish_reason = "stop"
-            if tool_calls_obj:
-                finish_reason = "tool_calls"
-            elif getattr(final_response, "finish_reason", None):
-                finish_reason = getattr(final_response, "finish_reason", "stop")
-
-            final_message = AssistantMessage(
-                role="assistant",
-                content=final_content,
-                tool_calls=tool_calls_obj,
-                usage=usage_dict,
-                finish_reason=finish_reason,
+            usage_dict = UsageStats(
+                prompt_tokens=final_response.usage.input_tokens,
+                completion_tokens=final_response.usage.output_tokens,
+                total_tokens=final_response.usage.total_tokens,
             )
 
-            # Parse structured output from final text when schema is set
-            if (
-                response_format is not None
-                and final_content_text
-                and not tool_calls_obj
-            ):
-                try:
-                    final_message.parsed = response_format.model_validate_json(
-                        final_content_text
-                    )
-                except Exception:
-                    logger.debug(
-                        f"Stream: failed to parse structured output: "
-                        f"{final_content_text[:200]}"
-                    )
+        # Determine finish reason
+        finish_reason = "stop"
+        if tool_calls_obj:
+            finish_reason = "tool_calls"
+        elif getattr(final_response, "finish_reason", None):
+            finish_reason = getattr(final_response, "finish_reason", "stop")
+
+        final_message = AssistantMessage(
+            role="assistant",
+            content=final_content,
+            tool_calls=tool_calls_obj,
+            usage=usage_dict,
+            finish_reason=finish_reason,
+        )
+
+        # Parse structured output from final text when schema is set
+        if response_format is not None and final_content_text and not tool_calls_obj:
+            try:
+                final_message.parsed = response_format.model_validate_json(
+                    final_content_text
+                )
+            except Exception:
+                logger.debug(
+                    f"Stream: failed to parse structured output: "
+                    f"{final_content_text[:200]}"
+                )
 
         # Yield final completion
         yield CompletionChunk(message=final_message)

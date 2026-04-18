@@ -8,11 +8,20 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from anthropic import AsyncAnthropic
 
-from raavan.core.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import (
+    BaseModelClient,
+    GenerateResult,
+    ModelStreamEvent,
+)
 from raavan.core.messages.base_message import BaseClientMessage, UsageStats
+from raavan.core.messages._types import MediaType
 from raavan.core.messages.client_messages import (
     AssistantMessage,
     ToolCallMessage,
+)
+from raavan.core.messages.encoders.anthropic import (
+    encode_messages as _encode_messages,
+    encode_tools as _encode_tools,
 )
 
 if TYPE_CHECKING:
@@ -43,191 +52,25 @@ class AnthropicClient(BaseModelClient):
         self.api_key = api_key
         self.client = AsyncAnthropic(api_key=api_key)
 
-    # ── Private helpers ──────────────────────────────────────────────────────
+    # ── Private helpers — delegates to ``core.messages.encoders.anthropic`` ──
 
     def _serialize_messages(
         self, messages: list[BaseClientMessage]
     ) -> tuple[str, list[dict[str, Any]]]:
         """Serialise framework messages into (system_prompt, messages).
 
-        Returns:
-            system: Concatenated system prompt text.
-            messages: List of Anthropic Messages API items.
+        Delegates to the centralised Anthropic encoder.
         """
-        system = ""
-        conversation: list[dict[str, Any]] = []
-
-        for msg in messages:
-            if msg.role == "system":
-                system += f"{msg.content}\n"
-
-            elif msg.role == "user":
-                msg_dict = msg.to_dict()
-                raw_content = msg_dict.get("content", [])
-                anthropic_content = self._convert_user_content(raw_content)
-                conversation.append({"role": "user", "content": anthropic_content})
-
-            elif msg.role == "assistant":
-                blocks: list[dict[str, Any]] = []
-
-                # Text content
-                if msg.content:
-                    for item in msg.content:
-                        if isinstance(item, str) and item.strip():
-                            blocks.append({"type": "text", "text": item})
-
-                # Tool use blocks
-                tool_calls = getattr(msg, "tool_calls", None)
-                if tool_calls:
-                    for tc in tool_calls:
-                        tc_args = tc.arguments
-                        if isinstance(tc_args, str):
-                            tc_args = json.loads(tc_args)
-                        blocks.append(
-                            {
-                                "type": "tool_use",
-                                "id": tc.id,
-                                "name": tc.name,
-                                "input": tc_args,
-                            }
-                        )
-
-                if blocks:
-                    conversation.append({"role": "assistant", "content": blocks})
-
-            elif msg.role in ("tool_response", "tool"):
-                content_str = ""
-                if hasattr(msg, "content") and msg.content:
-                    if isinstance(msg.content, list):
-                        content_str = "\n".join(
-                            block.get("text", "")
-                            for block in msg.content
-                            if isinstance(block, dict) and block.get("type") == "text"
-                        )
-                    elif isinstance(msg.content, str):
-                        content_str = msg.content
-
-                conversation.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": getattr(msg, "tool_call_id", ""),
-                                "content": content_str,
-                            }
-                        ],
-                    }
-                )
-
-        return system.strip(), conversation
-
-    def _convert_user_content(
-        self, content: list[dict[str, Any]] | str
-    ) -> list[dict[str, Any]] | str:
-        """Convert OpenAI Responses API content to Anthropic format."""
-        if isinstance(content, str):
-            return content
-
-        result: list[dict[str, Any]] = []
-        for block in content:
-            if isinstance(block, str):
-                result.append({"type": "text", "text": block})
-            elif isinstance(block, dict):
-                block_type = block.get("type", "")
-                if block_type == "input_text" or block_type == "text":
-                    result.append({"type": "text", "text": block.get("text", "")})
-                elif block_type == "input_image":
-                    image_url = block.get("image_url", "")
-                    if isinstance(image_url, str) and image_url.startswith("data:"):
-                        # Base64 data URL
-                        parts = image_url.split(",", 1)
-                        media_type = (
-                            parts[0].split(":")[1].split(";")[0]
-                            if ":" in parts[0]
-                            else "image/png"
-                        )
-                        result.append(
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": media_type,
-                                    "data": parts[1] if len(parts) > 1 else "",
-                                },
-                            }
-                        )
-                    elif isinstance(image_url, str):
-                        result.append(
-                            {
-                                "type": "image",
-                                "source": {"type": "url", "url": image_url},
-                            }
-                        )
-                else:
-                    # Pass through text-like blocks
-                    text = block.get("text", block.get("content", ""))
-                    if text:
-                        result.append({"type": "text", "text": str(text)})
-            else:
-                result.append({"type": "text", "text": str(block)})
-
-        return result if result else [{"type": "text", "text": ""}]
+        return _encode_messages(messages)
 
     def _serialize_tools(
         self, tools: Optional[list[dict[str, Any]]]
     ) -> Optional[list[dict[str, Any]]]:
-        """Convert tool schemas to Anthropic format."""
-        if not tools:
-            return None
+        """Convert tool schemas to Anthropic format.
 
-        result: list[dict[str, Any]] = []
-        for tool in tools:
-            # Flattened Responses API format
-            if "type" in tool and "name" in tool and "parameters" in tool:
-                result.append(
-                    {
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                        "input_schema": tool["parameters"],
-                    }
-                )
-            # OpenAI nested Chat Completions format
-            elif tool.get("type") == "function" and "function" in tool:
-                fn = tool["function"]
-                result.append(
-                    {
-                        "name": fn.get("name", ""),
-                        "description": fn.get("description", ""),
-                        "input_schema": fn.get(
-                            "parameters", {"type": "object", "properties": {}}
-                        ),
-                    }
-                )
-            # MCP format
-            elif "name" in tool and "inputSchema" in tool:
-                result.append(
-                    {
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                        "input_schema": tool["inputSchema"],
-                    }
-                )
-            # Generic named tool
-            elif "name" in tool:
-                result.append(
-                    {
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                        "input_schema": (
-                            tool.get("parameters")
-                            or tool.get("inputSchema")
-                            or {"type": "object", "properties": {}}
-                        ),
-                    }
-                )
-
-        return result or None
+        Delegates to the centralised Anthropic encoder.
+        """
+        return _encode_tools(tools)
 
     def _build_thinking_param(self, kwargs: dict[str, Any]) -> Optional[dict[str, Any]]:
         """Build the ``thinking`` parameter from kwargs.
@@ -259,12 +102,12 @@ class AnthropicClient(BaseModelClient):
     async def generate(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> GenerateResult:
         """Generate a single response from Anthropic using Messages API."""
         system, conversation = self._serialize_messages(messages)
 
@@ -342,7 +185,7 @@ class AnthropicClient(BaseModelClient):
                 )
 
         final_text = "\n".join(text_parts) if text_parts else ""
-        final_content: Optional[list[Any]] = [final_text] if final_text else None
+        final_content: Optional[list[MediaType]] = [final_text] if final_text else None
 
         # Usage (includes cache stats)
         usage_dict = None
@@ -379,11 +222,8 @@ class AnthropicClient(BaseModelClient):
             usage=usage_dict,
             finish_reason=finish_reason,
             cached=bool(getattr(response.usage, "cache_read_input_tokens", 0)),
+            reasoning="\n".join(thinking_parts) if thinking_parts else None,
         )
-
-        # Attach thinking content if present
-        if thinking_parts:
-            msg.thinking = "\n".join(thinking_parts)
 
         # Structured output parsing
         if response_format is not None and final_text and not tool_calls_obj:
@@ -400,11 +240,11 @@ class AnthropicClient(BaseModelClient):
     async def generate_stream(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[Any]:
+    ) -> AsyncIterator[ModelStreamEvent]:
         """Generate a streaming response from Anthropic using Messages API.
 
         Yields TextDeltaChunk objects, then a final CompletionChunk.
@@ -461,21 +301,26 @@ class AnthropicClient(BaseModelClient):
 
         async with self.client.messages.stream(**params) as stream:
             async for event in stream:
-                event_type = event.type
+                event_any: Any = event
+                event_type = event_any.type
 
                 if event_type == "message_start":
-                    if hasattr(event, "message") and hasattr(event.message, "usage"):
-                        input_tokens = getattr(event.message.usage, "input_tokens", 0)
+                    if hasattr(event_any, "message") and hasattr(
+                        event_any.message, "usage"
+                    ):
+                        input_tokens = getattr(
+                            event_any.message.usage, "input_tokens", 0
+                        )
 
                 elif event_type == "content_block_start":
-                    block = event.content_block
+                    block = event_any.content_block
                     if block.type == "tool_use":
                         current_tool_id = block.id
                         current_tool_name = block.name
                         current_tool_json = ""
 
                 elif event_type == "content_block_delta":
-                    delta = event.delta
+                    delta = event_any.delta
                     if delta.type == "thinking_delta":
                         thinking_text = getattr(delta, "thinking", "")
                         if thinking_text:
@@ -512,9 +357,9 @@ class AnthropicClient(BaseModelClient):
                         current_tool_json = ""
 
                 elif event_type == "message_delta":
-                    if hasattr(event, "usage"):
-                        output_tokens = getattr(event.usage, "output_tokens", 0)
-                    stop_reason = getattr(event, "delta", None)
+                    if hasattr(event_any, "usage"):
+                        output_tokens = getattr(event_any.usage, "output_tokens", 0)
+                    stop_reason = getattr(event_any, "delta", None)
                     if stop_reason and hasattr(stop_reason, "stop_reason"):
                         stop_reason = stop_reason.stop_reason
 
@@ -523,7 +368,7 @@ class AnthropicClient(BaseModelClient):
 
         # Build final message
         final_text = "".join(text_parts) if text_parts else ""
-        final_content: Optional[list[Any]] = [final_text] if final_text else None
+        final_content: Optional[list[MediaType]] = [final_text] if final_text else None
 
         finish_reason = "stop"
         if tool_calls_obj:
@@ -543,11 +388,8 @@ class AnthropicClient(BaseModelClient):
             tool_calls=tool_calls_obj,
             usage=usage_dict,
             finish_reason=finish_reason,
+            reasoning="".join(thinking_parts) if thinking_parts else None,
         )
-
-        # Attach thinking content if present
-        if thinking_parts:
-            final_message.thinking = "".join(thinking_parts)
 
         # Structured output parsing
         if response_format is not None and final_text and not tool_calls_obj:

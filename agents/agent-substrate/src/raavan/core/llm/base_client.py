@@ -9,6 +9,7 @@ from typing import (
     Literal,
     Optional,
     Type,
+    Union,
 )
 
 from raavan.core.messages.client_messages import (
@@ -18,6 +19,23 @@ from raavan.core.messages.client_messages import (
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
+    from raavan.core.messages._types import (
+        CompletionChunk,
+        ReasoningDeltaChunk,
+        TextDeltaChunk,
+    )
+    from raavan.core.structured.result import StructuredOutputResult
+
+# Type alias for the return value of generate() — either a message or
+# a structured output result when response_format is provided.
+GenerateResult = Union[AssistantMessage, "StructuredOutputResult[BaseModel]"]
+
+# Type alias for provider streaming responses.
+ModelStreamEvent = Union[
+    "TextDeltaChunk",
+    "ReasoningDeltaChunk",
+    "CompletionChunk",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -84,17 +102,19 @@ class BaseModelClient(ABC):
     async def generate(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional["Type[BaseModel]"] = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> GenerateResult:
         """Generate a response from the model.
 
-        - When ``response_format`` is ``None``: returns ``AssistantMessage``.
-        - When ``response_format`` is a Pydantic schema: returns
+        - Without ``response_format``: providers should return ``AssistantMessage``.
+        - With ``response_format`` and no tools: providers should return
           ``StructuredOutputResult``.
+        - With both tools and ``response_format``: either shape may be returned,
+          depending on the provider flow.
         """
         raise NotImplementedError
 
@@ -102,15 +122,41 @@ class BaseModelClient(ABC):
     async def generate_stream(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         response_format: Optional["Type[BaseModel]"] = None,
-        **kwargs,
-    ) -> AsyncIterator[AssistantMessage]:
-        """Generate a streaming response from the model."""
-        if False:
+        **kwargs: Any,
+    ) -> AsyncIterator[ModelStreamEvent]:
+        """Generate a streaming response from the model.
+
+        Provider clients yield chunk events rather than a final message on each
+        iteration. The terminal event is always a ``CompletionChunk``.
+        """
+        if False:  # pragma: no cover
             # Marks this abstract method as an async-generator contract.
-            yield AssistantMessage(role="assistant", content=None)
+            yield AssistantMessage(role="assistant", content=None)  # type: ignore[misc]
+
+    async def generate_text(
+        self,
+        messages: list[BaseClientMessage],
+        *,
+        tools: Optional[list[dict[str, Any]]] = None,
+        **kwargs: Any,
+    ) -> AssistantMessage:
+        """Generate a response, guaranteed to return ``AssistantMessage``.
+
+        Convenience wrapper for callers that never pass ``response_format``
+        and therefore always receive a plain text response. Raises
+        ``TypeError`` if the underlying provider unexpectedly returns a
+        ``StructuredOutputResult``.
+        """
+        result = await self.generate(messages, tools=tools, **kwargs)
+        if not isinstance(result, AssistantMessage):
+            raise TypeError(
+                f"generate_text expects AssistantMessage but got {type(result).__name__}."
+                " Use generate() directly when response_format may be set."
+            )
+        return result
 
     @abstractmethod
     async def count_tokens(self, messages: list[BaseClientMessage]) -> int:

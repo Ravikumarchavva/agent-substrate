@@ -17,6 +17,15 @@ import os
 import pytest
 
 from raavan.core.storage.base import FileRef
+from raavan.core.storage.document import (
+    BinaryDocument,
+    ImageDocument,
+    PdfDocument,
+    SpreadsheetDocument,
+    TextDocument,
+    create_document,
+    store_document,
+)
 from raavan.core.storage.local import LocalFileStore
 from raavan.core.storage.tenant import FileScope, TenantContext
 
@@ -46,6 +55,68 @@ def test_file_ref_default_metadata():
     )
     assert ref.metadata == {}
     assert ref.created_at is not None
+
+
+class TestDocumentModel:
+    def test_infers_image_document_from_extension(self):
+        document = create_document(
+            name="photo.png",
+            content_type="application/octet-stream",
+        )
+
+        assert isinstance(document, ImageDocument)
+        assert document.content_type == "image/png"
+        assert document.document_type == "image"
+        assert document.extension == "png"
+
+    def test_infers_pdf_document_from_mime(self):
+        document = create_document(name="report.bin", content_type="application/pdf")
+
+        assert isinstance(document, PdfDocument)
+        assert document.document_type == "pdf"
+
+    def test_infers_spreadsheet_document_from_extension(self):
+        document = create_document(name="costs.xlsx")
+
+        assert isinstance(document, SpreadsheetDocument)
+        assert document.content_type == (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    def test_falls_back_to_binary_document(self):
+        document = create_document(
+            name="blob.bin", content_type="application/octet-stream"
+        )
+
+        assert isinstance(document, BinaryDocument)
+        assert document.document_type == "file"
+
+    async def test_store_document_round_trip(self, tmp_path):
+        root = tmp_path / "filestore"
+        store = LocalFileStore(root=str(root))
+        await store.startup()
+
+        document = await store_document(
+            store,
+            tenant=TenantContext(thread_id="thread-1"),
+            name="notes.md",
+            content=b"# hello\n",
+            metadata={"source": FileScope.UPLOADS.value},
+        )
+
+        assert isinstance(document, TextDocument)
+        assert document.object_key is not None
+        assert document.object_key.startswith("thread/thread-1/uploads/")
+        assert document.checksum_sha256 == hashlib.sha256(b"# hello\n").hexdigest()
+
+        stored = await store.get(document.object_key)
+        assert stored == b"# hello\n"
+
+        head = await store.head(document.object_key)
+        assert head.object_key == document.object_key
+        assert document.content_type == "text/markdown"
+        assert document.descriptor()["document_type"] == "text"
+        assert document.descriptor()["document_class"] == "TextDocument"
 
 
 # -- TenantContext -----------------------------------------------------------

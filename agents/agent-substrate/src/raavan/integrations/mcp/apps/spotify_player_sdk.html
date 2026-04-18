@@ -230,17 +230,68 @@
     color: #6a6a6a; font-size: 13px;
   }
 
+  /* ── Tabs ───────────────────────────────────────────── */
+  .tabs {
+    display: flex; background: #181818;
+    border-bottom: 1px solid #282828;
+  }
+  .tab-btn {
+    flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+    color: #9ca3af; font-size: 12px; font-weight: 500;
+    padding: 10px 8px; cursor: pointer; transition: all 0.15s;
+  }
+  .tab-btn:hover { color: #fff; }
+  .tab-btn.active { color: #1DB954; border-bottom-color: #1DB954; }
+
+  /* ── Tab views ──────────────────────────────────────── */
+  .tab-view { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+  .tab-view.hidden { display: none; }
+
   /* ── Meta ────────────────────────────────────────────── */
   .meta-bar {
     display: flex; justify-content: space-between; align-items: center;
     padding: 8px 16px;
     font-size: 11px; color: #6a6a6a;
     border-bottom: 1px solid #1a1a1a;
+    flex-shrink: 0;
   }
   .track-count { font-variant-numeric: tabular-nums; }
   .powered-by {
     display: flex; align-items: center; gap: 4px;
     font-size: 10px; color: #6a6a6a;
+  }
+
+  /* ── Playlist Item ──────────────────────────────────── */
+  .playlist-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid #1a1a1a;
+  }
+  .playlist-item:hover { background: #1a1a1a; }
+  .playlist-item.active { background: #282828; }
+  .playlist-cover {
+    width: 44px; height: 44px; border-radius: 4px;
+    object-fit: cover; flex-shrink: 0; background: #282828;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .playlist-info { flex: 1; min-width: 0; }
+  .playlist-name {
+    font-size: 13px; font-weight: 500; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .playlist-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+  .playlist-back {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px; cursor: pointer; font-size: 12px;
+    color: #9ca3af; border-bottom: 1px solid #282828;
+    flex-shrink: 0;
+  }
+  .playlist-back:hover { color: #fff; background: #1a1a1a; }
+  .loading-state {
+    text-align: center; padding: 32px 16px;
+    color: #6a6a6a; font-size: 12px;
   }
 </style>
 </head>
@@ -294,19 +345,43 @@
   </div>
 </div>
 
-<!-- Meta -->
-<div class="meta-bar">
-  <span class="track-count" id="track-count">0 tracks</span>
-  <span class="powered-by">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="#6a6a6a"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-    Spotify Web Playback SDK
-  </span>
+<!-- Library Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" id="tab-btn-queue" onclick="switchTab('queue')">Queue</button>
+  <button class="tab-btn" id="tab-btn-playlists" onclick="switchTab('playlists')">Playlists</button>
+  <button class="tab-btn" id="tab-btn-liked" onclick="switchTab('liked')">Liked Songs</button>
 </div>
 
-<!-- Track List -->
-<div class="track-list-container">
-  <div class="track-list" id="track-list">
-    <div class="no-data">Search for music to get started</div>
+<!-- Queue View -->
+<div class="tab-view" id="tab-queue">
+  <div class="meta-bar">
+    <span class="track-count" id="track-count">0 tracks</span>
+    <span class="powered-by">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="#6a6a6a"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+      Spotify Web Playback SDK
+    </span>
+  </div>
+  <div class="track-list-container">
+    <div class="track-list" id="track-list">
+      <div class="no-data">Search for music to get started</div>
+    </div>
+  </div>
+</div>
+
+<!-- Playlists View -->
+<div class="tab-view hidden" id="tab-playlists">
+  <div class="track-list-container">
+    <div id="playlist-list"><div class="loading-state">Loading playlists…</div></div>
+  </div>
+</div>
+
+<!-- Liked Songs View -->
+<div class="tab-view hidden" id="tab-liked">
+  <div class="meta-bar">
+    <span id="liked-count">Liked Songs</span>
+  </div>
+  <div class="track-list-container">
+    <div class="track-list" id="liked-list"><div class="loading-state">Loading liked songs…</div></div>
   </div>
 </div>
 
@@ -352,6 +427,8 @@
       if (!spotifyPlayer) {
         initSpotifyPlayer();
       }
+      // Load library once we have a token
+      if (!libraryLoaded) loadLibrary();
       return;
     }
     
@@ -388,6 +465,13 @@
   let tokenExpiresAt = 0;
   let progressInterval = null;
   let playerState = null;
+
+  // Library state
+  let activeTab = 'queue';
+  let playlists = [];
+  let likedTracks = [];
+  let libraryLoaded = false;
+  let activePlaylistId = null; // null = show all playlists, string = showing playlist tracks
 
   // ── Token Persistence (localStorage) ────────────────────
   function saveTokens(tokens) {
@@ -589,6 +673,163 @@
     window.parent.postMessage({ type: "spotify_login_request" }, "*");
   };
 
+  // ── Library: Tab switching ───────────────────────────────
+  function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-view').forEach(v => v.classList.add('hidden'));
+    document.getElementById('tab-btn-' + tab).classList.add('active');
+    document.getElementById('tab-' + tab).classList.remove('hidden');
+
+    if ((tab === 'playlists' || tab === 'liked') && accessToken) {
+      if (!libraryLoaded) {
+        loadLibrary();
+      } else if (tab === 'playlists' && playlists.length === 0 && !activePlaylistId) {
+        fetchPlaylists();
+      } else if (tab === 'liked' && likedTracks.length === 0) {
+        fetchLikedSongs();
+      }
+    }
+  }
+
+  // ── Library: Fetch from Spotify Web API ─────────────────
+  async function spotifyGet(path) {
+    const res = await fetch('https://api.spotify.com/v1' + path, {
+      headers: { Authorization: 'Bearer ' + accessToken },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  }
+
+  async function loadLibrary() {
+    if (!accessToken) return;
+    libraryLoaded = true;
+    try {
+      await Promise.all([fetchPlaylists(), fetchLikedSongs()]);
+    } catch (e) {
+      libraryLoaded = false; // allow retry if something went wrong
+    }
+  }
+
+  async function fetchPlaylists() {
+    const el = document.getElementById('playlist-list');
+    el.innerHTML = '<div class="loading-state">Loading playlists…</div>';
+    try {
+      const data = await spotifyGet('/me/playlists?limit=50');
+      if (!data) { el.innerHTML = '<div class="no-data">Could not load playlists</div>'; return; }
+      playlists = data.items || [];
+      renderPlaylists();
+    } catch { el.innerHTML = '<div class="no-data">Could not load playlists</div>'; }
+  }
+
+  async function fetchLikedSongs() {
+    const el = document.getElementById('liked-list');
+    el.innerHTML = '<div class="loading-state">Loading liked songs…</div>';
+    try {
+      const data = await spotifyGet('/me/tracks?limit=50');
+      if (!data) { el.innerHTML = '<div class="no-data">Could not load liked songs</div>'; return; }
+      likedTracks = (data.items || []).map(item => ({
+        name: item.track.name,
+        artist: item.track.artists.map(a => a.name).join(', '),
+        album: item.track.album.name,
+        uri: item.track.uri,
+        cover_url: (item.track.album.images[2] || item.track.album.images[0] || {}).url || '',
+        duration_ms: item.track.duration_ms,
+        spotify_url: item.track.external_urls?.spotify,
+      }));
+      document.getElementById('liked-count').textContent = `${data.total || likedTracks.length} liked songs`;
+      renderLikedSongs();
+    } catch { el.innerHTML = '<div class="no-data">Could not load liked songs</div>'; }
+  }
+
+  function renderPlaylists() {
+    activePlaylistId = null;
+    const el = document.getElementById('playlist-list');
+    if (!playlists.length) { el.innerHTML = '<div class="no-data">No playlists found</div>'; return; }
+    el.innerHTML = playlists.map((p, i) => {
+      const img = p.images && p.images[0] ? p.images[0].url : '';
+      const count = p.tracks ? p.tracks.total + ' tracks' : '';
+      return `
+        <div class="playlist-item" data-index="${i}">
+          ${img
+            ? `<img class="playlist-cover" src="${esc(img)}" alt="" loading="lazy" />`
+            : `<div class="playlist-cover">🎵</div>`}
+          <div class="playlist-info">
+            <div class="playlist-name">${esc(p.name)}</div>
+            <div class="playlist-meta">${count}${p.owner ? ' · ' + esc(p.owner.display_name) : ''}</div>
+          </div>
+        </div>`;
+    }).join('');
+    el.querySelectorAll('.playlist-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const pl = playlists[parseInt(item.dataset.index)];
+        loadPlaylistTracks(pl.id, pl.name);
+      });
+    });
+  }
+
+  async function loadPlaylistTracks(playlistId, playlistName) {
+    activePlaylistId = playlistId;
+    const el = document.getElementById('playlist-list');
+    el.innerHTML = `
+      <div class="playlist-back" id="playlist-back">← Back to playlists</div>
+      <div id="playlist-tracks-loading" class="loading-state">Loading ${esc(playlistName)}…</div>`;
+    document.getElementById('playlist-back').addEventListener('click', renderPlaylists);
+
+    try {
+      const data = await spotifyGet('/playlists/' + playlistId + '/tracks?limit=50');
+      if (!data) { document.getElementById('playlist-tracks-loading').textContent = 'Could not load tracks'; return; }
+      const plTracks = (data.items || []).filter(i => i.track).map(item => ({
+        name: item.track.name,
+        artist: item.track.artists.map(a => a.name).join(', '),
+        album: item.track.album.name,
+        uri: item.track.uri,
+        cover_url: (item.track.album.images[2] || item.track.album.images[0] || {}).url || '',
+        duration_ms: item.track.duration_ms,
+        spotify_url: item.track.external_urls?.spotify,
+      }));
+
+      // Update queue and play
+      tracks = plTracks;
+      currentIndex = -1;
+      document.getElementById('track-count').textContent = `${plTracks.length} tracks`;
+      renderTrackList();
+
+      document.getElementById('playlist-tracks-loading').remove();
+      el.insertAdjacentHTML('beforeend', `<div style="padding:10px 16px;font-size:12px;color:#1DB954;border-bottom:1px solid #1a1a1a;">▶ ${esc(playlistName)} loaded — switch to Queue tab to play</div>`);
+    } catch { document.getElementById('playlist-tracks-loading').textContent = 'Could not load tracks'; }
+  }
+
+  function renderLikedSongs() {
+    const el = document.getElementById('liked-list');
+    if (!likedTracks.length) { el.innerHTML = '<div class="no-data">No liked songs found</div>'; return; }
+    el.innerHTML = likedTracks.map((t, i) => {
+      const dur = formatMs(t.duration_ms);
+      return `
+        <div class="track-item" data-liked-index="${i}">
+          <div class="track-num"><span class="track-num-text">${i + 1}</span></div>
+          ${t.cover_url ? `<img class="track-cover" src="${t.cover_url}" alt="" loading="lazy" />` :
+            '<div class="track-cover"></div>'}
+          <div class="track-info">
+            <div class="track-name">${esc(t.name)}</div>
+            <div class="track-artist">${esc(t.artist)}</div>
+          </div>
+          <span class="track-duration">${dur}</span>
+        </div>`;
+    }).join('');
+    el.querySelectorAll('.track-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.likedIndex);
+        tracks = likedTracks;
+        currentIndex = -1;
+        document.getElementById('track-count').textContent = `${tracks.length} tracks`;
+        renderTrackList();
+        playTrack(idx);
+        switchTab('queue');
+      });
+    });
+  }
+
   function handleAuthSuccess(tokens) {
     saveTokens(tokens);
     document.getElementById("auth-banner").classList.add("hidden");
@@ -611,6 +852,9 @@
       type: "spotify_auth_changed",
       authenticated: true
     }, "*");
+
+    // Load library now that we have a token
+    if (!libraryLoaded) loadLibrary();
   }
 
   // ── Init ────────────────────────────────────────────────
@@ -933,6 +1177,9 @@
       sendRpc("resize", { height: document.body.scrollHeight + 8 });
     }, 50);
   }
+
+  // Expose handlers used by inline onclick attributes.
+  window.switchTab = switchTab;
 
   // ── Start ───────────────────────────────────────────────
   init();

@@ -96,7 +96,7 @@ class GraphRAGPipeline:
         ]
 
         try:
-            response = await self._model.generate(messages)
+            response = await self._model.generate_text(messages)
             text_content = ""
             if response.content:
                 text_content = "".join(

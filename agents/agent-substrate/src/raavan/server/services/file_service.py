@@ -28,7 +28,8 @@ from typing import Optional
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from raavan.core.storage.base import FileRef, FileStore
+from raavan.core.storage.base import FileStore
+from raavan.core.storage.document import store_document
 from raavan.core.storage.tenant import FileScope, TenantContext
 from raavan.server.models import FileMetadata
 
@@ -109,12 +110,14 @@ async def save_file(
         user_id=str(user_id) if user_id else None,
         thread_id=str(thread_id),
     )
-    object_key = tenant.key(name, scope)
-
-    ref: FileRef = await store.put(
-        object_key,
-        content,
+    document = await store_document(
+        store,
+        tenant=tenant,
+        name=name,
+        content=content,
         content_type=mime,
+        scope=scope,
+        metadata={"source": scope.value},
     )
 
     meta = FileMetadata(
@@ -122,11 +125,12 @@ async def save_file(
         user_id=user_id,
         org_id=org_id,
         scope=scope.value,
-        object_key=ref.object_key,
-        original_name=name,
-        content_type=mime,
-        size_bytes=ref.size_bytes,
-        checksum_sha256=ref.checksum_sha256,
+        object_key=document.object_key or "",
+        original_name=document.name,
+        content_type=document.content_type,
+        size_bytes=document.size_bytes,
+        checksum_sha256=document.checksum_sha256 or "",
+        props=document.descriptor(),
     )
     db.add(meta)
     await db.flush()

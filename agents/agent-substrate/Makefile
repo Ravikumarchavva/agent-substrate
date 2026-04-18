@@ -9,17 +9,49 @@ else
 RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) uv run pytest --tb=short -q --junitxml=test-results.xml
 endif
 
-.PHONY: sync lint format-check typecheck typecheck-soft test test-ci build security security-soft ci help
+.PHONY: sync lint format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-down docker-up docker-down observability-up observability-down
 
 help:
 	@echo "Available targets:"
 	@echo "  make sync         - install project dependencies"
+	@echo "  make start        - start the backend in foreground via uv run start"
+	@echo "  make start-reload - start the backend with auto-reload (requires make infra-up)"
+	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, MinIO, Restate, NATS, Loki, Promtail, Grafana, Tempo, MCP server)"
+	@echo "  make infra-down   - stop the host-dev support services"
+	@echo "  make docker-up    - build and start the Docker backend plus core infra, storage, and Restate runtime"
+	@echo "  make docker-down  - stop the full agent-framework Docker stack"
+	@echo "  make observability-up   - start Tempo and Grafana via Docker Compose"
+	@echo "  make observability-down - stop Tempo and Grafana"
 	@echo "  make lint         - run Ruff lint and format checks"
 	@echo "  make typecheck    - run Pyright (soft fail remains in CI workflow)"
 	@echo "  make test         - run pytest"
 	@echo "  make build        - build the backend Docker image manually"
 	@echo "  make security     - run pip-audit"
 	@echo "  make ci           - run the same local preflight used by CI (typecheck/security are non-blocking)"
+
+start:
+	uv run start
+
+start-reload:
+	uv run start --reload
+
+infra-up:
+	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime up -d postgres redis minio loki promtail tempo grafana mcp-server restate nats
+
+infra-down:
+	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime stop postgres redis minio loki promtail tempo grafana mcp-server restate nats
+
+docker-up:
+	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime up -d --build backend postgres redis minio loki promtail tempo grafana mcp-server restate nats
+
+docker-down:
+	docker compose -f ./deployment/docker/docker-compose.yml down --remove-orphans
+
+observability-up:
+	docker compose -f ./deployment/docker/docker-compose.yml up -d tempo grafana
+
+observability-down:
+	docker compose -f ./deployment/docker/docker-compose.yml stop tempo grafana
 
 sync:
 	uv python install $(PYTHON_VERSION)

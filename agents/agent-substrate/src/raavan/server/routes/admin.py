@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from raavan.server.database import get_db
 from raavan.server.models import Step, Thread
+from raavan.server.services.file_service import purge_thread_files
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,14 @@ async def delete_thread(
 
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
+
+    ctx = getattr(request.app.state, "ctx", None)
+    file_store = getattr(ctx, "file_store", None)
+    if file_store is not None:
+        try:
+            await purge_thread_files(db, file_store, tid)
+        except Exception as exc:
+            logger.warning("Failed to purge stored files for thread %s: %s", tid, exc)
 
     await db.delete(thread)
     await db.commit()

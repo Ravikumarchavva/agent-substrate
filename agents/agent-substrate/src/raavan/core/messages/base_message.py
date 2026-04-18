@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Generic, Literal, Optional, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 CLIENT_ROLES = Literal["system", "user", "assistant", "tool_call", "tool_response"]
 SOURCE_ROLES = Literal["user", "agent"]
+ContentT = TypeVar("ContentT")
 
 
 class UsageStats(BaseModel):
@@ -27,24 +28,38 @@ class UsageStats(BaseModel):
     model_config = {"frozen": False}
 
 
-class BaseClientMessage(BaseModel, ABC):
-    """Base message class for client-model communication (LLM API)."""
+class BaseClientMessage(BaseModel, ABC, Generic[ContentT]):
+    """Base message class for client-model communication (LLM API).
+
+    Subclasses narrow the ``content`` field to a concrete type:
+      - ``SystemMessage``               → ``str``
+      - ``UserMessage``                  → ``list[MediaType]``
+      - ``AssistantMessage``             → ``Optional[list[MediaType]]``
+      - ``ToolCallMessage``              → ``Optional[str]``
+      - ``ToolExecutionResultMessage``   → ``list[dict[str, Any]]``
+
+    Provider-specific serialisation lives in
+    ``core.messages.encoders.<provider>`` — messages themselves are
+    provider-agnostic data containers.
+    """
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     role: CLIENT_ROLES
-    content: Any
+    # The concrete content type is supplied by each subclass via the generic
+    # parameter, e.g. ``BaseClientMessage[str]`` for system messages.
+    content: ContentT
     type: Literal["BaseClientMessage"] = "BaseClientMessage"
 
     model_config = {"arbitrary_types_allowed": True}
 
     @abstractmethod
-    def to_dict(self) -> Dict:
-        """Convert message to dictionary for LLM API."""
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert message to dictionary for storage / serialization."""
         pass
 
     @classmethod
     @abstractmethod
-    def from_dict(cls, data: Dict) -> "BaseClientMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> "BaseClientMessage":
         """Create message from dictionary."""
         pass
 
@@ -64,13 +79,13 @@ class BaseAgentMessage(BaseModel, ABC):
         pass
 
     @abstractmethod
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert agent message to dictionary."""
         pass
 
     @classmethod
     @abstractmethod
-    def from_dict(cls, data: Dict) -> "BaseAgentMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> "BaseAgentMessage":
         """Create agent message from dictionary."""
         pass
 

@@ -1,14 +1,30 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from __future__ import annotations
+
 from pathlib import Path
 from typing import List, Optional
+
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     ROOT_DIR: Path = Path(__file__).parent.parent.parent.parent
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
-    GOOGLE_API_KEY: str = ""
+    GOOGLE_API_KEY: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    )
+    GROQ_API_KEY: str = Field(
+        default="",
+        validation_alias=AliasChoices("GROQ_API_KEY", "GROK_API_KEY"),
+    )
     OPENAI_BASE_URL: str = ""
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_SITE_URL: str = "http://localhost:3000"
+    OPENROUTER_APP_NAME: str = "Raavan UI"
     DATABASE_URL: str = ""
 
     # Redis (short-term memory)
@@ -22,9 +38,13 @@ class Settings(BaseSettings):
     # LLM models
     # Override these in .env to switch globally, or let the frontend per-request
     # override take precedence (Settings → General → Model).
-    CHAT_MODEL: str = "gpt-5.4-mini"
+    CHAT_MODEL: str = "groq/llama-3.3-70b-versatile"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     STT_MODEL: str = "whisper-1"
+    TTS_MODEL: str = "google/gemini-3.1-flash-tts-preview"
+    TTS_VOICE: str = "Kore"
+    REALTIME_MODEL: str = "gpt-4o-realtime-preview-2024-12-17"
+    REALTIME_VOICE: str = "coral"
 
     # Model context window — how many messages (non-system) to include in each
     # LLM call.  System message is always prepended.  Older messages stay in

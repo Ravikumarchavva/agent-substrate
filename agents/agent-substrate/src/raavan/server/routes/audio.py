@@ -7,8 +7,9 @@ POST  /audio/tts                 TTS streaming → audio/mpeg
 GET   /audio/realtime-token      Mint ephemeral Realtime session token
 WS    /audio/realtime            Backend proxy to provider Realtime WS
 
-All audio operations are delegated to ``request.app.state.model_client``
-(a ``BaseModelClient`` instance) so routes contain zero provider-specific code.
+Audio routes resolve the correct provider client from the requested model,
+falling back to server defaults for STT/TTS/realtime when the frontend does not
+override them.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -30,7 +31,13 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 
+from raavan.configs.settings import settings
 from raavan.core.llm import BaseModelClient
+from raavan.integrations.llm.factory import (
+    create_model_client,
+    detect_provider,
+    strip_provider_prefix,
+)
 from raavan.server.schemas import (
     RealtimeTokenResponse,
     TranscribeResponse,
@@ -47,6 +54,35 @@ _MAX_AUDIO_BYTES = 25 * 1024 * 1024
 # Inactivity timeout for the Realtime proxy (seconds).
 # If the browser stops sending for this long the WS is closed automatically.
 _REALTIME_IDLE_TIMEOUT = 120.0
+
+
+def _resolve_model_client(
+    app_state: Any,
+    requested_model: str | None,
+    fallback_model: str,
+) -> tuple[BaseModelClient, str, str]:
+    """Resolve the correct provider client for an incoming audio request."""
+    effective_model = (
+        requested_model.strip()
+        if requested_model and requested_model.strip()
+        else fallback_model
+    )
+    default_client: BaseModelClient = app_state.model_client
+    effective_provider = detect_provider(effective_model)
+    bare_model = strip_provider_prefix(effective_model)
+
+    if (
+        getattr(default_client, "provider", None) == effective_provider
+        and getattr(default_client, "model", None) == bare_model
+    ):
+        return default_client, effective_provider, bare_model
+
+    client = create_model_client(
+        effective_model,
+        api_keys=getattr(app_state, "api_keys", {}),
+        **getattr(app_state, "model_client_kwargs", {}),
+    )
+    return client, effective_provider, bare_model
 
 
 # ── POST /audio/transcribe ────────────────────────────────────────────────────
@@ -67,10 +103,6 @@ async def transcribe_audio(
     Delegates to ``app.state.model_client`` (a ``BaseModelClient``) so the
     route is fully provider-agnostic.
     """
-    from raavan.configs.settings import settings as _settings
-
-    effective_model = model.strip() if model and model.strip() else _settings.STT_MODEL
-
     raw = await file.read()
     if len(raw) > _MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="Audio file exceeds 25 MB limit")
@@ -78,7 +110,17 @@ async def transcribe_audio(
     if not raw:
         raise HTTPException(status_code=400, detail="Empty audio file")
 
-    model_client: BaseModelClient = request.app.state.model_client
+    model_client, provider, effective_model = _resolve_model_client(
+        request.app.state,
+        model,
+        settings.STT_MODEL,
+    )
+
+    if provider == "openrouter":
+        raise HTTPException(
+            status_code=501,
+            detail="OpenRouter chat models are not supported for transcription",
+        )
 
     try:
         text = await model_client.transcribe(
@@ -88,6 +130,8 @@ async def transcribe_audio(
             language=language or None,
             prompt=prompt or None,
         )
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Transcription failed")
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -117,18 +161,36 @@ async def text_to_speech(request: Request, body: TTSRequest):
 
     Delegates to ``app.state.model_client`` — provider-agnostic.
     """
-    model_client: BaseModelClient = request.app.state.model_client
-    fmt = body.response_format or "mp3"
+    model_client, provider, effective_model = _resolve_model_client(
+        request.app.state,
+        body.model,
+        settings.TTS_MODEL,
+    )
+
+    if provider == "openrouter":
+        raise HTTPException(
+            status_code=501,
+            detail="OpenRouter chat models are not supported for speech synthesis",
+        )
+
+    fmt = "wav" if provider == "gemini" else (body.response_format or "mp3")
     content_type = _TTS_CONTENT_TYPE.get(fmt, "audio/mpeg")
+    voice = (
+        body.voice.strip()
+        if body.voice and body.voice.strip()
+        else (settings.TTS_VOICE if provider == "gemini" else "coral")
+    )
 
     try:
         audio_iter = model_client.stream_tts(
             text=body.text,
-            voice=body.voice or "coral",
-            model=body.model or "gpt-4o-mini-tts",
+            voice=voice,
+            model=effective_model,
             response_format=fmt,
             instructions=body.instructions,
         )
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("TTS setup failed")
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -147,7 +209,7 @@ async def text_to_speech(request: Request, body: TTSRequest):
 
 
 @router.get("/realtime-token", response_model=RealtimeTokenResponse)
-async def get_realtime_token(request: Request):
+async def get_realtime_token(request: Request, model: str = "", voice: str = ""):
     """Mint a short-lived ephemeral Realtime session token.
 
     The browser uses this token to authenticate the ``/audio/realtime``
@@ -155,8 +217,18 @@ async def get_realtime_token(request: Request):
 
     Delegates to ``app.state.model_client`` — provider-agnostic.
     """
-    model_client: BaseModelClient = request.app.state.model_client
+    model_client, provider, effective_model = _resolve_model_client(
+        request.app.state,
+        model,
+        settings.REALTIME_MODEL,
+    )
     system_instructions: str = getattr(request.app.state, "system_instructions", "")
+
+    if provider != "openai":
+        raise HTTPException(
+            status_code=501,
+            detail="Realtime speech is currently available only with OpenAI realtime models",
+        )
 
     if not model_client.supports_s2s:
         raise HTTPException(
@@ -166,6 +238,8 @@ async def get_realtime_token(request: Request):
 
     try:
         session = await model_client.create_s2s_session(
+            model=effective_model,
+            voice=voice.strip() or settings.REALTIME_VOICE,
             instructions=system_instructions or None,
         )
     except NotImplementedError as exc:
@@ -227,11 +301,21 @@ async def realtime_proxy(websocket: WebSocket):
         return
 
     client_secret: str = auth_msg["client_secret"]
-    model: str = auth_msg.get("model", "gpt-4o-realtime-preview-2024-12-17")
+    requested_model: str = auth_msg.get("model", settings.REALTIME_MODEL)
 
     # Ask the audio client for the upstream URL — keeps provider details out
     # of this route.
-    model_client: BaseModelClient = websocket.app.state.model_client
+    model_client, provider, model = _resolve_model_client(
+        websocket.app.state,
+        requested_model,
+        settings.REALTIME_MODEL,
+    )
+    if provider != "openai":
+        await websocket.close(
+            code=4005,
+            reason="Realtime is currently available only with OpenAI realtime models",
+        )
+        return
     try:
         upstream_url = model_client.s2s_ws_url(model)
     except NotImplementedError:

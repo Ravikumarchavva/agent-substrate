@@ -247,7 +247,7 @@ async def persist_message(
     elif role == "tool_result":
         await mem.add_message(
             ToolExecutionResultMessage(
-                content=content,
+                content=[{"type": "text", "text": content}],
                 tool_call_id=str(uuid.uuid4()),
                 name="workflow_tool",
             )
@@ -272,7 +272,7 @@ async def persist_tool_result(
 
     await mem.add_message(
         ToolExecutionResultMessage(
-            content=content,
+            content=[{"type": "text", "text": content}],
             tool_call_id=tool_call_id,
             name=tool_name,
         )

@@ -123,6 +123,8 @@ class FileOut(BaseModel):
     name: str
     mime: Optional[str] = None
     size: Optional[int] = None
+    document_type: Optional[str] = None
+    document_class: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -185,6 +187,8 @@ class ElementOut(BaseModel):
     url: Optional[str] = None
     for_id: Optional[uuid.UUID] = None
     props: Optional[Dict[str, Any]] = None
+    document_type: Optional[str] = None
+    document_class: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -202,9 +206,9 @@ class TTSRequest(BaseModel):
     """Request body for POST /audio/tts."""
 
     text: str
-    model: Optional[str] = "gpt-4o-mini-tts"  # gpt-4o-mini-tts | tts-1 | tts-1-hd
-    voice: Optional[str] = "coral"  # alloy | ash | coral | nova | …
-    response_format: Optional[str] = "mp3"  # mp3 | opus | aac | flac | wav | pcm
+    model: Optional[str] = None  # e.g. google/gemini-3.1-flash-tts-preview
+    voice: Optional[str] = None  # provider-specific voice name
+    response_format: Optional[str] = None  # mp3 | opus | aac | flac | wav | pcm
     instructions: Optional[str] = None  # style hint (gpt-4o-mini-tts only)
 
 

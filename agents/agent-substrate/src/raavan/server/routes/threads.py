@@ -17,6 +17,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from raavan.server.context import ServerContext, get_ctx
 from raavan.server.database import get_db
 from raavan.server.schemas import (
     StepOut,
@@ -32,6 +33,7 @@ from raavan.server.services import (
     list_threads,
     update_thread,
 )
+from raavan.server.services.file_service import purge_thread_files
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -118,9 +120,27 @@ async def update_thread_endpoint(
 @router.delete("/{thread_id}", status_code=204)
 async def delete_thread_endpoint(
     thread_id: uuid.UUID,
+    ctx: ServerContext = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a thread and all its data."""
+    thread = await get_thread(db, thread_id)
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    if ctx.file_store is not None:
+        try:
+            await purge_thread_files(db, ctx.file_store, thread_id)
+        except Exception as exc:
+            # Best effort: keep thread deletion available even if object storage lags.
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Failed to purge stored files for thread %s: %s",
+                thread_id,
+                exc,
+            )
+
     deleted = await delete_thread(db, thread_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Thread not found")

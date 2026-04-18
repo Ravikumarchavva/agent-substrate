@@ -48,9 +48,17 @@ from raavan.core.context import SlidingWindowContext
 from raavan.core.llm.base_client import BaseModelClient
 from raavan.core.memory.base_memory import BaseMemory
 from raavan.core.memory.unbounded_memory import UnboundedMemory
-from raavan.core.messages.client_messages import UserMessage
 from raavan.core.tools.base_tool import BaseTool
 from raavan.integrations.llm.factory import create_model_client, detect_provider
+
+
+def _first_env_value(*names: str) -> str:
+    """Return the first non-empty environment value from the provided names."""
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
 
 
 class Agent:
@@ -124,20 +132,26 @@ class Agent:
         """Resolve API keys from explicit param or environment variables."""
         keys: Dict[str, str] = {}
 
-        # Read all possible keys from environment
-        keys["openai"] = os.environ.get("OPENAI_API_KEY", "")
-        keys["anthropic"] = os.environ.get("ANTHROPIC_API_KEY", "")
-        keys["google"] = os.environ.get("GOOGLE_API_KEY", "")
+        # Read all possible keys from environment, including common aliases.
+        keys["openai"] = _first_env_value("OPENAI_API_KEY")
+        keys["anthropic"] = _first_env_value("ANTHROPIC_API_KEY")
+        keys["groq"] = _first_env_value("GROQ_API_KEY", "GROK_API_KEY")
+        keys["google"] = _first_env_value("GOOGLE_API_KEY", "GEMINI_API_KEY")
+        keys["openrouter"] = _first_env_value("OPENROUTER_API_KEY")
 
         # If explicit api_key provided, override the detected provider
         if api_key:
             provider = detect_provider(model)
             if provider == "openai":
                 keys["openai"] = api_key
+            elif provider == "groq":
+                keys["groq"] = api_key
             elif provider == "anthropic":
                 keys["anthropic"] = api_key
             elif provider == "gemini":
                 keys["google"] = api_key
+            elif provider == "openrouter":
+                keys["openrouter"] = api_key
 
         return keys
 
@@ -169,8 +183,7 @@ class Agent:
             ``AgentRunResult`` with ``final_output``, ``steps``, ``usage``, etc.
         """
         agent = self._build_agent()
-        message = UserMessage(content=[input])
-        return await agent.run(message, **kwargs)
+        return await agent.run(input, **kwargs)
 
     async def run_stream(self, input: str, **kwargs: Any) -> AsyncIterator[Any]:
         """Stream the agent's response.
@@ -183,8 +196,7 @@ class Agent:
             **kwargs: Additional kwargs forwarded to ``ReActAgent.run_stream()``.
         """
         agent = self._build_agent()
-        message = UserMessage(content=[input])
-        async for chunk in agent.run_stream(message, **kwargs):
+        async for chunk in agent.run_stream(input, **kwargs):
             yield chunk
 
     @property
@@ -224,8 +236,7 @@ class Agent:
 
         async def _run_single(text: str) -> AgentRunResult:
             agent = self._build_agent()
-            message = UserMessage(content=[text])
-            return await agent.run(message, **kwargs)
+            return await agent.run(text, **kwargs)
 
         processor = BatchProcessor(fn=_run_single, config=batch_config)
         return await processor.run(inputs)

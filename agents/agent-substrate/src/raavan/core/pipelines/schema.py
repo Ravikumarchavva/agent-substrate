@@ -47,6 +47,7 @@ class EdgeType(str, Enum):
     """Semantic edge types — drives validation and rendering."""
 
     AGENT_TOOL = "agent_tool"  # agent → tool
+    AGENT_FLOW = "agent_flow"  # agent → agent (sequential / parallel workflow step)
     AGENT_GUARDRAIL = "agent_guardrail"  # agent → guardrail
     AGENT_SKILL = "agent_skill"  # agent → skill
     AGENT_MEMORY = "agent_memory"  # agent → memory

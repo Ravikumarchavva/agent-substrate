@@ -201,7 +201,7 @@ class RAGPipeline:
             UserMessage(role="user", content=[question]),
         ]
 
-        response = await model_client.generate(messages)
+        response = await model_client.generate_text(messages)
 
         # Extract text from AssistantMessage
         if response.content:

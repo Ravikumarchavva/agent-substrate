@@ -33,6 +33,7 @@ class ServerContext:
 
     Attributes:
         model_client: The default LLM client (text, vision, STT, TTS, Realtime S2S, image gen).
+        model_client_kwargs: Shared factory kwargs used for per-request model selection.
         redis_memory: Global Redis memory factory (connect/disconnect lifecycle).
         tools: Registry of all available agent tools.
         bridge_registry: Per-thread SSE event bus registry (HITL, streaming).
@@ -54,6 +55,7 @@ class ServerContext:
     tools_requiring_approval: list[str]
     system_instructions: str
     tool_timeout: float
+    model_client_kwargs: dict[str, Any] = field(default_factory=dict)
     api_keys: dict[str, str] = field(default_factory=dict)
     runtime: Optional[AgentRuntime] = None
     cancel_registry: dict[str, Any] = field(default_factory=dict)

@@ -137,7 +137,7 @@ class DocumentAnalyzerTool(BaseTool):
             )
 
             messages = [SystemMessage(content=system), UserMessage(content=[user_msg])]
-            response = await self._model_client.generate(messages)
+            response = await self._model_client.generate_text(messages)
             answer = ""
             if response.content:
                 answer = " ".join(str(c) for c in response.content if c)

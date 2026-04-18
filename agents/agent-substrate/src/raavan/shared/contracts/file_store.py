@@ -14,6 +14,8 @@ class FileUploadResponse(BaseModel):
     name: str
     mime: Optional[str] = None
     size: Optional[int] = None
+    document_type: Optional[str] = None
+    document_class: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -23,6 +25,8 @@ class FileOut(BaseModel):
     name: str
     mime: Optional[str] = None
     size: Optional[int] = None
+    document_type: Optional[str] = None
+    document_class: Optional[str] = None
     model_config = {"from_attributes": True}
 
 

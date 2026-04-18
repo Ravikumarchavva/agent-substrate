@@ -125,6 +125,8 @@ async def persist_user_message(
     db: AsyncSession,
     thread_id: uuid.UUID,
     content: str,
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> uuid.UUID:
     """Save a user message step and return its ID."""
     step = await create_step(
@@ -133,6 +135,7 @@ async def persist_user_message(
         type="user_message",
         name="user",
         input=content,
+        metadata=metadata,
     )
     return step.id
 

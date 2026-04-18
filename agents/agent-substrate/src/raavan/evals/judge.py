@@ -131,7 +131,7 @@ class LLMJudge:
         # Call judge LLM with retries
         for attempt in range(self.max_retries + 1):
             try:
-                response = await self.model_client.generate(
+                response = await self.model_client.generate_text(
                     messages=[
                         SystemMessage(
                             content="You are a precise evaluation judge. Always respond with valid JSON only."

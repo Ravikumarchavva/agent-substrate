@@ -195,7 +195,7 @@ class LLMJudge(BaseGuardrail):
 
         # Build metadata dict from all parsed fields
         metadata: Dict[str, Any] = {}
-        if parsed is not None:
+        if isinstance(parsed, BaseModel):
             try:
                 metadata = parsed.model_dump()
             except Exception:

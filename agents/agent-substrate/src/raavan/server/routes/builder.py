@@ -111,7 +111,20 @@ async def get_registry(request: Request) -> RegistryResponse:
 
     # Tools from app.state
     tools_list: List[RegistryTool] = []
-    for tool in getattr(request.app.state, "tools", []):
+    tools_source: Any = getattr(request.app.state, "tools", [])
+    if hasattr(tools_source, "all_tools"):
+        tools_iterable = tools_source.all_tools()
+    else:
+        tools_iterable = tools_source
+
+    for tool in tools_iterable:
+        if not hasattr(tool, "get_schema"):
+            logger.warning(
+                "Skipping builder registry entry without get_schema(): %s",
+                type(tool).__name__,
+            )
+            continue
+
         schema = tool.get_schema()
         tools_list.append(
             RegistryTool(
@@ -423,9 +436,17 @@ async def run_pipeline(
 
                 async for chunk in _runnable.run_stream(body.input_text):
                     if isinstance(chunk, TextDeltaChunk):
-                        yield _sse_event("text_delta", {"content": chunk.text})
+                        payload = {"content": chunk.text}
+                        agent_id = getattr(chunk, "agent_id", None)
+                        if agent_id:
+                            payload["agent_id"] = agent_id
+                        yield _sse_event("text_delta", payload)
                     elif isinstance(chunk, ReasoningDeltaChunk):
-                        yield _sse_event("reasoning_delta", {"content": chunk.text})
+                        payload = {"content": chunk.text}
+                        agent_id = getattr(chunk, "agent_id", None)
+                        if agent_id:
+                            payload["agent_id"] = agent_id
+                        yield _sse_event("reasoning_delta", payload)
                     elif isinstance(chunk, CompletionChunk):
                         # Extract the final text from the AssistantMessage
                         msg = chunk.message

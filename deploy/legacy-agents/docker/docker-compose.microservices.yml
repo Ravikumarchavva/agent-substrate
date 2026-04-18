@@ -44,7 +44,7 @@ services:
   # ══════════════════════════════════════════════════════════════════════════
 
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg18
     ports:
       - "5432:5432"
     environment:
@@ -52,7 +52,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: agentdb
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -60,6 +60,7 @@ services:
       retries: 5
     networks:
       - agent-net
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -74,6 +75,22 @@ services:
       retries: 5
     networks:
       - agent-net
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - miniodata:/data
+    networks:
+      - agent-net
+    restart: unless-stopped
 
   # ══════════════════════════════════════════════════════════════════════════
   # Wave 1: Identity / Policy / Gateway
@@ -245,12 +262,22 @@ services:
     command: ["uv", "run", "uvicorn", "raavan.services.file_store.app:app", "--host", "0.0.0.0", "--port", "8018"]
     ports:
       - "8018:8018"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
     environment:
       <<: *common-env
       SERVICE_NAME: file-store
-      FILE_STORAGE_PATH: /data/files
-    volumes:
-      - file-store-data:/data/files
+      FILE_STORE_BACKEND: s3
+      FILE_STORE_BUCKET: agent-files
+      FILE_STORE_ENDPOINT: http://minio:9000
+      FILE_STORE_REGION: us-east-1
+      FILE_STORE_ACCESS_KEY: minioadmin
+      FILE_STORE_SECRET_KEY: minioadmin
 
   # ══════════════════════════════════════════════════════════════════════════
   # Wave 5: Admin
@@ -284,6 +311,40 @@ services:
       - agent-net
     profiles:
       - observability
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.9.4
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+      - lokidata:/loki
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agent-net
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.4
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    volumes:
+      - ./promtail/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - promtaildata:/tmp
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - agent-net
+    profiles:
+      - observability
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
@@ -293,12 +354,16 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
     depends_on:
       - tempo
+      - loki
     networks:
       - agent-net
     profiles:
       - observability
+    restart: unless-stopped
 
   # ══════════════════════════════════════════════════════════════════════════
   # MCP Server (optional)
@@ -320,10 +385,13 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  pgdata18:
   redisdata:
+  lokidata:
+  promtaildata:
   file-store-data:
   firecracker-assets:
+  miniodata:
 
 networks:
   agent-net:

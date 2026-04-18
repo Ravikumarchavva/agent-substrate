@@ -11,6 +11,8 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
+from raavan.configs.settings import Settings
+from raavan.core.storage.factory import create_file_store
 from raavan.services.file_store.models import ServiceBase
 from raavan.services.file_store.routes import router
 from raavan.services.base import create_service_app, init_service_db
@@ -39,14 +41,19 @@ async def lifespan(app):
     await event_bus.connect()
     app.state.event_bus = event_bus
 
-    # File store — use local filesystem by default
-    from raavan.core.storage.local import LocalFileStore
+    storage_settings = Settings()
+    legacy_storage_path = os.environ.get("FILE_STORAGE_PATH")
+    if not storage_settings.FILE_STORE_ROOT and legacy_storage_path:
+        storage_settings.FILE_STORE_ROOT = legacy_storage_path
 
-    storage_path = os.environ.get("FILE_STORAGE_PATH", "./data/files")
-    app.state.file_store = LocalFileStore(root=storage_path)
+    app.state.file_store_backend = storage_settings.FILE_STORE_BACKEND
+    app.state.file_store = create_file_store(storage_settings)
     await app.state.file_store.startup()
 
-    logger.info("File Store service started")
+    logger.info(
+        "File Store service started with backend %s",
+        app.state.file_store_backend,
+    )
     yield
 
     await app.state.file_store.shutdown()

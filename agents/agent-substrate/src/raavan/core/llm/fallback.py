@@ -21,8 +21,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
-from raavan.core.llm.base_client import BaseModelClient
-from raavan.core.messages.client_messages import AssistantMessage
+from raavan.core.llm.base_client import (
+    BaseModelClient,
+    GenerateResult,
+    ModelStreamEvent,
+)
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -62,12 +65,12 @@ class FallbackClient(BaseModelClient):
     async def generate(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type[BaseModel]] = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> GenerateResult:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
@@ -95,11 +98,11 @@ class FallbackClient(BaseModelClient):
     async def generate_stream(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         response_format: Optional[type[BaseModel]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[AssistantMessage]:
+    ) -> AsyncIterator[ModelStreamEvent]:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:

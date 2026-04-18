@@ -6,7 +6,10 @@ a sandboxed iframe with the interactive HTML app alongside their output.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, ClassVar, Dict, List
 
 import httpx
@@ -14,6 +17,7 @@ import httpx
 from raavan.configs.settings import settings
 from raavan.core.tools.base_tool import ToolResult, ToolRisk
 from raavan.integrations.mcp.app_tool_base import McpAppTool
+from raavan.server.routes.workspace_oauth import get_workspace_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -620,4 +624,387 @@ class SpotifyPlayerTool(McpAppTool):
                 "query": query,
                 "genre": genre,
             },
+        )
+
+
+# ── Google Workspace Tool ────────────────────────────────────────────────────
+
+
+def _workspace_query_matches(query: str, *values: str) -> bool:
+    if not query:
+        return True
+
+    needle = query.strip().lower()
+    return any(needle in value.lower() for value in values if value)
+
+
+def _format_google_datetime(value: str) -> str:
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+
+    return dt.astimezone().strftime("%a, %b %d %I:%M %p")
+
+
+def _format_google_date(value: str) -> str:
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+
+    return dt.strftime("%a, %b %d")
+
+
+def _extract_google_error(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str) and message:
+                return message
+        if isinstance(error, str) and error:
+            return error
+
+    return response.text[:200] or response.reason_phrase or "unknown error"
+
+
+async def _workspace_get_json(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: Any = None,
+) -> Dict[str, Any]:
+    response = await client.get(url, params=params)
+    if not response.is_success:
+        raise RuntimeError(
+            f"Google API {response.status_code}: {_extract_google_error(response)}"
+        )
+    return response.json()
+
+
+def _gmail_header_map(headers: List[Dict[str, Any]]) -> Dict[str, str]:
+    parsed: Dict[str, str] = {}
+    for header in headers:
+        name = header.get("name")
+        value = header.get("value")
+        if isinstance(name, str) and isinstance(value, str):
+            parsed[name.lower()] = value
+    return parsed
+
+
+def _sender_name(from_header: str) -> str:
+    if "<" in from_header:
+        prefix = from_header.split("<", 1)[0].strip()
+        if prefix:
+            return prefix.strip('"')
+    return from_header.strip() or "Unknown"
+
+
+def _format_email_date(date_header: str) -> str:
+    try:
+        return parsedate_to_datetime(date_header).astimezone().strftime("%a, %b %d")
+    except (TypeError, ValueError, IndexError):
+        return date_header
+
+
+async def _build_calendar_summary(
+    client: httpx.AsyncClient,
+    *,
+    query: str,
+) -> str:
+    now = datetime.now(timezone.utc)
+    data = await _workspace_get_json(
+        client,
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        params={
+            "timeMin": now.isoformat(),
+            "timeMax": (now + timedelta(days=7)).isoformat(),
+            "singleEvents": True,
+            "orderBy": "startTime",
+            "maxResults": 10,
+        },
+    )
+
+    lines: List[str] = []
+    for event in data.get("items", []):
+        start = event.get("start", {}) or {}
+        summary = str(event.get("summary") or "(No title)")
+        location = str(event.get("location") or "")
+        description = str(event.get("description") or "")
+
+        if not _workspace_query_matches(query, summary, location, description):
+            continue
+
+        if isinstance(start.get("dateTime"), str):
+            when = _format_google_datetime(start["dateTime"])
+        elif isinstance(start.get("date"), str):
+            when = _format_google_date(start["date"]) + " (all day)"
+        else:
+            when = "Unknown time"
+
+        line = f"- {when}: {summary}"
+        if location:
+            line += f" ({location})"
+        lines.append(line)
+
+    if not lines:
+        if query:
+            return f'No upcoming calendar events matched "{query}" in the next 7 days.'
+        return "No upcoming calendar events in the next 7 days."
+
+    heading = "Upcoming calendar events in the next 7 days"
+    if query:
+        heading += f' matching "{query}"'
+    return heading + ":\n" + "\n".join(lines)
+
+
+async def _build_gmail_summary(
+    client: httpx.AsyncClient,
+    *,
+    query: str,
+) -> str:
+    list_data = await _workspace_get_json(
+        client,
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+        params={"labelIds": "INBOX", "maxResults": 10},
+    )
+    message_refs = list_data.get("messages", [])
+
+    if not message_refs:
+        return "Inbox is empty."
+
+    detail_requests = [
+        _workspace_get_json(
+            client,
+            f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message['id']}",
+            params=[
+                ("format", "metadata"),
+                ("metadataHeaders", "From"),
+                ("metadataHeaders", "Subject"),
+                ("metadataHeaders", "Date"),
+            ],
+        )
+        for message in message_refs
+        if isinstance(message, dict) and isinstance(message.get("id"), str)
+    ]
+    messages = await asyncio.gather(*detail_requests)
+
+    lines: List[str] = []
+    for message in messages:
+        payload = message.get("payload", {}) or {}
+        headers = _gmail_header_map(payload.get("headers", []))
+        sender = _sender_name(headers.get("from", "Unknown"))
+        subject = headers.get("subject", "(No subject)")
+        snippet = str(message.get("snippet") or "")
+        date_label = (
+            _format_email_date(headers.get("date", "")) if headers.get("date") else ""
+        )
+
+        if not _workspace_query_matches(
+            query,
+            sender,
+            subject,
+            snippet,
+            headers.get("from", ""),
+        ):
+            continue
+
+        line = f"- {sender}: {subject}"
+        if date_label:
+            line += f" [{date_label}]"
+        lines.append(line)
+
+    if not lines:
+        if query:
+            return f'No recent inbox messages matched "{query}".'
+        return "No recent inbox messages found."
+
+    heading = "Recent inbox messages"
+    if query:
+        heading += f' matching "{query}"'
+    return heading + ":\n" + "\n".join(lines)
+
+
+async def _build_drive_summary(
+    client: httpx.AsyncClient,
+    *,
+    query: str,
+) -> str:
+    data = await _workspace_get_json(
+        client,
+        "https://www.googleapis.com/drive/v3/files",
+        params={
+            "orderBy": "viewedByMeTime desc",
+            "pageSize": 10,
+            "q": "trashed = false",
+            "fields": "files(id,name,mimeType,modifiedTime,webViewLink,owners(displayName))",
+        },
+    )
+
+    lines: List[str] = []
+    for file_meta in data.get("files", []):
+        name = str(file_meta.get("name") or "Untitled")
+        owners = file_meta.get("owners", [])
+        owner = ""
+        if isinstance(owners, list) and owners:
+            first_owner = owners[0] or {}
+            if isinstance(first_owner, dict):
+                owner = str(first_owner.get("displayName") or "")
+        modified = str(file_meta.get("modifiedTime") or "")
+
+        if not _workspace_query_matches(query, name, owner):
+            continue
+
+        line = f"- {name}"
+        meta_bits = [
+            bit
+            for bit in [owner, _format_google_datetime(modified) if modified else ""]
+            if bit
+        ]
+        if meta_bits:
+            line += " — " + " · ".join(meta_bits)
+        lines.append(line)
+
+    if not lines:
+        if query:
+            return f'No recent Drive files matched "{query}".'
+        return "No recent Drive files found."
+
+    heading = "Recent Drive files"
+    if query:
+        heading += f' matching "{query}"'
+    return heading + ":\n" + "\n".join(lines)
+
+
+async def _is_workspace_connected_async() -> bool:
+    """Return True if the engine currently has a mirrored workspace token."""
+    return bool(get_workspace_access_token())
+
+
+class GoogleWorkspaceTool(McpAppTool):
+    """Read Google Workspace data and open an interactive panel."""
+
+    ui_resource_uri: ClassVar[str] = "ui://google_workspace"
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="google_workspace",
+            description=(
+                "Use this tool whenever the user asks about their Gmail messages, "
+                "Calendar events, or Drive files. It returns a concise summary from "
+                "the live Google APIs and also opens the interactive Google Workspace "
+                "panel. Requires the user to connect Google Workspace in Settings > Apps. "
+                "You can optionally specify which service to inspect first "
+                "(drive, calendar, gmail) and pass a search query."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "service": {
+                        "type": "string",
+                        "enum": ["drive", "calendar", "gmail"],
+                        "description": "Which Google service to inspect and open first (default: drive)",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Optional filter query for messages, events, or files",
+                    },
+                },
+                "additionalProperties": False,
+            },
+            annotations={
+                "readOnlyHint": True,
+                "openWorldHint": True,
+                "title": "Google Workspace",
+            },
+        )
+
+    async def execute(  # type: ignore[override]
+        self,
+        *,
+        service: str = "drive",
+        query: str = "",
+    ) -> ToolResult:
+        service_name = service if service in {"drive", "calendar", "gmail"} else "drive"
+        connected = await _is_workspace_connected_async()
+
+        if not connected:
+            return ToolResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": (
+                            "Google Workspace is not connected. "
+                            "Please go to Settings → Apps and click 'Connect Google Workspace' "
+                            "to grant access to Drive, Calendar, and Gmail."
+                        ),
+                    }
+                ],
+                is_error=False,
+                app_data={"service": service_name, "query": query, "connected": False},
+            )
+
+        access_token = get_workspace_access_token()
+        if not access_token:
+            return ToolResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": (
+                            "Google Workspace was connected earlier, but the backend no "
+                            "longer has a usable access token. Reconnect in Settings → Apps."
+                        ),
+                    }
+                ],
+                is_error=True,
+                app_data={"service": service_name, "query": query, "connected": False},
+            )
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=10.0,
+                headers={"Authorization": f"Bearer {access_token}"},
+            ) as client:
+                if service_name == "calendar":
+                    summary = await _build_calendar_summary(client, query=query)
+                elif service_name == "gmail":
+                    summary = await _build_gmail_summary(client, query=query)
+                else:
+                    summary = await _build_drive_summary(client, query=query)
+        except Exception as exc:
+            logger.warning(
+                "Google Workspace %s lookup failed (query=%r): %s",
+                service_name,
+                query,
+                exc,
+            )
+            return ToolResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Google Workspace is connected, but loading {service_name} "
+                            f"data failed: {exc}"
+                        ),
+                    }
+                ],
+                is_error=True,
+                app_data={"service": service_name, "query": query, "connected": True},
+            )
+
+        return ToolResult(
+            content=[
+                {
+                    "type": "text",
+                    "text": summary,
+                }
+            ],
+            is_error=False,
+            app_data={"service": service_name, "query": query, "connected": True},
         )

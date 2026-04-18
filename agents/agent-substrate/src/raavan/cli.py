@@ -95,6 +95,7 @@ def cmd_start(args: argparse.Namespace) -> None:
     ]
     if reload:
         cmd.append("--reload")
+        cmd += ["--reload-dir", "src"]
     elif workers > 1:
         cmd += ["--workers", str(workers)]
 
@@ -391,6 +392,41 @@ def main() -> None:
 
     args = parser.parse_args()
     args.func(args)
+
+
+def start_main() -> None:
+    """Dedicated entry point for ``uv run start``.
+
+    Unlike ``raavan start``, this wrapper defaults to foreground mode so it is
+    suitable as a simple local dev command and as a container entrypoint.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="start",
+        description="Start the Raavan engine server",
+    )
+    parser.add_argument(
+        "--host", default="0.0.0.0", help="Bind host  (default: 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--port", "-p", default=8000, type=int, help="Bind port  (default: 8000)"
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload (dev mode)",
+    )
+    parser.add_argument(
+        "--workers", default=1, type=int, help="Number of uvicorn workers (default: 1)"
+    )
+    parser.add_argument(
+        "--background",
+        action="store_true",
+        help="Detach and run in the background instead of foreground",
+    )
+    args = parser.parse_args()
+    args.foreground = not args.background
+    cmd_start(args)
 
 
 if __name__ == "__main__":

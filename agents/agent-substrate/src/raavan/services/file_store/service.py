@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from raavan.core.storage.document import Document, create_document
 from raavan.services.file_store.models import FileMetadata
 
 logger = logging.getLogger(__name__)
@@ -29,16 +30,26 @@ async def create_file_record(
     storage_backend: str = "local",
     metadata: Optional[Dict[str, Any]] = None,
     uploaded_by: Optional[str] = None,
+    document: Document | None = None,
 ) -> FileMetadata:
     """Create a file metadata record."""
-    record = FileMetadata(
-        thread_id=thread_id,
-        original_name=original_name,
-        storage_key=storage_key,
+    stored_document = document or create_document(
+        name=original_name,
         content_type=content_type,
         size_bytes=size_bytes,
+        metadata=metadata or {},
+    )
+    record_metadata = dict(metadata or {})
+    record_metadata.update(stored_document.descriptor())
+
+    record = FileMetadata(
+        thread_id=thread_id,
+        original_name=stored_document.name,
+        storage_key=storage_key,
+        content_type=stored_document.content_type,
+        size_bytes=stored_document.size_bytes,
         storage_backend=storage_backend,
-        metadata_=metadata or {},
+        metadata_=record_metadata,
         uploaded_by=uploaded_by,
     )
     db.add(record)

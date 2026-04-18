@@ -20,7 +20,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
-from raavan.core.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import (
+    BaseModelClient,
+    GenerateResult,
+    ModelStreamEvent,
+)
 from raavan.core.messages.client_messages import AssistantMessage
 
 if TYPE_CHECKING:
@@ -59,12 +63,12 @@ class CachedModelClient(BaseModelClient):
     async def generate(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type[BaseModel]] = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> GenerateResult:
         # Only cache simple text-only calls (no tools, no structured output)
         cacheable = tools is None and response_format is None
 
@@ -101,11 +105,11 @@ class CachedModelClient(BaseModelClient):
     async def generate_stream(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         response_format: Optional[type[BaseModel]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[AssistantMessage]:
+    ) -> AsyncIterator[ModelStreamEvent]:
         # Streaming bypasses cache
         async for chunk in self._inner.generate_stream(
             messages, tools, response_format=response_format, **kwargs

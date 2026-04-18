@@ -439,7 +439,9 @@ class SummarizingContext(ModelContext):
             UserMessage(content=["Summarize the conversation above."]),
         ]
         try:
-            response = await self._summary_client.generate(messages=summary_request)
+            response = await self._summary_client.generate_text(
+                messages=summary_request
+            )
             if response.content:
                 text_parts = [
                     p

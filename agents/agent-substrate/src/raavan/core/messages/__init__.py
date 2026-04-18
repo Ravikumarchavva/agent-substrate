@@ -20,6 +20,7 @@ from ._types import (
     TextDeltaChunk,
     ReasoningDeltaChunk,
     CompletionChunk,
+    StructuredOutputChunk,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "TextDeltaChunk",
     "ReasoningDeltaChunk",
     "CompletionChunk",
+    "StructuredOutputChunk",
 ]

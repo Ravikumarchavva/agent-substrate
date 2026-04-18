@@ -2,18 +2,26 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional, cast
 
 from google import genai
 from google.genai import types as genai_types
 
-from raavan.core.llm.base_client import BaseModelClient
+from raavan.core.llm.base_client import (
+    BaseModelClient,
+    GenerateResult,
+    ModelStreamEvent,
+)
 from raavan.core.messages.base_message import BaseClientMessage, UsageStats
+from raavan.core.messages._types import MediaType
 from raavan.core.messages.client_messages import (
     AssistantMessage,
     ToolCallMessage,
+)
+from raavan.core.messages.encoders.gemini import (
+    encode_messages as _encode_messages,
+    encode_tools as _encode_tools,
 )
 
 if TYPE_CHECKING:
@@ -29,7 +37,8 @@ class GeminiClient(BaseModelClient):
       • ``generate`` / ``generate_stream`` → Gemini GenerateContent API
       • ``count_tokens``                   → Gemini CountTokens API
 
-    Audio and image generation are not supported through this client.
+    Audio transcription and live audio are not supported through this client.
+    Text-to-speech is supported via Gemini TTS preview models.
     """
 
     def __init__(
@@ -44,192 +53,32 @@ class GeminiClient(BaseModelClient):
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
 
+    @property
+    def supports_audio(self) -> bool:
+        return True
+
     # ── Private helpers ──────────────────────────────────────────────────────
+
+    # ── Private helpers — delegates to ``core.messages.encoders.gemini`` ─────
 
     def _serialize_messages(
         self, messages: list[BaseClientMessage]
     ) -> tuple[str, list[genai_types.Content]]:
         """Serialise framework messages into (system_instruction, contents).
 
-        Returns:
-            system_instruction: Concatenated system prompt text.
-            contents: List of Gemini Content objects.
+        Delegates to the centralised Gemini encoder.
         """
-        system = ""
-        contents: list[genai_types.Content] = []
-
-        for msg in messages:
-            if msg.role == "system":
-                system += f"{msg.content}\n"
-
-            elif msg.role == "user":
-                msg_dict = msg.to_dict()
-                raw_content = msg_dict.get("content", [])
-                parts = self._convert_user_content(raw_content)
-                contents.append(genai_types.Content(role="user", parts=parts))
-
-            elif msg.role == "assistant":
-                parts: list[genai_types.Part] = []
-
-                # Text content
-                if msg.content:
-                    for item in msg.content:
-                        if isinstance(item, str) and item.strip():
-                            parts.append(genai_types.Part(text=item))
-
-                # Function call parts
-                tool_calls = getattr(msg, "tool_calls", None)
-                if tool_calls:
-                    for tc in tool_calls:
-                        tc_args = tc.arguments
-                        if isinstance(tc_args, str):
-                            tc_args = json.loads(tc_args)
-                        parts.append(
-                            genai_types.Part(
-                                function_call=genai_types.FunctionCall(
-                                    name=tc.name,
-                                    args=tc_args,
-                                )
-                            )
-                        )
-
-                if parts:
-                    contents.append(genai_types.Content(role="model", parts=parts))
-
-            elif msg.role in ("tool_response", "tool"):
-                content_str = ""
-                if hasattr(msg, "content") and msg.content:
-                    if isinstance(msg.content, list):
-                        content_str = "\n".join(
-                            block.get("text", "")
-                            for block in msg.content
-                            if isinstance(block, dict) and block.get("type") == "text"
-                        )
-                    elif isinstance(msg.content, str):
-                        content_str = msg.content
-
-                tool_name = getattr(msg, "name", None) or "unknown_tool"
-                parts = [
-                    genai_types.Part(
-                        function_response=genai_types.FunctionResponse(
-                            name=tool_name,
-                            response={"result": content_str},
-                        )
-                    )
-                ]
-                contents.append(genai_types.Content(role="user", parts=parts))
-
-        return system.strip(), contents
-
-    def _convert_user_content(
-        self, content: list[dict[str, Any]] | str
-    ) -> list[genai_types.Part]:
-        """Convert OpenAI Responses API content to Gemini Parts."""
-        if isinstance(content, str):
-            return [genai_types.Part(text=content)]
-
-        result: list[genai_types.Part] = []
-        for block in content:
-            if isinstance(block, str):
-                result.append(genai_types.Part(text=block))
-            elif isinstance(block, dict):
-                block_type = block.get("type", "")
-                if block_type in ("input_text", "text"):
-                    result.append(genai_types.Part(text=block.get("text", "")))
-                elif block_type == "input_image":
-                    image_url = block.get("image_url", "")
-                    if isinstance(image_url, str) and image_url.startswith("data:"):
-                        import base64
-
-                        parts = image_url.split(",", 1)
-                        media_type = (
-                            parts[0].split(":")[1].split(";")[0]
-                            if ":" in parts[0]
-                            else "image/png"
-                        )
-                        data = base64.b64decode(parts[1]) if len(parts) > 1 else b""
-                        result.append(
-                            genai_types.Part(
-                                inline_data=genai_types.Blob(
-                                    mime_type=media_type, data=data
-                                )
-                            )
-                        )
-                    elif isinstance(image_url, str):
-                        # URL-based image — use file_data
-                        result.append(
-                            genai_types.Part(
-                                file_data=genai_types.FileData(
-                                    file_uri=image_url,
-                                    mime_type="image/jpeg",
-                                )
-                            )
-                        )
-                else:
-                    text = block.get("text", block.get("content", ""))
-                    if text:
-                        result.append(genai_types.Part(text=str(text)))
-            else:
-                result.append(genai_types.Part(text=str(block)))
-
-        return result or [genai_types.Part(text="")]
+        return _encode_messages(messages)
 
     def _serialize_tools(
         self, tools: Optional[list[dict[str, Any]]]
     ) -> Optional[list[genai_types.Tool]]:
-        """Convert tool schemas to Gemini format."""
-        if not tools:
-            return None
+        """Convert tool schemas to Gemini format.
 
-        declarations: list[genai_types.FunctionDeclaration] = []
-        for tool in tools:
-            name = ""
-            description = ""
-            parameters: dict[str, Any] = {"type": "OBJECT", "properties": {}}
-
-            # Flattened Responses API format
-            if "type" in tool and "name" in tool and "parameters" in tool:
-                name = tool["name"]
-                description = tool.get("description", "")
-                parameters = self._convert_json_schema(tool["parameters"])
-            # OpenAI nested format
-            elif tool.get("type") == "function" and "function" in tool:
-                fn = tool["function"]
-                name = fn.get("name", "")
-                description = fn.get("description", "")
-                parameters = self._convert_json_schema(
-                    fn.get("parameters", {"type": "object", "properties": {}})
-                )
-            # MCP format
-            elif "name" in tool and "inputSchema" in tool:
-                name = tool["name"]
-                description = tool.get("description", "")
-                parameters = self._convert_json_schema(tool["inputSchema"])
-            # Generic named tool
-            elif "name" in tool:
-                name = tool["name"]
-                description = tool.get("description", "")
-                raw = (
-                    tool.get("parameters")
-                    or tool.get("inputSchema")
-                    or {"type": "object", "properties": {}}
-                )
-                parameters = self._convert_json_schema(raw)
-
-            if name:
-                declarations.append(
-                    genai_types.FunctionDeclaration(
-                        name=name,
-                        description=description,
-                        parameters=parameters,
-                    )
-                )
-
-        return (
-            [genai_types.Tool(function_declarations=declarations)]
-            if declarations
-            else None
-        )
+        Delegates to the centralised Gemini encoder with JSON Schema
+        conversion applied.
+        """
+        return _encode_tools(tools, convert_schema=self._convert_json_schema)
 
     def _convert_json_schema(self, schema: dict[str, Any]) -> dict[str, Any]:
         """Convert JSON Schema to Gemini-compatible schema format.
@@ -276,12 +125,12 @@ class GeminiClient(BaseModelClient):
     async def generate(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> GenerateResult:
         """Generate a single response from Gemini using GenerateContent API."""
         system_instruction, contents = self._serialize_messages(messages)
 
@@ -309,7 +158,7 @@ class GeminiClient(BaseModelClient):
 
         response = await self.client.aio.models.generate_content(
             model=kwargs.get("model", self.model),
-            contents=contents,
+            contents=cast(Any, contents),
             config=genai_types.GenerateContentConfig(**config),
         )
 
@@ -329,13 +178,13 @@ class GeminiClient(BaseModelClient):
                         fc = part.function_call
                         tool_calls_obj.append(
                             ToolCallMessage(
-                                name=fc.name,
+                                name=fc.name or "gemini_tool",
                                 arguments=dict(fc.args) if fc.args else {},
                             )
                         )
 
         final_text = "\n".join(text_parts) if text_parts else ""
-        final_content: Optional[list[Any]] = [final_text] if final_text else None
+        final_content: Optional[list[MediaType]] = [final_text] if final_text else None
 
         # Usage
         usage_dict = None
@@ -374,11 +223,11 @@ class GeminiClient(BaseModelClient):
     async def generate_stream(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         *,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[Any]:
+    ) -> AsyncIterator[ModelStreamEvent]:
         """Generate a streaming response from Gemini.
 
         Yields TextDeltaChunk objects, then a final CompletionChunk.
@@ -414,7 +263,7 @@ class GeminiClient(BaseModelClient):
 
         async for chunk in await self.client.aio.models.generate_content_stream(
             model=kwargs.get("model", self.model),
-            contents=contents,
+            contents=cast(Any, contents),
             config=genai_types.GenerateContentConfig(**config),
         ):
             if chunk.candidates:
@@ -430,7 +279,7 @@ class GeminiClient(BaseModelClient):
                             fc = part.function_call
                             tool_calls_obj.append(
                                 ToolCallMessage(
-                                    name=fc.name,
+                                    name=fc.name or "gemini_tool",
                                     arguments=dict(fc.args) if fc.args else {},
                                 )
                             )
@@ -443,7 +292,7 @@ class GeminiClient(BaseModelClient):
 
         # Build final message
         final_text = "".join(text_parts) if text_parts else ""
-        final_content: Optional[list[Any]] = [final_text] if final_text else None
+        final_content: Optional[list[MediaType]] = [final_text] if final_text else None
 
         finish_reason = "stop"
         if tool_calls_obj:
@@ -481,10 +330,69 @@ class GeminiClient(BaseModelClient):
         try:
             result = await self.client.aio.models.count_tokens(
                 model=self.model,
-                contents=contents,
+                contents=cast(Any, contents),
             )
-            return result.total_tokens
+            return int(result.total_tokens or 0)
         except Exception:
             # Fallback: rough estimate
             total_chars = sum(len(str(c)) for c in contents)
             return total_chars // 4
+
+    async def stream_tts(
+        self,
+        *,
+        text: str,
+        voice: str = "",
+        model: str = "",
+        response_format: str = "",
+        instructions: Optional[str] = None,
+    ) -> AsyncGenerator[bytes, None]:
+        """Synthesize speech with Gemini TTS preview models.
+
+        Gemini TTS currently returns a single WAV payload rather than a true
+        incremental stream, so this async generator yields one chunk.
+        """
+        effective_model = model or self.model
+        effective_voice = voice or "Kore"
+        effective_format = (response_format or "wav").lower()
+        if effective_format != "wav":
+            raise ValueError("Gemini TTS currently supports WAV output only")
+
+        prompt_parts = []
+        if instructions and instructions.strip():
+            prompt_parts.append(instructions.strip())
+        prompt_parts.append("Speak the following text verbatim.")
+        prompt_parts.append(text)
+        prompt_text = "\n\n".join(prompt_parts)
+
+        response = await self.client.aio.models.generate_content(
+            model=effective_model,
+            contents=[
+                genai_types.Content(
+                    role="user",
+                    parts=[genai_types.Part(text=prompt_text)],
+                )
+            ],
+            config=genai_types.GenerateContentConfig(
+                response_modalities=[genai_types.Modality.AUDIO],
+                speech_config=genai_types.SpeechConfig(
+                    voice_config=genai_types.VoiceConfig(
+                        prebuilt_voice_config=genai_types.PrebuiltVoiceConfig(
+                            voice_name=effective_voice
+                        )
+                    )
+                ),
+            ),
+        )
+
+        for candidate in response.candidates or []:
+            content = getattr(candidate, "content", None)
+            if not content or not content.parts:
+                continue
+            for part in content.parts:
+                inline_data = getattr(part, "inline_data", None)
+                if inline_data and getattr(inline_data, "data", None):
+                    yield inline_data.data
+                    return
+
+        raise ValueError("Gemini TTS returned no audio data")

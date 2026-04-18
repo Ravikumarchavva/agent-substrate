@@ -3,9 +3,13 @@ from __future__ import annotations
 import base64
 import io
 from pathlib import Path
-from typing import Dict, Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Dict, Any, Literal, Optional, Union
 
 from PIL import Image
+
+if TYPE_CHECKING:
+    from raavan.core.messages.client_messages import AssistantMessage
+    from raavan.core.structured.result import StructuredOutputResult
 
 
 # Image content wrapper — for URL, file-ID, or raw-bytes inputs
@@ -85,13 +89,16 @@ class StreamChunk:
     """Base class for streaming chunks from LLM/Agent."""
 
     def __init__(
-        self, type: str, data: Any = None, metadata: Optional[Dict[str, Any]] = None
+        self,
+        type: str,
+        data: str | None = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         self.type = type
         self.data = data
         self.metadata = metadata or {}
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"StreamChunk(type={self.type}, data={self.data!r})"
 
 
@@ -112,22 +119,31 @@ class ReasoningDeltaChunk(StreamChunk):
 
 
 class CompletionChunk(StreamChunk):
-    """Final completion event with full response."""
+    """Final completion event with full response.
 
-    def __init__(self, message: Any, metadata: Optional[Dict[str, Any]] = None):
-        super().__init__("completion", message, metadata)
+    ``message`` is always an ``AssistantMessage`` instance.
+    """
+
+    def __init__(
+        self, message: "AssistantMessage", metadata: Optional[Dict[str, Any]] = None
+    ):
+        super().__init__("completion", None, metadata)
         self.message = message
 
 
 class StructuredOutputChunk(StreamChunk):
     """Yielded at the end of a streaming run when ``response_schema`` is set.
 
-    Contains the validated Pydantic instance alongside the raw JSON text.
+    Contains the validated result alongside the raw JSON text.
     Consumers can check ``chunk.result.ok`` before accessing ``chunk.result.parsed``.
     """
 
-    def __init__(self, result: Any, metadata: Optional[Dict[str, Any]] = None):
-        super().__init__("structured_output", result, metadata)
+    def __init__(
+        self,
+        result: "StructuredOutputResult[Any]",
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__("structured_output", None, metadata)
         self.result = result
 
 
@@ -210,8 +226,14 @@ def serialize_media_content(content: MediaType, role: str = "user") -> Dict[str,
     raise ValueError(f"Unsupported media content type: {type(content)}")
 
 
-def deserialize_media_content(data: Union[str, Dict[str, Any]]) -> MediaType:
+def deserialize_media_content(data: Union[MediaType, Dict[str, Any]]) -> MediaType:
     """Deserialize media content from messages."""
+    if isinstance(data, Image.Image):
+        return data
+
+    if isinstance(data, (ImageContent, AudioContent, VideoContent)):
+        return data
+
     if isinstance(data, dict):
         content_type = data.get("type", "")
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = "/api/backend";
 
 /**
  * Supported JSON-RPC methods the MCP App can call via postMessage.
@@ -224,19 +224,19 @@ export function McpAppRenderer({
   const handleIframeLoad = () => {};
 
   return (
-    <div className="rounded-lg border border-zinc-700 overflow-hidden bg-zinc-900 my-2 max-w-3xl mx-auto">
+    <div className="rounded-lg border border-(--border) overflow-hidden bg-(--card) my-2 max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-800/60 border-b border-zinc-700 text-xs text-zinc-400">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-background border-b border-(--border) text-xs text-(--muted)">
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" 
                 style={{ backgroundColor: isReady ? "#22c55e" : "#eab308" }} />
-          <span className="font-medium text-zinc-300">{toolName}</span>
-          <span className="text-zinc-500">MCP App</span>
+          <span className="font-medium text-foreground">{toolName}</span>
+          <span className="text-(--muted)">MCP App</span>
         </span>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 transition-colors px-1 cursor-pointer"
+            className="text-(--muted) hover:text-foreground transition-colors px-1 cursor-pointer"
             aria-label="Close MCP App"
           >
             ✕
@@ -246,12 +246,12 @@ export function McpAppRenderer({
 
       {/* Iframe or error */}
       {error ? (
-        <div className="p-4 text-center text-sm text-zinc-500">
+        <div className="p-4 text-center text-sm text-(--muted)">
           <p>⚠️ {error}</p>
           <p className="text-xs mt-1">
             The interactive UI for <strong>{toolName}</strong> could not be loaded.
           </p>
-          <p className="text-xs mt-2 text-zinc-600">
+          <p className="text-xs mt-2 text-(--muted-foreground)">
             URL: {fullUrl}
           </p>
         </div>

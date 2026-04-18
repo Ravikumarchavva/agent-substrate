@@ -77,7 +77,7 @@ export function ToolApprovalCard({
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] w-full text-sm">
+      <div className="w-full max-w-full text-sm sm:max-w-[85%]">
         <PanelShell
           icon={<ShieldAlert className="w-4 h-4" style={{ color: "#f59e0b" }} />}
           title="Tool Approval"
@@ -148,7 +148,7 @@ export function ToolApprovalCard({
               }}
             />
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={handleApprove}
               className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"

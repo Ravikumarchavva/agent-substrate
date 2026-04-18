@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, PanelRightClose, PanelRightOpen } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = "/api/backend";
 
 export type AppPanelItem = {
   /** Unique ID for this panel instance */
@@ -105,6 +105,35 @@ export function AppPanel({
     }
   }, []);
 
+  // ── Google Workspace: broadcast token to every loaded iframe ─────
+  const fetchAndSendWorkspaceToken = useCallback(async () => {
+    try {
+      const res = await fetch("/api/workspace/token");
+      if (!res.ok) return;
+      const data = await res.json() as { access_token?: string; connected?: boolean };
+      if (!data.access_token) return;
+
+      // Also get email from cookie for the workspace panel
+      let email = "";
+      try {
+        const cookie = document.cookie.split("; ").find(r => r.startsWith("google_user="));
+        if (cookie) {
+          const parsed = JSON.parse(decodeURIComponent(cookie.split("=")[1])) as { email?: string };
+          email = parsed.email ?? "";
+        }
+      } catch { /* ignore */ }
+
+      iframeRefs.current.forEach((iframe) => {
+        iframe?.contentWindow?.postMessage(
+          { type: "workspace_token_from_parent", access_token: data.access_token, email },
+          "*"
+        );
+      });
+    } catch {
+      // Not connected — silent
+    }
+  }, []);
+
   // ── Re-send token when switching to a Spotify tab ────────────────
   // With persistent iframes the `ready` event only fires once on first load,
   // so we push the token explicitly whenever the active tab is Spotify.
@@ -113,6 +142,14 @@ export function AppPanel({
       fetchAndSendSpotifyToken();
     }
     // Only re-run when the active item changes, not on every readyMap update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeItem?.id]);
+
+  // ── Re-send workspace token when switching to a Google Workspace tab ─
+  useEffect(() => {
+    if (activeItem?.toolName?.includes("google_workspace") && readyMap[activeItem.id]) {
+      fetchAndSendWorkspaceToken();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeItem?.id]);
 
@@ -214,6 +251,23 @@ export function AppPanel({
         return;
       }
 
+      // ── Workspace messages ──────────────────────────────────────
+      if (msg.type === "workspace_token_refresh_request") {
+        fetchAndSendWorkspaceToken();
+        return;
+      }
+      if (msg.type === "workspace_login_request") {
+        const w = 500, h = 700;
+        const left = Math.round(window.screen.width / 2 - w / 2);
+        const top = Math.round(window.screen.height / 2 - h / 2);
+        window.open("/api/workspace/login", "workspace-auth", `width=${w},height=${h},left=${left},top=${top}`);
+        return;
+      }
+      if (msg.type === "workspace_auth_success") {
+        fetchAndSendWorkspaceToken();
+        return;
+      }
+
       // ── JSON-RPC messages from a known iframe ───────────────────
       const data = msg as JsonRpcRequest;
       if (data.jsonrpc !== "2.0") return;
@@ -264,6 +318,10 @@ export function AppPanel({
           // Forward Spotify token if applicable
           if (senderItem.toolName?.includes("spotify")) {
             fetchAndSendSpotifyToken();
+          }
+          // Forward workspace token if applicable
+          if (senderItem.toolName?.includes("google_workspace")) {
+            fetchAndSendWorkspaceToken();
           }
           break;
         }
@@ -324,21 +382,21 @@ export function AppPanel({
 
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [items, onResult, onClose, sendToItem, fetchAndSendSpotifyToken]);
+  }, [items, onResult, onClose, sendToItem, fetchAndSendSpotifyToken, fetchAndSendWorkspaceToken]);
 
   if (items.length === 0) return null;
 
   // ── Collapsed pill ───────────────────────────────────────────────
   if (isCollapsed) {
     return (
-      <div className="fixed right-0 top-1/2 -translate-y-1/2 z-30">
+      <div className="fixed bottom-20 right-3 z-30 xl:right-0 xl:top-1/2 xl:bottom-auto xl:-translate-y-1/2">
         <button
           onClick={onToggleCollapse}
-          className="flex items-center gap-2 px-3 py-3 bg-zinc-800 border border-zinc-700 border-r-0 rounded-l-lg shadow-xl hover:bg-zinc-700 transition-colors cursor-pointer"
+          className="flex items-center gap-2 rounded-full border border-(--border) bg-(--card) px-3 py-3 shadow-xl transition-colors hover:bg-background cursor-pointer xl:rounded-l-lg xl:rounded-r-none xl:border-r-0"
           title="Open app panel"
         >
-          <PanelRightOpen className="w-4 h-4 text-zinc-300" />
-          <span className="text-xs text-zinc-400 font-medium">
+          <PanelRightOpen className="w-4 h-4 text-foreground" />
+          <span className="text-xs text-(--muted) font-medium">
             {items.length} app{items.length !== 1 ? "s" : ""}
           </span>
         </button>
@@ -347,140 +405,150 @@ export function AppPanel({
   }
 
   return (
-    <div className="w-120 xl:w-140 2xl:w-160 flex flex-col border-l border-(--border) bg-background h-full shrink-0">
-      {/* Panel Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-(--border) bg-zinc-800/50">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Apps</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-400 border border-emerald-800 font-medium">
-            {items.length}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onToggleCollapse}
-            className="p-1.5 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-            title="Collapse panel"
-          >
-            <PanelRightClose className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onClosePanel}
-            className="p-1.5 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-            title="Close all apps"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+    <>
+      <button
+        type="button"
+        className="fixed inset-0 z-30 bg-black/45 xl:hidden"
+        onClick={onToggleCollapse}
+        aria-label="Dismiss app panel"
+      />
 
-      {/* Tabs — visible when more than one app is open.
-          Each tab is a <div role="tab"> rather than <button> to avoid
-          the React hydration error caused by nesting a close <button>
-          inside a tab <button>. */}
-      {items.length > 1 && (
-        <div
-          className="flex border-b border-(--border) bg-zinc-900/50 overflow-x-auto scrollbar-thin"
-          role="tablist"
-        >
-          {items.map((item) => (
-            <div
-              key={item.id}
-              role="tab"
-              tabIndex={0}
-              aria-selected={item.id === activeItem?.id}
-              onClick={() => onSetActive(item.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") onSetActive(item.id);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors shrink-0 cursor-pointer select-none ${
-                item.id === activeItem?.id
-                  ? "border-emerald-500 text-emerald-400 bg-zinc-800/50"
-                  : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30"
-              }`}
+      <div className="fixed inset-0 z-40 flex flex-col bg-(--card) xl:static xl:z-auto xl:h-full xl:w-120 xl:shrink-0 xl:border-l xl:border-(--border) 2xl:w-140">
+        {/* Panel Header */}
+        <div className="flex items-center justify-between border-b border-(--border) bg-(--card) px-3 py-3 xl:px-3 xl:py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Apps</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-(--border) bg-background font-medium" style={{ color: "var(--accent)" }}>
+              {items.length}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onToggleCollapse}
+              className="p-1.5 rounded hover:bg-background text-(--muted) hover:text-foreground transition-colors cursor-pointer"
+              title="Collapse panel"
             >
-              <span className="max-w-30 truncate">
-                {item.toolName.replace(/_/g, " ")}
-              </span>
-              {/* Close uses <span role="button"> — no nested <button> */}
-              <span
-                role="button"
+              <PanelRightClose className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onClosePanel}
+              className="p-1.5 rounded hover:bg-background text-(--muted) hover:text-foreground transition-colors cursor-pointer"
+              title="Close all apps"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs — visible when more than one app is open.
+            Each tab is a <div role="tab"> rather than <button> to avoid
+            the React hydration error caused by nesting a close <button>
+            inside a tab <button>. */}
+        {items.length > 1 && (
+          <div
+            className="flex border-b border-(--border) bg-background overflow-x-auto scrollbar-thin"
+            role="tablist"
+          >
+            {items.map((item) => (
+              <div
+                key={item.id}
+                role="tab"
                 tabIndex={0}
-                aria-label={`Close ${item.toolName}`}
-                onClick={(e) => { e.stopPropagation(); onClose(item.id); }}
+                aria-selected={item.id === activeItem?.id}
+                onClick={() => onSetActive(item.id)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.stopPropagation();
-                    onClose(item.id);
-                  }
+                  if (e.key === "Enter" || e.key === " ") onSetActive(item.id);
                 }}
-                className="ml-1 p-0.5 rounded hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors shrink-0 cursor-pointer select-none ${
+                  item.id === activeItem?.id
+                    ? "bg-(--card)"
+                    : "border-transparent text-(--muted) hover:text-foreground hover:bg-(--card)"
+                }`}
+                style={item.id === activeItem?.id ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
               >
-                <X className="w-3 h-3" />
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Active app name bar */}
-      {activeItem && (
-        <div className="flex items-center px-3 py-1.5 bg-zinc-800/30 border-b border-zinc-800 text-xs shrink-0">
-          <span
-            className="inline-block w-2 h-2 rounded-full mr-1.5"
-            style={{ backgroundColor: readyMap[activeItem.id] ? "#22c55e" : "#eab308" }}
-          />
-          <span className="font-medium text-zinc-300">
-            {activeItem.toolName.replace(/_/g, " ")}
-          </span>
-          <span className="text-zinc-500 ml-1">MCP App</span>
-        </div>
-      )}
-
-      {/* All iframes rendered simultaneously.
-          Inactive ones are hidden with CSS `visibility: hidden` so they
-          stay alive (preserving Spotify auth, Kanban state, etc.) without
-          reloading when the user switches tabs. */}
-      <div className="flex-1 min-h-0 relative">
-        {items.map((item) => {
-          const isActive = item.id === activeItem?.id;
-          const itemError = errorMap[item.id];
-          const itemUrl = item.httpUrl.startsWith("http")
-            ? item.httpUrl
-            : `${API_BASE}${item.httpUrl}`;
-
-          return (
-            <div
-              key={item.id}
-              className="absolute inset-0 flex flex-col"
-              style={{ visibility: isActive ? "visible" : "hidden" }}
-            >
-              {itemError ? (
-                <div className="flex-1 flex items-center justify-center p-4 text-center text-sm text-zinc-500">
-                  <div>
-                    <p>⚠️ {itemError}</p>
-                    <p className="text-xs mt-1">
-                      The interactive UI for <strong>{item.toolName}</strong> could not be loaded.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <iframe
-                  ref={(el) => {
-                    if (el) iframeRefs.current.set(item.id, el);
-                    else iframeRefs.current.delete(item.id);
+                <span className="max-w-30 truncate">
+                  {item.toolName.replace(/_/g, " ")}
+                </span>
+                {/* Close uses <span role="button"> — no nested <button> */}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Close ${item.toolName}`}
+                  onClick={(e) => { e.stopPropagation(); onClose(item.id); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      onClose(item.id);
+                    }
                   }}
-                  src={itemUrl}
-                  sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-                  allow="autoplay; encrypted-media"
-                  style={{ width: "100%", flex: 1, border: "none", display: "block" }}
-                  title={`${item.toolName} MCP App`}
-                />
-              )}
-            </div>
-          );
-        })}
+                  className="ml-1 p-0.5 rounded hover:bg-background text-(--muted) hover:text-foreground cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Active app name bar */}
+        {activeItem && (
+          <div className="flex items-center px-3 py-1.5 bg-background border-b border-(--border) text-xs shrink-0">
+            <span
+              className="inline-block w-2 h-2 rounded-full mr-1.5"
+              style={{ backgroundColor: readyMap[activeItem.id] ? "#22c55e" : "#eab308" }}
+            />
+            <span className="font-medium text-foreground">
+              {activeItem.toolName.replace(/_/g, " ")}
+            </span>
+            <span className="text-(--muted) ml-1">MCP App</span>
+          </div>
+        )}
+
+        {/* All iframes rendered simultaneously.
+            Inactive ones are hidden with CSS `visibility: hidden` so they
+            stay alive (preserving Spotify auth, Kanban state, etc.) without
+            reloading when the user switches tabs. */}
+        <div className="flex-1 min-h-0 relative">
+          {items.map((item) => {
+            const isActive = item.id === activeItem?.id;
+            const itemError = errorMap[item.id];
+            const itemUrl = item.httpUrl.startsWith("http")
+              ? item.httpUrl
+              : `${API_BASE}${item.httpUrl}`;
+
+            return (
+              <div
+                key={item.id}
+                className="absolute inset-0 flex flex-col"
+                style={{ visibility: isActive ? "visible" : "hidden" }}
+              >
+                {itemError ? (
+                  <div className="flex-1 flex items-center justify-center p-4 text-center text-sm text-(--muted)">
+                    <div>
+                      <p>⚠️ {itemError}</p>
+                      <p className="text-xs mt-1">
+                        The interactive UI for <strong>{item.toolName}</strong> could not be loaded.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <iframe
+                    ref={(el) => {
+                      if (el) iframeRefs.current.set(item.id, el);
+                      else iframeRefs.current.delete(item.id);
+                    }}
+                    src={itemUrl}
+                    sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                    allow="autoplay; encrypted-media"
+                    style={{ width: "100%", flex: 1, border: "none", display: "block" }}
+                    title={`${item.toolName} MCP App`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 type Theme = "light" | "dark";
 
@@ -11,15 +19,26 @@ type ThemeContextType = {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+function getSnapshot(): boolean {
+  return true;
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+const subscribe: (onStoreChange: () => void) => () => void = () => () => {};
+
 function getInitialTheme(): Theme {
   if (typeof window === "undefined") return "dark";
-  const saved = localStorage.getItem("theme") as Theme | null;
+  const saved = localStorage.getItem("raavan-theme") as Theme | null;
   if (saved) return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const mounted = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const isFirst = useRef(true);
 
   useEffect(() => {
@@ -27,13 +46,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       isFirst.current = false;
       return;
     }
+    document.documentElement.setAttribute("data-theme", theme);
     document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem("theme", theme);
+    localStorage.setItem("raavan-theme", theme);
   }, [theme]);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
+  }, []);
+
+  if (!mounted) {
+    return <>{children}</>;
+  }
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>

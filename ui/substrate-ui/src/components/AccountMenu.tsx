@@ -85,14 +85,6 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
                   <Settings className="w-3.5 h-3.5 text-(--muted)" />
                   Settings
                 </button>
-                <button
-                  onClick={() => { setIsOpen(false); onOpenSettings("profile"); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
-                  role="menuitem"
-                >
-                  <User className="w-3.5 h-3.5 text-(--muted)" />
-                  Profile
-                </button>
                 {isAdmin && (
                   <button
                     onClick={() => { setIsOpen(false); onOpenSettings("admin"); }}
@@ -110,6 +102,12 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
                 <button
                   onClick={async () => {
                     setIsOpen(false);
+                    const confirmed = window.confirm(
+                      "Sign out of Google? Spotify will stay connected until you disconnect it from Apps."
+                    );
+                    if (!confirmed) {
+                      return;
+                    }
                     await logout();
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-(--card-hover) transition-colors cursor-pointer"

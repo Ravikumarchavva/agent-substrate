@@ -1,12 +1,23 @@
 /**
  * Spotify OAuth – Callback
  * GET /api/spotify/callback?code=...&state=...
- * Exchanges code for tokens, stores them as httpOnly cookies (cookie-based auth,
- * consistent with Google OAuth flow — no Prisma session required).
+ * Exchanges code for tokens, stores them as httpOnly cookies + persists in DB.
+ * CSRF verified via HMAC-signed state (no cookie needed).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { signState } from "../login/route";
+import { getCredentialManager } from "@/lib/credentials";
+import { prisma } from "@/lib/prisma";
 
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
+
+function resolveRedirectUri(req: NextRequest): string {
+  if (process.env.SPOTIFY_REDIRECT_URI) return process.env.SPOTIFY_REDIRECT_URI;
+  const proto = req.headers.get("x-forwarded-proto") ?? "http";
+  const host = req.headers.get("host") ?? "127.0.0.1:3000";
+  const normalizedHost = host.replace(/^localhost(:\d+)?$/, "127.0.0.1$1");
+  return `${proto}://${normalizedHost}/api/spotify/callback`;
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -28,9 +39,17 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Validate CSRF state
-  const savedState = req.cookies.get("spotify_oauth_state")?.value;
-  if (!savedState || savedState !== state) {
+  // Verify HMAC-signed state: format is "nonce.signature"
+  const dotIdx = state.indexOf(".");
+  if (dotIdx < 1) {
+    return new NextResponse(
+      buildCallbackHTML(false, "Invalid state format"),
+      { status: 400, headers: { "Content-Type": "text/html" } }
+    );
+  }
+  const nonce = state.slice(0, dotIdx);
+  const sig = state.slice(dotIdx + 1);
+  if (signState(nonce) !== sig) {
     return new NextResponse(
       buildCallbackHTML(false, "Invalid state parameter (CSRF protection failed)"),
       { status: 400, headers: { "Content-Type": "text/html" } }
@@ -39,7 +58,7 @@ export async function GET(req: NextRequest) {
 
   const clientId = process.env.SPOTIFY_CLIENT_ID!;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET!;
-  const redirectUri = process.env.SPOTIFY_REDIRECT_URI || "http://127.0.0.1:3000/api/spotify/callback";
+  const redirectUri = resolveRedirectUri(req);
 
   // Exchange code for tokens
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
@@ -97,8 +116,44 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Clear the state cookie
+  // Clear the state cookie (legacy, no-op if not present)
   res.cookies.delete("spotify_oauth_state");
+
+  // Push token to backend so it can use it for MCP tool calls and SDK
+  const backendUrl = process.env.BACKEND_API_URL ?? 'http://localhost:8000';
+  fetch(`${backendUrl}/auth/spotify/set-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token ?? null,
+      expires_in: expiresIn,
+    }),
+  }).catch((err) => console.error('[Spotify OAuth] Failed to push token to backend:', err));
+
+  // Persist tokens in DB (encrypted) for the logged-in user
+  try {
+    const userCookie = req.cookies.get("google_user")?.value;
+    if (userCookie) {
+      const userData = JSON.parse(decodeURIComponent(userCookie));
+      if (userData.email) {
+        const dbUser = await prisma.user.findUnique({ where: { email: userData.email } });
+        if (dbUser) {
+          const cm = getCredentialManager();
+          await cm.storeCredential(
+            dbUser.id,
+            "spotify",
+            tokens.access_token,
+            tokens.refresh_token,
+            expiresIn,
+            tokens.scope,
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Spotify OAuth] Failed to persist tokens in DB:", err);
+  }
 
   return res;
 }
@@ -121,8 +176,8 @@ function buildCallbackHTML(
   }
 
   return `<!DOCTYPE html><html><body>
-    <h1>Connected to Spotify!</h1>
-    <p>You can close this window...</p>
+    <h1>Spotify connected</h1>
+    <p>Your account stayed the same. You can close this window.</p>
     <script>
       // Deliver the token directly to the opener via postMessage.
       // This works even when the popup and parent are on different origins

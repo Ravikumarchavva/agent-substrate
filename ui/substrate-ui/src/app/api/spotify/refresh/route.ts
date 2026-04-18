@@ -1,14 +1,48 @@
 /**
  * Spotify OAuth – Refresh endpoint
  * POST /api/spotify/refresh
- * Forces a token refresh using the stored refresh_token cookie.
+ * Forces a token refresh using the stored refresh_token cookie (or DB fallback).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { getCredentialManager } from "@/lib/credentials";
+import { prisma } from "@/lib/prisma";
 
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 
+async function resolveUserId(req: NextRequest): Promise<string | null> {
+  try {
+    const userCookie = req.cookies.get("google_user")?.value;
+    if (!userCookie) return null;
+    const userData = JSON.parse(decodeURIComponent(userCookie));
+    if (!userData.email) return null;
+    const dbUser = await prisma.user.findUnique({ where: { email: userData.email }, select: { id: true } });
+    return dbUser?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
-  const refreshToken = req.cookies.get("spotify_refresh_token")?.value;
+  let refreshToken = req.cookies.get("spotify_refresh_token")?.value;
+
+  // Fall back to DB if cookie is missing
+  if (!refreshToken) {
+    const userId = await resolveUserId(req);
+    if (userId) {
+      try {
+        const cred = await prisma.userCredential.findUnique({
+          where: { userId_provider: { userId, provider: "spotify" } },
+          select: { refreshToken: true },
+        });
+        if (cred?.refreshToken) {
+          const cm = getCredentialManager();
+          refreshToken = cm.decrypt(cred.refreshToken);
+        }
+      } catch (err) {
+        console.error("[Spotify OAuth] DB refresh token lookup error:", err);
+      }
+    }
+  }
 
   if (!refreshToken) {
     return NextResponse.json(
@@ -72,6 +106,23 @@ export async function POST(req: NextRequest) {
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });
+    }
+
+    // Persist refreshed tokens in DB
+    const userId = await resolveUserId(req);
+    if (userId) {
+      try {
+        const cm = getCredentialManager();
+        await cm.storeCredential(
+          userId,
+          "spotify",
+          data.access_token,
+          data.refresh_token ?? refreshToken,
+          expiresIn,
+        );
+      } catch (err) {
+        console.error("[Spotify OAuth] DB persist error:", err);
+      }
     }
 
     return res;

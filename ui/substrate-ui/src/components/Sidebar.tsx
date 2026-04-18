@@ -16,7 +16,7 @@ type Props = {
   currentThreadId?: string | null;
   onNewChat: () => void;
   onSelectThread: (threadId: string) => void;
-  onDeleteThread: (threadId: string) => void;
+  onDeleteThread: (threadId: string) => Promise<void> | void;
   onRenameThread: (threadId: string, newName: string) => void;
   onCollapse?: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
@@ -53,6 +53,8 @@ export function Sidebar({
   const [editName, setEditName] = useState("");
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [threadPendingDelete, setThreadPendingDelete] = useState<Thread | null>(null);
+  const [isDeletingThread, setIsDeletingThread] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { user, isAuthenticated, isAdmin, loginWithGoogle, logout } = useAuth();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -67,6 +69,21 @@ export function Sidebar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (!threadPendingDelete || isDeletingThread) {
+      return;
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setThreadPendingDelete(null);
+      }
+    }
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isDeletingThread, threadPendingDelete]);
+
   const filtered = useMemo(() =>
     search.trim() === ""
       ? threads
@@ -79,27 +96,47 @@ export function Sidebar({
   const startEdit = (t: Thread) => { setEditingId(t.id); setEditName(t.name); };
   const saveEdit  = (id: string) => { if (editName.trim()) onRenameThread(id, editName.trim()); setEditingId(null); };
   const cancelEdit = () => { setEditingId(null); setEditName(""); };
+  const requestDelete = (thread: Thread) => {
+    setThreadPendingDelete(thread);
+  };
+  const handleConfirmDelete = async () => {
+    if (!threadPendingDelete) {
+      return;
+    }
+
+    setIsDeletingThread(true);
+    try {
+      await onDeleteThread(threadPendingDelete.id);
+      setThreadPendingDelete(null);
+    } finally {
+      setIsDeletingThread(false);
+    }
+  };
 
   return (
-    <aside className="w-64 h-full bg-(--sidebar-bg) flex flex-col overflow-hidden" suppressHydrationWarning>
+    <>
+      <aside
+        className="flex h-full min-h-0 w-full flex-col overflow-hidden border-r border-(--border) bg-(--card) shadow-2xl lg:shadow-none"
+        suppressHydrationWarning
+      >
       {/*  Top: Logo + actions  */}
-      <div className="flex items-center justify-between px-3 py-3">
+      <div className="flex items-center justify-between px-3 py-3 border-b border-(--border)">
         <div className="flex items-center gap-1">
           {onCollapse && (
             <button
               onClick={onCollapse}
               title="Collapse sidebar"
-              className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-background transition-colors cursor-pointer"
             >
               <PanelLeftClose className="w-4 h-4" style={{ color: "var(--muted)" }} />
             </button>
           )}
-          <span className="text-sm font-semibold tracking-tight px-1 opacity-80">Agent Chat</span>
+          <span className="text-sm font-semibold tracking-tight px-1">Workspace</span>
         </div>
         <button
           onClick={onNewChat}
           title="New chat"
-          className="p-2 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer"
+          className="p-2 rounded-lg hover:bg-background transition-colors cursor-pointer"
         >
           <SquarePen className="w-4 h-4" />
         </button>
@@ -107,7 +144,7 @@ export function Sidebar({
 
       {/*  Search  */}
       <div className="px-3 pb-2">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-(--card) text-sm text-(--muted)">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-(--border) bg-background text-sm text-(--muted)">
           <Search className="w-3.5 h-3.5 shrink-0" />
           <input
             value={search}
@@ -134,7 +171,9 @@ export function Sidebar({
             if (items.length === 0) return null;
             return (
               <div key={label} className="mb-3">
-                <p className="text-xs font-semibold text-(--muted) px-3 pb-1 pt-1">{label}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--muted) px-3 pb-1 pt-2">
+                  {label}
+                </p>
                 <div className="space-y-0.5">
                   {items.map(thread => (
                     <ThreadItem
@@ -147,7 +186,7 @@ export function Sidebar({
                       onStartEdit={() => startEdit(thread)}
                       onSaveEdit={() => saveEdit(thread.id)}
                       onCancelEdit={cancelEdit}
-                      onDelete={() => onDeleteThread(thread.id)}
+                      onDelete={() => requestDelete(thread)}
                       onEditNameChange={setEditName}
                     />
                   ))}
@@ -169,7 +208,7 @@ export function Sidebar({
                 <div className="text-sm font-medium truncate">{user.name ?? "User"}</div>
                 <div className="text-xs text-(--muted) truncate">{user.email ?? ""}</div>
                 {isAdmin && (
-                  <span className="inline-flex items-center gap-1 mt-1 text-xs text-purple-300">
+                  <span className="inline-flex items-center gap-1 mt-1 text-xs" style={{ color: "var(--accent)" }}>
                     <ShieldCheck className="w-3 h-3" /> Admin
                   </span>
                 )}
@@ -201,20 +240,13 @@ export function Sidebar({
               </button>
               {isAuthenticated && (
                 <>
-                  <button
-                    onClick={() => { setMenuOpen(false); onOpenSettings("profile"); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
-                  >
-                    <User className="w-3.5 h-3.5 text-(--muted)" />
-                    Profile
-                  </button>
                   {isAdmin && (
                     <button
                       onClick={() => { setMenuOpen(false); onOpenSettings("admin"); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-(--card-hover) transition-colors cursor-pointer"
                     >
-                      <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-                      <span className="text-purple-300">Admin Panel</span>
+                      <ShieldCheck className="w-3.5 h-3.5" style={{ color: "var(--accent)" }} />
+                      <span style={{ color: "var(--accent)" }}>Admin Panel</span>
                     </button>
                   )}
                 </>
@@ -225,7 +257,16 @@ export function Sidebar({
             <div className="border-t border-(--border) py-1">
               {isAuthenticated ? (
                 <button
-                  onClick={async () => { setMenuOpen(false); await logout(); }}
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    const confirmed = window.confirm(
+                      "Sign out of Google? Spotify will stay connected until you disconnect it from Apps."
+                    );
+                    if (!confirmed) {
+                      return;
+                    }
+                    await logout();
+                  }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-(--card-hover) transition-colors cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -282,7 +323,58 @@ export function Sidebar({
           <ChevronsUpDown className="w-3.5 h-3.5 shrink-0" style={{ color: "var(--muted)" }} />
         </button>
       </div>
-    </aside>
+      </aside>
+
+      {threadPendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60 cursor-pointer"
+            onClick={() => !isDeletingThread && setThreadPendingDelete(null)}
+            aria-label="Close delete confirmation"
+          />
+          <div
+            className="relative w-full max-w-md rounded-2xl border border-(--border) bg-background p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete chat thread"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/12 text-red-400">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-semibold text-foreground">Delete chat thread?</h2>
+                <p className="mt-2 text-sm leading-6 text-(--muted)">
+                  This removes
+                  <span className="font-medium text-foreground"> {threadPendingDelete.name}</span>
+                  and its message history permanently.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setThreadPendingDelete(null)}
+                disabled={isDeletingThread}
+                className="rounded-xl border border-(--border) px-4 py-2 text-sm text-foreground transition-colors hover:bg-(--card-hover) disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmDelete()}
+                disabled={isDeletingThread}
+                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+              >
+                {isDeletingThread ? "Deleting..." : "Delete thread"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -306,7 +398,7 @@ function ThreadItem({
 }: ThreadItemProps) {
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-(--card)">
+      <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-(--border) bg-background">
         <input
           value={editName}
           onChange={e => onEditNameChange(e.target.value)}
@@ -323,11 +415,13 @@ function ThreadItem({
   return (
     <div
       className={"group relative flex items-center rounded-lg transition-colors cursor-pointer " +
-        (isActive ? "bg-(--card)" : "hover:bg-(--card-hover)")}
+        (isActive
+          ? "bg-background text-foreground"
+          : "text-(--muted) hover:bg-background hover:text-foreground")}
       onClick={onSelect}
     >
       <div className="flex-1 min-w-0 px-3 py-2">
-        <p className="text-sm truncate leading-snug">{thread.name}</p>
+        <p className={"text-sm truncate leading-snug " + (isActive ? "font-medium" : "")}>{thread.name}</p>
       </div>
 
       {/* Hover actions */}

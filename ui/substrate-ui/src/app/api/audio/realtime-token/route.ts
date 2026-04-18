@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-export async function GET(_req: NextRequest) {
-  const res = await fetch(`${BACKEND_URL}/audio/realtime-token`, {
+export async function GET(req: NextRequest) {
+  const res = await fetch(`${BACKEND_URL}/audio/realtime-token${req.nextUrl.search}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
   });

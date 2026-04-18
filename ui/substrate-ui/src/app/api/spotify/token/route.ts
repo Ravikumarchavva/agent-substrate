@@ -1,67 +1,88 @@
 /**
  * Spotify Token API
  * GET /api/spotify/token
- * Returns the user's Spotify access token from httpOnly cookies (auto-refreshes
- * if the access token is missing but a refresh token is present).
- * Cookie-based — no Prisma session required, consistent with Google OAuth flow.
+ *   1. Proxies to backend (which holds the token after frontend OAuth push).
+ *   2. Falls back to Prisma DB if backend has lost the token (e.g. restart).
+ *      When a DB token is found it is re-pushed to the backend so subsequent
+ *      calls skip the fallback.
+ * DELETE /api/spotify/token — clears session cookies only.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { getCredentialManager } from '@/lib/credentials';
+import { prisma } from '@/lib/prisma';
 
+const BACKEND_URL = process.env.BACKEND_API_URL ?? 'http://localhost:8000';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 export async function GET(req: NextRequest) {
   try {
-    const accessToken = req.cookies.get('spotify_access_token')?.value;
-    const refreshToken = req.cookies.get('spotify_refresh_token')?.value;
-
-    // Valid access token present — return immediately
-    if (accessToken) {
-      return NextResponse.json({
-        access_token: accessToken,
-        authenticated: true,
-      });
+    // ── 1. Try backend (fastest path, always works after OAuth push) ──────────
+    const backendRes = await fetch(`${BACKEND_URL}/auth/spotify/token`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (backendRes.ok) {
+      const data = (await backendRes.json()) as { access_token: string };
+      return NextResponse.json({ access_token: data.access_token, authenticated: true });
     }
 
-    // No access token but we have a refresh token — try to refresh
-    if (refreshToken) {
-      const refreshed = await refreshAccessToken(refreshToken);
-      if (refreshed) {
-        const res = NextResponse.json({
-          access_token: refreshed.access_token,
-          authenticated: true,
-        });
-        res.cookies.set('spotify_access_token', refreshed.access_token, {
-          httpOnly: true,
-          maxAge: refreshed.expires_in || 3600,
-          path: '/',
-          sameSite: 'lax',
-          secure: process.env.NODE_ENV === 'production',
-        });
-        if (refreshed.refresh_token) {
-          res.cookies.set('spotify_refresh_token', refreshed.refresh_token, {
-            httpOnly: true,
-            maxAge: 60 * 60 * 24 * 30,
-            path: '/',
-            sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production',
-          });
-        }
-        return res;
-      }
-      // Refresh failed — clear stale cookies
-      const res = NextResponse.json(
+    // ── 2. Backend has no token (restart?) — try Prisma DB ───────────────────
+    const userId = await resolveUserId(req);
+    if (!userId) {
+      return NextResponse.json(
         { authenticated: false, error: 'Spotify not connected' },
         { status: 401 }
       );
-      res.cookies.delete('spotify_access_token');
-      res.cookies.delete('spotify_refresh_token');
-      return res;
     }
 
-    return NextResponse.json(
-      { authenticated: false, error: 'Spotify not connected' },
-      { status: 401 }
-    );
+    const cm = getCredentialManager();
+    const cred = await prisma.userCredential.findUnique({
+      where: { userId_provider: { userId, provider: 'spotify' } },
+      select: { accessToken: true, refreshToken: true, expiresAt: true },
+    });
+
+    if (!cred) {
+      return NextResponse.json(
+        { authenticated: false, error: 'Spotify not connected' },
+        { status: 401 }
+      );
+    }
+
+    let accessToken = cm.decrypt(cred.accessToken);
+    let refreshToken = cred.refreshToken ? cm.decrypt(cred.refreshToken) : null;
+    let expiresIn = 3600;
+
+    // Refresh if expired
+    if (cred.expiresAt && cred.expiresAt <= new Date()) {
+      if (!refreshToken) {
+        return NextResponse.json(
+          { authenticated: false, error: 'Spotify token expired' },
+          { status: 401 }
+        );
+      }
+      const refreshed = await refreshAccessToken(refreshToken);
+      if (!refreshed) {
+        return NextResponse.json(
+          { authenticated: false, error: 'Spotify token refresh failed' },
+          { status: 401 }
+        );
+      }
+      accessToken = refreshed.access_token;
+      if (refreshed.refresh_token) refreshToken = refreshed.refresh_token;
+      expiresIn = refreshed.expires_in ?? 3600;
+      // Persist updated token
+      try {
+        await cm.storeCredential(userId, 'spotify', accessToken, refreshToken ?? '', expiresIn);
+      } catch { /* non-fatal */ }
+    }
+
+    // Re-push to backend so subsequent calls are fast
+    fetch(`${BACKEND_URL}/auth/spotify/set-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn }),
+    }).catch(() => { /* non-fatal */ });
+
+    return NextResponse.json({ access_token: accessToken, authenticated: true });
   } catch (error) {
     console.error('[Spotify Token] Error:', error);
     return NextResponse.json(
@@ -78,34 +99,34 @@ export async function DELETE() {
   return res;
 }
 
+async function resolveUserId(req: NextRequest): Promise<string | null> {
+  try {
+    const userCookie = req.cookies.get('google_user')?.value;
+    if (!userCookie) return null;
+    const userData = JSON.parse(decodeURIComponent(userCookie)) as { email?: string };
+    if (!userData.email) return null;
+    const dbUser = await prisma.user.findUnique({ where: { email: userData.email }, select: { id: true } });
+    return dbUser?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function refreshAccessToken(
-  refreshToken: string
-): Promise<{ access_token: string; refresh_token?: string; expires_in: number } | null> {
+  refreshToken: string,
+): Promise<{ access_token: string; refresh_token?: string; expires_in?: number } | null> {
   try {
     const clientId = process.env.SPOTIFY_CLIENT_ID!;
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET!;
     const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-
-    const tokenRes = await fetch(SPOTIFY_TOKEN_URL, {
+    const res = await fetch(SPOTIFY_TOKEN_URL, {
       method: 'POST',
-      headers: {
-        Authorization: `Basic ${basic}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-      }),
+      headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
     });
-
-    if (!tokenRes.ok) {
-      console.error('[Spotify Token] Refresh failed:', await tokenRes.text());
-      return null;
-    }
-
-    return await tokenRes.json();
-  } catch (error) {
-    console.error('[Spotify Token] Refresh error:', error);
+    if (!res.ok) return null;
+    return await res.json() as { access_token: string; refresh_token?: string; expires_in?: number };
+  } catch {
     return null;
   }
 }

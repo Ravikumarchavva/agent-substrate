@@ -1,44 +1,82 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useRef, useEffect, useCallback } from "react";
 import { nanoid } from "nanoid";
+import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
-import { AppPanel, AppPanelItem } from "@/components/AppPanel";
+import { AppPanel } from "@/components/AppPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { SettingsPanel, SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
-import { Thread, Message, Task, TaskList, TaskStatus, UploadedFile } from "@/types";
+import { Message, Task, TaskList, UploadedFile } from "@/types";
 import { api } from "@/lib/api";
+import { getPreferredChatModel } from "@/lib/model-preferences";
+import { parseChatPath, buildChatPath, buildSettingsPath } from "@/lib/chat-routes";
+import {
+  getAttachmentIcon,
+  formatFileSize,
+} from "@/lib/file-utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { Send, Plus, Mic, Music2, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, type LucideIcon } from "lucide-react";
+import { useThreads } from "@/hooks/useThreads";
+import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAttachments";
+import { useAppPanel } from "@/hooks/useAppPanel";
+import { Send, Plus, Music2, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, type LucideIcon } from "lucide-react";
 
-export default function ChatPage() {
+const LAST_ACTIVE_THREAD_STORAGE_KEY = "raavan:last-active-thread";
+
+function readLastActiveThreadId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.sessionStorage.getItem(LAST_ACTIVE_THREAD_STORAGE_KEY);
+}
+
+function writeLastActiveThreadId(threadId: string | null): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (threadId) {
+    window.sessionStorage.setItem(LAST_ACTIVE_THREAD_STORAGE_KEY, threadId);
+    return;
+  }
+
+  window.sessionStorage.removeItem(LAST_ACTIVE_THREAD_STORAGE_KEY);
+}
+
+function hasPersistentToolCall(toolCalls: Message["toolCalls"]): boolean {
+  return Boolean(toolCalls?.some((tool) => tool._meta?.ui?.httpUrl));
+}
+
+function ChatPageContent() {
   const { isAuthenticated, isLoading: authLoading, loginWithGoogle } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const routeState = parseChatPath(pathname);
+  const settingsPanelOpen = routeState.settingsTab !== null;
+  const settingsPanelTab: SettingsTab = routeState.settingsTab ?? "general";
 
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [lastActiveThreadId, setLastActiveThreadId] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const wasAuthenticatedRef = useRef(false);
 
-  // ── Settings Panel State ─────────────────────────────────
-  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
-  const [settingsPanelTab, setSettingsPanelTab] = useState<SettingsTab>("general");
+  const updateLastActiveThreadId = useCallback((threadId: string | null) => {
+    setLastActiveThreadId(threadId);
+    writeLastActiveThreadId(threadId);
+  }, []);
 
-  function openSettingsPanel(tab: SettingsTab = "general") {
-    setSettingsPanelTab(tab);
-    setSettingsPanelOpen(true);
-  }
-
-  // ── App Panel State ──────────────────────────────────────
-  const [panelItems, setPanelItems] = useState<AppPanelItem[]>([]);
-  const [activePanelId, setActivePanelId] = useState<string | null>(null);
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const currentThreadId = routeState.threadId ?? lastActiveThreadId;
 
   // ── Task Board State ─────────────────────────────────────
   const [taskList, setTaskList] = useState<TaskList | null>(null);
@@ -52,29 +90,158 @@ export default function ChatPage() {
   // patch its toolArguments and be pushed to the iframe via update_context.
   const kanbanPanelIdRef = useRef<string | null>(null);
 
-  // ── File attachment state ────────────────────────────────
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
-  const [uploadingFile, setUploadingFile] = useState(false);
-
   // ── Realtime speech-to-speech panel ────────────────────────────────
   const [realtimeOpen, setRealtimeOpen] = useState(false);
 
-  // Load threads on mount
   useEffect(() => {
-    loadThreads();
+    setLastActiveThreadId(readLastActiveThreadId());
   }, []);
+
+  useEffect(() => {
+    if (routeState.threadId !== null) {
+      updateLastActiveThreadId(routeState.threadId);
+    }
+  }, [routeState.threadId, updateLastActiveThreadId]);
+
+  const selectThread = useCallback(
+    (threadId: string | null, mode: "replace" | "push" = "replace") => {
+      updateLastActiveThreadId(threadId);
+      const nextUrl = buildChatPath(threadId);
+      if (mode === "push") {
+        router.push(nextUrl, { scroll: false });
+      } else {
+        router.replace(nextUrl, { scroll: false });
+      }
+    },
+    [router, updateLastActiveThreadId],
+  );
+
+  const openSettingsPanel = useCallback(
+    (tab: SettingsTab = "general") => {
+      router.push(buildSettingsPath(tab), { scroll: false });
+    },
+    [router],
+  );
+
+  const closeSettingsPanel = useCallback(() => {
+    router.push(buildChatPath(lastActiveThreadId), { scroll: false });
+  }, [lastActiveThreadId, router]);
+
+  // ── Custom Hooks ────────────────────────────────────────
+  const { threads, setThreads, loadThreads, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
+    autoSelectFirstThread: !settingsPanelOpen,
+  });
+  const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile } = useFileAttachments(currentThreadId, selectThread, setThreads);
+  const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (wasAuthenticatedRef.current && !isAuthenticated) {
+      updateLastActiveThreadId(null);
+      setMessages([]);
+      setTaskList(null);
+      setPanelItems([]);
+      setActivePanelId(null);
+      kanbanPanelIdRef.current = null;
+      setAuthNotice("You were signed out. Sign in again to reopen or start chats.");
+      router.replace(buildChatPath(null), { scroll: false });
+    }
+
+    // If not authenticated and on a thread-specific URL, redirect to /chat
+    if (!isAuthenticated && !settingsPanelOpen && routeState.threadId) {
+      router.replace(buildChatPath(null), { scroll: false });
+    }
+
+    if (isAuthenticated) {
+      setAuthNotice(null);
+    }
+
+    wasAuthenticatedRef.current = isAuthenticated;
+  }, [authLoading, isAuthenticated, router, routeState.threadId, setActivePanelId, setPanelItems, settingsPanelOpen, updateLastActiveThreadId]);
+
+  const renderComposerAttachment = useCallback((file: AttachedFilePreview) => {
+    const AttachmentIcon = getAttachmentIcon(file.previewKind);
+    const previewSource = file.previewUrl || file.url || (currentThreadId
+      ? `/api/backend/threads/${currentThreadId}/files/${file.id}/content`
+      : "");
+
+    return (
+      <div key={file.id} className="attachment-card group/attach relative min-w-0 max-w-full p-2 sm:w-65">
+        <button
+          type="button"
+          onClick={() => handleRemoveFile(file.id)}
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-background/85 text-(--muted) opacity-100 shadow-sm transition-all sm:opacity-0 sm:group-hover/attach:opacity-100 cursor-pointer"
+          aria-label={`Remove ${file.name}`}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+
+        {file.previewKind === "image" && previewSource ? (
+          <div className="attachment-card__preview">
+            <Image
+              src={previewSource}
+              alt={file.name}
+              fill
+              unoptimized
+              sizes="72px"
+              className="object-cover transition-transform duration-200 group-hover/attach:scale-[1.03]"
+            />
+          </div>
+        ) : (
+          <div className="attachment-card__icon text-(--accent)">
+            <AttachmentIcon className="h-5 w-5" />
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1 pr-7">
+          <div className="truncate text-sm font-semibold text-foreground">{file.name}</div>
+          <div className="mt-1 text-[11px] text-(--muted)">
+            {formatFileSize(file.size)}
+          </div>
+        </div>
+      </div>
+    );
+  }, [currentThreadId, handleRemoveFile]);
+
+  // Wrap hook handlers to also manage local page state
+  const handleNewChat = useCallback(async () => {
+    await _handleNewChat({ onCreated: () => { setMessages([]); setMobileSidebarOpen(false); } });
+  }, [_handleNewChat]);
+
+  const handleSelectThread = useCallback((threadId: string) => {
+    _handleSelectThread(threadId, { onSelected: () => { setTaskList(null); setMobileSidebarOpen(false); } });
+  }, [_handleSelectThread]);
+
+  useEffect(() => {
+    if (pathname === "/") {
+      router.replace(buildChatPath(isAuthenticated ? currentThreadId : null), { scroll: false });
+    }
+  }, [currentThreadId, isAuthenticated, pathname, router]);
+
+  // Load threads on mount
+  useEffect(() => { void loadThreads(); }, [loadThreads]);
 
   // Load messages when thread changes, and reset panel/task state
   useEffect(() => {
+    clearAttachedFiles();
     if (currentThreadId) {
       loadMessages(currentThreadId);
       setPanelItems([]);
       setActivePanelId(null);
       setTaskList(null);
       kanbanPanelIdRef.current = null;
+      return;
     }
-  }, [currentThreadId]);
+
+    setMessages([]);
+    setPanelItems([]);
+    setActivePanelId(null);
+    setTaskList(null);
+    kanbanPanelIdRef.current = null;
+  }, [clearAttachedFiles, currentThreadId, setPanelItems, setActivePanelId]);
 
   // Keep the Kanban panel item's toolArguments in sync with taskList state so
   // the iframe receives live update_context messages from AppPanel.
@@ -86,7 +253,7 @@ export default function ChatPage() {
         item.id === id ? { ...item, toolArguments: { task_list: taskList } } : item
       )
     );
-  }, [taskList]);
+  }, [taskList, setPanelItems]);
 
   useEffect(() => {
     // Auto-scroll to bottom whenever messages change
@@ -106,18 +273,6 @@ export default function ChatPage() {
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
   }, [input]);
 
-  async function loadThreads() {
-    try {
-      const fetchedThreads = await api.getThreads();
-      setThreads(fetchedThreads);
-      if (fetchedThreads.length > 0 && !currentThreadId) {
-        setCurrentThreadId(fetchedThreads[0].id);
-      }
-    } catch (error) {
-      console.error("Failed to load threads:", error);
-    }
-  }
-
   async function loadMessages(threadId: string) {
     try {
       const fetchedMessages = await api.getMessages(threadId);
@@ -132,59 +287,15 @@ export default function ChatPage() {
     }
   }
 
-  const handleNewChat = async () => {
-    try {
-      const newThread = await api.createThread("New Chat");
-      setThreads([newThread, ...threads]);
-      setCurrentThreadId(newThread.id);
-      setMessages([]);
-    } catch (error) {
-      console.error("Failed to create thread:", error);
-    }
-  };
-
-  const handleSelectThread = (threadId: string) => {
-    setCurrentThreadId(threadId);
-    setTaskList(null); // clear board when switching conversations
-  };
-
-  const handleDeleteThread = async (threadId: string) => {
-    try {
-      await api.deleteThread(threadId);
-      setThreads(threads.filter((t) => t.id !== threadId));
-      if (currentThreadId === threadId && threads.length > 1) {
-        const remaining = threads.filter((t) => t.id !== threadId);
-        setCurrentThreadId(remaining[0]?.id || null);
-      }
-    } catch (error) {
-      console.error("Failed to delete thread:", error);
-    }
-  };
-
-  const handleRenameThread = async (threadId: string, newName: string) => {
-    try {
-      await api.updateThread(threadId, newName);
-      setThreads(
-        threads.map((t) =>
-          t.id === threadId ? { ...t, name: newName, updated_at: new Date().toISOString() } : t
-        )
-      );
-    } catch (error) {
-      console.error("Failed to rename thread:", error);
-    }
-  };
-
   // HITL: respond to a tool approval or human input request via HTTP POST.
   // The Next.js route at /api/chat/respond/[requestId] proxies to the backend.
   function respondToHITL(
     requestId: string,
     data: Record<string, unknown>
   ) {
-    fetch(`/api/chat/respond/${requestId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }).catch((err) => console.error("HITL respond failed:", err));
+    api.respondToHitl(requestId, data).catch((err: unknown) => {
+      console.error("HITL respond failed:", err);
+    });
   }
 
   // MCP App: handle context updates from interactive widgets
@@ -197,39 +308,6 @@ export default function ChatPage() {
     }
   }
 
-  // ── App Panel Management ────────────────────────────────
-  const openInPanel = useCallback((item: AppPanelItem) => {
-    setPanelItems((prev) => {
-      // Replace existing item with same toolName, or add new
-      const existing = prev.findIndex((p) => p.toolName === item.toolName);
-      if (existing >= 0) {
-        const updated = [...prev];
-        updated[existing] = { ...item, id: prev[existing].id };
-        return updated;
-      }
-      return [...prev, item];
-    });
-    setActivePanelId(item.id);
-    setPanelCollapsed(false);
-  }, []);
-
-  const closePanelItem = useCallback((id: string) => {
-    setPanelItems((prev) => {
-      const filtered = prev.filter((i) => i.id !== id);
-      if (activePanelId === id && filtered.length > 0) {
-        setActivePanelId(filtered[filtered.length - 1].id);
-      } else if (filtered.length === 0) {
-        setActivePanelId(null);
-      }
-      return filtered;
-    });
-  }, [activePanelId]);
-
-  const closeAllPanels = useCallback(() => {
-    setPanelItems([]);
-    setActivePanelId(null);
-  }, []);
-
   /** Abort the active SSE stream and signal the backend to stop the agent. */
   function handleStop() {
     if (wsRef.current) {
@@ -237,54 +315,10 @@ export default function ChatPage() {
       wsRef.current = null;
     }
     if (currentThreadId) {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-      fetch(`${apiBase}/chat/${currentThreadId}/cancel`, { method: "POST" }).catch(() => {});
+      api.cancelChat(currentThreadId).catch((error: unknown) => {
+        console.error("Failed to cancel active run:", error);
+      });
     }
-  }
-
-  // ── File attachment handlers ─────────────────────────────────────────────
-
-  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    // Reset so the same file can be re-selected
-    e.target.value = "";
-
-    // Ensure we have a thread before uploading
-    let threadId = currentThreadId;
-    if (!threadId) {
-      try {
-        const newThread = await api.createThread("New Chat");
-        setThreads([newThread]);
-        setCurrentThreadId(newThread.id);
-        threadId = newThread.id;
-      } catch {
-        console.error("Failed to create thread for file upload");
-        return;
-      }
-    }
-
-    setUploadingFile(true);
-    try {
-      const uploaded = await Promise.all(
-        files.map((f) => api.uploadFile(threadId!, f))
-      );
-      setAttachedFiles((prev) => [...prev, ...uploaded]);
-    } catch (err) {
-      console.error("File upload failed:", err);
-    } finally {
-      setUploadingFile(false);
-    }
-  }
-
-  async function handleRemoveFile(fileId: string) {
-    if (!currentThreadId) return;
-    try {
-      await api.deleteFile(currentThreadId, fileId);
-    } catch {
-      // Best-effort — remove from local state regardless
-    }
-    setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
   }
 
   async function doSendMessage(text: string) {
@@ -292,13 +326,30 @@ export default function ChatPage() {
 
     const currentInput = text;
     const currentFileIds = attachedFiles.map((f) => f.id);
+    const requestedModel = currentFileIds.length > 0
+      ? "google/gemini-2.5-flash"
+      : getPreferredChatModel();
+    const currentAttachments: UploadedFile[] = attachedFiles.map((file) => ({
+      id: file.id,
+      thread_id: file.thread_id,
+      name: file.name,
+      mime: file.mime,
+      size: file.size,
+      url: file.url,
+    }));
 
     // Clear input and show user message immediately (optimistic — never blocked by async work)
     setInput("");
-    setAttachedFiles([]);
+    clearAttachedFiles();
     setMessages((prev) => [
       ...prev,
-      { id: nanoid(), role: "user" as const, content: currentInput, timestamp: new Date() },
+      {
+        id: nanoid(),
+        role: "user" as const,
+        content: currentInput,
+        timestamp: new Date(),
+        attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
+      },
     ]);
     setLoading(true);
 
@@ -308,7 +359,7 @@ export default function ChatPage() {
       try {
         const newThread = await api.createThread("New Chat");
         setThreads((prev) => [newThread, ...prev]);
-        setCurrentThreadId(newThread.id);
+        selectThread(newThread.id, "push");
         threadId = newThread.id;
       } catch (error) {
         console.error("Failed to create thread:", error);
@@ -329,7 +380,7 @@ export default function ChatPage() {
     // Update thread name on the first message
     if (messages.length === 0) {
       const name = currentInput.slice(0, 50) + (currentInput.length > 50 ? "..." : "");
-      handleRenameThread(threadId, name);
+      handleRenameThread(threadId!, name);
     }
 
     // ── Mutable bubble tracking ──────────────────────────────────────────
@@ -360,13 +411,43 @@ export default function ChatPage() {
       ]);
     }
 
+    function finalizeAssistantMessages(
+      updateActive?: (message: Message) => Message,
+    ) {
+      setMessages((current) =>
+        current
+          .map((message) => {
+            if (message.role !== "assistant") return message;
+
+            const nextMessage =
+              updateActive && message.id === msgState.activeAssistantId
+                ? updateActive(message)
+                : message;
+
+            return { ...nextMessage, isToolExecuting: false };
+          })
+          .filter((message) => {
+            if (message.role !== "assistant") return true;
+
+            const contentStr = typeof message.content === "string" ? message.content : "";
+            const reasoningStr = typeof message.reasoning === "string" ? message.reasoning : "";
+            const hasContent = Boolean(contentStr.trim()) || Boolean(reasoningStr.trim());
+            return hasContent || hasPersistentToolCall(message.toolCalls);
+          })
+      );
+    }
+
     // ── Start SSE stream from backend ────────────────────────────────────
-    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const abortController = new AbortController();
     wsRef.current = abortController;
 
     // processEvent handles every server-sent event type.
     const processEvent = (data: Record<string, unknown>) => {
+      // Guard: if a newer stream has taken ownership (user sent a new message
+      // while this one was still draining), discard all further events from
+      // this stream so they don't corrupt the new stream's message state.
+      if (wsRef.current !== abortController) return;
+
       // ── Keepalive / end marker ────────────────────────────────────────
       if (data.type === "pong" || data.type === "done") return;
 
@@ -486,7 +567,7 @@ export default function ChatPage() {
         kanbanPanelIdRef.current = kanbanId;
         openInPanel({
           id: kanbanId,
-          httpUrl: `${apiBase}/ui/kanban_board`,
+          httpUrl: "/ui/kanban_board",
           toolName: "manage_tasks",
           toolArguments: { task_list: tl },
           timestamp: Date.now(),
@@ -549,8 +630,30 @@ export default function ChatPage() {
       }
 
       if (data.type === "completion") {
+        // Handle LLM-level errors (e.g. provider returned no completion)
+        if (data.finish_reason === "error") {
+          const errorDetail = typeof data.content === "string" ? data.content : "";
+          const errorMsg = errorDetail || "The AI model failed to generate a response. Please try again.";
+          finalizeAssistantMessages((message) => ({
+            ...message,
+            content: (message.content ? message.content + "\n\n" : "") + "⚠️ " + errorMsg,
+          }));
+          setLoading(false);
+          return;
+        }
+
         const finalContent = Array.isArray(data.content)
-          ? (data.content as string[]).join("")
+          ? (data.content as Array<string | { text?: unknown }>).map((item) => {
+              if (typeof item === "string") return item;
+              if (
+                item &&
+                typeof item === "object" &&
+                typeof item.text === "string"
+              ) {
+                return item.text;
+              }
+              return "";
+            }).join("")
           : String(data.content || "");
         const hasToolCalls = !!data.has_tool_calls;
 
@@ -569,12 +672,18 @@ export default function ChatPage() {
             };
           });
 
+        const toolMarkupPattern = /^\s*<function\/[\s\S]+<\/function>\s*$/;
+
         setMessages((m) =>
           m.map((msg) =>
             msg.id === msgState.activeAssistantId
               ? {
                   ...msg,
-                  content: finalContent || msg.content,
+                  content:
+                    toolCalls.length > 0
+                    && toolMarkupPattern.test(finalContent || "")
+                    ? ""
+                    : finalContent || msg.content,
                   role: (data.role as Message["role"]) ?? "assistant",
                   toolCalls: toolCalls.length > 0 ? toolCalls : msg.toolCalls,
                   isToolExecuting: hasToolCalls,
@@ -589,7 +698,7 @@ export default function ChatPage() {
           msgState.needsNewBubble = true;
         } else {
           setLoading(false);
-          loadThreads();
+          void loadThreads();
         }
         return;
       }
@@ -617,43 +726,34 @@ export default function ChatPage() {
       // ── Run-level terminal events ───────────────────────────────────
       if (data.type === "agent.run_completed") {
         // Safety net: if no completion event fired (e.g. tool-only runs), stop loading.
+        finalizeAssistantMessages();
         setLoading(false);
-        loadThreads();
+        void loadThreads();
         return;
       }
 
       if (data.type === "agent.run_failed") {
         const errorMsg = String(data.error || "The agent encountered an error.");
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.id === msgState.activeAssistantId
-              ? { ...msg, content: msg.content + "\n\n⚠️ " + errorMsg, isToolExecuting: false }
-              : msg
-          )
-        );
+        finalizeAssistantMessages((message) => ({
+          ...message,
+          content: message.content + "\n\n⚠️ " + errorMsg,
+        }));
         setLoading(false);
         return;
       }
 
       if (data.type === "cancelled") {
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.id === msgState.activeAssistantId ? { ...msg, isToolExecuting: false } : msg
-          )
-        );
+        finalizeAssistantMessages();
         setLoading(false);
         return;
       }
 
       if (data.type === "error") {
-        const errorMsg = String(data.error || "Unknown error");
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.id === msgState.activeAssistantId
-              ? { ...msg, content: msg.content + "\n\n⚠️ " + errorMsg, isToolExecuting: false }
-              : msg
-          )
-        );
+        const errorMsg = String(data.error || data.message || "Unknown error");
+        finalizeAssistantMessages((message) => ({
+          ...message,
+          content: message.content + "\n\n⚠️ " + errorMsg,
+        }));
         setLoading(false);
         return;
       }
@@ -661,26 +761,22 @@ export default function ChatPage() {
 
     // ── Fetch SSE and feed each event line into processEvent ──────────
     try {
-      const response = await fetch(`${apiBase}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({
+      const response = await api.streamChat(
+        {
           thread_id: threadId,
           messages: [{ role: "user", content: currentInput }],
           ...(currentFileIds.length ? { file_ids: currentFileIds } : {}),
           ...(localStorage.getItem("system_instructions_override")?.trim()
             ? { system_instructions: localStorage.getItem("system_instructions_override")!.trim() }
             : {}),
-          ...(localStorage.getItem("chat_model")?.trim()
-            ? { model: localStorage.getItem("chat_model")!.trim() }
-            : {}),
-        }),
-        signal: abortController.signal,
-      });
+          model: requestedModel,
+        },
+        abortController.signal,
+      );
 
-      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
-
-      const reader = response.body.getReader();
+      const responseBody = response.body;
+      if (!responseBody) throw new Error("No response body");
+      const reader = responseBody.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
@@ -708,46 +804,21 @@ export default function ChatPage() {
               : msg
           )
         );
-        setLoading(false);
       }
     } finally {
-      wsRef.current = null;
+      // Only finalize state if this stream is still the active owner, or if
+      // it was stopped via handleStop (wsRef already cleared to null).
+      // If a newer doSendMessage has already set wsRef to a different
+      // controller, leave the new stream's state untouched.
+      const isOwnerOrStopped =
+        wsRef.current === abortController || wsRef.current === null;
+      if (wsRef.current === abortController) wsRef.current = null;
+      if (isOwnerOrStopped) {
+        finalizeAssistantMessages();
+        setLoading(false);
+      }
     }
   }
-
-  // ── Task Board callbacks ─────────────────────────────
-  const handleTaskStatusChange = (_taskListId: string, taskId: string, status: TaskStatus) => {
-    setTaskList((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        tasks: prev.tasks.map((t) =>
-          t.id === taskId ? { ...t, status } : t
-        ),
-      };
-    });
-  };
-
-  const handleTaskDelete = (_taskListId: string, taskId: string) => {
-    setTaskList((prev) => {
-      if (!prev) return prev;
-      return { ...prev, tasks: prev.tasks.filter((t) => t.id !== taskId) };
-    });
-  };
-
-  const handleTaskAdd = (_taskListId: string, title: string) => {
-    // Optimistic: will be confirmed by SSE task_added event
-    const tempTask: Task = {
-      id: `temp-${Date.now()}`,
-      title,
-      status: "todo",
-      order: taskList ? taskList.tasks.length : 0,
-    };
-    setTaskList((prev) => {
-      if (!prev) return prev;
-      return { ...prev, tasks: [...prev.tasks, tempTask] };
-    });
-  };
 
   function sendMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -758,7 +829,7 @@ export default function ChatPage() {
   // ── Auth guards ───────────────────────────────────────────────────────
   if (authLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex min-h-dvh items-center justify-center bg-background">
         <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--muted)" }} />
       </div>
     );
@@ -766,7 +837,7 @@ export default function ChatPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background px-4">
+      <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
           <div
             className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-2xl font-bold text-white"
@@ -783,6 +854,11 @@ export default function ChatPage() {
               Sign in to start chatting with your AI assistant
             </p>
           </div>
+          {authNotice && (
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              {authNotice}
+            </div>
+          )}
           <button
             onClick={loginWithGoogle}
             className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-xl text-sm font-semibold hover:bg-gray-100 transition-colors shadow-lg cursor-pointer"
@@ -805,17 +881,18 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen bg-background text-foreground" suppressHydrationWarning>
+    <div className="flex h-dvh min-h-dvh overflow-hidden bg-background text-foreground" suppressHydrationWarning>
       {/* Settings Panel (portal-like overlay) */}
       <SettingsPanel
         isOpen={settingsPanelOpen}
         initialTab={settingsPanelTab}
-        onClose={() => setSettingsPanelOpen(false)}
+        onClose={closeSettingsPanel}
       />
-      {/* Sidebar */}
+
+      {/* Desktop Sidebar */}
       <div
-        className={`shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${
-          sidebarOpen ? "w-64" : "w-0"
+        className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${
+          desktopSidebarOpen ? "lg:w-64" : "lg:w-0"
         }`}
       >
         <Sidebar
@@ -825,7 +902,7 @@ export default function ChatPage() {
           onSelectThread={handleSelectThread}
           onDeleteThread={handleDeleteThread}
           onRenameThread={handleRenameThread}
-          onCollapse={() => setSidebarOpen(false)}
+          onCollapse={() => setDesktopSidebarOpen(false)}
           onOpenSettings={openSettingsPanel}
         />
       </div>
@@ -835,10 +912,9 @@ export default function ChatPage() {
         {/* Chat Area */}
         <div className="flex-1 flex flex-col min-w-0">
         <Header
-          onToggleSidebar={sidebarOpen ? undefined : () => setSidebarOpen(true)}
-          sidebarOpen={sidebarOpen}
+          onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+          onOpenDesktopSidebar={desktopSidebarOpen ? undefined : () => setDesktopSidebarOpen(true)}
           threadName={currentThread?.name}
-          onOpenSettings={openSettingsPanel}
         />
 
         {/* Messages Area */}
@@ -848,7 +924,7 @@ export default function ChatPage() {
         >
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center">
-              <div className="text-center space-y-6 w-full max-w-2xl px-4">
+              <div className="text-center space-y-6 w-full max-w-2xl px-4 sm:px-6">
                 <div
                   className="w-14 h-14 mx-auto rounded-full flex items-center justify-center text-xl font-bold text-white"
                   style={{ background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))" }}
@@ -863,7 +939,7 @@ export default function ChatPage() {
                 </div>
 
                 {/* Conversation Starters */}
-                <div className="grid grid-cols-2 gap-2 mt-4">
+                <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {([
                     { icon: Music2, text: "Play Despacito on Spotify" },
                     { icon: ListTodo, text: "Plan tasks to organise a birthday party" },
@@ -886,12 +962,12 @@ export default function ChatPage() {
               </div>
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto w-full px-4 py-2 space-y-2">
+            <div className="max-w-3xl mx-auto w-full space-y-2 px-3 py-3 sm:px-4">
               {messages.map((m) => {
                 if (m.role === "tool_approval" && m.metadata) {
                   return (
                     <div key={m.id} className="px-4 py-2">
-                      <div className="max-w-3xl mx-auto">
+                      <div className="max-w-3xl mx-auto px-0 sm:px-0">
                       <div className="flex gap-3">
                         <div className="w-7 shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -912,7 +988,7 @@ export default function ChatPage() {
                 if (m.role === "human_input" && m.metadata) {
                   return (
                     <div key={m.id} className="px-4 py-1">
-                      <div className="max-w-3xl mx-auto">
+                      <div className="max-w-3xl mx-auto px-0 sm:px-0">
                       <div className="flex gap-3">
                         <div className="w-7 shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -966,12 +1042,12 @@ export default function ChatPage() {
                       key={m.id}
                       role={m.role}
                       content={m.content}
+                      attachments={m.attachments}
                       reasoning={m.reasoning}
                       timestamp={m.timestamp}
                       toolCalls={m.toolCalls}
                       isToolExecuting={m.isToolExecuting}
                       isContinuation={m.isContinuation}
-                      onMcpAppResult={handleMcpAppResult}
                       onOpenInPanel={(tool) => {
                         const args = typeof tool.arguments === "string"
                           ? JSON.parse(tool.arguments)
@@ -1013,37 +1089,26 @@ export default function ChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="bg-background pb-4 pt-2">
-          <div className="max-w-3xl mx-auto px-4">
+        <div className="bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 sm:pb-4">
+          <div className="max-w-3xl mx-auto px-3 sm:px-4">
             <form
               onSubmit={sendMessage}
-              className="flex flex-col border border-(--border) bg-(--input-bg) px-3 py-2 shadow-sm"
-              style={{ borderRadius: "12px" }}
+              className="flex flex-col overflow-hidden border border-(--border) px-3 py-3 shadow-sm"
+              style={{
+                borderRadius: "28px",
+                background:
+                  "linear-gradient(180deg, color-mix(in srgb, var(--background) 88%, var(--input-bg)), color-mix(in srgb, var(--input-bg) 92%, var(--background)))",
+                boxShadow: "0 24px 60px -46px var(--panel-shadow)",
+              }}
             >
-              {/* File chips row — shown when files are attached */}
+              {/* Attachment preview row — shown when files are attached */}
               {attachedFiles.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pb-2">
-                  {attachedFiles.map((f) => (
-                    <span
-                      key={f.id}
-                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-(--border) bg-(--card)"
-                      style={{ color: "var(--foreground)" }}
-                    >
-                      <span className="max-w-32 truncate">{f.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveFile(f.id)}
-                        className="shrink-0 hover:opacity-70 transition-opacity cursor-pointer"
-                        aria-label={`Remove ${f.name}`}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
+                <div className="flex flex-wrap gap-2 pb-3">
+                  {attachedFiles.map((file) => renderComposerAttachment(file))}
                 </div>
               )}
 
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2.5">
               {/* Hidden file input */}
               <input
                 ref={fileInputRef}
@@ -1059,7 +1124,7 @@ export default function ChatPage() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingFile}
-                className="shrink-0 mb-0.5 p-1.5 rounded-full hover:bg-(--card-hover) transition-colors self-end disabled:opacity-40 cursor-pointer"
+                className="mb-0.5 shrink-0 self-end rounded-2xl p-2 transition-colors hover:bg-(--card-hover) disabled:opacity-40 cursor-pointer"
                 style={{ color: "var(--muted)" }}
                 aria-label="Attach file"
               >
@@ -1082,7 +1147,7 @@ export default function ChatPage() {
                   }
                 }}
                 rows={1}
-                className="flex-1 resize-none bg-transparent text-sm outline-none py-1.5 max-h-48 overflow-y-auto"
+                className="max-h-48 flex-1 resize-none bg-transparent py-2 text-sm outline-none overflow-y-auto"
                 placeholder="Ask anything"
                 disabled={loading}
               />
@@ -1101,7 +1166,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     onClick={() => setRealtimeOpen(true)}
-                    className="p-1.5 rounded-full hover:bg-(--card-hover) transition-colors cursor-pointer"
+                    className="rounded-2xl p-2 transition-colors hover:bg-(--card-hover) cursor-pointer"
                     style={{ color: "var(--muted)" }}
                     aria-label="Start speech-to-speech conversation"
                     title="Live voice conversation"
@@ -1114,7 +1179,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     onClick={handleStop}
-                    className="p-1.5 rounded-full transition-colors cursor-pointer"
+                    className="rounded-2xl p-2 transition-colors cursor-pointer"
                     style={{ background: "var(--accent)", color: "#fff" }}
                     aria-label="Stop"
                   >
@@ -1125,7 +1190,7 @@ export default function ChatPage() {
                   <button
                     type="submit"
                     disabled={!input.trim()}
-                    className="p-1.5 rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    className="rounded-2xl p-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     style={{
                       background: input.trim() ? "var(--accent)" : "var(--card)",
                       color: input.trim() ? "#fff" : "var(--muted)",
@@ -1163,13 +1228,43 @@ export default function ChatPage() {
         />
       </div>
 
-      {/* Overlay for mobile sidebar - kept for safety on narrow viewports */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-10 sm:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+      {/* Mobile Sidebar Drawer */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-40 flex lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setMobileSidebarOpen(false)}
+            aria-label="Close sidebar"
+          />
+          <div className="relative h-full w-[min(20rem,calc(100vw-1rem))] max-w-full">
+            <Sidebar
+              threads={threads}
+              currentThreadId={currentThreadId}
+              onNewChat={handleNewChat}
+              onSelectThread={handleSelectThread}
+              onDeleteThread={handleDeleteThread}
+              onRenameThread={handleRenameThread}
+              onCollapse={() => setMobileSidebarOpen(false)}
+              onOpenSettings={openSettingsPanel}
+            />
+          </div>
+        </div>
       )}
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-dvh items-center justify-center bg-background">
+          <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--muted)" }} />
+        </div>
+      }
+    >
+      <ChatPageContent />
+    </Suspense>
   );
 }

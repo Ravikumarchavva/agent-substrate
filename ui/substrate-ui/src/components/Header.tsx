@@ -1,32 +1,43 @@
 ﻿"use client";
 
 import { PanelLeftOpen } from "lucide-react";
-import type { SettingsTab } from "./SettingsPanel";
 
 interface HeaderProps {
-  onToggleSidebar?: () => void;
-  sidebarOpen?: boolean;
+  onOpenMobileSidebar?: () => void;
+  onOpenDesktopSidebar?: () => void;
   threadName?: string;
-  onOpenSettings: (tab?: SettingsTab) => void;
 }
 
 export function Header({
-  onToggleSidebar,
+  onOpenMobileSidebar,
+  onOpenDesktopSidebar,
   threadName,
 }: HeaderProps) {
 
   return (
     <header
-      className="flex items-center justify-between px-3 py-2 bg-background border-b border-(--border)"
+      className="flex items-center border-b border-(--border) bg-background px-3 py-2 sm:px-4"
       suppressHydrationWarning
     >
       {/* Left: sidebar toggle + thread name */}
       <div className="flex items-center gap-2 min-w-0">
-        {onToggleSidebar && (
+        {onOpenMobileSidebar && (
           <button
-            onClick={onToggleSidebar}
-            className="p-1.5 hover:bg-(--card-hover) rounded-lg shrink-0 cursor-pointer"
+            onClick={onOpenMobileSidebar}
+            className="shrink-0 rounded-lg p-1.5 hover:bg-(--card-hover) cursor-pointer lg:hidden"
             aria-label="Open sidebar"
+          >
+            <PanelLeftOpen
+              className="w-4 h-4"
+              style={{ color: "var(--muted)" }}
+            />
+          </button>
+        )}
+        {onOpenDesktopSidebar && (
+          <button
+            onClick={onOpenDesktopSidebar}
+            className="hidden shrink-0 rounded-lg p-1.5 hover:bg-(--card-hover) cursor-pointer lg:inline-flex"
+            aria-label="Restore sidebar"
           >
             <PanelLeftOpen
               className="w-4 h-4"

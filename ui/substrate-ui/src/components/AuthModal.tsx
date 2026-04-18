@@ -45,7 +45,7 @@ export function AuthModal({ isOpen, onClose }: Props) {
               )}
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{user.name || "User"}</p>
-                <p className="text-sm text-zinc-400 truncate">{user.email || user.provider}</p>
+                <p className="text-sm text-zinc-400 truncate">{user.email || "Signed in with Google"}</p>
               </div>
             </div>
           )}
@@ -115,13 +115,22 @@ export function AuthModal({ isOpen, onClose }: Props) {
               <div className="border-t border-(--border) my-4" />
               <button
                 onClick={async () => {
+                  const confirmed = window.confirm(
+                    "Sign out of Google? Spotify will stay connected until you disconnect it from Apps."
+                  );
+                  if (!confirmed) {
+                    return;
+                  }
                   await logout();
                   onClose();
                 }}
                 className="w-full py-2.5 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg font-medium transition-colors cursor-pointer"
               >
-                Logout from All Services
+                Sign out
               </button>
+              <p className="text-xs text-center text-zinc-500">
+                Spotify stays connected until you disconnect it from Apps.
+              </p>
             </>
           )}
         </div>

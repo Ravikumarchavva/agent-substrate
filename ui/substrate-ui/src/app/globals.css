@@ -1,48 +1,85 @@
 ﻿@import "tailwindcss";
 @import "katex/dist/katex.min.css";
 
-/* ─── Chainlit-inspired design tokens ─────────────────────────────────────── */
+/* ─── Shared Raavan tokens ─────────────────────────────────────────────────── */
 :root {
-  /* Light */
-  --background:    #ffffff;
-  --foreground:    #0d0d0d;
-  --border:        #e4e4e4;
-  --card:          #f5f5f5;
-  --card-hover:    #ececec;
-  --input-bg:      #f5f5f5;
-  --sidebar-bg:    #fafafa;
-  --sidebar-item:  #ececec;
-  --user-bubble:   #f0f0f0;
-  --accent:        #3b82f6;   /* Blue-500 — works in light & dark */
-  --accent-hover:  #2563eb;
-  --muted:         #737373;   /* neutral-500 — warm, not purple */
-  --step-bg:       #f9f9f9;
-  --code-bg:       #f5f5f5;
+  --background: #ffffff;
+  --foreground: #000000;
+  --muted: #666666;
+  --muted-foreground: #999999;
+  --border: #e5e5e5;
+  --border-hover: #cccccc;
+  --card: #fafafa;
+  --card-hover: #f5f5f5;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-foreground: #ffffff;
+  --input-bg: #ffffff;
+  --input-border: #e5e5e5;
+  --code-bg: #0a0a0a;
+  --code-fg: #e5e5e5;
+  --badge-bg: #f0f0f0;
+  --badge-fg: #333333;
+  --nav-bg: rgba(255, 255, 255, 0.8);
+  --section-alt: #fafafa;
+  --gradient-from: #ffffff;
+  --gradient-to: #f5f5f5;
+  --shadow: rgba(0, 0, 0, 0.08);
+  --ring: rgba(0, 0, 0, 0.1);
+  --sidebar-bg: #fafafa;
+  --sidebar-item: #ffffff;
+  --user-bubble: #fafafa;
+  --step-bg: #fafafa;
+  --panel: color-mix(in srgb, var(--card) 84%, var(--background));
+  --panel-elevated: color-mix(in srgb, var(--background) 78%, white 22%);
+  --panel-muted: color-mix(in srgb, var(--card) 72%, var(--background));
+  --panel-border: color-mix(in srgb, var(--border) 86%, transparent);
+  --panel-shadow: rgba(15, 23, 42, 0.16);
+  --panel-glow: rgba(37, 99, 235, 0.18);
 }
 
+[data-theme="dark"],
 .dark {
-  /* Chainlit dark: bg=13%≈#212121  sidebar=9%≈#171717  card=18%≈#2d2d2d  border=26%≈#424142 */
-  --background:    #212121;
-  --foreground:    #ededed;
-  --border:        #3d3d3d;
-  --card:          #2d2d2d;
-  --card-hover:    #383838;
-  --input-bg:      #2d2d2d;
-  --sidebar-bg:    #171717;
-  --sidebar-item:  #262626;
-  --user-bubble:   #2d2d2d;
-  --accent:        #3b82f6;   /* Blue-500 — works in light & dark */
-  --accent-hover:  #2563eb;
-  --muted:         #b5b5b5;   /* warm neutral — Chainlit muted-foreground 71% */
-  --step-bg:       #262626;
-  --code-bg:       #171717;
+  --background: #000000;
+  --foreground: #ffffff;
+  --muted: #888888;
+  --muted-foreground: #666666;
+  --border: #222222;
+  --border-hover: #333333;
+  --card: #0a0a0a;
+  --card-hover: #111111;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-foreground: #ffffff;
+  --input-bg: #0a0a0a;
+  --input-border: #222222;
+  --code-bg: #0a0a0a;
+  --code-fg: #e5e5e5;
+  --badge-bg: #1a1a1a;
+  --badge-fg: #cccccc;
+  --nav-bg: rgba(0, 0, 0, 0.8);
+  --section-alt: #050505;
+  --gradient-from: #000000;
+  --gradient-to: #0a0a0a;
+  --shadow: rgba(255, 255, 255, 0.05);
+  --ring: rgba(255, 255, 255, 0.1);
+  --sidebar-bg: #0a0a0a;
+  --sidebar-item: #000000;
+  --user-bubble: #0a0a0a;
+  --step-bg: #0a0a0a;
+  --panel: color-mix(in srgb, var(--card) 88%, var(--background));
+  --panel-elevated: color-mix(in srgb, var(--card) 78%, black 22%);
+  --panel-muted: color-mix(in srgb, var(--card) 68%, var(--background));
+  --panel-border: color-mix(in srgb, var(--border) 88%, transparent);
+  --panel-shadow: rgba(0, 0, 0, 0.48);
+  --panel-glow: rgba(96, 165, 250, 0.2);
 }
 
 @theme inline {
-  --color-background:  var(--background);
-  --color-foreground:  var(--foreground);
-  --font-sans:         var(--font-geist-sans);
-  --font-mono:         var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -51,8 +88,9 @@ html, body { height: 100%; }
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.15s, color 0.15s;
 }
 
@@ -61,6 +99,58 @@ body {
 ::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--card-hover); }
 *                          { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ─── Attachment cards (MessageBubble file attachments) ──────────────────── */
+.attachment-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.attachment-card:hover {
+  background: var(--card-hover);
+}
+
+.attachment-card__preview,
+.attachment-card__icon {
+  position: relative;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.attachment-card__preview {
+  background: var(--card-hover);
+}
+
+.attachment-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-hover);
+}
+
+.attachment-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--card);
+}
 
 /* ─── Prose ─────────────────────────────────────────────────────────────── */
 .prose-chat {
@@ -84,6 +174,7 @@ body {
 .prose-chat pre {
   background: var(--code-bg); border: 1px solid var(--border); border-radius:10px;
   padding:1rem; overflow-x:auto; margin:0.75em 0;
+  color: var(--code-fg);
 }
 .prose-chat pre code { background:none; border:none; padding:0; font-size:0.84rem; color:inherit; font-family:ui-monospace,Menlo,Monaco,monospace; }
 .prose-chat blockquote { border-left:3px solid var(--accent); padding-left:1em; margin:0.75em 0; opacity:0.8; }

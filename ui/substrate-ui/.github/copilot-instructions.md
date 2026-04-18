@@ -38,12 +38,41 @@ src/
 │   ├── AppPanel.tsx          ← Right panel for MCP App UI widgets
 │   ├── KanbanPanel.tsx       ← Live Kanban board driven by agent task events
 │   ├── HumanInputCard.tsx    ← HITL input prompt card
-│   └── ToolApprovalCard.tsx  ← Tool approval request card
+│   ├── ToolApprovalCard.tsx  ← Tool approval request card
+│   └── settings/             ← SettingsPanel split into tab components
+│       ├── index.tsx          ← Barrel re-export (SettingsPanel + SettingsTab)
+│       ├── SettingsPanel.tsx  ← Shell: state, handlers, tab bar, layout
+│       ├── GeneralTab.tsx     ← Custom instructions + Model & Voice preferences
+│       ├── ProfileTab.tsx     ← User profile card
+│       ├── AppsTab.tsx        ← Google + Spotify connect/disconnect
+│       ├── AdminTab.tsx       ← Admin stats, users, threads
+│       └── icons.tsx          ← GoogleIcon, SpotifyIcon SVG components
+├── hooks/
+│   ├── useThreads.ts         ← Thread CRUD state + handlers
+│   ├── useFileAttachments.ts ← File upload/remove state + preview helpers
+│   └── useAppPanel.ts        ← MCP App panel state + open/close handlers
 ├── lib/
-│   ├── api.ts                ← All backend API calls (threads, tasks, chat, HITL)
-│   └── logger.ts             ← Structured frontend logger (batches to /api/logs)
+│   ├── api/                  ← Backend API calls split by domain
+│   │   ├── index.ts          ← Assembles `api` object from domain modules
+│   │   ├── _client.ts        ← Shared fetch helpers (requestJson, requestVoid, etc.)
+│   │   ├── threads.ts        ← Thread CRUD
+│   │   ├── messages.ts       ← Message fetching + backend→frontend parsing
+│   │   ├── tasks.ts          ← Task board CRUD
+│   │   ├── files.ts          ← File upload/list/delete
+│   │   ├── chat.ts           ← SSE streaming, HITL respond, cancel, MCP context
+│   │   ├── admin.ts          ← Admin + settings API calls
+│   │   └── audio.ts          ← Transcription, TTS, realtime tokens
+│   ├── logger.ts             ← Structured frontend logger (batches to /api/logs)
+│   ├── file-utils.ts         ← Shared file attachment classification (extension/kind/icon/size)
+│   └── chat-routes.ts        ← URL routing utilities (parseChatPath, buildChatPath)
 ├── types/
-│   └── index.ts              ← Shared TypeScript types (Thread, Message, Task, etc.)
+│   ├── index.ts              ← Barrel re-exports from domain type files
+│   ├── chat.ts               ← Message, Thread, ToolCall, BackendMessage, UploadedFile
+│   ├── admin.ts              ← AdminThread, AdminUser, AdminStats, AdminStep
+│   ├── audio.ts              ← TTSVoice, TranscribeResult, RealtimeToken
+│   ├── tasks.ts              ← TaskStatus, Task, TaskList
+│   ├── models.ts             ← ModelProvider, ModelOption, VoiceOption
+│   └── user.ts               ← User, Element, InstructionValidationResult
 └── contexts/
     └── ThemeContext.tsx       ← Dark/light theme context
 ```
@@ -127,10 +156,10 @@ All events arrive on the `/api/chat` SSE stream. Handle in `page.tsx`:
 
 ---
 
-## API Client (`src/lib/api.ts`)
+## API Client (`src/lib/api/`)
 All backend calls go through the `api` object. Never call `fetch` directly in components:
 ```ts
-import { api } from "@/lib"
+import { api } from "@/lib/api"
 
 // Threads
 const threads = await api.getThreads()
@@ -143,6 +172,10 @@ await api.updateTask(listId, taskId, { status: "done" })
 await api.addTasks(listId, ["New task"])
 await api.deleteTask(listId, taskId)
 ```
+
+The API client is split into domain modules (`threads.ts`, `messages.ts`, `tasks.ts`,
+`files.ts`, `chat.ts`, `admin.ts`, `audio.ts`) assembled in `index.ts`.
+Shared fetch helpers live in `_client.ts`. Add new endpoints to the appropriate domain file.
 
 ---
 

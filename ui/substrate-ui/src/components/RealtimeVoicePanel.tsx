@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Mic, MicOff, Phone, PhoneOff, Volume2 } from "lucide-react";
+import { Loader2, Mic, Phone, PhoneOff, Volume2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { getPreferredRealtimeModel } from "@/lib/model-preferences";
 
 interface RealtimeVoicePanelProps {
   /** Whether the panel is currently open/visible. */
@@ -166,9 +167,10 @@ export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps)
 
     // 1. Get ephemeral token
     let token: Awaited<ReturnType<typeof api.getRealtimeToken>>;
+    const realtimeModel = getPreferredRealtimeModel();
     try {
       token = await api.getRealtimeToken();
-    } catch (_err) {
+    } catch {
       setError("Failed to get session token");
       setSessionState("error");
       return;
@@ -192,7 +194,13 @@ export function RealtimeVoicePanel({ isOpen, onClose }: RealtimeVoicePanelProps)
 
     ws.onopen = () => {
       // Send auth handshake
-      ws.send(JSON.stringify({ type: "auth", client_secret: token.client_secret }));
+      ws.send(
+        JSON.stringify({
+          type: "auth",
+          client_secret: token.client_secret,
+          model: realtimeModel,
+        })
+      );
     };
 
     ws.onclose = (e) => {

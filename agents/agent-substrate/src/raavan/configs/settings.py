@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # LLM models
     # Override these in .env to switch globally, or let the frontend per-request
     # override take precedence (Settings → General → Model).
-    CHAT_MODEL: str = "groq/llama-3.3-70b-versatile"
+    CHAT_MODEL: str = "openai/gpt-5.4-mini"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     STT_MODEL: str = "whisper-1"
     TTS_MODEL: str = "google/gemini-3.1-flash-tts-preview"

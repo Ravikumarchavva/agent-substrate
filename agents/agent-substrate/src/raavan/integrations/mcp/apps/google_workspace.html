@@ -7,28 +7,60 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
+  :root {
+    --bg: #171717;
+    --surface: #1f1f1f;
+    --surface-muted: #262626;
+    --surface-strong: #1a1a1a;
+    --text: #f5f5f5;
+    --text-muted: #9ca3af;
+    --text-soft: #6b7280;
+    --border: #2a2a2a;
+    --accent: #2563eb;
+    --accent-soft: rgba(37,99,235,0.16);
+    --danger: #ef4444;
+    --notification-bg: #111827;
+    --notification-border: #374151;
+  }
+
+  html[data-theme="light"] {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --surface-muted: #f5f3f0;
+    --surface-strong: #f0eeeb;
+    --text: #171717;
+    --text-muted: #6b7280;
+    --text-soft: #9ca3af;
+    --border: #e8e5df;
+    --accent: #2563eb;
+    --accent-soft: rgba(37,99,235,0.10);
+    --danger: #dc2626;
+    --notification-bg: #ffffff;
+    --notification-border: #e5e7eb;
+  }
+
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #1a1a2e; color: #e4e4e7;
+    background: var(--bg); color: var(--text);
     overflow: hidden; display: flex; flex-direction: column;
   }
 
   /* Header */
   .header {
     display: flex; align-items: center; gap: 10px;
-    padding: 14px 16px 10px; border-bottom: 1px solid #2a2a3e;
+    padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .gws-icon { width: 22px; height: 22px; }
-  .header h2 { font-size: 14px; font-weight: 600; color: #fff; }
-  .header .user-info { margin-left: auto; font-size: 11px; color: #9ca3af; }
+  .header h2 { font-size: 14px; font-weight: 600; color: var(--text); }
+  .header .user-info { margin-left: auto; font-size: 11px; color: var(--text-muted); }
 
   /* Auth banner */
   .auth-banner {
     display: flex; align-items: center; gap: 12px;
     padding: 14px 16px;
     background: linear-gradient(135deg, #4285F4 0%, #34A853 100%);
-    border-bottom: 1px solid #2a2a3e; flex-shrink: 0;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
   }
   .auth-banner.hidden { display: none; }
   .auth-text { flex: 1; color: #fff; font-size: 13px; font-weight: 500; }
@@ -41,18 +73,18 @@
 
   /* Tabs */
   .tabs {
-    display: flex; background: #16213e; border-bottom: 1px solid #2a2a3e;
+    display: flex; background: var(--surface-strong); border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .tab-btn {
     flex: 1; background: none; border: none;
     border-bottom: 2px solid transparent;
-    color: #9ca3af; font-size: 12px; font-weight: 500;
+    color: var(--text-muted); font-size: 12px; font-weight: 500;
     padding: 10px 6px; cursor: pointer; transition: all 0.15s;
     display: flex; align-items: center; justify-content: center; gap: 5px;
   }
-  .tab-btn:hover { color: #fff; }
-  .tab-btn.active { color: #4285F4; border-bottom-color: #4285F4; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
   /* Tab views */
   .tab-view { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
@@ -61,109 +93,109 @@
   /* Scrollable content */
   .content-scroll {
     flex: 1; overflow-y: auto; min-height: 0;
-    scrollbar-width: thin; scrollbar-color: #2a2a3e #16213e;
+    scrollbar-width: thin; scrollbar-color: var(--border) var(--surface-strong);
   }
   .content-scroll::-webkit-scrollbar { width: 6px; }
-  .content-scroll::-webkit-scrollbar-track { background: #16213e; }
-  .content-scroll::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 3px; }
+  .content-scroll::-webkit-scrollbar-track { background: var(--surface-strong); }
+  .content-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
   /* Section header */
   .section-hdr {
     display: flex; justify-content: space-between; align-items: center;
     padding: 10px 16px 6px; font-size: 11px; font-weight: 600;
-    color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;
-    border-bottom: 1px solid #1e1e30;
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
   }
   .refresh-btn {
-    background: none; border: none; color: #4285F4;
+    background: none; border: none; color: var(--accent);
     font-size: 11px; cursor: pointer; padding: 2px 6px;
     border-radius: 4px; transition: background 0.15s;
   }
-  .refresh-btn:hover { background: rgba(66,133,244,0.15); }
+  .refresh-btn:hover { background: var(--accent-soft); }
 
   /* Drive file item */
   .file-item {
     display: flex; align-items: center; gap: 12px;
     padding: 10px 16px; cursor: pointer;
-    transition: background 0.15s; border-bottom: 1px solid #1e1e30;
+    transition: background 0.15s; border-bottom: 1px solid var(--border);
   }
-  .file-item:hover { background: #1e1e30; }
+  .file-item:hover { background: var(--surface-muted); }
   .file-icon { width: 28px; height: 28px; flex-shrink: 0; font-size: 22px; text-align: center; }
   .file-info { flex: 1; min-width: 0; }
   .file-name {
-    font-size: 13px; font-weight: 500; color: #e4e4e7;
+    font-size: 13px; font-weight: 500; color: var(--text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .file-meta { font-size: 11px; color: #6a6a8a; margin-top: 2px; }
+  .file-meta { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
 
   /* Calendar event */
   .event-item {
     display: flex; align-items: flex-start; gap: 12px;
-    padding: 10px 16px; border-bottom: 1px solid #1e1e30;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
     transition: background 0.15s;
   }
-  .event-item:hover { background: #1e1e30; }
+  .event-item:hover { background: var(--surface-muted); }
   .event-time-col { flex-shrink: 0; width: 52px; }
-  .event-time { font-size: 11px; color: #4285F4; font-weight: 600; }
-  .event-date { font-size: 10px; color: #6a6a8a; margin-top: 1px; }
+  .event-time { font-size: 11px; color: var(--accent); font-weight: 600; }
+  .event-date { font-size: 10px; color: var(--text-soft); margin-top: 1px; }
   .event-dot {
     width: 10px; height: 10px; border-radius: 50%;
     background: #4285F4; flex-shrink: 0; margin-top: 4px;
   }
   .event-info { flex: 1; min-width: 0; }
   .event-title {
-    font-size: 13px; font-weight: 500; color: #e4e4e7;
+    font-size: 13px; font-weight: 500; color: var(--text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .event-location { font-size: 11px; color: #6a6a8a; margin-top: 2px; }
+  .event-location { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
 
   /* Gmail item */
   .mail-item {
     display: flex; align-items: flex-start; gap: 12px;
-    padding: 10px 16px; border-bottom: 1px solid #1e1e30;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
     cursor: pointer; transition: background 0.15s;
   }
-  .mail-item:hover { background: #1e1e30; }
-  .mail-item.unread .mail-sender { font-weight: 700; color: #fff; }
-  .mail-item.unread .mail-subject { font-weight: 600; color: #e4e4e7; }
+  .mail-item:hover { background: var(--surface-muted); }
+  .mail-item.unread .mail-sender { font-weight: 700; color: var(--text); }
+  .mail-item.unread .mail-subject { font-weight: 600; color: var(--text); }
   .mail-avatar {
     width: 32px; height: 32px; border-radius: 50%;
-    background: #4285F4; color: #fff;
+    background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: 600; flex-shrink: 0;
   }
   .mail-info { flex: 1; min-width: 0; }
-  .mail-sender { font-size: 13px; color: #9ca3af; }
+  .mail-sender { font-size: 13px; color: var(--text-muted); }
   .mail-subject {
-    font-size: 13px; color: #9ca3af; margin-top: 1px;
+    font-size: 13px; color: var(--text-muted); margin-top: 1px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .mail-snippet {
-    font-size: 11px; color: #6a6a8a; margin-top: 2px;
+    font-size: 11px; color: var(--text-soft); margin-top: 2px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .mail-time { font-size: 11px; color: #6a6a8a; flex-shrink: 0; }
+  .mail-time { font-size: 11px; color: var(--text-soft); flex-shrink: 0; }
 
   /* States */
   .no-data {
     text-align: center; padding: 40px 16px;
-    color: #6a6a8a; font-size: 13px;
+    color: var(--text-soft); font-size: 13px;
   }
   .loading-state {
     text-align: center; padding: 32px 16px;
-    color: #6a6a8a; font-size: 12px;
+    color: var(--text-soft); font-size: 12px;
   }
   .error-state {
     text-align: center; padding: 24px 16px;
-    color: #f87171; font-size: 12px;
+    color: var(--danger); font-size: 12px;
   }
 
   /* Notification */
   .notification {
     position: fixed; bottom: 16px; right: 16px; left: 16px;
-    background: #1e293b; border: 1px solid #334155;
+    background: var(--notification-bg); border: 1px solid var(--notification-border);
     border-radius: 8px; padding: 10px 14px;
-    font-size: 12px; color: #e4e4e7;
+    font-size: 12px; color: var(--text);
     animation: slideUp 0.2s ease; z-index: 100;
     display: none;
   }
@@ -235,6 +267,13 @@
 (function() {
   "use strict";
 
+  function applyTheme(theme) {
+    const normalizedTheme = theme === "light" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", normalizedTheme);
+  }
+
+  applyTheme(window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+
   // ── MCP RPC ──────────────────────────────────────────────
   let rpcId = 0;
   const pending = {};
@@ -263,6 +302,10 @@
     if (msg.id && pending[msg.id]) {
       pending[msg.id](msg.result || msg.error);
       delete pending[msg.id];
+    }
+    if (msg.method === "ui/notifications/theme-changed" && msg.params?.theme) {
+      applyTheme(msg.params.theme);
+      return;
     }
     if (msg.method === "ui/notifications/tool-input" && msg.params) {
       handleToolInput(msg.params.arguments || msg.params);
@@ -516,13 +559,23 @@
       userEmail = args.email;
       document.getElementById("user-info").textContent = userEmail;
     }
+    // After a calendar mutation (create/cancel), refresh the calendar view
+    if (args.calendar_mutated && accessToken) {
+      switchTab("calendar");
+      dataLoaded.calendar = false;
+      loadCalendar();
+      return;
+    }
     const requestedTab = args.service || args.view;
     if (requestedTab) switchTab(requestedTab);
   }
 
   // ── Init ─────────────────────────────────────────────────
   async function init() {
-    sendRpc("ready");
+    const initResult = await sendRpc("ui/initialize");
+    if (initResult?.hostContext?.theme) {
+      applyTheme(initResult.hostContext.theme);
+    }
     const ctx = await sendRpc("getContext");
     if (ctx?.arguments) handleToolInput(ctx.arguments);
 

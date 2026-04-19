@@ -227,6 +227,19 @@ class OpenAIClient(BaseModelClient):
         """
         return _encode_tools(tools)
 
+    @staticmethod
+    def _normalize_tool_choice(
+        tool_choice: Optional[str | dict[str, Any]],
+    ) -> Optional[str | dict[str, Any]]:
+        """Translate named-tool forcing into the Responses API shape."""
+        if not tool_choice:
+            return None
+        if isinstance(tool_choice, str):
+            if tool_choice in {"auto", "required", "none"}:
+                return tool_choice
+            return {"type": "function", "name": tool_choice}
+        return tool_choice
+
     async def generate(
         self,
         messages: list[BaseClientMessage],
@@ -247,6 +260,7 @@ class OpenAIClient(BaseModelClient):
         # None; the agent loop continues until the model answers with
         # text, which is then validated against the schema.
         transformed_tools = self._serialize_tools(tools)
+        normalized_tool_choice = self._normalize_tool_choice(tool_choice)
 
         if response_format is not None and transformed_tools:
             text_format = _build_openai_text_format(response_format)
@@ -267,8 +281,8 @@ class OpenAIClient(BaseModelClient):
                 params["instructions"] = instructions
             if self.max_tokens:
                 params["max_output_tokens"] = kwargs.get("max_tokens", self.max_tokens)
-            if tool_choice:
-                params["tool_choice"] = tool_choice
+            if normalized_tool_choice:
+                params["tool_choice"] = normalized_tool_choice
 
             params.update(
                 {
@@ -446,8 +460,8 @@ class OpenAIClient(BaseModelClient):
         transformed_tools = self._serialize_tools(tools)
         if transformed_tools:
             params["tools"] = transformed_tools
-            if tool_choice:
-                params["tool_choice"] = tool_choice
+            if normalized_tool_choice:
+                params["tool_choice"] = normalized_tool_choice
 
         # Forward any remaining caller kwargs
         params.update({k: v for k, v in kwargs.items() if k not in params})
@@ -541,10 +555,11 @@ class OpenAIClient(BaseModelClient):
         if self.max_tokens:
             params["max_tokens"] = kwargs.get("max_tokens", self.max_tokens)
         transformed_tools = self._serialize_tools(tools)
+        normalized_tool_choice = self._normalize_tool_choice(tool_choice)
         if transformed_tools:
             params["tools"] = transformed_tools
-            if tool_choice:
-                params["tool_choice"] = tool_choice
+            if normalized_tool_choice:
+                params["tool_choice"] = normalized_tool_choice
 
         # When response_format is set alongside tools, include text.format
         # so the model produces schema-conformant text in its final answer.

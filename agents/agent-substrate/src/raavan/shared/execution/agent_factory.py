@@ -176,6 +176,7 @@ def create_react_agent(
     runtime: Optional[AgentRuntime] = None,
     agent_id: Optional[AgentId] = None,
     execution_context: Optional[ExecutionContext] = None,
+    enable_capability_search: bool = True,
 ) -> ReActAgent:
     """Create a configured ``ReActAgent`` with shared defaults."""
     resolved_context = model_context or SlidingWindowContext(
@@ -212,4 +213,5 @@ def create_react_agent(
         kwargs["agent_id"] = agent_id
     if execution_context is not None:
         kwargs["execution_context"] = execution_context
+    kwargs["enable_capability_search"] = enable_capability_search
     return ReActAgent(**kwargs)

@@ -7,6 +7,7 @@ a sandboxed iframe with the interactive HTML app alongside their output.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -17,7 +18,10 @@ import httpx
 from raavan.configs.settings import settings
 from raavan.core.tools.base_tool import ToolResult, ToolRisk
 from raavan.integrations.mcp.app_tool_base import McpAppTool
-from raavan.server.routes.workspace_oauth import get_workspace_access_token
+from raavan.server.routes.workspace_oauth import (
+    clear_workspace_tokens_async,
+    get_workspace_access_token_async,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +205,7 @@ class JsonExplorerTool(McpAppTool):
             description=(
                 "Display any structured data as an interactive JSON tree. "
                 "The user can expand/collapse nodes, search keys and values, "
-                "and copy individual values. Pass `data` as any JSON-serialisable "
+                "and copy individual values. Pass `data` as a JSON-encoded "
                 "object or array."
             ),
             input_schema={
@@ -212,7 +216,8 @@ class JsonExplorerTool(McpAppTool):
                         "description": "Title for the explorer panel",
                     },
                     "data": {
-                        "description": "Any JSON data (object, array, etc.) to explore",
+                        "type": "string",
+                        "description": "JSON-encoded object or array to explore",
                     },
                 },
                 "required": ["data"],
@@ -236,6 +241,20 @@ class JsonExplorerTool(McpAppTool):
                 content=[{"type": "text", "text": "No data provided."}],
                 is_error=True,
             )
+
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                return ToolResult(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": "`data` must be valid JSON text representing an object or array.",
+                        }
+                    ],
+                    is_error=True,
+                )
 
         def count_keys(obj: Any) -> int:
             if isinstance(obj, dict):
@@ -287,7 +306,7 @@ class ColorPaletteTool(McpAppTool):
                     "colors": {
                         "type": "array",
                         "description": "Array of hex color strings or {hex, name} objects",
-                        "items": {},
+                        "items": {"type": "string"},
                     },
                 },
                 "required": ["colors"],
@@ -361,7 +380,7 @@ class KanbanBoardTool(McpAppTool):
                     "columns": {
                         "type": "array",
                         "description": "Column names or objects with {id, name, color}",
-                        "items": {},
+                        "items": {"type": "string"},
                     },
                     "tasks": {
                         "type": "array",
@@ -882,26 +901,105 @@ async def _build_drive_summary(
     return heading + ":\n" + "\n".join(lines)
 
 
-async def _is_workspace_connected_async() -> bool:
-    """Return True if the engine currently has a mirrored workspace token."""
-    return bool(get_workspace_access_token())
+async def _is_workspace_connected_async(redis: Any) -> bool:
+    """Return True if the engine currently has a workspace token in Redis."""
+    return bool(await get_workspace_access_token_async(redis))
+
+
+async def _create_calendar_event(
+    client: httpx.AsyncClient,
+    *,
+    title: str,
+    start_time: str,
+    end_time: str,
+    location: str = "",
+    description: str = "",
+) -> str:
+    """POST a new event to Google Calendar primary calendar."""
+    if not title:
+        raise ValueError("title is required to create an event")
+    if not start_time:
+        raise ValueError("start_time is required to create an event")
+
+    # Default end_time to 1 hour after start_time if not provided
+    if not end_time:
+        try:
+            dt = datetime.fromisoformat(start_time)
+            end_time = (dt + timedelta(hours=1)).isoformat()
+        except ValueError:
+            end_time = start_time
+
+    body: dict[str, Any] = {
+        "summary": title,
+        "start": {"dateTime": start_time},
+        "end": {"dateTime": end_time},
+    }
+    if location:
+        body["location"] = location
+    if description:
+        body["description"] = description
+
+    resp = await client.post(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        json=body,
+    )
+    if not resp.is_success:
+        raise RuntimeError(
+            f"Google API {resp.status_code}: {_extract_google_error(resp)}"
+        )
+
+    data = resp.json()
+    event_id = data.get("id", "")
+    event_link = data.get("htmlLink", "")
+    result = f"✅ Created event: {title} starting {_format_google_datetime(start_time)}"
+    if event_id:
+        result += f"\nEvent ID: {event_id}"
+    if event_link:
+        result += f"\n🔗 {event_link}"
+    return result
+
+
+async def _cancel_calendar_event(
+    client: httpx.AsyncClient,
+    *,
+    event_id: str,
+) -> str:
+    """DELETE a Google Calendar event by ID."""
+    if not event_id:
+        raise ValueError("event_id is required to cancel an event")
+
+    resp = await client.delete(
+        f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}",
+    )
+    if resp.status_code == 404:
+        raise RuntimeError("Event not found. It may have already been deleted.")
+    if not resp.is_success and resp.status_code != 204:
+        raise RuntimeError(
+            f"Google API {resp.status_code}: {_extract_google_error(resp)}"
+        )
+    return "✅ Calendar event cancelled successfully."
 
 
 class GoogleWorkspaceTool(McpAppTool):
-    """Read Google Workspace data and open an interactive panel."""
+    """Read and write Google Workspace data and open an interactive panel."""
 
     ui_resource_uri: ClassVar[str] = "ui://google_workspace"
+    risk: ClassVar[ToolRisk] = ToolRisk.SENSITIVE
 
-    def __init__(self) -> None:
+    def __init__(self, *, redis_client: Any = None) -> None:
+        self._redis = redis_client
         super().__init__(
             name="google_workspace",
             description=(
                 "Use this tool whenever the user asks about their Gmail messages, "
-                "Calendar events, or Drive files. It returns a concise summary from "
-                "the live Google APIs and also opens the interactive Google Workspace "
-                "panel. Requires the user to connect Google Workspace in Settings > Apps. "
-                "You can optionally specify which service to inspect first "
-                "(drive, calendar, gmail) and pass a search query."
+                "Calendar events, or Drive files — or wants to create or cancel a "
+                "calendar event. It returns a concise summary from the live Google APIs "
+                "and opens the interactive Google Workspace panel. "
+                "Requires the user to connect Google Workspace in Settings > Apps. "
+                "For 'action=create_event' provide title, start_time (ISO 8601 with "
+                "timezone e.g. '2026-04-20T19:00:00+05:30'), and optionally end_time "
+                "(defaults to 1 hour after start). "
+                "For 'action=cancel_event' provide event_id."
             ),
             input_schema={
                 "type": "object",
@@ -909,17 +1007,49 @@ class GoogleWorkspaceTool(McpAppTool):
                     "service": {
                         "type": "string",
                         "enum": ["drive", "calendar", "gmail"],
-                        "description": "Which Google service to inspect and open first (default: drive)",
+                        "description": "Which Google service to inspect and open first (default: drive). For write actions, calendar is used automatically.",
                     },
                     "query": {
                         "type": "string",
-                        "description": "Optional filter query for messages, events, or files",
+                        "description": (
+                            "Filter query for messages, events, or files. "
+                            "Pass an empty string when no filter is needed."
+                        ),
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["read", "create_event", "cancel_event"],
+                        "description": "Operation to perform: 'read' (default) lists data, 'create_event' creates a calendar event, 'cancel_event' deletes an event.",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Event title — required for create_event.",
+                    },
+                    "start_time": {
+                        "type": "string",
+                        "description": "Event start as ISO 8601 string with timezone, e.g. '2026-04-20T19:00:00+05:30'. Required for create_event.",
+                    },
+                    "end_time": {
+                        "type": "string",
+                        "description": "Event end as ISO 8601 string with timezone. Defaults to 1 hour after start_time if omitted.",
+                    },
+                    "event_id": {
+                        "type": "string",
+                        "description": "Google Calendar event ID — required for cancel_event.",
+                    },
+                    "location": {
+                        "type": "string",
+                        "description": "Event location (optional, for create_event).",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Event description / notes (optional, for create_event).",
                     },
                 },
                 "additionalProperties": False,
             },
             annotations={
-                "readOnlyHint": True,
+                "readOnlyHint": False,
                 "openWorldHint": True,
                 "title": "Google Workspace",
             },
@@ -930,9 +1060,29 @@ class GoogleWorkspaceTool(McpAppTool):
         *,
         service: str = "drive",
         query: str = "",
+        action: str = "read",
+        title: str = "",
+        start_time: str = "",
+        end_time: str = "",
+        event_id: str = "",
+        location: str = "",
+        description: str = "",
     ) -> ToolResult:
         service_name = service if service in {"drive", "calendar", "gmail"} else "drive"
-        connected = await _is_workspace_connected_async()
+        if action in ("create_event", "cancel_event"):
+            service_name = "calendar"
+        if self._redis is None:
+            return ToolResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": "Google Workspace tool is not configured (no Redis client).",
+                    }
+                ],
+                is_error=True,
+                app_data={"service": service_name, "query": query, "connected": False},
+            )
+        connected = await _is_workspace_connected_async(self._redis)
 
         if not connected:
             return ToolResult(
@@ -950,7 +1100,7 @@ class GoogleWorkspaceTool(McpAppTool):
                 app_data={"service": service_name, "query": query, "connected": False},
             )
 
-        access_token = get_workspace_access_token()
+        access_token = await get_workspace_access_token_async(self._redis)
         if not access_token:
             return ToolResult(
                 content=[
@@ -971,7 +1121,18 @@ class GoogleWorkspaceTool(McpAppTool):
                 timeout=10.0,
                 headers={"Authorization": f"Bearer {access_token}"},
             ) as client:
-                if service_name == "calendar":
+                if action == "create_event":
+                    summary = await _create_calendar_event(
+                        client,
+                        title=title,
+                        start_time=start_time,
+                        end_time=end_time,
+                        location=location,
+                        description=description,
+                    )
+                elif action == "cancel_event":
+                    summary = await _cancel_calendar_event(client, event_id=event_id)
+                elif service_name == "calendar":
                     summary = await _build_calendar_summary(client, query=query)
                 elif service_name == "gmail":
                     summary = await _build_gmail_summary(client, query=query)
@@ -984,20 +1145,33 @@ class GoogleWorkspaceTool(McpAppTool):
                 query,
                 exc,
             )
+            if "Google API 401:" in str(exc):
+                await clear_workspace_tokens_async(self._redis)
+                return ToolResult(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": (
+                                "Google Workspace authentication expired or was rejected by "
+                                "Google. Open Settings → Apps once to refresh the token, "
+                                "then try the request again."
+                            ),
+                        }
+                    ],
+                    is_error=True,
+                    app_data={
+                        "service": service_name,
+                        "query": query,
+                        "connected": False,
+                    },
+                )
             return ToolResult(
-                content=[
-                    {
-                        "type": "text",
-                        "text": (
-                            f"Google Workspace is connected, but loading {service_name} "
-                            f"data failed: {exc}"
-                        ),
-                    }
-                ],
+                content=[{"type": "text", "text": str(exc)}],
                 is_error=True,
                 app_data={"service": service_name, "query": query, "connected": True},
             )
 
+        calendar_mutated = action in ("create_event", "cancel_event")
         return ToolResult(
             content=[
                 {
@@ -1006,5 +1180,17 @@ class GoogleWorkspaceTool(McpAppTool):
                 }
             ],
             is_error=False,
-            app_data={"service": service_name, "query": query, "connected": True},
+            app_data={
+                "service": service_name,
+                "query": query,
+                "connected": True,
+                **(
+                    {
+                        "calendar_mutated": True,
+                        "action": action,
+                    }
+                    if calendar_mutated
+                    else {}
+                ),
+            },
         )

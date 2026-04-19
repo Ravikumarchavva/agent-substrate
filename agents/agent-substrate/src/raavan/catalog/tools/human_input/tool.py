@@ -429,6 +429,25 @@ class AskHumanTool(BaseTool):
 
         logger.info(f"Human input requested: {question} ({len(options)} options)")
 
+        # Guard: handler must be wired (placeholder instances have handler=None)
+        if self.handler is None:
+            logger.error(
+                "AskHumanTool.handler is None — tool was not wired to a bridge"
+            )
+            return ToolResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "error": "Human input handler not configured for this session",
+                            }
+                        ),
+                    }
+                ],
+                is_error=True,
+            )
+
         # Collect response
         try:
             response = await self.handler.request_input(request)

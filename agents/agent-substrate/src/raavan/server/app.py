@@ -99,6 +99,7 @@ async def lifespan(app: FastAPI):
         file_store=infra.file_store,
         session_factory=infra.session_factory,
         bridge_registry=infra.bridge_registry,
+        redis_client=infra.redis_client,
     )
     app.state.tools = tools.catalog
     app.state.task_tool = tools.task_tool

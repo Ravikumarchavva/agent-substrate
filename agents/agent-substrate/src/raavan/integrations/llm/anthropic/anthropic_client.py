@@ -97,6 +97,23 @@ class AnthropicClient(BaseModelClient):
         token_budget = budget if budget else 10_000
         return {"type": "enabled", "budget_tokens": token_budget}
 
+    @staticmethod
+    def _normalize_tool_choice(
+        tool_choice: Optional[str | dict[str, Any]],
+    ) -> Optional[dict[str, Any]]:
+        """Translate tool forcing into Anthropic Messages API shape."""
+        if not tool_choice:
+            return None
+        if isinstance(tool_choice, str):
+            if tool_choice == "auto":
+                return {"type": "auto"}
+            if tool_choice == "required":
+                return {"type": "any"}
+            if tool_choice == "none":
+                return {"type": "none"}
+            return {"type": "tool", "name": tool_choice}
+        return tool_choice
+
     # ── Text / Vision (required) ─────────────────────────────────────────────
 
     async def generate(
@@ -139,23 +156,11 @@ class AnthropicClient(BaseModelClient):
                 params["temperature"] = self.temperature
 
         anthropic_tools = self._serialize_tools(tools)
+        normalized_tool_choice = self._normalize_tool_choice(tool_choice)
         if anthropic_tools:
             params["tools"] = anthropic_tools
-            if tool_choice:
-                if isinstance(tool_choice, str):
-                    if tool_choice == "auto":
-                        params["tool_choice"] = {"type": "auto"}
-                    elif tool_choice == "required":
-                        params["tool_choice"] = {"type": "any"}
-                    elif tool_choice == "none":
-                        params["tool_choice"] = {"type": "none"}
-                    else:
-                        params["tool_choice"] = {
-                            "type": "tool",
-                            "name": tool_choice,
-                        }
-                elif isinstance(tool_choice, dict):
-                    params["tool_choice"] = tool_choice
+            if normalized_tool_choice:
+                params["tool_choice"] = normalized_tool_choice
 
         response = await self.client.messages.create(**params)
 
@@ -242,6 +247,7 @@ class AnthropicClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ModelStreamEvent]:
@@ -285,8 +291,11 @@ class AnthropicClient(BaseModelClient):
                 params["temperature"] = self.temperature
 
         anthropic_tools = self._serialize_tools(tools)
+        normalized_tool_choice = self._normalize_tool_choice(tool_choice)
         if anthropic_tools:
             params["tools"] = anthropic_tools
+            if normalized_tool_choice:
+                params["tool_choice"] = normalized_tool_choice
 
         # Accumulate for final message
         text_parts: list[str] = []

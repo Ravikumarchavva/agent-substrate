@@ -120,6 +120,48 @@ class GeminiClient(BaseModelClient):
 
         return result
 
+    @staticmethod
+    def _build_tool_config(
+        tool_choice: Optional[str | dict[str, Any]],
+    ) -> Optional[genai_types.ToolConfig]:
+        """Translate tool forcing into Gemini GenerateContentConfig shape."""
+        if not tool_choice:
+            return None
+
+        if isinstance(tool_choice, str):
+            if tool_choice == "auto":
+                function_calling_config = genai_types.FunctionCallingConfig(
+                    mode=genai_types.FunctionCallingConfigMode.AUTO
+                )
+            elif tool_choice == "required":
+                function_calling_config = genai_types.FunctionCallingConfig(
+                    mode=genai_types.FunctionCallingConfigMode.ANY
+                )
+            elif tool_choice == "none":
+                function_calling_config = genai_types.FunctionCallingConfig(
+                    mode=genai_types.FunctionCallingConfigMode.NONE
+                )
+            else:
+                function_calling_config = genai_types.FunctionCallingConfig(
+                    mode=genai_types.FunctionCallingConfigMode.ANY,
+                    allowed_function_names=[tool_choice],
+                )
+            return genai_types.ToolConfig(
+                function_calling_config=function_calling_config
+            )
+
+        if (
+            "function_calling_config" in tool_choice
+            or "functionCallingConfig" in tool_choice
+        ):
+            return genai_types.ToolConfig.model_validate(tool_choice)
+
+        return genai_types.ToolConfig(
+            function_calling_config=genai_types.FunctionCallingConfig.model_validate(
+                tool_choice
+            )
+        )
+
     # ── Text / Vision (required) ─────────────────────────────────────────────
 
     async def generate(
@@ -149,8 +191,11 @@ class GeminiClient(BaseModelClient):
             config["system_instruction"] = system_instruction
 
         gemini_tools = self._serialize_tools(tools)
+        normalized_tool_config = self._build_tool_config(tool_choice)
         if gemini_tools:
             config["tools"] = gemini_tools
+            if normalized_tool_config is not None:
+                config["tool_config"] = normalized_tool_config
 
         if response_format is not None and not tools:
             config["response_mime_type"] = "application/json"
@@ -225,6 +270,7 @@ class GeminiClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ModelStreamEvent]:
@@ -251,8 +297,11 @@ class GeminiClient(BaseModelClient):
             config["system_instruction"] = system_instruction
 
         gemini_tools = self._serialize_tools(tools)
+        normalized_tool_config = self._build_tool_config(tool_choice)
         if gemini_tools:
             config["tools"] = gemini_tools
+            if normalized_tool_config is not None:
+                config["tool_config"] = normalized_tool_config
 
         # Accumulate for final message
         text_parts: list[str] = []

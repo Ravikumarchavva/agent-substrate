@@ -34,6 +34,83 @@ from raavan.core.messages.client_messages import (
 )
 
 
+def _make_optional_schema_nullable(schema: dict[str, Any]) -> dict[str, Any]:
+    """Convert an optional property schema to a required-but-nullable schema."""
+    nullable = dict(schema)
+    schema_type = nullable.get("type")
+    if isinstance(schema_type, str) and schema_type != "null":
+        nullable["type"] = [schema_type, "null"]
+        return nullable
+    if isinstance(schema_type, list) and "null" not in schema_type:
+        nullable["type"] = [*schema_type, "null"]
+        return nullable
+
+    for key in ("anyOf", "oneOf"):
+        options = nullable.get(key)
+        if isinstance(options, list) and not any(
+            isinstance(option, dict) and option.get("type") == "null"
+            for option in options
+        ):
+            nullable[key] = [*options, {"type": "null"}]
+            return nullable
+
+    return nullable
+
+
+def ensure_strict_tool_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Normalize tool schemas to OpenAI strict function-calling rules.
+
+    OpenAI strict mode requires:
+    1. ``additionalProperties: false`` on every object node.
+    2. Every property to appear in ``required``.
+    3. Previously-optional properties to become nullable.
+    """
+    normalized = dict(schema)
+
+    if normalized.get("type") == "object":
+        normalized["additionalProperties"] = False
+        properties = normalized.get("properties")
+        if isinstance(properties, dict):
+            existing_required = set(normalized.get("required", []))
+            strict_properties: dict[str, Any] = {}
+            for key, value in properties.items():
+                property_schema = (
+                    ensure_strict_tool_schema(value)
+                    if isinstance(value, dict)
+                    else value
+                )
+                if key not in existing_required and isinstance(property_schema, dict):
+                    property_schema = _make_optional_schema_nullable(property_schema)
+                strict_properties[key] = property_schema
+            normalized["properties"] = strict_properties
+            normalized["required"] = list(properties.keys())
+
+    for key in ("items", "additionalProperties", "not"):
+        value = normalized.get(key)
+        if isinstance(value, dict):
+            normalized[key] = ensure_strict_tool_schema(value)
+
+    for key in ("properties", "$defs", "definitions"):
+        value = normalized.get(key)
+        if isinstance(value, dict):
+            normalized[key] = {
+                item_key: ensure_strict_tool_schema(item_value)
+                if isinstance(item_value, dict)
+                else item_value
+                for item_key, item_value in value.items()
+            }
+
+    for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+        value = normalized.get(key)
+        if isinstance(value, list):
+            normalized[key] = [
+                ensure_strict_tool_schema(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+
+    return normalized
+
+
 # ── Content encoding helpers ─────────────────────────────────────────────────
 
 
@@ -223,47 +300,63 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
     if not tools:
         return None
 
+    def _flatten_tool(
+        tool_name: str, description: str, parameters: dict[str, Any]
+    ) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "name": tool_name,
+            "description": description,
+            "parameters": ensure_strict_tool_schema(parameters),
+            "strict": True,
+        }
+
     result: list[dict[str, Any]] = []
     for tool in tools:
         # Already flattened Responses-API format
         if "type" in tool and "name" in tool and "parameters" in tool:
-            result.append(tool)
+            result.append(
+                _flatten_tool(
+                    tool_name=tool["name"],
+                    description=tool.get("description", ""),
+                    parameters=tool.get(
+                        "parameters", {"type": "object", "properties": {}}
+                    ),
+                )
+            )
         # OpenAI nested Chat Completions format
         elif tool.get("type") == "function" and "function" in tool:
             fn = tool["function"]
             result.append(
-                {
-                    "type": "function",
-                    "name": fn.get("name"),
-                    "description": fn.get("description", ""),
-                    "parameters": fn.get(
+                _flatten_tool(
+                    tool_name=fn.get("name"),
+                    description=fn.get("description", ""),
+                    parameters=fn.get(
                         "parameters", {"type": "object", "properties": {}}
                     ),
-                }
+                )
             )
         # MCP format with inputSchema
         elif "name" in tool and "inputSchema" in tool:
             result.append(
-                {
-                    "type": "function",
-                    "name": tool["name"],
-                    "description": tool.get("description", ""),
-                    "parameters": tool["inputSchema"],
-                }
+                _flatten_tool(
+                    tool_name=tool["name"],
+                    description=tool.get("description", ""),
+                    parameters=tool["inputSchema"],
+                )
             )
         # Generic named tool — best-effort
         elif "name" in tool:
             result.append(
-                {
-                    "type": "function",
-                    "name": tool["name"],
-                    "description": tool.get("description", ""),
-                    "parameters": (
+                _flatten_tool(
+                    tool_name=tool["name"],
+                    description=tool.get("description", ""),
+                    parameters=(
                         tool.get("parameters")
                         or tool.get("inputSchema")
                         or {"type": "object", "properties": {}}
                     ),
-                }
+                )
             )
         else:
             result.append(tool)

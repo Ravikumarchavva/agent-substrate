@@ -66,6 +66,7 @@ async def load_agent_for_thread(
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
     runtime: Optional[AgentRuntime] = None,
+    enable_capability_search: bool = True,
 ) -> ReActAgent:
     """Load a per-session agent whose history comes from Redis (hot) or Postgres (cold).
 
@@ -117,6 +118,7 @@ async def load_agent_for_thread(
         max_input_tokens=max_input_tokens,
         runtime=runtime,
         agent_id=AgentId("chat_agent", session_id) if runtime else None,
+        enable_capability_search=enable_capability_search,
     )
     return agent
 

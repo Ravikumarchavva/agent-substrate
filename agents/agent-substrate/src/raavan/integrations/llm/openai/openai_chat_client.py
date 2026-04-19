@@ -23,6 +23,7 @@ from raavan.core.messages.client_messages import (
     ToolExecutionResultMessage,
     UserMessage,
 )
+from raavan.core.messages.encoders.openai import ensure_strict_tool_schema
 from raavan.integrations.llm.openai.openai_client import OpenAIClient
 
 if TYPE_CHECKING:
@@ -42,6 +43,85 @@ class OpenAIChatCompletionClient(OpenAIClient):
     # ------------------------------------------------------------------
     # Message / tool serialisation for Chat Completions
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_provider_error(exc: Exception) -> str:
+        """Return a detailed provider error string for OpenAI-compatible SDK failures."""
+        parts: list[str] = [str(exc)]
+
+        body = getattr(exc, "body", None)
+        if body:
+            try:
+                parts.append(
+                    f"body={json.dumps(body, ensure_ascii=True, sort_keys=True)}"
+                )
+            except TypeError:
+                parts.append(f"body={body}")
+
+        response = getattr(exc, "response", None)
+        if response is not None:
+            status_code = getattr(response, "status_code", None)
+            if status_code:
+                parts.append(f"status={status_code}")
+
+            text = getattr(response, "text", None)
+            if text:
+                parts.append(f"response={text}")
+
+        return " | ".join(part for part in parts if part)
+
+    @staticmethod
+    def _try_recover_tool_use_failed(
+        exc: Exception,
+    ) -> Optional[tuple[dict[int, dict[str, Any]], str]]:
+        """Extract tool calls from a ``tool_use_failed`` rejection.
+
+        Groq sometimes rejects tool calls server-side but includes the
+        generated text in ``body.failed_generation``.  Parse it and
+        return ``(collected_tool_calls_dict, finish_reason)`` so the
+        caller can continue normally.  Returns ``None`` when recovery
+        is not possible.
+        """
+        body = getattr(exc, "body", None)
+        if not isinstance(body, dict):
+            return None
+        if body.get("code") != "tool_use_failed":
+            return None
+
+        raw: str = body.get("failed_generation", "")
+        if not raw:
+            return None
+
+        import re
+
+        # Groq emits: <function=tool_name{"key": "val"}</function>
+        pattern = re.compile(
+            r"<function=(\w+)\s*(\{.*?\})\s*(?:</function>|/>)", re.DOTALL
+        )
+        calls: dict[int, dict[str, Any]] = {}
+        for idx, m in enumerate(pattern.finditer(raw)):
+            name = m.group(1)
+            try:
+                arguments = json.loads(m.group(2))
+            except json.JSONDecodeError:
+                return None
+            calls[idx] = {
+                "id": f"recovered_{idx}",
+                "name": name,
+                "arguments": json.dumps(arguments)
+                if isinstance(arguments, dict)
+                else str(arguments),
+            }
+
+        if not calls:
+            return None
+
+        logger.info(
+            "Recovered %d tool call(s) from tool_use_failed: %s",
+            len(calls),
+            [c["name"] for c in calls.values()],
+        )
+        return calls, "tool_calls"
 
     @staticmethod
     def _serialize_messages_chat(
@@ -144,45 +224,36 @@ class OpenAIChatCompletionClient(OpenAIClient):
                 )
         return result
 
-    @staticmethod
-    def _ensure_additional_properties(schema: dict[str, Any]) -> dict[str, Any]:
-        """Recursively set ``additionalProperties: false`` on every object.
-
-        Many Chat Completions providers (Groq, OpenRouter) require this on
-        every ``"type": "object"`` node in tool parameter schemas.
-        """
-        schema = dict(schema)  # shallow copy to avoid mutating originals
-        if schema.get("type") == "object":
-            schema.setdefault("additionalProperties", False)
-            props = schema.get("properties")
-            if isinstance(props, dict):
-                schema["properties"] = {
-                    k: OpenAIChatCompletionClient._ensure_additional_properties(v)
-                    if isinstance(v, dict)
-                    else v
-                    for k, v in props.items()
-                }
-        items = schema.get("items")
-        if isinstance(items, dict):
-            schema["items"] = OpenAIChatCompletionClient._ensure_additional_properties(
-                items
-            )
-        return schema
-
-    @staticmethod
     def _serialize_tools_chat(
+        self,
         tools: Optional[list[dict[str, Any]]],
     ) -> Optional[list[dict[str, Any]]]:
-        """Normalise tool schemas to Chat Completions nested format."""
+        """Normalise tool schemas to Chat Completions nested format.
+
+        For OpenAI, ``strict: true`` and ``ensure_strict_tool_schema`` are
+        applied.  For other providers (Groq, OpenRouter) these are omitted
+        because they don't support strict mode and fall back to textual
+        tool calls which then fail validation.
+        """
         if not tools:
             return None
-        ensure = OpenAIChatCompletionClient._ensure_additional_properties
+
+        provider: str = getattr(self, "provider", "openai")
+        use_strict = provider == "openai"
+
         result: list[dict[str, Any]] = []
         for tool in tools:
             if tool.get("type") == "function" and "function" in tool:
                 fn = dict(tool["function"])
                 if "parameters" in fn:
-                    fn["parameters"] = ensure(fn["parameters"])
+                    if use_strict:
+                        fn["parameters"] = ensure_strict_tool_schema(fn["parameters"])
+                    else:
+                        fn.pop("strict", None)
+                if use_strict:
+                    fn["strict"] = True
+                else:
+                    fn.pop("strict", None)
                 result.append({"type": "function", "function": fn})
             elif "name" in tool:
                 params = (
@@ -190,15 +261,32 @@ class OpenAIChatCompletionClient(OpenAIClient):
                     or tool.get("inputSchema")
                     or {"type": "object", "properties": {}}
                 )
-                fn: dict[str, Any] = {
+                fn_dict: dict[str, Any] = {
                     "name": tool["name"],
                     "description": tool.get("description", ""),
-                    "parameters": ensure(params),
+                    "parameters": (
+                        ensure_strict_tool_schema(params) if use_strict else params
+                    ),
                 }
-                result.append({"type": "function", "function": fn})
+                if use_strict:
+                    fn_dict["strict"] = True
+                result.append({"type": "function", "function": fn_dict})
             else:
                 result.append(tool)
         return result
+
+    @staticmethod
+    def _normalize_chat_tool_choice(
+        tool_choice: Optional[str | dict[str, Any]],
+    ) -> Optional[str | dict[str, Any]]:
+        """Translate named-tool forcing into the Chat Completions shape."""
+        if not tool_choice:
+            return None
+        if isinstance(tool_choice, str):
+            if tool_choice in {"auto", "required", "none"}:
+                return tool_choice
+            return {"type": "function", "function": {"name": tool_choice}}
+        return tool_choice
 
     # ------------------------------------------------------------------
     # generate (non-streaming)
@@ -227,15 +315,43 @@ class OpenAIChatCompletionClient(OpenAIClient):
             params["max_tokens"] = kwargs.pop("max_tokens", self.max_tokens)
 
         chat_tools = self._serialize_tools_chat(tools)
+        normalized_tool_choice = self._normalize_chat_tool_choice(tool_choice)
         if chat_tools:
             params["tools"] = chat_tools
-            if tool_choice:
-                params["tool_choice"] = tool_choice
+            if normalized_tool_choice:
+                params["tool_choice"] = normalized_tool_choice
 
         if response_format is not None and not chat_tools:
             params["response_format"] = {"type": "json_object"}
 
-        response = await self.client.chat.completions.create(**params)
+        try:
+            response = await self.client.chat.completions.create(**params)
+        except Exception as exc:
+            # Attempt recovery from tool_use_failed (Groq textual fallback)
+            recovered = self._try_recover_tool_use_failed(exc)
+            if recovered is not None:
+                tc_dict, _ = recovered
+                tool_calls_obj = [
+                    ToolCallMessage(
+                        id=tc_data["id"],
+                        name=tc_data["name"],
+                        arguments=(
+                            json.loads(tc_data["arguments"])
+                            if tc_data["arguments"]
+                            else {}
+                        ),
+                    )
+                    for _, tc_data in sorted(tc_dict.items())
+                ]
+                return AssistantMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=tool_calls_obj,
+                    finish_reason="tool_calls",
+                )
+            detail = self._format_provider_error(exc)
+            logger.exception("Chat completions request failed: %s", detail)
+            raise RuntimeError(detail) from exc
         choice = response.choices[0]
         msg = choice.message
 
@@ -320,10 +436,11 @@ class OpenAIChatCompletionClient(OpenAIClient):
             params["max_tokens"] = kwargs.pop("max_tokens", self.max_tokens)
 
         chat_tools = self._serialize_tools_chat(tools)
+        normalized_tool_choice = self._normalize_chat_tool_choice(tool_choice)
         if chat_tools:
             params["tools"] = chat_tools
-            if tool_choice:
-                params["tool_choice"] = tool_choice
+            if normalized_tool_choice:
+                params["tool_choice"] = normalized_tool_choice
 
         if response_format is not None and not chat_tools:
             params["response_format"] = {"type": "json_object"}
@@ -333,47 +450,64 @@ class OpenAIChatCompletionClient(OpenAIClient):
         finish_reason = "stop"
         usage_stats: Optional[UsageStats] = None
 
-        stream = await self.client.chat.completions.create(**params)
-        async for chunk in stream:
-            # Usage-only chunk (arrives after all content when stream_options is set)
-            if not chunk.choices and hasattr(chunk, "usage") and chunk.usage:
-                usage_stats = UsageStats(
-                    prompt_tokens=chunk.usage.prompt_tokens,
-                    completion_tokens=chunk.usage.completion_tokens,
-                    total_tokens=chunk.usage.total_tokens,
-                )
-                continue
+        try:
+            stream = await self.client.chat.completions.create(**params)
+        except Exception as exc:
+            detail = self._format_provider_error(exc)
+            logger.exception("Stream chat completions request failed: %s", detail)
+            raise RuntimeError(detail) from exc
+        try:
+            async for chunk in stream:
+                # Usage-only chunk (arrives after all content when stream_options is set)
+                if not chunk.choices and hasattr(chunk, "usage") and chunk.usage:
+                    usage_stats = UsageStats(
+                        prompt_tokens=chunk.usage.prompt_tokens,
+                        completion_tokens=chunk.usage.completion_tokens,
+                        total_tokens=chunk.usage.total_tokens,
+                    )
+                    continue
 
-            if not chunk.choices:
-                continue
+                if not chunk.choices:
+                    continue
 
-            delta = chunk.choices[0].delta
-            chunk_finish = chunk.choices[0].finish_reason
+                delta = chunk.choices[0].delta
+                chunk_finish = chunk.choices[0].finish_reason
 
-            if delta.content:
-                collected_content += delta.content
-                yield TextDeltaChunk(text=delta.content)
+                if delta.content:
+                    collected_content += delta.content
+                    yield TextDeltaChunk(text=delta.content)
 
-            if delta.tool_calls:
-                for tc_delta in delta.tool_calls:
-                    idx = tc_delta.index
-                    if idx not in collected_tool_calls:
-                        collected_tool_calls[idx] = {
-                            "id": tc_delta.id or "",
-                            "name": "",
-                            "arguments": "",
-                        }
-                    entry = collected_tool_calls[idx]
-                    if tc_delta.id:
-                        entry["id"] = tc_delta.id
-                    if tc_delta.function:
-                        if tc_delta.function.name:
-                            entry["name"] = tc_delta.function.name
-                        if tc_delta.function.arguments:
-                            entry["arguments"] += tc_delta.function.arguments
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in collected_tool_calls:
+                            collected_tool_calls[idx] = {
+                                "id": tc_delta.id or "",
+                                "name": "",
+                                "arguments": "",
+                            }
+                        entry = collected_tool_calls[idx]
+                        if tc_delta.id:
+                            entry["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                entry["name"] = tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                entry["arguments"] += tc_delta.function.arguments
 
-            if chunk_finish:
-                finish_reason = chunk_finish
+                if chunk_finish:
+                    finish_reason = chunk_finish
+        except Exception as exc:
+            # Attempt to recover tool calls from a provider-side
+            # ``tool_use_failed`` rejection (common with Groq when it
+            # falls back to textual tool calls).
+            recovered = self._try_recover_tool_use_failed(exc)
+            if recovered is not None:
+                collected_tool_calls, finish_reason = recovered
+            else:
+                detail = self._format_provider_error(exc)
+                logger.exception("Stream chat completions iteration failed: %s", detail)
+                raise RuntimeError(detail) from exc
 
         # Build final AssistantMessage
         tool_calls_obj = None

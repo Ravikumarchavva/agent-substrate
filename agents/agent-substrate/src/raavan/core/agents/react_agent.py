@@ -224,22 +224,46 @@ def _parse_textual_tool_call_sequence(text: str) -> list[ToolCallMessage]:
     parsed_calls: list[ToolCallMessage] = []
 
     while remaining:
-        if not remaining.startswith("<function/"):
+        # Accept both Groq format (<function=name{...}) and legacy (<function/name{...)
+        if remaining.startswith("<function="):
+            prefix_len = len("<function=")
+        elif remaining.startswith("<function/"):
+            prefix_len = len("<function/")
+        else:
             return []
 
-        end_index = remaining.find("</function>")
-        if end_index == -1:
+        close_tag_index = remaining.find("</function>")
+        self_closing_index = remaining.find("/>")
+
+        if close_tag_index == -1 and self_closing_index == -1:
             return []
 
-        inner = remaining[len("<function/") : end_index].strip()
-        comma_index = inner.find(",")
-        if comma_index <= 0:
-            return []
+        is_self_closing = self_closing_index != -1 and (
+            close_tag_index == -1 or self_closing_index < close_tag_index
+        )
+        end_index = self_closing_index if is_self_closing else close_tag_index
 
-        tool_name = inner[:comma_index].strip()
-        raw_arguments = inner[comma_index + 1 :].strip()
+        inner = remaining[prefix_len:end_index].strip()
+
+        tool_name = ""
+        raw_arguments = ""
+
+        open_brace_index = inner.find("{")
+        if open_brace_index > 0:
+            tool_name = inner[:open_brace_index].strip().rstrip(">")
+            raw_arguments = inner[open_brace_index:].strip()
+        else:
+            comma_index = inner.find(",")
+            if comma_index <= 0:
+                return []
+            tool_name = inner[:comma_index].strip()
+            raw_arguments = inner[comma_index + 1 :].strip()
+
         if not tool_name or not raw_arguments:
             return []
+
+        if raw_arguments.endswith(">"):
+            raw_arguments = raw_arguments[:-1].strip()
 
         try:
             arguments = json.loads(raw_arguments)
@@ -250,7 +274,8 @@ def _parse_textual_tool_call_sequence(text: str) -> list[ToolCallMessage]:
             return []
 
         parsed_calls.append(ToolCallMessage(name=tool_name, arguments=arguments))
-        remaining = remaining[end_index + len("</function>") :].strip()
+        closing_len = len("/>") if is_self_closing else len("</function>")
+        remaining = remaining[end_index + closing_len :].strip()
 
     return parsed_calls
 
@@ -317,6 +342,7 @@ class ReActAgent(BaseAgent):
         # Runtime
         runtime: Optional[AgentRuntime] = None,
         agent_id: Optional[AgentId] = None,
+        enable_capability_search: bool = True,
     ):
         provided_tools = list(tools or [])
 
@@ -337,7 +363,7 @@ class ReActAgent(BaseAgent):
 
         # Inject the capability search tool (replaces old ToolSearchTool)
         existing_search = self._catalog.get_tool("capability_search")
-        if existing_search is None:
+        if enable_capability_search and existing_search is None:
             search_tool = CapabilitySearchTool(self._catalog)
             provided_tools.append(search_tool)
             self._catalog.register_tool(search_tool)
@@ -428,6 +454,23 @@ class ReActAgent(BaseAgent):
             return self.execution_context.run_id
         return str(uuid4())
 
+    @staticmethod
+    def _resolve_requested_tool_choice(
+        tool_schemas: List[Dict[str, Any]],
+        requested_tool_choice: Optional[str | dict[str, Any]] = None,
+    ) -> Optional[str | dict[str, Any]]:
+        """Return the tool-choice mode for the current LLM step.
+
+        Most turns should stay on automatic tool selection. For a small set of
+        high-confidence routed intents, the caller can force the first step to
+        open a specific tool by name and then let the normal ReAct loop resume.
+        """
+        if not tool_schemas:
+            return None
+        if requested_tool_choice:
+            return requested_tool_choice
+        return "auto"
+
     def _current_middleware_run_id(self) -> str:
         current = getattr(self, "_current_run_id", "")
         if current:
@@ -474,6 +517,7 @@ class ReActAgent(BaseAgent):
         final_output: List[Any] = []  # Multimodal output
         guardrail_results: List[GuardrailResult] = []
         response: Optional[AssistantMessage] = None
+        initial_tool_choice = kwargs.pop("tool_choice", None)
 
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
         user_message_content = _resolve_user_message_content(
@@ -542,6 +586,9 @@ class ReActAgent(BaseAgent):
                             current_input=input_text,
                             response_schema=response_schema,
                             input_content=user_message_content,
+                            tool_choice=(
+                                initial_tool_choice if step_num == 1 else None
+                            ),
                             **kwargs,
                         )
                         usage.add(response.usage)
@@ -822,6 +869,7 @@ class ReActAgent(BaseAgent):
             input_text,
             user_message_content,
         )
+        initial_tool_choice = kwargs.pop("tool_choice", None)
 
         # Optional: publish chunks to a topic for remote subscribers
         _stream_pub = None
@@ -913,7 +961,10 @@ class ReActAgent(BaseAgent):
                                 async for chunk in self.model_client.generate_stream(
                                     messages=messages,
                                     tools=tool_schemas or None,
-                                    tool_choice="auto" if tool_schemas else None,
+                                    tool_choice=self._resolve_requested_tool_choice(
+                                        tool_schemas,
+                                        initial_tool_choice if step_num == 1 else None,
+                                    ),
                                     response_format=(
                                         response_schema
                                         if response_schema is not None
@@ -1100,6 +1151,7 @@ class ReActAgent(BaseAgent):
     ) -> AssistantMessage:
         """Single LLM call with retry, hooks, and observability."""
         tool_schemas = self._build_tool_schemas(current_input=current_input)
+        requested_tool_choice = kwargs.pop("tool_choice", None)
         user_message_content = _resolve_user_message_content(
             current_input,
             input_content,
@@ -1136,7 +1188,10 @@ class ReActAgent(BaseAgent):
                     generate_kwargs: dict[str, Any] = {
                         "messages": messages,
                         "tools": tool_schemas or None,
-                        "tool_choice": "auto" if tool_schemas else None,
+                        "tool_choice": self._resolve_requested_tool_choice(
+                            tool_schemas,
+                            requested_tool_choice,
+                        ),
                     }
 
                     # Wrap with middleware pipeline when middleware is configured
@@ -1255,8 +1310,21 @@ class ReActAgent(BaseAgent):
                 },
             )
 
+            # Look up tool from per-request catalog (correctly-wired instances)
+            tool = find_tool(parsed.name, self._catalog, self.tools)
+
             # ── RUNTIME DISPATCH PATH ────────────────────────────────
-            if self.runtime is not None and self.agent_id is not None:
+            # Only route through runtime when the tool declares a custom
+            # agent_id for remote execution.  Default tools execute directly
+            # from the per-request catalog — the runtime's ToolExecutorHandler
+            # holds startup-time snapshots that lack per-request state
+            # (e.g. AskHumanTool's bridge handler).
+            if (
+                self.runtime is not None
+                and self.agent_id is not None
+                and tool is not None
+                and getattr(tool, "agent_id", None) is not None
+            ):
                 return await execute_tool_via_runtime(
                     parsed,
                     step_num,
@@ -1271,8 +1339,7 @@ class ReActAgent(BaseAgent):
                     activate_tool_names_cb=self._activate_tool_names,
                 )
 
-            # ── DIRECT EXECUTION PATH (no runtime) ───────────────────
-            tool = find_tool(parsed.name, self._catalog, self.tools)
+            # ── DIRECT EXECUTION PATH ────────────────────────────────
 
             if tool is None:
                 result = build_tool_error(

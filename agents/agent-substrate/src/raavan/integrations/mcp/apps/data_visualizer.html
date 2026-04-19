@@ -8,24 +8,24 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #18181b;
-    color: #e4e4e7;
+    background: var(--mcp-bg);
+    color: var(--mcp-text);
     padding: 16px;
   }
   .header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .header h2 { font-size: 14px; font-weight: 600; }
   .header .badge {
-    font-size: 10px; background: #064e3b; color: #34d399;
+    font-size: 10px; background: var(--mcp-success-soft); color: var(--mcp-success);
     padding: 2px 6px; border-radius: 4px;
   }
   .chart-container {
     position: relative;
     width: 100%;
     height: 200px;
-    border: 1px solid #3f3f46;
+    border: 1px solid var(--mcp-border-strong);
     border-radius: 8px;
     overflow: hidden;
-    background: #09090b;
+    background: var(--mcp-surface-elevated);
     padding: 8px;
   }
   canvas { width: 100%; height: 100%; }
@@ -33,25 +33,25 @@
     display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
   }
   .controls button {
-    padding: 6px 12px; border-radius: 6px; border: 1px solid #3f3f46;
-    background: #27272a; color: #e4e4e7; font-size: 12px;
+    padding: 6px 12px; border-radius: 6px; border: 1px solid var(--mcp-border-strong);
+    background: var(--mcp-surface-muted); color: var(--mcp-text); font-size: 12px;
     cursor: pointer; transition: all 0.15s;
   }
-  .controls button:hover { background: #3f3f46; }
-  .controls button.active { background: #065f46; border-color: #34d399; color: #34d399; }
+  .controls button:hover { background: var(--mcp-surface-strong); }
+  .controls button.active { background: var(--mcp-success-soft); border-color: var(--mcp-success); color: var(--mcp-success); }
   .stats {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: 8px; margin-top: 12px;
   }
   .stat {
-    background: #27272a; border-radius: 6px; padding: 8px;
-    text-align: center; border: 1px solid #3f3f46;
+    background: var(--mcp-surface-muted); border-radius: 6px; padding: 8px;
+    text-align: center; border: 1px solid var(--mcp-border-strong);
   }
-  .stat .label { font-size: 10px; color: #71717a; text-transform: uppercase; }
+  .stat .label { font-size: 10px; color: var(--mcp-text-soft); text-transform: uppercase; }
   .stat .value { font-size: 16px; font-weight: 600; margin-top: 2px; }
   .no-data {
     display: flex; align-items: center; justify-content: center;
-    height: 200px; color: #71717a; font-size: 14px;
+    height: 200px; color: var(--mcp-text-soft); font-size: 14px;
   }
 </style>
 </head>
@@ -87,6 +87,10 @@
   window.addEventListener("message", function(e) {
     const msg = e.data;
     if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.method === "ui/notifications/theme-changed") {
+      requestAnimationFrame(() => render());
+      return;
+    }
     if (msg.id === ctxId && msg.result) {
       const args = msg.result.arguments || {};
       chartData = parseData(args);
@@ -173,18 +177,24 @@
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
     const container = document.getElementById("chart");
+    const styles = getComputedStyle(document.documentElement);
     canvas.width = container.clientWidth - 16;
     canvas.height = 184;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const colors = ["#34d399","#60a5fa","#f472b6","#fbbf24","#a78bfa","#fb923c","#22d3ee","#e879f9"];
+    const chartTokens = {
+      text: styles.getPropertyValue("--mcp-text").trim() || "#e4e4e7",
+      muted: styles.getPropertyValue("--mcp-text-soft").trim() || "#71717a",
+      accentSoft: styles.getPropertyValue("--mcp-success-soft").trim() || "rgba(52, 211, 153, 0.1)",
+    };
 
-    if (chartType === "bar") drawBar(ctx, canvas, colors);
-    else if (chartType === "line") drawLine(ctx, canvas, colors);
-    else if (chartType === "pie") drawPie(ctx, canvas, colors);
+    if (chartType === "bar") drawBar(ctx, canvas, colors, chartTokens);
+    else if (chartType === "line") drawLine(ctx, canvas, colors, chartTokens);
+    else if (chartType === "pie") drawPie(ctx, canvas, colors, chartTokens);
   }
 
-  function drawBar(ctx, canvas, colors) {
+  function drawBar(ctx, canvas, colors, chartTokens) {
     const maxVal = Math.max(...chartData.map(d => d.value));
     const barW = Math.min(40, (canvas.width - 40) / chartData.length - 8);
     const startX = (canvas.width - chartData.length * (barW + 8)) / 2;
@@ -197,16 +207,16 @@
       ctx.beginPath();
       ctx.roundRect(x, y, barW, h, 3);
       ctx.fill();
-      ctx.fillStyle = "#71717a";
+      ctx.fillStyle = chartTokens.muted;
       ctx.font = "10px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(d.label.substring(0, 6), x + barW / 2, canvas.height - 4);
-      ctx.fillStyle = "#e4e4e7";
+      ctx.fillStyle = chartTokens.text;
       ctx.fillText(d.value, x + barW / 2, y - 4);
     });
   }
 
-  function drawLine(ctx, canvas, colors) {
+  function drawLine(ctx, canvas, colors, chartTokens) {
     const maxVal = Math.max(...chartData.map(d => d.value));
     const stepX = (canvas.width - 40) / Math.max(chartData.length - 1, 1);
     const startX = 20;
@@ -221,7 +231,7 @@
     });
     ctx.lineTo(startX + (chartData.length - 1) * stepX, canvas.height - 20);
     ctx.closePath();
-    ctx.fillStyle = "rgba(52, 211, 153, 0.1)";
+    ctx.fillStyle = chartTokens.accentSoft;
     ctx.fill();
 
     // Line
@@ -243,14 +253,14 @@
       ctx.fillStyle = colors[0];
       ctx.arc(x, y, 4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#71717a";
+      ctx.fillStyle = chartTokens.muted;
       ctx.font = "10px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(d.label.substring(0, 6), x, canvas.height - 4);
     });
   }
 
-  function drawPie(ctx, canvas, colors) {
+  function drawPie(ctx, canvas, colors, chartTokens) {
     const total = chartData.reduce((s, d) => s + d.value, 0);
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
@@ -271,7 +281,7 @@
       const lx = cx + (r * 0.65) * Math.cos(mid);
       const ly = cy + (r * 0.65) * Math.sin(mid);
       if (sliceAngle > 0.3) {
-        ctx.fillStyle = "#fff";
+        ctx.fillStyle = chartTokens.text;
         ctx.font = "bold 11px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText(d.label.substring(0, 5), lx, ly);

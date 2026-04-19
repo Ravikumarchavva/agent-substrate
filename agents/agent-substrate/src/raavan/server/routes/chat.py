@@ -101,6 +101,72 @@ ATTACHMENT_PLANNING_KEYWORDS = (
     "organise",
 )
 
+WORKSPACE_MAIL_NOUNS = (
+    "email",
+    "emails",
+    "mail",
+    "mails",
+    "gmail",
+    "inbox",
+    "mailbox",
+)
+
+WORKSPACE_MAIL_ACTIONS = (
+    "summarize",
+    "summarise",
+    "analyze",
+    "analyse",
+    "review",
+    "check",
+    "read",
+    "scan",
+    "show",
+    "list",
+)
+
+WORKSPACE_MAIL_TOOL_NAMES = {"ask_human", "google_workspace"}
+
+WORKSPACE_MAIL_INSTRUCTIONS = (
+    "If the user asks about their Gmail, inbox, or recent emails and the "
+    "google_workspace tool is available, you must call google_workspace before "
+    "answering. Do not claim you lack inbox access and do not ask the user to "
+    "paste emails until after the tool has been attempted. For requests about "
+    "recent or latest emails, call google_workspace with service='gmail' and an "
+    "empty query string, then summarize the five most recent relevant messages "
+    "from the tool output unless the user asked for a different number."
+)
+
+WORKSPACE_CALENDAR_NOUNS = (
+    "calendar",
+    "event",
+    "meeting",
+    "appointment",
+    "schedule",
+    "reminder",
+)
+
+WORKSPACE_CALENDAR_WRITE_ACTIONS = (
+    "create",
+    "add",
+    "schedule",
+    "set up",
+    "make",
+    "book",
+    "cancel",
+    "delete",
+    "remove",
+)
+
+WORKSPACE_CALENDAR_WRITE_INSTRUCTIONS = (
+    "The user wants to create or cancel a calendar event using Google Calendar. "
+    "Use the google_workspace tool with action='create_event' or action='cancel_event'. "
+    "For create_event, provide title, start_time as ISO 8601 with timezone offset "
+    "(e.g. '2026-04-20T19:00:00+05:30' for 7 PM IST), and optionally end_time. "
+    "IST is UTC+05:30. If no end time is specified, end_time may be omitted (defaults to 1 hour after start). "
+    "For cancel_event, you must first call google_workspace with service='calendar' "
+    "to list events and find the event_id, then call again with action='cancel_event'."
+)
+
 
 def _tool_name(tool: Any) -> str:
     try:
@@ -109,9 +175,71 @@ def _tool_name(tool: Any) -> str:
         return str(getattr(tool, "name", ""))
 
 
-def _should_allow_task_planning_for_attachment(user_text: str) -> bool:
+def _should_allow_task_planning(user_text: str) -> bool:
     normalized = user_text.lower()
     return any(keyword in normalized for keyword in ATTACHMENT_PLANNING_KEYWORDS)
+
+
+def _should_route_workspace_mail_request(user_text: str) -> bool:
+    normalized = user_text.lower()
+    if not any(keyword in normalized for keyword in WORKSPACE_MAIL_NOUNS):
+        return False
+
+    if any(keyword in normalized for keyword in WORKSPACE_MAIL_ACTIONS):
+        return True
+
+    return any(keyword in normalized for keyword in ("recent", "latest", "last "))
+
+
+def _configure_workspace_mail_request(
+    user_text: str,
+    tools: list[Any],
+    system_instructions: str,
+) -> tuple[list[Any], str, str | None]:
+    if not _should_route_workspace_mail_request(user_text):
+        return tools, system_instructions, None
+
+    if not any(_tool_name(tool) == "google_workspace" for tool in tools):
+        return tools, system_instructions, None
+
+    routed_tools = [
+        tool for tool in tools if _tool_name(tool) in WORKSPACE_MAIL_TOOL_NAMES
+    ]
+    updated_instructions = (
+        system_instructions
+        + "\n\n---\n**Google Workspace mail instructions:**\n"
+        + WORKSPACE_MAIL_INSTRUCTIONS
+    )
+    return routed_tools, updated_instructions, "google_workspace"
+
+
+def _should_route_calendar_write_request(user_text: str) -> bool:
+    normalized = user_text.lower()
+    if not any(noun in normalized for noun in WORKSPACE_CALENDAR_NOUNS):
+        return False
+    return any(action in normalized for action in WORKSPACE_CALENDAR_WRITE_ACTIONS)
+
+
+def _configure_calendar_write_request(
+    user_text: str,
+    tools: list[Any],
+    system_instructions: str,
+) -> tuple[list[Any], str, str | None]:
+    if not _should_route_calendar_write_request(user_text):
+        return tools, system_instructions, None
+
+    if not any(_tool_name(tool) == "google_workspace" for tool in tools):
+        return tools, system_instructions, None
+
+    routed_tools = [
+        tool for tool in tools if _tool_name(tool) in WORKSPACE_MAIL_TOOL_NAMES
+    ]
+    updated_instructions = (
+        system_instructions
+        + "\n\n---\n**Google Workspace calendar instructions:**\n"
+        + WORKSPACE_CALENDAR_WRITE_INSTRUCTIONS
+    )
+    return routed_tools, updated_instructions, "google_workspace"
 
 
 def _serialize_attached_file(meta: Any) -> dict[str, Any]:
@@ -471,16 +599,41 @@ async def chat(
                     resolved_model,
                 )
 
+        allow_task_planning = _should_allow_task_planning(display_content)
+
         if attachments:
             deps["system_instructions"] = (
                 deps["system_instructions"]
                 + "\n\n---\n**Attachment handling instructions:**\n"
                 + ATTACHMENT_ANALYSIS_INSTRUCTIONS
             )
-            if not _should_allow_task_planning_for_attachment(display_content):
-                deps["tools"] = [
-                    tool for tool in deps["tools"] if _tool_name(tool) != "manage_tasks"
-                ]
+
+        if not allow_task_planning:
+            deps["tools"] = [
+                tool for tool in deps["tools"] if _tool_name(tool) != "manage_tasks"
+            ]
+
+        deps["tools"], deps["system_instructions"], initial_tool_choice = (
+            _configure_workspace_mail_request(
+                display_content,
+                deps["tools"],
+                deps["system_instructions"],
+            )
+        )
+        if not initial_tool_choice:
+            deps["tools"], deps["system_instructions"], initial_tool_choice = (
+                _configure_calendar_write_request(
+                    display_content,
+                    deps["tools"],
+                    deps["system_instructions"],
+                )
+            )
+        if initial_tool_choice:
+            logger.info(
+                "Thread %s: forcing first tool choice to %s for mailbox request",
+                body.thread_id,
+                initial_tool_choice,
+            )
 
         # Per-request model override — if the frontend sends a different model,
         # create a fresh client for this request only (supports any provider).
@@ -519,6 +672,7 @@ async def chat(
             tools_requiring_approval=deps["tools_requiring_approval"],
             tool_timeout=deps["tool_timeout"],
             runtime=deps["runtime"],
+            enable_capability_search=False,
         )
 
         # 4. Extract user content from last message
@@ -648,6 +802,7 @@ async def chat(
                     agent=agent,
                     user_content=user_content,
                     input_content=user_input_content,
+                    tool_choice=initial_tool_choice,
                     execution_context=ExecutionContext(
                         run_id=chat_run_id,
                         correlation_id=chat_run_id,

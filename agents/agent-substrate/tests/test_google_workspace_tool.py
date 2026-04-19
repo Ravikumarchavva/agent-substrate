@@ -1,9 +1,26 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Callable
 
 from raavan.integrations.mcp import app_tools
 from raavan.integrations.mcp.app_tools import GoogleWorkspaceTool
+
+
+class _FakeRedis:
+    """Minimal async Redis stub that stores a single key."""
+
+    def __init__(self, data: dict[str, str] | None = None) -> None:
+        self._data: dict[str, str] = data or {}
+
+    async def get(self, key: str) -> str | None:
+        return self._data.get(key)
+
+    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+        self._data[key] = value
+
+    async def delete(self, key: str) -> None:
+        self._data.pop(key, None)
 
 
 class _FakeResponse:
@@ -34,11 +51,35 @@ class _FakeAsyncClient:
     async def get(self, url: str, params: Any = None) -> _FakeResponse:
         return self._handler(url, params)
 
+    async def post(self, url: str, json: Any = None) -> _FakeResponse:
+        return self._handler(url, json)
 
-async def test_google_workspace_tool_requires_connection(monkeypatch) -> None:
-    monkeypatch.setattr(app_tools, "get_workspace_access_token", lambda: None)
+    async def delete(self, url: str) -> _FakeResponse:
+        return self._handler(url, None)
 
-    result = await GoogleWorkspaceTool().execute(service="calendar")
+
+def _tool_disconnected() -> GoogleWorkspaceTool:
+    return GoogleWorkspaceTool(redis_client=_FakeRedis())
+
+
+def _tool_connected() -> GoogleWorkspaceTool:
+    redis = _FakeRedis(
+        {
+            "workspace_token:default_user": json.dumps(
+                {
+                    "access_token": "token",
+                    "refresh_token": None,
+                    "expires_in": 3600,
+                    "expires_at": 4_102_444_800,
+                }
+            )
+        }
+    )
+    return GoogleWorkspaceTool(redis_client=redis)
+
+
+async def test_google_workspace_tool_requires_connection() -> None:
+    result = await _tool_disconnected().execute(service="calendar")
 
     assert result.app_data == {
         "service": "calendar",
@@ -49,8 +90,6 @@ async def test_google_workspace_tool_requires_connection(monkeypatch) -> None:
 
 
 async def test_google_workspace_tool_returns_calendar_summary(monkeypatch) -> None:
-    monkeypatch.setattr(app_tools, "get_workspace_access_token", lambda: "token")
-
     def handler(url: str, params: Any) -> _FakeResponse:
         assert "calendar/v3/calendars/primary/events" in url
         return _FakeResponse(
@@ -71,7 +110,7 @@ async def test_google_workspace_tool_returns_calendar_summary(monkeypatch) -> No
         lambda *args, **kwargs: _FakeAsyncClient(handler),
     )
 
-    result = await GoogleWorkspaceTool().execute(service="calendar")
+    result = await _tool_connected().execute(service="calendar")
     text = result.content[0]["text"]
 
     assert "Upcoming calendar events" in text
@@ -85,8 +124,6 @@ async def test_google_workspace_tool_returns_calendar_summary(monkeypatch) -> No
 
 
 async def test_google_workspace_tool_returns_gmail_summary(monkeypatch) -> None:
-    monkeypatch.setattr(app_tools, "get_workspace_access_token", lambda: "token")
-
     def handler(url: str, params: Any) -> _FakeResponse:
         if url.endswith("/gmail/v1/users/me/messages"):
             return _FakeResponse({"messages": [{"id": "msg-1"}]})
@@ -118,7 +155,7 @@ async def test_google_workspace_tool_returns_gmail_summary(monkeypatch) -> None:
         lambda *args, **kwargs: _FakeAsyncClient(handler),
     )
 
-    result = await GoogleWorkspaceTool().execute(service="gmail")
+    result = await _tool_connected().execute(service="gmail")
     text = result.content[0]["text"]
 
     assert "Recent inbox messages" in text
@@ -129,3 +166,196 @@ async def test_google_workspace_tool_returns_gmail_summary(monkeypatch) -> None:
         "query": "",
         "connected": True,
     }
+
+
+async def test_google_workspace_tool_ignores_textual_fallback_action() -> None:
+    result = await _tool_disconnected().execute(
+        service="gmail",
+        query="",
+        action="summarize_mails",
+    )
+
+    assert result.app_data == {
+        "service": "gmail",
+        "query": "",
+        "connected": False,
+    }
+    assert "not connected" in result.content[0]["text"].lower()
+
+
+async def test_google_workspace_tool_clears_stale_token_after_google_401(
+    monkeypatch,
+) -> None:
+    redis = _FakeRedis(
+        {
+            "workspace_token:default_user": json.dumps(
+                {
+                    "access_token": "token",
+                    "refresh_token": "refresh-token",
+                    "expires_in": 3600,
+                    "expires_at": 4_102_444_800,
+                }
+            )
+        }
+    )
+
+    def handler(url: str, params: Any) -> _FakeResponse:
+        return _FakeResponse(
+            {
+                "error": {
+                    "message": "Request had invalid authentication credentials.",
+                }
+            },
+            status_code=401,
+        )
+
+    monkeypatch.setattr(
+        app_tools.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: _FakeAsyncClient(handler),
+    )
+
+    result = await GoogleWorkspaceTool(redis_client=redis).execute(service="gmail")
+
+    assert result.app_data == {
+        "service": "gmail",
+        "query": "",
+        "connected": False,
+    }
+    assert "refresh the token" in result.content[0]["text"].lower()
+    assert await redis.get("workspace_token:default_user") is None
+
+
+async def test_google_workspace_tool_create_event(monkeypatch) -> None:
+    def handler(url: str, body: Any) -> _FakeResponse:
+        assert "calendar/v3/calendars/primary/events" in url
+        assert body["summary"] == "IPL Final"
+        return _FakeResponse(
+            {
+                "id": "event-123",
+                "htmlLink": "https://calendar.google.com/event?eid=event-123",
+                "summary": "IPL Final",
+            }
+        )
+
+    monkeypatch.setattr(
+        app_tools.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: _FakeAsyncClient(handler),
+    )
+
+    result = await _tool_connected().execute(
+        service="calendar",
+        action="create_event",
+        title="IPL Final",
+        start_time="2026-04-20T19:00:00+05:30",
+        end_time="2026-04-20T22:00:00+05:30",
+    )
+
+    assert not result.is_error
+    text = result.content[0]["text"]
+    assert "Created event" in text
+    assert "IPL Final" in text
+    assert "Event ID: event-123" in text
+    assert result.app_data == {
+        "service": "calendar",
+        "query": "",
+        "connected": True,
+        "calendar_mutated": True,
+        "action": "create_event",
+    }
+
+
+async def test_google_workspace_tool_create_event_defaults_end_time(
+    monkeypatch,
+) -> None:
+    """When end_time is omitted, it should default to 1 hour after start."""
+    received: list[dict] = []
+
+    def handler(url: str, body: Any) -> _FakeResponse:
+        received.append(body)
+        return _FakeResponse({"id": "event-456", "summary": "Stand-up"})
+
+    monkeypatch.setattr(
+        app_tools.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: _FakeAsyncClient(handler),
+    )
+
+    result = await _tool_connected().execute(
+        service="calendar",
+        action="create_event",
+        title="Stand-up",
+        start_time="2026-04-21T09:00:00+05:30",
+    )
+
+    assert not result.is_error
+    body = received[0]
+    # end should be 10:00 IST = 1 hour after 09:00
+    assert "10:00:00" in body["end"]["dateTime"]
+
+
+async def test_google_workspace_tool_create_event_missing_title() -> None:
+    result = await _tool_connected().execute(
+        service="calendar",
+        action="create_event",
+        start_time="2026-04-20T19:00:00+05:30",
+    )
+
+    assert result.is_error
+    assert "title is required" in result.content[0]["text"]
+
+
+async def test_google_workspace_tool_cancel_event(monkeypatch) -> None:
+    def handler(url: str, body: Any) -> _FakeResponse:
+        assert "events/event-abc" in url
+        return _FakeResponse({}, status_code=204)
+
+    monkeypatch.setattr(
+        app_tools.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: _FakeAsyncClient(handler),
+    )
+
+    result = await _tool_connected().execute(
+        action="cancel_event",
+        event_id="event-abc",
+    )
+
+    assert not result.is_error
+    assert "cancelled" in result.content[0]["text"].lower()
+    assert result.app_data == {
+        "service": "calendar",
+        "query": "",
+        "connected": True,
+        "calendar_mutated": True,
+        "action": "cancel_event",
+    }
+
+
+async def test_google_workspace_tool_cancel_event_not_found(monkeypatch) -> None:
+    def handler(url: str, body: Any) -> _FakeResponse:
+        return _FakeResponse({}, status_code=404)
+
+    monkeypatch.setattr(
+        app_tools.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: _FakeAsyncClient(handler),
+    )
+
+    result = await _tool_connected().execute(
+        action="cancel_event",
+        event_id="nonexistent",
+    )
+
+    assert result.is_error
+    assert "not found" in result.content[0]["text"].lower()
+
+
+async def test_google_workspace_tool_cancel_event_missing_id() -> None:
+    result = await _tool_connected().execute(
+        action="cancel_event",
+    )
+
+    assert result.is_error
+    assert "event_id is required" in result.content[0]["text"]

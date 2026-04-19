@@ -90,6 +90,7 @@ security-soft:
 
 ci:
 	$(MAKE) sync
+	$(MAKE) lint-apply
 	$(MAKE) lint
 	$(MAKE) typecheck-soft
 	$(MAKE) test-ci

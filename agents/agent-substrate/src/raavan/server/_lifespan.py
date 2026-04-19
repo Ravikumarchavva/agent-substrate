@@ -231,6 +231,7 @@ async def init_tool_registry(
     file_store: FileStore,
     session_factory: Any,
     bridge_registry: BridgeRegistry,
+    redis_client: Any = None,
 ) -> ToolRegistryResult:
     """Create all tools, register them in a :class:`CapabilityRegistry`."""
 
@@ -358,7 +359,7 @@ async def init_tool_registry(
         aliases=["music_player"],
     )
     catalog.register_tool(
-        GoogleWorkspaceTool(),
+        GoogleWorkspaceTool(redis_client=redis_client),
         category="productivity",
         tags=[
             "google",

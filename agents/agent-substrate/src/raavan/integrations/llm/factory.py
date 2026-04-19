@@ -48,10 +48,10 @@ OPENAI_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "dall-e", "whisper", "tts-")
 ANTHROPIC_PREFIXES = ("claude-",)
 GEMINI_PREFIXES = ("gemini-",)
 CHAT_MODEL_FALLBACKS = (
+    "openai/gpt-5.4-mini",
+    "google/gemini-2.5-flash",
     "groq/llama-3.3-70b-versatile",
     "openrouter/liquid/lfm-2.5-1.2b-thinking:free",
-    "google/gemini-2.5-flash",
-    "openai/gpt-5.4-mini",
     "anthropic/claude-sonnet-4-20250514",
 )
 VISION_MODEL_FALLBACKS = (

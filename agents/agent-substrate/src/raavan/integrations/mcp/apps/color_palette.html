@@ -8,18 +8,18 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #18181b;
-    color: #e4e4e7;
+    background: var(--mcp-bg);
+    color: var(--mcp-text);
     padding: 16px;
   }
   .header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .header h2 { font-size: 14px; font-weight: 600; }
   .header .badge {
-    font-size: 10px; background: #4a1942; color: #f472b6;
+    font-size: 10px; background: rgba(244, 114, 182, 0.14); color: #db2777;
     padding: 2px 6px; border-radius: 4px;
   }
   .palette-name {
-    font-size: 12px; color: #a1a1aa; margin-bottom: 12px;
+    font-size: 12px; color: var(--mcp-text-muted); margin-bottom: 12px;
   }
   .palette-grid {
     display: grid;
@@ -30,17 +30,17 @@
   .color-card {
     border-radius: 8px;
     overflow: hidden;
-    border: 1px solid #3f3f46;
+    border: 1px solid var(--mcp-border-strong);
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s;
   }
   .color-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 12px var(--mcp-shadow);
   }
   .color-card.selected {
-    border-color: #f4f4f5;
-    box-shadow: 0 0 0 2px rgba(244,244,245,0.3);
+    border-color: var(--mcp-text);
+    box-shadow: 0 0 0 2px var(--mcp-highlight);
   }
   .color-swatch {
     height: 72px;
@@ -55,20 +55,20 @@
   .color-card:hover .copy-hint { opacity: 1; }
   .color-info {
     padding: 8px;
-    background: #27272a;
+    background: var(--mcp-surface-muted);
   }
   .color-info .hex {
     font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 12px; font-weight: 600; color: #e4e4e7;
+    font-size: 12px; font-weight: 600; color: var(--mcp-text);
   }
   .color-info .name {
-    font-size: 10px; color: #71717a; margin-top: 2px;
+    font-size: 10px; color: var(--mcp-text-soft); margin-top: 2px;
   }
   .detail-panel {
     display: none;
-    border: 1px solid #3f3f46;
+    border: 1px solid var(--mcp-border-strong);
     border-radius: 8px;
-    background: #09090b;
+    background: var(--mcp-surface-elevated);
     padding: 16px;
     margin-bottom: 12px;
   }
@@ -78,23 +78,23 @@
   }
   .detail-swatch {
     width: 48px; height: 48px; border-radius: 8px;
-    border: 1px solid #3f3f46;
+    border: 1px solid var(--mcp-border-strong);
   }
   .detail-title { font-size: 16px; font-weight: 600; }
   .detail-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
   }
   .detail-item {
-    background: #27272a; border-radius: 6px; padding: 8px;
-    border: 1px solid #3f3f46;
+    background: var(--mcp-surface-muted); border-radius: 6px; padding: 8px;
+    border: 1px solid var(--mcp-border-strong);
   }
   .detail-item .label {
-    font-size: 10px; color: #71717a; text-transform: uppercase;
+    font-size: 10px; color: var(--mcp-text-soft); text-transform: uppercase;
     margin-bottom: 2px;
   }
   .detail-item .value {
     font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 12px; color: #e4e4e7; cursor: pointer;
+    font-size: 12px; color: var(--mcp-text); cursor: pointer;
   }
   .detail-item .value:hover { color: #f472b6; }
   .detail-item .value.copied { color: #34d399; }
@@ -104,13 +104,13 @@
   .contrast-chip {
     flex: 1; padding: 6px 10px; border-radius: 6px;
     font-size: 12px; font-weight: 600; text-align: center;
-    border: 1px solid #3f3f46;
+    border: 1px solid var(--mcp-border-strong);
   }
   .harmony-section {
     margin-top: 16px;
   }
   .harmony-section h3 {
-    font-size: 12px; color: #71717a; margin-bottom: 8px;
+    font-size: 12px; color: var(--mcp-text-soft); margin-bottom: 8px;
     text-transform: uppercase; letter-spacing: 0.5px;
   }
   .harmony-row {
@@ -121,15 +121,15 @@
     border: 1px solid transparent; transition: border-color 0.15s;
     position: relative;
   }
-  .harmony-swatch:hover { border-color: #f4f4f5; }
+  .harmony-swatch:hover { border-color: var(--mcp-text); }
   .harmony-swatch .tip {
     position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
-    font-size: 9px; color: #71717a; white-space: nowrap; display: none;
+    font-size: 9px; color: var(--mcp-text-soft); white-space: nowrap; display: none;
   }
   .harmony-swatch:hover .tip { display: block; }
   .no-data {
     display: flex; align-items: center; justify-content: center;
-    height: 80px; color: #71717a; font-size: 14px;
+    height: 80px; color: var(--mcp-text-soft); font-size: 14px;
   }
 </style>
 </head>

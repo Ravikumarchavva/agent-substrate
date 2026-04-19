@@ -5,17 +5,26 @@ import { nanoid } from "nanoid";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { MessageBubble } from "@/components/MessageBubble";
+import { RaavanMark } from "@/components/RaavanMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
 import { AppPanel } from "@/components/AppPanel";
 import { Sidebar } from "@/components/Sidebar";
-import { Header } from "@/components/Header";
-import { SettingsPanel, SettingsTab } from "@/components/SettingsPanel";
+import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
+import { SettingsPanel } from "@/components/SettingsPanel";
+import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
 import { Message, Task, TaskList, UploadedFile } from "@/types";
 import { api } from "@/lib/api";
-import { getPreferredChatModel } from "@/lib/model-preferences";
+import {
+  getPreferredChatModel,
+  CHAT_MODEL_OPTIONS,
+  CHAT_MODEL_STORAGE_KEY,
+  MODEL_PREFERENCES_UPDATED_EVENT,
+  writeStoredValue,
+  groupModelOptions,
+} from "@/lib/model-preferences";
 import { parseChatPath, buildChatPath, buildSettingsPath } from "@/lib/chat-routes";
 import {
   getAttachmentIcon,
@@ -25,7 +34,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useThreads } from "@/hooks/useThreads";
 import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAttachments";
 import { useAppPanel } from "@/hooks/useAppPanel";
-import { Send, Plus, Music2, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, type LucideIcon } from "lucide-react";
+import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "raavan:last-active-thread";
 
@@ -55,12 +64,14 @@ function hasPersistentToolCall(toolCalls: Message["toolCalls"]): boolean {
 }
 
 function ChatPageContent() {
-  const { isAuthenticated, isLoading: authLoading, loginWithGoogle } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, isAdmin, loginWithGoogle } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const routeState = parseChatPath(pathname);
   const settingsPanelOpen = routeState.settingsTab !== null;
-  const settingsPanelTab: SettingsTab = routeState.settingsTab ?? "general";
+  const settingsPanelTab: SettingsTab = routeState.settingsTab === "admin" && !isAdmin
+    ? "general"
+    : routeState.settingsTab ?? "general";
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -93,6 +104,40 @@ function ChatPageContent() {
   // ── Realtime speech-to-speech panel ────────────────────────────────
   const [realtimeOpen, setRealtimeOpen] = useState(false);
 
+  // ── Model selector + thinking level ────────────────────────────────
+  const [selectedModel, setSelectedModel] = useState(() => getPreferredChatModel());
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [thinkingLevel, setThinkingLevel] = useState<"off" | "low" | "medium" | "high">("medium");
+  const [showThinkingPicker, setShowThinkingPicker] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement | null>(null);
+  const thinkingPickerRef = useRef<HTMLDivElement | null>(null);
+
+  // Keep selectedModel in sync with localStorage changes from settings
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { key: string; value: string | null } | undefined;
+      if (detail?.key === CHAT_MODEL_STORAGE_KEY) {
+        setSelectedModel(detail.value ?? getPreferredChatModel());
+      }
+    };
+    window.addEventListener(MODEL_PREFERENCES_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(MODEL_PREFERENCES_UPDATED_EVENT, handler);
+  }, []);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+      if (thinkingPickerRef.current && !thinkingPickerRef.current.contains(e.target as Node)) {
+        setShowThinkingPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   useEffect(() => {
     setLastActiveThreadId(readLastActiveThreadId());
   }, []);
@@ -123,9 +168,28 @@ function ChatPageContent() {
     [router],
   );
 
+  const selectSettingsTab = useCallback(
+    (tab: SettingsTab) => {
+      router.replace(buildSettingsPath(tab), { scroll: false });
+    },
+    [router],
+  );
+
   const closeSettingsPanel = useCallback(() => {
     router.push(buildChatPath(lastActiveThreadId), { scroll: false });
   }, [lastActiveThreadId, router]);
+
+  useEffect(() => {
+    if (settingsPanelOpen) {
+      setDesktopSidebarOpen(true);
+    }
+  }, [settingsPanelOpen]);
+
+  useEffect(() => {
+    if (routeState.settingsTab === "admin" && !isAdmin) {
+      router.replace(buildSettingsPath("general"), { scroll: false });
+    }
+  }, [isAdmin, routeState.settingsTab, router]);
 
   // ── Custom Hooks ────────────────────────────────────────
   const { threads, setThreads, loadThreads, handleNewChat: _handleNewChat, handleSelectThread: _handleSelectThread, handleDeleteThread, handleRenameThread } = useThreads(selectThread, currentThreadId, {
@@ -140,6 +204,7 @@ function ChatPageContent() {
     }
 
     if (wasAuthenticatedRef.current && !isAuthenticated) {
+      // Clear persisted thread so it doesn't leak into the next session
       updateLastActiveThreadId(null);
       setMessages([]);
       setTaskList(null);
@@ -150,8 +215,8 @@ function ChatPageContent() {
       router.replace(buildChatPath(null), { scroll: false });
     }
 
-    // If not authenticated and on a thread-specific URL, redirect to /chat
-    if (!isAuthenticated && !settingsPanelOpen && routeState.threadId) {
+    // Not authenticated → always show clean /chat (no stale thread IDs in URL)
+    if (!isAuthenticated && !settingsPanelOpen && (routeState.threadId || pathname !== "/chat")) {
       router.replace(buildChatPath(null), { scroll: false });
     }
 
@@ -160,7 +225,7 @@ function ChatPageContent() {
     }
 
     wasAuthenticatedRef.current = isAuthenticated;
-  }, [authLoading, isAuthenticated, router, routeState.threadId, setActivePanelId, setPanelItems, settingsPanelOpen, updateLastActiveThreadId]);
+  }, [authLoading, isAuthenticated, pathname, router, routeState.threadId, setActivePanelId, setPanelItems, settingsPanelOpen, updateLastActiveThreadId]);
 
   const renderComposerAttachment = useCallback((file: AttachedFilePreview) => {
     const AttachmentIcon = getAttachmentIcon(file.previewKind);
@@ -221,13 +286,16 @@ function ChatPageContent() {
     }
   }, [currentThreadId, isAuthenticated, pathname, router]);
 
-  // Load threads on mount
-  useEffect(() => { void loadThreads(); }, [loadThreads]);
+  // Guard: don't load threads when not authenticated
+  const canLoadData = isAuthenticated && !authLoading;
+
+  // Load threads on mount (only when authenticated)
+  useEffect(() => { if (canLoadData) void loadThreads(); }, [canLoadData, loadThreads]);
 
   // Load messages when thread changes, and reset panel/task state
   useEffect(() => {
     clearAttachedFiles();
-    if (currentThreadId) {
+    if (currentThreadId && canLoadData) {
       loadMessages(currentThreadId);
       setPanelItems([]);
       setActivePanelId(null);
@@ -241,7 +309,7 @@ function ChatPageContent() {
     setActivePanelId(null);
     setTaskList(null);
     kanbanPanelIdRef.current = null;
-  }, [clearAttachedFiles, currentThreadId, setPanelItems, setActivePanelId]);
+  }, [canLoadData, clearAttachedFiles, currentThreadId, setPanelItems, setActivePanelId]);
 
   // Keep the Kanban panel item's toolArguments in sync with taskList state so
   // the iframe receives live update_context messages from AppPanel.
@@ -328,7 +396,7 @@ function ChatPageContent() {
     const currentFileIds = attachedFiles.map((f) => f.id);
     const requestedModel = currentFileIds.length > 0
       ? "google/gemini-2.5-flash"
-      : getPreferredChatModel();
+      : selectedModel;
     const currentAttachments: UploadedFile[] = attachedFiles.map((file) => ({
       id: file.id,
       thread_id: file.thread_id,
@@ -766,9 +834,13 @@ function ChatPageContent() {
           thread_id: threadId,
           messages: [{ role: "user", content: currentInput }],
           ...(currentFileIds.length ? { file_ids: currentFileIds } : {}),
-          ...(localStorage.getItem("system_instructions_override")?.trim()
-            ? { system_instructions: localStorage.getItem("system_instructions_override")!.trim() }
-            : {}),
+          ...(() => {
+            const base = localStorage.getItem("system_instructions_override")?.trim() ?? "";
+            const tz = localStorage.getItem("user_timezone")?.trim();
+            const tzNote = tz ? `User timezone: ${tz}. Always use this timezone when creating or interpreting calendar events and times.` : "";
+            const combined = [tzNote, base].filter(Boolean).join("\n");
+            return combined ? { system_instructions: combined } : {};
+          })(),
           model: requestedModel,
         },
         abortController.signal,
@@ -824,13 +896,12 @@ function ChatPageContent() {
     e.preventDefault();
     doSendMessage(input);
   }
-  const currentThread = threads.find((t) => t.id === currentThreadId);
 
   // ── Auth guards ───────────────────────────────────────────────────────
   if (authLoading) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
-        <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--muted)" }} />
+        <Loader2 className="w-6 h-6 animate-spin text-(--muted)" />
       </div>
     );
   }
@@ -839,18 +910,12 @@ function ChatPageContent() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
-          <div
-            className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-2xl font-bold text-white"
-            style={{
-              background:
-                "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))",
-            }}
-          >
-            AI
+          <div className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-xl font-bold bg-foreground text-background">
+            R
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Welcome</h1>
-            <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>
+            <h1 className="text-2xl font-semibold">Welcome</h1>
+            <p className="text-sm mt-2 text-(--muted)">
               Sign in to start chatting with your AI assistant
             </p>
           </div>
@@ -861,7 +926,8 @@ function ChatPageContent() {
           )}
           <button
             onClick={loginWithGoogle}
-            className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-xl text-sm font-semibold hover:bg-gray-100 transition-colors shadow-lg cursor-pointer"
+            className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
+            style={{ boxShadow: "var(--shadow-md)" }}
           >
             {/* Google G */}
             <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -872,7 +938,7 @@ function ChatPageContent() {
             </svg>
             Continue with Google
           </button>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
+          <p className="text-xs text-(--muted)">
             Your conversations are private and secure
           </p>
         </div>
@@ -882,17 +948,10 @@ function ChatPageContent() {
 
   return (
     <div className="flex h-dvh min-h-dvh overflow-hidden bg-background text-foreground" suppressHydrationWarning>
-      {/* Settings Panel (portal-like overlay) */}
-      <SettingsPanel
-        isOpen={settingsPanelOpen}
-        initialTab={settingsPanelTab}
-        onClose={closeSettingsPanel}
-      />
-
       {/* Desktop Sidebar */}
       <div
         className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${
-          desktopSidebarOpen ? "lg:w-64" : "lg:w-0"
+          desktopSidebarOpen ? "lg:w-60" : "lg:w-0"
         }`}
       >
         <Sidebar
@@ -904,328 +963,394 @@ function ChatPageContent() {
           onRenameThread={handleRenameThread}
           onCollapse={() => setDesktopSidebarOpen(false)}
           onOpenSettings={openSettingsPanel}
+          mode={settingsPanelOpen ? "settings" : "chat"}
+          settingsTab={settingsPanelTab}
+          onSelectSettingsTab={selectSettingsTab}
+          onBackToChat={closeSettingsPanel}
         />
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex min-w-0">
-        {/* Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0">
-        <Header
-          onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
-          onOpenDesktopSidebar={desktopSidebarOpen ? undefined : () => setDesktopSidebarOpen(true)}
-          threadName={currentThread?.name}
-        />
+      <div className="flex min-w-0 flex-1">
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          <div className="pointer-events-none absolute left-4 top-4 z-20 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
+              aria-label="Open sidebar"
+            >
+              <SidebarToggleIcon direction="open" className="h-4 w-4" />
+            </button>
+            {!desktopSidebarOpen && (
+              <button
+                type="button"
+                onClick={() => setDesktopSidebarOpen(true)}
+                className="pointer-events-auto hidden h-9 w-9 items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:flex"
+                aria-label="Open sidebar"
+              >
+                <SidebarToggleIcon direction="open" className="h-4 w-4" />
+              </button>
+            )}
+          </div>
 
-        {/* Messages Area */}
-        <div
-          ref={containerRef}
-          className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
-        >
-          {messages.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center space-y-6 w-full max-w-2xl px-4 sm:px-6">
-                <div
-                  className="w-14 h-14 mx-auto rounded-full flex items-center justify-center text-xl font-bold text-white"
-                  style={{ background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))" }}
-                >
-                  AI
-                </div>
-                <div>
-                  <h2 className="text-2xl font-semibold">How can I help you today?</h2>
-                  <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>
-                    Ask me anything — I&apos;ll respond thoughtfully.
-                  </p>
-                </div>
-
-                {/* Conversation Starters */}
-                <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {([
-                    { icon: Music2, text: "Play Despacito on Spotify" },
-                    { icon: ListTodo, text: "Plan tasks to organise a birthday party" },
-                    { icon: Clock, text: "What's the current time?" },
-                    { icon: BarChart2, text: "Show a data visualisation" },
-                  ] as { icon: LucideIcon, text: string }[]).map(({ icon: Icon, text }, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => doSendMessage(text)}
-                      className="flex items-center gap-2.5 p-3 rounded-xl text-left text-sm transition-colors hover:bg-(--card-hover) cursor-pointer"
-                      style={{ background: "var(--card)", color: "var(--muted)" }}
-                    >
-                      <span style={{ color: "var(--accent)" }}>
-                        <Icon className="w-4 h-4 shrink-0" />
-                      </span>
-                      <span>{text}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+          {settingsPanelOpen ? (
+            <div className="flex-1 overflow-y-auto">
+              <SettingsPanel
+                isOpen={settingsPanelOpen}
+                initialTab={settingsPanelTab}
+                onTabChange={selectSettingsTab}
+              />
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto w-full space-y-2 px-3 py-3 sm:px-4">
-              {messages.map((m) => {
-                if (m.role === "tool_approval" && m.metadata) {
-                  return (
-                    <div key={m.id} className="px-4 py-2">
-                      <div className="max-w-3xl mx-auto px-0 sm:px-0">
-                      <div className="flex gap-3">
-                        <div className="w-7 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                      <ToolApprovalCard
-                        requestId={m.metadata.requestId as string}
-                        toolName={m.metadata.toolName as string}
-                        arguments={m.metadata.arguments as Record<string, unknown>}
-                        context={m.metadata.context as string | undefined}
-                        onRespond={respondToHITL}
-                      />
+            <>
+              <div
+                ref={containerRef}
+                className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
+              >
+                {messages.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="w-full max-w-200 px-4 text-center sm:px-6">
+                      <div className="space-y-6">
+                        <div
+                          className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-(--border) bg-(--card)"
+                          style={{ boxShadow: "var(--shadow-sm)" }}
+                        >
+                          <RaavanMark className="h-8 w-8" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-semibold">How can I help you today?</h2>
+                          <p className="mt-2 text-sm text-(--muted)">
+                            Ask me anything and I&apos;ll keep the working area clean and focused.
+                          </p>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                          {([
+                            { icon: Music2, text: "Play Despacito on Spotify" },
+                            { icon: Mail, text: "Summarize my recent 5 emails" },
+                            { icon: ListTodo, text: "Plan tasks to organise a birthday party" },
+                            { icon: Clock, text: "What's the current time?" },
+                            { icon: BarChart2, text: "Show a data visualisation" },
+                          ] as { icon: LucideIcon; text: string }[]).map(({ icon: Icon, text }, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => doSendMessage(text)}
+                              className="flex cursor-pointer items-center gap-3 rounded-2xl p-3.5 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover)"
+                              style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
+                            >
+                              <Icon className="h-4 w-4 shrink-0 text-foreground" />
+                              <span>{text}</span>
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (m.role === "human_input" && m.metadata) {
-                  return (
-                    <div key={m.id} className="px-4 py-1">
-                      <div className="max-w-3xl mx-auto px-0 sm:px-0">
-                      <div className="flex gap-3">
-                        <div className="w-7 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                      <HumanInputCard
-                        requestId={m.metadata.requestId as string}
-                        question={m.metadata.question as string}
-                        context={m.metadata.context as string | undefined}
-                        options={
-                          (m.metadata.options as
-                            | { key: string; label: string; description?: string }[]
-                            | undefined) || []
-                        }
-                        allowFreeform={m.metadata.allowFreeform as boolean | undefined}
-                        onRespond={respondToHITL}
-                      />
-                        </div>
-                      </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (m.role === "tool_result" && m.metadata) {
-                  const isErr = m.metadata.isError as boolean | undefined;
-                  return (
-                    <div
-                      key={m.id}
-                      className={`py-2 px-3 my-1 text-xs rounded-md border ${
-                        isErr
-                          ? "border-red-700 bg-red-950/40 text-red-300"
-                          : "text-zinc-400"
-                      }`}
-                      style={isErr ? {} : { background: "var(--code-bg)", borderColor: "var(--border)" }}
-                    >
-                      <span className="font-semibold">
-                        🔧 {(m.metadata.toolName as string) || "tool"}
-                      </span>
-                      {m.content && (
-                        <pre className="mt-1 whitespace-pre-wrap text-[11px]">
-                          {m.content}
-                        </pre>
-                      )}
-                    </div>
-                  );
-                }
-
-                // Only render MessageBubble for user/assistant messages
-                if (m.role === "user" || m.role === "assistant") {
-                  return (
-                    <MessageBubble
-                      key={m.id}
-                      role={m.role}
-                      content={m.content}
-                      attachments={m.attachments}
-                      reasoning={m.reasoning}
-                      timestamp={m.timestamp}
-                      toolCalls={m.toolCalls}
-                      isToolExecuting={m.isToolExecuting}
-                      isContinuation={m.isContinuation}
-                      onOpenInPanel={(tool) => {
-                        const args = typeof tool.arguments === "string"
-                          ? JSON.parse(tool.arguments)
-                          : tool.arguments;
-                        openInPanel({
-                          id: tool.id,
-                          httpUrl: tool._meta?.ui?.httpUrl || `/ui/${tool.name}`,
-                          toolName: tool.name,
-                          toolArguments: args,
-                          timestamp: Date.now(),
-                        });
-                      }}
-                    />
-                  );
-                }
-
-                return null;
-              })}
-{/* Only show bounce dots when loading but no assistant message exists yet */}
-              {loading && !messages.some((m) => m.role === 'assistant' && m.id === messages[messages.length - 1]?.id) && (
-                <div className="py-2">
-                  <div className="flex gap-3">
-                    <div
-                      className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
-                      style={{ background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))" }}
-                    >
-                      AI
-                    </div>
-                    <div className="flex items-center gap-1 pt-2.5">
-                      <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "var(--muted)", animationDelay: "0ms" }} />
-                      <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "var(--muted)", animationDelay: "150ms" }} />
-                      <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "var(--muted)", animationDelay: "300ms" }} />
                     </div>
                   </div>
+                ) : (
+                  <div className="mx-auto w-full space-y-8 py-8">
+                    {messages.map((m) => {
+                      if (m.role === "tool_approval" && m.metadata) {
+                        return (
+                          <div key={m.id} className="px-4 sm:px-6">
+                            <div className="mx-auto max-w-180">
+                              <ToolApprovalCard
+                                requestId={m.metadata.requestId as string}
+                                toolName={m.metadata.toolName as string}
+                                arguments={m.metadata.arguments as Record<string, unknown>}
+                                context={m.metadata.context as string | undefined}
+                                onRespond={respondToHITL}
+                              />
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (m.role === "human_input" && m.metadata) {
+                        return (
+                          <div key={m.id} className="px-4 sm:px-6">
+                            <div className="mx-auto max-w-180">
+                              <HumanInputCard
+                                requestId={m.metadata.requestId as string}
+                                question={m.metadata.question as string}
+                                context={m.metadata.context as string | undefined}
+                                options={
+                                  (m.metadata.options as
+                                    | { key: string; label: string; description?: string }[]
+                                    | undefined) || []
+                                }
+                                allowFreeform={m.metadata.allowFreeform as boolean | undefined}
+                                onRespond={respondToHITL}
+                              />
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (m.role === "tool_result") {
+                        return null;
+                      }
+
+                      if (m.role === "user" || m.role === "assistant") {
+                        return (
+                          <MessageBubble
+                            key={m.id}
+                            role={m.role}
+                            content={m.content}
+                            attachments={m.attachments}
+                            reasoning={m.reasoning}
+                            timestamp={m.timestamp}
+                            toolCalls={m.toolCalls}
+                            isToolExecuting={m.isToolExecuting}
+                            isContinuation={m.isContinuation}
+                            onOpenInPanel={(tool) => {
+                              const args = typeof tool.arguments === "string"
+                                ? JSON.parse(tool.arguments)
+                                : tool.arguments;
+                              openInPanel({
+                                id: tool.id,
+                                httpUrl: tool._meta?.ui?.httpUrl || `/ui/${tool.name}`,
+                                toolName: tool.name,
+                                toolArguments: args,
+                                timestamp: Date.now(),
+                              });
+                            }}
+                          />
+                        );
+                      }
+
+                      return null;
+                    })}
+
+                    {loading && !messages.some((m) => m.role === "assistant" && m.id === messages[messages.length - 1]?.id) && (
+                      <div className="px-4 py-2 sm:px-6">
+                        <div className="mx-auto flex max-w-180 items-center gap-2 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "0ms" }} />
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "150ms" }} />
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "300ms" }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:pb-5">
+                <div className="mx-auto max-w-200 px-4 sm:px-6">
+                  <form
+                    onSubmit={sendMessage}
+                    className="flex flex-col overflow-hidden px-4 py-3"
+                    style={{
+                      borderRadius: "24px",
+                      background: "var(--card)",
+                      boxShadow: "var(--shadow-md)",
+                    }}
+                  >
+                    {attachedFiles.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pb-3">
+                        {attachedFiles.map((file) => renderComposerAttachment(file))}
+                      </div>
+                    )}
+
+                    <div className="flex items-end gap-2.5">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={handleFileSelected}
+                        aria-hidden="true"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingFile}
+                        className="mb-0.5 shrink-0 self-end rounded-xl p-2 text-(--muted) transition-colors hover:bg-(--card-hover) disabled:opacity-40 cursor-pointer"
+                        aria-label="Attach file"
+                      >
+                        {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      </button>
+
+                      <textarea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            sendMessage(e);
+                          }
+                        }}
+                        rows={1}
+                        className="max-h-48 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] outline-none placeholder:text-(--muted)"
+                        placeholder="Ask anything…"
+                        disabled={loading}
+                      />
+
+                      <div className="mb-0.5 flex shrink-0 items-center gap-1 self-end">
+                        {!loading && (
+                          <VoiceRecorder
+                            onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
+                            disabled={loading}
+                          />
+                        )}
+                        {!loading && (
+                          <button
+                            type="button"
+                            onClick={() => setRealtimeOpen(true)}
+                            className="cursor-pointer rounded-xl p-2 text-(--muted) transition-colors hover:bg-(--card-hover)"
+                            aria-label="Start speech-to-speech conversation"
+                            title="Live voice conversation"
+                          >
+                            <Radio className="h-4 w-4" />
+                          </button>
+                        )}
+                        {loading ? (
+                          <button
+                            type="button"
+                            onClick={handleStop}
+                            className="cursor-pointer rounded-full bg-foreground p-2 text-background transition-colors"
+                            aria-label="Stop"
+                          >
+                            <StopCircle className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button
+                            type="submit"
+                            disabled={!input.trim()}
+                            className="cursor-pointer rounded-full p-2 transition-all disabled:cursor-not-allowed disabled:opacity-20"
+                            style={{
+                              background: input.trim() ? "var(--foreground)" : "var(--badge-bg)",
+                              color: input.trim() ? "var(--background)" : "var(--muted)",
+                            }}
+                            aria-label="Send"
+                          >
+                            <Send className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </form>
+
+                  <div className="mt-2 flex items-center gap-3 px-1">
+                    <div className="relative" ref={modelPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowModelPicker((v) => !v);
+                          setShowThinkingPicker(false);
+                        }}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-(--muted) transition-colors hover:bg-(--card-hover)"
+                      >
+                        <Settings2 className="h-3 w-3" />
+                        <span className="max-w-32 truncate">
+                          {CHAT_MODEL_OPTIONS.find((m) => m.id === selectedModel)?.label ?? selectedModel.split("/").pop()}
+                        </span>
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                      {showModelPicker && (
+                        <div
+                          className="absolute bottom-full left-0 z-50 mb-1 max-h-72 min-w-56 overflow-y-auto rounded-xl py-1"
+                          style={{ background: "var(--card)", boxShadow: "var(--shadow-lg)" }}
+                        >
+                          {groupModelOptions(CHAT_MODEL_OPTIONS).map((group) => (
+                            <div key={group.label}>
+                              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-(--muted)">
+                                {group.label}
+                              </div>
+                              {group.options.map((opt) => (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedModel(opt.id);
+                                    writeStoredValue(CHAT_MODEL_STORAGE_KEY, opt.id);
+                                    setShowModelPicker(false);
+                                  }}
+                                  className={`flex w-full cursor-pointer items-center justify-between px-3 py-1.5 text-left text-[13px] transition-colors hover:bg-(--card-hover) ${opt.id === selectedModel ? "font-medium text-foreground" : "text-(--muted)"}`}
+                                >
+                                  <span className="truncate">{opt.label}</span>
+                                  {opt.id === selectedModel && <span className="ml-2 shrink-0 text-[10px]">✓</span>}
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="text-(--border)">·</span>
+
+                    <div className="relative" ref={thinkingPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowThinkingPicker((v) => !v);
+                          setShowModelPicker(false);
+                        }}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-(--muted) transition-colors hover:bg-(--card-hover)"
+                      >
+                        <span>💭</span>
+                        <span>{thinkingLevel === "off" ? "No thinking" : `Thinking: ${thinkingLevel}`}</span>
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                      {showThinkingPicker && (
+                        <div
+                          className="absolute bottom-full left-0 z-50 mb-1 min-w-44 rounded-xl py-1"
+                          style={{ background: "var(--card)", boxShadow: "var(--shadow-lg)" }}
+                        >
+                          {(["off", "low", "medium", "high"] as const).map((level) => (
+                            <button
+                              key={level}
+                              type="button"
+                              onClick={() => {
+                                setThinkingLevel(level);
+                                setShowThinkingPicker(false);
+                              }}
+                              className={`flex w-full cursor-pointer items-center justify-between px-3 py-2 text-left text-[13px] transition-colors hover:bg-(--card-hover) ${level === thinkingLevel ? "font-medium text-foreground" : "text-(--muted)"}`}
+                            >
+                              <div>
+                                <div className="capitalize">{level === "off" ? "No thinking" : level}</div>
+                                <div className="text-[11px] text-(--muted)">
+                                  {level === "off" && "Direct responses without reasoning"}
+                                  {level === "low" && "Faster responses with less reasoning"}
+                                  {level === "medium" && "Balanced reasoning and speed"}
+                                  {level === "high" && "Greater reasoning depth but slower"}
+                                </div>
+                              </div>
+                              {level === thinkingLevel && <span className="ml-2 shrink-0 text-[10px]">✓</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <RealtimeVoicePanel isOpen={realtimeOpen} onClose={() => setRealtimeOpen(false)} />
+                  <p className="mt-2 text-center text-xs text-(--muted)">
+                    AI can make mistakes. Verify important information.
+                  </p>
                 </div>
-              )}
-            </div>
+              </div>
+            </>
           )}
         </div>
 
-        {/* Input Area */}
-        <div className="bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 sm:pb-4">
-          <div className="max-w-3xl mx-auto px-3 sm:px-4">
-            <form
-              onSubmit={sendMessage}
-              className="flex flex-col overflow-hidden border border-(--border) px-3 py-3 shadow-sm"
-              style={{
-                borderRadius: "28px",
-                background:
-                  "linear-gradient(180deg, color-mix(in srgb, var(--background) 88%, var(--input-bg)), color-mix(in srgb, var(--input-bg) 92%, var(--background)))",
-                boxShadow: "0 24px 60px -46px var(--panel-shadow)",
-              }}
-            >
-              {/* Attachment preview row — shown when files are attached */}
-              {attachedFiles.length > 0 && (
-                <div className="flex flex-wrap gap-2 pb-3">
-                  {attachedFiles.map((file) => renderComposerAttachment(file))}
-                </div>
-              )}
-
-              <div className="flex items-end gap-2.5">
-              {/* Hidden file input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileSelected}
-                aria-hidden="true"
-              />
-
-              {/* Left: attach/plus */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingFile}
-                className="mb-0.5 shrink-0 self-end rounded-2xl p-2 transition-colors hover:bg-(--card-hover) disabled:opacity-40 cursor-pointer"
-                style={{ color: "var(--muted)" }}
-                aria-label="Attach file"
-              >
-                {uploadingFile ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Plus className="w-4 h-4" />
-                )}
-              </button>
-
-              {/* Textarea */}
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage(e);
-                  }
-                }}
-                rows={1}
-                className="max-h-48 flex-1 resize-none bg-transparent py-2 text-sm outline-none overflow-y-auto"
-                placeholder="Ask anything"
-                disabled={loading}
-              />
-
-              {/* Right: voice + send */}
-              <div className="flex items-center gap-1 shrink-0 self-end mb-0.5">
-                {/* STT mic — transcribes speech into the text input */}
-                {!loading && (
-                  <VoiceRecorder
-                    onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
-                    disabled={loading}
-                  />
-                )}
-                {/* Realtime speech-to-speech button — separate, opens full-duplex panel */}
-                {!loading && (
-                  <button
-                    type="button"
-                    onClick={() => setRealtimeOpen(true)}
-                    className="rounded-2xl p-2 transition-colors hover:bg-(--card-hover) cursor-pointer"
-                    style={{ color: "var(--muted)" }}
-                    aria-label="Start speech-to-speech conversation"
-                    title="Live voice conversation"
-                  >
-                    <Radio className="w-4 h-4" />
-                  </button>
-                )}
-                {loading ? (
-                  /* Stop button — visible while the agent is running */
-                  <button
-                    type="button"
-                    onClick={handleStop}
-                    className="rounded-2xl p-2 transition-colors cursor-pointer"
-                    style={{ background: "var(--accent)", color: "#fff" }}
-                    aria-label="Stop"
-                  >
-                    <StopCircle className="w-4 h-4" />
-                  </button>
-                ) : (
-                  /* Send button — visible when idle */
-                  <button
-                    type="submit"
-                    disabled={!input.trim()}
-                    className="rounded-2xl p-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                    style={{
-                      background: input.trim() ? "var(--accent)" : "var(--card)",
-                      color: input.trim() ? "#fff" : "var(--muted)",
-                    }}
-                    aria-label="Send"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              </div>
-            </form>
-            {/* Realtime speech-to-speech modal */}
-            <RealtimeVoicePanel
-              isOpen={realtimeOpen}
-              onClose={() => setRealtimeOpen(false)}
-            />
-            <p className="text-xs text-center mt-2" style={{ color: "var(--muted)" }}>
-              AI can make mistakes. Verify important information.
-            </p>
-          </div>
-        </div>
-      </div>
-
-        {/* App Side Panel */}
-        <AppPanel
-          items={panelItems}
-          activeItemId={activePanelId}
-          onSetActive={setActivePanelId}
-          onClose={closePanelItem}
-          onClosePanel={closeAllPanels}
-          isCollapsed={panelCollapsed}
-          onToggleCollapse={() => setPanelCollapsed((c) => !c)}
-          onResult={handleMcpAppResult}
-        />
+        {!settingsPanelOpen && (
+          <AppPanel
+            items={panelItems}
+            activeItemId={activePanelId}
+            onSetActive={setActivePanelId}
+            onClose={closePanelItem}
+            onClosePanel={closeAllPanels}
+            isCollapsed={panelCollapsed}
+            onToggleCollapse={() => setPanelCollapsed((c) => !c)}
+            onResult={handleMcpAppResult}
+          />
+        )}
       </div>
 
       {/* Mobile Sidebar Drawer */}
@@ -1237,7 +1362,7 @@ function ChatPageContent() {
             onClick={() => setMobileSidebarOpen(false)}
             aria-label="Close sidebar"
           />
-          <div className="relative h-full w-[min(20rem,calc(100vw-1rem))] max-w-full">
+          <div className="relative h-full w-[min(15rem,calc(100vw-1rem))] max-w-full">
             <Sidebar
               threads={threads}
               currentThreadId={currentThreadId}
@@ -1247,6 +1372,13 @@ function ChatPageContent() {
               onRenameThread={handleRenameThread}
               onCollapse={() => setMobileSidebarOpen(false)}
               onOpenSettings={openSettingsPanel}
+              mode={settingsPanelOpen ? "settings" : "chat"}
+              settingsTab={settingsPanelTab}
+              onSelectSettingsTab={selectSettingsTab}
+              onBackToChat={() => {
+                setMobileSidebarOpen(false);
+                closeSettingsPanel();
+              }}
             />
           </div>
         </div>
@@ -1260,7 +1392,7 @@ export default function ChatPage() {
     <Suspense
       fallback={
         <div className="flex min-h-dvh items-center justify-center bg-background">
-          <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--muted)" }} />
+          <Loader2 className="w-6 h-6 animate-spin text-(--muted)" />
         </div>
       }
     >

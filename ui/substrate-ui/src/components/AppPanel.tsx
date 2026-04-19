@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const API_BASE = "/api/backend";
 
@@ -48,6 +50,7 @@ export function AppPanel({
 }: Props) {
   // ── Per-item iframe refs (never cleared — iframes stay mounted) ──
   const iframeRefs = useRef<Map<string, HTMLIFrameElement | null>>(new Map());
+  const { theme } = useTheme();
 
   // ── Per-item ready / error state ────────────────────────────────
   const [readyMap, setReadyMap] = useState<Record<string, boolean>>({});
@@ -133,6 +136,17 @@ export function AppPanel({
       // Not connected — silent
     }
   }, []);
+
+  // ── Notify iframes when theme changes ─────────────────────────────
+  useEffect(() => {
+    iframeRefs.current.forEach((iframe, id) => {
+      if (!readyMap[id] || !iframe?.contentWindow) return;
+      iframe.contentWindow.postMessage(
+        { jsonrpc: "2.0", method: "ui/notifications/theme-changed", params: { theme } },
+        "*",
+      );
+    });
+  }, [theme, readyMap]);
 
   // ── Re-send token when switching to a Spotify tab ────────────────
   // With persistent iframes the `ready` event only fires once on first load,
@@ -297,7 +311,7 @@ export function AppPanel({
                 hostInfo: { name: "agent-framework-ui", version: "1.0.0" },
                 hostCapabilities: {},
                 hostContext: {
-                  theme: "dark",
+                  theme,
                   toolInfo: { tool: { name: senderItem.toolName } },
                 },
               },
@@ -382,7 +396,7 @@ export function AppPanel({
 
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [items, onResult, onClose, sendToItem, fetchAndSendSpotifyToken, fetchAndSendWorkspaceToken]);
+  }, [items, onResult, onClose, sendToItem, fetchAndSendSpotifyToken, fetchAndSendWorkspaceToken, theme]);
 
   if (items.length === 0) return null;
 
@@ -395,10 +409,15 @@ export function AppPanel({
           className="flex items-center gap-2 rounded-full border border-(--border) bg-(--card) px-3 py-3 shadow-xl transition-colors hover:bg-background cursor-pointer xl:rounded-l-lg xl:rounded-r-none xl:border-r-0"
           title="Open app panel"
         >
-          <PanelRightOpen className="w-4 h-4 text-foreground" />
-          <span className="text-xs text-(--muted) font-medium">
-            {items.length} app{items.length !== 1 ? "s" : ""}
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-background">
+            <AppIcon toolName={activeItem?.toolName} className="h-4 w-4 text-foreground" />
           </span>
+          <span className="max-w-32 truncate text-xs font-medium text-(--muted)">
+            {items.length === 1 && activeItem
+              ? activeItem.toolName.replace(/_/g, " ")
+              : `${items.length} apps`}
+          </span>
+          <PanelRightOpen className="w-4 h-4 text-foreground" />
         </button>
       </div>
     );
@@ -466,6 +485,9 @@ export function AppPanel({
                 }`}
                 style={item.id === activeItem?.id ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
               >
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-background text-foreground">
+                  <AppIcon toolName={item.toolName} className="h-3.5 w-3.5 text-foreground" />
+                </span>
                 <span className="max-w-30 truncate">
                   {item.toolName.replace(/_/g, " ")}
                 </span>
@@ -497,6 +519,9 @@ export function AppPanel({
               className="inline-block w-2 h-2 rounded-full mr-1.5"
               style={{ backgroundColor: readyMap[activeItem.id] ? "#22c55e" : "#eab308" }}
             />
+            <span className="mr-2 flex h-6 w-6 items-center justify-center rounded-lg bg-(--card)">
+              <AppIcon toolName={activeItem.toolName} className="h-3.5 w-3.5 text-foreground" />
+            </span>
             <span className="font-medium text-foreground">
               {activeItem.toolName.replace(/_/g, " ")}
             </span>

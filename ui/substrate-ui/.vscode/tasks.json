@@ -8,6 +8,46 @@
 			"isBackground": true,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "UI CI",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"ci"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "UI CI",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"ci"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "UI CI",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"ci"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "UI CI",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"ci"
+			],
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

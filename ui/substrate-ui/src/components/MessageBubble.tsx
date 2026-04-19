@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useEffect, useState } from "react";
+import { createElement, useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -26,6 +26,54 @@ import {
 
 function isPersistentToolCall(toolCall: ToolCall): boolean {
   return Boolean(toolCall._meta?.ui?.httpUrl);
+}
+
+function serializeTableToClipboard(table: HTMLTableElement): string {
+  return Array.from(table.querySelectorAll("tr"))
+    .map((row) =>
+      Array.from(row.querySelectorAll("th, td"))
+        .map((cell) => cell.textContent?.replace(/\s+/g, " ").trim() ?? "")
+        .join("\t"),
+    )
+    .filter((line) => line.trim().length > 0)
+    .join("\n");
+}
+
+function CopyableMarkdownTable({ children, className, ...props }: ComponentPropsWithoutRef<"table">) {
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyTable = async () => {
+    if (!tableRef.current) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(serializeTableToClipboard(tableRef.current));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div
+      className="relative my-1 overflow-hidden rounded-[22px] border border-(--border) bg-(--card)"
+      style={{ boxShadow: "var(--shadow-sm)" }}
+    >
+      <button
+        type="button"
+        onClick={handleCopyTable}
+        className="absolute right-1.5 top-1.5 z-10 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-background/90 text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
+        aria-label={copied ? "Copied" : "Copy table"}
+        title={copied ? "Copied" : "Copy table"}
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+      <div className="overflow-x-auto">
+        <table ref={tableRef} className={className} style={{ margin: 0 }} {...props}>
+          {children}
+        </table>
+      </div>
+    </div>
+  );
 }
 
 interface AttachmentDocumentCardProps {
@@ -95,7 +143,6 @@ export function MessageBubble({
   timestamp, 
   toolCalls,
   isToolExecuting,
-  isContinuation,
   onRegenerate,
   onOpenInPanel
 }: Props) {
@@ -191,12 +238,13 @@ export function MessageBubble({
     </div>
   ) : null;
 
-  /* ── User message: right-aligned pill bubble ── */
+  /* ── User message: right-aligned speech bubble ── */
   if (isUser) {
     return (
       <>
-        <div className="group flex justify-end px-3 py-2 sm:px-4">
-          <div className="flex max-w-[88%] flex-col items-end gap-2 sm:max-w-[75%]">
+        <div className="group px-4 sm:px-6">
+          <div className="mx-auto max-w-180 flex justify-end">
+          <div className="flex max-w-[85%] flex-col items-end gap-2 sm:max-w-[75%]">
             {imageAttachments.length > 0 && (
               <div className="flex flex-wrap justify-end gap-2">
                 {imageAttachments.map((attachment) => (
@@ -204,8 +252,8 @@ export function MessageBubble({
                     key={attachment.id}
                     type="button"
                     onClick={() => setActiveImageAttachment(attachment)}
-                    className="group/image overflow-hidden rounded-2xl border border-(--border) shadow-sm cursor-pointer bg-(--card-hover)"
-                    style={{ maxWidth: imageAttachments.length === 1 ? "360px" : "180px" }}
+                    className="group/image overflow-hidden rounded-2xl cursor-pointer"
+                    style={{ maxWidth: imageAttachments.length === 1 ? "360px" : "180px", boxShadow: "var(--shadow-sm)" }}
                   >
                     <img
                       src={attachment.url ?? ""}
@@ -226,21 +274,21 @@ export function MessageBubble({
             )}
             {safeContent && (
               <div
-                className="px-4 py-2.5 text-sm leading-relaxed"
+                className="px-4 py-3 text-[15px] leading-relaxed"
                 style={{
                   background: "var(--user-bubble)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "12px 12px 4px 12px",
+                  borderRadius: "20px 20px 4px 20px",
                 }}
               >
                 {safeContent}
               </div>
             )}
             {timestamp && (
-              <span className="text-[11px]" style={{ color: "var(--muted)" }}>
+              <span className="text-[11px] text-(--muted) pr-1">
                 {formatTime(timestamp)}
               </span>
             )}
+          </div>
           </div>
         </div>
         {imageLightbox}
@@ -248,151 +296,141 @@ export function MessageBubble({
     );
   }
 
-  /* ── Assistant message: left-aligned with avatar ── */
+  /* ── Assistant message: left-aligned, clean layout ── */
   return (
-    <div className="group relative px-3 py-4 sm:px-4">
-      <div className="mx-auto flex max-w-3xl gap-2.5 sm:gap-3">
-        {/* AI avatar — hidden for continuation bubbles to avoid duplicate icons */}
-        <div className="shrink-0 mt-0.5">
-          {isContinuation ? (
-            <div className="h-6 w-6 sm:h-7 sm:w-7" />
-          ) : (
-            <div
-              className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white sm:h-7 sm:w-7 sm:text-[11px]"
-              style={{ background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))" }}
-            >
-              AI
+    <div className="group relative px-4 sm:px-6">
+      <div className="mx-auto max-w-180">
+        {/* Content column */}
+        <div className="space-y-3">
+          {/* Tool Calls — pill-style inline display */}
+          {visibleToolCalls.length > 0 && (
+            <div className="space-y-1.5">
+              {/* Summary pill */}
+              <details className="group/tools" open={false}>
+                <summary
+                  className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
+                  style={{ background: "var(--badge-bg)" }}
+                >
+                  {isToolExecuting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-(--muted)" />
+                  ) : (
+                    <WrenchIcon className="w-3.5 h-3.5 shrink-0 text-(--muted)" />
+                  )}
+                  <span className="text-xs font-medium text-(--badge-fg)">
+                    {isToolExecuting
+                      ? `Running ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}…`
+                      : `Used ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}`}
+                  </span>
+                  <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90 text-(--muted)" />
+                </summary>
+
+                <div
+                  className="mt-2 rounded-2xl overflow-hidden"
+                  style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
+                >
+                  {visibleToolCalls.map((tool, idx) => {
+                    const hasApp = tool._meta?.ui?.httpUrl;
+                    const isDone = tool.result !== undefined;
+                    const isErr = tool.isError;
+                    const riskColors: Record<string, string> = {
+                      safe:      "#34d399",
+                      sensitive: "#f59e0b",
+                      critical:  "#ef4444",
+                    };
+                    const riskColor = riskColors[tool.color ?? tool.risk ?? "safe"] ?? "#34d399";
+                    return (
+                      <div key={tool.id}>
+                        {idx > 0 && <div className="border-t border-(--border)" />}
+                        <details className="group">
+                          <summary className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-(--card-hover) transition-colors list-none">
+                            <span className="shrink-0">
+                              {!isDone ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-(--muted)" />
+                              ) : isErr ? (
+                                <span className="text-red-400 text-xs leading-none">✕</span>
+                              ) : (
+                                <span className="text-emerald-500 text-xs leading-none">✓</span>
+                              )}
+                            </span>
+                            <span
+                              title={`Risk: ${tool.risk ?? "safe"}`}
+                              className="shrink-0 w-2 h-2 rounded-full"
+                              style={{ background: riskColor }}
+                            />
+                            <span className="text-[13px] font-medium flex-1 text-foreground">
+                              {tool.name.replace(/_/g, " ")}
+                            </span>
+                            {hasApp && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-(--badge-bg) text-(--badge-fg) font-medium">
+                                App
+                              </span>
+                            )}
+                            <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90 text-(--muted)" />
+                          </summary>
+
+                          <div className="px-4 pb-3 space-y-2 border-t border-(--border)">
+                            <div className="pt-2.5">
+                              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-(--muted)">Input</div>
+                              <pre className="text-[11px] p-3 rounded-xl overflow-x-auto" style={{ background: "var(--code-bg)", color: "var(--code-fg)" }}>
+                                {JSON.stringify(
+                                  typeof tool.arguments === "string"
+                                    ? (() => { try { return JSON.parse(tool.arguments); } catch { return tool.arguments; } })()
+                                    : tool.arguments,
+                                  null, 2
+                                )}
+                              </pre>
+                            </div>
+                            {tool.result && tool.result !== "Completed" && (
+                              <div>
+                                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: isErr ? "#ef4444" : "var(--muted)" }}>Result</div>
+                                <div
+                                  className="text-[11px] p-3 rounded-xl max-h-32 overflow-y-auto whitespace-pre-wrap"
+                                  style={{
+                                    background: isErr ? "color-mix(in srgb, #ef4444 8%, var(--code-bg))" : "var(--code-bg)",
+                                    color: isErr ? "#fca5a5" : "var(--code-fg)",
+                                  }}
+                                >
+                                  {tool.result}
+                                </div>
+                              </div>
+                            )}
+                            {hasApp && (
+                              <button
+                                onClick={() => onOpenInPanel?.(tool)}
+                                className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer text-(--muted) hover:text-foreground"
+                              >
+                                <PanelRightOpen className="w-3.5 h-3.5" />
+                                Open {tool.name.replace(/_/g, " ")}
+                              </button>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
             </div>
           )}
-        </div>
 
-        {/* Content column */}
-        <div className="flex-1 min-w-0 space-y-2">
-          {/* Tool Calls — grouped collapsible */}
-          {visibleToolCalls.length > 0 && (
-            <details className="group/tools" open={false}>
-              <summary
-                className="flex items-center gap-2 cursor-pointer select-none list-none py-1 pr-2 rounded-lg w-fit"
-                style={{ color: "var(--muted)" }}
-              >
-                {isToolExecuting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: "var(--accent)" }} />
-                ) : (
-                  <WrenchIcon className="w-3.5 h-3.5 shrink-0" />
-                )}
-                <span className="text-xs">
-                  {isToolExecuting
-                    ? `Running ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}…`
-                    : `Used ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}`}
-                </span>
-                <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90" />
-              </summary>
-
-              <div
-                className="mt-1.5 rounded-lg overflow-hidden"
-                style={{ border: "1px solid var(--border)", background: "var(--card)" }}
-              >
-                {visibleToolCalls.map((tool, idx) => {
-                  const hasApp = tool._meta?.ui?.httpUrl;
-                  const isDone = tool.result !== undefined;
-                  const isErr = tool.isError;
-                  // Risk colour badge  (green=safe, yellow=sensitive, red=critical)
-                  const riskColors: Record<string, string> = {
-                    safe:      "#34d399", // emerald-400
-                    sensitive: "#fbbf24", // amber-400
-                    critical:  "#f87171", // red-400
-                  };
-                  const riskColor = riskColors[tool.color ?? tool.risk ?? "safe"] ?? "#34d399";
-                  return (
-                    <div key={tool.id}>
-                      {idx > 0 && <div style={{ borderTop: "1px solid var(--border)" }} />}
-                      <details className="group">
-                        <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-(--card-hover) transition-colors list-none">
-                          <span className="shrink-0">
-                            {!isDone ? (
-                              <Loader2 className="w-3 h-3 animate-spin" style={{ color: "var(--accent)" }} />
-                            ) : isErr ? (
-                              <span className="text-red-400 text-[11px] leading-none">✕</span>
-                            ) : (
-                              <span className="text-emerald-400 text-[11px] leading-none">✓</span>
-                            )}
-                          </span>
-                          {/* Risk tier dot */}
-                          <span
-                            title={`Risk: ${tool.risk ?? "safe"}`}
-                            className="shrink-0 w-2 h-2 rounded-full"
-                            style={{ background: riskColor }}
-                          />
-                          <span className="text-xs font-medium flex-1" style={{ color: "var(--foreground)" }}>
-                            {tool.name.replace(/_/g, " ")}
-                          </span>
-                          {hasApp && (
-                            <span
-                              className="text-[10px] px-1.5 py-0.5 rounded"
-                              style={{
-                                background: "color-mix(in srgb, var(--accent) 12%, transparent)",
-                                color: "var(--accent)",
-                              }}
-                            >
-                              App
-                            </span>
-                          )}
-                          <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90" style={{ color: "var(--muted)" }} />
-                        </summary>
-
-                        <div className="px-3 pb-2 space-y-1.5" style={{ borderTop: "1px solid var(--border)" }}>
-                          <div className="pt-2">
-                            <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--muted)" }}>Input</div>
-                            <pre className="text-[11px] p-2 rounded overflow-x-auto" style={{ background: "var(--code-bg)", color: "var(--muted)" }}>
-                              {JSON.stringify(
-                                typeof tool.arguments === "string"
-                                  ? (() => { try { return JSON.parse(tool.arguments); } catch { return tool.arguments; } })()
-                                  : tool.arguments,
-                                null, 2
-                              )}
-                            </pre>
-                          </div>
-                          {tool.result && tool.result !== "Completed" && (
-                            <div>
-                              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: isErr ? "#f87171" : "var(--muted)" }}>Result</div>
-                              <div
-                                className="text-[11px] p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap"
-                                style={{
-                                  background: isErr ? "color-mix(in srgb, #ef4444 8%, var(--code-bg))" : "var(--code-bg)",
-                                  color: isErr ? "#fca5a5" : "var(--muted)",
-                                }}
-                              >
-                                {tool.result}
-                              </div>
-                            </div>
-                          )}
-                          {hasApp && (
-                            <button
-                              onClick={() => onOpenInPanel?.(tool)}
-                              className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer"
-                              style={{ color: "var(--accent)" }}
-                            >
-                              <PanelRightOpen className="w-3.5 h-3.5" />
-                              Open {tool.name.replace(/_/g, " ")}
-                            </button>
-                          )}
-                        </div>
-                      </details>
-                    </div>
-                  );
-                })}
-              </div>
-            </details>
-          )}
-
-          {/* Reasoning */}
+          {/* Reasoning — expandable thinking card */}
           {safeReasoning && (
-            <details className="text-xs border-l-2 pl-3 py-1" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
-              <summary className="cursor-pointer hover:text-zinc-300 font-medium select-none">
-                💭 Reasoning
+            <details className="group/think" open={isToolExecuting}>
+              <summary
+                className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
+                style={{ background: "var(--badge-bg)" }}
+              >
+                <span className="text-xs">💭</span>
+                <span className="text-xs font-medium text-(--badge-fg)">Thinking</span>
+                <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/think:rotate-90 text-(--muted)" />
               </summary>
-              <div className="mt-1.5 whitespace-pre-wrap font-mono text-[11px] leading-relaxed opacity-80">
-                {safeReasoning}
+              <div
+                className="mt-2 rounded-2xl px-4 py-3"
+                style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
+              >
+                <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-(--muted)">
+                  {safeReasoning}
+                </div>
               </div>
             </details>
           )}
@@ -403,6 +441,11 @@ export function MessageBubble({
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
+                components={{
+                  table({ children, ...props }) {
+                    return <CopyableMarkdownTable {...props}>{children}</CopyableMarkdownTable>;
+                  },
+                }}
               >
                 {safeContent}
               </ReactMarkdown>
@@ -411,29 +454,26 @@ export function MessageBubble({
 
           {/* Action buttons — fade in on hover */}
           {safeContent && (
-            <div className="flex items-center gap-1 pt-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+            <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
               <button
                 onClick={copyToClipboard}
-                className="p-1.5 rounded hover:bg-(--card) transition-colors cursor-pointer"
-                style={{ color: "var(--muted)" }}
+                className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
                 title="Copy"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
-              {/* TTS listen button */}
               <AudioPlayer text={safeContent} />
               {onRegenerate && (
                 <button
                   onClick={onRegenerate}
-                  className="p-1.5 rounded hover:bg-(--card) transition-colors cursor-pointer"
-                  style={{ color: "var(--muted)" }}
+                  className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
                   title="Regenerate"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
                 </button>
               )}
               {timestamp && (
-                <span className="text-[11px] ml-1" style={{ color: "var(--muted)" }}>
+                <span className="text-[11px] ml-1.5 text-(--muted)">
                   {formatTime(timestamp)}
                 </span>
               )}

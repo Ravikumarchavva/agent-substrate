@@ -90,22 +90,30 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const info = (await userRes.json()) as { email?: string };
         email = info.email ?? null;
       }
-    } catch {
-      /* non-fatal */
+    } catch (err) {
+      console.error("[Workspace OAuth] Failed to fetch user info:", err);
     }
 
-    // Push token to backend (fire-and-forget)
-    fetch(`${BACKEND_URL}/auth/workspace/set-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token ?? null,
-        expires_in: expiresIn,
-      }),
-    }).catch((err) =>
-      console.error("[Workspace OAuth] Failed to push token to backend:", err)
-    );
+    try {
+      const backendRes = await fetch(`${BACKEND_URL}/auth/workspace/set-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token ?? null,
+          expires_in: expiresIn,
+        }),
+      });
+      if (!backendRes.ok) {
+        console.error(
+          "[Workspace OAuth] Failed to push token to backend:",
+          backendRes.status,
+          await backendRes.text(),
+        );
+      }
+    } catch (err) {
+      console.error("[Workspace OAuth] Failed to push token to backend:", err);
+    }
 
     // Persist in Prisma as provider='google_workspace'
     if (email) {

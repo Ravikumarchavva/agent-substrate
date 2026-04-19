@@ -16,7 +16,7 @@ export const REALTIME_MODEL_STORAGE_KEY = "realtime_model";
 export const REALTIME_VOICE_STORAGE_KEY = "realtime_voice";
 export const MODEL_PREFERENCES_UPDATED_EVENT = "raavan:model-preferences-updated";
 
-export const DEFAULT_CHAT_MODEL = "groq/llama-3.3-70b-versatile";
+export const DEFAULT_CHAT_MODEL = "openai/gpt-5.4-mini";
 export const DEFAULT_STT_MODEL = "openai/gpt-4o-mini-transcribe";
 export const DEFAULT_TTS_MODEL = "google/gemini-3.1-flash-tts-preview";
 export const DEFAULT_TTS_VOICE: TTSVoice = "Kore";

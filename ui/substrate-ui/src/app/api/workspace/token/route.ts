@@ -12,6 +12,12 @@ import { prisma } from "@/lib/prisma";
 const BACKEND_URL = process.env.BACKEND_API_URL ?? "http://localhost:8000";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
+interface WorkspaceTokenPayload {
+  access_token: string;
+  refresh_token: string | null;
+  expires_in: number;
+}
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     // ── 1. Try backend first ──────────────────────────────────────────────────
@@ -57,15 +63,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       expiresIn = refreshed.expires_in ?? 3600;
       try {
         await cm.storeCredential(userId, "google_workspace", accessToken, refreshToken ?? "", expiresIn);
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        console.error("[Workspace Token] Failed to persist refreshed token:", err);
+      }
     }
 
-    // Re-push to backend
-    fetch(`${BACKEND_URL}/auth/workspace/set-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn }),
-    }).catch(() => { /* non-fatal */ });
+    const mirrored = await mirrorWorkspaceTokenToBackend({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: expiresIn,
+    });
+    if (!mirrored) {
+      return NextResponse.json(
+        {
+          connected: false,
+          error: "Google Workspace token could not be restored to the backend.",
+        },
+        { status: 502 },
+      );
+    }
 
     return NextResponse.json({ access_token: accessToken, connected: true });
   } catch (err) {
@@ -74,9 +90,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-export async function DELETE(): Promise<NextResponse> {
-  // Clear from backend
-  fetch(`${BACKEND_URL}/auth/workspace/token`, { method: "DELETE" }).catch(() => { /* non-fatal */ });
+export async function DELETE(req: NextRequest): Promise<NextResponse> {
+  // Clear from backend (Redis)
+  try {
+    await fetch(`${BACKEND_URL}/auth/workspace/token`, { method: "DELETE" });
+  } catch (err) {
+    console.error("[Workspace Token] Failed to clear backend token:", err);
+  }
+
+  // Also clear from Prisma so the fallback path doesn't re-connect
+  try {
+    const userId = await resolveUserId(req);
+    if (userId) {
+      await prisma.userCredential.deleteMany({
+        where: { userId, provider: "google_workspace" },
+      });
+    }
+  } catch (err) {
+    console.error("[Workspace Token] Failed to clear Prisma token:", err);
+  }
+
   return NextResponse.json({ success: true });
 }
 
@@ -91,7 +124,8 @@ async function resolveUserId(req: NextRequest): Promise<string | null> {
       select: { id: true },
     });
     return dbUser?.id ?? null;
-  } catch {
+  } catch (err) {
+    console.error("[Workspace Token] Failed to resolve user:", err);
     return null;
   }
 }
@@ -112,7 +146,32 @@ async function refreshGoogleToken(
     });
     if (!res.ok) return null;
     return (await res.json()) as { access_token: string; refresh_token?: string; expires_in?: number };
-  } catch {
+  } catch (err) {
+    console.error("[Workspace Token] Failed to refresh Google token:", err);
     return null;
+  }
+}
+
+async function mirrorWorkspaceTokenToBackend(
+  payload: WorkspaceTokenPayload,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/auth/workspace/set-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error(
+        "[Workspace Token] Backend mirror failed:",
+        res.status,
+        await res.text(),
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[Workspace Token] Failed to mirror token to backend:", err);
+    return false;
   }
 }

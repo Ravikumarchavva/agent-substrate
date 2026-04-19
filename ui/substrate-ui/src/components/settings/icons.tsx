@@ -1,6 +1,10 @@
-export function GoogleIcon() {
+interface BrandIconProps {
+  className?: string;
+}
+
+export function GoogleIcon({ className = "h-4 w-4" }: BrandIconProps) {
   return (
-    <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="#4285F4"
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -21,15 +25,43 @@ export function GoogleIcon() {
   );
 }
 
-export function SpotifyIcon() {
+export function SpotifyIcon({ className = "h-5 w-5 text-[#1DB954]" }: BrandIconProps) {
   return (
     <svg
-      className="w-5 h-5 text-white"
+      className={className}
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"
     >
       <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+    </svg>
+  );
+}
+
+export function GitHubIcon({ className = "h-5 w-5" }: BrandIconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 1.5a10.5 10.5 0 0 0-3.32 20.46c.52.09.71-.22.71-.5v-1.74c-2.88.63-3.48-1.22-3.48-1.22-.48-1.19-1.16-1.5-1.16-1.5-.95-.65.08-.64.08-.64 1.05.08 1.6 1.08 1.6 1.08.93 1.59 2.45 1.13 3.05.86.1-.68.37-1.13.67-1.39-2.3-.26-4.71-1.15-4.71-5.12 0-1.13.4-2.06 1.07-2.79-.11-.26-.46-1.33.1-2.78 0 0 .87-.28 2.85 1.06a9.92 9.92 0 0 1 5.2 0c1.97-1.34 2.84-1.06 2.84-1.06.57 1.45.22 2.52.11 2.78.67.73 1.07 1.66 1.07 2.79 0 3.98-2.42 4.86-4.73 5.11.38.33.71.96.71 1.94v2.88c0 .28.19.6.72.5A10.5 10.5 0 0 0 12 1.5Z" />
+    </svg>
+  );
+}
+
+export function DocsIcon({ className = "h-5 w-5" }: BrandIconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M7 4h10a2 2 0 0 1 2 2v14H9a3 3 0 0 0-3 3V6a2 2 0 0 1 1-2Z" />
+      <path d="M9 8h6" />
+      <path d="M9 12h6" />
+      <path d="M9 16h4" />
     </svg>
   );
 }

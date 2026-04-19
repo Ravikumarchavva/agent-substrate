@@ -1,32 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Loader2 } from "lucide-react";
-import type {
-  ModelOption,
-  OpenAITTSVoice,
-  TTSPlaybackRate,
-  TTSVoice,
-  VoiceOption,
-} from "@/types";
-import {
-  TTS_PLAYBACK_RATE_OPTIONS,
-  getDefaultVoiceForModel,
-  isVoiceCompatible,
-} from "@/lib/model-preferences";
-
-interface SettingsNotice {
-  tone: "success" | "info";
-  message: string;
-}
-
-interface ModelOptionGroup {
-  label: string;
-  options: ModelOption[];
-}
-
-const SELECT_CLASS =
-  "w-full appearance-none rounded-xl border border-(--border) bg-background px-3 py-2.5 pr-8 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)";
+import { Globe2, Loader2, Sparkles } from "lucide-react";
 
 function Notice({
   tone,
@@ -73,42 +48,44 @@ function Section({
 
 function Field({
   label,
+  hint,
   children,
 }: {
   label: string;
+  hint?: string;
   children: ReactNode;
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-(--muted)">{label}</span>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-(--muted)">{label}</span>
+        {hint && <span className="text-[11px] text-(--muted)">{hint}</span>}
+      </div>
       {children}
     </label>
   );
 }
 
-function GroupedSelect({
-  value,
-  groups,
-  onChange,
+function FeatureCard({
+  icon,
+  title,
+  description,
 }: {
-  value: string;
-  groups: ModelOptionGroup[];
-  onChange: (value: string) => void;
+  icon: ReactNode;
+  title: string;
+  description: string;
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={SELECT_CLASS}
+    <div
+      className="rounded-[22px] p-5"
+      style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
     >
-      {groups.map((group) => (
-        <optgroup key={group.label} label={group.label}>
-          {group.options.map((opt) => (
-            <option key={opt.id} value={opt.id}>{opt.label}</option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
+      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-(--badge-bg) text-foreground">
+        {icon}
+      </div>
+      <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+      <p className="mt-2 text-sm leading-6 text-(--muted)">{description}</p>
+    </div>
   );
 }
 
@@ -120,36 +97,8 @@ interface GeneralTabProps {
   setSaveError: (v: string | null) => void;
   saveSuccess: boolean;
   handleSaveInstructions: () => void;
-  chatModel: string;
-  setChatModel: (v: string) => void;
-  sttModel: string;
-  setSttModel: (v: string) => void;
-  ttsModel: string;
-  setTtsModel: (v: string) => void;
-  ttsVoice: TTSVoice;
-  setTtsVoice: (v: TTSVoice | ((prev: TTSVoice) => TTSVoice)) => void;
-  ttsPlaybackRate: TTSPlaybackRate;
-  setTtsPlaybackRate: (v: TTSPlaybackRate) => void;
-  realtimeModel: string;
-  setRealtimeModel: (v: string) => void;
-  realtimeVoice: OpenAITTSVoice;
-  setRealtimeVoice: (v: OpenAITTSVoice) => void;
-  groupedChatModels: ModelOptionGroup[];
-  groupedSttModels: ModelOptionGroup[];
-  groupedTtsModels: ModelOptionGroup[];
-  groupedRealtimeModels: ModelOptionGroup[];
-  ttsVoiceOptions: VoiceOption[];
-  realtimeVoiceOptions: VoiceOption[];
-  selectedChatModel: ModelOption | undefined;
-  selectedSttModel: ModelOption | undefined;
-  selectedTtsModel: ModelOption | undefined;
-  selectedRealtimeModel: ModelOption | undefined;
-  hasUnsavedModelPreferences: boolean;
-  isDefaultModelPreferences: boolean;
-  handleSaveModelPreferences: () => void;
-  handleResetModelPreferences: () => void;
-  modelPreferencesNotice: SettingsNotice | null;
-  setModelPreferencesNotice: (v: SettingsNotice | null) => void;
+  timezone: string;
+  onTimezoneChange: (v: string) => void;
 }
 
 export function GeneralTab({
@@ -160,37 +109,72 @@ export function GeneralTab({
   setSaveError,
   saveSuccess,
   handleSaveInstructions,
-  chatModel,
-  setChatModel,
-  sttModel,
-  setSttModel,
-  ttsModel,
-  setTtsModel,
-  ttsVoice,
-  setTtsVoice,
-  ttsPlaybackRate,
-  setTtsPlaybackRate,
-  realtimeModel,
-  setRealtimeModel,
-  realtimeVoice,
-  setRealtimeVoice,
-  groupedChatModels,
-  groupedSttModels,
-  groupedTtsModels,
-  groupedRealtimeModels,
-  ttsVoiceOptions,
-  realtimeVoiceOptions,
-  hasUnsavedModelPreferences,
-  isDefaultModelPreferences,
-  handleSaveModelPreferences,
-  handleResetModelPreferences,
-  modelPreferencesNotice,
-  setModelPreferencesNotice,
+  timezone,
+  onTimezoneChange,
 }: GeneralTabProps) {
-  const clearNotice = () => setModelPreferencesNotice(null);
-
   return (
     <div className="space-y-8">
+      <div className="space-y-2">
+        <h2 className="text-3xl font-semibold tracking-tight text-foreground">General</h2>
+        <p className="max-w-2xl text-sm leading-6 text-(--muted)">
+          Personal defaults that shape every conversation before tools, models, or connectors take over.
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <FeatureCard
+          icon={<Globe2 className="h-5 w-5" />}
+          title="Timezone memory"
+          description="Calendar actions and time-aware prompts inherit this automatically."
+        />
+        <FeatureCard
+          icon={<Sparkles className="h-5 w-5" />}
+          title="Instruction memory"
+          description="Your custom instructions act like a standing preference for all new chats."
+        />
+        <div
+          className="rounded-[22px] p-5"
+          style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
+        >
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-(--muted)">Summary</div>
+          <p className="mt-4 text-sm text-(--muted)">Current timezone</p>
+          <p className="mt-1 text-lg font-semibold text-foreground">{timezone || "Not set yet"}</p>
+          <p className="mt-4 text-sm text-(--muted)">
+            {customInstructions.trim() ? "Custom instructions are active." : "No custom instructions saved yet."}
+          </p>
+        </div>
+      </div>
+
+      <Section title="User preferences" description="Applied automatically to every conversation.">
+        <Field label="Timezone" hint="IANA format recommended">
+          <input
+            type="text"
+            value={timezone}
+            onChange={(e) => onTimezoneChange(e.target.value)}
+            placeholder="e.g. Asia/Kolkata"
+            list="common-timezones"
+            className="w-full rounded-xl border border-(--border) bg-background px-3 py-2.5 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
+          />
+          <datalist id="common-timezones">
+            <option value="Asia/Kolkata" />
+            <option value="America/New_York" />
+            <option value="America/Chicago" />
+            <option value="America/Los_Angeles" />
+            <option value="Europe/London" />
+            <option value="Europe/Paris" />
+            <option value="Asia/Tokyo" />
+            <option value="Asia/Singapore" />
+            <option value="Australia/Sydney" />
+            <option value="UTC" />
+          </datalist>
+          {timezone && (
+            <p className="mt-1.5 text-xs text-(--muted)">Saved — will be used for calendar events and time-aware tasks.</p>
+          )}
+        </Field>
+      </Section>
+
+      <div className="h-px bg-(--border)" />
+
       <Section title="Custom instructions" description="Appended to the system prompt to shape tone and context.">
         <textarea
           value={customInstructions}
@@ -220,103 +204,6 @@ export function GeneralTab({
           )}
         </div>
       </Section>
-
-      <div className="h-px bg-(--border)" />
-
-      <Section title="Models" description="Default models for each capability.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Chat">
-            <GroupedSelect value={chatModel} groups={groupedChatModels} onChange={(v) => { clearNotice(); setChatModel(v); }} />
-          </Field>
-          <Field label="Transcription">
-            <GroupedSelect value={sttModel} groups={groupedSttModels} onChange={(v) => { clearNotice(); setSttModel(v); }} />
-          </Field>
-          <Field label="Speech synthesis">
-            <GroupedSelect
-              value={ttsModel}
-              groups={groupedTtsModels}
-              onChange={(v) => {
-                clearNotice();
-                setTtsModel(v);
-                setTtsVoice((cur) => isVoiceCompatible(v, cur) ? cur : getDefaultVoiceForModel(v));
-              }}
-            />
-          </Field>
-          <Field label="Live voice model">
-            <GroupedSelect value={realtimeModel} groups={groupedRealtimeModels} onChange={(v) => { clearNotice(); setRealtimeModel(v); }} />
-          </Field>
-        </div>
-      </Section>
-
-      <div className="h-px bg-(--border)" />
-
-      <Section title="Voice" description="Voice and playback preferences.">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Speech voice">
-            <select
-              value={ttsVoice}
-              onChange={(e) => { clearNotice(); setTtsVoice(e.target.value as TTSVoice); }}
-              className={SELECT_CLASS}
-            >
-              {ttsVoiceOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>{opt.label}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Playback speed">
-            <select
-              value={String(ttsPlaybackRate)}
-              onChange={(e) => { clearNotice(); setTtsPlaybackRate(Number.parseFloat(e.target.value) as TTSPlaybackRate); }}
-              className={SELECT_CLASS}
-            >
-              {TTS_PLAYBACK_RATE_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>{opt.label}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Realtime voice">
-            <select
-              value={realtimeVoice}
-              onChange={(e) => { clearNotice(); setRealtimeVoice(e.target.value as OpenAITTSVoice); }}
-              className={SELECT_CLASS}
-            >
-              {realtimeVoiceOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>{opt.label}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
-      </Section>
-
-      <div className="h-px bg-(--border)" />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-(--muted)">
-          {hasUnsavedModelPreferences ? "You have unsaved changes." : "Preferences are up to date."}
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={handleSaveModelPreferences}
-            disabled={!hasUnsavedModelPreferences}
-            className="rounded-xl bg-(--accent) px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-          >
-            Save preferences
-          </button>
-          <button
-            onClick={handleResetModelPreferences}
-            disabled={isDefaultModelPreferences}
-            className="rounded-xl border border-(--border) px-4 py-2 text-sm font-medium transition-colors hover:bg-(--card-hover) disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-          >
-            Reset defaults
-          </button>
-        </div>
-      </div>
-
-      {modelPreferencesNotice && (
-        <Notice tone={modelPreferencesNotice.tone === "success" ? "success" : "info"}>
-          {modelPreferencesNotice.message}
-        </Notice>
-      )}
     </div>
   );
 }

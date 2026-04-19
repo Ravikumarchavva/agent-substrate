@@ -16,8 +16,9 @@ const ROUTES = [
   "/chat",
   "/chat/test-thread-id",
   "/settings",
-  "/settings/profile",
   "/settings/apps",
+  "/settings/llm",
+  "/settings/search",
   "/settings/admin",
 ];
 

@@ -3,76 +3,84 @@
 
 /* ─── Shared Raavan tokens ─────────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #000000;
-  --muted: #666666;
-  --muted-foreground: #999999;
-  --border: #e5e5e5;
-  --border-hover: #cccccc;
-  --card: #fafafa;
-  --card-hover: #f5f5f5;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
+  --background: #fafaf8;
+  --foreground: #0a0a0a;
+  --muted: #6b7280;
+  --muted-foreground: #9ca3af;
+  --border: #e8e5df;
+  --border-hover: #d6d3cd;
+  --card: #ffffff;
+  --card-hover: #f5f3f0;
+  --accent: #0f0f0f;
+  --accent-hover: #262626;
   --accent-foreground: #ffffff;
   --input-bg: #ffffff;
-  --input-border: #e5e5e5;
-  --code-bg: #0a0a0a;
+  --input-border: #e8e5df;
+  --code-bg: #1a1a1a;
   --code-fg: #e5e5e5;
-  --badge-bg: #f0f0f0;
+  --badge-bg: #f0eeeb;
   --badge-fg: #333333;
-  --nav-bg: rgba(255, 255, 255, 0.8);
-  --section-alt: #fafafa;
-  --gradient-from: #ffffff;
-  --gradient-to: #f5f5f5;
-  --shadow: rgba(0, 0, 0, 0.08);
-  --ring: rgba(0, 0, 0, 0.1);
-  --sidebar-bg: #fafafa;
+  --nav-bg: rgba(250, 250, 248, 0.88);
+  --section-alt: #f5f3f0;
+  --gradient-from: #fafaf8;
+  --gradient-to: #f5f3f0;
+  --shadow: rgba(0, 0, 0, 0.04);
+  --ring: rgba(0, 0, 0, 0.08);
+  --sidebar-bg: #f5f3f0;
   --sidebar-item: #ffffff;
-  --user-bubble: #fafafa;
-  --step-bg: #fafafa;
-  --panel: color-mix(in srgb, var(--card) 84%, var(--background));
-  --panel-elevated: color-mix(in srgb, var(--background) 78%, white 22%);
-  --panel-muted: color-mix(in srgb, var(--card) 72%, var(--background));
-  --panel-border: color-mix(in srgb, var(--border) 86%, transparent);
-  --panel-shadow: rgba(15, 23, 42, 0.16);
-  --panel-glow: rgba(37, 99, 235, 0.18);
+  --user-bubble: #f0eeeb;
+  --step-bg: #f5f3f0;
+  --panel: #ffffff;
+  --panel-elevated: #ffffff;
+  --panel-muted: #f5f3f0;
+  --panel-border: #e8e5df;
+  --panel-shadow: rgba(0, 0, 0, 0.06);
+  --panel-glow: rgba(15, 15, 15, 0.06);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --radius: 16px;
 }
 
 [data-theme="dark"],
 .dark {
-  --background: #000000;
-  --foreground: #ffffff;
-  --muted: #888888;
-  --muted-foreground: #666666;
-  --border: #222222;
-  --border-hover: #333333;
-  --card: #0a0a0a;
-  --card-hover: #111111;
-  --accent: #3b82f6;
-  --accent-hover: #60a5fa;
-  --accent-foreground: #ffffff;
-  --input-bg: #0a0a0a;
-  --input-border: #222222;
-  --code-bg: #0a0a0a;
+  --background: #171717;
+  --foreground: #f5f5f5;
+  --muted: #9ca3af;
+  --muted-foreground: #6b7280;
+  --border: #2a2a2a;
+  --border-hover: #3a3a3a;
+  --card: #1f1f1f;
+  --card-hover: #262626;
+  --accent: #ffffff;
+  --accent-hover: #e5e5e5;
+  --accent-foreground: #0a0a0a;
+  --input-bg: #1f1f1f;
+  --input-border: #2a2a2a;
+  --code-bg: #111111;
   --code-fg: #e5e5e5;
-  --badge-bg: #1a1a1a;
-  --badge-fg: #cccccc;
-  --nav-bg: rgba(0, 0, 0, 0.8);
-  --section-alt: #050505;
-  --gradient-from: #000000;
-  --gradient-to: #0a0a0a;
-  --shadow: rgba(255, 255, 255, 0.05);
-  --ring: rgba(255, 255, 255, 0.1);
-  --sidebar-bg: #0a0a0a;
-  --sidebar-item: #000000;
-  --user-bubble: #0a0a0a;
-  --step-bg: #0a0a0a;
-  --panel: color-mix(in srgb, var(--card) 88%, var(--background));
-  --panel-elevated: color-mix(in srgb, var(--card) 78%, black 22%);
-  --panel-muted: color-mix(in srgb, var(--card) 68%, var(--background));
-  --panel-border: color-mix(in srgb, var(--border) 88%, transparent);
-  --panel-shadow: rgba(0, 0, 0, 0.48);
-  --panel-glow: rgba(96, 165, 250, 0.2);
+  --badge-bg: #262626;
+  --badge-fg: #d4d4d4;
+  --nav-bg: rgba(23, 23, 23, 0.88);
+  --section-alt: #1a1a1a;
+  --gradient-from: #171717;
+  --gradient-to: #1a1a1a;
+  --shadow: rgba(0, 0, 0, 0.2);
+  --ring: rgba(255, 255, 255, 0.08);
+  --sidebar-bg: #1a1a1a;
+  --sidebar-item: #1f1f1f;
+  --user-bubble: #262626;
+  --step-bg: #1a1a1a;
+  --panel: #1f1f1f;
+  --panel-elevated: #262626;
+  --panel-muted: #1a1a1a;
+  --panel-border: #2a2a2a;
+  --panel-shadow: rgba(0, 0, 0, 0.3);
+  --panel-glow: rgba(255, 255, 255, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.24), 0 2px 8px rgba(0, 0, 0, 0.12);
+  --radius: 16px;
 }
 
 @theme inline {
@@ -156,7 +164,7 @@ body {
 .prose-chat {
   color: inherit;
   max-width: none;
-  line-height: 1.75;
+  line-height: 1.7;
   font-size: 0.9375rem;
 }
 .prose-chat h1,.prose-chat h2,.prose-chat h3 { font-weight:600; margin-top:1.25em; margin-bottom:0.5em; line-height:1.3; }
@@ -167,21 +175,21 @@ body {
 .prose-chat ul,.prose-chat ol { padding-left:1.5em; margin-bottom:0.75em; }
 .prose-chat li { margin-bottom:0.25em; }
 .prose-chat code:not(pre > code) {
-  background: var(--card); border: 1px solid var(--border); border-radius:4px;
-  padding:1px 5px; font-size:0.85em;
+  background: var(--badge-bg); border: 1px solid var(--border); border-radius:6px;
+  padding:2px 6px; font-size:0.84em;
   font-family: ui-monospace, Menlo, Monaco, "Cascadia Code", monospace;
 }
 .prose-chat pre {
-  background: var(--code-bg); border: 1px solid var(--border); border-radius:10px;
+  background: var(--code-bg); border: 1px solid var(--border); border-radius:12px;
   padding:1rem; overflow-x:auto; margin:0.75em 0;
   color: var(--code-fg);
 }
 .prose-chat pre code { background:none; border:none; padding:0; font-size:0.84rem; color:inherit; font-family:ui-monospace,Menlo,Monaco,monospace; }
-.prose-chat blockquote { border-left:3px solid var(--accent); padding-left:1em; margin:0.75em 0; opacity:0.8; }
+.prose-chat blockquote { border-left:3px solid var(--muted); padding-left:1em; margin:0.75em 0; opacity:0.7; }
 .prose-chat table { width:100%; border-collapse:collapse; margin:0.75em 0; }
 .prose-chat th,.prose-chat td { border:1px solid var(--border); padding:0.5em 0.75em; font-size:0.875rem; }
-.prose-chat th { background:var(--card); font-weight:600; }
-.prose-chat a  { color:var(--accent); text-decoration:underline; }
+.prose-chat th { background:var(--badge-bg); font-weight:600; }
+.prose-chat a  { text-decoration:underline; text-underline-offset: 2px; }
 
 /* ─── Chainlit shimmer for streaming text ────────────────────────────────── */
 .streaming-cursor::after {

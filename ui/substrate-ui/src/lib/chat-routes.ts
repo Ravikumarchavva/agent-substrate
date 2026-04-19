@@ -7,6 +7,8 @@ export function isSettingsTab(value: string | null): value is SettingsTab {
   return (
     value === "general" ||
     value === "apps" ||
+    value === "llm" ||
+    value === "search" ||
     value === "admin"
   );
 }

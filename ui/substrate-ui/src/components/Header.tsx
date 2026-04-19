@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { PanelLeftOpen } from "lucide-react";
+import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 
 interface HeaderProps {
   onOpenMobileSidebar?: () => void;
@@ -16,7 +16,7 @@ export function Header({
 
   return (
     <header
-      className="flex items-center border-b border-(--border) bg-background px-3 py-2 sm:px-4"
+      className="flex items-center bg-background px-3 py-2 sm:px-4"
       suppressHydrationWarning
     >
       {/* Left: sidebar toggle + thread name */}
@@ -24,28 +24,22 @@ export function Header({
         {onOpenMobileSidebar && (
           <button
             onClick={onOpenMobileSidebar}
-            className="shrink-0 rounded-lg p-1.5 hover:bg-(--card-hover) cursor-pointer lg:hidden"
+            className="shrink-0 rounded-xl p-1.5 hover:bg-(--card-hover) cursor-pointer lg:hidden"
             aria-label="Open sidebar"
           >
-            <PanelLeftOpen
-              className="w-4 h-4"
-              style={{ color: "var(--muted)" }}
-            />
+            <SidebarToggleIcon direction="open" className="h-4 w-4 text-(--muted)" />
           </button>
         )}
         {onOpenDesktopSidebar && (
           <button
             onClick={onOpenDesktopSidebar}
-            className="hidden shrink-0 rounded-lg p-1.5 hover:bg-(--card-hover) cursor-pointer lg:inline-flex"
+            className="hidden shrink-0 rounded-xl p-1.5 hover:bg-(--card-hover) cursor-pointer lg:inline-flex"
             aria-label="Restore sidebar"
           >
-            <PanelLeftOpen
-              className="w-4 h-4"
-              style={{ color: "var(--muted)" }}
-            />
+            <SidebarToggleIcon direction="open" className="h-4 w-4 text-(--muted)" />
           </button>
         )}
-        <span className="text-sm font-medium truncate text-(--muted)">
+        <span className="text-[13px] font-medium truncate text-(--muted)">
           {threadName || "New Chat"}
         </span>
       </div>

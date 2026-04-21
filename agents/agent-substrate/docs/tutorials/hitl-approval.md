@@ -1,6 +1,6 @@
 # Add HITL Approval
 
-Human-in-the-loop is how Raavan pauses or gates risky actions.
+Human-in-the-loop is how Ravi pauses or gates risky actions.
 
 ## When to use it
 

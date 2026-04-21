@@ -33,7 +33,7 @@ spec:
           command:
             - python
             - -m
-            - raavan.integrations.runtime.grpc.node
+            - ravi.integrations.runtime.grpc.node
             - --listen
             - "0.0.0.0:50051"
             - --agents
@@ -105,7 +105,7 @@ spec:
           command:
             - python
             - -m
-            - raavan.integrations.runtime.grpc.node
+            - ravi.integrations.runtime.grpc.node
             - --listen
             - "0.0.0.0:50051"
             - --agents

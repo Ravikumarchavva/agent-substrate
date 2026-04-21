@@ -10,8 +10,8 @@
 ## Install the project
 
 ```bash
-git clone https://github.com/Ravikumarchavva/raavan.git
-cd raavan
+git clone https://github.com/Ravikumarchavva/ravi.git
+cd ravi
 uv sync
 ```
 

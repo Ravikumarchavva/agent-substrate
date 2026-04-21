@@ -39,15 +39,15 @@ uv run ruff format .
 
 | What to find | Path |
 |---|---|
-| Monolith FastAPI entry | `src/raavan/server/app.py` |
-| Microservices | `src/raavan/services/<name>/` |
-| LLM client | `src/raavan/integrations/llm/openai/openai_client.py` |
-| BaseTool | `src/raavan/core/tools/base_tool.py` |
-| RedisMemory | `src/raavan/core/memory/redis_memory.py` |
-| Event bus | `src/raavan/shared/events/bus.py` |
-| Event factories | `src/raavan/shared/events/types.py` |
-| Shared contracts | `src/raavan/shared/contracts/` |
-| Settings / env | `src/raavan/configs/settings.py` |
+| Monolith FastAPI entry | `src/ravi/server/app.py` |
+| Microservices | `src/ravi/services/<name>/` |
+| LLM client | `src/ravi/integrations/llm/openai/openai_client.py` |
+| BaseTool | `src/ravi/core/tools/base_tool.py` |
+| RedisMemory | `src/ravi/core/memory/redis_memory.py` |
+| Event bus | `src/ravi/shared/events/bus.py` |
+| Event factories | `src/ravi/shared/events/types.py` |
+| Shared contracts | `src/ravi/shared/contracts/` |
+| Settings / env | `src/ravi/configs/settings.py` |
 
 ## Environment Variables
 
@@ -64,14 +64,14 @@ REDIS_SESSION_TTL=3600
 
 ```python
 # LLM client — file is openai_client.py, not client.py
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 # MCP tools — no loader module exists; use MCPClient directly
-from raavan.integrations.mcp import MCPClient
+from ravi.integrations.mcp import MCPClient
 tools = await MCPClient(url=...).discover_tools()
 
 # Event bus — always use factory functions, never hand-build event dicts
-from raavan.shared.events.types import workflow_started, workflow_failed
+from ravi.shared.events.types import workflow_started, workflow_failed
 ```
 
 ## Test Structure

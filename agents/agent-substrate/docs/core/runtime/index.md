@@ -1,6 +1,6 @@
 # The Runtime
 
-Every agent in Raavan runs inside a **runtime** — the layer that lets agents talk to each other.
+Every agent in Ravi runs inside a **runtime** — the layer that lets agents talk to each other.
 
 By default that runtime is the **LocalRuntime**: pure asyncio, zero infrastructure, runs completely in-process. No Docker, no gRPC server, no external service. Just start it, register your agents, and send messages.
 
@@ -39,7 +39,7 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     Think of it as a typed async function call between actors.
 
     ```python
-    from raavan.core.runtime import LocalRuntime, AgentId
+    from ravi.core.runtime import LocalRuntime, AgentId
 
     runtime = LocalRuntime()
 
@@ -65,8 +65,8 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     No sender knows who is listening.
 
     ```python
-    from raavan.core.runtime import LocalRuntime, TopicId, DefaultTopicId
-    from raavan.core.runtime import default_subscription, type_subscription
+    from ravi.core.runtime import LocalRuntime, TopicId, DefaultTopicId
+    from ravi.core.runtime import default_subscription, type_subscription
 
     @default_subscription           # auto-subscribes to "default" topic
     class Logger(RoutedAgent): ...
@@ -92,7 +92,7 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     Ends with a `StreamDone` sentinel — consumers know the stream is closed.
 
     ```python
-    from raavan.core.runtime import StreamPublisher
+    from ravi.core.runtime import StreamPublisher
 
     publisher = StreamPublisher(runtime, topic_id=TopicId("llm-stream", "conv-1"))
 
@@ -111,7 +111,7 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     Configurable restart budget and strategy.
 
     ```python
-    from raavan.core.runtime import Supervisor, RestartStrategy
+    from ravi.core.runtime import Supervisor, RestartStrategy
 
     supervisor = Supervisor(
         runtime=runtime,
@@ -134,7 +134,7 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     Works retroactively — cancel a token you've already passed to a handler.
 
     ```python
-    from raavan.core.runtime import CancellationToken
+    from ravi.core.runtime import CancellationToken
 
     token = CancellationToken()
 
@@ -179,7 +179,7 @@ sequenceDiagram
 ```
 
 ```python
-from raavan.core.runtime import LocalRuntime
+from ravi.core.runtime import LocalRuntime
 
 runtime = LocalRuntime()
 agent = ReActAgent(tools=[WebSearchTool(), CodeTool()], model_client=client)
@@ -317,11 +317,11 @@ Ready to scale? → [Scaling Out: gRPC and Restate](scaling.md)
 
 | File | What it owns |
 |---|---|
-| [`core/runtime/base_runtime.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/runtime/base_runtime.py) | `BaseRuntime` ABC — the interface all three runtimes implement |
-| [`core/runtime/local_runtime.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/runtime/local_runtime.py) | `LocalRuntime` — asyncio mailboxes, dispatcher, pub/sub |
-| [`core/runtime/supervisor.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/runtime/supervisor.py) | `Supervisor` — restart budget, strategies |
-| [`core/runtime/stream.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/runtime/stream.py) | `StreamPublisher` — ordered event streams |
-| [`core/runtime/cancellation.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/runtime/cancellation.py) | `CancellationToken` — cooperative cancellation |
+| [`core/runtime/base_runtime.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/runtime/base_runtime.py) | `BaseRuntime` ABC — the interface all three runtimes implement |
+| [`core/runtime/local_runtime.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/runtime/local_runtime.py) | `LocalRuntime` — asyncio mailboxes, dispatcher, pub/sub |
+| [`core/runtime/supervisor.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/runtime/supervisor.py) | `Supervisor` — restart budget, strategies |
+| [`core/runtime/stream.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/runtime/stream.py) | `StreamPublisher` — ordered event streams |
+| [`core/runtime/cancellation.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/runtime/cancellation.py) | `CancellationToken` — cooperative cancellation |
 
 ---
 
@@ -638,13 +638,13 @@ def derive_policy_from_tool(tool: BaseTool) -> ToolPolicy:
 
 | File | Actor | What it owns |
 |---|---|---|
-| [`client.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/client.py) | Client | Dispatch, query, cancel, resolve promises |
-| [`app.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/app.py) | Restate App | ASGI surface, service registration |
-| [`workflows.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/workflows.py) | AgentWorkflow, PipelineWorkflow, ChainWorkflow | Durable loops + HITL promise gates |
-| [`activities.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/activities.py) | Activities | All side-effect work: LLM, tools, Redis, SSE |
-| [`worker.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/worker.py) | Worker | Bootstrap, DI injection, uvicorn host |
-| [`policies.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/policies.py) | ToolPolicy | Execution governance: timeouts, approval, retries |
-| [`runtime.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/runtime.py) | Runtime | Agent-to-agent durable dispatch |
+| [`client.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/client.py) | Client | Dispatch, query, cancel, resolve promises |
+| [`app.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/app.py) | Restate App | ASGI surface, service registration |
+| [`workflows.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/workflows.py) | AgentWorkflow, PipelineWorkflow, ChainWorkflow | Durable loops + HITL promise gates |
+| [`activities.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/activities.py) | Activities | All side-effect work: LLM, tools, Redis, SSE |
+| [`worker.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/worker.py) | Worker | Bootstrap, DI injection, uvicorn host |
+| [`policies.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/policies.py) | ToolPolicy | Execution governance: timeouts, approval, retries |
+| [`runtime.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/runtime.py) | Runtime | Agent-to-agent durable dispatch |
 
 ---
 
@@ -1010,14 +1010,14 @@ graph TB
 
 ## Source files
 
-All seven files live in `src/raavan/integrations/runtime/restate/`:
+All seven files live in `src/ravi/integrations/runtime/restate/`:
 
 | File | Actor | Lines |
 |---|---|---|
-| [`client.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/client.py) | Client — dispatch, query, cancel, resolve | ~200 |
-| [`app.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/app.py) | App — ASGI surface | ~10 |
-| [`workflows.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/workflows.py) | AgentWorkflow, PipelineWorkflow, ChainWorkflow | ~250 |
-| [`activities.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/activities.py) | Activities — all side-effect work | ~200 |
-| [`worker.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/worker.py) | Worker — bootstrap + DI | ~150 |
-| [`policies.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/policies.py) | ToolPolicy — execution governance | ~80 |
-| [`runtime.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/runtime/restate/runtime.py) | Runtime — agent-to-agent courier | ~100 |
+| [`client.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/client.py) | Client — dispatch, query, cancel, resolve | ~200 |
+| [`app.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/app.py) | App — ASGI surface | ~10 |
+| [`workflows.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/workflows.py) | AgentWorkflow, PipelineWorkflow, ChainWorkflow | ~250 |
+| [`activities.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/activities.py) | Activities — all side-effect work | ~200 |
+| [`worker.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/worker.py) | Worker — bootstrap + DI | ~150 |
+| [`policies.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/policies.py) | ToolPolicy — execution governance | ~80 |
+| [`runtime.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/runtime/restate/runtime.py) | Runtime — agent-to-agent courier | ~100 |

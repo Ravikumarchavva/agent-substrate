@@ -1,6 +1,6 @@
 # Connect MCP Tools
 
-MCP lets Raavan treat external tool servers as first-class capabilities.
+MCP lets Ravi treat external tool servers as first-class capabilities.
 
 ## Basic flow
 

@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for the raavan test suite."""
+"""Shared pytest fixtures for the ravi test suite."""
 
 from __future__ import annotations
 

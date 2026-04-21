@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from raavan.core.messages import UserMessage, AssistantMessage, SystemMessage
+from ravi.core.messages import UserMessage, AssistantMessage, SystemMessage
 
 
 class TestMessageTypes:
@@ -39,9 +39,9 @@ class TestRedisMemory:
     @pytest.mark.asyncio
     async def test_memory_lifecycle(self) -> None:
         """Test connect → add → get → disconnect cycle."""
-        from raavan.integrations.memory.redis_memory import RedisMemory
+        from ravi.integrations.memory.redis_memory import RedisMemory
 
-        with patch("raavan.integrations.memory.redis_memory.aioredis") as mock_redis:
+        with patch("ravi.integrations.memory.redis_memory.aioredis") as mock_redis:
             mock_conn = AsyncMock()
             mock_conn.ping = AsyncMock()
             mock_conn.lrange = AsyncMock(return_value=[])

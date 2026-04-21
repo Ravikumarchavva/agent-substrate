@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from raavan.configs.settings import Settings
-from raavan.core.agents.default_agent import Agent
+from ravi.configs.settings import Settings
+from ravi.core.agents.default_agent import Agent
 
 
 def test_settings_accepts_common_provider_env_aliases(tmp_path: Path) -> None:

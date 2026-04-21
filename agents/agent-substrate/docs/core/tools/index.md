@@ -34,7 +34,7 @@ flowchart LR
 Every tool subclasses `BaseTool`. Set `risk` and `hitl_mode` as **class-level attributes** — the agent reads them before executing.
 
 ```python
-from raavan.core.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
+from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
 
 class SendEmailTool(BaseTool):
     risk      = ToolRisk.CRITICAL       # Strategy: class-level
@@ -141,7 +141,7 @@ graph TD
 ```
 
 ```python
-from raavan.core.tools.catalog import CapabilityRegistry
+from ravi.core.tools.catalog import CapabilityRegistry
 
 registry = CapabilityRegistry()
 
@@ -175,7 +175,7 @@ risky = registry.by_risk(ToolRisk.CRITICAL)
 
 | File | What it owns |
 |---|---|
-| [`core/tools/base_tool.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/tools/base_tool.py) | `BaseTool`, `ToolResult`, `ToolCall`, `ToolRisk`, `HitlMode` |
-| [`core/tools/catalog.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/tools/catalog.py) | `CapabilityRegistry`, `CapabilityEntry`, `CategoryNode` |
-| [`core/tools/registry.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/tools/registry.py) | `ToolRegistry` — global singleton |
-| [`catalog/tools/`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/catalog/tools/) | Built-in tool implementations |
+| [`core/tools/base_tool.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/tools/base_tool.py) | `BaseTool`, `ToolResult`, `ToolCall`, `ToolRisk`, `HitlMode` |
+| [`core/tools/catalog.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/tools/catalog.py) | `CapabilityRegistry`, `CapabilityEntry`, `CategoryNode` |
+| [`core/tools/registry.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/tools/registry.py) | `ToolRegistry` — global singleton |
+| [`catalog/tools/`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/catalog/tools/) | Built-in tool implementations |

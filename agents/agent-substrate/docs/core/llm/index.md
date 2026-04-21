@@ -31,10 +31,10 @@ graph TB
 
 ```python
 # Abstract base (no external deps — safe to import anywhere)
-from raavan.core.llm.base_client import BaseModelClient
+from ravi.core.llm.base_client import BaseModelClient
 
 # Concrete implementation
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 ```
 
 ---
@@ -44,8 +44,8 @@ from raavan.integrations.llm.openai.openai_client import OpenAIClient
 ### Blocking
 
 ```python
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
-from raavan.core.messages import SystemMessage, UserMessage
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.core.messages import SystemMessage, UserMessage
 
 client = OpenAIClient(model="gpt-4o", temperature=0.7)
 
@@ -159,7 +159,7 @@ if result:
 Pass `ImageContent` objects in a `UserMessage` to feed images to the LLM.
 
 ```python
-from raavan.core.messages import UserMessage, ImageContent
+from ravi.core.messages import UserMessage, ImageContent
 
 msg = UserMessage(content=[
     "Describe what you see in this image.",
@@ -194,5 +194,5 @@ count = await client.count_tokens(messages)
 
 | File | What it owns |
 |---|---|
-| [`core/llm/base_client.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/llm/base_client.py) | `BaseModelClient` ABC — text, audio, image generation signatures |
-| [`integrations/llm/openai/openai_client.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/llm/openai/openai_client.py) | `OpenAIClient` — all modalities |
+| [`core/llm/base_client.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/llm/base_client.py) | `BaseModelClient` ABC — text, audio, image generation signatures |
+| [`integrations/llm/openai/openai_client.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/llm/openai/openai_client.py) | `OpenAIClient` — all modalities |

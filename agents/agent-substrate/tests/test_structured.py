@@ -12,24 +12,24 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel
 
-from raavan.core.structured.result import (
+from ravi.core.structured.result import (
     StructuredOutputError,
     StructuredOutputResult,
 )
-from raavan.core.structured.schemas import (
+from ravi.core.structured.schemas import (
     ClassificationResult,
     ContentSafetyJudge,
     ExtractionResult,
     RelevanceJudge,
 )
-from raavan.core.structured.parse import parse
-from raavan.core.structured.judge import LLMJudge
-from raavan.core.structured.router import StructuredRouter
-from raavan.core.guardrails.base_guardrail import (
+from ravi.core.structured.parse import parse
+from ravi.core.structured.judge import LLMJudge
+from ravi.core.structured.router import StructuredRouter
+from ravi.core.guardrails.base_guardrail import (
     GuardrailContext,
     GuardrailType,
 )
-from raavan.core.messages.client_messages import (
+from ravi.core.messages.client_messages import (
     SystemMessage,
     UserMessage,
 )

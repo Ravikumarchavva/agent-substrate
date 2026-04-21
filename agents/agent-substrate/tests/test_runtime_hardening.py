@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from raavan.core.runtime import (
+from ravi.core.runtime import (
     AgentId,
     Dispatcher,
     AgentNotFoundError,
@@ -21,10 +21,10 @@ from raavan.core.runtime import (
     TopicId,
     HandlerError,
 )
-from raavan.core.runtime._stream import StreamPublisher
-from raavan.core.runtime._supervisor import Supervisor, SupervisorEscalation
-from raavan.core.runtime._types import Envelope, MessageContext, RestartPolicy
-from raavan.integrations.runtime._base import BaseRemoteRuntime
+from ravi.core.runtime._stream import StreamPublisher
+from ravi.core.runtime._supervisor import Supervisor, SupervisorEscalation
+from ravi.core.runtime._types import Envelope, MessageContext, RestartPolicy
+from ravi.integrations.runtime._base import BaseRemoteRuntime
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -558,14 +558,14 @@ class TestRestateURLEncoding:
     async def test_valid_key_url_encoded(self) -> None:
         """Verify that even valid keys get URL-quoted in Restate calls."""
         try:
-            from raavan.integrations.runtime.restate.runtime import RestateRuntime
+            from ravi.integrations.runtime.restate.runtime import RestateRuntime
         except ImportError:
             pytest.skip("restate-sdk / httpx not installed")
 
         rt = RestateRuntime()
         rt._started = True
 
-        with patch("raavan.integrations.runtime.restate.runtime.httpx") as mock_httpx:
+        with patch("ravi.integrations.runtime.restate.runtime.httpx") as mock_httpx:
             mock_client = AsyncMock()
             mock_resp = AsyncMock()
             mock_resp.json.return_value = {"result": "ok"}
@@ -601,7 +601,7 @@ class TestGrpcRuntimeErrorHandling:
 
     async def test_grpc_inherits_base(self) -> None:
         try:
-            from raavan.integrations.runtime.grpc.runtime import GrpcRuntime
+            from ravi.integrations.runtime.grpc.runtime import GrpcRuntime
         except ImportError:
             pytest.skip("grpcio not installed")
         assert issubclass(GrpcRuntime, BaseRemoteRuntime)
@@ -609,7 +609,7 @@ class TestGrpcRuntimeErrorHandling:
     async def test_stop_clears_server_on_error(self) -> None:
         """H12: even if stop logic fails, server ref is cleaned up."""
         try:
-            from raavan.integrations.runtime.grpc.runtime import GrpcRuntime
+            from ravi.integrations.runtime.grpc.runtime import GrpcRuntime
         except ImportError:
             pytest.skip("grpcio not installed")
 
@@ -636,7 +636,7 @@ class TestRestateStartLifecycle:
 
     async def test_start_failure_leaves_not_started(self) -> None:
         try:
-            from raavan.integrations.runtime.restate.runtime import RestateRuntime
+            from ravi.integrations.runtime.restate.runtime import RestateRuntime
         except ImportError:
             pytest.skip("restate-sdk / httpx not installed")
 
@@ -740,7 +740,7 @@ class TestRestateConfigurableTimeouts:
 
     async def test_custom_timeouts(self) -> None:
         try:
-            from raavan.integrations.runtime.restate.runtime import RestateRuntime
+            from ravi.integrations.runtime.restate.runtime import RestateRuntime
         except ImportError:
             pytest.skip("restate-sdk / httpx not installed")
 
@@ -763,13 +763,13 @@ class TestNATSKeyValidation:
     """M7: topic keys are validated against a safe pattern."""
 
     async def test_valid_key_passes(self) -> None:
-        from raavan.integrations.runtime.nats.bridge import _validate_key
+        from ravi.integrations.runtime.nats.bridge import _validate_key
 
         _validate_key("thread-abc-123")
         _validate_key("agent.events.test_key")
 
     async def test_invalid_key_raises(self) -> None:
-        from raavan.integrations.runtime.nats.bridge import _validate_key
+        from ravi.integrations.runtime.nats.bridge import _validate_key
 
         with pytest.raises(ValueError, match="invalid topic key"):
             _validate_key("key with spaces")

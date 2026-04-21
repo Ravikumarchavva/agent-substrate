@@ -31,7 +31,7 @@ nats-py = ">=2.9"
 
 ### 1.3 Package skeleton
 ```
-src/raavan/distributed/
+src/ravi/distributed/
 ├── __init__.py
 ├── workflow.py          (stub)
 ├── activities.py        (stub)
@@ -222,7 +222,7 @@ NATS_URL: str = "nats://localhost:4222"
 
 ### 8.1 Docker Compose
 - Update `docker-compose.yml` with Restate + NATS services
-- Worker service with `uv run python -m raavan.distributed.worker`
+- Worker service with `uv run python -m ravi.distributed.worker`
 - Health checks for all services
 
 ### 8.2 Kubernetes

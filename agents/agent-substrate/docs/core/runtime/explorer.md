@@ -11,7 +11,7 @@ Use this when you want pinpoint understanding of how the Restate runtime is asse
 </div>
 
 <div class="runtime-frame">
-  <iframe src="../runtime-core-explorer.html" title="Raavan Runtime Explorer"></iframe>
+  <iframe src="../runtime-core-explorer.html" title="Ravi Runtime Explorer"></iframe>
 </div>
 
 ## Best reading order

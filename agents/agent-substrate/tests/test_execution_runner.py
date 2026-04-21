@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock
 
-from raavan.core.execution.context import ExecutionContext
-from raavan.core.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
-from raavan.core.messages.client_messages import (
+from ravi.core.execution.context import ExecutionContext
+from ravi.core.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
+from ravi.core.messages.client_messages import (
     AssistantMessage,
     ToolExecutionResultMessage,
 )
-from raavan.services.agent_runtime.service import execute_agent_run
-from raavan.shared.execution.runner import stream_agent_run
+from ravi.services.agent_runtime.service import execute_agent_run
+from ravi.shared.execution.runner import stream_agent_run
 
 
 class FakeStreamingAgent:

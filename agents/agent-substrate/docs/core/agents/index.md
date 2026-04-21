@@ -1,6 +1,6 @@
 # Agents
 
-Every agent in Raavan follows the same loop: **Think → Act → Observe**.
+Every agent in Ravi follows the same loop: **Think → Act → Observe**.
 
 Think: call the LLM with history + tool schemas. Act: execute the tool(s) the LLM picked. Observe: add the result back to history. Repeat until the LLM produces a final text answer or `max_iterations` is reached.
 
@@ -42,9 +42,9 @@ flowchart TD
 All agents share the same construction contract. `ReActAgent` is the concrete implementation you use in practice.
 
 ```python
-from raavan.core.agents.react_agent import ReActAgent
-from raavan.core.context.implementations import SlidingWindowContext
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.core.agents.react_agent import ReActAgent
+from ravi.core.context.implementations import SlidingWindowContext
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 client = OpenAIClient(model="gpt-4o")
 
@@ -82,7 +82,7 @@ agent = ReActAgent(
 ### Blocking — wait for the full answer
 
 ```python
-from raavan.core.agents.react_agent import ReActAgent
+from ravi.core.agents.react_agent import ReActAgent
 
 result = await agent.run("What is the current Python version?")
 
@@ -97,7 +97,7 @@ print(result.usage)           # token usage
 The agent yields typed `StreamChunk` objects. Process only what you need.
 
 ```python
-from raavan.core.messages import TextDeltaChunk, CompletionChunk
+from ravi.core.messages import TextDeltaChunk, CompletionChunk
 
 async for chunk in agent.run_stream("Summarise the AI news"):
     if isinstance(chunk, TextDeltaChunk):
@@ -152,12 +152,12 @@ graph LR
 ```
 
 ```python
-from raavan.core.guardrails.prebuilt import (
+from ravi.core.guardrails.prebuilt import (
     PromptInjectionGuardrail,
     PIIDetectionGuardrail,
     ContentFilterGuardrail,
 )
-from raavan.core.guardrails.base_guardrail import GuardrailType
+from ravi.core.guardrails.base_guardrail import GuardrailType
 
 agent = ReActAgent(
     ...
@@ -190,8 +190,8 @@ await agent.reset()   # clears memory, re-seeds system message, resets counters
 
 | File | What it owns |
 |---|---|
-| [`core/agents/base_agent.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/agents/base_agent.py) | `BaseAgent` ABC, `PromptEnricher` protocol |
-| [`core/agents/react_agent.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/agents/react_agent.py) | `ReActAgent` — full Think→Act→Observe loop |
-| [`core/agents/orchestrator_agent.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/agents/orchestrator_agent.py) | `OrchestratorAgent` — delegates to sub-agents |
-| [`core/agents/flow.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/agents/flow.py) | `FlowAgent` — graph-based multi-step flows |
-| [`core/agents/agent_result.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/agents/agent_result.py) | `AgentRunResult`, `RunStatus` |
+| [`core/agents/base_agent.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/agents/base_agent.py) | `BaseAgent` ABC, `PromptEnricher` protocol |
+| [`core/agents/react_agent.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/agents/react_agent.py) | `ReActAgent` — full Think→Act→Observe loop |
+| [`core/agents/orchestrator_agent.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/agents/orchestrator_agent.py) | `OrchestratorAgent` — delegates to sub-agents |
+| [`core/agents/flow.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/agents/flow.py) | `FlowAgent` — graph-based multi-step flows |
+| [`core/agents/agent_result.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/agents/agent_result.py) | `AgentRunResult`, `RunStatus` |

@@ -1,6 +1,6 @@
 # Concepts
 
-These pages explain how Raavan works internally without forcing you to read the whole source tree.
+These pages explain how Ravi works internally without forcing you to read the whole source tree.
 
 ## Read in this order
 

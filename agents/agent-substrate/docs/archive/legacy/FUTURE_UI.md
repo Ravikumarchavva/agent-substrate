@@ -53,7 +53,7 @@ Revenue grew **12%** quarter-over-quarter.
 
 ## Our Current MCP Apps System
 
-The raavan framework has its own LLM-driven UI system built on MCP.
+The ravi framework has its own LLM-driven UI system built on MCP.
 
 ### How it works
 
@@ -120,7 +120,7 @@ The raavan framework has its own LLM-driven UI system built on MCP.
 
 ---
 
-## What We'd Need to Add mdocUI to raavan-ui
+## What We'd Need to Add mdocUI to ravi-ui
 
 The two systems are complementary, not mutually exclusive. mdocUI would live in the
 chat message stream; MCP Apps stay in the side panel.
@@ -137,7 +137,7 @@ chat message stream; MCP Apps stay in the side panel.
 2. **No structural changes** to SSE — the LLM's `text_delta` events already carry
    the raw markdown+tags string. The parser runs entirely on the frontend.
 
-### Frontend changes (`raavan-ui`)
+### Frontend changes (`ravi-ui`)
 
 1. **Add packages**
    ```

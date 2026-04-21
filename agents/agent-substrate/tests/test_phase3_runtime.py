@@ -10,17 +10,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from raavan.core.runtime import (
+from ravi.core.runtime import (
     AgentId,
     LocalRuntime,
     StreamDone,
     TopicId,
 )
-from raavan.core.runtime._stream import StreamPublisher
-from raavan.core.runtime._types import MessageContext
-from raavan.core.tools.base_tool import BaseTool, HitlMode, ToolResult, ToolRisk
-from raavan.catalog.tools._tool_executor import ToolExecutorHandler
-from raavan.catalog.tools.human_input.tool import (
+from ravi.core.runtime._stream import StreamPublisher
+from ravi.core.runtime._types import MessageContext
+from ravi.core.tools.base_tool import BaseTool, HitlMode, ToolResult, ToolRisk
+from ravi.catalog.tools._tool_executor import ToolExecutorHandler
+from ravi.catalog.tools.human_input.tool import (
     ToolApprovalAction,
     ToolApprovalHandler,
     ToolApprovalResponse,
@@ -457,8 +457,8 @@ class TestBaseRemoteRuntime:
     """BaseRemoteRuntime ABC provides shared local dispatch for all remote backends."""
 
     async def test_grpc_inherits_base(self) -> None:
-        from raavan.integrations.runtime._base import BaseRemoteRuntime
-        from raavan.integrations.runtime.grpc import GrpcRuntime
+        from ravi.integrations.runtime._base import BaseRemoteRuntime
+        from ravi.integrations.runtime.grpc import GrpcRuntime
 
         if GrpcRuntime.__bases__[0] is not BaseRemoteRuntime:
             pytest.skip("grpcio not installed")
@@ -469,8 +469,8 @@ class TestBaseRemoteRuntime:
         assert isinstance(rt, BaseRemoteRuntime)
 
     async def test_restate_inherits_base(self) -> None:
-        from raavan.integrations.runtime._base import BaseRemoteRuntime
-        from raavan.integrations.runtime.restate import RestateRuntime
+        from ravi.integrations.runtime._base import BaseRemoteRuntime
+        from ravi.integrations.runtime.restate import RestateRuntime
 
         try:
             rt = RestateRuntime()
@@ -480,7 +480,7 @@ class TestBaseRemoteRuntime:
 
     async def test_base_register_and_dispatch(self) -> None:
         """BaseRemoteRuntime.register + send_message local dispatch works."""
-        from raavan.integrations.runtime.restate import RestateRuntime
+        from ravi.integrations.runtime.restate import RestateRuntime
 
         try:
             rt = RestateRuntime()
@@ -505,7 +505,7 @@ class TestBaseRemoteRuntime:
 
     async def test_base_subscribe_and_publish(self) -> None:
         """BaseRemoteRuntime pub/sub local fan-out works."""
-        from raavan.integrations.runtime.restate import RestateRuntime
+        from ravi.integrations.runtime.restate import RestateRuntime
 
         try:
             rt = RestateRuntime()
@@ -529,7 +529,7 @@ class TestBaseRemoteRuntime:
 
     async def test_subscribe_unknown_type_raises(self) -> None:
         """Subscribing an unregistered agent type raises ValueError."""
-        from raavan.integrations.runtime.restate import RestateRuntime
+        from ravi.integrations.runtime.restate import RestateRuntime
 
         try:
             rt = RestateRuntime()
@@ -550,7 +550,7 @@ class TestGrpcRuntimeProtocol:
             import importlib
             import sys
 
-            mod_name = "raavan.integrations.runtime.grpc.runtime"
+            mod_name = "ravi.integrations.runtime.grpc.runtime"
             if mod_name in sys.modules:
                 del sys.modules[mod_name]
 
@@ -564,7 +564,7 @@ class TestGrpcRuntimeProtocol:
     async def test_local_handler_dispatch(self) -> None:
         """GrpcRuntime dispatches to locally registered handlers."""
         try:
-            from raavan.integrations.runtime.grpc import GrpcRuntime
+            from ravi.integrations.runtime.grpc import GrpcRuntime
         except ImportError:
             pytest.skip("grpcio not installed")
 
@@ -595,7 +595,7 @@ class TestRestateRuntimeProtocol:
     async def test_local_handler_dispatch(self) -> None:
         """RestateRuntime dispatches to locally registered handlers."""
         try:
-            from raavan.integrations.runtime.restate import RestateRuntime
+            from ravi.integrations.runtime.restate import RestateRuntime
         except ImportError:
             pytest.skip("restate-sdk not installed")
 
@@ -628,7 +628,7 @@ class TestNATSBridgeProtocol:
             import importlib
             import sys
 
-            mod_name = "raavan.integrations.runtime.nats.bridge"
+            mod_name = "ravi.integrations.runtime.nats.bridge"
             if mod_name in sys.modules:
                 del sys.modules[mod_name]
 
@@ -650,7 +650,7 @@ class TestBackwardCompat:
         """BaseAgent defaults to runtime=None, agent_id=None."""
         from typing import AsyncIterator as _AsyncIterator
 
-        from raavan.core.agents.base_agent import BaseAgent
+        from ravi.core.agents.base_agent import BaseAgent
 
         class _DummyAgent(BaseAgent):
             async def run(self, input_text: str, **kw: Any) -> Any:
@@ -673,7 +673,7 @@ class TestBackwardCompat:
 
     async def test_server_context_runtime_optional(self) -> None:
         """ServerContext.runtime defaults to None."""
-        from raavan.server.context import ServerContext
+        from ravi.server.context import ServerContext
 
         ctx = ServerContext(
             model_client=MagicMock(),
@@ -688,7 +688,7 @@ class TestBackwardCompat:
 
     async def test_server_context_with_runtime(self) -> None:
         """ServerContext accepts runtime kwarg."""
-        from raavan.server.context import ServerContext
+        from ravi.server.context import ServerContext
 
         runtime = LocalRuntime()
         ctx = ServerContext(

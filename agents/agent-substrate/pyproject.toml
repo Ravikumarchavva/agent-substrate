@@ -1,8 +1,8 @@
 [tool.hatch.build.targets.wheel]
-packages = ["src/raavan"]
+packages = ["src/ravi"]
 
 [project]
-name = "raavan"
+name = "ravi"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -44,8 +44,8 @@ dependencies = [
 ]
 
 [project.scripts]
-raavan = "raavan.cli:main"
-start = "raavan.cli:start_main"
+ravi = "ravi.cli:main"
+start = "ravi.cli:start_main"
 
 [build-system]
 requires = ["hatchling"]
@@ -121,5 +121,5 @@ exclude = [
 # E701/E702: single-line if/semicolons are intentional in dispatch tables
 # E402: mid-file imports are intentional in some route files
 [tool.ruff.lint.per-file-ignores]
-"src/raavan/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
-"src/raavan/services/conversation/routes.py" = ["E402"]
+"src/ravi/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
+"src/ravi/services/conversation/routes.py" = ["E402"]

@@ -13,13 +13,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
-from raavan.core.messages.client_messages import (
+from ravi.core.messages.client_messages import (
     AssistantMessage,
     SystemMessage,
     ToolExecutionResultMessage,
     UserMessage,
 )
-from raavan.shared.execution import rebuild_messages_from_steps
+from ravi.shared.execution import rebuild_messages_from_steps
 
 
 SYSTEM_PROMPT = "You are a helpful agent."
@@ -202,20 +202,20 @@ async def test_load_agent_hot_path_calls_restore_without_limit():
 
     with (
         patch(
-            "raavan.server.services.agent_service.RedisMemory.for_session",
+            "ravi.server.services.agent_service.RedisMemory.for_session",
             return_value=mock_per_request,
         ),
         patch(
-            "raavan.server.services.agent_service.create_react_agent",
+            "ravi.server.services.agent_service.create_react_agent",
             return_value=MagicMock(),
         ),
         patch(
-            "raavan.server.services.agent_service.load_messages_for_memory",
+            "ravi.server.services.agent_service.load_messages_for_memory",
             new_callable=AsyncMock,
             return_value=[],
         ),
     ):
-        from raavan.server.services.agent_service import (
+        from ravi.server.services.agent_service import (
             load_agent_for_thread,
         )
 
@@ -257,20 +257,20 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
 
     with (
         patch(
-            "raavan.server.services.agent_service.RedisMemory.for_session",
+            "ravi.server.services.agent_service.RedisMemory.for_session",
             return_value=mock_per_request,
         ),
         patch(
-            "raavan.server.services.agent_service.load_messages_for_memory",
+            "ravi.server.services.agent_service.load_messages_for_memory",
             new_callable=AsyncMock,
             return_value=rows,
         ),
         patch(
-            "raavan.server.services.agent_service.create_react_agent",
+            "ravi.server.services.agent_service.create_react_agent",
             return_value=MagicMock(),
         ),
     ):
-        from raavan.server.services.agent_service import (
+        from ravi.server.services.agent_service import (
             load_agent_for_thread,
         )
 
@@ -297,8 +297,8 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
 
 async def test_load_agent_no_redis_uses_unbounded_memory():
     """When redis_memory=None, agent falls back to Postgres-only UnboundedMemory."""
-    from raavan.server.services.agent_service import load_agent_for_thread
-    from raavan.core.memory.unbounded_memory import UnboundedMemory
+    from ravi.server.services.agent_service import load_agent_for_thread
+    from ravi.core.memory.unbounded_memory import UnboundedMemory
 
     captured_memory = {}
 
@@ -312,12 +312,12 @@ async def test_load_agent_no_redis_uses_unbounded_memory():
 
     with (
         patch(
-            "raavan.server.services.agent_service.load_messages_for_memory",
+            "ravi.server.services.agent_service.load_messages_for_memory",
             new_callable=AsyncMock,
             return_value=rows,
         ),
         patch(
-            "raavan.server.services.agent_service.create_react_agent",
+            "ravi.server.services.agent_service.create_react_agent",
             side_effect=_capture_agent,
         ),
     ):

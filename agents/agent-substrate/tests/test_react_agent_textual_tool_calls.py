@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from raavan.core.agents.react_agent import _parse_textual_tool_call_sequence
+from ravi.core.agents.react_agent import _parse_textual_tool_call_sequence
 
 
 def test_parse_textual_tool_call_sequence_supports_self_closing_groq_format() -> None:

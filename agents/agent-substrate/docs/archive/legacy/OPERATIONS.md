@@ -292,7 +292,7 @@ In Grafana → Explore → Tempo → Search
 ```powershell
 cd agent-framework
 docker compose -f deployment/docker/docker-compose.yml up -d postgres redis
-uv run uvicorn raavan.server.app:app --port 8000 --reload
+uv run uvicorn ravi.server.app:app --port 8000 --reload
 ```
 
 ### Start frontend

@@ -1,13 +1,13 @@
 # Quickstart
 
-This is the shortest useful Raavan program.
+This is the shortest useful Ravi program.
 
 ```python
 import asyncio
 
-from raavan.core.agents.react_agent import ReActAgent
-from raavan.core.memory import UnboundedMemory
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.core.agents.react_agent import ReActAgent
+from ravi.core.memory import UnboundedMemory
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 
 async def main() -> None:
@@ -24,7 +24,7 @@ asyncio.run(main())
 
 ## What happened
 
-1. `OpenAIClient` translates Raavan messages into provider API calls.
+1. `OpenAIClient` translates Ravi messages into provider API calls.
 2. `UnboundedMemory` stores the conversation in process.
 3. `ReActAgent` runs a bounded Think → Act → Observe loop.
 4. Since there are no tools here, the model produces a direct answer.

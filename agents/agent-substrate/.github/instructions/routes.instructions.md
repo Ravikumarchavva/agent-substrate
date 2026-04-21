@@ -1,7 +1,7 @@
 ---
 name: "Server Route Conventions"
 description: "FastAPI server patterns, dependency injection, SSE streaming, and route registration"
-applyTo: "src/raavan/server/**"
+applyTo: "src/ravi/server/**"
 ---
 
 # Server & Route Conventions

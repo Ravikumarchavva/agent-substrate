@@ -16,8 +16,8 @@ import os
 
 import pytest
 
-from raavan.core.storage.base import FileRef
-from raavan.core.storage.document import (
+from ravi.core.storage.base import FileRef
+from ravi.core.storage.document import (
     BinaryDocument,
     ImageDocument,
     PdfDocument,
@@ -26,8 +26,8 @@ from raavan.core.storage.document import (
     create_document,
     store_document,
 )
-from raavan.core.storage.local import LocalFileStore
-from raavan.core.storage.tenant import FileScope, TenantContext
+from ravi.core.storage.local import LocalFileStore
+from ravi.core.storage.tenant import FileScope, TenantContext
 
 
 # -- FileRef -----------------------------------------------------------------
@@ -331,7 +331,7 @@ class TestLocalFileStore:
 
 class TestEncryptedFileStore:
     async def _make(self, tmp_path):
-        from raavan.core.storage.encrypted import (
+        from ravi.core.storage.encrypted import (
             EncryptedFileStore,
             LocalKeyProvider,
         )
@@ -437,7 +437,7 @@ class TestFactory:
     def test_create_local_store(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from raavan.core.storage.factory import create_file_store
+        from ravi.core.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"
@@ -451,8 +451,8 @@ class TestFactory:
     def test_create_encrypted_local_store(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from raavan.core.storage.encrypted import EncryptedFileStore
-        from raavan.core.storage.factory import create_file_store
+        from ravi.core.storage.encrypted import EncryptedFileStore
+        from ravi.core.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"
@@ -467,7 +467,7 @@ class TestFactory:
     def test_unknown_backend_raises(self):
         from unittest.mock import MagicMock
 
-        from raavan.core.storage.factory import create_file_store
+        from ravi.core.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "unknown"
@@ -479,7 +479,7 @@ class TestFactory:
     def test_envelope_without_kek_raises(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from raavan.core.storage.factory import create_file_store
+        from ravi.core.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"

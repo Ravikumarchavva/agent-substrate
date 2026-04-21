@@ -7,6 +7,8 @@ export type ModelOption = {
   label: string;
   provider: ModelProvider;
   description: string;
+  disabled?: boolean;
+  thinkingLevels?: string[];
 };
 
 export type VoiceOption = {

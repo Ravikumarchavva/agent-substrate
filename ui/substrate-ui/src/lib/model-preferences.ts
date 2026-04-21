@@ -14,7 +14,7 @@ export const TTS_VOICE_STORAGE_KEY = "tts_voice";
 export const TTS_PLAYBACK_RATE_STORAGE_KEY = "tts_playback_rate";
 export const REALTIME_MODEL_STORAGE_KEY = "realtime_model";
 export const REALTIME_VOICE_STORAGE_KEY = "realtime_voice";
-export const MODEL_PREFERENCES_UPDATED_EVENT = "raavan:model-preferences-updated";
+export const MODEL_PREFERENCES_UPDATED_EVENT = "ravi:model-preferences-updated";
 
 export const DEFAULT_CHAT_MODEL = "openai/gpt-5.4-mini";
 export const DEFAULT_STT_MODEL = "openai/gpt-4o-mini-transcribe";
@@ -35,88 +35,32 @@ const PROVIDER_LABELS: Record<ModelProvider, string> = {
 
 export const CHAT_MODEL_OPTIONS: ModelOption[] = [
   {
-    id: "groq/llama-3.3-70b-versatile",
-    label: "Llama 3.3 70B Versatile",
-    provider: "groq",
-    description: "Fast Groq-hosted general model for chat, extraction, and tool use.",
-  },
-  {
-    id: "groq/llama-3.1-8b-instant",
-    label: "Llama 3.1 8B Instant",
-    provider: "groq",
-    description: "Lower-latency Groq model when you want a faster response.",
-  },
-  {
-    id: "openrouter/liquid/lfm-2.5-1.2b-thinking:free",
-    label: "Auto free router",
-    provider: "openrouter",
-    description: "Lets OpenRouter pick an available free chat model.",
-  },
-  {
-    id: "openrouter/google/gemma-4-31b-it:free",
-    label: "Gemma 4 31B free",
-    provider: "openrouter",
-    description: "Solid general-purpose free model with a large context window.",
-  },
-  {
-    id: "openrouter/qwen/qwen3-next-80b-a3b-instruct:free",
-    label: "Qwen3 Next 80B free",
-    provider: "openrouter",
-    description: "Stronger free reasoning and instruction-following option.",
-  },
-  {
-    id: "openrouter/qwen/qwen3-coder:free",
-    label: "Qwen3 Coder free",
-    provider: "openrouter",
-    description: "Best free coding-oriented preset in the selector.",
-  },
-  {
-    id: "openrouter/openai/gpt-oss-20b:free",
-    label: "GPT OSS 20B free",
-    provider: "openrouter",
-    description: "OpenAI open-weight model through OpenRouter's free tier.",
-  },
-  {
-    id: "openrouter/z-ai/glm-4.5-air:free",
-    label: "GLM 4.5 Air free",
-    provider: "openrouter",
-    description: "Fast free model that works well for everyday chat.",
+    id: "openai/gpt-5.4-mini",
+    label: "GPT-5.4 Mini",
+    provider: "openai",
+    description: "High-quality OpenAI default.",
+    thinkingLevels: ["off", "low", "medium", "high", "xhigh"],
   },
   {
     id: "google/gemini-2.5-flash",
     label: "Gemini 2.5 Flash",
     provider: "google",
-    description: "Google workhorse model for fast reasoning and multimodal chat.",
+    description: "Fast Google workhorse model.",
+    thinkingLevels: ["off", "low", "medium", "high"],
   },
   {
-    id: "google/gemini-2.5-flash-lite",
-    label: "Gemini 2.5 Flash Lite",
-    provider: "google",
-    description: "Lower-cost Google option with strong latency.",
+    id: "openrouter/qwen/qwen3-coder:free",
+    label: "Qwen3 Coder",
+    provider: "openrouter",
+    description: "Best free coding-oriented model.",
+    thinkingLevels: ["off", "low", "medium"],
   },
   {
-    id: "google/gemini-3.1-flash-lite-preview",
-    label: "Gemini 3.1 Flash Lite",
-    provider: "google",
-    description: "Latest lightweight Gemini preview with long context.",
-  },
-  {
-    id: "openai/gpt-5.4-mini",
-    label: "GPT-5.4 Mini",
-    provider: "openai",
-    description: "High-quality OpenAI default when you want paid reliability.",
-  },
-  {
-    id: "openai/gpt-4.1-mini",
-    label: "GPT-4.1 Mini",
-    provider: "openai",
-    description: "Balanced OpenAI option for responsive chat.",
-  },
-  {
-    id: "openai/gpt-4o-mini",
-    label: "GPT-4o Mini",
-    provider: "openai",
-    description: "Fast OpenAI chat model with broad compatibility.",
+    id: "groq/llama-3.3-70b-versatile",
+    label: "Llama 3.3 70B",
+    provider: "groq",
+    description: "Powerful Groq-hosted Llama model.",
+    thinkingLevels: ["off", "low", "medium"],
   },
 ];
 

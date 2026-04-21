@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { MessageBubble } from "@/components/MessageBubble";
-import { RaavanMark } from "@/components/RaavanMark";
+import { RaviMark } from "@/components/RaviMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
 import { AppPanel } from "@/components/AppPanel";
@@ -36,7 +36,7 @@ import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAtt
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, type LucideIcon } from "lucide-react";
 
-const LAST_ACTIVE_THREAD_STORAGE_KEY = "raavan:last-active-thread";
+const LAST_ACTIVE_THREAD_STORAGE_KEY = "ravi:last-active-thread";
 
 function readLastActiveThreadId(): string | null {
   if (typeof window === "undefined") {
@@ -107,10 +107,18 @@ function ChatPageContent() {
   // ── Model selector + thinking level ────────────────────────────────
   const [selectedModel, setSelectedModel] = useState(() => getPreferredChatModel());
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [thinkingLevel, setThinkingLevel] = useState<"off" | "low" | "medium" | "high">("medium");
+  const [thinkingLevel, setThinkingLevel] = useState<string>("medium");
   const [showThinkingPicker, setShowThinkingPicker] = useState(false);
   const modelPickerRef = useRef<HTMLDivElement | null>(null);
   const thinkingPickerRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset thinking level if not compatible with the selected model
+  useEffect(() => {
+    const model = CHAT_MODEL_OPTIONS.find((m) => m.id === selectedModel);
+    if (model?.thinkingLevels && !model.thinkingLevels.includes(thinkingLevel)) {
+      setThinkingLevel(model.thinkingLevels[0] || "off");
+    }
+  }, [selectedModel, thinkingLevel]);
 
   // Keep selectedModel in sync with localStorage changes from settings
   useEffect(() => {
@@ -951,7 +959,7 @@ function ChatPageContent() {
       {/* Desktop Sidebar */}
       <div
         className={`hidden shrink-0 overflow-hidden transition-all duration-300 ease-in-out lg:block ${
-          desktopSidebarOpen ? "lg:w-60" : "lg:w-0"
+          desktopSidebarOpen ? "lg:w-[13.5rem]" : "lg:w-0"
         }`}
       >
         <Sidebar
@@ -977,7 +985,7 @@ function ChatPageContent() {
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
-              className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
+              className="btn-icon pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
               aria-label="Open sidebar"
             >
               <SidebarToggleIcon direction="open" className="h-4 w-4" />
@@ -986,7 +994,7 @@ function ChatPageContent() {
               <button
                 type="button"
                 onClick={() => setDesktopSidebarOpen(true)}
-                className="pointer-events-auto hidden h-9 w-9 items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:flex"
+                className="btn-icon pointer-events-auto hidden h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:flex"
                 aria-label="Open sidebar"
               >
                 <SidebarToggleIcon direction="open" className="h-4 w-4" />
@@ -1010,22 +1018,17 @@ function ChatPageContent() {
               >
                 {messages.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="w-full max-w-200 px-4 text-center sm:px-6">
-                      <div className="space-y-6">
-                        <div
-                          className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-(--border) bg-(--card)"
-                          style={{ boxShadow: "var(--shadow-sm)" }}
-                        >
-                          <RaavanMark className="h-8 w-8" />
-                        </div>
+                    <div className="w-full max-w-2xl px-4 text-center sm:px-6">
+                      <div className="space-y-5">
+                        <RaviMark className="mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
                         <div>
-                          <h2 className="text-2xl font-semibold">How can I help you today?</h2>
+                          <h2 className="text-xl font-semibold sm:text-2xl">How can I help you today?</h2>
                           <p className="mt-2 text-sm text-(--muted)">
                             Ask me anything and I&apos;ll keep the working area clean and focused.
                           </p>
                         </div>
 
-                        <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                           {([
                             { icon: Music2, text: "Play Despacito on Spotify" },
                             { icon: Mail, text: "Summarize my recent 5 emails" },
@@ -1036,7 +1039,7 @@ function ChatPageContent() {
                             <button
                               key={idx}
                               onClick={() => doSendMessage(text)}
-                              className="flex cursor-pointer items-center gap-3 rounded-2xl p-3.5 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover)"
+                              className="flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover) active:scale-[0.98] sm:p-3.5"
                               style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
                             >
                               <Icon className="h-4 w-4 shrink-0 text-foreground" />
@@ -1138,7 +1141,7 @@ function ChatPageContent() {
               </div>
 
               <div className="bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:pb-5">
-                <div className="mx-auto max-w-200 px-4 sm:px-6">
+                <div className="mx-auto w-full max-w-2xl px-3 sm:px-6">
                   <form
                     onSubmit={sendMessage}
                     className="flex flex-col overflow-hidden px-4 py-3"
@@ -1168,7 +1171,7 @@ function ChatPageContent() {
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploadingFile}
-                        className="mb-0.5 shrink-0 self-end rounded-xl p-2 text-(--muted) transition-colors hover:bg-(--card-hover) disabled:opacity-40 cursor-pointer"
+                        className="btn-icon mb-0.5 shrink-0 cursor-pointer self-end rounded-xl p-2 text-(--muted) transition-colors hover:bg-(--card-hover) disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label="Attach file"
                       >
                         {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -1201,7 +1204,7 @@ function ChatPageContent() {
                           <button
                             type="button"
                             onClick={() => setRealtimeOpen(true)}
-                            className="cursor-pointer rounded-xl p-2 text-(--muted) transition-colors hover:bg-(--card-hover)"
+                            className="btn-icon cursor-pointer rounded-xl p-2 text-(--muted) transition-colors hover:bg-(--card-hover)"
                             aria-label="Start speech-to-speech conversation"
                             title="Live voice conversation"
                           >
@@ -1212,7 +1215,7 @@ function ChatPageContent() {
                           <button
                             type="button"
                             onClick={handleStop}
-                            className="cursor-pointer rounded-full bg-foreground p-2 text-background transition-colors"
+                            className="btn-icon cursor-pointer rounded-full bg-foreground p-2 text-background transition-colors"
                             aria-label="Stop"
                           >
                             <StopCircle className="h-4 w-4" />
@@ -1221,7 +1224,7 @@ function ChatPageContent() {
                           <button
                             type="submit"
                             disabled={!input.trim()}
-                            className="cursor-pointer rounded-full p-2 transition-all disabled:cursor-not-allowed disabled:opacity-20"
+                            className="btn-icon cursor-pointer rounded-full p-2 transition-all disabled:cursor-not-allowed disabled:opacity-20"
                             style={{
                               background: input.trim() ? "var(--foreground)" : "var(--badge-bg)",
                               color: input.trim() ? "var(--background)" : "var(--muted)",
@@ -1235,7 +1238,7 @@ function ChatPageContent() {
                     </div>
                   </form>
 
-                  <div className="mt-2 flex items-center gap-3 px-1">
+                  <div className="mt-2 flex flex-wrap items-center gap-2 px-1 sm:gap-3">
                     <div className="relative" ref={modelPickerRef}>
                       <button
                         type="button"
@@ -1243,7 +1246,7 @@ function ChatPageContent() {
                           setShowModelPicker((v) => !v);
                           setShowThinkingPicker(false);
                         }}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-(--muted) transition-colors hover:bg-(--card-hover)"
+                        className="btn-icon flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-(--muted) transition-colors hover:bg-(--card-hover)"
                       >
                         <Settings2 className="h-3 w-3" />
                         <span className="max-w-32 truncate">
@@ -1253,15 +1256,16 @@ function ChatPageContent() {
                       </button>
                       {showModelPicker && (
                         <div
-                          className="absolute bottom-full left-0 z-50 mb-1 max-h-72 min-w-56 overflow-y-auto rounded-xl py-1"
-                          style={{ background: "var(--card)", boxShadow: "var(--shadow-lg)" }}
+                          className="absolute bottom-full left-0 z-50 mb-2 w-64 overflow-hidden rounded-2xl p-1 shadow-2xl"
+                          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
                         >
-                          {groupModelOptions(CHAT_MODEL_OPTIONS).map((group) => (
-                            <div key={group.label}>
-                              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-(--muted)">
-                                {group.label}
-                              </div>
-                              {group.options.map((opt) => (
+                          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-(--muted)">
+                            Model
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            {CHAT_MODEL_OPTIONS.filter(opt => !opt.disabled).map((opt) => {
+                              const active = opt.id === selectedModel;
+                              return (
                                 <button
                                   key={opt.id}
                                   type="button"
@@ -1270,14 +1274,19 @@ function ChatPageContent() {
                                     writeStoredValue(CHAT_MODEL_STORAGE_KEY, opt.id);
                                     setShowModelPicker(false);
                                   }}
-                                  className={`flex w-full cursor-pointer items-center justify-between px-3 py-1.5 text-left text-[13px] transition-colors hover:bg-(--card-hover) ${opt.id === selectedModel ? "font-medium text-foreground" : "text-(--muted)"}`}
+                                  className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${active ? "bg-(--card-hover) text-foreground ring-1 ring-(--border)" : "text-(--muted) hover:bg-(--card-hover) hover:text-foreground"}`}
                                 >
-                                  <span className="truncate">{opt.label}</span>
-                                  {opt.id === selectedModel && <span className="ml-2 shrink-0 text-[10px]">✓</span>}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[13.5px] font-medium tracking-tight">{opt.label}</span>
+                                    {(opt.id.includes("5.4") || opt.id.includes("3.3")) && (
+                                      <span className="rounded-md bg-(--badge-bg) px-1.5 py-0.5 text-[9px] font-bold text-(--muted) uppercase">New</span>
+                                    )}
+                                  </div>
+                                  {active && <div className="h-1.5 w-1.5 rounded-full bg-foreground" />}
                                 </button>
-                              ))}
-                            </div>
-                          ))}
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1291,7 +1300,7 @@ function ChatPageContent() {
                           setShowThinkingPicker((v) => !v);
                           setShowModelPicker(false);
                         }}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-(--muted) transition-colors hover:bg-(--card-hover)"
+                        className="btn-icon flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-(--muted) transition-colors hover:bg-(--card-hover)"
                       >
                         <span>💭</span>
                         <span>{thinkingLevel === "off" ? "No thinking" : `Thinking: ${thinkingLevel}`}</span>
@@ -1299,31 +1308,37 @@ function ChatPageContent() {
                       </button>
                       {showThinkingPicker && (
                         <div
-                          className="absolute bottom-full left-0 z-50 mb-1 min-w-44 rounded-xl py-1"
-                          style={{ background: "var(--card)", boxShadow: "var(--shadow-lg)" }}
+                          className="absolute bottom-full left-0 z-50 mb-2 w-56 overflow-hidden rounded-2xl p-1 shadow-2xl"
+                          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
                         >
-                          {(["off", "low", "medium", "high"] as const).map((level) => (
-                            <button
-                              key={level}
-                              type="button"
-                              onClick={() => {
-                                setThinkingLevel(level);
-                                setShowThinkingPicker(false);
-                              }}
-                              className={`flex w-full cursor-pointer items-center justify-between px-3 py-2 text-left text-[13px] transition-colors hover:bg-(--card-hover) ${level === thinkingLevel ? "font-medium text-foreground" : "text-(--muted)"}`}
-                            >
-                              <div>
-                                <div className="capitalize">{level === "off" ? "No thinking" : level}</div>
-                                <div className="text-[11px] text-(--muted)">
-                                  {level === "off" && "Direct responses without reasoning"}
-                                  {level === "low" && "Faster responses with less reasoning"}
-                                  {level === "medium" && "Balanced reasoning and speed"}
-                                  {level === "high" && "Greater reasoning depth but slower"}
-                                </div>
-                              </div>
-                              {level === thinkingLevel && <span className="ml-2 shrink-0 text-[10px]">✓</span>}
-                            </button>
-                          ))}
+                          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-(--muted)">
+                            Thinking
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            {(CHAT_MODEL_OPTIONS.find(m => m.id === selectedModel)?.thinkingLevels || ["off", "low", "medium", "high"]).map((level) => {
+                              const labels: Record<string, string> = {
+                                off: "No thinking",
+                                low: "Fast Reasoning",
+                                medium: "Balanced",
+                                high: "Deep Thought",
+                                xhigh: "Maximum Depth"
+                              };
+                              return (
+                                <button
+                                  key={level}
+                                  type="button"
+                                  onClick={() => {
+                                    setThinkingLevel(level);
+                                    setShowThinkingPicker(false);
+                                  }}
+                                  className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${level === thinkingLevel ? "bg-(--card-hover) text-foreground ring-1 ring-(--border)" : "text-(--muted) hover:bg-(--card-hover) hover:text-foreground"}`}
+                                >
+                                  <span className="text-[13.5px] font-medium tracking-tight">{labels[level] || level}</span>
+                                  {level === thinkingLevel && <div className="h-1.5 w-1.5 rounded-full bg-foreground" />}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1362,7 +1377,7 @@ function ChatPageContent() {
             onClick={() => setMobileSidebarOpen(false)}
             aria-label="Close sidebar"
           />
-          <div className="relative h-full w-[min(15rem,calc(100vw-1rem))] max-w-full">
+          <div className="relative h-full w-[min(13.5rem,calc(100vw-1rem))] max-w-full">
             <Sidebar
               threads={threads}
               currentThreadId={currentThreadId}

@@ -15,13 +15,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Chat Assistant",
-  description: "Chat with AI assistant",
+  title: "Ravi – AI Assistant",
+  description: "Chat with Ravi, your personal AI assistant.",
   other: {
-    // Tell Dark Reader not to reprocess this page — we handle dark mode ourselves.
-    // Prevents hydration mismatches caused by data-darkreader-* attributes injected into SVGs.
     "darkreader-lock": "",
   },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafaf8" },
+    { media: "(prefers-color-scheme: dark)", color: "#171717" },
+  ],
 };
 
 export default function RootLayout({
@@ -34,7 +44,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("raavan-theme");if(t){document.documentElement.setAttribute("data-theme",t);document.documentElement.classList.toggle("dark",t==="dark")}else if(window.matchMedia("(prefers-color-scheme: dark)").matches){document.documentElement.setAttribute("data-theme","dark");document.documentElement.classList.add("dark")}else{document.documentElement.setAttribute("data-theme","light");document.documentElement.classList.remove("dark")}}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem("ravi-theme");if(t){document.documentElement.setAttribute("data-theme",t);document.documentElement.classList.toggle("dark",t==="dark")}else if(window.matchMedia("(prefers-color-scheme: dark)").matches){document.documentElement.setAttribute("data-theme","dark");document.documentElement.classList.add("dark")}else{document.documentElement.setAttribute("data-theme","light");document.documentElement.classList.remove("dark")}}catch(e){}})()`,
           }}
         />
       </head>

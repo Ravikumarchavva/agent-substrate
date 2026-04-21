@@ -31,7 +31,7 @@ const subscribe: (onStoreChange: () => void) => () => void = () => () => {};
 
 function getInitialTheme(): Theme {
   if (typeof window === "undefined") return "dark";
-  const saved = localStorage.getItem("raavan-theme") as Theme | null;
+  const saved = localStorage.getItem("ravi-theme") as Theme | null;
   if (saved) return saved;
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
@@ -48,7 +48,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
     document.documentElement.setAttribute("data-theme", theme);
     document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem("raavan-theme", theme);
+    localStorage.setItem("ravi-theme", theme);
   }, [theme]);
 
   const toggleTheme = useCallback(() => {

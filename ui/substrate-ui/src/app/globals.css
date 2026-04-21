@@ -1,7 +1,7 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 @import "katex/dist/katex.min.css";
 
-/* ─── Shared Raavan tokens ─────────────────────────────────────────────────── */
+/* ─── Shared Ravi tokens ─────────────────────────────────────────────────── */
 :root {
   --background: #fafaf8;
   --foreground: #0a0a0a;
@@ -99,7 +99,36 @@ body {
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%; /* Prevent iOS font size inflation */
+  text-size-adjust: 100%;
   transition: background-color 0.15s, color 0.15s;
+  /* Ensure full-height layout on mobile (addresses iOS Safari address bar) */
+  min-height: 100dvh;
+}
+
+/* ─── Universal interactive element improvements ─────────────────────────── */
+button, a, [role="button"], summary, label[for] {
+  cursor: pointer;
+  /* Remove ugly iOS tap highlight */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure minimum 44×44px touch target for accessibility (WCAG 2.5.5) */
+button, a, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Inline/icon buttons override — they shouldn't force 44px box-model */
+.btn-icon {
+  min-height: unset;
+  min-width: unset;
+}
+
+/* Prevent long words/URLs from breaking layout on small screens */
+.prose-chat p, .prose-chat li {
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 ::-webkit-scrollbar        { width: 5px; height: 5px; }

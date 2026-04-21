@@ -7,7 +7,7 @@ interface CachedTtsAudioInput {
   format: "mp3" | "wav";
 }
 
-const AUDIO_CACHE_NAME = "raavan-tts-audio-v1";
+const AUDIO_CACHE_NAME = "ravi-tts-audio-v1";
 
 function hashValue(value: string): string {
   let hash = 2166136261;
@@ -19,7 +19,7 @@ function hashValue(value: string): string {
 }
 
 function buildCacheRequest(input: CachedTtsAudioInput): Request {
-  const origin = typeof window === "undefined" ? "https://local.raavan" : window.location.origin;
+  const origin = typeof window === "undefined" ? "https://local.ravi" : window.location.origin;
   const cacheKey = hashValue([
     input.model.trim(),
     input.voice.trim(),

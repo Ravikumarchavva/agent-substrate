@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Raavan Runtime Explorer</title>
+<title>Ravi Runtime Explorer</title>
 <style>
 /* === SINGLE DARK THEME ONLY === */
 :root {
@@ -287,9 +287,9 @@ code{
 
 <!-- HEADER -->
 <div class="hdr">
-  <div class="eyebrow">Raavan Core</div>
+  <div class="eyebrow">Ravi Core</div>
   <h1>Restate Runtime Explorer</h1>
-  <p>Scoped to <code>src/raavan/integrations/runtime/restate/</code>. Click any actor to inspect it, or pick a scenario tab to trace an execution flow step by step.</p>
+  <p>Scoped to <code>src/ravi/integrations/runtime/restate/</code>. Click any actor to inspect it, or pick a scenario tab to trace an execution flow step by step.</p>
   <div class="legend">
     <div class="litem"><span class="ldot" style="background:var(--c-entry)"></span>Entry / Control</div>
     <div class="litem"><span class="ldot" style="background:var(--c-wf)"></span>Durable Workflows</div>
@@ -425,7 +425,7 @@ code{
 </div><!-- /shell -->
 
 <script>
-const REPO = "https://github.com/Ravikumarchavva/raavan/blob/main/";
+const REPO = "https://github.com/Ravikumarchavva/ravi/blob/main/";
 
 // ────────────────────────────────────────────────────────────
 //  ACTOR DATA
@@ -433,13 +433,13 @@ const REPO = "https://github.com/Ravikumarchavva/raavan/blob/main/";
 const actors = {
   "workflow-client": {
     title:"RestateWorkflowClient", color:"var(--c-entry)",
-    file:"src/raavan/integrations/runtime/restate/client.py",
+    file:"src/ravi/integrations/runtime/restate/client.py",
     summary:"Thin HTTP wrapper around Restate ingress and admin APIs. The single entry-point for dispatching a workflow, querying its state, cancelling it, or resolving an external promise.",
     why:"Keeps Restate HTTP details out of routes, services, and higher-level callers. Any code that needs to trigger or interact with a durable run goes through this client.",
     receives:["start_agent_workflow(thread_id, user_content, claims, model, ...)","start_pipeline_workflow(name, definition, thread_id)","start_chain_workflow(code, timeout)","query_workflow(workflow_id)","cancel_workflow(workflow_id)","resolve_promise(workflow_id, promise_name, value)"],
     sends:["HTTP POST → Restate ingress /run or /send","HTTP calls → admin API for deployment registration","Blocking HTTP result when get_result() is awaited"],
     methods:["connect() / disconnect()","start_agent_workflow(...) → str","start_pipeline_workflow(...)","start_chain_workflow(...)","query_workflow(wf_id) → dict","cancel_workflow(wf_id)","resolve_promise(wf_id, name, value)","register_deployment(endpoint_url)"],
-    code:`<span class="kw">from</span> raavan.integrations.runtime.restate.client <span class="kw">import</span> <span class="cl">RestateWorkflowClient</span>
+    code:`<span class="kw">from</span> ravi.integrations.runtime.restate.client <span class="kw">import</span> <span class="cl">RestateWorkflowClient</span>
 
 client = <span class="cl">RestateWorkflowClient</span>(settings)
 <span class="kw">await</span> client.<span class="fn">connect</span>()
@@ -462,13 +462,13 @@ wf_id = <span class="kw">await</span> client.<span class="fn">start_agent_workfl
   },
   "runtime": {
     title:"RestateRuntime", color:"var(--c-entry)",
-    file:"src/raavan/integrations/runtime/restate/runtime.py",
+    file:"src/ravi/integrations/runtime/restate/runtime.py",
     summary:"Transport adapter implementing the framework BaseRuntime interface against Restate. Used when agents or orchestrators need to dispatch durable runs from inside the framework.",
     why:"Provides runtime-facing abstraction for remote durable dispatch without leaking Restate HTTP details into agent or orchestration code.",
     receives:["send_message(payload, sender, recipient)","resolve_promise(workflow_id, promise_name, value)","cancel_workflow(workflow_id)","start() / stop()"],
     sends:["HTTP POST to virtual-object endpoints via _remote_send","Promise resolution to workflow endpoints","Deployment registration to admin API on startup"],
     methods:["start()","stop()","_remote_send(endpoint, payload)","resolve_promise(wf_id, name, value)","cancel_workflow(wf_id)"],
-    code:`<span class="kw">from</span> raavan.integrations.runtime.restate.runtime <span class="kw">import</span> <span class="cl">RestateRuntime</span>
+    code:`<span class="kw">from</span> ravi.integrations.runtime.restate.runtime <span class="kw">import</span> <span class="cl">RestateRuntime</span>
 
 runtime = <span class="cl">RestateRuntime</span>(settings)
 <span class="kw">await</span> runtime.<span class="fn">start</span>()
@@ -483,7 +483,7 @@ runtime = <span class="cl">RestateRuntime</span>(settings)
   },
   "restate-app": {
     title:"Restate App", color:"var(--c-wf)",
-    file:"src/raavan/integrations/runtime/restate/app.py",
+    file:"src/ravi/integrations/runtime/restate/app.py",
     summary:"ASGI surface built with restate.app() that wraps registered workflow services. Restate's server discovers and routes all calls through this surface.",
     why:"The minimal serving surface Restate needs to dispatch into workflow objects with durable state, journaling, and promise semantics.",
     receives:["Invocations routed by Restate ingress","Payloads for AgentWorkflow, PipelineWorkflow, ChainWorkflow"],
@@ -503,7 +503,7 @@ app = restate.<span class="fn">app</span>(
   },
   "agent-workflow": {
     title:"AgentWorkflow", color:"var(--c-wf)",
-    file:"src/raavan/integrations/runtime/restate/workflows.py",
+    file:"src/ravi/integrations/runtime/restate/workflows.py",
     summary:"Durable ReAct agent loop. Restores memory, calls the LLM, executes tools, persists results — all via journaled ctx.run() calls. Suspends on HITL gates using ctx.promise().",
     why:"Owns the durable state machine for every agent run. Every transition is replay-safe via Restate journaling, so crashes produce the same result without re-calling external APIs.",
     receives:["thread_id, user_content, model, max_iterations, system_instructions","Promise resolutions for approval-{id} and human-{id} wait states"],
@@ -529,7 +529,7 @@ app = restate.<span class="fn">app</span>(
   },
   "pipeline-workflow": {
     title:"PipelineWorkflow", color:"var(--c-wf)",
-    file:"src/raavan/integrations/runtime/restate/workflows.py",
+    file:"src/ravi/integrations/runtime/restate/workflows.py",
     summary:"Sequential durable pipeline runner. Executes adapter steps one by one with journaled checkpoints. Only incomplete steps re-run on crash/resume.",
     why:"Multi-step adapter chains with proper retry and checkpoint semantics without duplicating orchestration logic in application code.",
     receives:["Pipeline definition: name, steps[], adapter_name, action, input_mapping"],
@@ -552,7 +552,7 @@ wf_id = <span class="kw">await</span> client.<span class="fn">start_pipeline_wor
   },
   "chain-workflow": {
     title:"ChainWorkflow", color:"var(--c-wf)",
-    file:"src/raavan/integrations/runtime/restate/workflows.py",
+    file:"src/ravi/integrations/runtime/restate/workflows.py",
     summary:"Thin durable wrapper around code-chain execution. Delegates entirely to a single journaled activities.execute_code_chain() call with configurable timeout.",
     why:"Durifies code-driven chains while keeping heavy work inside a single activity boundary — simple, predictable, easy to retry.",
     receives:["params: {code, timeout} from client dispatch"],
@@ -570,13 +570,13 @@ return resp.json()
   },
   "worker": {
     title:"Worker", color:"var(--c-exec)",
-    file:"src/raavan/integrations/runtime/restate/worker.py",
+    file:"src/ravi/integrations/runtime/restate/worker.py",
     summary:"Bootstrap entry-point. Assembles runtime dependencies, calls activities.configure() to inject them as globals, registers the deployment with Restate, then serves via uvicorn.",
     why:"One-time dependency wiring so workflow handlers stay pure. Scan tools, create model client, connect Redis — all at startup in one place.",
     receives:["CLI host and port args","Settings: OPENAI_API_KEY, REDIS_URL, NATS_URL, RESTATE_ADMIN_URL"],
     sends:["Configured DI globals into activities module","Deployment registration to Restate admin API","uvicorn hosting of the Restate ASGI app"],
     methods:["main() — CLI entry-point","_setup() — build services and wire DI","_scan_tools() — discover catalog tools","_register_with_restate(endpoint_url)","_teardown() — graceful shutdown"],
-    code:`<span class="cm"># uv run python -m raavan.integrations.runtime.restate.worker</span>
+    code:`<span class="cm"># uv run python -m ravi.integrations.runtime.restate.worker</span>
 <span class="cm">#   --host 0.0.0.0 --port 9080</span>
 
 <span class="kw">async def</span> <span class="fn">_setup</span>(self):
@@ -595,7 +595,7 @@ return resp.json()
   },
   "activities": {
     title:"Activities", color:"var(--c-exec)",
-    file:"src/raavan/integrations/runtime/restate/activities.py",
+    file:"src/ravi/integrations/runtime/restate/activities.py",
     summary:"All side-effect work that workflows offload via ctx.run(). Each function is journaled — Restate records the output on first call so retries and replays skip re-execution.",
     why:"Separates replay-safe workflow orchestration from impure work (model calls, tool execution, Redis writes, event publishing). Crash-safe via journal replay.",
     receives:["thread_id, model name, tool schemas, arguments","Persistence payloads (messages, tool results)","Adapter step definitions for pipeline execution"],
@@ -622,13 +622,13 @@ result = <span class="kw">await</span> ctx.<span class="fn">run</span>(
   },
   "tool-policy": {
     title:"ToolPolicy", color:"var(--c-ctrl)",
-    file:"src/raavan/integrations/runtime/restate/policies.py",
+    file:"src/ravi/integrations/runtime/restate/policies.py",
     summary:"Dataclass holding execution governance for a tool: timeout, retry limit, whether approval is required, whether it's a human-input gate, and idempotency expectations.",
     why:"Keeps execution rules out of workflow code and tool business logic. AgentWorkflow consults the policy before executing any tool — trust decisions are centralised.",
     receives:["tool name via get_policy(tool_name)","BaseTool instance via derive_policy_from_tool(tool)"],
     sends:["ToolPolicy(timeout, retries, requires_approval, is_hitl_input, idempotent)"],
     methods:["ToolPolicy — dataclass","TOOL_POLICIES — registry dict","derive_policy_from_tool(tool) → ToolPolicy","get_policy(tool_name) → ToolPolicy"],
-    code:`<span class="kw">from</span> raavan.integrations.runtime.restate.policies <span class="kw">import</span> <span class="cl">ToolPolicy</span>, get_policy
+    code:`<span class="kw">from</span> ravi.integrations.runtime.restate.policies <span class="kw">import</span> <span class="cl">ToolPolicy</span>, get_policy
 
 <span class="cm"># Derives from BaseTool.risk attribute</span>
 policy = <span class="fn">get_policy</span>(<span class="st">"send_email"</span>)
@@ -644,7 +644,7 @@ TOOL_POLICIES[<span class="st">"my_critical_tool"</span>] = <span class="cl">Too
   },
   "promise-gate": {
     title:"Promise Gate", color:"var(--c-ctrl)",
-    file:"src/raavan/integrations/runtime/restate/workflows.py",
+    file:"src/ravi/integrations/runtime/restate/workflows.py",
     summary:"Durable wait state created by ctx.promise(name).value() inside a workflow. The workflow suspends — no thread, no memory, no worker resources — until an external resolver delivers the value.",
     why:"Lets an agent pause for human approval or input without polling, spinning, or holding expensive resources. Restate stores the suspension; the workflow resumes exactly where it left off.",
     receives:["Promise names: approval-{request_id} or human-{request_id}","ctx.rand.uuid4() for deterministic, replay-safe IDs"],
@@ -665,7 +665,7 @@ decision = <span class="kw">await</span> ctx.<span class="fn">promise</span>(<sp
   },
   "promise-resolver": {
     title:"Promise Resolver", color:"var(--c-ctrl)",
-    file:"src/raavan/integrations/runtime/restate/client.py",
+    file:"src/ravi/integrations/runtime/restate/client.py",
     summary:"The external handoff mechanism. resolve_promise() makes an HTTP call to Restate that fulfils a named promise, waking the workflow at its exact suspension point.",
     why:"Bridges an out-of-band HITL response (user clicking Approve) back into the durable workflow. Full workflow state is preserved by Restate.",
     receives:["workflow_id, promise_name, value from an external caller","Approval or human-input decision payload"],

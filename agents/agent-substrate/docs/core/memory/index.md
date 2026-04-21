@@ -36,8 +36,8 @@ graph TB
 The simplest choice: a Python list in RAM. Returns instantly. Use it for scripts, notebooks, and unit tests where crash recovery is not needed.
 
 ```python
-from raavan.core.memory.unbounded_memory import UnboundedMemory
-from raavan.core.messages import SystemMessage, UserMessage
+from ravi.core.memory.unbounded_memory import UnboundedMemory
+from ravi.core.messages import SystemMessage, UserMessage
 
 mem = UnboundedMemory()
 
@@ -59,7 +59,7 @@ await mem.clear()
 Conversation history lives in Redis with a TTL. Survives process restarts as long as the TTL has not expired. All methods are async — always `await` them.
 
 ```python
-from raavan.integrations.memory.redis_memory import RedisMemory
+from ravi.integrations.memory.redis_memory import RedisMemory
 
 mem = RedisMemory(
     session_id="conv-abc-123",
@@ -114,9 +114,9 @@ sequenceDiagram
 ```
 
 ```python
-from raavan.core.memory.session_manager import SessionManager
-from raavan.integrations.memory.redis_memory import RedisMemory
-from raavan.integrations.memory.postgres_memory import PostgresMemory
+from ravi.core.memory.session_manager import SessionManager
+from ravi.integrations.memory.redis_memory import RedisMemory
+from ravi.integrations.memory.postgres_memory import PostgresMemory
 
 sm = SessionManager(
     redis=RedisMemory(session_id="mgr", redis_url=REDIS_URL),
@@ -165,8 +165,8 @@ flowchart LR
 
 | File | What it owns |
 |---|---|
-| [`core/memory/base_memory.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/memory/base_memory.py) | `BaseMemory` ABC |
-| [`core/memory/unbounded_memory.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/memory/unbounded_memory.py) | `UnboundedMemory` — in-process list |
-| [`core/memory/session_manager.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/memory/session_manager.py) | `SessionManager`, `SessionState`, `SessionStatus` |
-| [`integrations/memory/redis_memory.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/memory/redis_memory.py) | `RedisMemory` — hot tier |
-| [`integrations/memory/postgres_memory.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/integrations/memory/postgres_memory.py) | `PostgresMemory` — cold tier |
+| [`core/memory/base_memory.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/memory/base_memory.py) | `BaseMemory` ABC |
+| [`core/memory/unbounded_memory.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/memory/unbounded_memory.py) | `UnboundedMemory` — in-process list |
+| [`core/memory/session_manager.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/memory/session_manager.py) | `SessionManager`, `SessionState`, `SessionStatus` |
+| [`integrations/memory/redis_memory.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/memory/redis_memory.py) | `RedisMemory` — hot tier |
+| [`integrations/memory/postgres_memory.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/memory/postgres_memory.py) | `PostgresMemory` — cold tier |

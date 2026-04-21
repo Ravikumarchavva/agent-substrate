@@ -1,6 +1,6 @@
 # Agent Lifecycle
 
-Raavan’s default execution model is the ReAct loop: Think → Act → Observe.
+Ravi’s default execution model is the ReAct loop: Think → Act → Observe.
 
 ## Loop phases
 

@@ -26,37 +26,37 @@ resources:
   - ingress.yaml
 
 images:
-  - name: ghcr.io/Ravikumarchavva/raavan/gateway-bff
+  - name: ghcr.io/Ravikumarchavva/ravi/gateway-bff
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/identity-auth
+  - name: ghcr.io/Ravikumarchavva/ravi/identity-auth
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/policy-authorization
+  - name: ghcr.io/Ravikumarchavva/ravi/policy-authorization
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/conversation
+  - name: ghcr.io/Ravikumarchavva/ravi/conversation
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/job-controller
+  - name: ghcr.io/Ravikumarchavva/ravi/job-controller
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/agent-runtime
+  - name: ghcr.io/Ravikumarchavva/ravi/agent-runtime
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/tool-executor
+  - name: ghcr.io/Ravikumarchavva/ravi/tool-executor
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/human-gate
+  - name: ghcr.io/Ravikumarchavva/ravi/human-gate
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/live-stream
+  - name: ghcr.io/Ravikumarchavva/ravi/live-stream
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/file-store
+  - name: ghcr.io/Ravikumarchavva/ravi/file-store
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/raavan/admin
+  - name: ghcr.io/Ravikumarchavva/ravi/admin
     newName: agent-microservices-kind
     newTag: local
 
@@ -117,77 +117,77 @@ patches:
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.gateway.app:app", "--host", "0.0.0.0", "--port", "8001"]
+        value: ["uvicorn", "ravi.services.gateway.app:app", "--host", "0.0.0.0", "--port", "8001"]
   - target:
       kind: Deployment
       name: identity-auth
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.identity.app:app", "--host", "0.0.0.0", "--port", "8010"]
+        value: ["uvicorn", "ravi.services.identity.app:app", "--host", "0.0.0.0", "--port", "8010"]
   - target:
       kind: Deployment
       name: policy-authorization
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.policy.app:app", "--host", "0.0.0.0", "--port", "8011"]
+        value: ["uvicorn", "ravi.services.policy.app:app", "--host", "0.0.0.0", "--port", "8011"]
   - target:
       kind: Deployment
       name: conversation
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.conversation.app:app", "--host", "0.0.0.0", "--port", "8012"]
+        value: ["uvicorn", "ravi.services.conversation.app:app", "--host", "0.0.0.0", "--port", "8012"]
   - target:
       kind: Deployment
       name: job-controller
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.job_controller.app:app", "--host", "0.0.0.0", "--port", "8013"]
+        value: ["uvicorn", "ravi.services.job_controller.app:app", "--host", "0.0.0.0", "--port", "8013"]
   - target:
       kind: Deployment
       name: agent-runtime
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.agent_runtime.app:app", "--host", "0.0.0.0", "--port", "8014"]
+        value: ["uvicorn", "ravi.services.agent_runtime.app:app", "--host", "0.0.0.0", "--port", "8014"]
   - target:
       kind: Deployment
       name: tool-executor
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.tool_executor.app:app", "--host", "0.0.0.0", "--port", "8015"]
+        value: ["uvicorn", "ravi.services.tool_executor.app:app", "--host", "0.0.0.0", "--port", "8015"]
   - target:
       kind: Deployment
       name: human-gate
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.human_gate.app:app", "--host", "0.0.0.0", "--port", "8016"]
+        value: ["uvicorn", "ravi.services.human_gate.app:app", "--host", "0.0.0.0", "--port", "8016"]
   - target:
       kind: Deployment
       name: live-stream
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.live_stream.app:app", "--host", "0.0.0.0", "--port", "8017"]
+        value: ["uvicorn", "ravi.services.live_stream.app:app", "--host", "0.0.0.0", "--port", "8017"]
   - target:
       kind: Deployment
       name: file-store
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.file_store.app:app", "--host", "0.0.0.0", "--port", "8018"]
+        value: ["uvicorn", "ravi.services.file_store.app:app", "--host", "0.0.0.0", "--port", "8018"]
   - target:
       kind: Deployment
       name: admin
     patch: |
       - op: add
         path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "raavan.services.admin.app:app", "--host", "0.0.0.0", "--port", "8019"]
+        value: ["uvicorn", "ravi.services.admin.app:app", "--host", "0.0.0.0", "--port", "8019"]
 
   # ── Override CORS for Kind (localhost access via nginx-ingress on port 80) ──
   - target:

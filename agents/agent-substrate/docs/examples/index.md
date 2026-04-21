@@ -1,6 +1,6 @@
 # Examples
 
-Raavan ships with a notebook-heavy example strategy. The fastest way to learn the framework after the quickstart is to open one of the notebooks and run it end-to-end.
+Ravi ships with a notebook-heavy example strategy. The fastest way to learn the framework after the quickstart is to open one of the notebooks and run it end-to-end.
 
 ## Recommended progression
 
@@ -26,7 +26,7 @@ Raavan ships with a notebook-heavy example strategy. The fastest way to learn th
 
 ## Open on GitHub
 
-- [All examples in the repository](https://github.com/Ravikumarchavva/raavan/tree/main/examples)
+- [All examples in the repository](https://github.com/Ravikumarchavva/ravi/tree/main/examples)
 
 ## How to use examples with the docs
 

@@ -15,8 +15,8 @@ Stack: Python 3.13, `uv` (never pip), SQLAlchemy 2 async, asyncpg, OpenTelemetry
 
 ## Repository Structure (top-level)
 ```
-raavan/
-├── src/raavan/          ← Python package
+ravi/
+├── src/ravi/          ← Python package
 │   ├── core/            ← Framework primitives (agents, memory abstractions, tools base, context, messages, guardrails)
 │   │                        Includes: core/llm/ (BaseModelClient ABC — text + audio + vision)
 │   │                        Includes: core/agents/ (_tool_execution, _guardrail_runner, _stream_handler)
@@ -65,7 +65,7 @@ Organized by GoF category:
 |---|---|---|
 | **Factory Method** | `core/storage/factory.py` | Use `create_file_store(settings)` — never import concrete store. |
 | **Registry** | `core/tools/catalog.py` | Register via `catalog.register_tool(...)`. Search is global. |
-| **Convention Discovery** | `catalog/_scanner.py` | Walks `catalog/tools/`; anchors on **last** `raavan` in path. |
+| **Convention Discovery** | `catalog/_scanner.py` | Walks `catalog/tools/`; anchors on **last** `ravi` in path. |
 
 ### Structural (Object Composition)
 
@@ -95,7 +95,7 @@ Organized by GoF category:
 
 ### Tool creation — always subclass `BaseTool`
 ```python
-from raavan.core.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
+from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
 
 class EmailSenderTool(BaseTool):
     risk = ToolRisk.CRITICAL           # ← Strategy: class-level
@@ -168,15 +168,15 @@ Never add inline comments after integer values.
 
 ## Non-obvious Rules
 | **LLM abstract base** | `core/llm/base_client.py` | `BaseModelClient` ABC lives in `core/` — no external deps. Audio methods (`transcribe`, `stream_tts`, `create_s2s_session`, `s2s_ws_url`) are optional (raise `NotImplementedError`). |
-| **LLM concrete impl** | `integrations/llm/openai/openai_client.py` | `OpenAIClient` handles text + vision + image generation + STT + TTS + Realtime S2S. Import: `from raavan.integrations.llm.openai.openai_client import OpenAIClient` |
+| **LLM concrete impl** | `integrations/llm/openai/openai_client.py` | `OpenAIClient` handles text + vision + image generation + STT + TTS + Realtime S2S. Import: `from ravi.integrations.llm.openai.openai_client import OpenAIClient` |
 | **Audio in routes** | `server/routes/audio.py` | Use `request.app.state.model_client` (not `audio_client`). Check `model_client.supports_s2s` before S2S calls. |
 | **Image input** | `core/messages/_types.py` | Use `ImageContent(url=...)`, `ImageContent(file_id=...)`, or `ImageContent(data=bytes)` in `UserMessage.content`. PIL `Image.Image` also accepted. |
 | **Image generation** | `integrations/llm/openai/openai_client.py` | `await client.generate_image(prompt, model="dall-e-3")` — check `client.supports_image_generation` first. Returns `list[str]` (URLs or data URLs). |
 | **Memory backends** | `integrations/memory/` | `RedisMemory`, `PostgresMemory` — concrete SDK-backed stores. |
 | **S3 storage** | `integrations/storage/s3.py` | `S3FileStore` — concrete aiobotocore adapter. |
-| **Skills infra** | `catalog/_skill_manager.py`, `_skill_loader.py`, `_skill_models.py` | Import via `from raavan.catalog import SkillManager` |
+| **Skills infra** | `catalog/_skill_manager.py`, `_skill_loader.py`, `_skill_models.py` | Import via `from ravi.catalog import SkillManager` |
 | **Logging** | `shared/observability/logger.py` | `setup_logging()` — structured JSON + pretty formatter. |
 - Event factory functions only — never build event dicts manually.
 - `server/security/` delegates to `shared/auth/` (thin wrapper binding settings).
 - DB session: use `get_db_session` from `shared.database.dependency` — never local `_get_db`.
-- Canonical enum re-exports: `from raavan.core import ToolRisk, RunStatus`.
+- Canonical enum re-exports: `from ravi.core import ToolRisk, RunStatus`.

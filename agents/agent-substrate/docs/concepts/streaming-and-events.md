@@ -1,6 +1,6 @@
 # Streaming And Events
 
-Raavan streams runtime progress over SSE so the frontend can update in real time.
+Ravi streams runtime progress over SSE so the frontend can update in real time.
 
 ## Typical event flow
 

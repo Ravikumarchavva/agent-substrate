@@ -1,6 +1,6 @@
 # Messages
 
-Every interaction in Raavan is a typed message. Messages form the conversation history that the LLM sees, the tool calls it makes, and the results it receives back.
+Every interaction in Ravi is a typed message. Messages form the conversation history that the LLM sees, the tool calls it makes, and the results it receives back.
 
 ---
 
@@ -54,7 +54,7 @@ sequenceDiagram
 ### SystemMessage
 
 ```python
-from raavan.core.messages import SystemMessage
+from ravi.core.messages import SystemMessage
 
 msg = SystemMessage("You are a precise research assistant.")
 # content is a plain string
@@ -63,7 +63,7 @@ msg = SystemMessage("You are a precise research assistant.")
 ### UserMessage — text and multi-modal
 
 ```python
-from raavan.core.messages import UserMessage, ImageContent, AudioContent
+from ravi.core.messages import UserMessage, ImageContent, AudioContent
 
 # Text only
 msg = UserMessage(content=["What year is it?"])
@@ -99,7 +99,7 @@ for tc in assistant_msg.tool_calls:
 ### ToolCallMessage + ToolExecutionResultMessage
 
 ```python
-from raavan.core.messages import ToolCallMessage, ToolExecutionResultMessage
+from ravi.core.messages import ToolCallMessage, ToolExecutionResultMessage
 
 # Reading a tool call
 call = ToolCallMessage(id="call-123", name="web_search", arguments={"query": "LLMs"})
@@ -154,7 +154,7 @@ All messages support `to_dict()` / `from_dict()` for storage and transport.
 data = msg.to_dict()    # {"role": "user", "content": [...]}
 
 # Deserialise
-from raavan.core.messages import UserMessage
+from ravi.core.messages import UserMessage
 msg = UserMessage.from_dict(data)
 ```
 
@@ -172,7 +172,7 @@ When an agent streams (`run_stream()`), it yields these chunk types:
 | `StructuredOutputChunk` | `"structured_output"` | `.result.parsed` — validated Pydantic model |
 
 ```python
-from raavan.core.messages import (
+from ravi.core.messages import (
     TextDeltaChunk, ReasoningDeltaChunk,
     CompletionChunk, StructuredOutputChunk,
 )
@@ -195,5 +195,5 @@ async for chunk in agent.run_stream("..."):
 
 | File | What it owns |
 |---|---|
-| [`core/messages/_types.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/messages/_types.py) | `ImageContent`, `AudioContent`, `VideoContent`, `MediaType`, all `StreamChunk` subclasses |
-| [`core/messages/client_messages.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/messages/client_messages.py) | `SystemMessage`, `UserMessage`, `AssistantMessage`, `ToolCallMessage`, `ToolExecutionResultMessage` |
+| [`core/messages/_types.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/messages/_types.py) | `ImageContent`, `AudioContent`, `VideoContent`, `MediaType`, all `StreamChunk` subclasses |
+| [`core/messages/client_messages.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/messages/client_messages.py) | `SystemMessage`, `UserMessage`, `AssistantMessage`, `ToolCallMessage`, `ToolExecutionResultMessage` |

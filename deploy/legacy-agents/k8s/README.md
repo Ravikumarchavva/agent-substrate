@@ -1,4 +1,4 @@
-﻿# Kubernetes Manifests
+# Kubernetes Manifests
 
 Kubernetes deployment for the Agent Framework microservices architecture.
 

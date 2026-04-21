@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from raavan.core.tools.base_tool import BaseTool, ToolResult
-from raavan.core.tools.catalog import CapabilityRegistry
-from raavan.catalog.tools.capability_search.tool import CapabilitySearchTool
+from ravi.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.tools.catalog import CapabilityRegistry
+from ravi.catalog.tools.capability_search.tool import CapabilitySearchTool
 
 
 # ---------------------------------------------------------------------------

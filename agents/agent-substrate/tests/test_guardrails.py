@@ -1,7 +1,7 @@
 """Test suite for the guardrail system."""
 
 import asyncio
-from raavan.core.guardrails import (
+from ravi.core.guardrails import (
     BaseGuardrail,
     GuardrailContext,
     GuardrailResult,
@@ -13,7 +13,7 @@ from raavan.core.guardrails import (
     MaxTokenGuardrail,
     ToolCallValidationGuardrail,
 )
-from raavan.exceptions import GuardrailTripwireError
+from ravi.exceptions import GuardrailTripwireError
 
 
 async def test_content_filter():

@@ -37,12 +37,12 @@ We adapt Pydantic AI's pattern but keep it much simpler (3 providers, not 15+):
 ### New Files
 
 ```
-src/raavan/core/llm/
+src/ravi/core/llm/
 ├── base_client.py          ← existing (unchanged)
 ├── models.py               ← NEW: ModelProfile + MODEL_REGISTRY
 └── provider.py             ← NEW: ProviderConfig dataclass
 
-src/raavan/integrations/llm/
+src/ravi/integrations/llm/
 ├── factory.py              ← MODIFIED: accept ProviderConfig
 ├── openai/openai_client.py ← MODIFIED: accept base_url
 ├── anthropic/              ← unchanged
@@ -53,7 +53,7 @@ src/raavan/integrations/llm/
 
 ## Phase A: ModelProfile — Model Metadata Registry
 
-**File:** `src/raavan/core/llm/models.py`
+**File:** `src/ravi/core/llm/models.py`
 
 ```python
 @dataclass(frozen=True)
@@ -95,7 +95,7 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float
 
 ## Phase B: ProviderConfig
 
-**File:** `src/raavan/core/llm/provider.py`
+**File:** `src/ravi/core/llm/provider.py`
 
 ```python
 @dataclass

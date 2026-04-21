@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from raavan.core.messages.encoders.openai import encode_tools, ensure_strict_tool_schema
+from ravi.core.messages.encoders.openai import encode_tools, ensure_strict_tool_schema
 from google.genai import types as genai_types
-from raavan.integrations.llm.anthropic.anthropic_client import AnthropicClient
-from raavan.integrations.llm.gemini.gemini_client import GeminiClient
-from raavan.integrations.mcp.app_tools import JsonExplorerTool
-from raavan.integrations.llm.openai.openai_chat_client import (
+from ravi.integrations.llm.anthropic.anthropic_client import AnthropicClient
+from ravi.integrations.llm.gemini.gemini_client import GeminiClient
+from ravi.integrations.mcp.app_tools import JsonExplorerTool
+from ravi.integrations.llm.openai.openai_chat_client import (
     OpenAIChatCompletionClient,
 )
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 
 def _sample_schema() -> dict[str, object]:

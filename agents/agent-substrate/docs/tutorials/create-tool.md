@@ -3,7 +3,7 @@
 Every built-in and custom tool follows the same contract: subclass `BaseTool`, declare `name`, `description`, and `input_schema`, then implement `execute()`.
 
 ```python
-from raavan.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.tools.base_tool import BaseTool, ToolResult
 
 
 class EchoTool(BaseTool):

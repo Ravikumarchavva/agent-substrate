@@ -83,11 +83,11 @@ Restate restarts workflow → replays steps 1-2 from journal (no re-execution)
 
 ### 1. Restate Agent Workflow
 
-New module: `src/raavan/distributed/workflow.py`
+New module: `src/ravi/distributed/workflow.py`
 
 ```python
 import restate
-from raavan.distributed.activities import do_llm_call, do_tool_exec
+from ravi.distributed.activities import do_llm_call, do_tool_exec
 
 agent_workflow = restate.Workflow("AgentWorkflow")
 
@@ -215,7 +215,7 @@ TOOL_POLICIES = {
 
 ### 3. NATS Streaming Layer
 
-New module: `src/raavan/distributed/streaming.py`
+New module: `src/ravi/distributed/streaming.py`
 
 ```python
 import nats
@@ -631,7 +631,7 @@ nats-py = ">=2.9"        # NATS client with JetStream
 ## New Directory Structure
 
 ```
-src/raavan/distributed/         ← New package
+src/ravi/distributed/         ← New package
 ├── __init__.py
 ├── workflow.py                 ← Restate AgentWorkflow
 ├── activities.py               ← do_llm_call, do_tool_exec, restore_memory

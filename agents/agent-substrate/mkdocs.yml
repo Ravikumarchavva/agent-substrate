@@ -1,8 +1,8 @@
-site_name: Raavan Agent Framework
+site_name: Ravi Agent Framework
 site_description: Production-ready Python framework for building autonomous AI agents with tool calling, memory management, and durable execution.
-site_url: https://ravikumarchavva.github.io/raavan
-repo_url: https://github.com/Ravikumarchavva/raavan
-repo_name: Ravikumarchavva/raavan
+site_url: https://ravikumarchavva.github.io/ravi
+repo_url: https://github.com/Ravikumarchavva/ravi
+repo_name: Ravikumarchavva/ravi
 edit_uri: edit/main/docs/
 exclude_docs: |
   includes/
@@ -12,8 +12,8 @@ copyright: Copyright &copy; 2025–2026 Ravikumar Chavva
 # ── Theme ────────────────────────────────────────────────────────────────────
 theme:
   name: material
-  logo: public/brand/raavan-mark.svg
-  favicon: public/brand/raavan-mark.svg
+  logo: public/brand/ravi-mark.svg
+  favicon: public/brand/ravi-mark.svg
   palette:
     # System-preference aware
     - media: "(prefers-color-scheme: dark)"
@@ -96,7 +96,7 @@ markdown_extensions:
       normalize_issue_symbols: true
       repo_url_shorthand: true
       user: Ravikumarchavva
-      repo: raavan
+      repo: ravi
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.snippets:
@@ -128,9 +128,9 @@ extra:
     default: latest
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/Ravikumarchavva/raavan
+      link: https://github.com/Ravikumarchavva/ravi
     - icon: fontawesome/brands/python
-      link: https://pypi.org/project/raavan/
+      link: https://pypi.org/project/ravi/
   analytics:
     provider: google
     property: !ENV [GOOGLE_ANALYTICS_ID, ""]
@@ -197,6 +197,6 @@ nav:
   - Archive: archive/index.md
 
   - GitHub:
-    - Repository: https://github.com/Ravikumarchavva/raavan
-    - Notebooks: https://github.com/Ravikumarchavva/raavan/tree/main/examples
-    - Frontend UI: https://github.com/Ravikumarchavva/raavan-ui
+    - Repository: https://github.com/Ravikumarchavva/ravi
+    - Notebooks: https://github.com/Ravikumarchavva/ravi/tree/main/examples
+    - Frontend UI: https://github.com/Ravikumarchavva/ravi-ui

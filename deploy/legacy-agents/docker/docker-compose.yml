@@ -63,7 +63,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-http://host.docker.internal:3001}
-      OPENROUTER_APP_NAME: ${OPENROUTER_APP_NAME:-Raavan UI}
+      OPENROUTER_APP_NAME: ${OPENROUTER_APP_NAME:-Ravi UI}
       CHAT_MODEL: ${CHAT_MODEL:-groq/llama-3.3-70b-versatile}
       TTS_MODEL: ${TTS_MODEL:-google/gemini-3.1-flash-tts-preview}
       TTS_VOICE: ${TTS_VOICE:-Kore}

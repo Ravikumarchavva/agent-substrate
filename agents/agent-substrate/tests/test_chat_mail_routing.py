@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from raavan.server.routes.chat import _configure_workspace_mail_request
+from ravi.server.routes.chat import _configure_workspace_mail_request
 
 
 class _Schema:

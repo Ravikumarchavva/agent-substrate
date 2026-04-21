@@ -3,7 +3,7 @@ hide:
     - navigation
     - toc
 ---
-# Raavan Agent Framework
+# Ravi Agent Framework
 
 Production-ready infrastructure for building agent systems that can reason, call tools, stream progress, wait for humans, and resume safely after failures.
 
@@ -68,8 +68,8 @@ Production-ready infrastructure for building agent systems that can reason, call
 === "uv (recommended)"
 
     ```bash
-    git clone https://github.com/Ravikumarchavva/raavan.git
-    cd raavan
+    git clone https://github.com/Ravikumarchavva/ravi.git
+    cd ravi
     uv sync
     ```
 
@@ -92,9 +92,9 @@ Production-ready infrastructure for building agent systems that can reason, call
 
 ```python
 import asyncio
-from raavan.core.agents.react_agent import ReActAgent
-from raavan.core.memory import UnboundedMemory
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.core.agents.react_agent import ReActAgent
+from ravi.core.memory import UnboundedMemory
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 async def main():
     client = OpenAIClient(api_key="sk-...", model="gpt-4o")
@@ -141,6 +141,6 @@ graph LR
 
 ## Notebooks
 
-Explore the [`examples/`](https://github.com/Ravikumarchavva/raavan/tree/main/examples) folder for 20 Jupyter notebooks covering everything from basic agents to Kubernetes deployments.
+Explore the [`examples/`](https://github.com/Ravikumarchavva/ravi/tree/main/examples) folder for 20 Jupyter notebooks covering everything from basic agents to Kubernetes deployments.
 
 For deeper historical design notes, planning documents, and the interactive legacy explorer, see [Archive](archive/index.md).

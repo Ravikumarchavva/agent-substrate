@@ -1,6 +1,6 @@
 # Microservices
 
-Raavan also supports a microservices direction with separate services for gateway, identity, conversation, job control, runtime execution, human gating, streaming, file storage, and admin workflows.
+Ravi also supports a microservices direction with separate services for gateway, identity, conversation, job control, runtime execution, human gating, streaming, file storage, and admin workflows.
 
 ## Use cases
 

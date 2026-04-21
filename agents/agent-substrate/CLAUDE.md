@@ -9,8 +9,8 @@ Trust it as the primary reference; only search the codebase if something here is
 
 Python async AI-agent framework with **two deployment modes**:
 
-1. **Monolith** — single FastAPI server at `src/raavan/server/`
-2. **Microservices** — 12 independent FastAPI services under `src/raavan/services/`
+1. **Monolith** — single FastAPI server at `src/ravi/server/`
+2. **Microservices** — 12 independent FastAPI services under `src/ravi/services/`
 
 Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 18, Redis 7, OpenTelemetry → Tempo.
 
@@ -31,7 +31,7 @@ make infra-up
 docker compose -f deployment/docker/docker-compose.yml --profile mcp up -d mcp-server   # → localhost:9000/sse
 
 # Start monolith backend
-uv run uvicorn raavan.server.app:app --port 8000 --reload
+uv run uvicorn ravi.server.app:app --port 8000 --reload
 
 # Run tests
 uv run pytest
@@ -46,8 +46,8 @@ uv run ruff format .
 ## Full Directory Map
 
 ```
-raavan/                            ← repo root
-├── src/raavan/                    ← Python package (all application code)
+ravi/                            ← repo root
+├── src/ravi/                    ← Python package (all application code)
 ├── deployment/                    ← All deployment artefacts
 │   ├── docker/                    ← Dockerfiles + Compose files
 │   │   ├── backend.Dockerfile     ← Production backend image
@@ -67,7 +67,7 @@ raavan/                            ← repo root
 ```
 
 ```
-src/raavan/
+src/ravi/
 ├── core/                      ← Framework primitives (pure engine, no external deps)
 │   ├── agents/                ← BaseAgent, ReActAgent (+ _tool_execution, _guardrail_runner, _stream_handler), OrchestratorAgent, FlowAgent
 │   ├── memory/                ← BaseMemory, UnboundedMemory, SlidingWindowMemory, SessionManager
@@ -101,7 +101,7 @@ src/raavan/
 │   ├── skills/                ← SKILL.md prompt-skill packages (debugging, code_review, …)
 │   ├── connectors/            ← External service connectors (email, postgres_query, …)
 │   ├── _chain_runtime.py      ← ChainRuntime + AdapterProxy (Proxy pattern)
-│   ├── _scanner.py            ← Convention discovery scanner (anchors on last raavan in path)
+│   ├── _scanner.py            ← Convention discovery scanner (anchors on last ravi in path)
 │   ├── _data_ref.py           ← DataRef / DataRefStore
 │   ├── _pipeline.py           ← PipelineDef, PipelineEngine, PipelineStore
 │   ├── _skill_loader.py       ← SkillLoader (filesystem scanner + YAML parser)
@@ -152,7 +152,7 @@ src/raavan/
 │   │   └── types.py           ← Event factories: workflow_started, workflow_completed, …
 │   ├── auth/                  ← Canonical JWT + auth middleware (AuthClaims, verify_token, get_current_user)
 │   ├── database/              ← Shared session factory + get_db_session dependency
-│   ├── observability/         ← OpenTelemetry setup + telemetry (logger instance re-exported here; setup_logging() lives in raavan/logger.py)
+│   ├── observability/         ← OpenTelemetry setup + telemetry (logger instance re-exported here; setup_logging() lives in ravi/logger.py)
 │   └── tasks/                 ← In-memory TaskStore singleton
 │
 ├── configs/settings.py        ← Pydantic Settings (reads from .env)
@@ -199,7 +199,7 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 ### Tool Creation — always subclass `BaseTool`
 
 ```python
-from raavan.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.tools.base_tool import BaseTool, ToolResult
 
 class MyTool(BaseTool):
     def __init__(self):
@@ -219,16 +219,16 @@ Register in `server/app.py` lifespan under `app.state.tools`.
 
 ```python
 # ✅ Correct
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 # Abstract base is now in core:
-from raavan.core.llm.base_client import BaseModelClient
+from ravi.core.llm.base_client import BaseModelClient
 ```
 
 ### MCP Tools — load at runtime via MCPClient
 
 ```python
-from raavan.integrations.mcp import MCPClient
+from ravi.integrations.mcp import MCPClient
 
 client = MCPClient(url="http://localhost:9000/sse")
 tools = await client.discover_tools()   # returns list[MCPTool]
@@ -239,8 +239,8 @@ There is **no** `integrations.mcp.loader` module. Do not import from it.
 ### Shared Event Bus — always use factory functions
 
 ```python
-from raavan.shared.events.bus import EventBus
-from raavan.shared.events.types import workflow_started, workflow_failed
+from ravi.shared.events.bus import EventBus
+from ravi.shared.events.types import workflow_started, workflow_failed
 
 bus: EventBus = app.state.bus
 await bus.publish(workflow_started(job_id=job.id, run_id=run.id))
@@ -251,7 +251,7 @@ Never construct event dicts manually — always use the factory functions from `
 ### SSE Event Bus (monolith only)
 
 ```python
-from raavan.server.sse.bridge import WebHITLBridge
+from ravi.server.sse.bridge import WebHITLBridge
 
 bridge: WebHITLBridge = request.app.state.bridge
 await bridge.put_event({"type": "my_event", "data": {...}})
@@ -267,7 +267,7 @@ await bridge.put_event({"type": "my_event", "data": {...}})
 ## Memory — `RedisMemory`
 
 ```python
-from raavan.core.memory import RedisMemory
+from ravi.core.memory import RedisMemory
 
 mem = RedisMemory(session_id="conv-abc-123", redis_url=REDIS_URL)
 await mem.connect()
@@ -301,7 +301,7 @@ await mem.disconnect()       # ← correct method name
 ### `ImageContent` — image inputs without loading into PIL
 
 ```python
-from raavan.core.messages import ImageContent
+from ravi.core.messages import ImageContent
 
 # URL (public or presigned)
 ImageContent(url="https://example.com/photo.jpg", detail="high")
@@ -401,7 +401,7 @@ All services send OTLP traces to `http://tempo.af-observability.svc.cluster.loca
 Set via `OTLP_ENDPOINT` env var (injected by kustomize patch for Kind).
 
 ### Logs
-- Backend services output structured JSON via `raavan/logger.py` → Promtail scrapes stdout
+- Backend services output structured JSON via `ravi/logger.py` → Promtail scrapes stdout
 - Frontend sends warn/error logs to `/api/logs` → structured JSON stdout → Promtail
 - Query in Grafana via Loki: `{namespace=~"af-.*"}`
 
@@ -430,7 +430,7 @@ Measures agent quality via LLM-as-judge grading.
 | `criteria.py` | `CORRECTNESS`, `HELPFULNESS`, `SAFETY`, `RELEVANCE` | Built-in grading criteria |
 
 ```python
-from raavan.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+from ravi.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
 
 runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
 report = await runner.run(dataset)
@@ -459,7 +459,7 @@ Tests pod health, endpoints, chat flow, and observability stack.
 |---|---|---|
 | **Factory Method** | `core/storage/factory.py` | Use `create_file_store(settings)` — never import concrete store classes directly. |
 | **Registry** | `core/tools/catalog.py` | Register tools via `catalog.register_tool(tool, category=..., tags=[...])`. Search is global. |
-| **Convention Discovery** | `catalog/_scanner.py` | Walks `catalog/tools/`; anchors on **last** `raavan` in path (Windows fix). |
+| **Convention Discovery** | `catalog/_scanner.py` | Walks `catalog/tools/`; anchors on **last** `ravi` in path (Windows fix). |
 
 ### Structural (Object Composition)
 
@@ -500,9 +500,9 @@ Tests pod health, endpoints, chat flow, and observability stack.
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **Snake_case** — files, modules, functions, variables
 - New DB models → `server/models/`; new schemas → `server/schemas.py` (monolith) or service-local `models.py` (microservices)
-- Built-in skills → `src/raavan/catalog/skills/<name>/SKILL.md` with YAML frontmatter
+- Built-in skills → `src/ravi/catalog/skills/<name>/SKILL.md` with YAML frontmatter
 - MCP SSE server source → `deployment/docker/mcp_server/server.py` (FastMCP 2.x, pinned)
-- Canonical enum re-exports live in `core/__init__.py` (e.g. `from raavan.core import ToolRisk, RunStatus`).
+- Canonical enum re-exports live in `core/__init__.py` (e.g. `from ravi.core import ToolRisk, RunStatus`).
 - **DB session dependency** — all microservice routes use `get_db_session` from `shared.database.dependency`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: no `@pytest.mark.asyncio` decorator needed. Write `async def test_*` directly.
 

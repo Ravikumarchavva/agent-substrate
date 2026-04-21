@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from raavan.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.tools.base_tool import BaseTool, ToolResult
 
 
 class EchoTool(BaseTool):

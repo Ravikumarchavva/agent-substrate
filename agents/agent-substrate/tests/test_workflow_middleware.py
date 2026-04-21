@@ -4,13 +4,13 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
-from raavan.core.execution.context import ExecutionContext
-from raavan.core.pipelines.middleware import (
+from ravi.core.execution.context import ExecutionContext
+from ravi.core.pipelines.middleware import (
     BaseWorkflowMiddleware,
     WorkflowMiddlewareContext,
     WorkflowRunnable,
 )
-from raavan.integrations.llm.openai.openai_client import _normalize_strict_json_schema
+from ravi.integrations.llm.openai.openai_client import _normalize_strict_json_schema
 
 
 class _RecordingWorkflowMiddleware(BaseWorkflowMiddleware):

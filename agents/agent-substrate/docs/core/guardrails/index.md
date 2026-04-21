@@ -57,7 +57,7 @@ flowchart LR
 Blocks 13 patterns: DAN prompts, role-override attempts, jailbreaks, "ignore previous instructions", etc.
 
 ```python
-from raavan.core.guardrails.prebuilt import PromptInjectionGuardrail
+from ravi.core.guardrails.prebuilt import PromptInjectionGuardrail
 
 guard = PromptInjectionGuardrail(
     tripwire=True,               # raise on detection
@@ -70,7 +70,7 @@ guard = PromptInjectionGuardrail(
 Detects email, US phone, SSN, credit card, and IP address by default. `pii_types=None` activates all patterns.
 
 ```python
-from raavan.core.guardrails.prebuilt import PIIDetectionGuardrail
+from ravi.core.guardrails.prebuilt import PIIDetectionGuardrail
 
 guard = PIIDetectionGuardrail(
     pii_types=["email", "credit_card"],  # None = all
@@ -84,8 +84,8 @@ guard = PIIDetectionGuardrail(
 Blocks messages matching regex patterns or keyword lists. Works at INPUT or OUTPUT.
 
 ```python
-from raavan.core.guardrails.prebuilt import ContentFilterGuardrail
-from raavan.core.guardrails.base_guardrail import GuardrailType
+from ravi.core.guardrails.prebuilt import ContentFilterGuardrail
+from ravi.core.guardrails.base_guardrail import GuardrailType
 
 # As output filter
 guard = ContentFilterGuardrail(
@@ -101,7 +101,7 @@ guard = ContentFilterGuardrail(
 Rejects input that's too long before it ever reaches the LLM. Uses `tiktoken` when available.
 
 ```python
-from raavan.core.guardrails.prebuilt import MaxTokenGuardrail
+from ravi.core.guardrails.prebuilt import MaxTokenGuardrail
 
 guard = MaxTokenGuardrail(
     max_tokens=4096,
@@ -115,7 +115,7 @@ guard = MaxTokenGuardrail(
 Checks which tools the LLM is allowed to call and validates argument patterns before execution.
 
 ```python
-from raavan.core.guardrails.prebuilt import ToolCallValidationGuardrail
+from ravi.core.guardrails.prebuilt import ToolCallValidationGuardrail
 
 guard = ToolCallValidationGuardrail(
     allowed_tools=["web_search", "code_interpreter"],  # None = all allowed
@@ -134,8 +134,8 @@ guard = ToolCallValidationGuardrail(
 Uses a second LLM call to evaluate the content. The judge must respond with `{"safe": bool, "reason": str}`.
 
 ```python
-from raavan.core.guardrails.prebuilt import LLMJudgeGuardrail
-from raavan.core.guardrails.base_guardrail import GuardrailType
+from ravi.core.guardrails.prebuilt import LLMJudgeGuardrail
+from ravi.core.guardrails.base_guardrail import GuardrailType
 
 guard = LLMJudgeGuardrail(
     model_client=client,
@@ -167,15 +167,15 @@ graph TB
 ```
 
 ```python
-from raavan.core.agents.react_agent import ReActAgent
-from raavan.core.guardrails.prebuilt import (
+from ravi.core.agents.react_agent import ReActAgent
+from ravi.core.guardrails.prebuilt import (
     PromptInjectionGuardrail,
     PIIDetectionGuardrail,
     MaxTokenGuardrail,
     ToolCallValidationGuardrail,
     ContentFilterGuardrail,
 )
-from raavan.core.guardrails.base_guardrail import GuardrailType
+from ravi.core.guardrails.base_guardrail import GuardrailType
 
 agent = ReActAgent(
     name="safe_agent",
@@ -205,7 +205,7 @@ agent = ReActAgent(
 Subclass `BaseGuardrail`, set `name` and `guardrail_type` at the class level, implement `check()`.
 
 ```python
-from raavan.core.guardrails.base_guardrail import (
+from ravi.core.guardrails.base_guardrail import (
     BaseGuardrail, GuardrailContext, GuardrailResult, GuardrailType
 )
 
@@ -234,6 +234,6 @@ class LengthGuardrail(BaseGuardrail):
 
 | File | What it owns |
 |---|---|
-| [`core/guardrails/base_guardrail.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/guardrails/base_guardrail.py) | `BaseGuardrail`, `GuardrailContext`, `GuardrailResult`, `GuardrailType` |
-| [`core/guardrails/prebuilt.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/guardrails/prebuilt.py) | All five prebuilt guardrails |
-| [`core/guardrails/runner.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/guardrails/runner.py) | Guardrail pipeline runner (used by agents internally) |
+| [`core/guardrails/base_guardrail.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/guardrails/base_guardrail.py) | `BaseGuardrail`, `GuardrailContext`, `GuardrailResult`, `GuardrailType` |
+| [`core/guardrails/prebuilt.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/guardrails/prebuilt.py) | All five prebuilt guardrails |
+| [`core/guardrails/runner.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/guardrails/runner.py) | Guardrail pipeline runner (used by agents internally) |

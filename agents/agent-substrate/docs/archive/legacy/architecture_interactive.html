@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Raavan Agent Framework — Interactive Architecture Explorer</title>
+<title>Ravi Agent Framework — Interactive Architecture Explorer</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -132,7 +132,7 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Inter',sans-serif;
 <div class="layout" id="layout">
   <div class="main">
     <div class="hdr">
-      <div class="hdr-title">🏗️ Raavan Agent Framework — Architecture Explorer</div>
+      <div class="hdr-title">🏗️ Ravi Agent Framework — Architecture Explorer</div>
       <div class="hdr-sub">Actor model · Deployment boundaries · Core internals</div>
       <div class="hdr-hint"><span class="pulse"></span>Click any component card to explore source files, API contracts, and implementation details</div>
     </div>
@@ -183,14 +183,14 @@ const ACTORS = {
     tags:[{l:'📬 SSE events', bg:'#0f2b4a', fg:'#38bdf8'},{l:'📤 POST /chat', bg:'#0f2e1a', fg:'#4ade80'}],
     desc:'The browser is a pure React client. It holds all chat state in useState/useReducer (no external store). It opens an EventSource to /api/chat which delivers streaming SSE tokens. When tool_approval_request arrives it renders a ToolApprovalCard; when human_input_request arrives it renders HumanInputCard. KanbanPanel is driven by task_list_created / task_updated events.',
     files:[
-      'raavan-ui/src/app/page.tsx — main state + SSE loop + layout',
-      'raavan-ui/src/app/layout.tsx — root layout + ThemeProvider',
-      'raavan-ui/src/components/MessageBubble.tsx — markdown, tool calls, tool results',
-      'raavan-ui/src/components/ToolApprovalCard.tsx — HITL approval UI',
-      'raavan-ui/src/components/HumanInputCard.tsx — ask_human prompt UI',
-      'raavan-ui/src/components/KanbanPanel.tsx — live Kanban from agent tasks',
-      'raavan-ui/src/components/AppPanel.tsx — MCP App widget host',
-      'raavan-ui/src/lib/api.ts — all API calls (never raw fetch in components)',
+      'ravi-ui/src/app/page.tsx — main state + SSE loop + layout',
+      'ravi-ui/src/app/layout.tsx — root layout + ThemeProvider',
+      'ravi-ui/src/components/MessageBubble.tsx — markdown, tool calls, tool results',
+      'ravi-ui/src/components/ToolApprovalCard.tsx — HITL approval UI',
+      'ravi-ui/src/components/HumanInputCard.tsx — ask_human prompt UI',
+      'ravi-ui/src/components/KanbanPanel.tsx — live Kanban from agent tasks',
+      'ravi-ui/src/components/AppPanel.tsx — MCP App widget host',
+      'ravi-ui/src/lib/api.ts — all API calls (never raw fetch in components)',
     ],
     receives:[
       'SSE: text_delta { content, partial }',
@@ -241,12 +241,12 @@ es.addEventListener(<span class="st">'tool_approval_request'</span>, (e) => {
     tags:[{l:'📬 browser req', bg:'#1e1a30', fg:'#a78bfa'},{l:'📤 proxy', bg:'#0f2b4a', fg:'#38bdf8'}],
     desc:'The BFF is a thin passthrough. chat/route.ts opens a fetch() to FastAPI /chat and pipes the raw response bytes—including SSE keep-alive frames—directly to the browser ReadableStream. No business logic lives here. respond/[requestId]/route.ts forwards HITL approval payloads to the backend.',
     files:[
-      'raavan-ui/src/app/api/chat/route.ts — SSE proxy to FastAPI',
-      'raavan-ui/src/app/api/chat/respond/[requestId]/route.ts — HITL bridge',
-      'raavan-ui/src/app/api/logs/route.ts — Loki log collector',
-      'raavan-ui/src/app/api/audio/transcribe/route.ts — STT proxy',
-      'raavan-ui/src/app/api/audio/tts/route.ts — TTS proxy',
-      'raavan-ui/src/lib/logger.ts — structured logger, batches warn/error to /api/logs',
+      'ravi-ui/src/app/api/chat/route.ts — SSE proxy to FastAPI',
+      'ravi-ui/src/app/api/chat/respond/[requestId]/route.ts — HITL bridge',
+      'ravi-ui/src/app/api/logs/route.ts — Loki log collector',
+      'ravi-ui/src/app/api/audio/transcribe/route.ts — STT proxy',
+      'ravi-ui/src/app/api/audio/tts/route.ts — TTS proxy',
+      'ravi-ui/src/lib/logger.ts — structured logger, batches warn/error to /api/logs',
     ],
     receives:[
       'POST /api/chat { message, threadId }  ← browser',
@@ -288,17 +288,17 @@ es.addEventListener(<span class="st">'tool_approval_request'</span>, (e) => {
     tags:[{l:'📬 HTTP routes', bg:'#1e1a30', fg:'#a78bfa'},{l:'🗃️ app.state.*', bg:'#1a2e0f', fg:'#86efac'}],
     desc:'FastAPI is the monolith backend entry point. All dependencies (model client, tools, bridge, DB engine, workflow client) are wired in lifespan() and accessed via request.app.state.*. There are no global singletons. Routes are thin — business logic lives in server/services/. The DI container is the FastAPI app object itself.',
     files:[
-      'src/raavan/server/app.py — create_app() factory + lifespan()',
-      'src/raavan/server/routes/chat.py — POST /chat SSE endpoint',
-      'src/raavan/server/routes/hitl.py — POST /hitl/respond',
-      'src/raavan/server/routes/threads.py — CRUD /threads',
-      'src/raavan/server/routes/tasks.py — CRUD /tasks',
-      'src/raavan/server/routes/workflows.py — workflow management',
-      'src/raavan/server/routes/mcp_apps.py — MCP App registry',
-      'src/raavan/server/security/ — JWT + OAuth (delegates to shared/auth/)',
-      'src/raavan/server/models.py — SQLAlchemy ORM: Thread, Message',
-      'src/raavan/server/schemas.py — Pydantic request/response models',
-      'src/raavan/server/database.py — async session factory',
+      'src/ravi/server/app.py — create_app() factory + lifespan()',
+      'src/ravi/server/routes/chat.py — POST /chat SSE endpoint',
+      'src/ravi/server/routes/hitl.py — POST /hitl/respond',
+      'src/ravi/server/routes/threads.py — CRUD /threads',
+      'src/ravi/server/routes/tasks.py — CRUD /tasks',
+      'src/ravi/server/routes/workflows.py — workflow management',
+      'src/ravi/server/routes/mcp_apps.py — MCP App registry',
+      'src/ravi/server/security/ — JWT + OAuth (delegates to shared/auth/)',
+      'src/ravi/server/models.py — SQLAlchemy ORM: Thread, Message',
+      'src/ravi/server/schemas.py — Pydantic request/response models',
+      'src/ravi/server/database.py — async session factory',
     ],
     receives:[
       'POST /chat { message, thread_id }',
@@ -352,10 +352,10 @@ es.addEventListener(<span class="st">'tool_approval_request'</span>, (e) => {
     tags:[{l:'📬 NATS events', bg:'#0f2b4a', fg:'#38bdf8'},{l:'📤 SSE push', bg:'#1e1a30', fg:'#a78bfa'}],
     desc:'The bridge decouples NATS message delivery from SSE client connections. Each conversation gets an asyncio.Queue registered at connection time. Worker activities publish to NATS → NATSBridge subscriber calls bridge.put_event() → chat route reads the queue and yields SSE frames. Never build event dicts manually — always use factory functions from shared/events/types.py.',
     files:[
-      'src/raavan/server/sse/bridge.py — WebHITLBridge, BridgeRegistry',
-      'src/raavan/server/sse/events.py — EventBus + typed SSE event dataclasses',
-      'src/raavan/shared/events/types.py — event factory functions',
-      'src/raavan/shared/events/bus.py — EventBus (Redis pub/sub, microservices mode)',
+      'src/ravi/server/sse/bridge.py — WebHITLBridge, BridgeRegistry',
+      'src/ravi/server/sse/events.py — EventBus + typed SSE event dataclasses',
+      'src/ravi/shared/events/types.py — event factory functions',
+      'src/ravi/shared/events/bus.py — EventBus (Redis pub/sub, microservices mode)',
     ],
     receives:[
       'bridge.register(conv_id, queue)  ← chat route on connect',
@@ -394,7 +394,7 @@ es.addEventListener(<span class="st">'tool_approval_request'</span>, (e) => {
     tags:[{l:'📤 HTTP invoke', bg:'#0b1d2e', fg:'#38bdf8'},{l:'📬 start/resolve', bg:'#1a0b2e', fg:'#a78bfa'}],
     desc:'Unified HTTP client wrapping all Restate ingress and admin API calls. Replaces both the old TemporalClient and the previous RestateClient. URL path segments are percent-encoded. Uses a persistent httpx.AsyncClient for connection pooling. Wired as app.state.workflow_client in lifespan.',
     files:[
-      'src/raavan/integrations/runtime/restate/client.py',
+      'src/ravi/integrations/runtime/restate/client.py',
     ],
     receives:[
       'start_agent_workflow(conversation_id, user_message, context) → handle',
@@ -444,8 +444,8 @@ es.addEventListener(<span class="st">'tool_approval_request'</span>, (e) => {
     tags:[{l:'🗃️ journal', bg:'#0b1d1a', fg:'#2dd4bf'},{l:'⏸️ promises', bg:'#1a0b2e', fg:'#a78bfa'}],
     desc:'Restate stores a durable execution journal. Every ctx.run() call is persisted before and after. If the Worker crashes, Restate replays from the last committed activity — skipping already-completed steps. HITL uses ctx.promise() which creates a named durable promise; the workflow suspends until resolve_approval or resolve_human_input is called.',
     files:[
-      'src/raavan/integrations/runtime/restate/app.py — ASGI app mount',
-      'src/raavan/integrations/runtime/restate/workflows.py — 3 workflow types',
+      'src/ravi/integrations/runtime/restate/app.py — ASGI app mount',
+      'src/ravi/integrations/runtime/restate/workflows.py — 3 workflow types',
       'deployment/docker/docker-compose.yml — restate service (port 8080/9070)',
       'deployment/k8s/ — Restate k8s manifests',
     ],
@@ -491,14 +491,14 @@ agent_workflow = restate.<span class="fn">Workflow</span>(<span class="st">"Agen
   },
 
   worker: {
-    icon:'⚙️', name:'Worker Process', sub:'python -m raavan.integrations.runtime.restate.worker', zone:'exec',
+    icon:'⚙️', name:'Worker Process', sub:'python -m ravi.integrations.runtime.restate.worker', zone:'exec',
     tags:[{l:'⚙️ activities', bg:'#0b1d1a', fg:'#2dd4bf'},{l:'📤 NATS/Redis', bg:'#1a200b', fg:'#a3e635'}],
     desc:'The Worker is a standalone async Python process. On startup it connects to all infrastructure (Redis, NATS, PostgreSQL, OpenAI), calls activities.configure() to inject all dependencies, registers the workflow endpoint with the Restate admin API, then starts serving workflow tasks. It hosts the Restate ASGI app over HTTP on a bound port.',
     files:[
-      'src/raavan/integrations/runtime/restate/worker.py — main(), _setup(), _teardown()',
-      'src/raavan/integrations/runtime/restate/activities.py — all activity functions',
-      'src/raavan/integrations/runtime/restate/policies.py — ToolPolicy',
-      'src/raavan/integrations/runtime/nats/bridge.py — NATSBridge',
+      'src/ravi/integrations/runtime/restate/worker.py — main(), _setup(), _teardown()',
+      'src/ravi/integrations/runtime/restate/activities.py — all activity functions',
+      'src/ravi/integrations/runtime/restate/policies.py — ToolPolicy',
+      'src/ravi/integrations/runtime/nats/bridge.py — NATSBridge',
     ],
     receives:[
       'Workflow task dispatch from Restate (over ASGI/HTTP)',
@@ -522,7 +522,7 @@ agent_workflow = restate.<span class="fn">Workflow</span>(<span class="st">"Agen
     ],
     rules:[
       'configure() must be called once at startup before Restate starts dispatching',
-      '_scan_tools() anchors on last "raavan" in path — Windows path safe',
+      '_scan_tools() anchors on last "ravi" in path — Windows path safe',
       'Worker runs on a separate port from FastAPI (default worker port: 9080)',
     ],
     code:`<span class="kw">async def</span> <span class="fn">main</span>():
@@ -540,7 +540,7 @@ agent_workflow = restate.<span class="fn">Workflow</span>(<span class="st">"Agen
     tags:[{l:'🔁 journalled', bg:'#0b1d1a', fg:'#2dd4bf'},{l:'📤 LLM/tools', bg:'#1a1200', fg:'#fbbf24'}],
     desc:'Activities are pure async functions called via ctx.run() inside workflows. Each call is journalled — Restate persists the result before returning. All dependencies (model client, tools, memory, NATS bridge) are injected once via configure() at worker startup using module-level globals. There are no per-request dependency containers.',
     files:[
-      'src/raavan/integrations/runtime/restate/activities.py',
+      'src/ravi/integrations/runtime/restate/activities.py',
     ],
     receives:[
       'ctx.run("restore_memory", restore_memory, conv_id)',
@@ -594,7 +594,7 @@ _tools: <span class="ty">dict</span>[<span class="ty">str</span>, <span class="t
     tags:[{l:'🔒 frozen', bg:'#1a0b2e', fg:'#a78bfa'},{l:'⚙️ governs exec', bg:'#0b1d1a', fg:'#2dd4bf'}],
     desc:'ToolPolicy is a frozen dataclass that controls how each tool runs inside a durable workflow. It governs timeout, idempotency requirements, approval gates, and HITL input triggers. Unknown tools fall back to derive_policy_from_tool() which reads tool.risk and tool.hitl_mode attributes.',
     files:[
-      'src/raavan/integrations/runtime/restate/policies.py',
+      'src/ravi/integrations/runtime/restate/policies.py',
     ],
     receives:[
       'get_policy(tool_name: str) → ToolPolicy  — lookup from TOOL_POLICIES',
@@ -638,11 +638,11 @@ TOOL_POLICIES = {
     tags:[{l:'🔁 ReAct loop', bg:'#1a1200', fg:'#fbbf24'},{l:'🛡️ guardrails', bg:'#1a0a0a', fg:'#fb7185'}],
     desc:'ReActAgent implements the ReAct (Reasoning + Acting) loop. Each iteration: build prompt, call LLM, if stop_reason==tool_use call tool, append result to memory, loop. Guardrails run at 3 injection points. Max iterations capped. The same agent.run() entrypoint is used regardless of which runtime is configured — runtime is a strategy injected at construction.',
     files:[
-      'src/raavan/core/agents/react_agent.py — _run_inner(), _run_tool_call()',
-      'src/raavan/core/agents/base_agent.py — BaseAgent ABC, PromptEnricher protocol',
-      'src/raavan/core/messages/_types.py — SystemMessage, UserMessage, AssistantMessage, ...',
-      'src/raavan/core/guardrails/ — ContentFilter, PII, PromptInjection, MaxToken',
-      'src/raavan/core/context/ — RedisModelContext.build()',
+      'src/ravi/core/agents/react_agent.py — _run_inner(), _run_tool_call()',
+      'src/ravi/core/agents/base_agent.py — BaseAgent ABC, PromptEnricher protocol',
+      'src/ravi/core/messages/_types.py — SystemMessage, UserMessage, AssistantMessage, ...',
+      'src/ravi/core/guardrails/ — ContentFilter, PII, PromptInjection, MaxToken',
+      'src/ravi/core/context/ — RedisModelContext.build()',
     ],
     receives:[
       'agent.run(user_message: str) → str  — public entrypoint',
@@ -695,13 +695,13 @@ TOOL_POLICIES = {
     tags:[{l:'📋 schema', bg:'#1a1200', fg:'#fbbf24'},{l:'⚙️ execute()', bg:'#0b1d1a', fg:'#2dd4bf'}],
     desc:'BaseTool is the base class for all tools in the catalog. Subclasses implement execute() with keyword-only args. BaseTool.run() validates inputs against input_schema before calling execute(). Risk level and HITL mode are class-level attributes (Strategy pattern) used by ToolPolicy derivation.',
     files:[
-      'src/raavan/core/tools/base_tool.py — BaseTool, ToolResult, ToolRisk, HitlMode',
-      'src/raavan/core/tools/catalog.py — ToolRegistry',
-      'src/raavan/catalog/tools/ — all built-in tool implementations',
-      'src/raavan/catalog/tools/human_input/ — AskHumanTool',
-      'src/raavan/catalog/tools/task_manager/ — TaskManagerTool',
-      'src/raavan/catalog/tools/web_surfer/ — WebSurferTool',
-      'src/raavan/catalog/tools/code_interpreter/ — CodeInterpreterTool',
+      'src/ravi/core/tools/base_tool.py — BaseTool, ToolResult, ToolRisk, HitlMode',
+      'src/ravi/core/tools/catalog.py — ToolRegistry',
+      'src/ravi/catalog/tools/ — all built-in tool implementations',
+      'src/ravi/catalog/tools/human_input/ — AskHumanTool',
+      'src/ravi/catalog/tools/task_manager/ — TaskManagerTool',
+      'src/ravi/catalog/tools/web_surfer/ — WebSurferTool',
+      'src/ravi/catalog/tools/code_interpreter/ — CodeInterpreterTool',
     ],
     receives:[
       'tool.run(**kwargs) — validates inputs then calls execute()',
@@ -719,7 +719,7 @@ TOOL_POLICIES = {
       'async def execute(self, *, param: str) → ToolResult  — keyword-only args',
       '# type: ignore[override]  — required on execute() due to *-only args',
       'ToolResult(content=[{"type":"text","text":"..."}], app_data={...})',
-      'from raavan.core import ToolRisk, RunStatus  — canonical re-exports',
+      'from ravi.core import ToolRisk, RunStatus  — canonical re-exports',
     ],
     rules:[
       'Use app_data for structured output, not metadata (metadata is legacy)',
@@ -747,12 +747,12 @@ TOOL_POLICIES = {
     tags:[{l:'INPUT', bg:'#1a0a0a', fg:'#fb7185'},{l:'OUTPUT', bg:'#0f2b10', fg:'#4ade80'},{l:'TOOL_CALL', bg:'#1a1200', fg:'#fbbf24'}],
     desc:'Guardrails run at 3 injection points: INPUT (before LLM call), OUTPUT (after LLM response), and TOOL_CALL (before tool execution). Each guardrail returns a GuardResult — if any returns BLOCK the agent stops that turn. Guardrails are pure strategy objects injected at agent construction time.',
     files:[
-      'src/raavan/core/guardrails/ — all guardrail implementations',
-      'src/raavan/core/guardrails/content_filter.py — toxic/harmful content',
-      'src/raavan/core/guardrails/pii.py — PII detection and redaction',
-      'src/raavan/core/guardrails/prompt_injection.py — injection detection',
-      'src/raavan/core/guardrails/max_token.py — token budget enforcement',
-      'src/raavan/core/guardrails/tool_call_validation.py — schema validation',
+      'src/ravi/core/guardrails/ — all guardrail implementations',
+      'src/ravi/core/guardrails/content_filter.py — toxic/harmful content',
+      'src/ravi/core/guardrails/pii.py — PII detection and redaction',
+      'src/ravi/core/guardrails/prompt_injection.py — injection detection',
+      'src/ravi/core/guardrails/max_token.py — token budget enforcement',
+      'src/ravi/core/guardrails/tool_call_validation.py — schema validation',
     ],
     receives:[
       'guardrail.check(GuardPoint.INPUT, messages) → GuardResult',
@@ -799,11 +799,11 @@ agent = <span class="ty">ReActAgent</span>(
     tags:[{l:'async only', bg:'#1a1200', fg:'#fbbf24'},{l:'🧠 Redis-backed', bg:'#0b1d1a', fg:'#2dd4bf'}],
     desc:'The memory system has a clean hierarchy. BaseMemory defines the async interface. UnboundedMemory holds messages in RAM (notebooks/tests). SlidingWindowMemory trims to a fixed window. RedisMemory is the production backend — all public methods are async, lifecycle is connect/restore/use/disconnect. There is no close() method.',
     files:[
-      'src/raavan/core/memory/ — BaseMemory, UnboundedMemory, SlidingWindowMemory',
-      'src/raavan/core/memory/session_manager.py — SessionManager',
-      'src/raavan/integrations/memory/redis_memory.py — RedisMemory',
-      'src/raavan/integrations/memory/postgres_memory.py — PostgresMemory',
-      'src/raavan/core/context/ — RedisModelContext.build()',
+      'src/ravi/core/memory/ — BaseMemory, UnboundedMemory, SlidingWindowMemory',
+      'src/ravi/core/memory/session_manager.py — SessionManager',
+      'src/ravi/integrations/memory/redis_memory.py — RedisMemory',
+      'src/ravi/integrations/memory/postgres_memory.py — PostgresMemory',
+      'src/ravi/core/context/ — RedisModelContext.build()',
     ],
     receives:[
       'await memory.add_message(msg: Message) — ALWAYS await',
@@ -831,7 +831,7 @@ agent = <span class="ty">ReActAgent</span>(
       'One Redis class: RedisMemory — do not create a RedisBackedMemory wrapper',
       'RedisModelContext.build() reads via await memory.get_messages()',
     ],
-    code:`<span class="kw">from</span> raavan.integrations.memory <span class="kw">import</span> <span class="ty">RedisMemory</span>
+    code:`<span class="kw">from</span> ravi.integrations.memory <span class="kw">import</span> <span class="ty">RedisMemory</span>
 
 mem = <span class="ty">RedisMemory</span>(session_id=<span class="st">"conv-001"</span>, redis_url=REDIS_URL)
 <span class="kw">await</span> mem.<span class="fn">connect</span>()
@@ -846,8 +846,8 @@ msgs = <span class="kw">await</span> mem.<span class="fn">get_messages</span>()
     tags:[{l:'🗃️ memory', bg:'#2a1010', fg:'#f87171'},{l:'📡 pub/sub', bg:'#0f2b4a', fg:'#38bdf8'}],
     desc:'Redis serves two roles: session memory storage (RedisMemory) and pub/sub event bus (EventBus in microservices mode). Memory keys are scoped by session_id with a TTL. All operations go through the RedisMemory class — never access the raw Redis client from business logic.',
     files:[
-      'src/raavan/integrations/memory/redis_memory.py — RedisMemory',
-      'src/raavan/shared/events/bus.py — EventBus (Redis pub/sub)',
+      'src/ravi/integrations/memory/redis_memory.py — RedisMemory',
+      'src/ravi/shared/events/bus.py — EventBus (Redis pub/sub)',
     ],
     receives:[
       'HSET/RPUSH per session_id (from RedisMemory.add_message)',
@@ -883,10 +883,10 @@ app.state.redis_client = <span class="kw">await</span> aioredis.<span class="fn"
     tags:[{l:'🗃️ threads', bg:'#0f1a2e', fg:'#60a5fa'},{l:'🗃️ messages', bg:'#0f1a2e', fg:'#818cf8'}],
     desc:'PostgreSQL stores durable thread and message history via SQLAlchemy 2 async. The ORM models (Thread, Message) live in server/models.py. Prisma is used separately for Next.js OAuth session storage only. All microservice routes must use get_db_session from shared.database.dependency — never define a local _get_db helper.',
     files:[
-      'src/raavan/server/models.py — Thread, Message SQLAlchemy ORM',
-      'src/raavan/server/database.py — async session factory',
-      'src/raavan/shared/database/ — get_db_session dependency',
-      'raavan-ui/prisma/schema.prisma — Next.js OAuth session store (separate schema)',
+      'src/ravi/server/models.py — Thread, Message SQLAlchemy ORM',
+      'src/ravi/server/database.py — async session factory',
+      'src/ravi/shared/database/ — get_db_session dependency',
+      'ravi-ui/prisma/schema.prisma — Next.js OAuth session store (separate schema)',
     ],
     receives:[
       'session.add(Thread(...))   — create thread',
@@ -911,7 +911,7 @@ app.state.redis_client = <span class="kw">await</span> aioredis.<span class="fn"
       'New ORM models go in server/models/ (monolith) or service-local models.py (microservices)',
       'After adding Prisma models: npx prisma generate (Next.js only)',
     ],
-    code:`<span class="kw">from</span> raavan.shared.database.dependency <span class="kw">import</span> get_db_session
+    code:`<span class="kw">from</span> ravi.shared.database.dependency <span class="kw">import</span> get_db_session
 
 <span class="kw">@router.post</span>(<span class="st">"/threads"</span>)
 <span class="kw">async def</span> <span class="fn">create_thread</span>(
@@ -929,9 +929,9 @@ app.state.redis_client = <span class="kw">await</span> aioredis.<span class="fn"
     tags:[{l:'📬 subscribe', bg:'#0b1d1a', fg:'#2dd4bf'},{l:'📤 publish', bg:'#1a1200', fg:'#fbbf24'}],
     desc:'NATS decouples Worker activity output from SSE client connections. Worker publishes to subject events.{conv_id}. The WebHITLBridge subscribes and forwards to the appropriate asyncio.Queue. This means Workers can run on separate machines from the API server. In microservices mode EventBus uses Redis pub/sub instead.',
     files:[
-      'src/raavan/integrations/runtime/nats/bridge.py — NATSBridge',
-      'src/raavan/shared/events/bus.py — EventBus (Redis pub/sub fallback)',
-      'src/raavan/shared/events/types.py — event factory functions',
+      'src/ravi/integrations/runtime/nats/bridge.py — NATSBridge',
+      'src/ravi/shared/events/bus.py — EventBus (Redis pub/sub fallback)',
+      'src/ravi/shared/events/types.py — event factory functions',
     ],
     receives:[
       'bridge.publish(subject, event_dict)  ← Worker activities',
@@ -958,7 +958,7 @@ app.state.redis_client = <span class="kw">await</span> aioredis.<span class="fn"
     <span class="kw">await</span> _streaming.<span class="fn">publish</span>(<span class="st">f"events.{conv_id}"</span>, event)
 
 <span class="cm"># ✓ Use factory functions</span>
-<span class="kw">from</span> raavan.shared.events.types <span class="kw">import</span> workflow_started
+<span class="kw">from</span> ravi.shared.events.types <span class="kw">import</span> workflow_started
 event = <span class="fn">workflow_started</span>(job_id=job.id, run_id=run.id)
 
 <span class="cm"># ✗ Never build dicts manually</span>
@@ -970,9 +970,9 @@ event = {<span class="st">"type"</span>: <span class="st">"workflow_started"</sp
     tags:[{l:'🤖 LLM', bg:'#1a0a0a', fg:'#fb7185'},{l:'🎨 image gen', bg:'#1a1200', fg:'#fbbf24'}],
     desc:'OpenAIClient is the single concrete LLM adapter. It implements BaseModelClient ABC which lives in core/ with no external deps. Supports text generation, vision (ImageContent), STT (transcribe), TTS (stream_tts), image generation (generate_image), and Realtime S2S. Audio methods are optional and raise NotImplementedError if not supported.',
     files:[
-      'src/raavan/integrations/llm/openai/openai_client.py — OpenAIClient',
-      'src/raavan/core/llm/base_client.py — BaseModelClient ABC (no external deps)',
-      'src/raavan/core/messages/_types.py — ImageContent, AudioContent, VideoContent',
+      'src/ravi/integrations/llm/openai/openai_client.py — OpenAIClient',
+      'src/ravi/core/llm/base_client.py — BaseModelClient ABC (no external deps)',
+      'src/ravi/core/messages/_types.py — ImageContent, AudioContent, VideoContent',
     ],
     receives:[
       'generate(messages, tools?, stream?) → AssistantMessage',
@@ -988,8 +988,8 @@ event = {<span class="st">"type"</span>: <span class="st">"workflow_started"</sp
     ],
     classes:[
       'OpenAIClient(api_key, model="gpt-4o")',
-      'from raavan.integrations.llm.openai.openai_client import OpenAIClient  ← EXACT PATH',
-      'from raavan.core.llm.base_client import BaseModelClient  ← abstract base',
+      'from ravi.integrations.llm.openai.openai_client import OpenAIClient  ← EXACT PATH',
+      'from ravi.core.llm.base_client import BaseModelClient  ← abstract base',
       'client.supports_image_generation — check before generate_image()',
       'client.supports_s2s — check before S2S calls',
       'ImageContent(url="...", detail="high")  — no PIL needed',
@@ -997,13 +997,13 @@ event = {<span class="st">"type"</span>: <span class="st">"workflow_started"</sp
       'detail: "low"|"high"|"original"|"auto" (default)',
     ],
     rules:[
-      'Import path: from raavan.integrations.llm.openai.openai_client import OpenAIClient',
+      'Import path: from ravi.integrations.llm.openai.openai_client import OpenAIClient',
       'BaseModelClient ABC is in core.llm.base_client — no external deps',
       'Always check supports_image_generation before calling generate_image()',
       'Audio methods in routes: use request.app.state.model_client (not audio_client)',
       'Check model_client.supports_s2s before any S2S calls',
     ],
-    code:`<span class="kw">from</span> raavan.integrations.llm.openai.openai_client <span class="kw">import</span> <span class="ty">OpenAIClient</span>
+    code:`<span class="kw">from</span> ravi.integrations.llm.openai.openai_client <span class="kw">import</span> <span class="ty">OpenAIClient</span>
 
 client = <span class="ty">OpenAIClient</span>(api_key=<span class="st">"sk-..."</span>, model=<span class="st">"gpt-4o"</span>)
 
@@ -1011,7 +1011,7 @@ client = <span class="ty">OpenAIClient</span>(api_key=<span class="st">"sk-..."<
 reply = <span class="kw">await</span> client.<span class="fn">generate</span>(messages, tools=schemas)
 
 <span class="cm"># Vision — no PIL needed</span>
-<span class="kw">from</span> raavan.core.messages <span class="kw">import</span> <span class="ty">ImageContent</span>
+<span class="kw">from</span> ravi.core.messages <span class="kw">import</span> <span class="ty">ImageContent</span>
 msg = <span class="ty">UserMessage</span>(content=[
     <span class="st">"Describe this image:"</span>,
     <span class="ty">ImageContent</span>(url=<span class="st">"https://..."</span>, detail=<span class="st">"high"</span>)])

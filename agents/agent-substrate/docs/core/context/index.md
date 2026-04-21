@@ -50,7 +50,7 @@ flowchart LR
 Pass-through. Every message in memory is sent to the LLM unchanged. The `SystemMessage` at index 0 is always preserved.
 
 ```python
-from raavan.core.context.implementations import UnboundedContext
+from ravi.core.context.implementations import UnboundedContext
 
 ctx = UnboundedContext()   # default — no arguments
 ```
@@ -64,7 +64,7 @@ ctx = UnboundedContext()   # default — no arguments
 Keeps `SystemMessage` + the **last `max_messages`** non-system messages. Oldest messages are silently dropped.
 
 ```python
-from raavan.core.context.implementations import SlidingWindowContext
+from ravi.core.context.implementations import SlidingWindowContext
 
 ctx = SlidingWindowContext(max_messages=20)
 ```
@@ -86,7 +86,7 @@ graph LR
 Drops the oldest non-system messages until total token count is under `max_tokens`. Uses `model_client.count_tokens()` if provided, else falls back to the 4-chars-per-token heuristic.
 
 ```python
-from raavan.core.context.implementations import TokenBudgetContext
+from ravi.core.context.implementations import TokenBudgetContext
 
 ctx = TokenBudgetContext(max_tokens=8_000)
 
@@ -121,7 +121,7 @@ sequenceDiagram
 ```
 
 ```python
-from raavan.core.context.implementations import HybridContext
+from ravi.core.context.implementations import HybridContext
 
 ctx = HybridContext(
     session_manager=sm,
@@ -151,7 +151,7 @@ flowchart LR
 ```
 
 ```python
-from raavan.core.context.implementations import SummarizingContext
+from ravi.core.context.implementations import SummarizingContext
 
 ctx = SummarizingContext(
     model_client=client,
@@ -167,5 +167,5 @@ ctx = SummarizingContext(
 
 | File | What it owns |
 |---|---|
-| [`core/context/base_context.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/context/base_context.py) | `ModelContext` ABC |
-| [`core/context/implementations.py`](https://github.com/Ravikumarchavva/raavan/blob/main/src/raavan/core/context/implementations.py) | All five context strategies |
+| [`core/context/base_context.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/context/base_context.py) | `ModelContext` ABC |
+| [`core/context/implementations.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/context/implementations.py) | All five context strategies |

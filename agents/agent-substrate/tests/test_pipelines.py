@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from raavan.core.pipelines.schema import (
+from ravi.core.pipelines.schema import (
     EdgeConfig,
     EdgeType,
     NodeConfig,
@@ -18,8 +18,8 @@ from raavan.core.pipelines.schema import (
     PipelineConfig,
     Position,
 )
-from raavan.core.pipelines.codegen import generate_code
-from raavan.core.pipelines.runner import PipelineRunner
+from ravi.core.pipelines.codegen import generate_code
+from ravi.core.pipelines.runner import PipelineRunner
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ class TestPipelineRunner:
             tools_registry=[],
             model_client=_mock_model_client(),
         )
-        from raavan.core.agents.react_agent import ReActAgent
+        from ravi.core.agents.react_agent import ReActAgent
 
         assert isinstance(agent, ReActAgent)
         assert agent.name == "TestAgent"
@@ -379,7 +379,7 @@ class TestPipelineRunner:
             model_client=_mock_model_client(),
         )
 
-        from raavan.core.agents.flow import ParallelFlow, SequentialFlow
+        from ravi.core.agents.flow import ParallelFlow, SequentialFlow
 
         assert isinstance(flow, SequentialFlow)
         assert len(flow.steps) == 3
@@ -399,7 +399,7 @@ class TestPipelineRunner:
             tools_registry=[],
             model_client=_mock_model_client(),
         )
-        from raavan.core.memory.unbounded_memory import UnboundedMemory
+        from ravi.core.memory.unbounded_memory import UnboundedMemory
 
         assert isinstance(agent.memory, UnboundedMemory)
 
@@ -450,7 +450,7 @@ class TestPipelineRunner:
             tools_registry=[],
             model_client=_mock_model_client(),
         )
-        from raavan.core.structured.router import StructuredRouter
+        from ravi.core.structured.router import StructuredRouter
 
         assert isinstance(result, StructuredRouter)
 

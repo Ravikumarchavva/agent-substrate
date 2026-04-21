@@ -11,7 +11,7 @@ import os
 
 from fastmcp import FastMCP
 
-mcp = FastMCP("raavan-demo")
+mcp = FastMCP("ravi-demo")
 
 # ── Tools ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ def word_count(text: str) -> dict:
 def server_info() -> dict:
     """Return metadata about this MCP server."""
     return {
-        "name": "raavan-demo",
+        "name": "ravi-demo",
         "transport": "sse",
         "tools": [
             "add",

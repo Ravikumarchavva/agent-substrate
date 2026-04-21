@@ -1,6 +1,6 @@
 # Message Model
 
-Raavan treats messages as typed execution artifacts, not just free-form strings.
+Ravi treats messages as typed execution artifacts, not just free-form strings.
 
 ## Important message types
 

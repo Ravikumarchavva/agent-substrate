@@ -16,13 +16,13 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from raavan.core.agents.react_agent import ReActAgent
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
-from raavan.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from raavan.core.hooks import HookEvent, HookManager, CostTracker
+from ravi.core.agents.react_agent import ReActAgent
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.core.hooks import HookEvent, HookManager, CostTracker
 
 # Evals
-from raavan.evals import (
+from ravi.evals import (
     EvalCase,
     EvalDataset,
     EvalRunner,

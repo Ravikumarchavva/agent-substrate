@@ -6,14 +6,14 @@ import pytest
 
 from google.genai import types as genai_types
 
-from raavan.integrations.llm.factory import (
+from ravi.integrations.llm.factory import (
     create_model_client,
     detect_provider,
     model_supports_vision,
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
-from raavan.integrations.llm.gemini.gemini_client import GeminiClient
+from ravi.integrations.llm.gemini.gemini_client import GeminiClient
 
 
 def test_detect_provider_openrouter() -> None:
@@ -46,7 +46,7 @@ def test_create_model_client_openrouter_uses_openrouter_config() -> None:
         api_keys={"openrouter": "test-key"},
         openrouter_base_url="https://openrouter.ai/api/v1",
         openrouter_site_url="http://localhost:3000",
-        openrouter_app_name="Raavan UI",
+        openrouter_app_name="Ravi UI",
     )
 
     assert getattr(client, "provider", None) == "openrouter"

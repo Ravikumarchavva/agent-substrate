@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from raavan.catalog._pipeline import (
+from ravi.catalog._pipeline import (
     PipelineDef,
     PipelineEngine,
     PipelineStep,
 )
-from raavan.core.tools.base_tool import BaseTool, ToolResult
-from raavan.core.tools.catalog import CapabilityRegistry
+from ravi.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.tools.catalog import CapabilityRegistry
 
 
 class _DoubleTool(BaseTool):

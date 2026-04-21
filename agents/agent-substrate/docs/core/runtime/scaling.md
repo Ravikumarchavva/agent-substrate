@@ -56,7 +56,7 @@ Write once. Deploy anywhere.
 
 ## GrpcRuntime
 
-Source: `src/raavan/integrations/runtime/grpc/`
+Source: `src/ravi/integrations/runtime/grpc/`
 
 GrpcRuntime makes agent mailboxes **network-addressable**. Each agent type runs as a gRPC servicer. `send_message()` becomes a unary gRPC call across the network. `publish_message()` becomes a server-streaming push.
 
@@ -96,7 +96,7 @@ graph LR
 ### Setting it up
 
 ```python
-from raavan.integrations.runtime.grpc import GrpcRuntime
+from ravi.integrations.runtime.grpc import GrpcRuntime
 
 # Node A (runs in Pod A)
 runtime_a = GrpcRuntime(
@@ -138,7 +138,7 @@ The orchestrator on Node A calls `send_message(WriteRequest(...), AgentId("write
 
 ## RestateRuntime
 
-Source: `src/raavan/integrations/runtime/restate/`
+Source: `src/ravi/integrations/runtime/restate/`
 
 RestateRuntime wraps every agent step in a **durable journal**. Restate records the result of every activity the moment it completes. If the worker crashes and restarts, Restate replays the journal — completed steps are skipped, the in-progress step retries from the beginning.
 
@@ -197,7 +197,7 @@ sequenceDiagram
 ### Setting it up
 
 ```python
-from raavan.integrations.runtime.restate import RestateWorkflowClient
+from ravi.integrations.runtime.restate import RestateWorkflowClient
 
 client = RestateWorkflowClient(settings)
 await client.connect()
@@ -221,7 +221,7 @@ await client.resolve_promise(
 )
 ```
 
-The implementation lives in `src/raavan/integrations/runtime/restate/`.
+The implementation lives in `src/ravi/integrations/runtime/restate/`.
 
 ### Trade-offs
 
@@ -271,6 +271,6 @@ graph LR
 
 ## You probably don't need this yet
 
-Most production deployments run just fine on LocalRuntime inside a monolith. The framework's monolith server (`src/raavan/server/`) does exactly that — all agents run in the same process, dispatching through LocalRuntime internally.
+Most production deployments run just fine on LocalRuntime inside a monolith. The framework's monolith server (`src/ravi/server/`) does exactly that — all agents run in the same process, dispatching through LocalRuntime internally.
 
 Reach for GrpcRuntime or RestateRuntime when a concrete production problem forces your hand — not before.

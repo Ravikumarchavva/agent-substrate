@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from raavan.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from raavan.core.tools.catalog import CapabilityRegistry
+from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.tools.catalog import CapabilityRegistry
 
 
 # ---------------------------------------------------------------------------

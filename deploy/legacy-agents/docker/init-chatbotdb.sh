@@ -1,5 +1,5 @@
 #!/bin/bash
-# Create the chatbotdb database for raavan-ui (Prisma).
+# Create the chatbotdb database for ravi-ui (Prisma).
 # Docker entrypoint runs all scripts in /docker-entrypoint-initdb.d/ on first init.
 set -e
 

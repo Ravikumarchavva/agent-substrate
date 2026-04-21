@@ -12,7 +12,7 @@ from the Restate journal without re-executing completed steps.
 
 ## Previous State
 
-Raavan was a **single-process** framework. Both the monolith (`server/`) and the microservices (`services/`) ran agents in-process within the same Python event loop. This meant:
+Ravi was a **single-process** framework. Both the monolith (`server/`) and the microservices (`services/`) ran agents in-process within the same Python event loop. This meant:
 
 - All agent state lived in memory or Redis — no cross-process agent communication.
 - Sub-agents handed off via `OrchestratorAgent` ran in the same event loop on the same machine.
@@ -36,7 +36,7 @@ A distributed runtime lets you treat agents as isolated units of work that can:
 
 ### Option A — Temporal.io (recommended)
 
-Raavan already has a `catalog/_temporal/` stub. Temporal is a durable workflow engine that provides exactly-once execution, automatic retries, and state replay.
+Ravi already has a `catalog/_temporal/` stub. Temporal is a durable workflow engine that provides exactly-once execution, automatic retries, and state replay.
 
 **What to build:**
 

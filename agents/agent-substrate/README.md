@@ -43,8 +43,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/Ravikumarchavva/raavan.git
-cd raavan
+git clone https://github.com/Ravikumarchavva/ravi.git
+cd ravi
 
 # Install with uv
 uv sync
@@ -72,9 +72,9 @@ export OPENAI_API_KEY="sk-your-key-here"
 
 ```python
 import asyncio
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
-from raavan.core.memory.unbounded_memory import UnboundedMemory
-from raavan.core.messages.agent_messages import UserMessage, SystemMessage
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.core.memory.unbounded_memory import UnboundedMemory
+from ravi.core.messages.agent_messages import UserMessage, SystemMessage
 
 async def main():
     # Initialize components
@@ -103,10 +103,10 @@ asyncio.run(main())
 ```python
 import asyncio
 import json
-from raavan.model_clients.openai_client import OpenAIClient
-from raavan.memory.unbounded_memory import UnboundedMemory
-from raavan.messages.agent_messages import UserMessage, ToolMessage
-from raavan.tools.builtin_tools import CalculatorTool
+from ravi.model_clients.openai_client import OpenAIClient
+from ravi.memory.unbounded_memory import UnboundedMemory
+from ravi.messages.agent_messages import UserMessage, ToolMessage
+from ravi.tools.builtin_tools import CalculatorTool
 
 async def main():
     client = OpenAIClient(model="gpt-4o")
@@ -152,7 +152,7 @@ asyncio.run(main())
 Structured communication between agents, users, and tools:
 
 ```python
-from raavan.messages.agent_messages import (
+from ravi.messages.agent_messages import (
     SystemMessage,    # System instructions
     UserMessage,      # User inputs
     AssistantMessage, # Agent responses
@@ -165,7 +165,7 @@ from raavan.messages.agent_messages import (
 Abstraction layer for different LLM providers:
 
 ```python
-from raavan.model_clients.openai_client import OpenAIClient
+from ravi.model_clients.openai_client import OpenAIClient
 
 client = OpenAIClient(
     model="gpt-4o",
@@ -179,7 +179,7 @@ client = OpenAIClient(
 Function calling with JSON Schema validation:
 
 ```python
-from raavan.tools.base_tool import BaseTool
+from ravi.tools.base_tool import BaseTool
 
 class MyTool(BaseTool):
     async def execute(self, **kwargs):
@@ -196,7 +196,7 @@ class MyTool(BaseTool):
 Conversation history management:
 
 ```python
-from raavan.memory.unbounded_memory import UnboundedMemory
+from ravi.memory.unbounded_memory import UnboundedMemory
 
 memory = UnboundedMemory()
 memory.add_message(message)
@@ -208,7 +208,7 @@ messages = memory.get_messages()
 Connect to external tools via Model Context Protocol:
 
 ```python
-from raavan.tools import MCPClient, MCPTool
+from ravi.tools import MCPClient, MCPTool
 
 # Connect to MCP server
 mcp_client = MCPClient()
@@ -283,31 +283,31 @@ server        ← FastAPI routes, DB models, DI wiring
 
 ```python
 # Core — agents, base classes, memory
-from raavan.core.agents.react_agent import ReActAgent
-from raavan.core.agents.orchestrator_agent import OrchestratorAgent
-from raavan.core.memory.unbounded_memory import UnboundedMemory
-from raavan.core.memory.session_manager import SessionManager
-from raavan.core.guardrails.base_guardrail import BaseGuardrail
+from ravi.core.agents.react_agent import ReActAgent
+from ravi.core.agents.orchestrator_agent import OrchestratorAgent
+from ravi.core.memory.unbounded_memory import UnboundedMemory
+from ravi.core.memory.session_manager import SessionManager
+from ravi.core.guardrails.base_guardrail import BaseGuardrail
 
 # Integrations — LLM clients, audio, MCP, skills, third-party APIs
-from raavan.integrations.llm.openai.openai_client import OpenAIClient
-from raavan.integrations.audio import BaseAudioClient
-from raavan.integrations.spotify.client import SpotifyService
-from raavan.integrations.mcp import MCPClient
-from raavan.integrations.skills import SkillManager
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.audio import BaseAudioClient
+from ravi.integrations.spotify.client import SpotifyService
+from ravi.integrations.mcp import MCPClient
+from ravi.integrations.skills import SkillManager
 
 # Tools — built-in tool implementations
-from raavan.tools.human_input import AskHumanTool
-from raavan.tools.web_surfer import WebSurferTool
-from raavan.tools.file_manager_tool import FileManagerTool
+from ravi.tools.human_input import AskHumanTool
+from ravi.tools.web_surfer import WebSurferTool
+from ravi.tools.file_manager_tool import FileManagerTool
 
 # Server SSE — event bus, HITL bridge
-from raavan.server.sse.bridge import WebHITLBridge
-from raavan.server.sse.events import EventBus
+from ravi.server.sse.bridge import WebHITLBridge
+from ravi.server.sse.events import EventBus
 
 # Shared — cross-service infra
-from raavan.shared.tasks.store import TaskStore
-from raavan.shared.observability import configure_opentelemetry
+from ravi.shared.tasks.store import TaskStore
+from ravi.shared.observability import configure_opentelemetry
 ```
 
 ### Common extension tasks — quick reference
@@ -354,7 +354,7 @@ Ideal for workflows that require multiple domain experts working under a single 
 ![OrchestratorAgent Architecture](docs/public/diagrams/multi-agent-orchestrator.svg)
 
 ```python
-from raavan import OrchestratorAgent, ReActAgent
+from ravi import OrchestratorAgent, ReActAgent
 
 orchestrator = OrchestratorAgent(
     name="coordinator",
@@ -374,7 +374,7 @@ Perfect for ETL pipelines, report generation, and multi-stage transformation wor
 ![SequentialFlow Architecture](docs/public/diagrams/multi-agent-sequential.svg)
 
 ```python
-from raavan import SequentialFlow
+from ravi import SequentialFlow
 
 pipeline = SequentialFlow(
     name="etl_pipeline",
@@ -392,7 +392,7 @@ Ideal for independent analyses, multi-perspective reviews, and latency-critical 
 ![ParallelFlow Architecture](docs/public/diagrams/multi-agent-parallel.svg)
 
 ```python
-from raavan import ParallelFlow
+from ravi import ParallelFlow
 
 reviewer = ParallelFlow(
     name="code_review",
@@ -411,7 +411,7 @@ Branches can themselves be any agent or flow, enabling arbitrarily deep decision
 ![ConditionalFlow Architecture](docs/public/diagrams/multi-agent-conditional.svg)
 
 ```python
-from raavan import ConditionalFlow
+from ravi import ConditionalFlow
 
 router = ConditionalFlow(
     name="smart_router",
@@ -462,7 +462,7 @@ LOG_LEVEL=INFO
 pytest
 
 # With coverage
-pytest --cov=raavan
+pytest --cov=ravi
 
 # Run specific test
 pytest tests/test_messages.py

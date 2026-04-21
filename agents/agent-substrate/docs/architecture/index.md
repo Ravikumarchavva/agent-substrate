@@ -1,6 +1,6 @@
 # Architecture
 
-Raavan is structured around a simple developer-facing model and a more robust execution model underneath it.
+Ravi is structured around a simple developer-facing model and a more robust execution model underneath it.
 
 At the API level you create an agent, register tools, attach memory, and call `run()`. Underneath that, the framework manages prompt assembly, guardrails, tool execution, event streaming, and optionally a durable runtime that can survive process crashes or human wait states.
 

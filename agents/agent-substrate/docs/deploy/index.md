@@ -1,6 +1,6 @@
 # Deploy
 
-Raavan supports a simple local monolith path and a more production-like distributed path.
+Ravi supports a simple local monolith path and a more production-like distributed path.
 
 ## Read in order
 

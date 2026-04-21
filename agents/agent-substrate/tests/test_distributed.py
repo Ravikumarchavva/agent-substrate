@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from raavan.integrations.runtime.restate.policies import (
+from ravi.integrations.runtime.restate.policies import (
     TOOL_POLICIES,
     ToolPolicy,
     derive_policy_from_tool,
@@ -65,7 +65,7 @@ class TestToolPolicy:
         tool.hitl_mode = "blocking"
         tool.hitl_timeout_seconds = None
 
-        from raavan.core.tools.base_tool import HitlMode, ToolRisk
+        from ravi.core.tools.base_tool import HitlMode, ToolRisk
 
         tool.risk = ToolRisk.SAFE
         tool.hitl_mode = HitlMode.BLOCKING
@@ -75,7 +75,7 @@ class TestToolPolicy:
         assert p.requires_approval is False
 
     def test_derive_from_critical_tool(self) -> None:
-        from raavan.core.tools.base_tool import HitlMode, ToolRisk
+        from ravi.core.tools.base_tool import HitlMode, ToolRisk
 
         tool = MagicMock()
         tool.name = "nuclear_launch"
@@ -102,7 +102,7 @@ class TestToolPolicy:
 
 class TestNATSBridge:
     async def test_publish_requires_connection(self) -> None:
-        from raavan.integrations.runtime.nats.bridge import NATSBridge
+        from ravi.integrations.runtime.nats.bridge import NATSBridge
 
         bridge = NATSBridge.__new__(NATSBridge)
         bridge._nc = None
@@ -112,7 +112,7 @@ class TestNATSBridge:
             await bridge.publish("thread-1", {"type": "test"})
 
     async def test_subscribe_requires_connection(self) -> None:
-        from raavan.integrations.runtime.nats.bridge import NATSBridge
+        from ravi.integrations.runtime.nats.bridge import NATSBridge
 
         bridge = NATSBridge.__new__(NATSBridge)
         bridge._nc = None
@@ -123,7 +123,7 @@ class TestNATSBridge:
                 pass
 
     async def test_publish_serializes_json(self) -> None:
-        from raavan.integrations.runtime.nats.bridge import NATSBridge
+        from ravi.integrations.runtime.nats.bridge import NATSBridge
 
         bridge = NATSBridge.__new__(NATSBridge)
         bridge._js = AsyncMock()
@@ -141,7 +141,7 @@ class TestNATSBridge:
         assert payload["content"] == "hi"
 
     async def test_disconnect_drains(self) -> None:
-        from raavan.integrations.runtime.nats.bridge import NATSBridge
+        from ravi.integrations.runtime.nats.bridge import NATSBridge
 
         bridge = NATSBridge.__new__(NATSBridge)
         mock_nc = AsyncMock()
@@ -163,7 +163,7 @@ class TestNATSBridge:
 class TestActivities:
     def setup_method(self) -> None:
         """Set up mock DI globals for activities."""
-        from raavan.integrations.runtime.restate import activities
+        from ravi.integrations.runtime.restate import activities
 
         self._mock_nats = AsyncMock()
         self._mock_model_client = AsyncMock()
@@ -177,7 +177,7 @@ class TestActivities:
             "function": {"name": "test_tool"},
         }
 
-        from raavan.core.tools.base_tool import ToolResult
+        from ravi.core.tools.base_tool import ToolResult
 
         # run() is async, so explicitly set it as AsyncMock
         self._mock_tool.run = AsyncMock(
@@ -195,14 +195,14 @@ class TestActivities:
         )
 
     async def test_get_tool_schemas(self) -> None:
-        from raavan.integrations.runtime.restate import activities
+        from ravi.integrations.runtime.restate import activities
 
         schemas = activities.get_tool_schemas()
         assert len(schemas) == 1
         assert schemas[0]["function"]["name"] == "test_tool"
 
     async def test_do_tool_exec_success(self) -> None:
-        from raavan.integrations.runtime.restate import activities
+        from ravi.integrations.runtime.restate import activities
 
         result = await activities.do_tool_exec(
             tool_name="test_tool",
@@ -218,7 +218,7 @@ class TestActivities:
         assert self._mock_nats.publish.call_count == 2  # tool_call + tool_result
 
     async def test_do_tool_exec_not_found(self) -> None:
-        from raavan.integrations.runtime.restate import activities
+        from ravi.integrations.runtime.restate import activities
 
         result = await activities.do_tool_exec(
             tool_name="nonexistent",
@@ -233,7 +233,7 @@ class TestActivities:
     async def test_do_tool_exec_timeout(self) -> None:
         import asyncio
 
-        from raavan.integrations.runtime.restate import activities
+        from ravi.integrations.runtime.restate import activities
 
         async def _slow(**kw: Any) -> None:
             await asyncio.sleep(10)
@@ -250,9 +250,9 @@ class TestActivities:
         assert result["is_error"] is True
         assert "timed out" in result["content"]
 
-    @patch("raavan.integrations.memory.redis_memory.RedisMemory")
+    @patch("ravi.integrations.memory.redis_memory.RedisMemory")
     async def test_persist_message_user(self, mock_redis_cls: MagicMock) -> None:
-        from raavan.integrations.runtime.restate import activities
+        from ravi.integrations.runtime.restate import activities
 
         mock_mem = AsyncMock()
         mock_redis_cls.for_session.return_value = mock_mem
@@ -262,9 +262,9 @@ class TestActivities:
         assert result["persisted"] is True
         mock_mem.add_message.assert_awaited_once()
 
-    @patch("raavan.integrations.memory.redis_memory.RedisMemory")
+    @patch("ravi.integrations.memory.redis_memory.RedisMemory")
     async def test_persist_tool_result(self, mock_redis_cls: MagicMock) -> None:
-        from raavan.integrations.runtime.restate import activities
+        from ravi.integrations.runtime.restate import activities
 
         mock_mem = AsyncMock()
         mock_redis_cls.for_session.return_value = mock_mem
@@ -289,7 +289,7 @@ class TestActivities:
 
 class TestRestateWorkflowClient:
     async def test_start_agent_workflow(self) -> None:
-        from raavan.integrations.runtime.restate.client import RestateWorkflowClient
+        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
 
         client = RestateWorkflowClient(
             ingress_url="http://localhost:8080",
@@ -319,7 +319,7 @@ class TestRestateWorkflowClient:
         assert "/send" in url
 
     async def test_start_pipeline_workflow(self) -> None:
-        from raavan.integrations.runtime.restate.client import RestateWorkflowClient
+        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
 
         client = RestateWorkflowClient()
         mock_response = AsyncMock()
@@ -339,7 +339,7 @@ class TestRestateWorkflowClient:
         assert "PipelineWorkflow" in url
 
     async def test_resolve_promise(self) -> None:
-        from raavan.integrations.runtime.restate.client import RestateWorkflowClient
+        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
 
         client = RestateWorkflowClient()
         mock_response = AsyncMock()
@@ -362,7 +362,7 @@ class TestRestateWorkflowClient:
         assert "resolve_approval" in url
 
     async def test_cancel_workflow(self) -> None:
-        from raavan.integrations.runtime.restate.client import RestateWorkflowClient
+        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
 
         client = RestateWorkflowClient()
         mock_response = AsyncMock()
@@ -377,7 +377,7 @@ class TestRestateWorkflowClient:
         mock_http.delete.assert_awaited_once()
 
     async def test_register_deployment(self) -> None:
-        from raavan.integrations.runtime.restate.client import RestateWorkflowClient
+        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
 
         client = RestateWorkflowClient()
         mock_response = AsyncMock()
@@ -394,7 +394,7 @@ class TestRestateWorkflowClient:
         assert "deployments" in url
 
     async def test_url_encoding(self) -> None:
-        from raavan.integrations.runtime.restate.client import RestateWorkflowClient
+        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
 
         client = RestateWorkflowClient()
         mock_response = AsyncMock()
@@ -418,7 +418,7 @@ class TestRestateWorkflowClient:
         assert wf_id == "wf/with/slashes"
 
     async def test_connect_disconnect(self) -> None:
-        from raavan.integrations.runtime.restate.client import RestateWorkflowClient
+        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
 
         client = RestateWorkflowClient()
         assert client._http is None
@@ -437,17 +437,17 @@ class TestRestateWorkflowClient:
 
 class TestWorkflowDefinition:
     def test_agent_workflow_has_main(self) -> None:
-        from raavan.integrations.runtime.restate.workflows import agent_workflow
+        from ravi.integrations.runtime.restate.workflows import agent_workflow
 
         assert agent_workflow.name == "AgentWorkflow"
 
     def test_pipeline_workflow_exists(self) -> None:
-        from raavan.integrations.runtime.restate.workflows import pipeline_workflow
+        from ravi.integrations.runtime.restate.workflows import pipeline_workflow
 
         assert pipeline_workflow.name == "PipelineWorkflow"
 
     def test_chain_workflow_exists(self) -> None:
-        from raavan.integrations.runtime.restate.workflows import chain_workflow
+        from ravi.integrations.runtime.restate.workflows import chain_workflow
 
         assert chain_workflow.name == "ChainWorkflow"
 
@@ -459,6 +459,6 @@ class TestWorkflowDefinition:
 
 class TestRestateApp:
     def test_app_created(self) -> None:
-        from raavan.integrations.runtime.restate.app import app
+        from ravi.integrations.runtime.restate.app import app
 
         assert app is not None

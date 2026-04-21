@@ -23,7 +23,7 @@ async def test_something():
 ## Tool unit tests
 Test tools directly without spinning up the full server:
 ```python
-from raavan.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.tools.base_tool import BaseTool, ToolResult
 
 async def test_my_tool():
     tool = MyTool()
@@ -37,7 +37,7 @@ Use mock `OpenAIClient` to avoid real API calls:
 from unittest.mock import AsyncMock, patch
 
 async def test_agent_run():
-    with patch("raavan.integrations.llm.openai.openai_client.OpenAIClient") as mock:
+    with patch("ravi.integrations.llm.openai.openai_client.OpenAIClient") as mock:
         mock.return_value.stream = AsyncMock(...)
         agent = ReActAgent(model_client=mock.return_value, tools=[])
         async for chunk in agent.run_stream("hello"):

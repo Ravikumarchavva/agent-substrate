@@ -2,8 +2,8 @@
 
 import asyncio
 import json
-from raavan.core.tools.base_tool import BaseTool, ToolResult
-from raavan.core.messages.client_messages import ToolExecutionResultMessage
+from ravi.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.messages.client_messages import ToolExecutionResultMessage
 
 
 class SimpleTool(BaseTool):

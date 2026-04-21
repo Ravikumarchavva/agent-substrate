@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from raavan.core.agents.agent_result import AgentRunResult, RunStatus
-from raavan.core.agents.base_agent import BaseAgent
-from raavan.core.runtime import (
+from ravi.core.agents.agent_result import AgentRunResult, RunStatus
+from ravi.core.agents.base_agent import BaseAgent
+from ravi.core.runtime import (
     AgentId,
     AgentNotFoundError,
     AgentRuntime,
@@ -545,7 +545,7 @@ class TestHandoffToolDualMode:
 
     async def test_fallback_without_runtime(self) -> None:
         """Without runtime, _HandoffTool calls agent.run() directly."""
-        from raavan.core.agents.orchestrator_agent import _HandoffTool
+        from ravi.core.agents.orchestrator_agent import _HandoffTool
 
         agent = _StubAgent(output="direct-result")
         tool = _HandoffTool(agent, runtime=None)
@@ -554,7 +554,7 @@ class TestHandoffToolDualMode:
 
     async def test_dispatch_via_runtime(self) -> None:
         """With runtime + agent_id, _HandoffTool uses runtime.send_message()."""
-        from raavan.core.agents.orchestrator_agent import _HandoffTool
+        from ravi.core.agents.orchestrator_agent import _HandoffTool
 
         agent = _StubAgent(
             output="ignored",
@@ -575,7 +575,7 @@ class TestHandoffToolDualMode:
 
     async def test_fallback_when_agent_has_no_id(self) -> None:
         """Even with runtime, falls back if agent has no agent_id."""
-        from raavan.core.agents.orchestrator_agent import _HandoffTool
+        from ravi.core.agents.orchestrator_agent import _HandoffTool
 
         agent = _StubAgent(output="fallback-ok")  # no agent_id
         mock_runtime = AsyncMock()
@@ -605,7 +605,7 @@ class TestOrchestratorRuntimeIntegration:
 
         # We can't instantiate OrchestratorAgent without a real LLM call,
         # but we can verify the _HandoffTool it creates works correctly.
-        from raavan.core.agents.orchestrator_agent import _HandoffTool
+        from ravi.core.agents.orchestrator_agent import _HandoffTool
 
         tool = _HandoffTool(sub, runtime=rt)
         result = await tool.execute(input="solve this")
@@ -614,7 +614,7 @@ class TestOrchestratorRuntimeIntegration:
 
     async def test_orchestrator_stores_runtime(self) -> None:
         """OrchestratorAgent passes runtime to super and handoff tools."""
-        from raavan.core.agents.orchestrator_agent import OrchestratorAgent
+        from ravi.core.agents.orchestrator_agent import OrchestratorAgent
 
         rt = MagicMock()
         sub = _StubAgent(name="worker", output="ok")
@@ -642,7 +642,7 @@ class TestRestatePackage:
     def test_import_succeeds(self) -> None:
         import importlib
 
-        mod = importlib.import_module("raavan.integrations.runtime.restate")
+        mod = importlib.import_module("ravi.integrations.runtime.restate")
         assert hasattr(mod, "RestateRuntime")
         assert hasattr(mod, "RestateWorkflowClient")
         assert hasattr(mod, "ToolPolicy")

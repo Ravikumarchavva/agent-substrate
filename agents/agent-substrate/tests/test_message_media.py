@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from raavan.core.messages._types import ImageContent
-from raavan.core.messages.client_messages import UserMessage
+from ravi.core.messages._types import ImageContent
+from ravi.core.messages.client_messages import UserMessage
 
 
 def test_user_message_accepts_live_image_content_instance() -> None:

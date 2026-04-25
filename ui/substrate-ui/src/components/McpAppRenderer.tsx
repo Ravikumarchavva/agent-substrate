@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const API_BASE = "/api/backend";
 
@@ -50,6 +51,7 @@ export function McpAppRenderer({
   onClose,
   maxHeight = 400,
 }: Props) {
+  const { theme: currentTheme } = useTheme();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [height, setHeight] = useState(200);
@@ -124,7 +126,7 @@ export function McpAppRenderer({
               hostInfo: { name: "agent-framework-ui", version: "1.0.0" },
               hostCapabilities: {},
               hostContext: {
-                theme: "dark",
+                theme: currentTheme,
                 toolInfo: {
                   tool: { name: toolName },
                 },
@@ -224,19 +226,19 @@ export function McpAppRenderer({
   const handleIframeLoad = () => {};
 
   return (
-    <div className="rounded-lg border border-(--border) overflow-hidden bg-(--card) my-2 max-w-3xl mx-auto">
+    <div className="rounded-lg border border-[var(--border)] overflow-hidden bg-[var(--card)] my-2 max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-background border-b border-(--border) text-xs text-(--muted)">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-background border-b border-[var(--border)] text-xs text-[var(--muted)]">
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" 
                 style={{ backgroundColor: isReady ? "#22c55e" : "#eab308" }} />
           <span className="font-medium text-foreground">{toolName}</span>
-          <span className="text-(--muted)">MCP App</span>
+          <span className="text-[var(--muted)]">MCP App</span>
         </span>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-(--muted) hover:text-foreground transition-colors px-1 cursor-pointer"
+            className="text-[var(--muted)] hover:text-foreground transition-colors px-1 cursor-pointer"
             aria-label="Close MCP App"
           >
             ✕
@@ -246,12 +248,12 @@ export function McpAppRenderer({
 
       {/* Iframe or error */}
       {error ? (
-        <div className="p-4 text-center text-sm text-(--muted)">
+        <div className="p-4 text-center text-sm text-[var(--muted)]">
           <p>⚠️ {error}</p>
           <p className="text-xs mt-1">
             The interactive UI for <strong>{toolName}</strong> could not be loaded.
           </p>
-          <p className="text-xs mt-2 text-(--muted-foreground)">
+          <p className="text-xs mt-2 text-[var(--muted-foreground)]">
             URL: {fullUrl}
           </p>
         </div>

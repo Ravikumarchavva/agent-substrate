@@ -168,7 +168,7 @@ function AddTaskForm({ taskListId, onAdd }: { taskListId: string; onAdd: (id: st
       />
       <button
         onClick={submit}
-        className="text-xs px-2.5 py-1.5 rounded-lg transition-colors text-white cursor-pointer"
+        className="text-xs px-2.5 py-1.5 rounded-lg transition-colors text-(--accent-foreground) cursor-pointer"
         style={{ background: "var(--accent)" }}
       >
         Add

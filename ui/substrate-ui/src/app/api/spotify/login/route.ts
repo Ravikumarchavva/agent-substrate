@@ -15,6 +15,9 @@ const SCOPES = [
   "user-read-private",
   "user-modify-playback-state",
   "user-read-playback-state",
+  "user-library-read",
+  "playlist-read-private",
+  "playlist-read-collaborative",
 ].join(" ");
 
 function resolveRedirectUri(req: NextRequest): string {

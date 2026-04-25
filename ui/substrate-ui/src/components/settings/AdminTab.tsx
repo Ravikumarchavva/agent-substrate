@@ -142,7 +142,7 @@ export function AdminTab({
                     alt=""
                   />
                 ) : (
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-(--accent) text-sm font-bold text-white">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-(--accent) text-sm font-bold text-(--accent-foreground)">
                     {(user.email || "U")[0].toUpperCase()}
                   </div>
                 )}

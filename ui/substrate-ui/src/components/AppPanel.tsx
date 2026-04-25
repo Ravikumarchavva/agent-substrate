@@ -432,9 +432,9 @@ export function AppPanel({
         aria-label="Dismiss app panel"
       />
 
-      <div className="fixed inset-0 z-40 flex flex-col bg-(--card) xl:static xl:z-auto xl:h-full xl:w-120 xl:shrink-0 xl:border-l xl:border-(--border) 2xl:w-140">
+      <div className="fixed inset-0 z-40 flex flex-col bg-background xl:static xl:z-auto xl:h-full xl:w-120 xl:shrink-0 xl:border-l xl:border-(--border) 2xl:w-140">
         {/* Panel Header */}
-        <div className="flex items-center justify-between border-b border-(--border) bg-(--card) px-3 py-3 xl:px-3 xl:py-2">
+        <div className="flex items-center justify-between border-b border-(--border) bg-background px-3 py-3 xl:px-3 xl:py-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Apps</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded border border-(--border) bg-background font-medium" style={{ color: "var(--accent)" }}>

@@ -73,7 +73,7 @@ function IntegrationCard({
           <button
             onClick={onConnect}
             disabled={disabled}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent) px-3.5 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent) px-3.5 py-1.5 text-sm font-medium text-(--accent-foreground) transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
             {connectLabel ?? `Connect ${title}`}
@@ -114,7 +114,7 @@ export function AppsTab({
             </p>
             <button
               onClick={loginWithGoogle}
-              className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent) px-3.5 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent) px-3.5 py-1.5 text-sm font-medium text-(--accent-foreground) transition-opacity hover:opacity-90"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               Sign in with Google

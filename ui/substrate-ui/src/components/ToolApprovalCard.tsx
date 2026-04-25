@@ -151,8 +151,8 @@ export function ToolApprovalCard({
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={handleApprove}
-              className="rounded px-3 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
-                style={{ background: "var(--accent)" }}
+                className="rounded px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer"
+                style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
                 onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
                 onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
               >

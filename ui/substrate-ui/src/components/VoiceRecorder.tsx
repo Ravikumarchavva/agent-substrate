@@ -9,6 +9,8 @@ interface VoiceRecorderProps {
   onTranscript: (text: string) => void;
   /** Disable the button while the chat is sending a message. */
   disabled?: boolean;
+  /** Optional class name to override styling */
+  className?: string;
 }
 
 type RecordingState = "idle" | "recording" | "transcribing";
@@ -16,7 +18,7 @@ type RecordingState = "idle" | "recording" | "transcribing";
 // Maximum recording duration (ms) — auto-stops to prevent forgotten sessions.
 const MAX_RECORD_MS = 60_000;
 
-export function VoiceRecorder({ onTranscript, disabled }: VoiceRecorderProps) {
+export function VoiceRecorder({ onTranscript, disabled, className }: VoiceRecorderProps) {
   const [state, setState] = useState<RecordingState>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -136,7 +138,7 @@ export function VoiceRecorder({ onTranscript, disabled }: VoiceRecorderProps) {
             : "Transcribing…"
         }
         title={error ?? undefined}
-        className="relative p-1.5 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className={`relative flex items-center justify-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${className || "p-1.5"}`}
         style={{
           color:
             state === "recording"

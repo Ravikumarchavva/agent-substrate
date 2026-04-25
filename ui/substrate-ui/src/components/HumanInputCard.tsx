@@ -100,7 +100,7 @@ export function HumanInputCard({
               className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
               style={{ background: "var(--accent)" }}
             >
-              <Check className="w-3 h-3 text-white" strokeWidth={3} />
+              <Check className="w-3 h-3 text-(--accent-foreground)" strokeWidth={3} />
             </div>
             <span className="text-xs" style={{ color: "var(--muted)" }}>
               Answered:{" "}
@@ -139,7 +139,7 @@ export function HumanInputCard({
                     className="shrink-0 w-5 h-5 flex items-center justify-center text-[11px] font-semibold rounded-sm"
                     style={{
                       background: isSelected ? "var(--accent)" : "var(--step-bg)",
-                      color:  isSelected ? "#fff" : "var(--muted)",
+                      color:  isSelected ? "var(--accent-foreground)" : "var(--muted)",
                       border: isSelected ? "none" : "1px solid var(--border)",
                     }}
                   >
@@ -203,7 +203,7 @@ export function HumanInputCard({
                   style={{
                     background:
                       selectedKey === "__freeform__" ? "var(--accent)" : "var(--step-bg)",
-                    color: selectedKey === "__freeform__" ? "#fff" : "var(--muted)",
+                    color: selectedKey === "__freeform__" ? "var(--accent-foreground)" : "var(--muted)",
                     border:
                       selectedKey === "__freeform__" ? "none" : "1px solid var(--border)",
                   }}
@@ -233,7 +233,7 @@ export function HumanInputCard({
                 {selectedKey === "__freeform__" && freeformText.trim() && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleFreeformSubmit(); }}
-                    className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer text-white"
+                    className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer text-(--accent-foreground)"
                     style={{ background: "var(--accent)" }}
                   >
                   Send

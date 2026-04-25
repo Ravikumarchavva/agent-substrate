@@ -43,7 +43,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
           />
         ) : (
           <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-(--accent-foreground)"
             style={{ background: "var(--accent)" }}
           >
             {isAuthenticated && user

@@ -118,15 +118,10 @@ class CredentialManager {
 
   async deleteCredential(userId: string, provider: string): Promise<boolean> {
     try {
-      await prisma.userCredential.delete({
-        where: {
-          userId_provider: {
-            userId,
-            provider,
-          },
-        },
+      const result = await prisma.userCredential.deleteMany({
+        where: { userId, provider },
       });
-      return true;
+      return result.count > 0;
     } catch {
       return false;
     }

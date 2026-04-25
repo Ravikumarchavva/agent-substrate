@@ -189,7 +189,7 @@ export function GeneralTab({
           <button
             onClick={handleSaveInstructions}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 rounded-xl bg-(--accent) px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-xl bg-(--accent) px-4 py-2 text-sm font-medium text-(--accent-foreground) transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
             {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSaving ? "Checking…" : "Save"}

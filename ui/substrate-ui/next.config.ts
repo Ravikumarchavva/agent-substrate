@@ -8,7 +8,7 @@ const WS_BACKEND_URL = PUBLIC_BACKEND_URL.replace(/^http/, "ws");
 
 const nextConfig: NextConfig = {
   output: 'standalone', // For Docker builds
-  allowedDevOrigins: ['127.0.0.1', '192.168.0.6'],
+  allowedDevOrigins: ['127.0.0.1', '192.168.0.6', 'coagulant-stump-starlet.ngrok-free.dev'],
   experimental: {
     // Enable if needed
   },

@@ -84,10 +84,10 @@ function QuickActionButton({ icon: Icon, label, onClick, isActive = false }: Qui
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl px-2 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-background"}`}
+      className={`ravi-press flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-(--card-hover)"}`}
     >
       <Icon className="h-4 w-4 shrink-0" />
-      <span className="truncate">{label}</span>
+      <span className="truncate font-medium">{label}</span>
     </button>
   );
 }
@@ -112,6 +112,8 @@ export function Sidebar({
   const [menuOpen, setMenuOpen] = useState(false);
   const [threadPendingDelete, setThreadPendingDelete] = useState<Thread | null>(null);
   const [isDeletingThread, setIsDeletingThread] = useState(false);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { user, isAuthenticated, isAdmin, loginWithGoogle, logout } = useAuth();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -181,14 +183,36 @@ export function Sidebar({
 
   const chatQuickActions = [{ label: "New chat", icon: SquarePen, onClick: onNewChat }];
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+
+    if (isLeftSwipe && onCollapse) {
+      onCollapse();
+    }
+  };
+
   return (
     <>
       <aside
         className="flex h-full min-h-0 w-full flex-col overflow-hidden border-r border-(--border) bg-(--card) shadow-2xl lg:shadow-none"
         suppressHydrationWarning
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
-        <div className="flex items-center justify-between border-b border-(--border) px-2 py-3">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between px-2 py-2">
+          <div className="flex items-center gap-3 ml-2">
             <RaviMark className="h-6 w-6 text-foreground" />
           </div>
           {onCollapse && (
@@ -203,7 +227,7 @@ export function Sidebar({
           )}
         </div>
 
-        <div className="px-2 pt-3">
+        <div className="px-2 pt-2">
           <div className="space-y-1">
             {isSettingsMode ? (
               <QuickActionButton icon={ArrowLeft} label="Back to chats" onClick={() => onBackToChat?.()} />
@@ -221,7 +245,7 @@ export function Sidebar({
         </div>
 
         {isSettingsMode ? (
-          <div className="flex-1 overflow-y-auto px-3 py-4">
+          <div className="flex-1 overflow-y-auto px-2 py-4">
             <div className="space-y-5">
               {settingsGroups.map((group) => (
                 <div key={group.title}>
@@ -256,9 +280,9 @@ export function Sidebar({
           </div>
         ) : (
           <>
-            <div className="px-2 pb-2 pt-3">
-              <div className="flex items-center gap-2 rounded-2xl border border-(--border) bg-background px-2 py-2.5 text-sm text-(--muted)">
-                <Search className="h-3.5 w-3.5 shrink-0" />
+            <div className="px-3 pb-2 pt-3">
+              <div className="flex items-center gap-2 rounded-xl border border-(--border) bg-background px-3 py-2.5 text-sm text-(--muted)">
+                <Search className="h-4 w-4 shrink-0" />
                 <input
                   ref={searchInputRef}
                   value={search}
@@ -278,8 +302,8 @@ export function Sidebar({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto pb-3 pt-4">
-              <p className="px-2 pb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-(--muted)">
+            <div className="flex-1 overflow-y-auto px-2 pb-3 pt-4">
+              <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-(--muted)">
                 Recents
               </p>
               {threads.length === 0 ? (
@@ -294,7 +318,7 @@ export function Sidebar({
 
                   return (
                     <div key={label} className="mb-4">
-                      <p className="px-2 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-[0.12em] text-(--muted)">
+                      <p className="px-1 pb-2 pt-2 text-[11px] font-semibold uppercase tracking-wider text-(--muted)">
                         {label}
                       </p>
                       <div className="space-y-0.5">
@@ -322,9 +346,9 @@ export function Sidebar({
           </>
         )}
 
-        <div className="border-t border-(--border) p-2" ref={menuRef}>
+        <div className="mt-auto px-2 pb-3 pt-2" ref={menuRef}>
           {menuOpen && (
-            <div className="mb-1.5 overflow-hidden rounded-2xl bg-(--card)" style={{ boxShadow: "var(--shadow-lg)" }}>
+            <div className="ravi-pop-in mb-1.5 overflow-hidden rounded-2xl bg-(--card)" style={{ boxShadow: "var(--shadow-lg)", transformOrigin: "bottom center" }}>
               {isAuthenticated && user && (
                 <div className="border-b border-(--border) px-2.5 py-3">
                   <div className="truncate text-sm font-medium">{user.name ?? "User"}</div>
@@ -342,7 +366,7 @@ export function Sidebar({
                 <button
                   type="button"
                   onClick={toggleTheme}
-                  className="cursor-pointer rounded-xl p-1.5 transition-colors hover:bg-(--card-hover)"
+                  className="flex items-center justify-center cursor-pointer rounded-xl p-1.5 transition-colors hover:bg-(--card-hover)"
                   aria-label="Toggle theme"
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -405,7 +429,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setMenuOpen((open) => !open)}
-            className="flex w-full cursor-pointer items-center gap-2.5 rounded-2xl bg-background px-3 py-3 transition-colors hover:bg-(--card-hover)"
+            className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-(--card-hover)"
             aria-expanded={menuOpen}
             aria-haspopup="true"
           >
@@ -434,7 +458,7 @@ export function Sidebar({
       </aside>
 
       {threadPendingDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="ravi-fade-in fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
             className="absolute inset-0 cursor-pointer bg-black/50 backdrop-blur-sm"
@@ -442,7 +466,7 @@ export function Sidebar({
             aria-label="Close delete confirmation"
           />
           <div
-            className="relative w-full max-w-md rounded-2xl bg-(--card) p-6"
+            className="ravi-scale-in relative w-full max-w-md rounded-2xl bg-(--card) p-6"
             role="dialog"
             aria-modal="true"
             aria-label="Delete chat thread"
@@ -559,7 +583,7 @@ function ThreadItem({
 
   return (
     <div
-      className={`group relative w-full cursor-pointer rounded-lg transition-colors ${isActive ? "bg-(--card) text-foreground" : "text-(--muted) hover:bg-(--card) hover:text-foreground"}`}
+      className={`group relative w-full cursor-pointer rounded-xl transition-colors ${isActive ? "bg-(--card-hover) text-foreground" : "text-foreground hover:bg-(--card-hover)"}`}
       onClick={onSelect}
       style={isActive ? { boxShadow: "var(--shadow-sm)" } : undefined}
       role="button"
@@ -567,7 +591,7 @@ function ThreadItem({
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
     >
       {/* Text — full width */}
-      <div className="w-full py-2.5 pl-2.5 pr-2.5 sm:py-2">
+      <div className="w-full py-3 px-3">
         <p
           className={`truncate text-[14px] leading-6 ${isActive ? "font-medium" : ""}`}
           title={thread.name}
@@ -584,7 +608,7 @@ function ThreadItem({
       >
         {/* Gradient fade behind the button */}
         <div
-          className={`pointer-events-none absolute right-0 top-0 h-full w-14 bg-gradient-to-l to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isActive ? "from-(--card)" : "from-background group-hover:from-(--card)"}`}
+          className={`pointer-events-none absolute right-0 top-0 h-full w-14 bg-gradient-to-l to-transparent opacity-0 group-hover:opacity-100 transition-opacity from-(--card-hover)`}
         />
         <button
           type="button"
@@ -592,13 +616,13 @@ function ThreadItem({
             e.stopPropagation();
             setShowMenu(!showMenu);
           }}
-          className={`btn-icon relative z-10 flex cursor-pointer items-center justify-center rounded-lg p-1.5 sm:p-1 transition-all hover:bg-(--card-hover) ${showMenu ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+          className={`btn-icon relative z-10 flex cursor-pointer items-center justify-center rounded-lg p-1.5 sm:p-1 transition-all hover:bg-foreground/10 ${showMenu ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
         >
           <MoreHorizontal className="h-4 w-4" />
         </button>
 
         {showMenu && (
-          <div className="absolute right-0 top-full z-[100] mt-1 w-32 overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-2xl">
+          <div className="ravi-scale-in absolute right-0 top-full z-[100] mt-1 w-32 overflow-hidden rounded-xl border border-(--border) bg-(--card) shadow-2xl" style={{ transformOrigin: "top right" }}>
             <button
               type="button"
               onClick={(e) => {

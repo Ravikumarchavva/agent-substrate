@@ -34,7 +34,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useThreads } from "@/hooks/useThreads";
 import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAttachments";
 import { useAppPanel } from "@/hooks/useAppPanel";
-import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, type LucideIcon } from "lucide-react";
+import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "ravi:last-active-thread";
 
@@ -246,7 +246,7 @@ function ChatPageContent() {
         <button
           type="button"
           onClick={() => handleRemoveFile(file.id)}
-          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-background/85 text-(--muted) opacity-100 shadow-sm transition-all sm:opacity-0 sm:group-hover/attach:opacity-100 cursor-pointer"
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-background/85 text-[var(--muted) opacity-100 shadow-sm transition-all sm:opacity-0 sm:group-hover/attach:opacity-100 cursor-pointer"
           aria-label={`Remove ${file.name}`}
         >
           <X className="h-3.5 w-3.5" />
@@ -264,14 +264,14 @@ function ChatPageContent() {
             />
           </div>
         ) : (
-          <div className="attachment-card__icon text-(--accent)">
+          <div className="attachment-card__icon text-[var(--accent)">
             <AttachmentIcon className="h-5 w-5" />
           </div>
         )}
 
         <div className="min-w-0 flex-1 pr-7">
           <div className="truncate text-sm font-semibold text-foreground">{file.name}</div>
-          <div className="mt-1 text-[11px] text-(--muted)">
+          <div className="mt-1 text-[11px] text-[var(--muted)">
             {formatFileSize(file.size)}
           </div>
         </div>
@@ -909,7 +909,7 @@ function ChatPageContent() {
   if (authLoading) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
-        <Loader2 className="w-6 h-6 animate-spin text-(--muted)" />
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--muted)" />
       </div>
     );
   }
@@ -918,24 +918,24 @@ function ChatPageContent() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
-          <div className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-xl font-bold bg-foreground text-background">
+          <div className="ravi-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-xl font-bold bg-foreground text-background">
             R
           </div>
-          <div>
+          <div className="ravi-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
             <h1 className="text-2xl font-semibold">Welcome</h1>
-            <p className="text-sm mt-2 text-(--muted)">
+            <p className="text-sm mt-2 text-[var(--muted)">
               Sign in to start chatting with your AI assistant
             </p>
           </div>
           {authNotice && (
-            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            <div className="ravi-fade-up rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" style={{ '--stagger': 2 } as React.CSSProperties}>
               {authNotice}
             </div>
           )}
           <button
             onClick={loginWithGoogle}
-            className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
-            style={{ boxShadow: "var(--shadow-md)" }}
+            className="ravi-fade-up ravi-press flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
+            style={{ '--stagger': 3, boxShadow: "var(--shadow-md)" } as React.CSSProperties}
           >
             {/* Google G */}
             <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -946,7 +946,7 @@ function ChatPageContent() {
             </svg>
             Continue with Google
           </button>
-          <p className="text-xs text-(--muted)">
+          <p className="ravi-fade-up text-xs text-[var(--muted)" style={{ '--stagger': 4 } as React.CSSProperties}>
             Your conversations are private and secure
           </p>
         </div>
@@ -985,7 +985,7 @@ function ChatPageContent() {
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
-              className="btn-icon pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
+              className="btn-icon pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-[var(--border) bg-[var(--card)/95 text-[var(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:hidden"
               aria-label="Open sidebar"
             >
               <SidebarToggleIcon direction="open" className="h-4 w-4" />
@@ -994,7 +994,7 @@ function ChatPageContent() {
               <button
                 type="button"
                 onClick={() => setDesktopSidebarOpen(true)}
-                className="btn-icon pointer-events-auto hidden h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-(--border) bg-(--card)/95 text-(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:flex"
+                className="btn-icon pointer-events-auto hidden h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-[var(--border) bg-[var(--card)/95 text-[var(--muted) shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground lg:flex"
                 aria-label="Open sidebar"
               >
                 <SidebarToggleIcon direction="open" className="h-4 w-4" />
@@ -1020,10 +1020,10 @@ function ChatPageContent() {
                   <div className="flex h-full items-center justify-center">
                     <div className="w-full max-w-2xl px-4 text-center sm:px-6">
                       <div className="space-y-5">
-                        <RaviMark className="mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
-                        <div>
+                        <RaviMark className="ravi-fade-up mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
+                        <div className="ravi-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
                           <h2 className="text-xl font-semibold sm:text-2xl">How can I help you today?</h2>
-                          <p className="mt-2 text-sm text-(--muted)">
+                          <p className="mt-2 text-sm text-[var(--muted)">
                             Ask me anything and I&apos;ll keep the working area clean and focused.
                           </p>
                         </div>
@@ -1039,8 +1039,8 @@ function ChatPageContent() {
                             <button
                               key={idx}
                               onClick={() => doSendMessage(text)}
-                              className="flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover) active:scale-[0.98] sm:p-3.5"
-                              style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
+                              className="ravi-pop-in ravi-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-[var(--muted) transition-colors hover:bg-[var(--card-hover) sm:p-3.5"
+                              style={{ '--stagger': idx + 2, background: "var(--card)", boxShadow: "var(--shadow-sm)" } as React.CSSProperties}
                             >
                               <Icon className="h-4 w-4 shrink-0 text-foreground" />
                               <span>{text}</span>
@@ -1056,7 +1056,7 @@ function ChatPageContent() {
                       if (m.role === "tool_approval" && m.metadata) {
                         return (
                           <div key={m.id} className="px-4 sm:px-6">
-                            <div className="mx-auto max-w-180">
+                            <div className="mx-auto max-w-[var(--chat-width)]">
                               <ToolApprovalCard
                                 requestId={m.metadata.requestId as string}
                                 toolName={m.metadata.toolName as string}
@@ -1072,7 +1072,7 @@ function ChatPageContent() {
                       if (m.role === "human_input" && m.metadata) {
                         return (
                           <div key={m.id} className="px-4 sm:px-6">
-                            <div className="mx-auto max-w-180">
+                            <div className="mx-auto max-w-[var(--chat-width)]">
                               <HumanInputCard
                                 requestId={m.metadata.requestId as string}
                                 question={m.metadata.question as string}
@@ -1127,11 +1127,11 @@ function ChatPageContent() {
 
                     {loading && !messages.some((m) => m.role === "assistant" && m.id === messages[messages.length - 1]?.id) && (
                       <div className="px-4 py-2 sm:px-6">
-                        <div className="mx-auto flex max-w-180 items-center gap-2 py-2">
+                        <div className="mx-auto flex max-w-[var(--chat-width)] items-center gap-2 py-2">
                           <div className="flex items-center gap-1.5">
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "0ms" }} />
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "150ms" }} />
-                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-(--muted)" style={{ animationDelay: "300ms" }} />
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--muted)" style={{ animationDelay: "0ms" }} />
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--muted)" style={{ animationDelay: "150ms" }} />
+                            <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--muted)" style={{ animationDelay: "300ms" }} />
                           </div>
                         </div>
                       </div>
@@ -1141,23 +1141,22 @@ function ChatPageContent() {
               </div>
 
               <div className="bg-background pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:pb-5">
-                <div className="mx-auto w-full max-w-2xl px-3 sm:px-6">
+                <div className="mx-auto w-full max-w-[var(--chat-width)] px-3 sm:px-6">
                   <form
                     onSubmit={sendMessage}
-                    className="flex flex-col overflow-hidden px-4 py-3"
+                    className="flex flex-col overflow-hidden rounded-[20px] px-3.5 py-2.5 sm:rounded-[24px]"
                     style={{
-                      borderRadius: "24px",
                       background: "var(--card)",
                       boxShadow: "var(--shadow-md)",
                     }}
                   >
                     {attachedFiles.length > 0 && (
-                      <div className="flex flex-wrap gap-2 pb-3">
+                      <div className="flex flex-wrap gap-2 pb-3 pt-1">
                         {attachedFiles.map((file) => renderComposerAttachment(file))}
                       </div>
                     )}
 
-                    <div className="flex items-end gap-2.5">
+                    <div className="flex items-end gap-2 px-1">
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -1171,10 +1170,11 @@ function ChatPageContent() {
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploadingFile}
-                        className="btn-icon mb-0.5 shrink-0 cursor-pointer self-end rounded-xl p-2 text-(--muted) transition-colors hover:bg-(--card-hover) disabled:cursor-not-allowed disabled:opacity-40"
+                        className="btn-icon mb-1 flex h-9 w-9 shrink-0 items-center justify-center cursor-pointer self-end rounded-full text-[var(--muted) transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        style={{ background: "var(--card-hover)" }}
                         aria-label="Attach file"
                       >
-                        {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
                       </button>
 
                       <textarea
@@ -1188,57 +1188,58 @@ function ChatPageContent() {
                           }
                         }}
                         rows={1}
-                        className="max-h-48 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] outline-none placeholder:text-(--muted)"
-                        placeholder="Ask anything…"
+                        className="max-h-48 flex-1 resize-none overflow-y-auto bg-transparent py-2.5 pl-1 pr-2 text-[15px] outline-none placeholder:text-[var(--muted)"
+                        placeholder="Ask anything"
                         disabled={loading}
                       />
 
-                      <div className="mb-0.5 flex shrink-0 items-center gap-1 self-end">
-                        {!loading && (
-                          <VoiceRecorder
-                            onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
-                            disabled={loading}
-                          />
+                      <div className="mb-1 flex shrink-0 items-center gap-2 self-end">
+                        {!input.trim() && !loading && (
+                          <>
+                            <div className="rounded-full" style={{ background: "var(--card-hover)" }}>
+                              <VoiceRecorder
+                                onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
+                                disabled={loading}
+                                className="h-9 w-9"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setRealtimeOpen(true)}
+                              className="btn-icon flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-transform active:scale-95"
+                              aria-label="Start speech-to-speech conversation"
+                              title="Live voice conversation"
+                            >
+                              <AudioLines className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
-                        {!loading && (
-                          <button
-                            type="button"
-                            onClick={() => setRealtimeOpen(true)}
-                            className="btn-icon cursor-pointer rounded-xl p-2 text-(--muted) transition-colors hover:bg-(--card-hover)"
-                            aria-label="Start speech-to-speech conversation"
-                            title="Live voice conversation"
-                          >
-                            <Radio className="h-4 w-4" />
-                          </button>
-                        )}
-                        {loading ? (
-                          <button
-                            type="button"
-                            onClick={handleStop}
-                            className="btn-icon cursor-pointer rounded-full bg-foreground p-2 text-background transition-colors"
-                            aria-label="Stop"
-                          >
-                            <StopCircle className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <button
-                            type="submit"
-                            disabled={!input.trim()}
-                            className="btn-icon cursor-pointer rounded-full p-2 transition-all disabled:cursor-not-allowed disabled:opacity-20"
-                            style={{
-                              background: input.trim() ? "var(--foreground)" : "var(--badge-bg)",
-                              color: input.trim() ? "var(--background)" : "var(--muted)",
-                            }}
-                            aria-label="Send"
-                          >
-                            <Send className="h-4 w-4" />
-                          </button>
+                        {(input.trim() || loading) && (
+                          loading ? (
+                            <button
+                              type="button"
+                              onClick={handleStop}
+                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-colors"
+                              aria-label="Stop"
+                            >
+                              <StopCircle className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              type="submit"
+                              disabled={!input.trim()}
+                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-10 bg-foreground text-background"
+                              aria-label="Send"
+                            >
+                              <ArrowUp className="h-5 w-5" />
+                            </button>
+                          )
                         )}
                       </div>
                     </div>
                   </form>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-2 px-1 sm:gap-3">
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2 px-1">
                     <div className="relative" ref={modelPickerRef}>
                       <button
                         type="button"
@@ -1246,24 +1247,24 @@ function ChatPageContent() {
                           setShowModelPicker((v) => !v);
                           setShowThinkingPicker(false);
                         }}
-                        className="btn-icon flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-(--muted) transition-colors hover:bg-(--card-hover)"
+                        className="btn-icon ravi-press flex cursor-pointer items-center gap-1.5 rounded-xl border border-[var(--border) bg-[var(--card)/50 px-3 py-1.5 text-[11px] font-medium text-[var(--muted) transition-all hover:bg-[var(--card-hover) hover:text-foreground"
                       >
                         <Settings2 className="h-3 w-3" />
                         <span className="max-w-32 truncate">
                           {CHAT_MODEL_OPTIONS.find((m) => m.id === selectedModel)?.label ?? selectedModel.split("/").pop()}
                         </span>
-                        <ChevronDown className="h-3 w-3" />
+                        <ChevronDown className="h-3 w-3 opacity-50" />
                       </button>
                       {showModelPicker && (
                         <div
-                          className="absolute bottom-full left-0 z-50 mb-2 w-64 overflow-hidden rounded-2xl p-1 shadow-2xl"
-                          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                          className="ravi-scale-in absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 overflow-hidden rounded-xl p-1 shadow-2xl"
+                          style={{ background: "var(--card)", border: "1px solid var(--border)", transformOrigin: "bottom center" }}
                         >
-                          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-(--muted)">
+                          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-[var(--muted)">
                             Model
                           </div>
                           <div className="flex flex-col gap-0.5">
-                            {CHAT_MODEL_OPTIONS.filter(opt => !opt.disabled).map((opt) => {
+                            {CHAT_MODEL_OPTIONS.filter(opt => !opt.disabled).map((opt, idx) => {
                               const active = opt.id === selectedModel;
                               return (
                                 <button
@@ -1274,12 +1275,13 @@ function ChatPageContent() {
                                     writeStoredValue(CHAT_MODEL_STORAGE_KEY, opt.id);
                                     setShowModelPicker(false);
                                   }}
-                                  className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${active ? "bg-(--card-hover) text-foreground ring-1 ring-(--border)" : "text-(--muted) hover:bg-(--card-hover) hover:text-foreground"}`}
+                                  className={`ravi-slide-down flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${active ? "bg-[var(--card-hover) text-foreground ring-1 ring-(--border)" : "text-[var(--muted) hover:bg-[var(--card-hover) hover:text-foreground"}`}
+                                  style={{ '--stagger': idx } as React.CSSProperties}
                                 >
                                   <div className="flex items-center gap-2">
                                     <span className="text-[13.5px] font-medium tracking-tight">{opt.label}</span>
                                     {(opt.id.includes("5.4") || opt.id.includes("3.3")) && (
-                                      <span className="rounded-md bg-(--badge-bg) px-1.5 py-0.5 text-[9px] font-bold text-(--muted) uppercase">New</span>
+                                      <span className="rounded-md bg-[var(--badge-bg) px-1.5 py-0.5 text-[9px] font-bold text-[var(--muted) uppercase">New</span>
                                     )}
                                   </div>
                                   {active && <div className="h-1.5 w-1.5 rounded-full bg-foreground" />}
@@ -1291,7 +1293,7 @@ function ChatPageContent() {
                       )}
                     </div>
 
-                    <span className="text-(--border)">·</span>
+                    <div className="h-3 w-px bg-[var(--border)" />
 
                     <div className="relative" ref={thinkingPickerRef}>
                       <button
@@ -1300,22 +1302,22 @@ function ChatPageContent() {
                           setShowThinkingPicker((v) => !v);
                           setShowModelPicker(false);
                         }}
-                        className="btn-icon flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-(--muted) transition-colors hover:bg-(--card-hover)"
+                        className="btn-icon ravi-press flex cursor-pointer items-center gap-1.5 rounded-xl border border-[var(--border) bg-[var(--card)/50 px-3 py-1.5 text-[11px] font-medium text-[var(--muted) transition-all hover:bg-[var(--card-hover) hover:text-foreground"
                       >
-                        <span>💭</span>
+                        <span className="text-[10px]">💭</span>
                         <span>{thinkingLevel === "off" ? "No thinking" : `Thinking: ${thinkingLevel}`}</span>
-                        <ChevronDown className="h-3 w-3" />
+                        <ChevronDown className="h-3 w-3 opacity-50" />
                       </button>
                       {showThinkingPicker && (
                         <div
-                          className="absolute bottom-full left-0 z-50 mb-2 w-56 overflow-hidden rounded-2xl p-1 shadow-2xl"
-                          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                          className="ravi-scale-in absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 overflow-hidden rounded-xl p-1 shadow-2xl"
+                          style={{ background: "var(--card)", border: "1px solid var(--border)", transformOrigin: "bottom center" }}
                         >
-                          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-(--muted)">
+                          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-[var(--muted)">
                             Thinking
                           </div>
                           <div className="flex flex-col gap-0.5">
-                            {(CHAT_MODEL_OPTIONS.find(m => m.id === selectedModel)?.thinkingLevels || ["off", "low", "medium", "high"]).map((level) => {
+                            {(CHAT_MODEL_OPTIONS.find(m => m.id === selectedModel)?.thinkingLevels || ["off", "low", "medium", "high"]).map((level, idx) => {
                               const labels: Record<string, string> = {
                                 off: "No thinking",
                                 low: "Fast Reasoning",
@@ -1331,7 +1333,8 @@ function ChatPageContent() {
                                     setThinkingLevel(level);
                                     setShowThinkingPicker(false);
                                   }}
-                                  className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${level === thinkingLevel ? "bg-(--card-hover) text-foreground ring-1 ring-(--border)" : "text-(--muted) hover:bg-(--card-hover) hover:text-foreground"}`}
+                                  className={`ravi-slide-down flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${level === thinkingLevel ? "bg-[var(--card-hover) text-foreground ring-1 ring-(--border)" : "text-[var(--muted) hover:bg-[var(--card-hover) hover:text-foreground"}`}
+                                  style={{ '--stagger': idx } as React.CSSProperties}
                                 >
                                   <span className="text-[13.5px] font-medium tracking-tight">{labels[level] || level}</span>
                                   {level === thinkingLevel && <div className="h-1.5 w-1.5 rounded-full bg-foreground" />}
@@ -1345,7 +1348,7 @@ function ChatPageContent() {
                   </div>
 
                   <RealtimeVoicePanel isOpen={realtimeOpen} onClose={() => setRealtimeOpen(false)} />
-                  <p className="mt-2 text-center text-xs text-(--muted)">
+                  <p className="mt-2 text-center text-xs text-[var(--muted)">
                     AI can make mistakes. Verify important information.
                   </p>
                 </div>
@@ -1370,14 +1373,20 @@ function ChatPageContent() {
 
       {/* Mobile Sidebar Drawer */}
       {mobileSidebarOpen && (
-        <div className="fixed inset-0 z-40 flex lg:hidden">
+        <div className="ravi-fade-in fixed inset-0 z-40 lg:hidden">
+          {/* Backdrop */}
           <button
             type="button"
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 cursor-pointer"
+            style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
             onClick={() => setMobileSidebarOpen(false)}
             aria-label="Close sidebar"
           />
-          <div className="relative h-full w-[min(13.5rem,calc(100vw-1rem))] max-w-full">
+          {/* Sidebar sheet — slides in from the left */}
+          <div
+            className="ravi-slide-in-left relative flex h-full flex-col"
+            style={{ width: "min(360px, 88vw)" }}
+          >
             <Sidebar
               threads={threads}
               currentThreadId={currentThreadId}
@@ -1407,7 +1416,7 @@ export default function ChatPage() {
     <Suspense
       fallback={
         <div className="flex min-h-dvh items-center justify-center bg-background">
-          <Loader2 className="w-6 h-6 animate-spin text-(--muted)" />
+          <Loader2 className="w-6 h-6 animate-spin text-[var(--muted)" />
         </div>
       }
     >

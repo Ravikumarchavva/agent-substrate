@@ -1,6 +1,7 @@
 "use client";
 
-import { Cpu, Mic, Radio, Volume2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Cpu, Mic, Radio, Volume2, ChevronDown, Check } from "lucide-react";
 import type {
   ModelOption,
   OpenAITTSVoice,
@@ -108,20 +109,129 @@ function GroupedSelect({
   groups: ModelOptionGroup[];
   onChange: (value: string) => void;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) setIsOpen(false);
+    }
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const selectedLabel = groups.flatMap((g) => g.options).find((o) => o.id === value)?.label || value;
+
   return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="w-full rounded-2xl border border-(--border) bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
-    >
-      {groups.map((group) => (
-        <optgroup key={group.label} label={group.label}>
-          {group.options.map((option) => (
-            <option key={option.id} value={option.id}>{option.label}</option>
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between rounded-xl border border-(--border) bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
+      >
+        <span className="truncate">{selectedLabel}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+      </button>
+
+      {isOpen && (
+        <div
+          className="ravi-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--border) p-1 shadow-xl"
+          style={{ background: "var(--card)" }}
+        >
+          {groups.map((group) => (
+            <div key={group.label} className="mb-2 last:mb-0">
+              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-(--muted)">
+                {group.label}
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {group.options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(option.id);
+                      setIsOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      value === option.id
+                        ? "bg-foreground/10 font-medium text-foreground"
+                        : "text-foreground hover:bg-(--card-hover)"
+                    }`}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    {value === option.id && <Check className="h-4 w-4 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
-        </optgroup>
-      ))}
-    </select>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: { id: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) setIsOpen(false);
+    }
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const selectedLabel = options.find((o) => o.id === value)?.label || value;
+
+  return (
+    <div className="relative w-full" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between rounded-xl border border-(--border) bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
+      >
+        <span className="truncate">{selectedLabel}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+      </button>
+
+      {isOpen && (
+        <div
+          className="ravi-scale-in absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--border) p-1 shadow-xl"
+          style={{ background: "var(--card)" }}
+        >
+          <div className="flex flex-col gap-0.5">
+            {options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  onChange(option.id);
+                  setIsOpen(false);
+                }}
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                  value === option.id
+                    ? "bg-foreground/10 font-medium text-foreground"
+                    : "text-foreground hover:bg-(--card-hover)"
+                }`}
+              >
+                <span className="truncate">{option.label}</span>
+                {value === option.id && <Check className="h-4 w-4 shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -229,7 +339,7 @@ export function ModelsTab({
               type="button"
               onClick={handleSaveModelPreferences}
               disabled={!hasUnsavedModelPreferences}
-              className="rounded-xl bg-(--accent) px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+              className="rounded-xl bg-(--accent) px-4 py-2 text-sm font-medium text-(--accent-foreground) transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
             >
               Save defaults
             </button>
@@ -282,24 +392,16 @@ export function ModelsTab({
             }}
           />
           <div className="grid gap-3 sm:grid-cols-2">
-            <select
+            <CustomSelect
               value={ttsVoice}
-              onChange={(event) => { clearNotice(); setTtsVoice(event.target.value as TTSVoice); }}
-              className="w-full rounded-2xl border border-(--border) bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
-            >
-              {ttsVoiceOptions.map((option) => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </select>
-            <select
+              onChange={(value) => { clearNotice(); setTtsVoice(value as TTSVoice); }}
+              options={ttsVoiceOptions}
+            />
+            <CustomSelect
               value={String(ttsPlaybackRate)}
-              onChange={(event) => { clearNotice(); setTtsPlaybackRate(Number.parseFloat(event.target.value) as TTSPlaybackRate); }}
-              className="w-full rounded-2xl border border-(--border) bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
-            >
-              {TTS_PLAYBACK_RATE_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </select>
+              onChange={(value) => { clearNotice(); setTtsPlaybackRate(Number.parseFloat(value) as TTSPlaybackRate); }}
+              options={TTS_PLAYBACK_RATE_OPTIONS}
+            />
           </div>
         </CapabilityCard>
 
@@ -310,15 +412,11 @@ export function ModelsTab({
           activeModel={selectedRealtimeModel}
         >
           <GroupedSelect value={realtimeModel} groups={groupedRealtimeModels} onChange={(value) => { clearNotice(); setRealtimeModel(value); }} />
-          <select
+          <CustomSelect
             value={realtimeVoice}
-            onChange={(event) => { clearNotice(); setRealtimeVoice(event.target.value as OpenAITTSVoice); }}
-            className="w-full rounded-2xl border border-(--border) bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-(--accent)"
-          >
-            {realtimeVoiceOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
+            onChange={(value) => { clearNotice(); setRealtimeVoice(value as OpenAITTSVoice); }}
+            options={realtimeVoiceOptions}
+          />
         </CapabilityCard>
       </div>
 

@@ -55,13 +55,13 @@ function CopyableMarkdownTable({ children, className, ...props }: ComponentProps
 
   return (
     <div
-      className="relative my-1 overflow-hidden rounded-[22px] border border-(--border) bg-(--card)"
+      className="relative my-1 overflow-hidden rounded-[22px] border border-[var(--border) bg-[var(--card)"
       style={{ boxShadow: "var(--shadow-sm)" }}
     >
       <button
         type="button"
         onClick={handleCopyTable}
-        className="absolute right-1.5 top-1.5 z-10 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-background/90 text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
+        className="absolute right-1.5 top-1.5 z-10 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-background/90 text-[var(--muted) transition-colors hover:bg-[var(--card-hover) hover:text-foreground"
         aria-label={copied ? "Copied" : "Copy table"}
         title={copied ? "Copied" : "Copy table"}
       >
@@ -86,12 +86,12 @@ function AttachmentDocumentCard({ attachment }: AttachmentDocumentCardProps) {
   const extension = attachment.name.split(".").pop()?.toUpperCase() || "FILE";
   const content = (
     <div className="attachment-card group/file p-3">
-      <div className="attachment-card__icon text-(--accent)">
+      <div className="attachment-card__icon text-[var(--accent)">
         {createElement(attachmentIcon, { className: "h-5 w-5" })}
       </div>
       <div className="min-w-0 flex-1 pr-1">
         <div className="truncate text-sm font-semibold text-foreground">{attachment.name}</div>
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-(--muted)">
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-[var(--muted)">
           <span>{extension}</span>
           {attachment.size > 0 && (
             <>
@@ -101,7 +101,7 @@ function AttachmentDocumentCard({ attachment }: AttachmentDocumentCardProps) {
           )}
         </div>
       </div>
-      {attachment.url && <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-(--muted)" />}
+      {attachment.url && <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)" />}
     </div>
   );
 
@@ -194,7 +194,7 @@ export function MessageBubble({
   };
 
   const imageLightbox = activeImageAttachment?.url ? (
-    <div className="fixed inset-0 z-70 flex items-center justify-center p-4 sm:p-6">
+    <div className="ravi-fade-in fixed inset-0 z-70 flex items-center justify-center p-4 sm:p-6">
       <button
         type="button"
         className="absolute inset-0 bg-black/88 backdrop-blur-md"
@@ -242,8 +242,8 @@ export function MessageBubble({
   if (isUser) {
     return (
       <>
-        <div className="group px-4 sm:px-6">
-          <div className="mx-auto max-w-180 flex justify-end">
+        <div className="ravi-fade-up group px-4 sm:px-6">
+          <div className="mx-auto max-w-[var(--chat-width)] flex justify-end">
           <div className="flex max-w-[85%] flex-col items-end gap-2 sm:max-w-[75%]">
             {imageAttachments.length > 0 && (
               <div className="flex flex-wrap justify-end gap-2">
@@ -284,7 +284,7 @@ export function MessageBubble({
               </div>
             )}
             {timestamp && (
-              <span className="text-[11px] text-(--muted) pr-1">
+              <span className="text-[11px] text-[var(--muted) pr-1">
                 {formatTime(timestamp)}
               </span>
             )}
@@ -298,8 +298,8 @@ export function MessageBubble({
 
   /* ── Assistant message: left-aligned, clean layout ── */
   return (
-    <div className="group relative px-4 sm:px-6">
-      <div className="mx-auto max-w-180">
+    <div className="ravi-fade-up group relative px-4 sm:px-6">
+      <div className="mx-auto max-w-[var(--chat-width)]">
         {/* Content column */}
         <div className="space-y-3">
           {/* Tool Calls — pill-style inline display */}
@@ -308,20 +308,20 @@ export function MessageBubble({
               {/* Summary pill */}
               <details className="group/tools" open={false}>
                 <summary
-                  className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
+                  className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-[var(--card-hover)"
                   style={{ background: "var(--badge-bg)" }}
                 >
                   {isToolExecuting ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-(--muted)" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-[var(--muted)" />
                   ) : (
-                    <WrenchIcon className="w-3.5 h-3.5 shrink-0 text-(--muted)" />
+                    <WrenchIcon className="w-3.5 h-3.5 shrink-0 text-[var(--muted)" />
                   )}
-                  <span className="text-xs font-medium text-(--badge-fg)">
+                  <span className="text-xs font-medium text-[var(--badge-fg)">
                     {isToolExecuting
                       ? `Running ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}…`
                       : `Used ${visibleToolCalls.length} tool${visibleToolCalls.length > 1 ? 's' : ''}`}
                   </span>
-                  <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90 text-(--muted)" />
+                  <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/tools:rotate-90 text-[var(--muted)" />
                 </summary>
 
                 <div
@@ -340,12 +340,12 @@ export function MessageBubble({
                     const riskColor = riskColors[tool.color ?? tool.risk ?? "safe"] ?? "#34d399";
                     return (
                       <div key={tool.id}>
-                        {idx > 0 && <div className="border-t border-(--border)" />}
+                        {idx > 0 && <div className="border-t border-[var(--border)" />}
                         <details className="group">
-                          <summary className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-(--card-hover) transition-colors list-none">
+                          <summary className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-[var(--card-hover) transition-colors list-none">
                             <span className="shrink-0">
                               {!isDone ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-(--muted)" />
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--muted)" />
                               ) : isErr ? (
                                 <span className="text-red-400 text-xs leading-none">✕</span>
                               ) : (
@@ -361,16 +361,16 @@ export function MessageBubble({
                               {tool.name.replace(/_/g, " ")}
                             </span>
                             {hasApp && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-(--badge-bg) text-(--badge-fg) font-medium">
+                              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-[var(--badge-bg) text-[var(--badge-fg) font-medium">
                                 App
                               </span>
                             )}
-                            <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90 text-(--muted)" />
+                            <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90 text-[var(--muted)" />
                           </summary>
 
-                          <div className="px-4 pb-3 space-y-2 border-t border-(--border)">
+                          <div className="px-4 pb-3 space-y-2 border-t border-[var(--border)">
                             <div className="pt-2.5">
-                              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-(--muted)">Input</div>
+                              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[var(--muted)">Input</div>
                               <pre className="text-[11px] p-3 rounded-xl overflow-x-auto" style={{ background: "var(--code-bg)", color: "var(--code-fg)" }}>
                                 {JSON.stringify(
                                   typeof tool.arguments === "string"
@@ -397,7 +397,7 @@ export function MessageBubble({
                             {hasApp && (
                               <button
                                 onClick={() => onOpenInPanel?.(tool)}
-                                className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer text-(--muted) hover:text-foreground"
+                                className="flex items-center gap-1.5 text-xs py-1 transition-colors cursor-pointer text-[var(--muted) hover:text-foreground"
                               >
                                 <PanelRightOpen className="w-3.5 h-3.5" />
                                 Open {tool.name.replace(/_/g, " ")}
@@ -417,18 +417,18 @@ export function MessageBubble({
           {safeReasoning && (
             <details className="group/think" open={isToolExecuting}>
               <summary
-                className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-(--card-hover)"
+                className="inline-flex items-center gap-2 cursor-pointer select-none list-none rounded-xl px-3 py-1.5 transition-colors hover:bg-[var(--card-hover)"
                 style={{ background: "var(--badge-bg)" }}
               >
                 <span className="text-xs">💭</span>
-                <span className="text-xs font-medium text-(--badge-fg)">Thinking</span>
-                <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/think:rotate-90 text-(--muted)" />
+                <span className="text-xs font-medium text-[var(--badge-fg)">Thinking</span>
+                <ChevronRight className="w-3 h-3 shrink-0 transition-transform group-open/think:rotate-90 text-[var(--muted)" />
               </summary>
               <div
                 className="mt-2 rounded-2xl px-4 py-3"
                 style={{ background: "var(--card)", boxShadow: "var(--shadow-sm)" }}
               >
-                <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-(--muted)">
+                <div className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-[var(--muted)">
                   {safeReasoning}
                 </div>
               </div>
@@ -457,7 +457,7 @@ export function MessageBubble({
             <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
               <button
                 onClick={copyToClipboard}
-                className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                className="p-1.5 rounded-lg hover:bg-[var(--card-hover) transition-colors cursor-pointer text-[var(--muted)"
                 title="Copy"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -466,14 +466,14 @@ export function MessageBubble({
               {onRegenerate && (
                 <button
                   onClick={onRegenerate}
-                  className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                  className="p-1.5 rounded-lg hover:bg-[var(--card-hover) transition-colors cursor-pointer text-[var(--muted)"
                   title="Regenerate"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
                 </button>
               )}
               {timestamp && (
-                <span className="text-[11px] ml-1.5 text-(--muted)">
+                <span className="text-[11px] ml-1.5 text-[var(--muted)">
                   {formatTime(timestamp)}
                 </span>
               )}

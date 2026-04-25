@@ -475,8 +475,14 @@ class SpotifyPlayerTool(McpAppTool):
                         "type": "string",
                         "description": (
                             "Search query — can be a song name, artist, genre, "
-                            "mood, or any music-related phrase"
+                            "mood, or any music-related phrase. Required for source='search'."
                         ),
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "The source to play from. 'search' (default) uses the query, 'liked_songs' plays your saved tracks, 'playlists' lists your playlists.",
+                        "enum": ["search", "liked_songs", "playlists"],
+                        "default": "search",
                     },
                     "genre": {
                         "type": "string",
@@ -484,10 +490,10 @@ class SpotifyPlayerTool(McpAppTool):
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Number of tracks to return (default: 10, max: 50)",
+                        "description": "Number of tracks to return (default: 20, max: 50)",
                     },
                 },
-                "required": ["query"],
+                "required": [],
                 "additionalProperties": False,
             },
             annotations={
@@ -500,16 +506,11 @@ class SpotifyPlayerTool(McpAppTool):
     async def execute(  # type: ignore[override]
         self,
         *,
-        query: str,
+        query: str = "",
+        source: str = "search",
         genre: str = "",
-        limit: int = 10,
+        limit: int = 20,
     ) -> ToolResult:
-
-        if not query:
-            return ToolResult(
-                content=[{"type": "text", "text": "No search query provided."}],
-                is_error=True,
-            )
 
         # Check if Spotify service is configured
         if not self._base_spotify_service:
@@ -536,7 +537,7 @@ class SpotifyPlayerTool(McpAppTool):
                     data = resp.json()
                     if data.get("access_token"):
                         oauth_token = data["access_token"]
-                        logger.info("Using OAuth token from Next.js for Spotify search")
+                        logger.info("Using OAuth token from Next.js for Spotify operation")
         except Exception as e:
             logger.debug("No OAuth token available from Next.js: %s", e)
 
@@ -551,99 +552,86 @@ class SpotifyPlayerTool(McpAppTool):
         else:
             spotify = self._base_spotify_service
 
-        # Search Spotify — use the user query as-is first.
-        # If a genre hint is provided, we only use it as a fallback
-        # qualifier (never the genre: filter, which Spotify deprecated).
         effective_limit = min(limit, 50)
         tracks: list = []
+        app_data: Dict[str, Any] = {"source": source}
 
         try:
-            tracks = await spotify.search_tracks(
-                query=query,
-                limit=effective_limit,
-            )
-        except Exception as e:
-            logger.warning(
-                "Spotify search failed for query=%r (limit=%d): %s",
-                query,
-                effective_limit,
-                e,
-            )
-            # Retry with a smaller limit and simpler query
-            try:
-                simple_query = query.split()[0] if query.split() else query
-                tracks = await spotify.search_tracks(
-                    query=simple_query,
-                    limit=min(effective_limit, 5),
+            if source == "liked_songs":
+                result = await spotify.get_liked_songs(limit=effective_limit)
+                tracks = result.get("tracks", [])
+                app_data["tracks"] = tracks
+                summary_prefix = f"Fetched {len(tracks)} liked songs from your library."
+            elif source == "playlists":
+                result = await spotify.get_playlists(limit=effective_limit)
+                playlists = result.get("playlists", [])
+                app_data["playlists"] = playlists
+                summary_prefix = f"Found {len(playlists)} playlists in your account."
+                return ToolResult(
+                    content=[{"type": "text", "text": summary_prefix}],
+                    is_error=False,
+                    app_data=app_data,
                 )
-            except Exception:
-                logger.exception("Spotify search retry also failed")
-                # If OAuth token was used, try falling back to Client Credentials
-                if oauth_token:
-                    try:
-                        logger.info("Falling back to Client Credentials for search")
-                        tracks = await self._base_spotify_service.search_tracks(
-                            query=query,
-                            limit=min(effective_limit, 5),
-                        )
-                    except Exception:
-                        pass
-                    else:
-                        if tracks:
-                            logger.info("Client Credentials fallback succeeded")
-                            # Continue to result handling below
-
-                if not tracks:
+            else:
+                # Default: search
+                if not query:
                     return ToolResult(
-                        content=[
-                            {"type": "text", "text": f"Spotify search failed: {e}"}
-                        ],
+                        content=[{"type": "text", "text": "Search query is required for search source."}],
                         is_error=True,
                     )
+                tracks = await spotify.search_tracks(
+                    query=query,
+                    limit=effective_limit,
+                )
+                app_data["tracks"] = tracks
+                app_data["query"] = query
+                summary_prefix = f'Found {len(tracks)} tracks for "{query}"'
 
-        if not tracks:
+        except Exception as e:
+            logger.warning(
+                "Spotify %s failed: %s",
+                source,
+                e,
+            )
             return ToolResult(
-                content=[{"type": "text", "text": f"No tracks found for '{query}'."}],
-                is_error=False,
+                content=[{"type": "text", "text": f"Spotify {source} failed: {e}"}],
+                is_error=True,
             )
 
-        # Filter to tracks with preview URLs available (check only, not stored)
-        all_tracks = tracks
+        if not tracks and source != "playlists":
+            return ToolResult(
+                content=[{"type": "text", "text": f"No tracks found for {source}."}],
+                is_error=False,
+            )
 
         # Check Spotify OAuth authentication status
         is_authenticated = await _is_spotify_authenticated_async()
 
         # Build text summary for the LLM
         track_list = []
-        for i, t in enumerate(all_tracks[:10], 1):
+        for i, t in enumerate(tracks[:10], 1):
             track_list.append(f"{i}. 🎵 {t['name']} — {t['artist']} ({t['album']})")
 
         # Different message based on authentication state
         if is_authenticated:
             summary = (
-                f'🎵 Found {len(all_tracks)} tracks for "{query}"'
-                + (f" (genre: {genre})" if genre else "")
+                summary_prefix
                 + ". User is connected to Spotify Premium and can play full tracks.\n"
                 + "\n".join(track_list)
             )
         else:
             summary = (
-                f'🎵 Found {len(all_tracks)} tracks for "{query}"'
-                + (f" (genre: {genre})" if genre else "")
-                + ". ⚠️ User needs to connect their Spotify Premium account first to play full tracks. "
-                + "The player will show a 'Connect Spotify' button.\n"
+                summary_prefix
+                + ". ⚠️ User needs to connect their Spotify Premium account first to play full tracks.\n"
                 + "\n".join(track_list)
             )
 
         return ToolResult(
             content=[{"type": "text", "text": summary}],
             is_error=False,
-            app_data={
-                "tracks": all_tracks,
-                "query": query,
-                "genre": genre,
-            },
+            app_data=app_data,
         )
+
 
 
 # ── Google Workspace Tool ────────────────────────────────────────────────────

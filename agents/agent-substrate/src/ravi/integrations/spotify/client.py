@@ -258,3 +258,170 @@ class SpotifyService:
         """Get available genre seeds for recommendations."""
         data = await self._get("/recommendations/available-genre-seeds")
         return data.get("genres", [])
+
+    async def get_liked_songs(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        market: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Fetch the current user's liked (saved) tracks.
+
+        Requires OAuth token with ``user-library-read`` scope.
+
+        Returns:
+            Dict with ``tracks`` list and ``total`` count.
+        """
+        if not self._oauth_token:
+            return {"tracks": [], "total": 0, "error": "Not authenticated"}
+
+        params: Dict[str, Any] = {
+            "limit": min(max(1, limit), 50),
+            "offset": max(0, offset),
+        }
+        if market:
+            params["market"] = market
+
+        data = await self._get("/me/tracks", params=params)
+
+        tracks: List[Dict[str, Any]] = []
+        for item in data.get("items", []):
+            track = item.get("track")
+            if not track:
+                continue
+            artists = [a["name"] for a in track.get("artists", [])]
+            album = track.get("album", {})
+            album_images = album.get("images", [])
+            cover_url = next(
+                (img["url"] for img in album_images if img.get("height", 0) <= 300),
+                album_images[0]["url"] if album_images else "",
+            )
+            tracks.append(
+                {
+                    "id": track["id"],
+                    "name": track["name"],
+                    "artists": artists,
+                    "artist": ", ".join(artists),
+                    "album": album.get("name", ""),
+                    "cover_url": cover_url,
+                    "duration_ms": track.get("duration_ms", 0),
+                    "preview_url": track.get("preview_url"),
+                    "spotify_url": track.get("external_urls", {}).get("spotify", ""),
+                    "uri": track.get("uri", ""),
+                    "popularity": track.get("popularity", 0),
+                    "added_at": item.get("added_at", ""),
+                }
+            )
+
+        return {
+            "tracks": tracks,
+            "total": data.get("total", len(tracks)),
+            "next": data.get("next"),
+        }
+
+    async def get_playlists(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Fetch the current user's playlists.
+
+        Requires OAuth token with ``playlist-read-private`` scope.
+
+        Returns:
+            Dict with ``playlists`` list and ``total`` count.
+        """
+        if not self._oauth_token:
+            return {"playlists": [], "total": 0, "error": "Not authenticated"}
+
+        params: Dict[str, Any] = {
+            "limit": min(max(1, limit), 50),
+            "offset": max(0, offset),
+        }
+
+        data = await self._get("/me/playlists", params=params)
+
+        playlists: List[Dict[str, Any]] = []
+        for item in data.get("items", []):
+            if not item:
+                continue
+            images = item.get("images", [])
+            cover_url = images[0]["url"] if images else ""
+            playlists.append(
+                {
+                    "id": item["id"],
+                    "name": item.get("name", ""),
+                    "description": item.get("description", ""),
+                    "cover_url": cover_url,
+                    "track_count": item.get("tracks", {}).get("total", 0),
+                    "owner": item.get("owner", {}).get("display_name", ""),
+                    "public": item.get("public", False),
+                    "uri": item.get("uri", ""),
+                    "spotify_url": item.get("external_urls", {}).get("spotify", ""),
+                }
+            )
+
+        return {
+            "playlists": playlists,
+            "total": data.get("total", len(playlists)),
+        }
+
+    async def get_playlist_tracks(
+        self,
+        playlist_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        market: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Fetch tracks from a specific playlist.
+
+        Args:
+            playlist_id: Spotify playlist ID.
+
+        Returns:
+            Dict with ``tracks`` list and ``total`` count.
+        """
+        params: Dict[str, Any] = {
+            "limit": min(max(1, limit), 100),
+            "offset": max(0, offset),
+            "fields": "items(track(id,name,artists,album,duration_ms,preview_url,external_urls,uri,popularity)),total,next",
+        }
+        if market:
+            params["market"] = market
+
+        data = await self._get(f"/playlists/{playlist_id}/tracks", params=params)
+
+        tracks: List[Dict[str, Any]] = []
+        for item in data.get("items", []):
+            track = item.get("track") if isinstance(item, dict) else None
+            if not track or not track.get("id"):
+                continue
+            artists = [a["name"] for a in track.get("artists", [])]
+            album = track.get("album", {})
+            album_images = album.get("images", [])
+            cover_url = next(
+                (img["url"] for img in album_images if img.get("height", 0) <= 300),
+                album_images[0]["url"] if album_images else "",
+            )
+            tracks.append(
+                {
+                    "id": track["id"],
+                    "name": track["name"],
+                    "artists": artists,
+                    "artist": ", ".join(artists),
+                    "album": album.get("name", ""),
+                    "cover_url": cover_url,
+                    "duration_ms": track.get("duration_ms", 0),
+                    "preview_url": track.get("preview_url"),
+                    "spotify_url": track.get("external_urls", {}).get("spotify", ""),
+                    "uri": track.get("uri", ""),
+                    "popularity": track.get("popularity", 0),
+                }
+            )
+
+        return {
+            "tracks": tracks,
+            "total": data.get("total", len(tracks)),
+            "next": data.get("next"),
+        }
+

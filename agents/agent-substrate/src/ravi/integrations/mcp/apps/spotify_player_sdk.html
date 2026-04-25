@@ -712,31 +712,33 @@
     const el = document.getElementById('playlist-list');
     el.innerHTML = '<div class="loading-state">Loading playlists…</div>';
     try {
-      const data = await spotifyGet('/me/playlists?limit=50');
-      if (!data) { el.innerHTML = '<div class="no-data">Could not load playlists</div>'; return; }
-      playlists = data.items || [];
+      // Use backend proxy instead of direct Spotify API
+      const res = await fetch('/auth/spotify/playlists');
+      if (!res.ok) throw new Error('Backend failed');
+      const data = await res.json();
+      playlists = data.playlists || [];
       renderPlaylists();
-    } catch { el.innerHTML = '<div class="no-data">Could not load playlists</div>'; }
+    } catch (e) { 
+      console.error("[Spotify] Playlists load failed:", e);
+      el.innerHTML = '<div class="no-data">Could not load playlists. Try reconnecting Spotify.</div>'; 
+    }
   }
 
   async function fetchLikedSongs() {
     const el = document.getElementById('liked-list');
     el.innerHTML = '<div class="loading-state">Loading liked songs…</div>';
     try {
-      const data = await spotifyGet('/me/tracks?limit=50');
-      if (!data) { el.innerHTML = '<div class="no-data">Could not load liked songs</div>'; return; }
-      likedTracks = (data.items || []).map(item => ({
-        name: item.track.name,
-        artist: item.track.artists.map(a => a.name).join(', '),
-        album: item.track.album.name,
-        uri: item.track.uri,
-        cover_url: (item.track.album.images[2] || item.track.album.images[0] || {}).url || '',
-        duration_ms: item.track.duration_ms,
-        spotify_url: item.track.external_urls?.spotify,
-      }));
+      // Use backend proxy instead of direct Spotify API
+      const res = await fetch('/auth/spotify/liked-songs');
+      if (!res.ok) throw new Error('Backend failed');
+      const data = await res.json();
+      likedTracks = data.tracks || [];
       document.getElementById('liked-count').textContent = `${data.total || likedTracks.length} liked songs`;
       renderLikedSongs();
-    } catch { el.innerHTML = '<div class="no-data">Could not load liked songs</div>'; }
+    } catch (e) { 
+      console.error("[Spotify] Liked songs load failed:", e);
+      el.innerHTML = '<div class="no-data">Could not load liked songs. Try reconnecting Spotify.</div>'; 
+    }
   }
 
   function renderPlaylists() {
@@ -744,8 +746,8 @@
     const el = document.getElementById('playlist-list');
     if (!playlists.length) { el.innerHTML = '<div class="no-data">No playlists found</div>'; return; }
     el.innerHTML = playlists.map((p, i) => {
-      const img = p.images && p.images[0] ? p.images[0].url : '';
-      const count = p.tracks ? p.tracks.total + ' tracks' : '';
+      const img = p.cover_url || '';
+      const count = p.track_count + ' tracks';
       return `
         <div class="playlist-item" data-index="${i}">
           ${img
@@ -753,7 +755,7 @@
             : `<div class="playlist-cover">🎵</div>`}
           <div class="playlist-info">
             <div class="playlist-name">${esc(p.name)}</div>
-            <div class="playlist-meta">${count}${p.owner ? ' · ' + esc(p.owner.display_name) : ''}</div>
+            <div class="playlist-meta">${count}${p.owner ? ' · ' + esc(p.owner) : ''}</div>
           </div>
         </div>`;
     }).join('');
@@ -774,17 +776,10 @@
     document.getElementById('playlist-back').addEventListener('click', renderPlaylists);
 
     try {
-      const data = await spotifyGet('/playlists/' + playlistId + '/tracks?limit=50');
-      if (!data) { document.getElementById('playlist-tracks-loading').textContent = 'Could not load tracks'; return; }
-      const plTracks = (data.items || []).filter(i => i.track).map(item => ({
-        name: item.track.name,
-        artist: item.track.artists.map(a => a.name).join(', '),
-        album: item.track.album.name,
-        uri: item.track.uri,
-        cover_url: (item.track.album.images[2] || item.track.album.images[0] || {}).url || '',
-        duration_ms: item.track.duration_ms,
-        spotify_url: item.track.external_urls?.spotify,
-      }));
+      const res = await fetch(`/auth/spotify/playlists/${playlistId}/tracks`);
+      if (!res.ok) throw new Error('Backend failed');
+      const data = await res.json();
+      const plTracks = data.tracks || [];
 
       // Update queue and play
       tracks = plTracks;
@@ -793,7 +788,7 @@
       renderTrackList();
 
       document.getElementById('playlist-tracks-loading').remove();
-      el.insertAdjacentHTML('beforeend', `<div style="padding:10px 16px;font-size:12px;color:#1DB954;border-bottom:1px solid #1a1a1a;">▶ ${esc(playlistName)} loaded — switch to Queue tab to play</div>`);
+      el.insertAdjacentHTML('beforeend', `<div style="padding:10px 16px;font-size:12px;color:#1DB954;border-bottom:1px solid var(--mcp-border);">▶ ${esc(playlistName)} loaded — switch to Queue tab to play</div>`);
     } catch { document.getElementById('playlist-tracks-loading').textContent = 'Could not load tracks'; }
   }
 
@@ -832,32 +827,22 @@
     document.getElementById("auth-banner").classList.add("hidden");
     
     if (!spotifyPlayer) {
-      // Player will auto-play first track in the "ready" listener
       initSpotifyPlayer();
-    } else if (deviceId && tracks.length > 0 && currentIndex < 0) {
-      // Player already ready, auto-play now
-      playTrack(0);
     }
     
     showNotification("✅ Connected to Spotify!", "success");
-    
-    // Notify agent that user is now authenticated
     notifyState("authenticated");
     
-    // Notify parent window to refresh token (cross-origin fix)
     window.parent.postMessage({
       type: "spotify_auth_changed",
       authenticated: true
     }, "*");
 
-    // Load library now that we have a token
     if (!libraryLoaded) loadLibrary();
   }
 
   // ── Init ────────────────────────────────────────────────
   async function init() {
-    // Early auth check — hide banner immediately if we have saved tokens
-    // (don't wait for SDK to load)
     const saved = loadSavedTokens();
     if (saved && saved.access_token && !saved.expired) {
       document.getElementById("auth-banner").classList.add("hidden");
@@ -873,19 +858,31 @@
   function handleToolInput(args) {
     tracks = args.tracks || [];
     const query = args.query || args.title || "";
-    document.getElementById("query-info").textContent = query ? `"${query}"` : "";
+    const source = args.source || "search";
+    
+    document.getElementById("query-info").textContent = query ? `"${query}"` : (source === "liked_songs" ? "Liked Songs" : "");
 
     if (!tracks.length) {
-      document.getElementById("track-list").innerHTML =
-        '<div class="no-data">No tracks found</div>';
-      document.getElementById("track-count").textContent = "0 tracks";
+      if (source !== "playlists") {
+        document.getElementById("track-list").innerHTML =
+          '<div class="no-data">No tracks found</div>';
+        document.getElementById("track-count").textContent = "0 tracks";
+      }
       resize();
-      return;
+    } else {
+      document.getElementById("track-count").textContent = `${tracks.length} tracks`;
+      renderTrackList();
+      resize();
     }
 
-    document.getElementById("track-count").textContent = `${tracks.length} tracks`;
-    renderTrackList();
-    resize();
+    // Auto-switch tabs based on source
+    if (source === "liked_songs") {
+      switchTab('liked');
+    } else if (source === "playlists") {
+      switchTab('playlists');
+    } else {
+      switchTab('queue');
+    }
   }
 
   // ── Render ──────────────────────────────────────────────

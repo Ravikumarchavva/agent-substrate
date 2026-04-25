@@ -328,3 +328,84 @@ async def restore_tokens(request: Request):
         )
 
     raise HTTPException(status_code=400, detail="Could not restore tokens")
+
+
+def _get_oauth_service_with_token(session_id: str = "default_user"):
+    """Return a SpotifyService initialised with the current user OAuth token, or None."""
+    from ravi.integrations.spotify.client import SpotifyService
+
+    tokens = _user_tokens.get(session_id)
+    if not tokens or not tokens.get("access_token"):
+        return None
+
+    return SpotifyService(
+        client_id=settings.SPOTIFY_CLIENT_ID,
+        client_secret=settings.SPOTIFY_CLIENT_SECRET,
+        oauth_token=tokens["access_token"],
+    )
+
+
+@router.get("/liked-songs")
+async def get_liked_songs(
+    limit: int = Query(50, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    market: Optional[str] = Query(None),
+):
+    """Fetch the current user's liked (saved) tracks.
+
+    Requires user-library-read scope in the stored OAuth token.
+    """
+    svc = _get_oauth_service_with_token()
+    if svc is None:
+        raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
+
+    try:
+        result = await svc.get_liked_songs(limit=limit, offset=offset, market=market)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error("Failed to fetch liked songs: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch liked songs: {e}")
+
+
+@router.get("/playlists")
+async def get_playlists(
+    limit: int = Query(50, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+):
+    """Fetch the current user's playlists.
+
+    Requires playlist-read-private scope in the stored OAuth token.
+    """
+    svc = _get_oauth_service_with_token()
+    if svc is None:
+        raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
+
+    try:
+        result = await svc.get_playlists(limit=limit, offset=offset)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error("Failed to fetch playlists: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch playlists: {e}")
+
+
+@router.get("/playlists/{playlist_id}/tracks")
+async def get_playlist_tracks(
+    playlist_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    market: Optional[str] = Query(None),
+):
+    """Fetch tracks for a specific playlist."""
+    svc = _get_oauth_service_with_token()
+    if svc is None:
+        raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
+
+    try:
+        result = await svc.get_playlist_tracks(
+            playlist_id=playlist_id, limit=limit, offset=offset, market=market
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error("Failed to fetch playlist tracks for %s: %s", playlist_id, e)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch playlist tracks: {e}")
+

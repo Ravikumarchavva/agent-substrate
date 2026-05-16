@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -568,8 +568,8 @@ class TestRestateURLEncoding:
         with patch("ravi.integrations.runtime.restate.runtime.httpx") as mock_httpx:
             mock_client = AsyncMock()
             mock_resp = AsyncMock()
-            mock_resp.json.return_value = {"result": "ok"}
-            mock_resp.raise_for_status = AsyncMock()
+            mock_resp.json = MagicMock(return_value={"result": "ok"})  # sync in httpx
+            mock_resp.raise_for_status = MagicMock()  # sync in httpx
             mock_client.post.return_value = mock_resp
             mock_httpx.AsyncClient.return_value.__aenter__ = AsyncMock(
                 return_value=mock_client

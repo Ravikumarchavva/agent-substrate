@@ -407,5 +407,6 @@ async def get_playlist_tracks(
         return JSONResponse(result)
     except Exception as e:
         logger.error("Failed to fetch playlist tracks for %s: %s", playlist_id, e)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch playlist tracks: {e}")
-
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch playlist tracks: {e}"
+        )

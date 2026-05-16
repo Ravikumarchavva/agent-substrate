@@ -12,6 +12,7 @@ handler is the durable main entrypoint.  Activities executed inside
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any, Dict, List
 
 from restate import Workflow, WorkflowContext, WorkflowSharedContext
@@ -167,7 +168,7 @@ async def agent_run(ctx: WorkflowContext, payload: Dict[str, Any]) -> Dict[str, 
 
             # HITL: human input request
             if policy.is_hitl_input:
-                request_id = str(ctx.rand.uuid4())
+                request_id = str(uuid.uuid4())
                 await ctx.run(
                     f"hitl_event_{step}_{i}",
                     activities.publish_event,
@@ -193,7 +194,7 @@ async def agent_run(ctx: WorkflowContext, payload: Dict[str, Any]) -> Dict[str, 
 
             # HITL: tool approval gate
             if policy.requires_approval:
-                request_id = str(ctx.rand.uuid4())
+                request_id = str(uuid.uuid4())
                 await ctx.run(
                     f"approval_event_{step}_{i}",
                     activities.publish_event,
@@ -225,7 +226,7 @@ async def agent_run(ctx: WorkflowContext, payload: Dict[str, Any]) -> Dict[str, 
             # Execute tool (journaled)
             idempotency_key: str | None = None
             if policy.needs_idempotency:
-                idempotency_key = str(ctx.rand.uuid4())
+                idempotency_key = str(uuid.uuid4())
 
             tool_result: Dict[str, Any] = await ctx.run(
                 f"tool_{step}_{tc_name}_{i}",

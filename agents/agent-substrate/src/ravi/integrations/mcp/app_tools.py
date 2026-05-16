@@ -537,7 +537,9 @@ class SpotifyPlayerTool(McpAppTool):
                     data = resp.json()
                     if data.get("access_token"):
                         oauth_token = data["access_token"]
-                        logger.info("Using OAuth token from Next.js for Spotify operation")
+                        logger.info(
+                            "Using OAuth token from Next.js for Spotify operation"
+                        )
         except Exception as e:
             logger.debug("No OAuth token available from Next.js: %s", e)
 
@@ -576,7 +578,12 @@ class SpotifyPlayerTool(McpAppTool):
                 # Default: search
                 if not query:
                     return ToolResult(
-                        content=[{"type": "text", "text": "Search query is required for search source."}],
+                        content=[
+                            {
+                                "type": "text",
+                                "text": "Search query is required for search source.",
+                            }
+                        ],
                         is_error=True,
                     )
                 tracks = await spotify.search_tracks(
@@ -631,7 +638,6 @@ class SpotifyPlayerTool(McpAppTool):
             is_error=False,
             app_data=app_data,
         )
-
 
 
 # ── Google Workspace Tool ────────────────────────────────────────────────────

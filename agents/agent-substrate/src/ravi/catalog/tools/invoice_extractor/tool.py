@@ -136,7 +136,7 @@ class InvoiceExtractorTool(BaseTool):
                 is_error=True,
             )
         try:
-            import pytesseract
+            import pytesseract  # type: ignore[import-unresolved]
         except ImportError:
             return ToolResult(
                 content=[
@@ -228,7 +228,7 @@ class InvoiceExtractorTool(BaseTool):
         path: Path, pages: list[int] | None, extract_tables: bool
     ) -> ToolResult:
         try:
-            import pdfplumber
+            import pdfplumber  # type: ignore[import-unresolved]
         except ImportError:
             return ToolResult(
                 content=[

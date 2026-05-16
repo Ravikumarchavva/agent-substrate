@@ -86,7 +86,7 @@ class NATSBridge:
 
     async def connect(self) -> None:
         """Connect to NATS and ensure the JetStream stream exists."""
-        self._nc = await nats.connect(self._nats_url)
+        self._nc = await nats.connect(self._nats_url)  # type: ignore[possibly-unbound]
         self._js = self._nc.jetstream()
 
         expected_max_age = self._retention_seconds * 1_000_000_000  # nanoseconds
@@ -94,10 +94,10 @@ class NATSBridge:
         # Ensure the stream exists (idempotent)
         try:
             await self._js.add_stream(
-                StreamConfig(
+                StreamConfig(  # type: ignore[possibly-unbound]
                     name=self._stream_name,
                     subjects=[f"{_SUBJECT_PREFIX}.*"],
-                    retention=RetentionPolicy.LIMITS,
+                    retention=RetentionPolicy.LIMITS,  # type: ignore[possibly-unbound]
                     max_age=expected_max_age,
                 )
             )
@@ -179,7 +179,7 @@ class NATSBridge:
             sub = await self._js.subscribe(
                 subject,
                 durable=consumer_name,
-                deliver_policy=DeliverPolicy.NEW,
+                deliver_policy=DeliverPolicy.NEW,  # type: ignore[possibly-unbound]
             )
         else:
             sub = await self._js.subscribe(subject)

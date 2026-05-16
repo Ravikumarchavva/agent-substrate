@@ -26,6 +26,7 @@ from ravi.catalog.tools.task_manager.tool import (
 )
 from ravi.configs.settings import Settings
 from ravi.core.llm.base_client import BaseModelClient
+from ravi.core.llm.base_embedding_client import BaseEmbeddingClient
 from ravi.core.runtime import LocalRuntime
 from ravi.core.storage.base import FileStore
 from ravi.core.storage.factory import create_file_store
@@ -66,7 +67,7 @@ class LLMClients:
     model_client_kwargs: dict[str, Any]
     model_client: BaseModelClient
     chat_model: str
-    embedding_client: BaseModelClient
+    embedding_client: BaseEmbeddingClient
 
 
 @dataclass
@@ -164,7 +165,7 @@ def init_llm_clients(settings: Settings) -> LLMClients:
 
 async def init_infrastructure(
     settings: Settings,
-    embedding_client: BaseModelClient,
+    embedding_client: BaseEmbeddingClient,
 ) -> Infrastructure:
     """Create Redis, runtime, file store, vector store, RAG, and bridge registry."""
 

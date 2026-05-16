@@ -108,7 +108,7 @@ class RestateRuntime(BaseRemoteRuntime):
         registration.
         """
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient() as client:  # type: ignore[possibly-unbound]
                 resp = await client.post(
                     f"{self._admin_url}/deployments",
                     content=json.dumps({"uri": self._worker_url, "use_http_11": True}),
@@ -166,7 +166,7 @@ class RestateRuntime(BaseRemoteRuntime):
         )
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient() as client:  # type: ignore[possibly-unbound]
                 resp = await client.post(
                     url,
                     content=payload,
@@ -199,7 +199,7 @@ class RestateRuntime(BaseRemoteRuntime):
         url = f"{self._ingress_url}/AgentWorkflow/{safe_wf}/{safe_promise}"
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient() as client:  # type: ignore[possibly-unbound]
                 resp = await client.post(
                     url,
                     content=json.dumps(value),
@@ -218,7 +218,7 @@ class RestateRuntime(BaseRemoteRuntime):
         """Cancel a running Restate workflow."""
         safe_wf = quote(workflow_id, safe="")
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient() as client:  # type: ignore[possibly-unbound]
                 resp = await client.delete(
                     f"{self._admin_url}/invocations?workflow_id={safe_wf}",
                     timeout=self._admin_timeout,

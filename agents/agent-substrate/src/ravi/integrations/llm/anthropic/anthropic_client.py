@@ -370,7 +370,7 @@ class AnthropicClient(BaseModelClient):
                         output_tokens = getattr(event_any.usage, "output_tokens", 0)
                     stop_reason = getattr(event_any, "delta", None)
                     if stop_reason and hasattr(stop_reason, "stop_reason"):
-                        stop_reason = stop_reason.stop_reason
+                        stop_reason = stop_reason.stop_reason  # type: ignore[attr-defined]
 
                 elif event_type == "message_stop":
                     pass  # Handled below
@@ -418,7 +418,7 @@ class AnthropicClient(BaseModelClient):
         try:
             result = await self.client.messages.count_tokens(
                 model=self.model,
-                messages=conversation,
+                messages=conversation,  # type: ignore[arg-type]
             )
             return result.input_tokens
         except Exception:

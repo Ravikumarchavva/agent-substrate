@@ -91,9 +91,10 @@ class BatchProcessor:
         result.succeeded = sum(1 for item in result.items if item.success)
         result.failed = result.total - result.succeeded
         result.completed_at = datetime.now(timezone.utc)
-        result.duration_ms = (
-            result.completed_at - result.started_at
-        ).total_seconds() * 1000
+        if result.started_at is not None:
+            result.duration_ms = (
+                result.completed_at - result.started_at
+            ).total_seconds() * 1000
 
         if self._cancelled:
             result.status = BatchStatus.CANCELLED

@@ -6,7 +6,7 @@ Extracts the inner streaming loop body so the agent class stays thin.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional, cast
 
 from ravi.core.agents._guardrail_runner import (
     check_output_guardrails,
@@ -173,7 +173,9 @@ async def handle_stream_final_response(
                 context_messages,
                 response_format=response_schema,
             )
-            yield StructuredOutputChunk(result=structured_result)
+            from ravi.core.structured.result import StructuredOutputResult as _SOR
+
+            yield StructuredOutputChunk(result=cast(_SOR[Any], structured_result))
 
 
 # ---------------------------------------------------------------------------

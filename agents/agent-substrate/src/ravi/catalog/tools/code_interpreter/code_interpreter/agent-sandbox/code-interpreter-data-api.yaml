@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-interpreter-data-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: code-interpreter-data-api
+  template:
+    metadata:
+      labels:
+        app: code-interpreter-data-api
+    spec:
+      containers:
+      - name: api
+        image: code-interpreter:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "/app/main.py"]
+        env:
+        - name: CODE_INTERPRETER_LISTEN_MODE
+          value: "tcp"
+        - name: CODE_INTERPRETER_HOST
+          value: "0.0.0.0"
+        - name: CODE_INTERPRETER_PORT
+          value: "8000"
+        ports:
+        - containerPort: 8000
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-interpreter-data-api
+  namespace: default
+spec:
+  selector:
+    app: code-interpreter-data-api
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000

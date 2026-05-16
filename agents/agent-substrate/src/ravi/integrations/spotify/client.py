@@ -424,4 +424,3 @@ class SpotifyService:
             "total": data.get("total", len(tracks)),
             "next": data.get("next"),
         }
-

@@ -67,14 +67,15 @@ class GeminiEmbeddingClient(BaseEmbeddingClient):
 
         response = self.client.models.embed_content(
             model=effective_model,
-            contents=texts,
+            contents=texts,  # type: ignore[arg-type]
             config=config,
         )
 
         embeddings: list[list[float]] = []
         if response.embeddings:
             for emb in response.embeddings:
-                embeddings.append(list(emb.values))
+                if emb.values is not None:
+                    embeddings.append(list(emb.values))
 
         return EmbeddingResult(
             embeddings=embeddings,

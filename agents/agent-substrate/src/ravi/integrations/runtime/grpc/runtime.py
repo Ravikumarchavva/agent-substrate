@@ -66,10 +66,11 @@ if _HAS_GRPC:
             self._runtime = runtime
 
         def service(
-            self, handler_call_details: grpc.HandlerCallDetails
-        ) -> grpc.RpcMethodHandler | None:
+            self,
+            handler_call_details: grpc.HandlerCallDetails,  # type: ignore[valid-type]
+        ) -> grpc.RpcMethodHandler | None:  # type: ignore[valid-type]
             if handler_call_details.method == _SERVICE_METHOD:
-                return grpc.unary_unary_rpc_method_handler(
+                return grpc.unary_unary_rpc_method_handler(  # type: ignore[union-attr]
                     self._handle_send_message,
                     request_deserializer=lambda b: json.loads(b.decode("utf-8")),
                     response_serializer=lambda obj: json.dumps(obj).encode("utf-8"),
@@ -79,7 +80,7 @@ if _HAS_GRPC:
         async def _handle_send_message(
             self,
             request: dict[str, Any],
-            context: grpc.aio.ServicerContext,
+            context: grpc.aio.ServicerContext,  # type: ignore[valid-type]
         ) -> Any:
             """Deserialise the JSON envelope and dispatch locally."""
             recipient = AgentId(
@@ -95,7 +96,7 @@ if _HAS_GRPC:
 
             if recipient.type not in self._runtime._handlers:
                 await context.abort(
-                    grpc.StatusCode.NOT_FOUND,
+                    grpc.StatusCode.NOT_FOUND,  # type: ignore[union-attr]
                     f"No handler for agent type {recipient.type!r}",
                 )
 
@@ -141,7 +142,7 @@ class GrpcRuntime(BaseRemoteRuntime):
 
     async def start(self) -> None:
         """Start the gRPC server for local agent servicers."""
-        self._server = grpc_aio.server()
+        self._server = grpc_aio.server()  # type: ignore[union-attr]
         self._server.add_generic_rpc_handlers([_AgentServiceHandler(self)])
         self._server.add_insecure_port(self._listen_address)
         await self._server.start()
@@ -207,10 +208,10 @@ class GrpcRuntime(BaseRemoteRuntime):
         )
 
         try:
-            async with grpc_aio.insecure_channel(address) as channel:
+            async with grpc_aio.insecure_channel(address) as channel:  # type: ignore[union-attr]
                 stub = channel.unary_unary(
                     "/ravi.runtime.AgentService/SendMessage",
-                    request_serializer=lambda x: x.encode("utf-8"),
+                    request_serializer=lambda x: str(x).encode("utf-8"),
                     response_deserializer=lambda x: json.loads(x.decode("utf-8")),
                 )
                 return await stub(payload_json)

@@ -80,9 +80,9 @@ async def _setup() -> Dict[str, Any]:
         data_store = DataRefStore(redis_url=settings.REDIS_URL)
         await data_store.connect()
 
-        from ravi.core.tools.catalog import ToolRegistry
+        from ravi.core.tools.catalog import CapabilityRegistry
 
-        catalog = ToolRegistry()
+        catalog = CapabilityRegistry()
         for tool in tools.values():
             catalog.register_tool(tool)
 
@@ -129,11 +129,16 @@ def _scan_tools() -> Dict[str, Any]:
     """Discover and instantiate all available tools."""
     tools: Dict[str, Any] = {}
     try:
-        from ravi.catalog._scanner import scan_tools
+        from ravi.catalog._scanner import CatalogScanner
 
-        discovered = scan_tools()
-        for tool in discovered:
-            tools[tool.name] = tool
+        discovered = CatalogScanner().discover()
+        for pkg in discovered:
+            if pkg.tool_class is not None:
+                try:
+                    instance = pkg.tool_class()
+                    tools[instance.name] = instance
+                except Exception as exc:
+                    logger.warning("Failed to instantiate tool %s: %s", pkg.name, exc)
     except Exception as exc:
         logger.warning("Tool scan failed, using empty catalog: %s", exc)
     return tools

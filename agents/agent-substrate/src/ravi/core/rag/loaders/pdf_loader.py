@@ -52,7 +52,7 @@ class PDFLoader(BaseDocumentLoader):
         source: Union[str, Path, bytes],
         metadata: dict[str, Any],
     ) -> list[Document]:
-        import pdfplumber
+        import pdfplumber  # type: ignore[import-unresolved]
 
         if isinstance(source, bytes):
             pdf = pdfplumber.open(io.BytesIO(source))

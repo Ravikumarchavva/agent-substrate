@@ -157,19 +157,25 @@ class LLMJudge(BaseGuardrail):
             )
 
         # Safety refusal from the judge itself
-        if result.refused:
-            logger.warning("[%s] Judge model refused: %s", self.name, result.refusal)
+        from ravi.core.structured.result import StructuredOutputResult as _SOR
+        from typing import cast as _cast
+
+        structured = _cast(_SOR[Any], result)
+        if structured.refused:
+            logger.warning(
+                "[%s] Judge model refused: %s", self.name, structured.refusal
+            )
             return GuardrailResult(
                 guardrail_name=self.name,
                 guardrail_type=self.guardrail_type,
                 passed=False,
                 tripwire=self._tripwire_on_refusal,
-                message=f"Judge refused: {result.refusal}",
-                metadata={"refusal": result.refusal},
+                message=f"Judge refused: {structured.refusal}",
+                metadata={"refusal": structured.refusal},
             )
 
         # Read the pass/fail boolean from the parsed schema
-        parsed = result.parsed
+        parsed = structured.parsed
         try:
             passed: bool = bool(getattr(parsed, self._pass_field))
         except AttributeError:

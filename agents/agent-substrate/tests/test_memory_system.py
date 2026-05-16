@@ -50,19 +50,37 @@ def _redis_available() -> bool:
 
 def _pg_available() -> bool:
     """Check Postgres connectivity synchronously for skip markers."""
-    try:
-        from sqlalchemy import create_engine, text
+    import asyncio
+    import socket
 
-        db_url = os.getenv(
-            "DATABASE_URL",
-            "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
-        )
-        sync_url = db_url.replace("+asyncpg", "")
-        engine = create_engine(sync_url)
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        engine.dispose()
-        return True
+    db_url = os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
+    )
+    # Extract host and port from URL for a lightweight TCP probe
+    try:
+        # e.g. postgresql+asyncpg://user:pass@host:5432/db
+        netloc = db_url.split("@")[-1].split("/")[0]
+        host, _, port_str = netloc.partition(":")
+        port = int(port_str) if port_str else 5432
+        sock = socket.create_connection((host, port), timeout=2)
+        sock.close()
+    except Exception:
+        return False
+
+    # Now verify with asyncpg that we can actually authenticate
+    try:
+        import asyncpg
+
+        async def _check() -> bool:
+            conn = await asyncpg.connect(
+                db_url.replace("postgresql+asyncpg://", "postgresql://"), timeout=5
+            )
+            await conn.execute("SELECT 1")
+            await conn.close()
+            return True
+
+        return asyncio.run(_check())
     except Exception:
         return False
 

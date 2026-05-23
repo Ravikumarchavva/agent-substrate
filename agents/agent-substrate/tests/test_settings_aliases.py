@@ -12,7 +12,8 @@ def test_settings_accepts_common_provider_env_aliases(tmp_path: Path) -> None:
         (
             "OPENROUTER_API_KEY=router-key\n"
             "GEMINI_API_KEY=gemini-key\n"
-            "GROK_API_KEY=groq-key\n"
+            "GROQ_API_KEY=groq-key\n"
+            "JWT_SECRET=test-secret-for-unit-tests-that-is-long-enough-32c\n"
         ),
         encoding="utf-8",
     )
@@ -20,7 +21,7 @@ def test_settings_accepts_common_provider_env_aliases(tmp_path: Path) -> None:
     configured = Settings(_env_file=env_file)
 
     assert configured.OPENROUTER_API_KEY == "router-key"
-    assert configured.GOOGLE_API_KEY == "gemini-key"
+    assert configured.GEMINI_API_KEY == "gemini-key"
     assert configured.GROQ_API_KEY == "groq-key"
 
 

@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode, ToolAnnotations
+from ravi.core.tools.base_tool import (
+    BaseTool,
+    ToolResult,
+    ToolRisk,
+    HitlMode,
+    ToolAnnotations,
+)
 
 
 class LazyTool(BaseTool):
     """Wrapper that defers loading of a real BaseTool until first execution/evaluation.
 
-    This helps keep the AgentCatalogRegistry extremely lightweight at startup and
-    during testing, avoiding importing heavy packages (like kubernetes, google-api, etc.)
-    or setting up client instances eagerly.
+    Keeps AgentCatalog lightweight at startup by avoiding imports of heavy packages
+    (kubernetes, google-api, etc.) or eager client instantiation.
     """
 
     def __init__(
@@ -46,10 +51,13 @@ class LazyTool(BaseTool):
         """Resolve and instantiate the underlying concrete tool."""
         if self._resolved_instance is None:
             self._resolved_instance = self._factory_fn()
-            # Sync key fields from lazy metadata if needed
-            self._resolved_instance.category = self.category or self._resolved_instance.category
+            self._resolved_instance.category = (
+                self.category or self._resolved_instance.category
+            )
             self._resolved_instance.tags = self.tags or self._resolved_instance.tags
-            self._resolved_instance.aliases = self.aliases or self._resolved_instance.aliases
+            self._resolved_instance.aliases = (
+                self.aliases or self._resolved_instance.aliases
+            )
         return self._resolved_instance
 
     async def execute(self, **kwargs: Any) -> ToolResult:

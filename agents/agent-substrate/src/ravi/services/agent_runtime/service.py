@@ -154,7 +154,9 @@ async def execute_agent_run(
     async def _publish_tool_result(chunk: ToolExecutionResultMessage) -> None:
         content_text = ""
         if isinstance(chunk.content, list):
-            parts = [block.text for block in chunk.content if isinstance(block, TextBlock)]
+            parts = [
+                block.text for block in chunk.content if isinstance(block, TextBlock)
+            ]
             content_text = "\n".join(parts)
 
         await event_bus.publish(

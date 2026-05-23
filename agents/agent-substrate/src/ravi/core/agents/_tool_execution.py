@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
@@ -27,10 +27,10 @@ from ravi.core.middleware.base import (
     MiddlewareContext,
     MiddlewareStage,
 )
-from ravi.core.resilience import RetryPolicy, _calculate_delay, TOOL_RETRY_POLICY
+from ravi.core.resilience import RetryPolicy, _calculate_delay
 from ravi.core.runtime import AgentId, AgentRuntime
 from ravi.core.tools.base_tool import HitlMode, ToolResult
-from ravi.core.catalog import AgentCatalogRegistry
+from ravi.core.agent_catalog import AgentCatalogRegistry
 from ravi.catalog.tools.human_input.tool import (
     ToolApprovalAction,
     ToolApprovalHandler,
@@ -410,40 +410,61 @@ async def execute_tool_direct(
             # Build the actual execution coroutine
             async def _run_tool() -> ToolResult:
                 lock_handle = None
-                if runtime and hasattr(runtime, "resource_locks") and getattr(tool, "resource_uri", None):
+                if (
+                    runtime
+                    and hasattr(runtime, "resource_locks")
+                    and getattr(tool, "resource_uri", None)
+                ):
                     from ravi.core.tools.base_tool import ToolRisk
                     from ravi.core.runtime._resource_lock import LockMode
-                    
+
                     mode = LockMode.EXCLUSIVE
                     if getattr(tool, "risk", None) == ToolRisk.SAFE:
                         mode = LockMode.SHARED
-                    elif getattr(tool, "annotations", None) and getattr(tool.annotations, "readOnlyHint", None):
+                    elif getattr(tool, "annotations", None) and getattr(
+                        tool.annotations, "readOnlyHint", None
+                    ):
                         mode = LockMode.SHARED
-                        
+
                     try:
                         uri = tool.resource_uri.format(**parsed.arguments)
                     except Exception:
                         uri = tool.resource_uri
-                        
+
                     lock_handle = await runtime.resource_locks.acquire(
                         resource_uri=uri,
                         agent_id=agent_name,
                         mode=mode,
                     )
-                
+
                 try:
                     # Saga coordination for critical tools
-                    if runtime and hasattr(runtime, "saga_coordinator") and getattr(tool, "is_critical", False):
+                    if (
+                        runtime
+                        and hasattr(runtime, "saga_coordinator")
+                        and getattr(tool, "is_critical", False)
+                    ):
                         saga_coordinator = runtime.saga_coordinator
-                        req_hash = saga_coordinator.hash_request(parsed.name, parsed.arguments)
-                        
+                        req_hash = saga_coordinator.hash_request(
+                            parsed.name, parsed.arguments
+                        )
+
                         # Define compensating action
                         compensate_fn = None
                         if getattr(tool, "compensating_tool", None):
+
                             async def do_compensate(step_result: Any) -> None:
                                 comp_tool = find_tool(
                                     tool.compensating_tool,
-                                    catalog or (skill_manager._catalog if (skill_manager and hasattr(skill_manager, "_catalog")) else None),
+                                    catalog
+                                    or (
+                                        skill_manager._catalog
+                                        if (
+                                            skill_manager
+                                            and hasattr(skill_manager, "_catalog")
+                                        )
+                                        else None
+                                    ),
                                     tools or [],
                                 )
                                 if comp_tool:
@@ -454,9 +475,12 @@ async def execute_tool_direct(
                                         comp_args["step_result"] = step_result
                                     await comp_tool.execute(**comp_args)
                                 else:
-                                    logger.error(f"Compensating tool '{tool.compensating_tool}' not found for tool '{parsed.name}'")
+                                    logger.error(
+                                        f"Compensating tool '{tool.compensating_tool}' not found for tool '{parsed.name}'"
+                                    )
+
                             compensate_fn = do_compensate
-                            
+
                         async def do_action() -> Any:
                             if tool_timeout:
                                 res = await asyncio.wait_for(
@@ -465,20 +489,22 @@ async def execute_tool_direct(
                                 )
                             else:
                                 res = await tool.execute(**parsed.arguments)
-                                
+
                             if hasattr(res, "model_dump"):
                                 return res.model_dump(mode="json")
                             return {"result": str(res)}
-                            
+
                         # Run the step in the saga
-                        async with saga_coordinator.begin(run_id, agent_id=agent_name) as saga_ctx:
+                        async with saga_coordinator.begin(
+                            run_id, agent_id=agent_name
+                        ) as saga_ctx:
                             saga_res = await saga_ctx.step(
                                 step_id=parsed.call_id,
                                 action=do_action,
                                 compensate=compensate_fn,
                                 request_hash=req_hash,
                             )
-                            
+
                         # Reconstruct ToolResult from saga result
                         if isinstance(saga_res, dict) and "content" in saga_res:
                             return ToolResult.model_validate(saga_res)
@@ -610,6 +636,7 @@ async def execute_tool_direct(
                 build_tool_blocked_message,
                 build_tool_blocked_record,
             )
+
             tool_msg = build_tool_blocked_message(parsed, e.message)
             record = build_tool_blocked_record(parsed, e.message)
             record.duration_ms = duration_ms

@@ -155,7 +155,9 @@ async def get_workspace_token(
 ) -> JSONResponse:
     """Return the stored Google Workspace access token."""
     redis = _get_redis(request)
-    access_token = await get_workspace_access_token_async(redis, session_id=current_user.sub)
+    access_token = await get_workspace_access_token_async(
+        redis, session_id=current_user.sub
+    )
     if not access_token:
         raise HTTPException(
             status_code=401,

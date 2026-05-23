@@ -133,7 +133,9 @@ class BaseRemoteRuntime(BaseRuntime):
         from ravi.core.messages.content import TextBlock
 
         # Envelope only needs content for routing; we just need the auto-generated correlation_id
-        content = message if isinstance(message, list) else [TextBlock(text=str(message))]
+        content = (
+            message if isinstance(message, list) else [TextBlock(text=str(message))]
+        )
         return Envelope(sender=sender, target=target, content=content).correlation_id
 
     async def _dispatch_local(

@@ -1,15 +1,9 @@
 """AgentCatalog — unified resource governance for the agent runtime.
 
-Replaces the 726-line ``core/catalog/registry.py`` god object with a
-clean, testable, layered implementation.
+Single source of truth for all registered resources: tools, skills, memories,
+contexts, checkpoints, MCP tools, and models.
 
-Key improvements over ``AgentCatalogRegistry``:
-  - Single ``register(spec, instance)`` instead of six ``register_*`` methods.
-  - ``ResourceSpec`` typed metadata instead of untyped ``Dict[str, Any]``.
-  - Collision detection: raises ``ValueError`` on duplicate FQN.
-  - ``check_permission`` always returns ``bool`` (old version returned None).
-  - Permissions enforced at resolution time via ``resolve(..., principal=)``.
-  - Backward-compatible convenience wrappers keep existing callers working.
+FQN format: ``{catalog}.{schema}.{name}``
 """
 
 from __future__ import annotations
@@ -19,7 +13,7 @@ import logging
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set
 
 from ravi.core.agent_catalog._spec import ResourceSpec, ResourceType
-from ravi.core.catalog.lazy_tool import LazyTool
+from ravi.core.agent_catalog.lazy_tool import LazyTool
 from ravi.core.tools.base_tool import BaseTool, ToolRisk
 
 logger = logging.getLogger("ravi.core.agent_catalog")
@@ -98,14 +92,18 @@ class AgentCatalog:
         fqn = self._find_fqn(name, search_path)
         if fqn is None:
             return None
-        if principal is not None and not self.check_permission(principal, fqn, privilege):
+        if principal is not None and not self.check_permission(
+            principal, fqn, privilege
+        ):
             raise PermissionError(
                 f"Principal '{principal}' lacks '{privilege}' on '{fqn}'"
             )
         _, instance = self._resources[fqn]
         return instance
 
-    def get_spec(self, name: str, search_path: Optional[List[str]] = None) -> Optional[ResourceSpec]:
+    def get_spec(
+        self, name: str, search_path: Optional[List[str]] = None
+    ) -> Optional[ResourceSpec]:
         """Return the ResourceSpec for a resource (without the instance)."""
         fqn = self._find_fqn(name, search_path)
         if fqn is None:
@@ -126,15 +124,23 @@ class AgentCatalog:
             return None
         return _LegacyAssetView(*self._resources[fqn])
 
-    def get_tool(self, name: str, search_path: Optional[List[str]] = None) -> Optional[BaseTool]:
+    def get_tool(
+        self, name: str, search_path: Optional[List[str]] = None
+    ) -> Optional[BaseTool]:
         """Return a tool instance by FQN or short-name."""
         fqn = self._find_fqn(name, search_path)
         if fqn is None:
             return None
         spec, inst = self._resources[fqn]
-        return inst if spec.resource_type in (ResourceType.TOOL, ResourceType.MCP_TOOL) else None
+        return (
+            inst
+            if spec.resource_type in (ResourceType.TOOL, ResourceType.MCP_TOOL)
+            else None
+        )
 
-    def get_memory(self, name: str, search_path: Optional[List[str]] = None) -> Optional[Any]:
+    def get_memory(
+        self, name: str, search_path: Optional[List[str]] = None
+    ) -> Optional[Any]:
         """Return a memory instance by FQN or short-name."""
         fqn = self._find_fqn(name, search_path)
         if fqn is None:
@@ -142,7 +148,9 @@ class AgentCatalog:
         spec, inst = self._resources[fqn]
         return inst if spec.resource_type == ResourceType.MEMORY else None
 
-    def get_context(self, name: str, search_path: Optional[List[str]] = None) -> Optional[Any]:
+    def get_context(
+        self, name: str, search_path: Optional[List[str]] = None
+    ) -> Optional[Any]:
         """Return a model context instance by FQN or short-name."""
         fqn = self._find_fqn(name, search_path)
         if fqn is None:
@@ -150,7 +158,9 @@ class AgentCatalog:
         spec, inst = self._resources[fqn]
         return inst if spec.resource_type == ResourceType.CONTEXT else None
 
-    def get_checkpoint_store(self, name: str, search_path: Optional[List[str]] = None) -> Optional[Any]:
+    def get_checkpoint_store(
+        self, name: str, search_path: Optional[List[str]] = None
+    ) -> Optional[Any]:
         """Return a checkpoint store by FQN or short-name."""
         fqn = self._find_fqn(name, search_path)
         if fqn is None:
@@ -158,7 +168,9 @@ class AgentCatalog:
         spec, inst = self._resources[fqn]
         return inst if spec.resource_type == ResourceType.CHECKPOINT else None
 
-    def get_model(self, name: str, search_path: Optional[List[str]] = None) -> Optional[Any]:
+    def get_model(
+        self, name: str, search_path: Optional[List[str]] = None
+    ) -> Optional[Any]:
         """Return a registered model client by FQN or short-name."""
         fqn = self._find_fqn(name, search_path)
         if fqn is None:
@@ -247,14 +259,16 @@ class AgentCatalog:
                 continue
             if kind_filter and spec.resource_type.value != kind_filter:
                 continue
-            corpus = " ".join([
-                spec.name,
-                fqn,
-                spec.description,
-                spec.category,
-                *spec.tags,
-                *spec.aliases,
-            ]).lower()
+            corpus = " ".join(
+                [
+                    spec.name,
+                    fqn,
+                    spec.description,
+                    spec.category,
+                    *spec.tags,
+                    *spec.aliases,
+                ]
+            ).lower()
             if any(token in corpus for token in tokens):
                 results.append(_LegacyAssetView(spec, inst))
             if len(results) >= limit:
@@ -284,11 +298,13 @@ class AgentCatalog:
             if candidate in self._resources:
                 return candidate
 
-        # Last resort: any schema in the default catalog
-        prefix = f"{self.default_catalog}."
-        for fqn in self._insertion_order:
-            if fqn.endswith(f".{lower}") and fqn.startswith(prefix):
-                return fqn
+        # Last resort: any schema in the default catalog — only when caller
+        # did not specify an explicit search_path (i.e. open-ended lookup).
+        if search_path is None:
+            prefix = f"{self.default_catalog}."
+            for fqn in self._insertion_order:
+                if fqn.endswith(f".{lower}") and fqn.startswith(prefix):
+                    return fqn
 
         return None
 
@@ -513,6 +529,7 @@ class AgentCatalog:
         resolved_dirs: List[str] = []
         if skill_dirs:
             import os
+
             resolved_dirs = [os.path.expanduser(d) for d in skill_dirs if d]
         self.skill_manager = SkillManager(skill_dirs=resolved_dirs, auto_discover=True)
         return self
@@ -591,7 +608,7 @@ class AgentCatalog:
                 cat_lower = cat.lower()
                 if not cat_lower.startswith(parent_lower + "/"):
                     continue
-                remainder = cat_lower[len(parent_lower) + 1:]
+                remainder = cat_lower[len(parent_lower) + 1 :]
                 child = remainder.split("/")[0]
                 full = f"{parent_path}/{child}"
                 if full.lower() not in seen:
@@ -714,11 +731,17 @@ class _LegacyAssetView:
 
     @property
     def context(self) -> Optional[Any]:
-        return self.instance if self.spec.resource_type == ResourceType.CONTEXT else None
+        return (
+            self.instance if self.spec.resource_type == ResourceType.CONTEXT else None
+        )
 
     @property
     def checkpoint_store(self) -> Optional[Any]:
-        return self.instance if self.spec.resource_type == ResourceType.CHECKPOINT else None
+        return (
+            self.instance
+            if self.spec.resource_type == ResourceType.CHECKPOINT
+            else None
+        )
 
     @property
     def model_client(self) -> Optional[Any]:

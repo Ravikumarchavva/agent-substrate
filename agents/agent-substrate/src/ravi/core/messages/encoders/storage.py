@@ -17,6 +17,7 @@ Public API::
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any
 
@@ -42,8 +43,6 @@ _MESSAGE_CLASSES: dict[str, type[BaseClientMessage]] = {
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-
-import base64
 
 def _bytes_to_b64(val: Any) -> Any:
     if isinstance(val, dict):

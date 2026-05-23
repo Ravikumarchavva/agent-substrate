@@ -105,9 +105,7 @@ class Thread(Base):
     def __repr__(self) -> str:
         return f"<Thread(id={self.id}, name={self.name!r})>"
 
-    __table_args__ = (
-        Index("ix_threads_updated_at", "updated_at"),
-    )
+    __table_args__ = (Index("ix_threads_updated_at", "updated_at"),)
 
 
 # ── Steps (Messages / Tool Calls / Agent Steps) ─────────────────────────────
@@ -222,9 +220,7 @@ class Element(Base):
     def __repr__(self) -> str:
         return f"<Element(id={self.id}, name={self.name!r}, type={self.type!r})>"
 
-    __table_args__ = (
-        Index("ix_elements_thread_id", "thread_id"),
-    )
+    __table_args__ = (Index("ix_elements_thread_id", "thread_id"),)
 
 
 # ── File Metadata (external storage) ────────────────────────────────────────

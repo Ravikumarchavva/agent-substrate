@@ -68,7 +68,9 @@ class TestTopicId:
 class TestMailbox:
     async def test_put_and_get(self) -> None:
         mb = Mailbox(capacity=10)
-        env = Envelope(sender=None, target=AgentId("x", "1"), content=[TextBlock(text="hello")])
+        env = Envelope(
+            sender=None, target=AgentId("x", "1"), content=[TextBlock(text="hello")]
+        )
         await mb.put(env)
         got = await mb.get(timeout=1.0)
         assert got.content[0].text == "hello"
@@ -78,14 +80,18 @@ class TestMailbox:
         assert mb.is_empty
         assert not mb.is_full
         for i in range(5):
-            env = Envelope(sender=None, target=AgentId("x", "1"), content=[TextBlock(text=str(i))])
+            env = Envelope(
+                sender=None, target=AgentId("x", "1"), content=[TextBlock(text=str(i))]
+            )
             await mb.put(env)
         assert mb.size == 5
         assert mb.is_full
 
     async def test_put_nowait_full_raises(self) -> None:
         mb = Mailbox(capacity=1)
-        env = Envelope(sender=None, target=AgentId("x", "1"), content=[TextBlock(text="a")])
+        env = Envelope(
+            sender=None, target=AgentId("x", "1"), content=[TextBlock(text="a")]
+        )
         mb.put_nowait(env)
         with pytest.raises(MailboxFullError):
             mb.put_nowait(env)
@@ -105,7 +111,9 @@ class TestMailbox:
     async def test_put_after_close_raises(self) -> None:
         mb = Mailbox(capacity=10)
         mb.close()
-        env = Envelope(sender=None, target=AgentId("x", "1"), content=[TextBlock(text="a")])
+        env = Envelope(
+            sender=None, target=AgentId("x", "1"), content=[TextBlock(text="a")]
+        )
         with pytest.raises(MailboxFullError):
             await mb.put(env)
 
@@ -452,14 +460,15 @@ class _StubAgent(BaseAgent):
     """Concrete BaseAgent subclass that returns canned responses."""
 
     def __init__(self, name: str = "stub", output: str = "hello", **kwargs: Any):
-        # Provide minimal required args with mocks
-        mc = MagicMock()  # model_client
-        ctx = MagicMock()  # model_context
+        from unittest.mock import MagicMock
+        from ravi.core.agent_catalog import AgentCatalog
+
+        catalog = AgentCatalog()
+        catalog.register_model("primary", MagicMock())
         super().__init__(
             name=name,
             description=f"Stub agent: {name}",
-            model_client=mc,
-            model_context=ctx,
+            catalog=catalog,
             **kwargs,
         )
         self._output = output

@@ -210,60 +210,75 @@ class CodeInterpreterTool(BaseTool):
                 exec_type=exec_type,
                 timeout=timeout,
             )
-            if not resp.success and any(err in str(resp.error).lower() for err in ["capacity", "microvm", "503", "service unavailable", "timeout", "degraded", "not available"]):
+            if not resp.success and any(
+                err in str(resp.error).lower()
+                for err in [
+                    "capacity",
+                    "microvm",
+                    "503",
+                    "service unavailable",
+                    "timeout",
+                    "degraded",
+                    "not available",
+                ]
+            ):
                 raise RuntimeError(f"Overloaded MicroVM Service: {resp.error}")
         except Exception as exc:
-            logger.warning("code_interpreter HTTP error or capacity issue. Activating local fallback sandbox. Reason: %s", exc)
+            logger.warning(
+                "code_interpreter HTTP error or capacity issue. Activating local fallback sandbox. Reason: %s",
+                exc,
+            )
             try:
                 import sys
                 import io
                 import traceback
                 import matplotlib
-                matplotlib.use('Agg')
+
+                matplotlib.use("Agg")
                 import matplotlib.pyplot as plt
-                
+
                 old_stdout = sys.stdout
                 old_stderr = sys.stderr
                 redirected_output = io.StringIO()
                 redirected_error = io.StringIO()
                 sys.stdout = redirected_output
                 sys.stderr = redirected_error
-                
+
                 local_ns = {}
                 local_ns["plt"] = plt
                 local_ns["matplotlib"] = matplotlib
                 try:
                     import numpy as np
+
                     local_ns["np"] = np
                 except ImportError:
                     pass
                 try:
                     import pandas as pd
+
                     local_ns["pd"] = pd
                 except ImportError:
                     pass
-                
+
                 success = True
                 error_str = None
-                
+
                 try:
-                    plt.close('all')
+                    plt.close("all")
                     exec(code, {}, local_ns)
-                    
+
                     media = []
                     figs = [plt.figure(num) for num in plt.get_fignums()]
                     for idx, fig in enumerate(figs):
                         buf = io.BytesIO()
-                        fig.savefig(buf, format='png', bbox_inches='tight')
+                        fig.savefig(buf, format="png", bbox_inches="tight")
                         buf.seek(0)
                         img_data = buf.getvalue()
-                        
+
                         from ravi.core.messages import ImageContent
+
                         media.append(
-                            ImageContent(
-                                data=img_data,
-                                media_type="image/png"
-                            )
+                            ImageContent(data=img_data, media_type="image/png")
                         )
                         plt.close(fig)
                 except Exception as e:
@@ -272,10 +287,10 @@ class CodeInterpreterTool(BaseTool):
                 finally:
                     sys.stdout = old_stdout
                     sys.stderr = old_stderr
-                    
+
                 stdout_text = redirected_output.getvalue()
                 stderr_text = redirected_error.getvalue()
-                
+
                 if not success:
                     return ToolResult(
                         content=[
@@ -293,22 +308,27 @@ class CodeInterpreterTool(BaseTool):
                         ],
                         is_error=True,
                     )
-                    
+
                 response_data = {
                     "success": True,
-                    "output": stdout_text + (f"\n[stderr]\n{stderr_text}" if stderr_text else ""),
+                    "output": stdout_text
+                    + (f"\n[stderr]\n{stderr_text}" if stderr_text else ""),
                     "execution_time": 0.05,
                     "cell_id": "fallback-cell",
                     "exec_type": "python",
                 }
-                
+
                 return ToolResult(
                     content=[TextBlock(text=json.dumps(response_data))],
                     is_error=False,
                     media=media or None,
                 )
             except Exception as fallback_exc:
-                logger.error("Local fallback execution engine error: %s", fallback_exc, exc_info=True)
+                logger.error(
+                    "Local fallback execution engine error: %s",
+                    fallback_exc,
+                    exc_info=True,
+                )
                 return ToolResult(
                     content=[
                         TextBlock(

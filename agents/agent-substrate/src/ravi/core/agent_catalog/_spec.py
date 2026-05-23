@@ -37,7 +37,7 @@ class ResourceSpec(BaseModel):
     """
 
     name: str
-    namespace: str                        # "catalog.schema" prefix
+    namespace: str  # "catalog.schema" prefix
     resource_type: ResourceType
     description: str = ""
     version: str = "1.0.0"

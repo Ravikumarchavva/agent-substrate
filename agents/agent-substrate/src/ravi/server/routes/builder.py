@@ -33,7 +33,9 @@ from ravi.server.models import Pipeline, PipelineRun
 from ravi.server.security.deps import get_current_user
 
 logger = logging.getLogger("ravi.server.routes.builder")
-router = APIRouter(prefix="/builder", tags=["builder"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/builder", tags=["builder"], dependencies=[Depends(get_current_user)]
+)
 
 
 # ── Request / Response schemas ───────────────────────────────────────────────

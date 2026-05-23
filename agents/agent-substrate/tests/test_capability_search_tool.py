@@ -202,7 +202,9 @@ async def test_browse_nonexistent_category_is_error():
 async def test_list_categories():
     cat = _make_populated_catalog()
     tool = CapabilitySearchTool(cat)
-    cat.register_tool(tool)  # Register the search tool itself so 'system' category appears
+    cat.register_tool(
+        tool
+    )  # Register the search tool itself so 'system' category appears
 
     result = await tool.execute(action="list_categories")
 

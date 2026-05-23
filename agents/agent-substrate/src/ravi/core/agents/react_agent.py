@@ -29,6 +29,13 @@ from ravi.core.messages._types import StreamChunk
 
 
 from ravi.core.agents.base_agent import BaseAgent
+from ravi.core.agents._react_loop import (
+    build_persisted_user_message,
+    extract_text,
+    normalize_textual_tool_calls,
+    prepare_model_context_messages,
+    resolve_user_message_content,
+)
 from ravi.core.execution.context import ExecutionContext
 from ravi.core.runtime import AgentId, AgentRuntime, StreamPublisher, TopicId
 from ravi.core.agents.agent_result import (
@@ -61,7 +68,6 @@ from ravi.core.agents._stream_handler import (
     handle_stream_final_response,
     process_stream_tool_calls,
 )
-from ravi.core.context.base_context import ModelContext
 from ravi.exceptions import GuardrailTripwireError
 from ravi.core.guardrails.base_guardrail import (
     GuardrailResult,
@@ -86,7 +92,7 @@ from ravi.core.messages.client_messages import (
     UserMessage,
 )
 from ravi.core.messages._types import MediaType
-from ravi.core.llm.base_client import BaseModelClient, GenerateResult
+from ravi.core.llm.base_client import GenerateResult
 from ravi.shared.observability import global_metrics, global_tracer, logger
 from ravi.catalog.tools.human_input.tool import (
     ToolApprovalHandler,
@@ -98,10 +104,10 @@ from ravi.core.resilience import (
     _calculate_delay,
 )
 from ravi.core.tools.base_tool import BaseTool
-from ravi.core.catalog import AgentCatalogRegistry
+from ravi.core.agent_catalog import AgentCatalogRegistry
 from ravi.catalog import SkillManager
 from ravi.catalog.tools.capability_search.tool import CapabilitySearchTool
-from ravi.core.checkpointing import CheckpointStore
+from ravi.core.runtime import CheckpointStore
 
 
 # ---------------------------------------------------------------------------
@@ -109,179 +115,6 @@ from ravi.core.checkpointing import CheckpointStore
 # ---------------------------------------------------------------------------
 
 _ParsedToolCall = ParsedToolCall
-
-
-def _resolve_user_message_content(
-    input_text: str,
-    input_content: Optional[list[MediaType]],
-) -> list[MediaType]:
-    if input_content is None:
-        return [input_text]
-    if not isinstance(input_content, list):
-        raise ValueError("input_content must be a list of media items")
-    if input_content:
-        return input_content
-    return [input_text]
-
-
-def _has_non_text_media(content: list[MediaType]) -> bool:
-    return any(not isinstance(item, str) for item in content)
-
-
-def _build_persisted_user_message(
-    input_text: str,
-    content: list[MediaType],
-) -> UserMessage:
-    if _has_non_text_media(content):
-        return UserMessage(content=[input_text])
-    return UserMessage(content=content)
-
-
-def _inject_ephemeral_user_message(
-    raw_messages: list[BaseClientMessage],
-    input_text: str,
-    ephemeral_content: list[MediaType],
-) -> list[BaseClientMessage]:
-    if not _has_non_text_media(ephemeral_content):
-        return raw_messages
-
-    expected_text = input_text.strip()
-    patched_messages = list(raw_messages)
-
-    for index in range(len(patched_messages) - 1, -1, -1):
-        candidate = patched_messages[index]
-        if not isinstance(candidate, UserMessage):
-            continue
-        if any(not isinstance(item, str) for item in candidate.content):
-            continue
-
-        text_parts = [
-            item for item in candidate.content if isinstance(item, str) and item
-        ]
-        candidate_text = "\n".join(text_parts).strip()
-        if candidate_text != expected_text:
-            continue
-
-        patched_messages[index] = UserMessage(
-            content=ephemeral_content,
-            name=candidate.name,
-        )
-        break
-
-    return patched_messages
-
-
-def _sanitize_message_for_model_context(
-    message: BaseClientMessage,
-) -> BaseClientMessage:
-    if not isinstance(message, UserMessage):
-        return message
-    if not _has_non_text_media(message.content):
-        return message
-
-    text_parts = [
-        item for item in message.content if isinstance(item, str) and item.strip()
-    ]
-    sanitized_text = "\n".join(text_parts).strip()
-    if not sanitized_text:
-        sanitized_text = "[User provided a non-text attachment in a previous turn.]"
-
-    return UserMessage(content=[sanitized_text], name=message.name)
-
-
-def _prepare_model_context_messages(
-    raw_messages: list[BaseClientMessage],
-    input_text: str,
-    ephemeral_content: list[MediaType],
-) -> list[BaseClientMessage]:
-    sanitized_messages = [
-        _sanitize_message_for_model_context(message) for message in raw_messages
-    ]
-    return _inject_ephemeral_user_message(
-        sanitized_messages,
-        input_text,
-        ephemeral_content,
-    )
-
-
-def _assistant_text_parts(content: Optional[List[MediaType]]) -> list[str]:
-    parts: list[str] = []
-    if not content:
-        return parts
-
-    for item in content:
-        if isinstance(item, str):
-            if item:
-                parts.append(item)
-            continue
-
-        if isinstance(item, dict):
-            text = item.get("text")
-            if isinstance(text, str) and text:
-                parts.append(text)
-
-    return parts
-
-
-def _parse_textual_tool_call_sequence(text: str) -> list[ToolCallMessage]:
-    remaining = text.strip()
-    parsed_calls: list[ToolCallMessage] = []
-
-    while remaining:
-        # Accept both Groq format (<function=name{...}) and legacy (<function/name{...)
-        if remaining.startswith("<function="):
-            prefix_len = len("<function=")
-        elif remaining.startswith("<function/"):
-            prefix_len = len("<function/")
-        else:
-            return []
-
-        close_tag_index = remaining.find("</function>")
-        self_closing_index = remaining.find("/>")
-
-        if close_tag_index == -1 and self_closing_index == -1:
-            return []
-
-        is_self_closing = self_closing_index != -1 and (
-            close_tag_index == -1 or self_closing_index < close_tag_index
-        )
-        end_index = self_closing_index if is_self_closing else close_tag_index
-
-        inner = remaining[prefix_len:end_index].strip()
-
-        tool_name = ""
-        raw_arguments = ""
-
-        open_brace_index = inner.find("{")
-        if open_brace_index > 0:
-            tool_name = inner[:open_brace_index].strip().rstrip(">")
-            raw_arguments = inner[open_brace_index:].strip()
-        else:
-            comma_index = inner.find(",")
-            if comma_index <= 0:
-                return []
-            tool_name = inner[:comma_index].strip()
-            raw_arguments = inner[comma_index + 1 :].strip()
-
-        if not tool_name or not raw_arguments:
-            return []
-
-        if raw_arguments.endswith(">"):
-            raw_arguments = raw_arguments[:-1].strip()
-
-        try:
-            arguments = json.loads(raw_arguments)
-        except json.JSONDecodeError:
-            return []
-
-        if not isinstance(arguments, dict):
-            return []
-
-        parsed_calls.append(ToolCallMessage(name=tool_name, arguments=arguments))
-        closing_len = len("/>") if is_self_closing else len("</function>")
-        remaining = remaining[end_index + closing_len :].strip()
-
-    return parsed_calls
 
 
 # ---------------------------------------------------------------------------
@@ -355,10 +188,11 @@ class ReActAgent(BaseAgent):
     ):
         # Inject defaults for resources not explicitly registered in the catalog.
         if catalog.primary_memory() is None:
-            catalog.register_memory("default", UnboundedMemory())
+            catalog.register_memory("memory", UnboundedMemory())
 
         if catalog.primary_context() is None:
             from ravi.core.context.implementations import SlidingWindowContext
+
             catalog.register_context("default", SlidingWindowContext(max_messages=40))
 
         # Inject the capability search tool
@@ -404,7 +238,9 @@ class ReActAgent(BaseAgent):
         }
         self._max_active_tools = self.DEFAULT_MAX_ACTIVE_TOOLS
         # Fault recovery
-        self.checkpoint_store: Optional[CheckpointStore] = catalog.primary_checkpoint_store()
+        self.checkpoint_store: Optional[CheckpointStore] = (
+            catalog.primary_checkpoint_store()
+        )
         self.checkpoint_every: int = checkpoint_every
 
     # ── Core run ─────────────────────────────────────────────────────────────
@@ -449,7 +285,7 @@ class ReActAgent(BaseAgent):
         """Persist current agent state to the checkpoint store using RunCheckpoint."""
         if self.checkpoint_store is None:
             return
-        from ravi.core.runtime._checkpoint import RunCheckpoint
+        from ravi.core.runtime import RunCheckpoint
 
         agent_id = (
             self.execution_context.agent_id
@@ -546,7 +382,11 @@ class ReActAgent(BaseAgent):
                 )
 
                 # Restore any saved resource locks into runtime
-                if self.runtime and checkpoint.resource_locks and hasattr(self.runtime, "resource_locks"):
+                if (
+                    self.runtime
+                    and checkpoint.resource_locks
+                    and hasattr(self.runtime, "resource_locks")
+                ):
                     for lock_data in checkpoint.resource_locks:
                         try:
                             await self.runtime.resource_locks.acquire(
@@ -631,11 +471,11 @@ class ReActAgent(BaseAgent):
         initial_tool_choice = kwargs.pop("tool_choice", None)
 
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
-        user_message_content = _resolve_user_message_content(
+        user_message_content = resolve_user_message_content(
             input_text,
             kwargs.pop("input_content", None),
         )
-        persisted_user_message = _build_persisted_user_message(
+        persisted_user_message = build_persisted_user_message(
             input_text,
             user_message_content,
         )
@@ -691,10 +531,16 @@ class ReActAgent(BaseAgent):
                                 **kwargs,
                             )
                         except GuardrailTripwireError as e:
-                            logger.error(f"[{self.name}] Guardrail tripwire in middleware: {e.message}")
+                            logger.error(
+                                f"[{self.name}] Guardrail tripwire in middleware: {e.message}"
+                            )
                             tripped_res = e.details.get("result", {})
                             g_type = tripped_res.get("guardrail_type")
-                            output_prefix = "Request blocked" if g_type == GuardrailType.INPUT else "Response blocked"
+                            output_prefix = (
+                                "Request blocked"
+                                if g_type == GuardrailType.INPUT
+                                else "Response blocked"
+                            )
                             return build_guardrail_tripped_result(
                                 error=e,
                                 run_id=run_id,
@@ -839,7 +685,7 @@ class ReActAgent(BaseAgent):
                         from ravi.core.structured.result import StructuredOutputResult
 
                         assert response is not None
-                        raw_text = self._extract_text(response) or ""
+                        raw_text = extract_text(response) or ""
                         result.structured_output = StructuredOutputResult(
                             parsed=_parsed,
                             raw_text=raw_text,
@@ -852,7 +698,7 @@ class ReActAgent(BaseAgent):
                         context_messages = await self.model_context.build(
                             session_id=getattr(self, "_session_id", self.name),
                             current_input=input_text,
-                            raw_messages=_prepare_model_context_messages(
+                            raw_messages=prepare_model_context_messages(
                                 memory_messages,
                                 input_text,
                                 user_message_content,
@@ -906,7 +752,9 @@ class ReActAgent(BaseAgent):
                             "steps_used": len(steps),
                             "tool_calls_total": total_tool_calls,
                             "tokens_used": usage.total_tokens,
-                            "duration_seconds": (run_end_err - run_start).total_seconds(),
+                            "duration_seconds": (
+                                run_end_err - run_start
+                            ).total_seconds(),
                             "error": str(exc),
                         },
                     )
@@ -1004,11 +852,11 @@ class ReActAgent(BaseAgent):
         run_id = self._resolve_run_id()
         self._current_run_id = run_id
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
-        user_message_content = _resolve_user_message_content(
+        user_message_content = resolve_user_message_content(
             input_text,
             kwargs.pop("input_content", None),
         )
-        persisted_user_message = _build_persisted_user_message(
+        persisted_user_message = build_persisted_user_message(
             input_text,
             user_message_content,
         )
@@ -1075,7 +923,7 @@ class ReActAgent(BaseAgent):
                         messages = await self.model_context.build(
                             session_id=getattr(self, "_session_id", self.name),
                             current_input=input_text,
-                            raw_messages=_prepare_model_context_messages(
+                            raw_messages=prepare_model_context_messages(
                                 memory_messages,
                                 input_text,
                                 user_message_content,
@@ -1123,7 +971,7 @@ class ReActAgent(BaseAgent):
 
                                 if final_response_obj:
                                     final_response_obj = (
-                                        self._normalize_textual_tool_calls(
+                                        normalize_textual_tool_calls(
                                             final_response_obj
                                         )
                                     )
@@ -1184,7 +1032,7 @@ class ReActAgent(BaseAgent):
                                 input_text=input_text,
                                 response_schema=_schema,
                                 stream_pub=_stream_pub,
-                                extract_text_fn=self._extract_text,
+                                extract_text_fn=extract_text,
                             ):
                                 yield chunk
                                 # If a guardrail tripped, we need to return
@@ -1293,7 +1141,7 @@ class ReActAgent(BaseAgent):
         """Single LLM call with retry, hooks, and observability."""
         tool_schemas = self._build_tool_schemas(current_input=current_input)
         requested_tool_choice = kwargs.pop("tool_choice", None)
-        user_message_content = _resolve_user_message_content(
+        user_message_content = resolve_user_message_content(
             current_input,
             input_content,
         )
@@ -1301,7 +1149,7 @@ class ReActAgent(BaseAgent):
         messages = await self.model_context.build(
             session_id=getattr(self, "_session_id", self.name),
             current_input=current_input,
-            raw_messages=_prepare_model_context_messages(
+            raw_messages=prepare_model_context_messages(
                 memory_messages,
                 current_input,
                 user_message_content,
@@ -1358,7 +1206,9 @@ class ReActAgent(BaseAgent):
                         async def _do_generate(
                             ctx: MiddlewareContext,
                         ) -> GenerateResult:
-                            generate_kwargs["messages"] = ctx.metadata.get("messages", messages)
+                            generate_kwargs["messages"] = ctx.metadata.get(
+                                "messages", messages
+                            )
                             return await self.model_client.generate(**generate_kwargs)
 
                         response = await self.middleware_pipeline.run(
@@ -1372,7 +1222,7 @@ class ReActAgent(BaseAgent):
                             "ReActAgent expected AssistantMessage from generate()"
                         )
 
-                    response = self._normalize_textual_tool_calls(response)
+                    response = normalize_textual_tool_calls(response)
                     llm_t1 = asyncio.get_event_loop().time()
                     global_metrics.record_histogram(
                         "llm_latency",
@@ -1421,14 +1271,6 @@ class ReActAgent(BaseAgent):
         if last_exception:
             raise last_exception
         raise RuntimeError("LLM call failed unexpectedly")
-
-    @staticmethod
-    def _parse_tool_call(tc: ToolCallMessage | JsonObject) -> ParsedToolCall:
-        """Normalise any tool-call shape into a ParsedToolCall.
-
-        Delegates to ``_tool_execution.parse_tool_call``.
-        """
-        return parse_tool_call(tc)
 
     async def _execute_tool(
         self,
@@ -1489,7 +1331,9 @@ class ReActAgent(BaseAgent):
                 and tool is not None
                 and getattr(tool, "agent_id", None) is not None
             ):
-                return await execute_tool_via_runtime(parsed, step_num, t0, span, exec_ctx)
+                return await execute_tool_via_runtime(
+                    parsed, step_num, t0, span, exec_ctx
+                )
 
             # ── DIRECT EXECUTION PATH ────────────────────────────────
 
@@ -1556,52 +1400,3 @@ class ReActAgent(BaseAgent):
             # Execute with retry, timeout, and middleware
             return await execute_tool_direct(parsed, step_num, t0, span, tool, exec_ctx)
 
-    def _tool_error(
-        self,
-        parsed: ParsedToolCall,
-        step_num: int,
-        t0: float,
-        span: object,
-        error_msg: str,
-        metric_name: str,
-    ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
-        """Build error record + message for a failed tool call."""
-        return build_tool_error(parsed, t0, span, error_msg, metric_name, self.name)
-
-    def _find_tool(self, name: str) -> Optional[BaseTool]:
-        """Look up a tool by name (or alias) from the catalog."""
-        return find_tool(name, self._catalog, self.tools)
-
-    @staticmethod
-    def _extract_text(response: AssistantMessage) -> Optional[str]:
-        """Extract plain text content from an AssistantMessage."""
-        if response.content is None:
-            return None
-        if isinstance(response.content, list):
-            parts = _assistant_text_parts(response.content)
-            return " ".join(parts) if parts else None
-        return str(response.content) if response.content else None
-
-    @staticmethod
-    def _normalize_textual_tool_calls(response: AssistantMessage) -> AssistantMessage:
-        """Translate fallback textual tool-call markup into ToolCallMessage objects."""
-        if response.tool_calls:
-            return response
-
-        text = ReActAgent._extract_text(response)
-        if not text:
-            return response
-
-        parsed_calls = _parse_textual_tool_call_sequence(text)
-        if not parsed_calls:
-            return response
-
-        response.tool_calls = parsed_calls
-        response.content = None
-        response.finish_reason = "tool_calls"
-        return response
-
-    @staticmethod
-    def _content_to_str(content: list[MediaType] | str) -> str:
-        """Convert tool result content to a plain string for the record."""
-        return content_to_str(content)

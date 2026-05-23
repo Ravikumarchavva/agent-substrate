@@ -51,7 +51,9 @@ class UsageStats(BaseModel):
     @model_validator(mode="after")
     def _normalize_total(self) -> "UsageStats":
         """Compute total when provider omits it (e.g. some cached responses)."""
-        if self.total_tokens == 0 and (self.prompt_tokens > 0 or self.completion_tokens > 0):
+        if self.total_tokens == 0 and (
+            self.prompt_tokens > 0 or self.completion_tokens > 0
+        ):
             self.total_tokens = self.prompt_tokens + self.completion_tokens
         return self
 

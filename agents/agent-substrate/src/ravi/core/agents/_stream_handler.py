@@ -229,10 +229,16 @@ async def process_stream_tool_calls(
                     _, tool_msg = await asyncio.wait_for(coro, timeout=tool_timeout)
                 except asyncio.TimeoutError:
                     from ravi.core.messages.content import TextBlock
-                    from ravi.core.messages.client_messages import ToolExecutionResultMessage
+                    from ravi.core.messages.client_messages import (
+                        ToolExecutionResultMessage,
+                    )
 
                     tool_msg = ToolExecutionResultMessage(
-                        content=[TextBlock(text=f"Tool '{parsed.name}' timed out after {tool_timeout}s")],
+                        content=[
+                            TextBlock(
+                                text=f"Tool '{parsed.name}' timed out after {tool_timeout}s"
+                            )
+                        ],
                         tool_call_id=parsed.call_id,
                         name=parsed.name,
                         is_error=True,

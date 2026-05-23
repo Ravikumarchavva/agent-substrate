@@ -186,6 +186,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
                 exc,
             )
             from ..tool import CodeInterpreterTool
+
             local_tool = CodeInterpreterTool()
             local_tool.session_id = self.session_id
             return await local_tool.execute(code=code, timeout=timeout)

@@ -140,7 +140,9 @@ class EventBus:
                                 f"consume:{envelope.event_type}",
                                 context=parent_ctx,
                                 kind=trace.SpanKind.CONSUMER,
-                                attributes={"messaging.event_type": envelope.event_type},
+                                attributes={
+                                    "messaging.event_type": envelope.event_type
+                                },
                             ):
                                 yield envelope
                             await self._client.xack(stream_key, group, msg_id)

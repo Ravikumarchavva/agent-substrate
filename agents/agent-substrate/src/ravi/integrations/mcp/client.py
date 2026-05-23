@@ -236,6 +236,7 @@ class MCPClient:
     async def discover_tools(self) -> list[MCPTool]:
         """Discover all tools from the connected MCP server as MCPTool instances."""
         from ravi.integrations.mcp.tool import MCPTool  # lazy — avoids circular import
+
         return await MCPTool.from_mcp_client(self)
 
     async def list_resources(self) -> list[dict[str, Any]]:

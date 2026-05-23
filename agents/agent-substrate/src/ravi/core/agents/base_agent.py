@@ -21,7 +21,7 @@ from ravi.core.messages.client_messages import ToolExecutionResultMessage
 from ravi.core.agents.agent_result import AgentRunResult
 from ravi.core.context.base_context import ModelContext
 from ravi.core.tools.base_tool import BaseTool
-from ravi.core.catalog import AgentCatalogRegistry
+from ravi.core.agent_catalog import AgentCatalogRegistry
 from ravi.core.llm.base_client import BaseModelClient
 from ravi.core.memory.base_memory import BaseMemory
 from ravi.core.memory.memory_scope import MemoryScope

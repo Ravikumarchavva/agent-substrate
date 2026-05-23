@@ -78,9 +78,14 @@ class ToolExecutorHandler:
         """
         if isinstance(payload, list) and len(payload) > 0:
             block = payload[0]
-            if hasattr(block, "type") and block.type == "text" and hasattr(block, "text"):
+            if (
+                hasattr(block, "type")
+                and block.type == "text"
+                and hasattr(block, "text")
+            ):
                 import ast
                 import json
+
                 try:
                     parsed_payload = ast.literal_eval(block.text)
                     if isinstance(parsed_payload, dict):
@@ -99,7 +104,6 @@ class ToolExecutorHandler:
                 tool_name="unknown",
                 error="Invalid payload: expected dict",
             )
-
 
         tool_name: str = payload.get("tool_name", "")
         arguments: dict = payload.get("arguments", {})

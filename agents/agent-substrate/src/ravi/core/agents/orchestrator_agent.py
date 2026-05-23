@@ -41,7 +41,6 @@ from ravi.core.agents.base_agent import BaseAgent
 from ravi.core.agents.react_agent import ReActAgent
 from ravi.core.agents.agent_result import AgentRunResult
 from ravi.core.context.base_context import ModelContext
-from ravi.core.context.implementations import UnboundedContext
 from ravi.core.guardrails.base_guardrail import BaseGuardrail
 from ravi.core.hooks import HookEvent, HookManager
 from ravi.core.memory.base_memory import BaseMemory
@@ -53,7 +52,7 @@ from ravi.core.tools.base_tool import BaseTool, ToolResult
 from ravi.catalog import SkillManager
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.core.runtime import AgentId, AgentRuntime
-from ravi.core.catalog import AgentCatalogRegistry
+from ravi.core.agent_catalog import AgentCatalogRegistry
 from ravi.core.middleware.base import BaseMiddleware
 
 
@@ -270,18 +269,32 @@ class OrchestratorAgent(ReActAgent):
         resolved_middleware = list(middleware or [])
         if handoff_guardrails:
             from ravi.core.middleware.builtins.guardrails import GuardrailsMiddleware
+
             resolved_middleware = [
                 GuardrailsMiddleware(tool_call_guardrails=handoff_guardrails)
             ] + resolved_middleware
 
+        # Build the catalog from legacy params (or use the provided one).
+        from ravi.core.agent_catalog import AgentCatalog
+
+        resolved_catalog: AgentCatalogRegistry = catalog or AgentCatalog()
+        resolved_catalog.register_model("primary", model_client)
+        if model_context is not None:
+            resolved_catalog.register_context("default", model_context)
+        if memory is not None:
+            resolved_catalog.register_memory("default", memory)
+        for tool in all_tools:
+            resolved_catalog.register_tool(tool)
+        if skill_dirs or skill_manager:
+            resolved_catalog.init_skills(skill_dirs=skill_dirs or [])
+            if skill_manager is not None:
+                resolved_catalog.skill_manager = skill_manager
+
         super().__init__(
             name=name,
             description=description,
-            model_client=model_client,
-            model_context=model_context or UnboundedContext(),
-            tools=all_tools,
+            catalog=resolved_catalog,
             system_instructions=system_instructions or default_instructions,
-            memory=memory,
             memory_scope=memory_scope,
             max_iterations=max_iterations,
             verbose=verbose,
@@ -292,12 +305,10 @@ class OrchestratorAgent(ReActAgent):
             tool_timeout=tool_timeout,
             tool_approval_handler=tool_approval_handler,
             tools_requiring_approval=tools_requiring_approval,
-            skill_dirs=skill_dirs,
-            skill_manager=skill_manager,
             runtime=runtime,
             agent_id=agent_id,
             middleware=resolved_middleware,
-            catalog=catalog,
+            enable_capability_search=False,
         )
 
         self.sub_agents = sub_agents

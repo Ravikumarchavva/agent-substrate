@@ -53,7 +53,7 @@ class GovernanceMiddleware(BaseMiddleware):
             fqn = f"{self.catalog.default_catalog}.default.{tool_name}".lower()
 
         principal = ctx.agent_name or "default_agent"
-        
+
         # Check permissions
         is_permitted = self.catalog.check_permission(principal, fqn, "execute")
         if not is_permitted:
@@ -71,8 +71,8 @@ class GovernanceMiddleware(BaseMiddleware):
                         "guardrail_type": "tool_call",
                         "guardrail_name": "governance_policy",
                         "status": "tripped",
-                    }
-                }
+                    },
+                },
             )
 
         return ctx

@@ -186,7 +186,9 @@ def create_react_agent(
     """
     from ravi.core.middleware.builtins.guardrails import GuardrailsMiddleware
 
-    resolved_context = model_context or SlidingWindowContext(max_messages=model_context_window)
+    resolved_context = model_context or SlidingWindowContext(
+        max_messages=model_context_window
+    )
 
     catalog = AgentCatalog()
     catalog.register_model("primary", model_client)

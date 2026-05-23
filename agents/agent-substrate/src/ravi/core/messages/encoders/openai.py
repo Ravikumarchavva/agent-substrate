@@ -11,13 +11,13 @@ Public API::
 
 from __future__ import annotations
 
-import base64
-import io
 import json
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
+
+from ravi.core.messages.encoders._media import bytes_to_base64, pil_to_base64_png
 
 from ravi.core.messages._types import (
     AudioContent,
@@ -127,10 +127,7 @@ def ensure_strict_tool_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 def _encode_image(img: Image.Image) -> dict[str, Any]:
     """PIL Image → OpenAI Responses API ``input_image`` block."""
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-    return {"type": "input_image", "image_url": f"data:image/png;base64,{b64}"}
+    return {"type": "input_image", "image_url": f"data:image/png;base64,{pil_to_base64_png(img)}"}
 
 
 def _encode_image_content(ic: ImageContent) -> dict[str, Any]:
@@ -141,8 +138,7 @@ def _encode_image_content(ic: ImageContent) -> dict[str, Any]:
     elif ic.file_id:
         block["file_id"] = ic.file_id
     else:
-        b64 = base64.b64encode(ic.data or b"").decode("utf-8")
-        block["image_url"] = f"data:{ic.media_type};base64,{b64}"
+        block["image_url"] = f"data:{ic.media_type};base64,{bytes_to_base64(ic.data or b'')}"
     if ic.detail != "auto":
         block["detail"] = ic.detail
     return block
@@ -161,7 +157,7 @@ def _encode_audio_content(ac: AudioContent, role: str) -> dict[str, Any]:
         "source": {
             "type": "base64",
             "media_type": f"audio/{ac.format}",
-            "data": base64.b64encode(audio_bytes).decode("utf-8"),
+            "data": bytes_to_base64(audio_bytes),
         },
     }
 
@@ -181,13 +177,19 @@ def _encode_video_content(vc: VideoContent, role: str) -> dict[str, Any]:
         "source": {
             "type": "base64",
             "media_type": vc.media_type,
-            "data": base64.b64encode(video_bytes).decode("utf-8"),
+            "data": bytes_to_base64(video_bytes),
         },
     }
 
 
 def _encode_media_item(
-    item: str | Image.Image | ImageContent | AudioContent | VideoContent | DocumentContent, role: str
+    item: str
+    | Image.Image
+    | ImageContent
+    | AudioContent
+    | VideoContent
+    | DocumentContent,
+    role: str,
 ) -> dict[str, Any]:
     """Encode a single MediaType item to OpenAI Responses API format."""
     if isinstance(item, Image.Image):

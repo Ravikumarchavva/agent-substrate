@@ -319,6 +319,7 @@ class DocumentContent(BaseModel):
                         if len(parts) > 1:
                             raw_data = parts[1]
                     import base64
+
                     data["data"] = base64.b64decode(raw_data)
                 except Exception:
                     pass
@@ -339,7 +340,6 @@ MediaContent = Union[ImageContent, AudioContent, VideoContent, DocumentContent]
 # What message.content actually carries — text strings or typed media.
 MessageContent = Union[str, ImageContent, AudioContent, VideoContent, DocumentContent]
 """A single content item in a message: plain string or typed media."""
-
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

@@ -8,7 +8,9 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 
 from ravi.shared.auth.middleware import get_current_user
 
-router = APIRouter(prefix="/pipelines", tags=["pipelines"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/pipelines", tags=["pipelines"], dependencies=[Depends(get_current_user)]
+)
 
 
 @router.get("/")

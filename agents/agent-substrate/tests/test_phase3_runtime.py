@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ravi.core.agent_catalog import AgentCatalog
 from ravi.core.runtime import (
     AgentId,
     LocalRuntime,
@@ -96,6 +97,13 @@ class _CriticalTool(BaseTool):
 
     async def execute(self, *, action: str = "") -> ToolResult:  # type: ignore[override]
         return ToolResult(content=[{"type": "text", "text": f"done: {action}"}])
+
+
+def _make_catalog() -> AgentCatalog:
+    """Create a minimal AgentCatalog with a mock primary model."""
+    catalog: AgentCatalog = AgentCatalog()
+    catalog.register_model("primary", MagicMock())
+    return catalog
 
 
 def _make_ctx(agent_id: AgentId | None = None) -> MessageContext:
@@ -425,15 +433,24 @@ class TestStreamPubSubViaRuntime:
         async def subscriber(ctx: MessageContext, payload: object) -> None:
             if isinstance(payload, list) and len(payload) > 0:
                 block = payload[0]
-                if hasattr(block, "type") and block.type == "text" and hasattr(block, "text"):
+                if (
+                    hasattr(block, "type")
+                    and block.type == "text"
+                    and hasattr(block, "text")
+                ):
                     if "StreamDone" in block.text:
                         reason = "complete"
                         if "reason=" in block.text:
-                            reason = block.text.split("reason=")[1].split(")")[0].strip("'\"")
+                            reason = (
+                                block.text.split("reason=")[1]
+                                .split(")")[0]
+                                .strip("'\"")
+                            )
                         payload = StreamDone(reason=reason)
                     else:
                         import ast
                         import json
+
                         try:
                             parsed = ast.literal_eval(block.text)
                             if isinstance(parsed, dict):
@@ -446,8 +463,6 @@ class TestStreamPubSubViaRuntime:
                             except Exception:
                                 pass
             received.append(payload)
-
-
 
         await rt.register("stream_consumer", subscriber)
         topic = TopicId(type="stream", source="thread-1")
@@ -689,9 +704,7 @@ class TestBackwardCompat:
         agent = _DummyAgent(
             name="test",
             description="test agent",
-            model_client=MagicMock(),
-            model_context=MagicMock(),
-            tools=[],
+            catalog=_make_catalog(),
         )
         assert agent.runtime is None
         assert agent.agent_id is None

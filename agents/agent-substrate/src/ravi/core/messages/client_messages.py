@@ -34,7 +34,6 @@ from ravi.core.messages.content import (
     MessageContent,
     TextBlock,
     ImageBlock,
-    DocumentBlock,
     content_block_from_dict,
 )
 
@@ -65,7 +64,9 @@ class UserMessage(BaseClientMessage[List[MessageContent]]):
             for item in v:
                 if isinstance(item, str):
                     result.append(item)
-                elif isinstance(item, (ImageContent, AudioContent, VideoContent, DocumentContent)):
+                elif isinstance(
+                    item, (ImageContent, AudioContent, VideoContent, DocumentContent)
+                ):
                     result.append(item)
                 elif isinstance(item, dict):
                     # Reconstruct from serialized form
@@ -156,7 +157,9 @@ class AssistantMessage(BaseClientMessage[Optional[List[MessageContent]]]):
             for item in v:
                 if isinstance(item, str):
                     result.append(item)
-                elif isinstance(item, (ImageContent, AudioContent, VideoContent, DocumentContent)):
+                elif isinstance(
+                    item, (ImageContent, AudioContent, VideoContent, DocumentContent)
+                ):
                     result.append(item)
                 elif isinstance(item, dict):
                     item_type = item.get("type", "")
@@ -231,7 +234,9 @@ class ToolExecutionResultMessage(BaseClientMessage[List[ContentBlock]]):
         if isinstance(v, list):
             result: List[MediaContent] = []
             for item in v:
-                if isinstance(item, (ImageContent, AudioContent, VideoContent, DocumentContent)):
+                if isinstance(
+                    item, (ImageContent, AudioContent, VideoContent, DocumentContent)
+                ):
                     result.append(item)
                 elif isinstance(item, dict):
                     item_type = item.get("type", "")
@@ -269,7 +274,6 @@ class ToolExecutionResultMessage(BaseClientMessage[List[ContentBlock]]):
             app_data=tool_result.app_data,
             media=list(tool_result.media) if tool_result.media else None,
         )
-
 
 
 if TYPE_CHECKING:

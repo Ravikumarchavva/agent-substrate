@@ -11,12 +11,12 @@ Public API::
 
 from __future__ import annotations
 
-import base64
-import io
 import json
 from typing import Any
 
 from PIL import Image
+
+from ravi.core.messages.encoders._media import bytes_to_base64, pil_to_base64_png
 
 from ravi.core.messages._types import (
     AudioContent,
@@ -42,12 +42,9 @@ def _encode_text(text: str) -> dict[str, Any]:
 
 def _encode_image(img: Image.Image) -> dict[str, Any]:
     """PIL Image → Anthropic base64 image block."""
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     return {
         "type": "image",
-        "source": {"type": "base64", "media_type": "image/png", "data": b64},
+        "source": {"type": "base64", "media_type": "image/png", "data": pil_to_base64_png(img)},
     }
 
 
@@ -59,15 +56,19 @@ def _encode_image_content(ic: ImageContent) -> dict[str, Any]:
         # Anthropic doesn't support file_id natively — use URL fallback
         return {"type": "text", "text": f"[Image file: {ic.file_id}]"}
     # Raw bytes
-    b64 = base64.b64encode(ic.data or b"").decode("utf-8")
     return {
         "type": "image",
-        "source": {"type": "base64", "media_type": ic.media_type, "data": b64},
+        "source": {"type": "base64", "media_type": ic.media_type, "data": bytes_to_base64(ic.data or b"")},
     }
 
 
 def _encode_media_item(
-    item: str | Image.Image | ImageContent | AudioContent | VideoContent | DocumentContent,
+    item: str
+    | Image.Image
+    | ImageContent
+    | AudioContent
+    | VideoContent
+    | DocumentContent,
 ) -> dict[str, Any]:
     """Encode a single MediaType item to Anthropic content block."""
     if isinstance(item, Image.Image):
@@ -83,13 +84,12 @@ def _encode_media_item(
     if isinstance(item, DocumentContent):
         # Anthropic supports PDF documents natively!
         if item.media_type == "application/pdf" and item.data:
-            b64 = base64.b64encode(item.data).decode("utf-8")
             return {
                 "type": "document",
                 "source": {
                     "type": "base64",
                     "media_type": "application/pdf",
-                    "data": b64,
+                    "data": bytes_to_base64(item.data),
                 },
             }
         ref = item.filename or item.url or "document"
@@ -201,6 +201,7 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> dict[str, Any]:
                 content_blocks.append(_encode_media_item(item))
             except Exception as e:
                 import logging
+
                 logging.getLogger("ravi.core.messages.encoders.anthropic").warning(
                     "Failed to encode media item for Anthropic tool result: %s", e
                 )
@@ -219,7 +220,6 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> dict[str, Any]:
             }
         ],
     }
-
 
 
 # ── Public API ───────────────────────────────────────────────────────────────

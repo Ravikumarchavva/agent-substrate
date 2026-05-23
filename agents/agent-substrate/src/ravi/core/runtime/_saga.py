@@ -107,7 +107,9 @@ class SagaRecord(BaseModel):
 
     saga_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     agent_id: str = ""
-    status: StepStatus = StepStatus.PENDING  # reusing enum: pending / executed / failed / compensated
+    status: StepStatus = (
+        StepStatus.PENDING
+    )  # reusing enum: pending / executed / failed / compensated
     steps: list[SagaStep] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
@@ -212,22 +214,32 @@ class SagaExecutionContext:
             if existing.status == StepStatus.EXECUTED:
                 logger.info(
                     "saga %s: step %s already executed, using stored result",
-                    self.saga_id, step_id,
+                    self.saga_id,
+                    step_id,
                 )
                 # Verify request hash if provided
-                if request_hash and existing.request_hash and request_hash != existing.request_hash:
+                if (
+                    request_hash
+                    and existing.request_hash
+                    and request_hash != existing.request_hash
+                ):
                     logger.warning(
                         "saga %s: step %s request hash mismatch (stored=%s, current=%s)",
-                        self.saga_id, step_id,
-                        existing.request_hash, request_hash,
+                        self.saga_id,
+                        step_id,
+                        existing.request_hash,
+                        request_hash,
                     )
                 # Register compensator for already-executed steps
                 if compensate and existing.response is not None:
-                    self._compensators.append((step_id, lambda r=existing.response: compensate(r)))
+                    self._compensators.append(
+                        (step_id, lambda r=existing.response: compensate(r))
+                    )
                 return existing.response
             elif existing.status == StepStatus.FAILED:
                 raise SagaFailedError(
-                    self.saga_id, step_id,
+                    self.saga_id,
+                    step_id,
                     message=f"step {step_id!r} previously failed: {existing.error_message}",
                 )
 
@@ -292,7 +304,8 @@ class SagaExecutionContext:
             except Exception:
                 logger.exception(
                     "saga %s: compensation failed for step %s",
-                    self.saga_id, step_id,
+                    self.saga_id,
+                    step_id,
                 )
         await self._coordinator._store.save(self._record)
         return compensated

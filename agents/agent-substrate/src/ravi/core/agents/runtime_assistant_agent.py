@@ -46,12 +46,10 @@ from ravi.exceptions import GuardrailTripwireError
 from ravi.core.guardrails.base_guardrail import GuardrailType
 
 from ravi.core.tools.base_tool import BaseTool
-from ravi.core.catalog import AgentCatalogRegistry
+from ravi.core.agent_catalog import AgentCatalogRegistry
+from rich.console import Console
 
 logger = logging.getLogger("ravi.core.agents.runtime_assistant_agent")
-
-
-from rich.console import Console
 
 _rich_console = Console()
 
@@ -77,20 +75,31 @@ def _thought_banner(agent_name: str, thought: str) -> None:
 
 
 def _tool_call_banner(agent_name: str, tool_name: str, args: dict) -> None:
-    args_str = ", ".join(f"[bold yellow]{k}[/bold yellow]={v!r}" for k, v in args.items())
-    _rich_console.print(f"  [yellow]⚙️  Running tool:[/yellow] [bold cyan]{tool_name}[/bold cyan]({args_str})...", end="")
+    args_str = ", ".join(
+        f"[bold yellow]{k}[/bold yellow]={v!r}" for k, v in args.items()
+    )
+    _rich_console.print(
+        f"  [yellow]⚙️  Running tool:[/yellow] [bold cyan]{tool_name}[/bold cyan]({args_str})...",
+        end="",
+    )
 
 
-def _tool_result_banner(agent_name: str, tool_name: str, result: str, elapsed: float) -> None:
+def _tool_result_banner(
+    agent_name: str, tool_name: str, result: str, elapsed: float
+) -> None:
     result_preview = result.strip().replace("\n", " ")
     if len(result_preview) > 80:
         result_preview = result_preview[:80] + "..."
     # Conclude the tool call printed in _tool_call_banner on the same line!
-    _rich_console.print(f" [green]Done![/green] [dim]({elapsed:.2f}s)[/dim] → [italic green]{result_preview}[/italic green]")
+    _rich_console.print(
+        f" [green]Done![/green] [dim]({elapsed:.2f}s)[/dim] → [italic green]{result_preview}[/italic green]"
+    )
 
 
 def _final_answer_banner(agent_name: str, text: str) -> None:
-    _rich_console.print(f"\n[bold magenta]🤖 {agent_name} ›[/bold magenta] {text.strip()}\n")
+    _rich_console.print(
+        f"\n[bold magenta]🤖 {agent_name} ›[/bold magenta] {text.strip()}\n"
+    )
 
 
 class RuntimeAssistantAgent(RuntimeAgent):
@@ -179,7 +188,9 @@ class RuntimeAssistantAgent(RuntimeAgent):
 
         # Ensure system prompt is seeded into memory
         if await self.memory.size() == 0:
-            await self.memory.add_message(SystemMessage(content=self.system_instructions))
+            await self.memory.add_message(
+                SystemMessage(content=self.system_instructions)
+            )
 
         # Append incoming message to memory
         user_msg = UserMessage(content=[input_text])
@@ -230,7 +241,9 @@ class RuntimeAssistantAgent(RuntimeAgent):
                     response = await self.middleware_pipeline.run(mw_ctx, _do_generate)
                 except Exception as e:
                     if self.verbose:
-                        _console_print(f"  ❌ [{self.name}] Guardrail blocked/tripped: {e}")
+                        _console_print(
+                            f"  ❌ [{self.name}] Guardrail blocked/tripped: {e}"
+                        )
                     if isinstance(e, GuardrailTripwireError):
                         tripped_res = e.details.get("result", {})
                         g_type = tripped_res.get("guardrail_type")
@@ -296,7 +309,9 @@ class RuntimeAssistantAgent(RuntimeAgent):
                 await self.memory.add_message(result_msg)
 
         if self.verbose:
-            _console_print(f"  ⚠️  [{self.name}] Max iterations ({self.max_iterations}) reached!")
+            _console_print(
+                f"  ⚠️  [{self.name}] Max iterations ({self.max_iterations}) reached!"
+            )
         return "Max iterations reached without a final response."
 
     # -- Tool execution helper -----------------------------------------------
@@ -311,7 +326,9 @@ class RuntimeAssistantAgent(RuntimeAgent):
             err_msg = f"Tool '{parsed.name}' not found."
             logger.error("[%s] %s", self.name, err_msg)
             if self.verbose:
-                _rich_console.print(f"  [bold red]❌ [{self.name}] {err_msg}[/bold red]")
+                _rich_console.print(
+                    f"  [bold red]❌ [{self.name}] {err_msg}[/bold red]"
+                )
             return ToolExecutionResultMessage(
                 tool_call_id=parsed.call_id,
                 name=parsed.name,
@@ -321,7 +338,11 @@ class RuntimeAssistantAgent(RuntimeAgent):
         try:
             # Re-entrant locking protection: check if tool uses resource locking
             lock_handle = None
-            if self.runtime and hasattr(self.runtime, "resource_locks") and getattr(tool, "resource_uri", None):
+            if (
+                self.runtime
+                and hasattr(self.runtime, "resource_locks")
+                and getattr(tool, "resource_uri", None)
+            ):
                 lock_handle = await self.runtime.resource_locks.acquire(
                     resource_uri=tool.resource_uri,
                     agent_id=self.id,
@@ -335,12 +356,15 @@ class RuntimeAssistantAgent(RuntimeAgent):
                 await self.runtime.resource_locks.release(lock_handle)
 
             elapsed = time.monotonic() - t0
-            
+
             # Extract plain text content for console banner
             banner_text = ""
             if hasattr(result, "content") and isinstance(result.content, list):
                 from ravi.core.messages.content import TextBlock
-                banner_text = "\n".join(b.text for b in result.content if isinstance(b, TextBlock))
+
+                banner_text = "\n".join(
+                    b.text for b in result.content if isinstance(b, TextBlock)
+                )
             else:
                 banner_text = str(result)
 
@@ -358,7 +382,9 @@ class RuntimeAssistantAgent(RuntimeAgent):
             err_msg = f"Error executing tool '{parsed.name}': {e}"
             logger.exception("[%s] %s", self.name, err_msg)
             if self.verbose:
-                _rich_console.print(f" [bold red]FAILED![/bold red] [dim]({elapsed:.2f}s)[/dim] → [red]{e}[/red]")
+                _rich_console.print(
+                    f" [bold red]FAILED![/bold red] [dim]({elapsed:.2f}s)[/dim] → [red]{e}[/red]"
+                )
             return ToolExecutionResultMessage(
                 tool_call_id=parsed.call_id,
                 name=parsed.name,

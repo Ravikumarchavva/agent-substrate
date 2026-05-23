@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import pytest
-from typing import List
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.catalog import AgentCatalogRegistry, CatalogAsset
+from ravi.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.catalog import AgentCatalogRegistry
 from ravi.core.middleware.base import MiddlewareContext, MiddlewareStage
 from ravi.core.middleware.builtins.governance import GovernanceMiddleware
 from ravi.exceptions import GuardrailTripwireError
 from ravi.core.memory.unbounded_memory import UnboundedMemory
 from ravi.core.context.implementations import SlidingWindowContext
-from ravi.core.checkpointing import CheckpointStore
 
 
 class DummyTaxTool(BaseTool):
@@ -120,7 +118,7 @@ async def test_governance_middleware_enforcement():
         stage=MiddlewareStage.TOOL_EXECUTION,
         agent_name="finance_agent",
         tool_name="calculate_tax",
-        metadata={"search_path": ["finance"]}
+        metadata={"search_path": ["finance"]},
     )
     result_ctx = await middleware.before(ctx_allowed)
     assert result_ctx == ctx_allowed
@@ -130,7 +128,7 @@ async def test_governance_middleware_enforcement():
         stage=MiddlewareStage.TOOL_EXECUTION,
         agent_name="unauthorized_agent",
         tool_name="calculate_tax",
-        metadata={"search_path": ["finance"]}
+        metadata={"search_path": ["finance"]},
     )
 
     with pytest.raises(GuardrailTripwireError) as exc_info:

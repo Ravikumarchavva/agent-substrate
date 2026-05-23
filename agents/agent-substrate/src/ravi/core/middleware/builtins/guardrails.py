@@ -6,7 +6,11 @@ import logging
 from typing import Any, List, Optional
 
 from ravi.core.middleware.base import BaseMiddleware, MiddlewareContext, MiddlewareStage
-from ravi.core.guardrails.base_guardrail import BaseGuardrail, GuardrailContext, GuardrailType
+from ravi.core.guardrails.base_guardrail import (
+    BaseGuardrail,
+    GuardrailContext,
+    GuardrailType,
+)
 from ravi.core.guardrails.runner import run_guardrails
 from ravi.core.messages.client_messages import AssistantMessage
 
@@ -35,19 +39,31 @@ class GuardrailsMiddleware(BaseMiddleware):
 
         # If any of the input/output guardrails are actually tool_call guardrails,
         # move/copy them to tool_call_guardrails to keep separation clean.
-        self.tool_call_guardrails.extend([
-            g for g in self.input_guardrails if getattr(g, "guardrail_type", None) == GuardrailType.TOOL_CALL
-        ])
-        self.tool_call_guardrails.extend([
-            g for g in self.output_guardrails if getattr(g, "guardrail_type", None) == GuardrailType.TOOL_CALL
-        ])
+        self.tool_call_guardrails.extend(
+            [
+                g
+                for g in self.input_guardrails
+                if getattr(g, "guardrail_type", None) == GuardrailType.TOOL_CALL
+            ]
+        )
+        self.tool_call_guardrails.extend(
+            [
+                g
+                for g in self.output_guardrails
+                if getattr(g, "guardrail_type", None) == GuardrailType.TOOL_CALL
+            ]
+        )
 
         # Filter out tool call guardrails from input/output guardrail lists
         self.input_guardrails = [
-            g for g in self.input_guardrails if getattr(g, "guardrail_type", None) != GuardrailType.TOOL_CALL
+            g
+            for g in self.input_guardrails
+            if getattr(g, "guardrail_type", None) != GuardrailType.TOOL_CALL
         ]
         self.output_guardrails = [
-            g for g in self.output_guardrails if getattr(g, "guardrail_type", None) != GuardrailType.TOOL_CALL
+            g
+            for g in self.output_guardrails
+            if getattr(g, "guardrail_type", None) != GuardrailType.TOOL_CALL
         ]
 
     async def before(self, ctx: MiddlewareContext) -> MiddlewareContext:
@@ -91,7 +107,11 @@ class GuardrailsMiddleware(BaseMiddleware):
 
     async def after(self, ctx: MiddlewareContext, result: Any) -> Any:
         """Run output guardrails after the LLM call."""
-        if ctx.stage == MiddlewareStage.LLM_CALL and self.output_guardrails and isinstance(result, AssistantMessage):
+        if (
+            ctx.stage == MiddlewareStage.LLM_CALL
+            and self.output_guardrails
+            and isinstance(result, AssistantMessage)
+        ):
             # Only run output guardrails on final answer (no tool calls requested)
             if not result.tool_calls:
                 # Extract output text

@@ -35,7 +35,7 @@ from ravi.core.runtime._contracts import MessageContext
 from ravi.core.runtime._protocol import AgentRuntime
 from ravi.core.tools.base_tool import BaseTool
 
-from ravi.core.catalog import AgentCatalogRegistry
+from ravi.core.agent_catalog import AgentCatalogRegistry
 
 logger = logging.getLogger("ravi.core.agents.runtime_agent")
 
@@ -79,8 +79,12 @@ class RuntimeAgent:
         self.runtime = runtime
         self.key = key
         self.description = description or f"{name} agent"
-        self.catalog = catalog or AgentCatalogRegistry.from_tools_and_skills(tools or [])
-        self._subscriptions: list[TopicId] = list(subscriptions) if subscriptions else []
+        self.catalog = catalog or AgentCatalogRegistry.from_tools_and_skills(
+            tools or []
+        )
+        self._subscriptions: list[TopicId] = (
+            list(subscriptions) if subscriptions else []
+        )
         self._started = False
 
     @property

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 from typing import AsyncIterator
 import pytest
 
 from ravi.core.agents.runtime_assistant_agent import RuntimeAssistantAgent
-from ravi.core.runtime import LocalRuntime, AgentId
-from ravi.core.messages.content import TextBlock
-from ravi.core.messages.client_messages import AssistantMessage, ToolExecutionResultMessage
-from ravi.core.guardrails.base_guardrail import BaseGuardrail, GuardrailResult
+from ravi.core.runtime import LocalRuntime
+from ravi.core.messages.client_messages import AssistantMessage
+from ravi.core.guardrails.base_guardrail import BaseGuardrail
 from ravi.core.tools.base_tool import BaseTool, ToolResult
 
 
@@ -95,8 +93,9 @@ class TestRuntimeAssistantAgent:
         weather_tool.description = "Get current weather"
         weather_tool.parameters = {}
         weather_tool.input_schema = {}
-        weather_tool.execute = AsyncMock(return_value=ToolResult(output_text="Sunny, 68F"))
-
+        weather_tool.execute = AsyncMock(
+            return_value=ToolResult(output_text="Sunny, 68F")
+        )
 
         agent = RuntimeAssistantAgent(
             name="weather_agent",
@@ -107,7 +106,9 @@ class TestRuntimeAssistantAgent:
         )
         await agent.start()
 
-        response = await runtime.send_message("What is the weather like in SF?", recipient=agent.id)
+        response = await runtime.send_message(
+            "What is the weather like in SF?", recipient=agent.id
+        )
         assert response == "It is sunny in San Francisco."
 
         # Verify tool was called and model generated twice

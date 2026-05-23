@@ -105,7 +105,9 @@ class _LockRecord:
 
     resource_uri: str
     mode: LockMode | None = None  # None when no holders
-    holders: dict[str, LockHandle] = field(default_factory=dict)  # handle_id → LockHandle
+    holders: dict[str, LockHandle] = field(
+        default_factory=dict
+    )  # handle_id → LockHandle
     waiters: list[tuple[str, LockMode, asyncio.Event]] = field(
         default_factory=list
     )  # (agent_id, mode, event)
@@ -159,7 +161,9 @@ class ResourceLockManager:
             mode = LockMode(mode)
 
         effective_timeout = timeout if timeout is not None else self._default_timeout
-        record = self._locks.setdefault(resource_uri, _LockRecord(resource_uri=resource_uri))
+        record = self._locks.setdefault(
+            resource_uri, _LockRecord(resource_uri=resource_uri)
+        )
 
         # Fast path: can grant immediately?
         if self._can_grant(record, agent_id, mode):
@@ -178,7 +182,10 @@ class ResourceLockManager:
         record.waiters.append((agent_id, mode, event))
         logger.debug(
             "agent %s waiting for %s lock on %s (timeout=%s)",
-            agent_id, mode.value, resource_uri, effective_timeout,
+            agent_id,
+            mode.value,
+            resource_uri,
+            effective_timeout,
         )
 
         try:
@@ -189,15 +196,17 @@ class ResourceLockManager:
         except asyncio.TimeoutError:
             # Clean up waiter entry and wait-for graph
             record.waiters = [
-                (a, m, e) for a, m, e in record.waiters
+                (a, m, e)
+                for a, m, e in record.waiters
                 if not (a == agent_id and e is event)
             ]
             self._wait_for_graph.pop(agent_id, None)
             # Find one of the holders for the error message
             holder_id = next(iter(holder_ids), "unknown")
             raise ResourceConflictError(
-                resource_uri, holder_id,
-                f"timeout waiting for {mode.value} lock on {resource_uri!r}"
+                resource_uri,
+                holder_id,
+                f"timeout waiting for {mode.value} lock on {resource_uri!r}",
             ) from None
         finally:
             self._wait_for_graph.pop(agent_id, None)
@@ -209,7 +218,9 @@ class ResourceLockManager:
         """Release a previously acquired lock."""
         record = self._locks.get(handle.resource_uri)
         if record is None:
-            logger.warning("release called for unknown resource %s", handle.resource_uri)
+            logger.warning(
+                "release called for unknown resource %s", handle.resource_uri
+            )
             return
 
         removed = record.holders.pop(handle.handle_id, None)
@@ -219,7 +230,9 @@ class ResourceLockManager:
 
         logger.debug(
             "agent %s released %s lock on %s",
-            handle.agent_id, handle.mode.value, handle.resource_uri,
+            handle.agent_id,
+            handle.mode.value,
+            handle.resource_uri,
         )
 
         # If no holders remain, reset mode
@@ -284,9 +297,7 @@ class ResourceLockManager:
                 return True  # same agent, allow re-entrant
         return False
 
-    def _grant(
-        self, record: _LockRecord, agent_id: str, mode: LockMode
-    ) -> LockHandle:
+    def _grant(self, record: _LockRecord, agent_id: str, mode: LockMode) -> LockHandle:
         """Create a handle and register it as a holder."""
         handle = LockHandle(
             handle_id=uuid.uuid4().hex,
@@ -299,7 +310,9 @@ class ResourceLockManager:
         record.mode = mode
         logger.debug(
             "granted %s lock on %s to agent %s",
-            mode.value, record.resource_uri, agent_id,
+            mode.value,
+            record.resource_uri,
+            agent_id,
         )
         return handle
 

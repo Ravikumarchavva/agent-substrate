@@ -698,6 +698,7 @@ class PipelineRunner:
         resolved_middleware = []
         if input_guardrails or output_guardrails:
             from ravi.core.middleware.builtins.guardrails import GuardrailsMiddleware
+
             resolved_middleware.append(
                 GuardrailsMiddleware(
                     input_guardrails=input_guardrails or None,
@@ -710,7 +711,7 @@ class PipelineRunner:
         catalog = AgentCatalog()
         catalog.register_model("primary", agent_client)
         catalog.register_context("default", model_context)
-        catalog.register_memory("default", memory)
+        catalog.register_memory("memory", memory)
         for _tool in tools:
             catalog.register_tool(_tool)
         if skill_manager is not None:

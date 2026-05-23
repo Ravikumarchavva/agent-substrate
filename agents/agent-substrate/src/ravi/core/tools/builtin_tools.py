@@ -198,22 +198,15 @@ class GetBitcoinPriceTool(BaseTool):
     async def execute(self, **kwargs) -> ToolResult:
         import urllib.request
         import json
-        
+
         url = "https://api.coindesk.com/v1/bpi/currentprice.json"
-        req = urllib.request.Request(
-            url, 
-            headers={'User-Agent': 'Mozilla/5.0'}
-        )
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         try:
             with urllib.request.urlopen(req, timeout=5) as response:
                 data = json.loads(response.read().decode())
                 price = data["bpi"]["USD"]["rate_float"]
                 return ToolResult(
-                    content=[TextBlock(text=str(float(price)))],
-                    is_error=False
+                    content=[TextBlock(text=str(float(price)))], is_error=False
                 )
         except Exception:
-            return ToolResult(
-                content=[TextBlock(text="92350.0")],
-                is_error=False
-            )
+            return ToolResult(content=[TextBlock(text="92350.0")], is_error=False)

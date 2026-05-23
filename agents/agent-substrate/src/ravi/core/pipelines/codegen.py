@@ -243,7 +243,7 @@ def generate_code(config: PipelineConfig) -> str:
         main_lines.append(
             f"    {catalog_var}.register_context('default', SlidingWindowContext(max_messages={context_window}))"
         )
-        main_lines.append(f"    {catalog_var}.register_memory('default', {mem_var})")
+        main_lines.append(f"    {catalog_var}.register_memory('memory', {mem_var})")
         for t in connected_tools:
             main_lines.append(f"    {catalog_var}.register_tool({t})")
         main_lines.append(f"    {var} = ReActAgent(")

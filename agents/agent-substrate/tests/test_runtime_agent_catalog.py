@@ -10,8 +10,7 @@ from ravi.core.agents.runtime_assistant_agent import RuntimeAssistantAgent
 from ravi.core.runtime._protocol import AgentRuntime
 from ravi.core.runtime._identity import TopicId, AgentId
 from ravi.core.runtime._contracts import MessageContext
-from ravi.core.messages.content import ContentBlock
-from ravi.core.llm.base_client import BaseModelClient, GenerateResult
+from ravi.core.llm.base_client import BaseModelClient
 from ravi.core.messages.client_messages import AssistantMessage
 from ravi.core.context.implementations import SlidingWindowContext
 
@@ -27,15 +26,24 @@ class DummyCatalogTool(BaseTool):
 class MockAgentRuntime(AgentRuntime):
     async def start(self) -> None:
         pass
+
     async def stop(self) -> None:
         pass
+
     async def register(self, type_name: str, handler: Any) -> None:
         pass
+
     async def subscribe(self, type_name: str, topic: TopicId) -> None:
         pass
-    async def send_message(self, message: Any, sender: Optional[AgentId], recipient: AgentId) -> Any:
+
+    async def send_message(
+        self, message: Any, sender: Optional[AgentId], recipient: AgentId
+    ) -> Any:
         pass
-    async def publish_message(self, message: Any, sender: Optional[AgentId], topic: TopicId) -> None:
+
+    async def publish_message(
+        self, message: Any, sender: Optional[AgentId], topic: TopicId
+    ) -> None:
         pass
 
 
@@ -43,7 +51,9 @@ class MockModelClient(BaseModelClient):
     def __init__(self) -> None:
         super().__init__(model="mock-model")
 
-    async def generate(self, messages: Any, tools: Any = None, **kwargs: Any) -> AssistantMessage:
+    async def generate(
+        self, messages: Any, tools: Any = None, **kwargs: Any
+    ) -> AssistantMessage:
         return AssistantMessage(role="assistant", content=["mock response"])
 
     async def generate_stream(self, messages: Any, tools: Any = None, **kwargs: Any):
@@ -61,11 +71,7 @@ async def test_runtime_agent_catalog_unification():
     cat.register_tool(tool)
 
     # Instantiate RuntimeAgent with explicit catalog
-    agent = RuntimeAgent(
-        name="test_runtime_agent",
-        runtime=runtime,
-        catalog=cat
-    )
+    agent = RuntimeAgent(name="test_runtime_agent", runtime=runtime, catalog=cat)
 
     # Dynamic tools property should fetch from the catalog
     assert len(agent.tools) == 1
@@ -74,7 +80,7 @@ async def test_runtime_agent_catalog_unification():
     # Adding tools through tools setter should update the catalog
     new_tool = DummyCatalogTool(name="another_tool")
     agent.tools = [new_tool]
-    
+
     assert len(agent.tools) == 1
     assert agent.tools[0].name == "another_tool"
     assert "another_tool" in agent.catalog
@@ -96,14 +102,20 @@ async def test_runtime_assistant_agent_catalog_schemas():
         model_client=client,
         model_context=context,
         catalog=cat,
-        verbose=False
+        verbose=False,
     )
 
     assert len(assistant.tools) == 1
     assert assistant.tools[0].name == "dummy_catalog_tool"
 
     # Triggers on_message to verify it compiles schemas correctly from catalog
-    ctx = MessageContext(runtime=runtime, sender=None, agent_id=AgentId("user", "1"), correlation_id="test-corr")
+    ctx = MessageContext(
+        runtime=runtime,
+        sender=None,
+        agent_id=AgentId("user", "1"),
+        correlation_id="test-corr",
+    )
     from ravi.core.messages.content import TextBlock
+
     res = await assistant.on_message(ctx, [TextBlock(text="hello")])
     assert res == "mock response"

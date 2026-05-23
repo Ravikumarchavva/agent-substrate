@@ -798,22 +798,22 @@ async def chat(
                                 output=raw_content,
                                 is_error=getattr(chunk, "is_error", False),
                             )
-                            
+
                             tool_media = getattr(chunk, "media", None)
                             if tool_media:
                                 from ravi.server.services.file_service import save_file
                                 from ravi.core.storage.tenant import FileScope
                                 import uuid
                                 import base64
-                                
+
                                 for idx, media_item in enumerate(tool_media):
-                                    filename = f"generated_plot_{idx+1}.png"
+                                    filename = f"generated_plot_{idx + 1}.png"
                                     mime = media_item.media_type or "image/png"
                                     if "image/jpeg" in mime:
-                                        filename = f"generated_plot_{idx+1}.jpg"
+                                        filename = f"generated_plot_{idx + 1}.jpg"
                                     elif "image/webp" in mime:
-                                        filename = f"generated_plot_{idx+1}.webp"
-                                        
+                                        filename = f"generated_plot_{idx + 1}.webp"
+
                                     raw_data = media_item.data
                                     if isinstance(raw_data, str):
                                         try:
@@ -824,7 +824,7 @@ async def chat(
                                         pass
                                     else:
                                         raw_data = str(raw_data).encode("utf-8")
-                                        
+
                                     file_meta = await save_file(
                                         persist_db,
                                         ctx.file_store,
@@ -834,7 +834,7 @@ async def chat(
                                         content=raw_data,
                                         scope=FileScope.UPLOADS,
                                     )
-                                    
+
                                     file_dict = {
                                         "id": str(file_meta.id),
                                         "thread_id": str(file_meta.thread_id),
@@ -843,10 +843,12 @@ async def chat(
                                         "size": file_meta.size_bytes,
                                     }
                                     generated_files.append(file_dict)
-                                    
+
                             await persist_db.commit()
                     except Exception:
-                        logger.exception("Failed to persist tool result or process media")
+                        logger.exception(
+                            "Failed to persist tool result or process media"
+                        )
                     await bus.emit_dict(payload)
 
                 async def _emit_unknown(chunk: object) -> None:

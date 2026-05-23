@@ -4,7 +4,11 @@ import pytest
 
 from ravi.core.middleware.base import MiddlewareContext, MiddlewareStage
 from ravi.core.middleware.builtins.history_truncator import HistoryTruncatorMiddleware
-from ravi.core.messages.client_messages import SystemMessage, UserMessage, AssistantMessage
+from ravi.core.messages.client_messages import (
+    SystemMessage,
+    UserMessage,
+    AssistantMessage,
+)
 
 
 @pytest.mark.asyncio
@@ -24,8 +28,7 @@ async def test_history_truncator_middleware():
     ]
 
     ctx = MiddlewareContext(
-        stage=MiddlewareStage.LLM_CALL,
-        metadata={"messages": list(messages)}
+        stage=MiddlewareStage.LLM_CALL, metadata={"messages": list(messages)}
     )
 
     # Before execution

@@ -12,7 +12,6 @@ Public API::
 from __future__ import annotations
 
 import base64
-import io
 import json
 from pathlib import Path
 from typing import Any, cast
@@ -20,6 +19,8 @@ from typing import Any, cast
 from PIL import Image
 
 from google.genai import types as genai_types
+
+from ravi.core.messages.encoders._media import pil_to_png_bytes
 
 from ravi.core.messages._types import (
     AudioContent,
@@ -45,10 +46,8 @@ def _encode_text(text: str) -> genai_types.Part:
 
 def _encode_image(img: Image.Image) -> genai_types.Part:
     """PIL Image → Gemini inline_data Part."""
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
     return genai_types.Part(
-        inline_data=genai_types.Blob(mime_type="image/png", data=buf.getvalue())
+        inline_data=genai_types.Blob(mime_type="image/png", data=pil_to_png_bytes(img))
     )
 
 
@@ -100,7 +99,12 @@ def _encode_video_content(vc: VideoContent) -> genai_types.Part:
 
 
 def _encode_media_item(
-    item: str | Image.Image | ImageContent | AudioContent | VideoContent | DocumentContent,
+    item: str
+    | Image.Image
+    | ImageContent
+    | AudioContent
+    | VideoContent
+    | DocumentContent,
 ) -> genai_types.Part:
     """Encode a single MediaType item to a Gemini Part."""
     if isinstance(item, Image.Image):
@@ -118,7 +122,9 @@ def _encode_media_item(
             )
         elif item.url:
             return genai_types.Part(
-                file_data=genai_types.FileData(file_uri=item.url, mime_type=item.media_type)
+                file_data=genai_types.FileData(
+                    file_uri=item.url, mime_type=item.media_type
+                )
             )
         return _encode_text(f"[Document Attachment: {item.filename or 'document'}]")
     if isinstance(item, str):
@@ -234,12 +240,12 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> genai_types.Content:
                 parts.append(_encode_media_item(item))
             except Exception as e:
                 import logging
+
                 logging.getLogger("ravi.core.messages.encoders.gemini").warning(
                     "Failed to encode media item for Gemini function response: %s", e
                 )
 
     return genai_types.Content(role="user", parts=parts)
-
 
 
 # ── Public API ───────────────────────────────────────────────────────────────

@@ -109,7 +109,9 @@ class LocalRuntime(BaseRuntime):
         self._active_handlers = 0
 
         # New runtime subsystems
-        self._resource_locks = ResourceLockManager(default_timeout=resource_lock_timeout)
+        self._resource_locks = ResourceLockManager(
+            default_timeout=resource_lock_timeout
+        )
         self._client_channel: Optional[ClientWriteChannel] = None
         if client_sink is not None:
             self._client_channel = ClientWriteChannel(sink=client_sink)

@@ -144,4 +144,5 @@ def tool(
     # Called as @tool(...) with arguments
     def wrapper(fn: Callable) -> BaseTool:
         return _FunctionalTool(fn, name=name, description=description, risk=risk)
+
     return wrapper

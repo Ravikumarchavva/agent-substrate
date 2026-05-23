@@ -125,7 +125,7 @@ class ChainRuntime:
         catalog: Any,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
-        from ravi.core.catalog import AgentCatalogRegistry
+        from ravi.core.agent_catalog import AgentCatalogRegistry
 
         self._catalog: AgentCatalogRegistry = catalog
         self._data_store = data_store

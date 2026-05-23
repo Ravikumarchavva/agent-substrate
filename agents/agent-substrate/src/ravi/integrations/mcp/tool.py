@@ -96,11 +96,13 @@ class MCPTool(BaseTool):
                             content.append(ImageBlock(data=item.data, media_type=mime))
                         elif item.type == "resource" and hasattr(item, "resource"):
                             r = item.resource
-                            content.append(ResourceBlock(
-                                uri=getattr(r, "uri", ""),
-                                mime_type=getattr(r, "mimeType", None),
-                                text=getattr(r, "text", None)
-                            ))
+                            content.append(
+                                ResourceBlock(
+                                    uri=getattr(r, "uri", ""),
+                                    mime_type=getattr(r, "mimeType", None),
+                                    text=getattr(r, "text", None),
+                                )
+                            )
                         else:
                             # Fallback if other types are present
                             content.append(TextBlock(text=str(item)))
@@ -110,17 +112,26 @@ class MCPTool(BaseTool):
                         if item_type == "text":
                             content.append(TextBlock(text=str(item.get("text", ""))))
                         elif item_type == "image":
-                            content.append(ImageBlock(
-                                data=str(item.get("data", "")),
-                                media_type=str(item.get("mediaType", item.get("mimeType", "image/png")))
-                            ))
+                            content.append(
+                                ImageBlock(
+                                    data=str(item.get("data", "")),
+                                    media_type=str(
+                                        item.get(
+                                            "mediaType",
+                                            item.get("mimeType", "image/png"),
+                                        )
+                                    ),
+                                )
+                            )
                         elif item_type == "resource":
                             r = item.get("resource", {})
-                            content.append(ResourceBlock(
-                                uri=str(r.get("uri", "")),
-                                mime_type=r.get("mimeType"),
-                                text=r.get("text")
-                            ))
+                            content.append(
+                                ResourceBlock(
+                                    uri=str(r.get("uri", "")),
+                                    mime_type=r.get("mimeType"),
+                                    text=r.get("text"),
+                                )
+                            )
                         else:
                             content.append(TextBlock(text=str(item)))
                     else:
@@ -133,7 +144,6 @@ class MCPTool(BaseTool):
                 # Legacy: result is a raw string/object
                 content = [TextBlock(text=str(result))]
                 return ToolResult(content=content, is_error=False)
-
 
         except Exception as e:
             return ToolResult(

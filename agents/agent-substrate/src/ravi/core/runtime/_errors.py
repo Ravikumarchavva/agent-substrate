@@ -40,10 +40,14 @@ class ResourceConflictError(Exception):
     Contains the resource URI and the agent that currently holds the lock.
     """
 
-    def __init__(self, resource_uri: str, holder_agent_id: str, message: str = "") -> None:
+    def __init__(
+        self, resource_uri: str, holder_agent_id: str, message: str = ""
+    ) -> None:
         self.resource_uri = resource_uri
         self.holder_agent_id = holder_agent_id
-        super().__init__(message or f"resource {resource_uri!r} locked by {holder_agent_id}")
+        super().__init__(
+            message or f"resource {resource_uri!r} locked by {holder_agent_id}"
+        )
 
 
 class DeadlockDetectedError(Exception):
@@ -93,4 +97,3 @@ class CheckpointCorruptedError(Exception):
 
 class EnvelopeExpiredError(Exception):
     """Raised when an envelope's TTL has been exceeded."""
-

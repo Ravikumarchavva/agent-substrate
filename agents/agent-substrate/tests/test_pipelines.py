@@ -127,6 +127,9 @@ def _mock_tool(name: str = "calculator") -> MagicMock:
     tool = MagicMock()
     tool.name = name
     tool.description = f"Test tool: {name}"
+    tool.category = "test"
+    tool.tags = []
+    tool.aliases = []
     tool.execute = AsyncMock(return_value=MagicMock(content="42", metadata={}))
     return tool
 
@@ -231,7 +234,7 @@ class TestCodegen:
             edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
         )
         code = generate_code(cfg)
-        assert "tools=" in code
+        assert "register_tool" in code
         compile(code, "<generated>", "exec")
 
     def test_includes_guardrails(self):

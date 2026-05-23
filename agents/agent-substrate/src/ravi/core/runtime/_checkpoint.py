@@ -151,7 +151,8 @@ class RunCheckpoint(BaseModel):
     def incomplete_children(self) -> list["RunCheckpoint"]:
         """Return children that need to be re-run."""
         return [
-            c for c in self.children
+            c
+            for c in self.children
             if c.status in (CheckpointStatus.IN_PROGRESS, CheckpointStatus.NOT_STARTED)
         ]
 
@@ -180,7 +181,9 @@ class RunCheckpoint(BaseModel):
         self.metadata["error"] = error
         self.updated_at = datetime.now(timezone.utc)
 
-    def update_iteration(self, iteration: int, messages: list[dict[str, Any]] | None = None) -> None:
+    def update_iteration(
+        self, iteration: int, messages: list[dict[str, Any]] | None = None
+    ) -> None:
         """Update the iteration counter and optionally the message history."""
         self.iteration = iteration
         if messages is not None:

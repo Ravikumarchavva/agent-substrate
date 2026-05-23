@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from typing import Dict, Any
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
 from ravi.core.catalog import AgentCatalogRegistry
@@ -19,11 +18,9 @@ class HeavyDummyTool(BaseTool):
             description="A dummy heavy tool",
             input_schema={
                 "type": "object",
-                "properties": {
-                    "val": {"type": "string"}
-                },
-                "required": ["val"]
-            }
+                "properties": {"val": {"type": "string"}},
+                "required": ["val"],
+            },
         )
         type(self).instances_created += 1
 
@@ -50,15 +47,13 @@ async def test_lazy_tool_deferred_instantiation():
         factory_fn=factory,
         input_schema={
             "type": "object",
-            "properties": {
-                "val": {"type": "string"}
-            },
-            "required": ["val"]
+            "properties": {"val": {"type": "string"}},
+            "required": ["val"],
         },
         risk=ToolRisk.SENSITIVE,
         category="data",
         tags=["heavy", "dummy"],
-        aliases=["dummy_lazy"]
+        aliases=["dummy_lazy"],
     )
 
     # Still no instantiation
@@ -95,7 +90,7 @@ async def test_catalog_register_lazy_tool():
         factory_fn=factory,
         description="A lazy dummy calc",
         category="productivity",
-        tags=["lazy", "calc"]
+        tags=["lazy", "calc"],
     )
 
     # Verify registry has the tool, but it's not yet instantiated

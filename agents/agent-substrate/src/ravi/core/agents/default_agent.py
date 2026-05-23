@@ -160,7 +160,9 @@ class Agent:
         """Build a fresh ``ReActAgent`` for a single run."""
         catalog = AgentCatalog()
         catalog.register_model("primary", self._model_client)
-        catalog.register_context("default", SlidingWindowContext(max_messages=self.context_window))
+        catalog.register_context(
+            "default", SlidingWindowContext(max_messages=self.context_window)
+        )
         catalog.register_memory("default", self._memory)
         for tool in self.tools:
             catalog.register_tool(tool)

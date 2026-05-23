@@ -281,9 +281,7 @@ class ClientWriteChannel:
         """Background task: drain buffer and push frames to the sink."""
         while self._running or not self._buffer.empty():
             try:
-                frame = await asyncio.wait_for(
-                    self._buffer.get(), timeout=0.1
-                )
+                frame = await asyncio.wait_for(self._buffer.get(), timeout=0.1)
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
@@ -294,7 +292,8 @@ class ClientWriteChannel:
             except Exception:
                 logger.exception(
                     "sink error for frame seq=%d lane=%s",
-                    frame.seq, frame.lane_id,
+                    frame.seq,
+                    frame.lane_id,
                 )
                 # Frame is dropped — in production you'd want a DLQ or retry
 

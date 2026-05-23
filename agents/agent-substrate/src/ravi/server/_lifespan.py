@@ -31,8 +31,12 @@ from ravi.core.runtime import LocalRuntime
 from ravi.core.storage.base import FileStore
 from ravi.core.storage.factory import create_file_store
 from ravi.core.tools.base_tool import BaseTool, ToolRisk
-from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool, GetBitcoinPriceTool
-from ravi.core.catalog import AgentCatalogRegistry
+from ravi.core.tools.builtin_tools import (
+    CalculatorTool,
+    GetCurrentTimeTool,
+    GetBitcoinPriceTool,
+)
+from ravi.core.agent_catalog import AgentCatalogRegistry
 from ravi.integrations.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_embedding_client,
@@ -264,10 +268,16 @@ async def init_tool_registry(
             template=os.environ.get("CI_SANDBOX_TEMPLATE", "python-sandbox-template"),
             namespace=os.environ.get("CI_SANDBOX_NAMESPACE", "default"),
         )
-        logger.info("Kubernetes agent-sandbox Code Interpreter registered successfully!")
+        logger.info(
+            "Kubernetes agent-sandbox Code Interpreter registered successfully!"
+        )
     except Exception as e:
-        logger.warning("Failed to initialize K8sSandboxCodeInterpreterTool: %s. Falling back to CodeInterpreterTool.", e)
+        logger.warning(
+            "Failed to initialize K8sSandboxCodeInterpreterTool: %s. Falling back to CodeInterpreterTool.",
+            e,
+        )
         from ravi.catalog.tools.code_interpreter.tool import CodeInterpreterTool
+
         code_interpreter_tool = CodeInterpreterTool()
 
     file_manager_tool = FileManagerTool(

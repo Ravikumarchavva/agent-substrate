@@ -186,7 +186,11 @@ class TestMailboxCloseDeadlock:
         mbox = Mailbox(capacity=10)
         mbox.close()
         with pytest.raises(MailboxFullError):
-            await mbox.put(Envelope(sender=None, target=AgentId("t", "k"), content=[TextBlock(text="x")]))
+            await mbox.put(
+                Envelope(
+                    sender=None, target=AgentId("t", "k"), content=[TextBlock(text="x")]
+                )
+            )
 
     async def test_get_timeout(self) -> None:
         """get() with timeout raises TimeoutError when no messages arrive."""
@@ -313,11 +317,15 @@ class TestFanOutIsolation:
         dispatcher.subscribe_to_topic(topic, "listener_c")
 
         # Fill mbox_c so it will fail on put
-        await mbox_c.put(Envelope(sender=None, target=aid_c, content=[TextBlock(text="fill")]))
+        await mbox_c.put(
+            Envelope(sender=None, target=aid_c, content=[TextBlock(text="fill")])
+        )
         assert mbox_c.is_full
 
         # Dispatch to topic — should continue past mbox_c failure
-        envelope = Envelope(sender=None, target=topic, content=[TextBlock(text="broadcast")])
+        envelope = Envelope(
+            sender=None, target=topic, content=[TextBlock(text="broadcast")]
+        )
         await dispatcher.dispatch(envelope)
 
         # A and B should have received it

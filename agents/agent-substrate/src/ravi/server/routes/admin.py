@@ -28,7 +28,9 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # ── Auth guard ───────────────────────────────────────────────────────────────
 
 
-def require_admin(current_user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
+def require_admin(
+    current_user: TokenPayload = Depends(get_current_user),
+) -> TokenPayload:
     """Raise 403 unless the authenticated user has an admin role."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden: admin access only")

@@ -111,6 +111,18 @@ export function HumanInputCard({
           </div>
         ) : (
           <div className="py-1">
+            {/* Fallback: no options and no freeform — show simple acknowledge button */}
+            {options.length === 0 && !allowFreeform && (
+              <div className="px-4 py-3">
+                <button
+                  onClick={() => submit("__ack__", "Acknowledged")}
+                  className="w-full rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer transition-colors"
+                  style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+                >
+                  Acknowledged
+                </button>
+              </div>
+            )}
             {/* Predefined options */}
             {options.map((opt, idx) => {
               const isSelected = selectedKey === opt.key;

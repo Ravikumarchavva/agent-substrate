@@ -45,6 +45,7 @@ export const messageApi = {
           content,
           timestamp: new Date(msg.created_at),
           toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+          attachments: getMessageAttachments(msg.metadata),
         });
       } else if (msg.type === "tool_result") {
         // Only show tool results that DON'T have a companion MCP App

@@ -55,4 +55,8 @@ export const adminApi = {
       credentials: "include",
     });
   },
+
+  async disconnectWorkspace(): Promise<void> {
+    await requestVoidFromUrl("/api/workspace/token", { method: "DELETE" });
+  },
 };

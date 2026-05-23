@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-const ADMIN_EMAIL = "chavvaravikumarreddy2004@gmail.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function getAdminEmail(req: NextRequest): string | null {
@@ -20,7 +20,7 @@ function getAdminEmail(req: NextRequest): string | null {
 
 export async function GET(req: NextRequest) {
   const email = getAdminEmail(req);
-  if (!email || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  if (!email || !ADMIN_EMAIL || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

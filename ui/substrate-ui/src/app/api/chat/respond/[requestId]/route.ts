@@ -9,11 +9,17 @@ export async function POST(
 
   try {
     const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    const authHeader = req.headers.get("authorization");
+    if (authHeader) headers["Authorization"] = authHeader;
+    const cookieHeader = req.headers.get("cookie");
+    if (cookieHeader) headers["cookie"] = cookieHeader;
+
     const upstream = await fetch(
       `${BACKEND_URL}/chat/respond/${requestId}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body),
       }
     );

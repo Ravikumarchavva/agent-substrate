@@ -42,7 +42,7 @@ export type Thread = {
 
 export type BackendMessage = {
   id: string;
-  type: string; // "user_message" | "assistant_message" | "tool_result"
+  type: "user_message" | "assistant_message" | "tool_result" | "tool_call" | string; // discriminated union with string fallback
   name?: string;
   input?: string;
   output?: string | string[];

@@ -383,7 +383,7 @@ export function SettingsPanel({
   const handleDisconnectWorkspace = useCallback(async () => {
     setDisconnectingApp("workspace");
     try {
-      await fetch("/api/workspace/token", { method: "DELETE" });
+      await api.disconnectWorkspace();
       await checkAuth();
     } catch (err) {
       console.error("Failed to disconnect Google Workspace:", err);

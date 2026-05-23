@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const ADMIN_EMAIL = "chavvaravikumarreddy2004@gmail.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
 
 function getAdminEmail(req: NextRequest): string | null {
   const cookie = req.cookies.get("google_user")?.value;
@@ -28,7 +28,7 @@ function isDatabaseUnavailableError(error: unknown): boolean {
 
 export async function GET(req: NextRequest) {
   const email = getAdminEmail(req);
-  if (!email || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  if (!email || !ADMIN_EMAIL || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

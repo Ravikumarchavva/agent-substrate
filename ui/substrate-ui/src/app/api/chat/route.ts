@@ -4,9 +4,16 @@ export async function POST(req: Request) {
   // Forward the request to FastAPI backend with thread_id, messages and optional system_instructions
   // BACKEND_API_URL is for server-side (internal cluster); NEXT_PUBLIC_API_URL is build-time fallback
   const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  const authHeader = req.headers.get("authorization");
+  if (authHeader) headers["Authorization"] = authHeader;
+  const cookieHeader = req.headers.get("cookie");
+  if (cookieHeader) headers["cookie"] = cookieHeader;
+
   const res = await fetch(`${BACKEND_URL}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       thread_id: body.thread_id,
       messages: body.messages,

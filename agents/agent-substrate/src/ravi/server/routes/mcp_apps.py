@@ -12,6 +12,7 @@ import logging
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
+from pydantic import BaseModel
 from ravi.core.tools.base_tool import BaseTool
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -20,11 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.server.database import get_db
 from ravi.server.schemas import McpContextUpdate
+from ravi.server.security.deps import get_current_user
 from ravi.server.services import create_step, get_thread
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["mcp-apps"])
+router = APIRouter(tags=["mcp-apps"], dependencies=[Depends(get_current_user)])
 
 # ── Registry ─────────────────────────────────────────────────────────────────
 # Maps resource names (path component after ui://) → absolute file paths
@@ -322,7 +324,7 @@ async def update_mcp_context(
     # Serialize the context to a human-readable string for the LLM.
     # body.context can be a dict, list, str, or a Pydantic model (McpAppContextPayload).
     raw = body.context
-    if hasattr(raw, "model_dump"):
+    if isinstance(raw, BaseModel):
         raw = raw.model_dump()
     context_str = json.dumps(raw, indent=2) if not isinstance(raw, str) else raw
 

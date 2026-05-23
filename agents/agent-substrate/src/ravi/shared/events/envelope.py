@@ -5,7 +5,7 @@ Consumer services declare which event_type/event_version combos they handle.
 
 Envelope fields (per docs/microservices/03-data-ownership-and-contract-standards.md):
   event_id, event_type, event_version, emitted_at, tenant_id, workspace_id,
-  actor_id, correlation_id, payload
+  actor_id, correlation_id, payload, trace_context
 """
 
 from __future__ import annotations
@@ -23,6 +23,9 @@ class EventEnvelope(BaseModel):
     All inter-service async events are wrapped in this envelope before
     being published to the Redis Streams backbone. Payloads must be
     serializable to JSON.
+
+    ``trace_context`` carries W3C Trace Context headers (``traceparent``,
+    ``tracestate``) so consuming services can continue the distributed trace.
     """
 
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -34,6 +37,7 @@ class EventEnvelope(BaseModel):
     actor_id: str = ""
     correlation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     payload: Dict[str, Any] = Field(default_factory=dict)
+    trace_context: Dict[str, str] = Field(default_factory=dict)
 
     def stream_key(self) -> str:
         """Return the Redis Stream key for this event type."""

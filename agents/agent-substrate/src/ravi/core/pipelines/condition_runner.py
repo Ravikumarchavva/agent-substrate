@@ -27,6 +27,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from ravi.core.agents.react_agent import ReActAgent
+from ravi.core.pipelines._expr_eval import safe_eval
 
 import logging
 
@@ -157,51 +158,12 @@ class ConditionPipelineRunner:
             expr = cond.get("expression", "")
             label = cond.get("label", f"Branch {idx + 1}")
             handle = f"cond-{idx}"
-            try:
-                # Safe evaluation: replace variable names with ctx lookups
-                if self._safe_eval(expr, ctx):
-                    agent = self.branch_agents.get(handle) or self.branch_agents.get(
-                        label
-                    )
-                    if agent:
-                        return agent, label
-            except Exception as exc:
-                logger.debug("Condition %r eval error: %s", expr, exc)
+            if safe_eval(expr, ctx):
+                agent = self.branch_agents.get(handle) or self.branch_agents.get(label)
+                if agent:
+                    return agent, label
 
-        # Else branch
         if self.else_agent:
             return self.else_agent, "else"
 
         return None, ""
-
-    @staticmethod
-    def _safe_eval(expr: str, ctx: Dict[str, Any]) -> bool:
-        """Evaluate a simple expression string against a context dict.
-
-        Supports: ``key == "value"``, ``key != "value"``,
-        ``"value" in output``, ``key.startswith("v")``.
-        Only string comparisons — no arbitrary code execution.
-        """
-        if not expr.strip():
-            return False
-
-        # Replace unquoted identifiers that are in ctx with their values
-        def _replace(m: re.Match) -> str:
-            name = m.group(0)
-            val = ctx.get(name)
-            if val is not None:
-                return repr(str(val))
-            return name
-
-        safe_expr = re.sub(r"\b([a-z_]\w*)\b", _replace, expr)
-
-        # Only allow safe characters after substitution
-        allowed = re.compile(r"^[\w\s\"'=!<>()\[\].,]+$")
-        if not allowed.match(safe_expr):
-            return False
-
-        try:
-            # Evaluate with a minimal safe scope
-            return bool(eval(safe_expr, {"__builtins__": {}}, {}))  # noqa: S307
-        except Exception:
-            return False

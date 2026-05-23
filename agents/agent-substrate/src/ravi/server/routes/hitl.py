@@ -15,10 +15,14 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ravi.server.schemas import HITLResponse
 from ravi.server.context import ServerContext, get_ctx
+from ravi.server.security.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["hitl"])
+router = APIRouter(
+    tags=["hitl"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("/chat/respond/{request_id}")

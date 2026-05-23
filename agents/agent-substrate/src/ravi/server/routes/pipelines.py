@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 
-router = APIRouter(prefix="/pipelines", tags=["pipelines"])
+from ravi.shared.auth.middleware import get_current_user
+
+router = APIRouter(prefix="/pipelines", tags=["pipelines"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/")

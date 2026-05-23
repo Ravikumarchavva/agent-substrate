@@ -25,6 +25,7 @@ from ravi.core.messages._types import (
     AudioContent,
     ImageContent,
     VideoContent,
+    DocumentContent,
 )
 from ravi.core.messages.base_message import BaseClientMessage
 from ravi.core.messages.client_messages import (
@@ -94,12 +95,12 @@ def _encode_video_content(vc: VideoContent) -> genai_types.Part:
     else:
         video_bytes = vc.data
     return genai_types.Part(
-        inline_data=genai_types.Blob(mime_type=f"video/{vc.format}", data=video_bytes)
+        inline_data=genai_types.Blob(mime_type=vc.media_type, data=video_bytes)
     )
 
 
 def _encode_media_item(
-    item: str | Image.Image | ImageContent | AudioContent | VideoContent,
+    item: str | Image.Image | ImageContent | AudioContent | VideoContent | DocumentContent,
 ) -> genai_types.Part:
     """Encode a single MediaType item to a Gemini Part."""
     if isinstance(item, Image.Image):
@@ -110,6 +111,16 @@ def _encode_media_item(
         return _encode_audio_content(item)
     if isinstance(item, VideoContent):
         return _encode_video_content(item)
+    if isinstance(item, DocumentContent):
+        if item.data:
+            return genai_types.Part(
+                inline_data=genai_types.Blob(mime_type=item.media_type, data=item.data)
+            )
+        elif item.url:
+            return genai_types.Part(
+                file_data=genai_types.FileData(file_uri=item.url, mime_type=item.media_type)
+            )
+        return _encode_text(f"[Document Attachment: {item.filename or 'document'}]")
     if isinstance(item, str):
         return _encode_text(item)
     raise ValueError(f"Unsupported content type: {type(item)}")
@@ -149,18 +160,63 @@ def _encode_assistant(msg: AssistantMessage) -> genai_types.Content | None:
     return None
 
 
+def _get_block_text(block: Any) -> str:
+    if isinstance(block, str):
+        return block
+    if hasattr(block, "type"):
+        if block.type == "text" and hasattr(block, "text"):
+            return block.text
+        if block.type == "code" and hasattr(block, "code"):
+            lang = getattr(block, "language", "python")
+            return f"```{lang}\n{block.code}\n```"
+        if block.type == "data" and hasattr(block, "data"):
+            try:
+                return json.dumps(block.data)
+            except Exception:
+                return str(block.data)
+        if block.type == "error":
+            err_type = getattr(block, "error_type", "Error")
+            msg = getattr(block, "message", "")
+            return f"[{err_type}]: {msg}"
+        if block.type == "document" and hasattr(block, "data"):
+            filename = getattr(block, "filename", None) or "document"
+            media_type = getattr(block, "media_type", "application/octet-stream")
+            return f"[Document: {filename} ({media_type})]"
+        return ""
+    if isinstance(block, dict):
+        b_type = block.get("type", "text")
+        if b_type == "text":
+            return str(block.get("text", ""))
+        if b_type == "code":
+            lang = block.get("language", "python")
+            return f"```{lang}\n{block.get('code', '')}\n```"
+        if b_type == "data":
+            try:
+                return json.dumps(block.get("data", {}))
+            except Exception:
+                return str(block.get("data", ""))
+        if b_type == "error":
+            return f"[{block.get('error_type', 'Error')}]: {block.get('message', '')}"
+        if b_type == "document":
+            filename = block.get("filename") or "document"
+            media_type = block.get("media_type", "application/octet-stream")
+            return f"[Document: {filename} ({media_type})]"
+    return ""
+
+
 def _encode_tool_result(msg: ToolExecutionResultMessage) -> genai_types.Content:
     """ToolExecutionResultMessage → Gemini function_response Content."""
     content_str = ""
     if msg.content:
         if isinstance(msg.content, list):
-            content_str = "\n".join(
-                block.get("text", "")
-                for block in msg.content
-                if isinstance(block, dict) and block.get("type") == "text"
-            )
+            parts_text = []
+            for block in msg.content:
+                text = _get_block_text(block)
+                if text:
+                    parts_text.append(text)
+            content_str = "\n".join(parts_text)
         elif isinstance(msg.content, str):
-            content_str = msg.content  # type: ignore[assignment]
+            content_str = msg.content
 
     tool_name = msg.name or "unknown_tool"
     parts = [
@@ -170,7 +226,20 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> genai_types.Content:
             )
         )
     ]
+
+    # Add media items as subsequent Parts in the Content object
+    if msg.media:
+        for item in msg.media:
+            try:
+                parts.append(_encode_media_item(item))
+            except Exception as e:
+                import logging
+                logging.getLogger("ravi.core.messages.encoders.gemini").warning(
+                    "Failed to encode media item for Gemini function response: %s", e
+                )
+
     return genai_types.Content(role="user", parts=parts)
+
 
 
 # ── Public API ───────────────────────────────────────────────────────────────

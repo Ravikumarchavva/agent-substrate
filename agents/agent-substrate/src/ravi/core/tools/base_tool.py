@@ -1,15 +1,19 @@
-"""MCP-compatible tool primitives with GoF Template Method contract.
+"""Tool primitives with GoF Template Method contract.
 
 Design decisions (GoF §5.10 Template Method; SOLID Open/Closed):
 - ``BaseTool`` is the template.  Subclasses fill in ``execute()``.
 - ``ToolRisk`` (Strategy pattern) classifies every tool's risk level at
   definition time, enabling colour-coded UI without runtime inspection.
-- ``ToolAnnotations`` is a typed Pydantic model enforcing MCP annotation
-  compliance — no raw ``Dict[str,Any]`` slipping through.
+- ``ToolAnnotations`` is a typed Pydantic model — no raw ``Dict[str,Any]``.
 - ``BaseTool._validate_input()`` runs JSON-Schema validation before every
   ``execute()`` call; subclasses never receive unvalidated kwargs.
 - ``__init_subclass__`` enforces that each concrete tool declares a ``name``
   — ensures the LLM / router always has a unique, stable identifier.
+
+Runtime integration (post-MCP liberation):
+- ``is_critical`` — marks tools that need saga protection (exactly-once execution).
+- ``compensating_tool`` — names the tool that undoes this one (for saga rollback).
+- ``resource_uri`` — declares which resource this tool locks (for ResourceLockManager).
 """
 
 from __future__ import annotations
@@ -17,7 +21,17 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional
+
+from ravi.core.messages.content import (
+    ContentBlock,
+    JsonObject,
+    MediaContent,
+    TextBlock,
+)
+
+if TYPE_CHECKING:
+    pass
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 import json
 from uuid import uuid4
@@ -99,10 +113,11 @@ class HitlMode(str, Enum):
 
 
 class ToolAnnotations(BaseModel):
-    """Validated MCP tool annotations.
+    """Typed tool annotations for behavioral hints.
 
-    Mirrors the MCP specification's ``annotations`` object.  Any extra fields
-    from future spec versions pass through via ``extra="allow"``.
+    Provides metadata about a tool's behavior that consumers (runtime,
+    UI, policy engine) can use for safety and optimization decisions.
+    Extra fields from future extensions pass through via ``extra="allow"``.
     """
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
@@ -128,13 +143,13 @@ class ToolAnnotations(BaseModel):
 
 
 class Tool(BaseModel):
-    """MCP-compatible tool schema with annotations and MCP Apps UI support."""
+    """Tool schema for LLM function calling and tool discovery."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
     name: str
     description: str
-    inputSchema: Dict[str, Any] = Field(
+    inputSchema: JsonObject = Field(
         default_factory=lambda: {"type": "object", "properties": {}, "required": []},
         description="JSON Schema for tool input parameters (MCP format)",
     )
@@ -142,7 +157,7 @@ class Tool(BaseModel):
         default=None,
         description="MCP tool annotations",
     )
-    meta: Optional[Dict[str, Any]] = Field(
+    meta: Optional[JsonObject] = Field(
         default=None,
         alias="_meta",
         serialization_alias="_meta",
@@ -162,7 +177,7 @@ class Tool(BaseModel):
         description="Seconds to wait before auto-continuing (only used in continue_on_timeout mode)",
     )
 
-    def to_openai_format(self) -> Dict[str, Any]:
+    def to_openai_format(self) -> JsonObject:
         """Convert MCP tool schema to OpenAI function calling format."""
         return {
             "type": "function",
@@ -174,9 +189,9 @@ class Tool(BaseModel):
             },
         }
 
-    def to_mcp_format(self) -> Dict[str, Any]:
+    def to_mcp_format(self) -> JsonObject:
         """Export as MCP tool schema with annotations and _meta."""
-        result: Dict[str, Any] = {
+        result: JsonObject = {
             "name": self.name,
             "description": self.description,
             "inputSchema": self.inputSchema,
@@ -203,11 +218,15 @@ class ToolResult(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
-    content: List[Dict[str, Any]] = Field(default_factory=list)
+    content: List[ContentBlock] = Field(default_factory=list)
     is_error: bool = Field(default=False)
-    app_data: Optional[Dict[str, Any]] = Field(
+    app_data: Optional[JsonObject] = Field(
         default=None,
         description="Structured data for MCP App UIs (sent to iframe, not to LLM)",
+    )
+    media: Optional[List[MediaContent]] = Field(
+        default=None,
+        description="Multimodal artifacts to feed back to the model without inlining base64 in text",
     )
     data_ref: Optional[Any] = Field(
         default=None,
@@ -225,18 +244,21 @@ class ToolCall(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    arguments: Dict[str, Any] = Field(default_factory=dict)
+    arguments: JsonObject = Field(default_factory=dict)
 
     @field_validator("arguments", mode="before")
     @classmethod
-    def _validate_arguments(cls, v: Any) -> Dict[str, Any]:
+    def _validate_arguments(cls, v: object) -> JsonObject:
         if isinstance(v, str):
             try:
-                return json.loads(v)
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    return parsed
             except Exception:
-                raise ValueError("arguments must be a dict or JSON string")
+                pass
+            raise ValueError("arguments must be a dict or JSON string")
         if isinstance(v, dict):
-            return v
+            return v  # type: ignore[return-value]
         raise ValueError("arguments must be a dict")
 
 
@@ -246,13 +268,22 @@ class ToolCall(BaseModel):
 
 
 class BaseTool(ABC):
-    """Base class for all MCP-compatible tools.
+    """Base class for all tools.
 
     Subclass contract (enforced via ``__init_subclass__``):
       - Declare a class-level ``name: ClassVar[str]`` attribute.
       - Implement ``async execute(**kwargs) -> ToolResult``.
       - Declare ``risk: ClassVar[ToolRisk]`` (defaults to SAFE if omitted,
         but subclasses are encouraged to be explicit).
+
+    Runtime integration fields:
+      - ``is_critical`` — when True, the runtime wraps execution in a saga
+        step for exactly-once semantics and crash recovery.
+      - ``compensating_tool`` — name of the tool that undoes this one.
+        Used by the SagaCoordinator for rollback on failure.
+      - ``resource_uri`` — a URI pattern or callable that identifies which
+        resource this tool locks.  The runtime acquires an exclusive lock
+        before execution and releases it after.
 
     Input validation (GoF Template Method — ``execute`` is the hook):
       ``execute()`` automatically validates ``**kwargs`` against the declared
@@ -287,6 +318,10 @@ class BaseTool(ABC):
         category: Optional[str] = None,
         tags: Optional[List[str]] = None,
         aliases: Optional[List[str]] = None,
+        # Runtime integration — saga + resource locking
+        is_critical: bool = False,
+        compensating_tool: Optional[str] = None,
+        resource_uri: Optional[str] = None,
     ) -> None:
         self.name = name
         self.description = description
@@ -312,10 +347,14 @@ class BaseTool(ABC):
             if hitl_timeout_seconds is not None
             else type(self).hitl_timeout_seconds
         )
-        # Catalog metadata — used by CapabilityRegistry for search/browse
+        # Catalog metadata — used by AgentCatalogRegistry for search/browse
         self.category: Optional[str] = category
         self.tags: Optional[List[str]] = tags
         self.aliases: Optional[List[str]] = aliases
+        # Runtime integration: saga protection + resource locking
+        self.is_critical: bool = is_critical
+        self.compensating_tool: Optional[str] = compensating_tool
+        self.resource_uri: Optional[str] = resource_uri
 
     # ── JSON-Schema input validation (Template Method) ─────────────────────
 
@@ -389,7 +428,7 @@ class BaseTool(ABC):
             self._validate_input(kwargs)
         except ValueError as exc:
             return ToolResult(
-                content=[{"type": "text", "text": str(exc)}],
+                content=[TextBlock(text=str(exc))],
                 is_error=True,
             )
         return await self.execute(**kwargs)

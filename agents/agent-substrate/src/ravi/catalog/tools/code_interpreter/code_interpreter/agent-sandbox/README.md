@@ -19,7 +19,10 @@ kubectl apply -f deploy/agent-sandbox/sandboxtemplate.code-interpreter.yaml
 ## Build and load image into kind
 
 ```bash
-docker build -t code-interpreter:latest .
+docker build \
+	-f src/ravi/catalog/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile \
+	-t code-interpreter:latest \
+	.
 kind load docker-image code-interpreter:latest --name ai-lab
 ```
 
@@ -50,7 +53,10 @@ kubectl get deploy,svc,sandboxtemplate -n default \
 1. Build and load image into kind:
 
 ```bash
-docker build -t code-interpreter:latest .
+docker build \
+	-f src/ravi/catalog/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile \
+	-t code-interpreter:latest \
+	.
 kind load docker-image code-interpreter:latest --name ai-lab
 ```
 

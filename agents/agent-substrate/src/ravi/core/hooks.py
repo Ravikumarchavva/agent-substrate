@@ -30,7 +30,9 @@ import asyncio
 import logging
 from collections import defaultdict, deque
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, Deque, List, Optional, Union
+from typing import Awaitable, Callable, Deque, List, Optional, Union, Dict
+
+from ravi.core.messages.content import JsonObject
 
 logger = logging.getLogger("ravi.hooks")
 
@@ -61,8 +63,8 @@ class HookEvent(str, Enum):
 # Type alias for hook callbacks — both async and sync callables are accepted;
 # sync callables are wrapped in asyncio.to_thread before dispatch.
 HookCallback = Union[
-    Callable[[Dict[str, Any]], Awaitable[None]],
-    Callable[[Dict[str, Any]], None],
+    Callable[[JsonObject], Awaitable[None]],
+    Callable[[JsonObject], None],
 ]
 
 
@@ -128,7 +130,7 @@ class HookManager:
         else:
             self._hooks.clear()
 
-    async def dispatch(self, event: HookEvent, context: Dict[str, Any]) -> None:
+    async def dispatch(self, event: HookEvent, context: JsonObject) -> None:
         """Fire all hooks for an event.
 
         Hooks run in parallel. Exceptions are caught and logged
@@ -210,7 +212,7 @@ class CostTracker:
         self.total_completion_tokens = 0
         self.call_count = 0
 
-    async def on_llm_end(self, ctx: Dict[str, Any]) -> None:
+    async def on_llm_end(self, ctx: JsonObject) -> None:
         """Track cost after each LLM call."""
         usage = ctx.get("usage")
         if usage:
@@ -225,7 +227,7 @@ class CostTracker:
             self.total_completion_tokens += completion_tokens
             self.call_count += 1
 
-    async def on_run_end(self, ctx: Dict[str, Any]) -> None:
+    async def on_run_end(self, ctx: JsonObject) -> None:
         """Log total cost at end of run."""
         logger.info(
             f"Run cost: ${self.total_cost:.6f} "
@@ -241,7 +243,7 @@ class CostTracker:
         self.call_count = 0
 
     @property
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> JsonObject:
         return {
             "total_cost_usd": round(self.total_cost, 6),
             "total_prompt_tokens": self.total_prompt_tokens,
@@ -264,9 +266,9 @@ class RunLogger:
     def __init__(self, level: int = logging.DEBUG, maxlen: int = 500):
         self.level = level
         # Bounded deque prevents unbounded memory growth on long-running agents.
-        self.events: Deque[Dict[str, Any]] = deque(maxlen=maxlen)
+        self.events: Deque[JsonObject] = deque(maxlen=maxlen)
 
-    async def log(self, ctx: Dict[str, Any]) -> None:
+    async def log(self, ctx: JsonObject) -> None:
         event = ctx.get("event", "unknown")
         agent = ctx.get("agent_name", "unknown")
         logger.log(
@@ -275,7 +277,7 @@ class RunLogger:
         self.events.append(ctx)
 
     @staticmethod
-    def _summarize(ctx: Dict[str, Any]) -> str:
+    def _summarize(ctx: JsonObject) -> str:
         """Create a brief summary of context for logging."""
         parts = []
         for key in ("run_id", "step", "tool_name", "duration_ms", "status"):

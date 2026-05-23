@@ -17,26 +17,16 @@ import asyncio
 import logging
 import time
 from collections import deque
-from typing import Any, Awaitable, Callable, Deque, Dict
+from typing import Awaitable, Callable, Deque
 
-from ravi.core.runtime._protocol import AgentId
-from ravi.core.runtime._types import RestartPolicy
+from ravi.core.runtime._identity import AgentId
+from ravi.core.runtime._contracts import RestartPolicy
+from ravi.core.runtime._errors import SupervisorEscalation
 
 logger = logging.getLogger("ravi.core.runtime.supervisor")
 
-
-# ---------------------------------------------------------------------------
-# Errors
-# ---------------------------------------------------------------------------
-
-
-class SupervisorEscalation(Exception):
-    """Raised when an agent exceeds its restart budget."""
-
-
-# ---------------------------------------------------------------------------
-# Supervisor
-# ---------------------------------------------------------------------------
+# Re-export so existing ``from _supervisor import SupervisorEscalation`` works.
+__all__ = ["Supervisor", "SupervisorEscalation"]
 
 
 class Supervisor:
@@ -58,9 +48,9 @@ class Supervisor:
 
     def __init__(self, restart_policy: RestartPolicy | None = None) -> None:
         self._policy = restart_policy or RestartPolicy()
-        self._tasks: Dict[AgentId, asyncio.Task[Any]] = {}
-        self._factories: Dict[AgentId, Callable[[], Awaitable[Any]]] = {}
-        self._restart_times: Dict[AgentId, Deque[float]] = {}
+        self._tasks: dict[AgentId, asyncio.Task[object]] = {}
+        self._factories: dict[AgentId, Callable[[], Awaitable[object]]] = {}
+        self._restart_times: dict[AgentId, Deque[float]] = {}
         self._running = True
 
     # -- public API ---------------------------------------------------------
@@ -68,8 +58,8 @@ class Supervisor:
     def supervise(
         self,
         agent_id: AgentId,
-        coro_factory: Callable[[], Awaitable[Any]],
-    ) -> asyncio.Task[Any]:
+        coro_factory: Callable[[], Awaitable[object]],
+    ) -> asyncio.Task[object]:
         """Start and supervise an agent task.
 
         ``coro_factory`` is a zero-arg callable that returns a new coroutine
@@ -92,7 +82,7 @@ class Supervisor:
 
     # -- internal -----------------------------------------------------------
 
-    def _spawn(self, agent_id: AgentId) -> asyncio.Task[Any]:
+    def _spawn(self, agent_id: AgentId) -> asyncio.Task[object]:
         factory = self._factories[agent_id]
         task = asyncio.create_task(
             self._run_supervised(agent_id, factory),
@@ -104,8 +94,8 @@ class Supervisor:
     async def _run_supervised(
         self,
         agent_id: AgentId,
-        factory: Callable[[], Awaitable[Any]],
-    ) -> Any:
+        factory: Callable[[], Awaitable[object]],
+    ) -> object:
         try:
             return await factory()
         except asyncio.CancelledError:
@@ -151,8 +141,6 @@ class Supervisor:
     async def _restart_all(self) -> None:
         """Restart every supervised agent (one_for_all strategy)."""
         logger.info("one_for_all: restarting all %d agents", len(self._tasks))
-        # Exclude the current task — it's the one that called us and is still
-        # running; cancelling it here would cause a recursive-cancel loop.
         current = asyncio.current_task()
         tasks_to_cancel = [t for t in self._tasks.values() if t is not current]
         for task in tasks_to_cancel:
@@ -160,7 +148,6 @@ class Supervisor:
         if tasks_to_cancel:
             await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
 
-        # M2 fix: re-spawn each independently — one failure doesn't stop others
         agent_ids = list(self._factories.keys())
         for aid in agent_ids:
             try:

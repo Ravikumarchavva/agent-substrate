@@ -10,6 +10,7 @@ import pytest
 
 from ravi.core.agents.agent_result import AgentRunResult, RunStatus
 from ravi.core.agents.base_agent import BaseAgent
+from ravi.core.messages.content import TextBlock
 from ravi.core.runtime import (
     AgentId,
     AgentNotFoundError,
@@ -67,24 +68,24 @@ class TestTopicId:
 class TestMailbox:
     async def test_put_and_get(self) -> None:
         mb = Mailbox(capacity=10)
-        env = Envelope(sender=None, target=AgentId("x", "1"), payload="hello")
+        env = Envelope(sender=None, target=AgentId("x", "1"), content=[TextBlock(text="hello")])
         await mb.put(env)
         got = await mb.get(timeout=1.0)
-        assert got.payload == "hello"
+        assert got.content[0].text == "hello"
 
     async def test_size_tracking(self) -> None:
         mb = Mailbox(capacity=5)
         assert mb.is_empty
         assert not mb.is_full
         for i in range(5):
-            env = Envelope(sender=None, target=AgentId("x", "1"), payload=i)
+            env = Envelope(sender=None, target=AgentId("x", "1"), content=[TextBlock(text=str(i))])
             await mb.put(env)
         assert mb.size == 5
         assert mb.is_full
 
     async def test_put_nowait_full_raises(self) -> None:
         mb = Mailbox(capacity=1)
-        env = Envelope(sender=None, target=AgentId("x", "1"), payload="a")
+        env = Envelope(sender=None, target=AgentId("x", "1"), content=[TextBlock(text="a")])
         mb.put_nowait(env)
         with pytest.raises(MailboxFullError):
             mb.put_nowait(env)
@@ -104,7 +105,7 @@ class TestMailbox:
     async def test_put_after_close_raises(self) -> None:
         mb = Mailbox(capacity=10)
         mb.close()
-        env = Envelope(sender=None, target=AgentId("x", "1"), payload="a")
+        env = Envelope(sender=None, target=AgentId("x", "1"), content=[TextBlock(text="a")])
         with pytest.raises(MailboxFullError):
             await mb.put(env)
 
@@ -121,17 +122,17 @@ class TestDispatcher:
         mb = Mailbox()
         d.register_agent(aid, mb)
 
-        env = Envelope(sender=None, target=aid, payload="task")
+        env = Envelope(sender=None, target=aid, content=[TextBlock(text="task")])
         await d.dispatch(env)
         got = await mb.get(timeout=1.0)
-        assert got.payload == "task"
+        assert got.content[0].text == "task"
 
     async def test_dispatch_to_unknown_agent_raises(self) -> None:
         d = Dispatcher()
         env = Envelope(
             sender=None,
             target=AgentId("ghost", "1"),
-            payload="nope",
+            content=[TextBlock(text="nope")],
         )
         with pytest.raises(AgentNotFoundError):
             await d.dispatch(env)
@@ -157,13 +158,13 @@ class TestDispatcher:
         d.subscribe_to_topic(topic, "listener")
         d.subscribe_to_topic(topic, "listener2")
 
-        env = Envelope(sender=None, target=topic, payload="broadcast")
+        env = Envelope(sender=None, target=topic, content=[TextBlock(text="broadcast")])
         await d.dispatch(env)
 
         got_a = await mb_a.get(timeout=1.0)
         got_b = await mb_b.get(timeout=1.0)
-        assert got_a.payload == "broadcast"
-        assert got_b.payload == "broadcast"
+        assert got_a.content[0].text == "broadcast"
+        assert got_b.content[0].text == "broadcast"
 
     async def test_unsubscribe(self) -> None:
         d = Dispatcher()
@@ -266,8 +267,9 @@ class TestLocalRuntime:
     async def test_register_and_send_message(self) -> None:
         """Basic request-response via send_message."""
 
-        async def echo_handler(ctx: MessageContext, payload: str) -> str:
-            return f"echo:{payload}"
+        async def echo_handler(ctx: MessageContext, content: list[TextBlock]) -> str:
+            text = content[0].text if content else ""
+            return f"echo:{text}"
 
         rt = LocalRuntime()
         await rt.start()
@@ -286,7 +288,7 @@ class TestLocalRuntime:
         """Agents should be created only on first message, not at register time."""
         created = False
 
-        async def handler(ctx: MessageContext, payload: str) -> str:
+        async def handler(ctx: MessageContext, content: list[TextBlock]) -> str:
             nonlocal created
             created = True
             return "ok"
@@ -310,8 +312,9 @@ class TestLocalRuntime:
         """publish_message should deliver to all topic subscribers."""
         received: list[str] = []
 
-        async def listener(ctx: MessageContext, payload: str) -> None:
-            received.append(f"{ctx.agent_id}:{payload}")
+        async def listener(ctx: MessageContext, content: list[TextBlock]) -> None:
+            text = content[0].text if content else ""
+            received.append(f"{ctx.agent_id}:{text}")
 
         rt = LocalRuntime()
         await rt.start()
@@ -352,7 +355,7 @@ class TestLocalRuntime:
             await rt.subscribe("nonexistent", TopicId("t", "s"))
 
     async def test_stop_cleans_up(self) -> None:
-        async def handler(ctx: MessageContext, payload: str) -> str:
+        async def handler(ctx: MessageContext, content: list[TextBlock]) -> str:
             return "ok"
 
         rt = LocalRuntime()
@@ -375,9 +378,10 @@ class TestPingPong:
         """Two agents communicate point-to-point via send_message."""
         log: list[str] = []
 
-        async def ping_handler(ctx: MessageContext, payload: str) -> str:
-            log.append(f"ping received: {payload}")
-            if payload == "start":
+        async def ping_handler(ctx: MessageContext, content: list[TextBlock]) -> str:
+            text = content[0].text if content else ""
+            log.append(f"ping received: {text}")
+            if text == "start":
                 # Send to pong and return its response
                 resp = await ctx.runtime.send_message(
                     "ping!",
@@ -387,8 +391,9 @@ class TestPingPong:
                 return f"pong said: {resp}"
             return "unexpected"
 
-        async def pong_handler(ctx: MessageContext, payload: str) -> str:
-            log.append(f"pong received: {payload}")
+        async def pong_handler(ctx: MessageContext, content: list[TextBlock]) -> str:
+            text = content[0].text if content else ""
+            log.append(f"pong received: {text}")
             return "pong!"
 
         rt = LocalRuntime()
@@ -419,7 +424,7 @@ class TestEnvelope:
         env = Envelope(
             sender=AgentId("a", "1"),
             target=AgentId("b", "2"),
-            payload={"key": "val"},
+            content=[TextBlock(text="val")],
         )
         assert env.correlation_id  # auto-generated UUID hex
         assert env.created_at is not None
@@ -429,7 +434,7 @@ class TestEnvelope:
         env = Envelope(
             sender=None,
             target=TopicId("t", "s"),
-            payload="x",
+            content=[TextBlock(text="x")],
             correlation_id="custom-123",
         )
         assert env.correlation_id == "custom-123"
@@ -550,7 +555,7 @@ class TestHandoffToolDualMode:
         agent = _StubAgent(output="direct-result")
         tool = _HandoffTool(agent, runtime=None)
         result = await tool.execute(input="do something")
-        assert result.content[0]["text"] == "direct-result"
+        assert result.content[0].text == "direct-result"
 
     async def test_dispatch_via_runtime(self) -> None:
         """With runtime + agent_id, _HandoffTool uses runtime.send_message()."""
@@ -571,7 +576,7 @@ class TestHandoffToolDualMode:
             sender=None,
             recipient=AgentId("sub", "1"),
         )
-        assert result.content[0]["text"] == "runtime-result"
+        assert result.content[0].text == "runtime-result"
 
     async def test_fallback_when_agent_has_no_id(self) -> None:
         """Even with runtime, falls back if agent has no agent_id."""
@@ -584,7 +589,7 @@ class TestHandoffToolDualMode:
         result = await tool.execute(input="test")
 
         mock_runtime.send_message.assert_not_awaited()
-        assert result.content[0]["text"] == "fallback-ok"
+        assert result.content[0].text == "fallback-ok"
 
 
 class TestOrchestratorRuntimeIntegration:
@@ -609,7 +614,7 @@ class TestOrchestratorRuntimeIntegration:
 
         tool = _HandoffTool(sub, runtime=rt)
         result = await tool.execute(input="solve this")
-        assert result.content[0]["text"] == "specialist-answer"
+        assert result.content[0].text == "specialist-answer"
         await rt.stop()
 
     async def test_orchestrator_stores_runtime(self) -> None:

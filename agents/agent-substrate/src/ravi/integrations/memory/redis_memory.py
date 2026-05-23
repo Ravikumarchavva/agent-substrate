@@ -187,13 +187,12 @@ class RedisMemory(BaseMemory):
         sid = self._require_session_id()
         self._messages.append(message)
         try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._persist_one(sid, message))
-        except RuntimeError:
-            logger.debug(
-                "RedisMemory: no running loop for add_message, "
-                "Redis write skipped for session %s",
+            await self._persist_one(sid, message)
+        except Exception as exc:
+            logger.error(
+                "RedisMemory: failed to persist message (session %s): %s",
                 sid,
+                exc,
             )
 
     async def get_messages(

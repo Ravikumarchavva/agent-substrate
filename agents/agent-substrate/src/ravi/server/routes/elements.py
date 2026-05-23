@@ -23,11 +23,12 @@ from ravi.server.context import ServerContext, get_ctx
 from ravi.server.database import get_db
 from ravi.server.models import Element
 from ravi.server.schemas import ElementOut
+from ravi.server.security.deps import get_current_user
 from ravi.server.services import get_thread
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["elements"])
+router = APIRouter(tags=["elements"], dependencies=[Depends(get_current_user)])
 
 
 def _require_file_store(ctx: ServerContext) -> FileStore:

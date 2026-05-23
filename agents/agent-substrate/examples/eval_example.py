@@ -16,6 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from ravi.core.agent_catalog._catalog import AgentCatalog
 from ravi.core.agents.react_agent import ReActAgent
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
@@ -73,21 +74,25 @@ async def main():
     # ── 2. Set up the agent ───────────────────────────────────────────────
     # Agent model (the model being tested)
     agent_client = OpenAIClient(model="gpt-4.1-nano")
-    
+
     # Set up lifecycle hooks with cost tracking
     hooks = HookManager()
     cost_tracker = CostTracker(model="gpt-4.1-nano")
     hooks.register(HookEvent.LLM_END, cost_tracker.on_llm_end)
     hooks.register(HookEvent.RUN_END, cost_tracker.on_run_end)
 
+    catalog = AgentCatalog()
+    catalog.register_model("primary", agent_client)
+    catalog.register_tool(CalculatorTool())
+    catalog.register_tool(GetCurrentTimeTool())
+
     agent = ReActAgent(
         name="eval-agent",
         description="Agent under evaluation",
-        model_client=agent_client,
-        tools=[CalculatorTool(), GetCurrentTimeTool()],
+        catalog=catalog,
         hooks=hooks,
         max_iterations=5,
-        verbose=False,  # Quiet during evals
+        verbose=False,
     )
 
     # ── 3. Set up the judge ───────────────────────────────────────────────

@@ -37,12 +37,15 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
 from typing import Any, ClassVar, Optional
 
+from ravi.core.messages import ImageContent, MediaContent
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 from .sandbox_service import CodeInterpreterConfig, CodeInterpreterService
 from .session_store import JsonSessionStore, SessionStore
@@ -173,29 +176,19 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
                 code,
                 timeout,
             )
+            if result.get("status") != "ok":
+                raise RuntimeError(f"Sandbox run status is: {result.get('status')}")
+            return self._to_tool_result(result)
         except Exception as exc:
-            logger.error(
-                "k8s_sandbox[%s] error: %s",
+            logger.warning(
+                "k8s_sandbox[%s] failed or is unavailable. Activating local fallback sandbox. Reason: %s",
                 session_id,
                 exc,
-                exc_info=True,
             )
-            return ToolResult(
-                content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
-                            {
-                                "success": False,
-                                "error": f"{type(exc).__name__}: {exc}",
-                            }
-                        ),
-                    }
-                ],
-                is_error=True,
-            )
-
-        return self._to_tool_result(result)
+            from ..tool import CodeInterpreterTool
+            local_tool = CodeInterpreterTool()
+            local_tool.session_id = self.session_id
+            return await local_tool.execute(code=code, timeout=timeout)
 
     # ── Response conversion ─────────────────────────────────────────────────────
 
@@ -225,7 +218,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
         output_files: list[dict[str, Any]] = result.get("output_files", [])
 
         text_parts: list[str] = []
-        images: list[dict[str, Any]] = []
+        media: list[MediaContent] = []
 
         if stdout:
             text_parts.append(stdout.rstrip())
@@ -238,14 +231,16 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
             name: str = artifact.get("name", "artifact")
             content_b64: str = artifact.get("content_base64", "")
             if mime.startswith("image/") and content_b64:
-                images.append(
-                    {
-                        "name": name,
-                        "format": mime.split("/")[-1],
-                        "data": content_b64,
-                    }
-                )
-                text_parts.append(f"[Generated {name}]")
+                try:
+                    media.append(
+                        ImageContent(
+                            data=base64.b64decode(content_b64),
+                            media_type=mime,
+                        )
+                    )
+                    text_parts.append(f"[Generated {name}]")
+                except Exception:
+                    text_parts.append(f"[Generated {name}] (image decode failed)")
             elif content_b64:
                 text_parts.append(f"[File: {name}] ({mime})")
 
@@ -256,8 +251,6 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
             "output": text,
             "exit_code": exit_code,
         }
-        if images:
-            response_data["images"] = images
 
         # Include non-image file names so the agent knows what was written
         non_image_files = [
@@ -269,6 +262,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
             response_data["output_files"] = non_image_files
 
         return ToolResult(
-            content=[{"type": "text", "text": json.dumps(response_data)}],
+            content=[TextBlock(text=json.dumps(response_data))],
             is_error=not success,
+            media=media or None,
         )

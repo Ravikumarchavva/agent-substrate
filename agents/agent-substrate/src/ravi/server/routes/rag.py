@@ -11,10 +11,16 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/rag", tags=["rag"])
+from ravi.server.security.deps import get_current_user
+
+router = APIRouter(
+    prefix="/rag",
+    tags=["rag"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ── Request / Response schemas ────────────────────────────────────────────────

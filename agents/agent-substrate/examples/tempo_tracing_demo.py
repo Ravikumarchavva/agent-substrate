@@ -1,5 +1,6 @@
 import asyncio
 import os
+from ravi.core.agent_catalog._catalog import AgentCatalog
 from ravi.core.agents.react_agent import ReActAgent
 from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
@@ -33,18 +34,19 @@ async def main():
     if not api_key:
         print("⚠️  Warning: OPENAI_API_KEY not found in environment.")
     
-    client = OpenAIClient(model="gpt-4o", api_key=api_key)
-    memory = UnboundedMemory()
+    catalog = AgentCatalog()
+    catalog.register_model("primary", OpenAIClient(model="gpt-4o", api_key=api_key))
+    catalog.register_memory("default", UnboundedMemory())
+    for tool in tools:
+        catalog.register_tool(tool)
 
     # 3. Initialize Agent
     agent = ReActAgent(
         name="TempoDemoBot",
         description="A helpful assistant for demonstrating tracing.",
-        model_client=client,
-        tools=tools,
-        memory=memory,
+        catalog=catalog,
         max_iterations=5,
-        verbose=True
+        verbose=True,
     )
 
     print(f"🤖 Agent '{agent.name}' initialized.")

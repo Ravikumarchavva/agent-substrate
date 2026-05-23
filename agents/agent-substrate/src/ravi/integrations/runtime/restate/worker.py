@@ -80,9 +80,9 @@ async def _setup() -> Dict[str, Any]:
         data_store = DataRefStore(redis_url=settings.REDIS_URL)
         await data_store.connect()
 
-        from ravi.core.tools.catalog import CapabilityRegistry
+        from ravi.core.catalog import AgentCatalogRegistry
 
-        catalog = CapabilityRegistry()
+        catalog = AgentCatalogRegistry()
         for tool in tools.values():
             catalog.register_tool(tool)
 

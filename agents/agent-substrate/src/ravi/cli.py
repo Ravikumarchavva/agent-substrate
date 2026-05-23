@@ -245,6 +245,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     """Launch an interactive CLI chat session with a ReAct agent."""
     # Late imports so the CLI stays fast for server commands
     from ravi.console import Console
+    from ravi.core.agent_catalog._catalog import AgentCatalog
     from ravi.core.agents.react_agent import ReActAgent
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
     from ravi.core.memory.unbounded_memory import UnboundedMemory
@@ -265,14 +266,17 @@ def cmd_chat(args: argparse.Namespace) -> None:
             mcp_tools = _load_mcp_tools(args.mcp)
             tools.extend(mcp_tools)
 
-    client = OpenAIClient(model=args.model)
+    catalog = AgentCatalog()
+    catalog.register_model("primary", OpenAIClient(model=args.model))
+    catalog.register_context("default", UnboundedContext())
+    catalog.register_memory("default", UnboundedMemory())
+    for tool in tools:
+        catalog.register_tool(tool)
+
     agent = ReActAgent(
         name=args.name,
         description="Interactive CLI assistant",
-        model_client=client,
-        tools=tools,
-        memory=UnboundedMemory(),
-        model_context=UnboundedContext(),
+        catalog=catalog,
         max_iterations=args.max_iterations,
         verbose=args.verbose,
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 
 class PipelineManagerTool(BaseTool):
@@ -78,26 +79,26 @@ class PipelineManagerTool(BaseTool):
         if action == "validate":
             return await self._validate(name)
         return ToolResult(
-            content=[{"type": "text", "text": f"Unknown action: {action!r}"}],
+            content=[TextBlock(text=f"Unknown action: {action!r}")],
             is_error=True,
         )
 
     async def _run(self, name: str) -> ToolResult:
         if not name:
             return ToolResult(
-                content=[{"type": "text", "text": "Pipeline name required for 'run'"}],
+                content=[TextBlock(text="Pipeline name required for 'run'")],
                 is_error=True,
             )
         pipeline = await self._store.load(name)
         if pipeline is None:
             return ToolResult(
-                content=[{"type": "text", "text": f"Pipeline '{name}' not found"}],
+                content=[TextBlock(text=f"Pipeline '{name}' not found")],
                 is_error=True,
             )
         result = await self._engine.execute(pipeline)
         if not result.success:
             return ToolResult(
-                content=[{"type": "text", "text": f"Pipeline failed: {result.error}"}],
+                content=[TextBlock(text=f"Pipeline failed: {result.error}")],
                 is_error=True,
             )
         parts = [f"Pipeline '{name}' completed in {result.duration_ms}ms"]
@@ -105,7 +106,7 @@ class PipelineManagerTool(BaseTool):
             parts.append(
                 f"  Step {i} ({sr['adapter']}): {'error' if sr['is_error'] else 'ok'}"
             )
-        return ToolResult(content=[{"type": "text", "text": "\n".join(parts)}])
+        return ToolResult(content=[TextBlock(text="\n".join(parts))])
 
     async def _save(
         self, name: str, definition: Optional[dict[str, Any]]
@@ -113,10 +114,7 @@ class PipelineManagerTool(BaseTool):
         if not name or not definition:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": "Both 'name' and 'definition' required for save",
-                    }
+                    TextBlock(text="Both 'name' and 'definition' required for save")
                 ],
                 is_error=True,
             )
@@ -127,10 +125,7 @@ class PipelineManagerTool(BaseTool):
         await self._store.save(pipeline)
         return ToolResult(
             content=[
-                {
-                    "type": "text",
-                    "text": f"Pipeline '{name}' saved ({len(pipeline.steps)} steps)",
-                }
+                TextBlock(text=f"Pipeline '{name}' saved ({len(pipeline.steps)} steps)")
             ],
         )
 
@@ -138,64 +133,58 @@ class PipelineManagerTool(BaseTool):
         pipelines = await self._store.list_all()
         if not pipelines:
             return ToolResult(
-                content=[{"type": "text", "text": "No saved pipelines"}],
+                content=[TextBlock(text="No saved pipelines")],
             )
         lines = [f"Saved pipelines ({len(pipelines)}):"]
         for p in pipelines:
             lines.append(
                 f"  - {p.name}: {p.description or '(no description)'} ({len(p.steps)} steps)"
             )
-        return ToolResult(content=[{"type": "text", "text": "\n".join(lines)}])
+        return ToolResult(content=[TextBlock(text="\n".join(lines))])
 
     async def _delete(self, name: str) -> ToolResult:
         if not name:
             return ToolResult(
-                content=[
-                    {"type": "text", "text": "Pipeline name required for 'delete'"}
-                ],
+                content=[TextBlock(text="Pipeline name required for 'delete'")],
                 is_error=True,
             )
         deleted = await self._store.delete(name)
         if deleted:
             return ToolResult(
-                content=[{"type": "text", "text": f"Pipeline '{name}' deleted"}],
+                content=[TextBlock(text=f"Pipeline '{name}' deleted")],
             )
         return ToolResult(
-            content=[{"type": "text", "text": f"Pipeline '{name}' not found"}],
+            content=[TextBlock(text=f"Pipeline '{name}' not found")],
             is_error=True,
         )
 
     async def _validate(self, name: str) -> ToolResult:
         if not name:
             return ToolResult(
-                content=[
-                    {"type": "text", "text": "Pipeline name required for 'validate'"}
-                ],
+                content=[TextBlock(text="Pipeline name required for 'validate'")],
                 is_error=True,
             )
         pipeline = await self._store.load(name)
         if pipeline is None:
             return ToolResult(
-                content=[{"type": "text", "text": f"Pipeline '{name}' not found"}],
+                content=[TextBlock(text=f"Pipeline '{name}' not found")],
                 is_error=True,
             )
         errors = self._engine.validate(pipeline)
         if errors:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": "Validation errors:\n"
-                        + "\n".join(f"  - {e}" for e in errors),
-                    }
+                    TextBlock(
+                        text="Validation errors:\n"
+                        + "\n".join(f"  - {e}" for e in errors)
+                    )
                 ],
                 is_error=True,
             )
         return ToolResult(
             content=[
-                {
-                    "type": "text",
-                    "text": f"Pipeline '{name}' is valid ({len(pipeline.steps)} steps)",
-                }
+                TextBlock(
+                    text=f"Pipeline '{name}' is valid ({len(pipeline.steps)} steps)"
+                )
             ],
         )

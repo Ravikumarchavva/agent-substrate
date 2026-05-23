@@ -24,9 +24,8 @@ import logging
 import os
 import platform
 import signal
-from typing import Any
 
-from ravi.core.runtime._types import MessageContext
+from ravi.core.runtime import MessageContext, MessageHandler
 from ravi.integrations.runtime.grpc.runtime import GrpcRuntime
 
 logging.basicConfig(
@@ -41,7 +40,7 @@ logger = logging.getLogger("ravi.runtime.node")
 # ---------------------------------------------------------------------------
 
 
-async def echo_handler(ctx: MessageContext, payload: Any) -> Any:
+async def echo_handler(ctx: MessageContext, payload: object) -> dict[str, object]:
     """Echoes back the payload with node metadata."""
     return {
         "agent": "echo",
@@ -51,7 +50,7 @@ async def echo_handler(ctx: MessageContext, payload: Any) -> Any:
     }
 
 
-async def greeter_handler(ctx: MessageContext, payload: Any) -> Any:
+async def greeter_handler(ctx: MessageContext, payload: object) -> dict[str, object]:
     """Returns a greeting message."""
     name = payload.get("name", "stranger") if isinstance(payload, dict) else "stranger"
     return {
@@ -61,7 +60,7 @@ async def greeter_handler(ctx: MessageContext, payload: Any) -> Any:
     }
 
 
-async def summarizer_handler(ctx: MessageContext, payload: Any) -> Any:
+async def summarizer_handler(ctx: MessageContext, payload: object) -> dict[str, object]:
     """Summarises text (mock — truncates to 80 chars)."""
     text = (
         payload.get("text", str(payload)) if isinstance(payload, dict) else str(payload)
@@ -75,7 +74,7 @@ async def summarizer_handler(ctx: MessageContext, payload: Any) -> Any:
     }
 
 
-async def translator_handler(ctx: MessageContext, payload: Any) -> Any:
+async def translator_handler(ctx: MessageContext, payload: object) -> dict[str, object]:
     """Mock translator — reverses the text as a 'translation'."""
     text = (
         payload.get("text", str(payload)) if isinstance(payload, dict) else str(payload)
@@ -89,7 +88,7 @@ async def translator_handler(ctx: MessageContext, payload: Any) -> Any:
     }
 
 
-HANDLERS: dict[str, Any] = {
+HANDLERS: dict[str, MessageHandler] = {
     "echo": echo_handler,
     "greeter": greeter_handler,
     "summarizer": summarizer_handler,

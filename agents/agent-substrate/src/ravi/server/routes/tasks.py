@@ -9,8 +9,13 @@ from pydantic import BaseModel
 
 from ravi.shared.tasks.store import GlobalTaskStore
 from ravi.server.context import ServerContext, get_ctx
+from ravi.server.security.deps import get_current_user
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+router = APIRouter(
+    prefix="/tasks",
+    tags=["tasks"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ---------------------------------------------------------------------------

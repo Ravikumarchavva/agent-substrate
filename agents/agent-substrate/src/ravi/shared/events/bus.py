@@ -12,6 +12,8 @@ import logging
 from typing import Any, AsyncIterator, Optional, cast
 
 import redis.asyncio as aioredis
+from opentelemetry import trace
+from opentelemetry.propagate import extract, inject
 
 from ravi.shared.events.envelope import EventEnvelope
 
@@ -52,11 +54,20 @@ class EventBus:
     async def publish(self, event: EventEnvelope) -> str:
         """Publish an event to the appropriate Redis Stream.
 
-        Also broadcasts via pub/sub for real-time subscribers (e.g. StreamProjector).
+        Injects the current OTel span context into ``event.trace_context`` so
+        consuming services can continue the distributed trace.
+        Also broadcasts via pub/sub for real-time fan-out to StreamProjector.
         Returns the stream message ID.
         """
         if not self._client:
             raise RuntimeError("EventBus not connected")
+
+        # Inject W3C trace context (traceparent / tracestate) into the envelope.
+        # Use a local dict carrier; inject() writes into it.
+        carrier: dict[str, str] = {}
+        inject(carrier)
+        if carrier:
+            event = event.model_copy(update={"trace_context": carrier})
 
         stream_key = event.stream_key()
         json_data = event.model_dump_json()
@@ -121,7 +132,17 @@ class EventBus:
                             envelope = EventEnvelope.model_validate_json(
                                 data["envelope"]
                             )
-                            yield envelope
+                            # Restore the publishing span as a remote parent so the
+                            # consumer trace is linked to the producer trace.
+                            parent_ctx = extract(envelope.trace_context)
+                            tracer = trace.get_tracer("ravi.events")
+                            with tracer.start_as_current_span(
+                                f"consume:{envelope.event_type}",
+                                context=parent_ctx,
+                                kind=trace.SpanKind.CONSUMER,
+                                attributes={"messaging.event_type": envelope.event_type},
+                            ):
+                                yield envelope
                             await self._client.xack(stream_key, group, msg_id)
                         except Exception:
                             logger.exception("Failed to process event %s", msg_id)

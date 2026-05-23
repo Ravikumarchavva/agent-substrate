@@ -13,7 +13,12 @@ from __future__ import annotations
 import asyncio
 from typing import Optional
 
-from ravi.core.runtime._types import Envelope
+from ravi.core.runtime._contracts import Envelope
+from ravi.core.runtime._errors import MailboxFullError
+
+# Re-export MailboxFullError so existing ``from _mailbox import MailboxFullError``
+# continues to work.
+__all__ = ["Mailbox", "MailboxFullError"]
 
 
 # ---------------------------------------------------------------------------
@@ -21,15 +26,6 @@ from ravi.core.runtime._types import Envelope
 # ---------------------------------------------------------------------------
 
 _MAILBOX_CLOSED = object()
-
-
-# ---------------------------------------------------------------------------
-# Errors
-# ---------------------------------------------------------------------------
-
-
-class MailboxFullError(Exception):
-    """Raised when a non-blocking ``put_nowait`` finds the mailbox at capacity."""
 
 
 # ---------------------------------------------------------------------------

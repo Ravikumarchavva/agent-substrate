@@ -23,6 +23,7 @@ from typing import Any, AsyncIterator, Optional
 
 from ravi.core.agents.agent_result import AgentRunResult
 from ravi.core.agents.react_agent import ReActAgent
+from ravi.core.pipelines._expr_eval import safe_eval
 
 logger = logging.getLogger("ravi.pipelines.while_runner")
 
@@ -50,13 +51,7 @@ class WhilePipelineRunner:
         """Evaluate the user-supplied condition expression."""
         if not self.condition:
             return True  # loop until max_iterations
-        try:
-            return bool(
-                eval(self.condition, {"output": output, "iteration": iteration})
-            )  # noqa: S307
-        except Exception as exc:
-            logger.warning("While condition eval error (treating as False): %s", exc)
-            return False
+        return safe_eval(self.condition, {"output": output, "iteration": iteration})
 
     # ------------------------------------------------------------------
     # Public API
@@ -87,8 +82,9 @@ class WhilePipelineRunner:
             full = []
             async for chunk in self.body_agent.run_stream(output):
                 yield chunk
-                if hasattr(chunk, "content") and chunk.content:
-                    full.append(str(chunk.content))
+                _content = getattr(chunk, "content", None)
+                if _content:
+                    full.append(str(_content))
             output = "".join(full)
             if not self._should_continue(output, i):
                 break

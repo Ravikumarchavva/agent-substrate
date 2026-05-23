@@ -18,6 +18,7 @@ import uuid
 from typing import Any, ClassVar, Optional
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def _text_result(
     text: str, *, is_error: bool = False, app_data: Optional[dict[str, Any]] = None
 ) -> ToolResult:
     return ToolResult(
-        content=[{"type": "text", "text": text}],
+        content=[TextBlock(text=text)],
         is_error=is_error,
         app_data=app_data,
     )

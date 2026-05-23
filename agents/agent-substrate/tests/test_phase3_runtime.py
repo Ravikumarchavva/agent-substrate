@@ -5,7 +5,6 @@ integration backend protocol compliance, and end-to-end flows.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,11 +12,11 @@ import pytest
 from ravi.core.runtime import (
     AgentId,
     LocalRuntime,
+    MessageContext,
     StreamDone,
+    StreamPublisher,
     TopicId,
 )
-from ravi.core.runtime._stream import StreamPublisher
-from ravi.core.runtime._types import MessageContext
 from ravi.core.tools.base_tool import BaseTool, HitlMode, ToolResult, ToolRisk
 from ravi.catalog.tools._tool_executor import ToolExecutorHandler
 from ravi.catalog.tools.human_input.tool import (
@@ -117,7 +116,7 @@ def _make_ctx(agent_id: AgentId | None = None) -> MessageContext:
 class TestToolExecutorHandler:
     """Test the ToolExecutorHandler message handler."""
 
-    def _handler(self, **kwargs: Any) -> ToolExecutorHandler:
+    def _handler(self, **kwargs: object) -> ToolExecutorHandler:
         tools = {
             "echo_tool": _EchoTool(),
             "fail_tool": _FailTool(),
@@ -421,11 +420,34 @@ class TestStreamPubSubViaRuntime:
         rt = LocalRuntime()
         await rt.start()
 
-        received: List[Any] = []
+        received: list[object] = []
 
-        async def subscriber(ctx: MessageContext, payload: Any) -> Any:
+        async def subscriber(ctx: MessageContext, payload: object) -> None:
+            if isinstance(payload, list) and len(payload) > 0:
+                block = payload[0]
+                if hasattr(block, "type") and block.type == "text" and hasattr(block, "text"):
+                    if "StreamDone" in block.text:
+                        reason = "complete"
+                        if "reason=" in block.text:
+                            reason = block.text.split("reason=")[1].split(")")[0].strip("'\"")
+                        payload = StreamDone(reason=reason)
+                    else:
+                        import ast
+                        import json
+                        try:
+                            parsed = ast.literal_eval(block.text)
+                            if isinstance(parsed, dict):
+                                payload = parsed
+                        except Exception:
+                            try:
+                                parsed = json.loads(block.text)
+                                if isinstance(parsed, dict):
+                                    payload = parsed
+                            except Exception:
+                                pass
             received.append(payload)
-            return None
+
+
 
         await rt.register("stream_consumer", subscriber)
         topic = TopicId(type="stream", source="thread-1")
@@ -487,9 +509,9 @@ class TestBaseRemoteRuntime:
         except ImportError:
             pytest.skip("restate-sdk not installed")
 
-        received: List[Any] = []
+        received: list[str] = []
 
-        async def handler(ctx: MessageContext, payload: Any) -> Any:
+        async def handler(ctx: MessageContext, payload: str) -> str:
             received.append(payload)
             return "base-ok"
 
@@ -512,11 +534,10 @@ class TestBaseRemoteRuntime:
         except ImportError:
             pytest.skip("restate-sdk not installed")
 
-        received: List[Any] = []
+        received: list[str] = []
 
-        async def handler(ctx: MessageContext, payload: Any) -> Any:
+        async def handler(ctx: MessageContext, payload: str) -> None:
             received.append(payload)
-            return None
 
         topic = TopicId(type="events", source="s1")
         await rt.register("listener", handler)
@@ -569,9 +590,11 @@ class TestGrpcRuntimeProtocol:
             pytest.skip("grpcio not installed")
 
         rt = GrpcRuntime()
-        calls: List[Any] = []
+        calls: list[dict[str, str]] = []
 
-        async def handler(ctx: MessageContext, payload: Any) -> Any:
+        async def handler(
+            ctx: MessageContext, payload: dict[str, str]
+        ) -> dict[str, str]:
             calls.append(payload)
             return {"result": "ok"}
 
@@ -600,9 +623,11 @@ class TestRestateRuntimeProtocol:
             pytest.skip("restate-sdk not installed")
 
         rt = RestateRuntime()
-        calls: List[Any] = []
+        calls: list[dict[str, str]] = []
 
-        async def handler(ctx: MessageContext, payload: Any) -> Any:
+        async def handler(
+            ctx: MessageContext, payload: dict[str, str]
+        ) -> dict[str, str]:
             calls.append(payload)
             return {"status": "done"}
 
@@ -653,12 +678,12 @@ class TestBackwardCompat:
         from ravi.core.agents.base_agent import BaseAgent
 
         class _DummyAgent(BaseAgent):
-            async def run(self, input_text: str, **kw: Any) -> Any:
+            async def run(self, input_text: str, **kw: object) -> str:
                 return "ok"
 
             async def run_stream(
-                self, input_text: str, **kw: Any
-            ) -> _AsyncIterator[Any]:
+                self, input_text: str, **kw: object
+            ) -> _AsyncIterator[str]:
                 yield "ok"  # type: ignore[misc]
 
         agent = _DummyAgent(

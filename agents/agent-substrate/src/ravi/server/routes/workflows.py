@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/workflows", tags=["workflows"])
+from ravi.server.security.deps import get_current_user
+
+router = APIRouter(
+    prefix="/workflows",
+    tags=["workflows"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 class StartPipelineRequest(BaseModel):

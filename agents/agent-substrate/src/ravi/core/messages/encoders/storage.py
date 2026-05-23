@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ravi.core.messages._types import deserialize_media_content
 from ravi.core.messages.base_message import BaseClientMessage
 from ravi.core.messages.client_messages import (
     AssistantMessage,
@@ -44,9 +43,33 @@ _MESSAGE_CLASSES: dict[str, type[BaseClientMessage]] = {
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
+import base64
+
+def _bytes_to_b64(val: Any) -> Any:
+    if isinstance(val, dict):
+        return {k: _bytes_to_b64(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [_bytes_to_b64(x) for x in val]
+    elif isinstance(val, bytes):
+        return {"__bytes_b64__": base64.b64encode(val).decode("utf-8")}
+    return val
+
+
+def _b64_to_bytes(val: Any) -> Any:
+    if isinstance(val, dict):
+        if "__bytes_b64__" in val:
+            return base64.b64decode(val["__bytes_b64__"])
+        return {k: _b64_to_bytes(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [_b64_to_bytes(x) for x in val]
+    return val
+
+
 def serialize_message(message: BaseClientMessage) -> dict[str, Any]:
     """Serialize a single message to a dict suitable for JSON storage."""
-    data = message.to_dict()
+    # Use model_dump() instead of model_dump(mode="json") to preserve bytes
+    raw_data = message.model_dump()
+    data = _bytes_to_b64(raw_data)
     # Ensure discriminator is always present
     if "type" not in data:
         data["type"] = type(message).__name__
@@ -60,16 +83,8 @@ def deserialize_message(data: dict[str, Any]) -> BaseClientMessage:
     if cls is None:
         raise ValueError(f"Unknown message type: {msg_type!r}")
 
-    # Pre-process content for types that need media deserialization
-    if msg_type in ("UserMessage", "AssistantMessage"):
-        content = data.get("content")
-        if isinstance(content, list):
-            data = {
-                **data,
-                "content": [deserialize_media_content(item) for item in content],
-            }
-
-    return cls.from_dict(data)
+    clean_data = _b64_to_bytes(data)
+    return cls.model_validate(clean_data)
 
 
 def serialize_messages(messages: list[BaseClientMessage]) -> str:

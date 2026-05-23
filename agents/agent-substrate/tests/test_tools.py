@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from ravi.core.tools.base_tool import BaseTool, ToolResult
+from ravi.core.messages.content import TextBlock
 
 
 class EchoTool(BaseTool):
@@ -55,14 +56,14 @@ class TestBaseTool:
     async def test_tool_execute(self) -> None:
         tool = EchoTool()
         result = await tool.execute(message="hello world")
-        assert result.content == [{"type": "text", "text": "Echo: hello world"}]
+        assert result.content == [TextBlock(text="Echo: hello world")]
         assert result.app_data == {"original": "hello world"}
 
 
 class TestToolResult:
     def test_tool_result_creation(self) -> None:
         result = ToolResult(content=[{"type": "text", "text": "test output"}])
-        assert result.content == [{"type": "text", "text": "test output"}]
+        assert result.content == [TextBlock(text="test output")]
 
     def test_tool_result_with_metadata(self) -> None:
         result = ToolResult(

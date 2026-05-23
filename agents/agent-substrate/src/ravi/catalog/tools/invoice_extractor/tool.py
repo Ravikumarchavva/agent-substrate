@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ class InvoiceExtractorTool(BaseTool):
         path = Path(file_path)
         if not path.exists():
             return ToolResult(
-                content=[{"type": "text", "text": f"File not found: {file_path}"}],
+                content=[TextBlock(text=f"File not found: {file_path}")],
                 is_error=True,
             )
 
@@ -106,13 +107,12 @@ class InvoiceExtractorTool(BaseTool):
 
         return ToolResult(
             content=[
-                {
-                    "type": "text",
-                    "text": (
+                TextBlock(
+                    text=(
                         f"Unsupported file type: {path.suffix}. "
                         f"Supported: PDF, TIF, TIFF, PNG, JPG, JPEG."
-                    ),
-                }
+                    )
+                )
             ],
             is_error=True,
         )
@@ -128,10 +128,7 @@ class InvoiceExtractorTool(BaseTool):
         except ImportError:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": "Pillow is not installed. Run: uv sync --group pdf",
-                    }
+                    TextBlock(text="Pillow is not installed. Run: uv sync --group pdf")
                 ],
                 is_error=True,
             )
@@ -140,13 +137,12 @@ class InvoiceExtractorTool(BaseTool):
         except ImportError:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": (
+                    TextBlock(
+                        text=(
                             "pytesseract is not installed. Run: uv sync --group pdf. "
                             "Also ensure the Tesseract binary is installed on your system."
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )
@@ -155,7 +151,7 @@ class InvoiceExtractorTool(BaseTool):
             img = Image.open(path)
         except Exception as exc:
             return ToolResult(
-                content=[{"type": "text", "text": f"Cannot open image: {exc}"}],
+                content=[TextBlock(text=f"Cannot open image: {exc}")],
                 is_error=True,
             )
 
@@ -177,13 +173,12 @@ class InvoiceExtractorTool(BaseTool):
             if not selected:
                 return ToolResult(
                     content=[
-                        {
-                            "type": "text",
-                            "text": (
+                        TextBlock(
+                            text=(
                                 f"No valid pages selected. "
                                 f"Image has {len(frames)} frame(s) (0-indexed)."
-                            ),
-                        }
+                            )
+                        )
                     ],
                     is_error=True,
                 )
@@ -209,7 +204,7 @@ class InvoiceExtractorTool(BaseTool):
             )
 
         return ToolResult(
-            content=[{"type": "text", "text": full_text}],
+            content=[TextBlock(text=full_text)],
             app_data={
                 "file": str(path),
                 "format": "image_ocr",
@@ -232,10 +227,9 @@ class InvoiceExtractorTool(BaseTool):
         except ImportError:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": "pdfplumber is not installed. Run: uv sync --group pdf",
-                    }
+                    TextBlock(
+                        text="pdfplumber is not installed. Run: uv sync --group pdf"
+                    )
                 ],
                 is_error=True,
             )
@@ -247,7 +241,7 @@ class InvoiceExtractorTool(BaseTool):
         except Exception as exc:
             logger.exception("PDF extraction failed for %s", path)
             return ToolResult(
-                content=[{"type": "text", "text": f"PDF extraction error: {exc}"}],
+                content=[TextBlock(text=f"PDF extraction error: {exc}")],
                 is_error=True,
             )
 
@@ -272,13 +266,12 @@ class InvoiceExtractorTool(BaseTool):
             if not target_pages:
                 return ToolResult(
                     content=[
-                        {
-                            "type": "text",
-                            "text": (
+                        TextBlock(
+                            text=(
                                 f"No valid pages selected. "
                                 f"PDF has {total_pages} pages (0-indexed)."
-                            ),
-                        }
+                            )
+                        )
                     ],
                     is_error=True,
                 )
@@ -315,7 +308,7 @@ class InvoiceExtractorTool(BaseTool):
             output_parts.append("\n".join(table_lines))
 
         return ToolResult(
-            content=[{"type": "text", "text": "\n".join(output_parts)}],
+            content=[TextBlock(text="\n".join(output_parts))],
             app_data={
                 "file": str(path),
                 "format": "pdf",

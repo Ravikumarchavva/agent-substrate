@@ -23,6 +23,7 @@ from ravi.core.storage.base import FileStore
 from ravi.server.context import ServerContext, get_ctx
 from ravi.server.database import get_db
 from ravi.server.schemas import FileOut
+from ravi.server.security.deps import get_current_user
 from ravi.server.services import get_thread
 from ravi.server.services.file_service import (
     delete_file,
@@ -33,7 +34,11 @@ from ravi.server.services.file_service import (
     save_file,
 )
 
-router = APIRouter(prefix="/threads", tags=["files"])
+router = APIRouter(
+    prefix="/threads",
+    tags=["files"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def _require_file_store(ctx: ServerContext) -> FileStore:

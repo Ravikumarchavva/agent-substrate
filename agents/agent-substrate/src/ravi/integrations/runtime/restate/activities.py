@@ -17,6 +17,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+from ravi.core.messages.content import TextBlock
+
 logger = logging.getLogger(__name__)
 
 # ── Module-level DI (set once by configure()) ───────────────────────────
@@ -26,7 +28,7 @@ _model_client: Any = None  # BaseModelClient (OpenAIClient)
 _tools: Dict[str, Any] = {}  # name → BaseTool instance
 _redis_memory: Any = None  # RedisMemory (connection pool)
 _tool_schemas: List[Dict[str, Any]] = []
-_catalog: Any = None  # CapabilityRegistry
+_catalog: Any = None  # AgentCatalogRegistry
 _data_store: Any = None  # DataRefStore
 _chain_runtime: Any = None  # ChainRuntime
 
@@ -204,7 +206,9 @@ async def do_tool_exec(
     if result.content:
         parts = []
         for block in result.content:
-            if isinstance(block, dict) and "text" in block:
+            if hasattr(block, "text"):
+                parts.append(block.text)
+            elif isinstance(block, dict) and "text" in block:
                 parts.append(block["text"])
             elif isinstance(block, str):
                 parts.append(block)
@@ -247,7 +251,7 @@ async def persist_message(
     elif role == "tool_result":
         await mem.add_message(
             ToolExecutionResultMessage(
-                content=[{"type": "text", "text": content}],
+                content=[TextBlock(text=content)],
                 tool_call_id=str(uuid.uuid4()),
                 name="workflow_tool",
             )
@@ -272,7 +276,7 @@ async def persist_tool_result(
 
     await mem.add_message(
         ToolExecutionResultMessage(
-            content=[{"type": "text", "text": content}],
+            content=[TextBlock(text=content)],
             tool_call_id=tool_call_id,
             name=tool_name,
         )

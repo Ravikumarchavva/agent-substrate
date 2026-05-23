@@ -30,6 +30,7 @@ from ravi.core.messages.client_messages import (
     AssistantMessage,
     ToolExecutionResultMessage,
 )
+from ravi.core.messages.content import TextBlock
 
 
 # ---------------------------------------------------------------------------
@@ -159,10 +160,7 @@ def build_tool_blocked_message(
     """Build a ToolExecutionResultMessage for a guardrail-blocked tool call."""
     return ToolExecutionResultMessage(
         content=[
-            {
-                "type": "text",
-                "text": json.dumps({"error": f"Tool blocked: {error_message}"}),
-            }
+            TextBlock(text=json.dumps({"error": f"Tool blocked: {error_message}"}))
         ],
         tool_call_id=parsed.call_id,
         name=parsed.name,

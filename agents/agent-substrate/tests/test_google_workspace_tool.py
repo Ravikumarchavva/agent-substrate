@@ -86,7 +86,7 @@ async def test_google_workspace_tool_requires_connection() -> None:
         "query": "",
         "connected": False,
     }
-    assert "not connected" in result.content[0]["text"].lower()
+    assert "not connected" in result.content[0].text.lower()
 
 
 async def test_google_workspace_tool_returns_calendar_summary(monkeypatch) -> None:
@@ -111,7 +111,7 @@ async def test_google_workspace_tool_returns_calendar_summary(monkeypatch) -> No
     )
 
     result = await _tool_connected().execute(service="calendar")
-    text = result.content[0]["text"]
+    text = result.content[0].text
 
     assert "Upcoming calendar events" in text
     assert "Team Sync" in text
@@ -156,7 +156,7 @@ async def test_google_workspace_tool_returns_gmail_summary(monkeypatch) -> None:
     )
 
     result = await _tool_connected().execute(service="gmail")
-    text = result.content[0]["text"]
+    text = result.content[0].text
 
     assert "Recent inbox messages" in text
     assert "Alice Example" in text
@@ -180,7 +180,7 @@ async def test_google_workspace_tool_ignores_textual_fallback_action() -> None:
         "query": "",
         "connected": False,
     }
-    assert "not connected" in result.content[0]["text"].lower()
+    assert "not connected" in result.content[0].text.lower()
 
 
 async def test_google_workspace_tool_clears_stale_token_after_google_401(
@@ -222,7 +222,7 @@ async def test_google_workspace_tool_clears_stale_token_after_google_401(
         "query": "",
         "connected": False,
     }
-    assert "refresh the token" in result.content[0]["text"].lower()
+    assert "refresh the token" in result.content[0].text.lower()
     assert await redis.get("workspace_token:default_user") is None
 
 
@@ -253,7 +253,7 @@ async def test_google_workspace_tool_create_event(monkeypatch) -> None:
     )
 
     assert not result.is_error
-    text = result.content[0]["text"]
+    text = result.content[0].text
     assert "Created event" in text
     assert "IPL Final" in text
     assert "Event ID: event-123" in text
@@ -303,7 +303,7 @@ async def test_google_workspace_tool_create_event_missing_title() -> None:
     )
 
     assert result.is_error
-    assert "title is required" in result.content[0]["text"]
+    assert "title is required" in result.content[0].text
 
 
 async def test_google_workspace_tool_cancel_event(monkeypatch) -> None:
@@ -323,7 +323,7 @@ async def test_google_workspace_tool_cancel_event(monkeypatch) -> None:
     )
 
     assert not result.is_error
-    assert "cancelled" in result.content[0]["text"].lower()
+    assert "cancelled" in result.content[0].text.lower()
     assert result.app_data == {
         "service": "calendar",
         "query": "",
@@ -349,7 +349,7 @@ async def test_google_workspace_tool_cancel_event_not_found(monkeypatch) -> None
     )
 
     assert result.is_error
-    assert "not found" in result.content[0]["text"].lower()
+    assert "not found" in result.content[0].text.lower()
 
 
 async def test_google_workspace_tool_cancel_event_missing_id() -> None:
@@ -358,4 +358,4 @@ async def test_google_workspace_tool_cancel_event_missing_id() -> None:
     )
 
     assert result.is_error
-    assert "event_id is required" in result.content[0]["text"]
+    assert "event_id is required" in result.content[0].text

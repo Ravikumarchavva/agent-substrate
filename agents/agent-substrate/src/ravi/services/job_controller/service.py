@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -216,27 +217,7 @@ async def dispatch_run(
         )
         await event_bus.publish(event)
 
-        # Publish run command for Agent Runtime to pick up
-        run_command = {
-            "type": "agent.run_command",
-            "run_id": run_id,
-            "thread_id": thread_id,
-            "user_content": run.user_content or "",
-            "system_instructions": run.system_instructions or "",
-            "file_ids": run.file_ids or [],
-        }
-        from ravi.shared.events.envelope import EventEnvelope
-
-        cmd_envelope = EventEnvelope(
-            event_type="agent.run_command",
-            payload=run_command,
-            correlation_id=run_id,
-        )
-        await event_bus.publish(cmd_envelope)
-
-        # Call Agent Runtime HTTP API to start the run
-        import httpx
-
+        # Dispatch to Agent Runtime via HTTP
         runtime_url = agent_runtime_url or os.environ.get(
             "AGENT_RUNTIME_SERVICE_URL",
             os.environ.get("AGENT_RUNTIME_URL", "http://localhost:8014"),

@@ -1,7 +1,10 @@
 """MCP tool adapter that wraps MCP server tools as BaseTool instances."""
 
+from __future__ import annotations
+
 from typing import Any
 
+from ravi.core.messages.content import ImageBlock, ResourceBlock, TextBlock
 from ravi.core.tools.base_tool import BaseTool, ToolResult
 from ravi.integrations.mcp.client import MCPClient
 
@@ -79,36 +82,62 @@ class MCPTool(BaseTool):
             raise RuntimeError(f"MCP client not connected for tool '{self.name}'")
 
         try:
-            # Call tool via MCP client - returns MCP response object
             result = await self.client.call_tool(self.name, kwargs)
 
-            # MCP responses come back as CallToolResult objects with content list
-            # Convert to our ToolResult format
             if hasattr(result, "content"):
                 # Native MCP SDK response
                 content = []
                 for item in result.content:  # type: ignore[union-attr]
-                    if hasattr(item, "type") and hasattr(item, "text"):
-                        # TextContent object
-                        content.append({"type": "text", "text": item.text})
+                    if hasattr(item, "type"):
+                        if item.type == "text" and hasattr(item, "text"):
+                            content.append(TextBlock(text=item.text))
+                        elif item.type == "image" and hasattr(item, "data"):
+                            mime = getattr(item, "mimeType", "image/png")
+                            content.append(ImageBlock(data=item.data, media_type=mime))
+                        elif item.type == "resource" and hasattr(item, "resource"):
+                            r = item.resource
+                            content.append(ResourceBlock(
+                                uri=getattr(r, "uri", ""),
+                                mime_type=getattr(r, "mimeType", None),
+                                text=getattr(r, "text", None)
+                            ))
+                        else:
+                            # Fallback if other types are present
+                            content.append(TextBlock(text=str(item)))
                     elif isinstance(item, dict):
-                        # Already a dict
-                        content.append(item)
+                        # Decode from dict
+                        item_type = item.get("type", "text")
+                        if item_type == "text":
+                            content.append(TextBlock(text=str(item.get("text", ""))))
+                        elif item_type == "image":
+                            content.append(ImageBlock(
+                                data=str(item.get("data", "")),
+                                media_type=str(item.get("mediaType", item.get("mimeType", "image/png")))
+                            ))
+                        elif item_type == "resource":
+                            r = item.get("resource", {})
+                            content.append(ResourceBlock(
+                                uri=str(r.get("uri", "")),
+                                mime_type=r.get("mimeType"),
+                                text=r.get("text")
+                            ))
+                        else:
+                            content.append(TextBlock(text=str(item)))
                     else:
                         # Fallback
-                        content.append({"type": "text", "text": str(item)})
+                        content.append(TextBlock(text=str(item)))
 
                 is_error: bool = getattr(result, "isError", False)
                 return ToolResult(content=content, is_error=is_error)
             else:
                 # Legacy: result is a raw string/object
-                content = [{"type": "text", "text": str(result)}]
+                content = [TextBlock(text=str(result))]
                 return ToolResult(content=content, is_error=False)
 
+
         except Exception as e:
-            # Wrap execution errors
             return ToolResult(
-                content=[{"type": "text", "text": f"Tool execution failed: {str(e)}"}],
+                content=[TextBlock(text=f"Tool execution failed: {e}")],
                 is_error=True,
             )
 

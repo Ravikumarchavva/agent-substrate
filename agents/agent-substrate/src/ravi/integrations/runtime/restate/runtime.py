@@ -33,7 +33,7 @@ import logging
 from typing import Any, Dict
 from urllib.parse import quote
 
-from ravi.core.runtime._protocol import AgentId
+from ravi.core.runtime import AgentId
 from ravi.integrations.runtime._base import BaseRemoteRuntime
 
 logger = logging.getLogger(__name__)

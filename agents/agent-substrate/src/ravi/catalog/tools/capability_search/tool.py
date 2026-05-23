@@ -15,19 +15,20 @@ from __future__ import annotations
 from typing import Any, List, Optional
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 
 class CapabilitySearchTool(BaseTool):
     """Meta-tool for discovering tools and skills in the capability catalogue."""
 
     def __init__(self, catalog: Any) -> None:
-        from ravi.core.tools.catalog import CapabilityRegistry
+        from ravi.core.catalog import AgentCatalogRegistry
 
-        if not isinstance(catalog, CapabilityRegistry):
+        if not isinstance(catalog, AgentCatalogRegistry):
             raise TypeError(
-                f"Expected CapabilityRegistry, got {type(catalog).__name__}"
+                f"Expected AgentCatalogRegistry, got {type(catalog).__name__}"
             )
-        self._catalog: CapabilityRegistry = catalog
+        self._catalog: AgentCatalogRegistry = catalog
         super().__init__(
             name="capability_search",
             description=(
@@ -114,10 +115,9 @@ class CapabilitySearchTool(BaseTool):
 
         return ToolResult(
             content=[
-                {
-                    "type": "text",
-                    "text": f"Unknown action: {action!r}. Use 'search', 'browse', or 'list_categories'.",
-                }
+                TextBlock(
+                    text=f"Unknown action: {action!r}. Use 'search', 'browse', or 'list_categories'."
+                )
             ],
             is_error=True,
         )
@@ -132,10 +132,7 @@ class CapabilitySearchTool(BaseTool):
         if not query.strip():
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": "Please provide a 'query' for the search action.",
-                    }
+                    TextBlock(text="Please provide a 'query' for the search action.")
                 ],
                 is_error=True,
             )
@@ -156,10 +153,7 @@ class CapabilitySearchTool(BaseTool):
         if not matches:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": f"No matching capabilities found for: {query!r}",
-                    }
+                    TextBlock(text=f"No matching capabilities found for: {query!r}")
                 ],
                 app_data={"matched_tool_names": [], "matched_skill_names": []},
             )
@@ -190,7 +184,7 @@ class CapabilitySearchTool(BaseTool):
         text = f"Found {len(matches)} capabilities for '{query}':\n" + "\n".join(lines)
 
         return ToolResult(
-            content=[{"type": "text", "text": text}],
+            content=[TextBlock(text=text)],
             app_data={
                 "matched_tool_names": matched_tool_names,
                 "matched_skill_names": matched_skill_names,
@@ -201,10 +195,9 @@ class CapabilitySearchTool(BaseTool):
         if not category_path.strip():
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": "Please provide a 'category_path' for the browse action.",
-                    }
+                    TextBlock(
+                        text="Please provide a 'category_path' for the browse action."
+                    )
                 ],
                 is_error=True,
             )
@@ -215,10 +208,9 @@ class CapabilitySearchTool(BaseTool):
             all_cats = [c.path for c in self._catalog.list_categories()]
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": f"Category '{category_path}' not found. Top-level categories: {', '.join(all_cats)}",
-                    }
+                    TextBlock(
+                        text=f"Category '{category_path}' not found. Top-level categories: {', '.join(all_cats)}"
+                    )
                 ],
                 is_error=True,
             )
@@ -248,7 +240,7 @@ class CapabilitySearchTool(BaseTool):
                     matched_skill_names.append(entry.name)
 
         return ToolResult(
-            content=[{"type": "text", "text": "\n".join(lines)}],
+            content=[TextBlock(text="\n".join(lines))],
             app_data={
                 "matched_tool_names": matched_tool_names,
                 "matched_skill_names": matched_skill_names,
@@ -273,5 +265,5 @@ class CapabilitySearchTool(BaseTool):
         )
 
         return ToolResult(
-            content=[{"type": "text", "text": "\n".join(lines)}],
+            content=[TextBlock(text="\n".join(lines))],
         )

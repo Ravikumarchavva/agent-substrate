@@ -12,12 +12,18 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+
+from ravi.server.security.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/execute", tags=["code-interpreter"])
+router = APIRouter(
+    prefix="/api/execute",
+    tags=["code-interpreter"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ── Request / Response models ────────────────────────────────────────────────

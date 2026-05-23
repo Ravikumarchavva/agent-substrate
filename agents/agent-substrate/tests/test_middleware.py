@@ -7,6 +7,7 @@ from typing import Any, Optional, List
 import pytest
 
 from ravi.core.execution.context import ExecutionContext
+from ravi.core.messages.content import TextBlock
 from ravi.core.middleware.base import (
     BaseMiddleware,
     MiddlewareContext,
@@ -216,23 +217,23 @@ class TestContentTruncator:
 
         # Simulate a ToolResult-like object with content list
         class FakeResult:
-            content = [{"type": "text", "text": "A" * 50}]
+            content = [TextBlock(text="A" * 50)]
 
         result = FakeResult()
         got = await mw.after(ctx, result)
-        assert len(got.content[0]["text"]) == 13  # 10 + "..."
-        assert got.content[0]["text"].endswith("...")
+        assert len(got.content[0].text) == 13  # 10 + "..."
+        assert got.content[0].text.endswith("...")
 
     async def test_no_truncation_for_short_text(self):
         mw = ContentTruncatorMiddleware(max_chars=100)
         ctx = MiddlewareContext(stage=MiddlewareStage.TOOL_EXECUTION)
 
         class FakeResult:
-            content = [{"type": "text", "text": "short"}]
+            content = [TextBlock(text="short")]
 
         result = FakeResult()
         got = await mw.after(ctx, result)
-        assert got.content[0]["text"] == "short"
+        assert got.content[0].text == "short"
 
     async def test_skip_non_tool_stage(self):
         mw = ContentTruncatorMiddleware(max_chars=5)
@@ -466,13 +467,13 @@ class TestMiddlewareIntegration:
         )
 
         class FakeResult:
-            content = [{"type": "text", "text": "A" * 20}]
+            content = [TextBlock(text="A" * 20)]
 
         async def execute(c: MiddlewareContext) -> Any:
             return FakeResult()
 
         got = await pipeline.run(ctx, execute)
-        assert got.content[0]["text"] == "AAAAA!"
+        assert got.content[0].text == "AAAAA!"
 
     async def test_cache_skips_execution_on_hit(self):
         cache = CacheMiddleware()

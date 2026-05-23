@@ -10,7 +10,7 @@ from ravi.catalog._chain_runtime import (
     _AdapterNamespace,
 )
 from ravi.core.tools.base_tool import BaseTool, ToolResult
-from ravi.core.tools.catalog import CapabilityRegistry
+from ravi.core.catalog import AgentCatalogRegistry
 
 
 class _AddTool(BaseTool):
@@ -52,8 +52,8 @@ class _EchoTool(BaseTool):
 
 
 @pytest.fixture
-def catalog() -> CapabilityRegistry:
-    cat = CapabilityRegistry()
+def catalog() -> AgentCatalogRegistry:
+    cat = AgentCatalogRegistry()
     cat.register_tool(_AddTool(), category="test", tags=["math"])
     cat.register_tool(_EchoTool(), category="test", tags=["text"])
     return cat
@@ -99,7 +99,7 @@ class TestAdapterNamespace:
 class TestChainRuntime:
     """ChainRuntime script execution tests."""
 
-    async def test_simple_script(self, catalog: CapabilityRegistry) -> None:
+    async def test_simple_script(self, catalog: AgentCatalogRegistry) -> None:
         runtime = ChainRuntime(catalog=catalog)
         result = await runtime.execute_script(
             "r = await adapters.add(a=10, b=20)\nresults.append(r)"
@@ -108,7 +108,7 @@ class TestChainRuntime:
         assert len(result.outputs) == 1
         assert result.duration_ms > 0
 
-    async def test_chained_calls(self, catalog: CapabilityRegistry) -> None:
+    async def test_chained_calls(self, catalog: AgentCatalogRegistry) -> None:
         runtime = ChainRuntime(catalog=catalog)
         result = await runtime.execute_script(
             "r1 = await adapters.add(a=1, b=2)\n"
@@ -118,14 +118,14 @@ class TestChainRuntime:
         assert result.error is None
         assert "sum=" in str(result.outputs[0])
 
-    async def test_print_captured(self, catalog: CapabilityRegistry) -> None:
+    async def test_print_captured(self, catalog: AgentCatalogRegistry) -> None:
         runtime = ChainRuntime(catalog=catalog)
         result = await runtime.execute_script(
             "print('hello from chain')\nresults.append('done')"
         )
         assert "hello from chain" in result.logs
 
-    async def test_timeout(self, catalog: CapabilityRegistry) -> None:
+    async def test_timeout(self, catalog: AgentCatalogRegistry) -> None:
         runtime = ChainRuntime(catalog=catalog)
         result = await runtime.execute_script(
             "import asyncio\nawait asyncio.sleep(10)",
@@ -134,13 +134,13 @@ class TestChainRuntime:
         assert result.error is not None
         assert "timed out" in result.error.lower()
 
-    async def test_error_captured(self, catalog: CapabilityRegistry) -> None:
+    async def test_error_captured(self, catalog: AgentCatalogRegistry) -> None:
         runtime = ChainRuntime(catalog=catalog)
         result = await runtime.execute_script("raise ValueError('test error')")
         assert result.error is not None
         assert "test error" in result.error
 
-    async def test_missing_adapter_error(self, catalog: CapabilityRegistry) -> None:
+    async def test_missing_adapter_error(self, catalog: AgentCatalogRegistry) -> None:
         runtime = ChainRuntime(catalog=catalog)
         result = await runtime.execute_script("await adapters.nonexistent()")
         assert result.error is not None

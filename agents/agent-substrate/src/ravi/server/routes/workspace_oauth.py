@@ -12,8 +12,10 @@ import logging
 import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+
+from ravi.server.security.deps import TokenPayload, get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +130,10 @@ async def clear_workspace_tokens_async(
 
 
 @router.post("/set-token")
-async def set_workspace_token(request: Request) -> JSONResponse:
+async def set_workspace_token(
+    request: Request,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> JSONResponse:
     """Accept a Google Workspace OAuth token pushed from the Next.js frontend."""
     body = await request.json()
     redis = _get_redis(request)
@@ -137,16 +142,20 @@ async def set_workspace_token(request: Request) -> JSONResponse:
         access_token=body["access_token"],
         refresh_token=body.get("refresh_token"),
         expires_in=body.get("expires_in", 3600),
+        session_id=current_user.sub,
     )
     logger.info("Google Workspace OAuth token stored in Redis")
     return JSONResponse({"status": "ok"})
 
 
 @router.get("/token")
-async def get_workspace_token(request: Request) -> JSONResponse:
+async def get_workspace_token(
+    request: Request,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> JSONResponse:
     """Return the stored Google Workspace access token."""
     redis = _get_redis(request)
-    access_token = await get_workspace_access_token_async(redis)
+    access_token = await get_workspace_access_token_async(redis, session_id=current_user.sub)
     if not access_token:
         raise HTTPException(
             status_code=401,
@@ -156,9 +165,12 @@ async def get_workspace_token(request: Request) -> JSONResponse:
 
 
 @router.delete("/token")
-async def clear_workspace_token(request: Request) -> JSONResponse:
+async def clear_workspace_token(
+    request: Request,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> JSONResponse:
     """Clear the stored workspace token (disconnect)."""
     redis = _get_redis(request)
-    await clear_workspace_tokens_async(redis)
+    await clear_workspace_tokens_async(redis, session_id=current_user.sub)
     logger.info("Google Workspace token cleared from Redis")
     return JSONResponse({"status": "ok"})

@@ -11,30 +11,32 @@ RUN pip install --no-cache-dir \
 	"uvicorn[standard]" \
 	python-multipart \
 	httpx \
-	# --- data science core ---
+	# --- data science core --- \
 	numpy \
 	pandas \
 	scipy \
 	scikit-learn \
-	# --- visualisation ---
+	# --- visualisation --- \
 	matplotlib \
 	seaborn \
 	plotly \
 	kaleido \
-	# --- file format support ---
+	# --- file format support --- \
 	openpyxl \
 	xlrd \
 	pyarrow \
 	polars \
 	pdfplumber \
 	Pillow \
-	# --- requests kept for compat ---
+	# --- requests kept for compat --- \
 	requests
 
 # Create default workspace directory
 RUN mkdir -p /app/workspace /tmp/matplotlib
 
-COPY src/code_interpreter/sandbox_runtime.py /app/sandbox_runtime.py
+# Build with the repository root as context so this path resolves correctly:
+# docker build -f src/ravi/catalog/tools/code_interpreter/code_interpreter/agent-sandbox/Dockerfile -t code-interpreter:latest .
+COPY src/ravi/catalog/tools/code_interpreter/code_interpreter/sandbox_runtime.py /app/sandbox_runtime.py
 
 EXPOSE 8888
 

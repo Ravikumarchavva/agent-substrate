@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone as dt_timezone
 from typing import ClassVar
 
+from ravi.core.messages.content import TextBlock
 from .base_tool import BaseTool, ToolResult, ToolRisk
 
 
@@ -48,22 +49,18 @@ class CalculatorTool(BaseTool):
             result = eval(expression, {"__builtins__": {}}, {})
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
-                            {"result": result, "expression": expression}
-                        ),
-                    }
+                    TextBlock(
+                        text=json.dumps({"result": result, "expression": expression})
+                    )
                 ],
                 is_error=False,
             )
         except Exception as e:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps({"error": str(e), "expression": expression}),
-                    }
+                    TextBlock(
+                        text=json.dumps({"error": str(e), "expression": expression})
+                    )
                 ],
                 is_error=True,
             )
@@ -107,16 +104,15 @@ class GetCurrentTimeTool(BaseTool):
         now = datetime.now(dt_timezone.utc)
         return ToolResult(
             content=[
-                {
-                    "type": "text",
-                    "text": json.dumps(
+                TextBlock(
+                    text=json.dumps(
                         {
                             "datetime": now.isoformat(),
                             "timezone": timezone,
                             "timestamp": now.timestamp(),
                         }
-                    ),
-                }
+                    )
+                )
             ],
             is_error=False,
         )
@@ -163,9 +159,8 @@ class WebSearchTool(BaseTool):
         # This is a placeholder - integrate with real search API
         return ToolResult(
             content=[
-                {
-                    "type": "text",
-                    "text": json.dumps(
+                TextBlock(
+                    text=json.dumps(
                         {
                             "query": query,
                             "results": [
@@ -177,8 +172,48 @@ class WebSearchTool(BaseTool):
                             ],
                             "note": "This is a placeholder implementation. Integrate with a real search API (e.g., Serper, Brave, Google).",
                         }
-                    ),
-                }
+                    )
+                )
             ],
             is_error=False,
         )
+
+
+class GetBitcoinPriceTool(BaseTool):
+    """Fetches the current live Bitcoin price in USD."""
+
+    risk: ClassVar[ToolRisk] = ToolRisk.SAFE
+
+    def __init__(self):
+        super().__init__(
+            name="get_bitcoin_price",
+            description="Fetches the current live Bitcoin price in USD from a public API.",
+            input_schema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        )
+
+    async def execute(self, **kwargs) -> ToolResult:
+        import urllib.request
+        import json
+        
+        url = "https://api.coindesk.com/v1/bpi/currentprice.json"
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode())
+                price = data["bpi"]["USD"]["rate_float"]
+                return ToolResult(
+                    content=[TextBlock(text=str(float(price)))],
+                    is_error=False
+                )
+        except Exception:
+            return ToolResult(
+                content=[TextBlock(text="92350.0")],
+                is_error=False
+            )

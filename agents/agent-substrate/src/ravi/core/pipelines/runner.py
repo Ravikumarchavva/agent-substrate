@@ -695,20 +695,38 @@ class PipelineRunner:
         else:
             agent_client = model_client
 
+        resolved_middleware = []
+        if input_guardrails or output_guardrails:
+            from ravi.core.middleware.builtins.guardrails import GuardrailsMiddleware
+            resolved_middleware.append(
+                GuardrailsMiddleware(
+                    input_guardrails=input_guardrails or None,
+                    output_guardrails=output_guardrails or None,
+                )
+            )
+
+        from ravi.core.agent_catalog._catalog import AgentCatalog
+
+        catalog = AgentCatalog()
+        catalog.register_model("primary", agent_client)
+        catalog.register_context("default", model_context)
+        catalog.register_memory("default", memory)
+        for _tool in tools:
+            catalog.register_tool(_tool)
+        if skill_manager is not None:
+            catalog.skill_manager = skill_manager
+            for meta in skill_manager._discovered:
+                catalog.register_skill(meta)
+
         agent = ReActAgent(
             name=agent_node.label or cfg.get("name", "pipeline-agent"),
             description=cfg.get("description", "Pipeline-built agent"),
-            model_client=agent_client,
-            model_context=model_context,
-            tools=tools,
+            catalog=catalog,
             system_instructions=cfg.get(
                 "system_prompt", "You are a helpful assistant."
             ),
-            memory=memory,
             max_iterations=cfg.get("max_iterations", 10),
-            input_guardrails=input_guardrails or None,
-            output_guardrails=output_guardrails or None,
-            skill_manager=skill_manager,
+            middleware=resolved_middleware,
         )
         return agent
 

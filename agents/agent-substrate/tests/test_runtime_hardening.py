@@ -6,24 +6,28 @@ Covers: C1-C6 (critical), H1-H12 (high), M1-M4 (medium).
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from typing import Any
 
+from ravi.core.messages.content import TextBlock
 from ravi.core.runtime import (
     AgentId,
-    Dispatcher,
     AgentNotFoundError,
+    Dispatcher,
+    Envelope,
+    HandlerError,
     LocalRuntime,
     Mailbox,
     MailboxFullError,
+    MessageContext,
+    RestartPolicy,
+    StreamPublisher,
+    Supervisor,
+    SupervisorEscalation,
     TopicId,
-    HandlerError,
 )
-from ravi.core.runtime._stream import StreamPublisher
-from ravi.core.runtime._supervisor import Supervisor, SupervisorEscalation
-from ravi.core.runtime._types import Envelope, MessageContext, RestartPolicy
 from ravi.integrations.runtime._base import BaseRemoteRuntime
 
 
@@ -32,15 +36,16 @@ from ravi.integrations.runtime._base import BaseRemoteRuntime
 # ══════════════════════════════════════════════════════════════════════════
 
 
-async def _echo_handler(ctx: MessageContext, payload: Any) -> Any:
-    return f"echo:{payload}"
+async def _echo_handler(ctx: MessageContext, content: list[TextBlock]) -> str:
+    text = content[0].text if content else ""
+    return f"echo:{text}"
 
 
-async def _crash_handler(ctx: MessageContext, payload: Any) -> Any:
+async def _crash_handler(ctx: MessageContext, content: list[TextBlock]) -> object:
     raise RuntimeError("deliberate crash")
 
 
-async def _slow_handler(ctx: MessageContext, payload: Any) -> Any:
+async def _slow_handler(ctx: MessageContext, content: list[TextBlock]) -> str:
     await asyncio.sleep(999)
     return "never"
 
@@ -141,7 +146,7 @@ class TestMailboxCloseDeadlock:
         envelope = Envelope(
             sender=None,
             target=AgentId(type="test", key="1"),
-            payload="fill",
+            content=[TextBlock(text="fill")],
         )
         await mbox.put(envelope)
         assert mbox.is_full
@@ -151,7 +156,7 @@ class TestMailboxCloseDeadlock:
 
         # get() should return the existing envelope first, then raise StopAsyncIteration
         result = await asyncio.wait_for(mbox.get(), timeout=1.0)
-        assert result.payload == "fill"
+        assert result.content[0].text == "fill"
 
         with pytest.raises(StopAsyncIteration):
             await asyncio.wait_for(mbox.get(), timeout=1.0)
@@ -181,7 +186,7 @@ class TestMailboxCloseDeadlock:
         mbox = Mailbox(capacity=10)
         mbox.close()
         with pytest.raises(MailboxFullError):
-            await mbox.put(Envelope(sender=None, target=AgentId("t", "k"), payload="x"))
+            await mbox.put(Envelope(sender=None, target=AgentId("t", "k"), content=[TextBlock(text="x")]))
 
     async def test_get_timeout(self) -> None:
         """get() with timeout raises TimeoutError when no messages arrive."""
@@ -308,11 +313,11 @@ class TestFanOutIsolation:
         dispatcher.subscribe_to_topic(topic, "listener_c")
 
         # Fill mbox_c so it will fail on put
-        await mbox_c.put(Envelope(sender=None, target=aid_c, payload="fill"))
+        await mbox_c.put(Envelope(sender=None, target=aid_c, content=[TextBlock(text="fill")]))
         assert mbox_c.is_full
 
         # Dispatch to topic — should continue past mbox_c failure
-        envelope = Envelope(sender=None, target=topic, payload="broadcast")
+        envelope = Envelope(sender=None, target=topic, content=[TextBlock(text="broadcast")])
         await dispatcher.dispatch(envelope)
 
         # A and B should have received it
@@ -336,7 +341,7 @@ class TestFanOutIsolation:
 
         mbox_a.close()
 
-        envelope = Envelope(sender=None, target=topic, payload="test")
+        envelope = Envelope(sender=None, target=topic, content=[TextBlock(text="test")])
         await dispatcher.dispatch(envelope)
 
         # B should still receive
@@ -386,7 +391,7 @@ class TestUnregisterGranularity:
         dispatcher.unregister_agent(aid1)
 
         # Dispatch to topic should still reach aid2
-        envelope = Envelope(sender=None, target=topic, payload="test")
+        envelope = Envelope(sender=None, target=topic, content=[TextBlock(text="test")])
         await dispatcher.dispatch(envelope)
         assert dispatcher.get_mailbox(aid2).size == 1  # type: ignore[union-attr]
 
@@ -687,7 +692,7 @@ class TestDispatcherReverseIndex:
 
         dispatcher.subscribe_to_topic(topic, "worker")
 
-        envelope = Envelope(sender=None, target=topic, payload="msg")
+        envelope = Envelope(sender=None, target=topic, content=[TextBlock(text="msg")])
         await dispatcher.dispatch(envelope)
 
         assert mbox_w1.size == 1
@@ -806,10 +811,10 @@ class TestLocalRuntimeEndToEnd:
         runtime = LocalRuntime(send_timeout=5.0)
         await runtime.start()
 
-        received: list[Any] = []
+        received: list[list[TextBlock]] = []
 
-        async def subscriber(ctx: MessageContext, payload: Any) -> None:
-            received.append(payload)
+        async def subscriber(ctx: MessageContext, content: list[TextBlock]) -> None:
+            received.append(content)
 
         await runtime.register("listener", subscriber)
         topic = TopicId(type="events", source="test")
@@ -819,7 +824,7 @@ class TestLocalRuntimeEndToEnd:
 
         # Give the agent loop time to process
         await asyncio.sleep(0.1)
-        assert "broadcast" in received
+        assert any(c[0].text == "broadcast" for c in received if c)
         await runtime.stop()
 
     async def test_graceful_shutdown(self) -> None:

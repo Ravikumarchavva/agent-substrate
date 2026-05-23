@@ -1,14 +1,13 @@
-"""Admin routes – accessible only to the configured admin user.
+"""Admin routes – accessible only to users with the admin role.
 
-All endpoints require the ``X-Admin-Email`` request header to match
-``ADMIN_EMAIL`` environment variable (default: chavvaravikumarreddy2004@gmail.com).
-The Next.js proxy reads the admin's Google cookie and injects this header.
+All endpoints require a valid JWT access token where ``role`` is
+``"platform_admin"`` or ``"tenant_admin"`` (i.e. ``AuthClaims.is_admin``
+returns True).
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from typing import Any, Dict, List
 
@@ -18,11 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.server.database import get_db
 from ravi.server.models import Step, Thread
+from ravi.server.security.deps import TokenPayload, get_current_user
 from ravi.server.services.file_service import purge_thread_files
 
 logger = logging.getLogger(__name__)
-
-ADMIN_EMAIL: str = os.environ.get("ADMIN_EMAIL", "chavvaravikumarreddy2004@gmail.com")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -30,11 +28,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # ── Auth guard ───────────────────────────────────────────────────────────────
 
 
-def _require_admin(request: Request) -> None:
-    """Raise 403 unless the request carries the correct admin email header."""
-    email = request.headers.get("X-Admin-Email", "").strip().lower()
-    if email != ADMIN_EMAIL.lower():
+def require_admin(current_user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
+    """Raise 403 unless the authenticated user has an admin role."""
+    if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden: admin access only")
+    return current_user
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -42,11 +40,10 @@ def _require_admin(request: Request) -> None:
 
 @router.get("/stats")
 async def admin_stats(
-    request: Request,
     db: AsyncSession = Depends(get_db),
+    _: TokenPayload = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Return top-level aggregate stats."""
-    _require_admin(request)
 
     thread_count: int = (await db.execute(select(func.count(Thread.id)))).scalar_one()
     step_count: int = (await db.execute(select(func.count(Step.id)))).scalar_one()
@@ -59,13 +56,12 @@ async def admin_stats(
 
 @router.get("/threads")
 async def list_all_threads(
-    request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
+    _: TokenPayload = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     """Return all threads with step counts, newest first."""
-    _require_admin(request)
 
     # Sub-query: count of steps per thread
     step_counts_sq = (
@@ -106,11 +102,10 @@ async def list_all_threads(
 @router.get("/threads/{thread_id}/steps")
 async def get_thread_steps(
     thread_id: str,
-    request: Request,
     db: AsyncSession = Depends(get_db),
+    _: TokenPayload = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     """Return all steps for a specific thread (for admin inspection)."""
-    _require_admin(request)
 
     try:
         tid = uuid.UUID(thread_id)
@@ -139,9 +134,9 @@ async def delete_thread(
     thread_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    _: TokenPayload = Depends(require_admin),
 ) -> Dict[str, str]:
     """Hard-delete a thread and all its steps (admin only)."""
-    _require_admin(request)
 
     try:
         tid = uuid.UUID(thread_id)

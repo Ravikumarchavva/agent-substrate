@@ -29,10 +29,10 @@ def create_access_token(
     extra: dict[str, Any] | None = None,
 ) -> tuple[str, datetime]:
     return _jwt.create_access_token(
-        user_id=user_id,
+        user_id,
+        _SECRET,
         email=email,
         role=role,
-        secret=_SECRET,
         algorithm=_ALG,
         expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
         extra=extra,
@@ -41,8 +41,8 @@ def create_access_token(
 
 def create_refresh_token(user_id: str) -> tuple[str, str, datetime]:
     return _jwt.create_refresh_token(
-        user_id=user_id,
-        secret=_SECRET,
+        user_id,
+        _SECRET,
         algorithm=_ALG,
         expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
     )
@@ -54,10 +54,10 @@ def create_agent_context_token(
     permissions: list[str] | None = None,
 ) -> str:
     return _jwt.create_agent_context_token(
-        user_id=user_id,
-        thread_id=thread_id,
+        user_id,
+        thread_id,
+        _SECRET,
         permissions=permissions,
-        secret=_SECRET,
         algorithm=_ALG,
         expire_minutes=settings.JWT_AGENT_TOKEN_EXPIRE_MINUTES,
     )

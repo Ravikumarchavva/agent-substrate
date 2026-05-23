@@ -21,6 +21,7 @@ from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
+    Depends,
     File,
     Form,
     HTTPException,
@@ -43,10 +44,15 @@ from ravi.server.schemas import (
     TranscribeResponse,
     TTSRequest,
 )
+from ravi.server.security.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/audio", tags=["audio"])
+router = APIRouter(
+    prefix="/audio",
+    tags=["audio"],
+    dependencies=[Depends(get_current_user)],
+)
 
 # Maximum upload size for audio files (25 MB — OpenAI hard limit)
 _MAX_AUDIO_BYTES = 25 * 1024 * 1024

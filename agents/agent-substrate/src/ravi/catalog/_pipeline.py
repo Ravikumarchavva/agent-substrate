@@ -116,7 +116,7 @@ class PipelineEngine:
     Parameters
     ----------
     catalog
-        CapabilityRegistry to look up adapters.
+        AgentCatalogRegistry to look up adapters.
     data_store
         DataRefStore for passing data between steps.
     """
@@ -126,9 +126,9 @@ class PipelineEngine:
         catalog: Any,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
-        from ravi.core.tools.catalog import CapabilityRegistry
+        from ravi.core.catalog import AgentCatalogRegistry
 
-        self._catalog: CapabilityRegistry = catalog
+        self._catalog: AgentCatalogRegistry = catalog
         self._data_store = data_store
 
     async def execute(self, pipeline: PipelineDef) -> PipelineResult:
@@ -225,7 +225,7 @@ class PipelineEngine:
         - literal values pass through unchanged
 
         When the resolved value is a ToolResult content list
-        (``[{"type": "text", "text": "..."}]``), the text is extracted
+        (``[TextBlock(text="...")]``), the text is extracted
         automatically so downstream adapters receive a plain string.
         """
         resolved: Dict[str, Any] = {}

@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import logging
 from abc import abstractmethod
-from typing import Any
 
-from ravi.core.runtime._base import BaseRuntime
-from ravi.core.runtime._protocol import AgentFactory, AgentId, TopicId
-from ravi.core.runtime._types import (
+from ravi.core.runtime import (
+    AgentId,
+    BaseRuntime,
     Envelope,
     MessageContext,
+    MessageHandler,
+    TopicId,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,12 +52,12 @@ class BaseRemoteRuntime(BaseRuntime):
     async def register(
         self,
         agent_type: str,
-        factory: AgentFactory,
+        handler: MessageHandler,
     ) -> None:
         """Register a local agent type.
 
         Raises ``RuntimeError`` if called after ``start()``.
-        Raises ``ValueError`` if *agent_type* is empty or *factory* not callable.
+        Raises ``ValueError`` if *agent_type* is empty or *handler* not callable.
         """
         # H7 fix: block registration after start
         if self._started:
@@ -64,9 +65,9 @@ class BaseRemoteRuntime(BaseRuntime):
         # M3 fix: input validation
         if not agent_type or not isinstance(agent_type, str):
             raise ValueError("agent_type must be a non-empty string")
-        if not callable(factory):
-            raise ValueError("factory must be callable")
-        await super().register(agent_type, factory)
+        if not callable(handler):
+            raise ValueError("handler must be callable")
+        await super().register(agent_type, handler)
         logger.debug("%s: registered agent type %r", type(self).__name__, agent_type)
 
     async def subscribe(
@@ -79,11 +80,11 @@ class BaseRemoteRuntime(BaseRuntime):
 
     async def send_message(
         self,
-        message: Any,
+        message: object,
         *,
         sender: AgentId | None = None,
         recipient: AgentId,
-    ) -> Any:
+    ) -> object:
         """Dispatch: local handler if registered, otherwise :meth:`_remote_send`.
 
         Raises ``RuntimeError`` if called before ``start()``.
@@ -97,7 +98,7 @@ class BaseRemoteRuntime(BaseRuntime):
 
     async def publish_message(
         self,
-        message: Any,
+        message: object,
         *,
         sender: AgentId | None = None,
         topic: TopicId,
@@ -127,17 +128,21 @@ class BaseRemoteRuntime(BaseRuntime):
     # -- Internal helpers ---------------------------------------------------
 
     def _make_correlation_id(
-        self, message: Any, *, sender: AgentId | None, target: AgentId | TopicId
+        self, message: object, *, sender: AgentId | None, target: AgentId | TopicId
     ) -> str:
-        return Envelope(sender=sender, target=target, payload=message).correlation_id
+        from ravi.core.messages.content import TextBlock
+
+        # Envelope only needs content for routing; we just need the auto-generated correlation_id
+        content = message if isinstance(message, list) else [TextBlock(text=str(message))]
+        return Envelope(sender=sender, target=target, content=content).correlation_id
 
     async def _dispatch_local(
         self,
-        message: Any,
+        message: object,
         *,
         sender: AgentId | None,
         target: AgentId,
-    ) -> Any:
+    ) -> object:
         """Invoke the local handler for *target* and return its response."""
         handler = self._handlers[target.type]
         ctx = MessageContext(
@@ -152,7 +157,7 @@ class BaseRemoteRuntime(BaseRuntime):
 
     async def _dispatch_local_subscriber(
         self,
-        message: Any,
+        message: object,
         *,
         sender: AgentId | None,
         topic: TopicId,
@@ -175,11 +180,11 @@ class BaseRemoteRuntime(BaseRuntime):
     @abstractmethod
     async def _remote_send(
         self,
-        message: Any,
+        message: object,
         *,
         sender: AgentId | None,
         recipient: AgentId,
-    ) -> Any:
+    ) -> object:
         """Send *message* to a remote agent via the transport layer.
 
         Called by :meth:`send_message` when no local handler matches

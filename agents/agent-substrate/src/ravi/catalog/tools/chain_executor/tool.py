@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 
 class ChainExecutorTool(BaseTool):
@@ -78,7 +79,7 @@ class ChainExecutorTool(BaseTool):
             if result.logs:
                 error_text += f"\n\nLogs:\n{result.logs}"
             return ToolResult(
-                content=[{"type": "text", "text": error_text}],
+                content=[TextBlock(text=error_text)],
                 is_error=True,
             )
 
@@ -100,5 +101,5 @@ class ChainExecutorTool(BaseTool):
         parts.append(f"Duration: {result.duration_ms}ms")
 
         return ToolResult(
-            content=[{"type": "text", "text": "\n".join(parts)}],
+            content=[TextBlock(text="\n".join(parts))],
         )

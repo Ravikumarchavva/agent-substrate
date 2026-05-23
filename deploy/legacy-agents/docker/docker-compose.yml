@@ -48,9 +48,9 @@ services:
       FILE_STORE_ENDPOINT: http://minio:9000
       FILE_STORE_REGION: us-east-1
       FILE_STORE_ACCESS_KEY: minioadmin
-      FILE_STORE_SECRET_KEY: minioadmin
+      FILE_STORE_SECRET_KEY: ${FILE_STORE_SECRET_KEY:-minioadmin}
       ENABLE_BUILDER: "true"
-      FRONTEND_URL: ${FRONTEND_URL:-http://host.docker.internal:3001}
+      FRONTEND_URL: ${FRONTEND_URL:-http://host.docker.internal:3000}
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
@@ -70,6 +70,8 @@ services:
       RESTATE_INGRESS_URL: ${RESTATE_INGRESS_URL:-http://restate:8080}
       RESTATE_ADMIN_URL: ${RESTATE_ADMIN_URL:-http://restate:9070}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,6 +82,23 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  ravi-ui:
+    profiles:
+      - ui
+    build:
+      context: ../../../ravi-ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_API_URL: http://backend:8000
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ravi_ui
+    depends_on:
+      - backend
+      - postgres
 
   tempo:
     image: grafana/tempo:2.10.0
@@ -125,7 +144,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     ports:
-      - "3001:3000"
+      - "3099:3000"
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin

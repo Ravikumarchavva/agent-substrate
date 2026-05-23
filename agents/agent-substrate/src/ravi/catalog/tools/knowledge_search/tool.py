@@ -12,6 +12,7 @@ import math
 from typing import List, Optional, Tuple
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -131,19 +132,16 @@ class KnowledgeSearchTool(BaseTool):
         if action == "status":
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": f"Knowledge index: {len(self._index)} chunks indexed.",
-                    }
+                    TextBlock(
+                        text=f"Knowledge index: {len(self._index)} chunks indexed."
+                    )
                 ],
             )
 
         if action == "index":
             if not text.strip():
                 return ToolResult(
-                    content=[
-                        {"type": "text", "text": "'text' is required for indexing."}
-                    ],
+                    content=[TextBlock(text="'text' is required for indexing.")],
                     is_error=True,
                 )
             doc_label = doc_id or f"doc_{len(self._index)}"
@@ -157,37 +155,30 @@ class KnowledgeSearchTool(BaseTool):
             if indexed == 0:
                 return ToolResult(
                     content=[
-                        {
-                            "type": "text",
-                            "text": "Could not generate embeddings. Check API key.",
-                        }
+                        TextBlock(text="Could not generate embeddings. Check API key.")
                     ],
                     is_error=True,
                 )
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": f"Indexed {indexed} chunks from '{doc_label}'. Total: {len(self._index)} chunks.",
-                    }
+                    TextBlock(
+                        text=f"Indexed {indexed} chunks from '{doc_label}'. Total: {len(self._index)} chunks."
+                    )
                 ],
             )
 
         if action == "search":
             if not text.strip():
                 return ToolResult(
-                    content=[
-                        {"type": "text", "text": "'text' query is required for search."}
-                    ],
+                    content=[TextBlock(text="'text' query is required for search.")],
                     is_error=True,
                 )
             if not self._index:
                 return ToolResult(
                     content=[
-                        {
-                            "type": "text",
-                            "text": "No documents indexed yet. Use action='index' first.",
-                        }
+                        TextBlock(
+                            text="No documents indexed yet. Use action='index' first."
+                        )
                     ],
                 )
 
@@ -195,10 +186,9 @@ class KnowledgeSearchTool(BaseTool):
             if query_embedding is None:
                 return ToolResult(
                     content=[
-                        {
-                            "type": "text",
-                            "text": "Could not generate query embedding. Check API key.",
-                        }
+                        TextBlock(
+                            text="Could not generate query embedding. Check API key."
+                        )
                     ],
                     is_error=True,
                 )
@@ -216,10 +206,10 @@ class KnowledgeSearchTool(BaseTool):
                 lines.append(f"\n{i}. [{doc_label}] (score: {sim:.3f})\n   {preview}")
 
             return ToolResult(
-                content=[{"type": "text", "text": "\n".join(lines)}],
+                content=[TextBlock(text="\n".join(lines))],
             )
 
         return ToolResult(
-            content=[{"type": "text", "text": f"Unknown action: {action!r}"}],
+            content=[TextBlock(text=f"Unknown action: {action!r}")],
             is_error=True,
         )

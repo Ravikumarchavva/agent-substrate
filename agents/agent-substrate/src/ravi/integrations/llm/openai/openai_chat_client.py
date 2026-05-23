@@ -168,7 +168,7 @@ class OpenAIChatCompletionClient(OpenAIClient):
                 if msg.tool_calls:
                     entry["tool_calls"] = [
                         {
-                            "id": tc.id,
+                            "id": tc.tool_call_id,
                             "type": "function",
                             "function": {
                                 "name": tc.name,
@@ -186,11 +186,14 @@ class OpenAIChatCompletionClient(OpenAIClient):
             elif isinstance(msg, ToolExecutionResultMessage):
                 content_str = ""
                 if isinstance(msg.content, list):
-                    content_str = "\n".join(
-                        b.get("text", "")
-                        for b in msg.content
-                        if isinstance(b, dict) and b.get("type") == "text"
-                    )
+                    parts = []
+                    for b in msg.content:
+                        if isinstance(b, dict):
+                            if b.get("type") == "text" and "text" in b:
+                                parts.append(b["text"])
+                        elif hasattr(b, "text"):
+                            parts.append(getattr(b, "text"))
+                    content_str = "\n".join(parts)
                 elif isinstance(msg.content, str):
                     content_str = msg.content
                 result.append(
@@ -208,7 +211,7 @@ class OpenAIChatCompletionClient(OpenAIClient):
                         "content": None,
                         "tool_calls": [
                             {
-                                "id": msg.id,
+                                "id": msg.tool_call_id,
                                 "type": "function",
                                 "function": {
                                     "name": msg.name,

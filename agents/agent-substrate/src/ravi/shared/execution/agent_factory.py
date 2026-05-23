@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional
 
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
+from ravi.core.agent_catalog._catalog import AgentCatalog
 from ravi.core.agents.react_agent import ReActAgent
 from ravi.core.context.base_context import ModelContext
 from ravi.core.context.implementations import SlidingWindowContext
@@ -23,6 +24,7 @@ from ravi.core.messages.client_messages import (
     ToolExecutionResultMessage,
     UserMessage,
 )
+from ravi.core.messages.content import TextBlock
 from ravi.core.runtime import AgentId, AgentRuntime
 from ravi.core.tools.base_tool import BaseTool
 from ravi.integrations.memory.redis_memory import RedisMemory
@@ -78,7 +80,7 @@ async def rebuild_messages_from_steps(
                 ToolExecutionResultMessage(
                     tool_call_id=meta.get("tool_call_id", ""),
                     name=row.get("name", ""),
-                    content=[{"type": "text", "text": row.get("output") or ""}],
+                    content=[TextBlock(text=row.get("output") or "")],
                     is_error=row.get("is_error") or False,
                 )
             )
@@ -178,26 +180,37 @@ def create_react_agent(
     execution_context: Optional[ExecutionContext] = None,
     enable_capability_search: bool = True,
 ) -> ReActAgent:
-    """Create a configured ``ReActAgent`` with shared defaults."""
-    resolved_context = model_context or SlidingWindowContext(
-        max_messages=model_context_window
-    )
+    """Create a configured ``ReActAgent`` with shared defaults.
+
+    Builds a catalog from the provided resources and passes it to ``ReActAgent``.
+    """
+    from ravi.core.middleware.builtins.guardrails import GuardrailsMiddleware
+
+    resolved_context = model_context or SlidingWindowContext(max_messages=model_context_window)
+
+    catalog = AgentCatalog()
+    catalog.register_model("primary", model_client)
+    catalog.register_context("default", resolved_context)
+    catalog.register_memory("default", memory)
+    for tool in tools:
+        catalog.register_tool(tool)
 
     kwargs: Dict[str, Any] = dict(
         name="ChatBot",
         description="A helpful AI assistant with tool access.",
-        model_client=model_client,
-        model_context=resolved_context,
-        tools=tools,
+        catalog=catalog,
         system_instructions=system_instructions,
-        memory=memory,
         max_iterations=max_iterations,
         verbose=verbose,
-        input_guardrails=[
-            MaxTokenGuardrail(
-                max_tokens=max_input_tokens,
-                model="gpt-4o",
-                tripwire=True,
+        middleware=[
+            GuardrailsMiddleware(
+                input_guardrails=[
+                    MaxTokenGuardrail(
+                        max_tokens=max_input_tokens,
+                        model="gpt-4o",
+                        tripwire=True,
+                    )
+                ]
             )
         ],
     )

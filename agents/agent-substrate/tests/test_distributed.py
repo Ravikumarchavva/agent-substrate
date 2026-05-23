@@ -178,11 +178,12 @@ class TestActivities:
         }
 
         from ravi.core.tools.base_tool import ToolResult
+        from ravi.core.messages.content import TextBlock
 
         # run() is async, so explicitly set it as AsyncMock
         self._mock_tool.run = AsyncMock(
             return_value=ToolResult(
-                content=[{"type": "text", "text": "tool output"}],
+                content=[TextBlock(text="tool output")],
                 is_error=False,
             )
         )
@@ -212,7 +213,7 @@ class TestActivities:
         )
 
         assert result["is_error"] is False
-        assert "tool output" in result["content"]
+        assert "tool output" in str(result["content"])
         self._mock_tool.run.assert_awaited_once_with(arg1="val1")
         # Verify streaming events published
         assert self._mock_nats.publish.call_count == 2  # tool_call + tool_result

@@ -62,6 +62,7 @@ from ravi.catalog.tools.file_manager.tool import (
 )
 from ravi.catalog.tools.web_surfer.tool import WebSurferTool
 from ravi.catalog.tools.human_input.tool import AskHumanTool
+from ravi.server.security.deps import get_current_user
 from ravi.server.sse.bridge import BRIDGE_DONE, BridgeRegistry, WebHITLBridge
 from ravi.server.sse.events import (
     EventBus,
@@ -74,7 +75,7 @@ from ravi.server.sse.events import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["chat"])
+router = APIRouter(tags=["chat"], dependencies=[Depends(get_current_user)])
 
 ATTACHMENT_ANALYSIS_INSTRUCTIONS = (
     "When the user asks about attached files, images, or documents, inspect the "
@@ -369,8 +370,13 @@ def _build_tool_result_payload(
     if isinstance(chunk.content, list):
         parts = []
         for block in chunk.content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                parts.append(block.get("text", ""))
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+            elif hasattr(block, "text"):
+                parts.append(getattr(block, "text") or "")
+            elif isinstance(block, str):
+                parts.append(block)
         content_text = "\n".join(parts)
 
     tool_name = getattr(chunk, "name", "unknown")
@@ -745,6 +751,7 @@ async def chat(
         async def agent_worker() -> None:
             """Run agent; emit typed events and persist inline to Postgres."""
             nonlocal bridge_signaled
+            generated_files: list[dict] = []
             try:
 
                 async def _emit_text_delta(chunk: TextDeltaChunk) -> None:
@@ -757,6 +764,11 @@ async def chat(
 
                 async def _emit_completion(message: AssistantMessage) -> None:
                     payload = _build_completion_payload(message, tool_meta_map)
+                    metadata = None
+                    if generated_files:
+                        metadata = {"attachments": generated_files}
+                        payload["attachments"] = generated_files
+
                     try:
                         async with ctx.session_factory() as persist_db:
                             await persist_assistant_message(
@@ -764,6 +776,7 @@ async def chat(
                                 body.thread_id,
                                 message,
                                 tool_meta_map=tool_meta_map,
+                                metadata=metadata,
                             )
                             await persist_db.commit()
                     except Exception:
@@ -785,9 +798,55 @@ async def chat(
                                 output=raw_content,
                                 is_error=getattr(chunk, "is_error", False),
                             )
+                            
+                            tool_media = getattr(chunk, "media", None)
+                            if tool_media:
+                                from ravi.server.services.file_service import save_file
+                                from ravi.core.storage.tenant import FileScope
+                                import uuid
+                                import base64
+                                
+                                for idx, media_item in enumerate(tool_media):
+                                    filename = f"generated_plot_{idx+1}.png"
+                                    mime = media_item.media_type or "image/png"
+                                    if "image/jpeg" in mime:
+                                        filename = f"generated_plot_{idx+1}.jpg"
+                                    elif "image/webp" in mime:
+                                        filename = f"generated_plot_{idx+1}.webp"
+                                        
+                                    raw_data = media_item.data
+                                    if isinstance(raw_data, str):
+                                        try:
+                                            raw_data = base64.b64decode(raw_data)
+                                        except Exception:
+                                            raw_data = raw_data.encode("utf-8")
+                                    elif isinstance(raw_data, bytes):
+                                        pass
+                                    else:
+                                        raw_data = str(raw_data).encode("utf-8")
+                                        
+                                    file_meta = await save_file(
+                                        persist_db,
+                                        ctx.file_store,
+                                        thread_id=uuid.UUID(str(body.thread_id)),
+                                        name=filename,
+                                        mime=mime,
+                                        content=raw_data,
+                                        scope=FileScope.UPLOADS,
+                                    )
+                                    
+                                    file_dict = {
+                                        "id": str(file_meta.id),
+                                        "thread_id": str(file_meta.thread_id),
+                                        "name": file_meta.original_name,
+                                        "mime": file_meta.content_type,
+                                        "size": file_meta.size_bytes,
+                                    }
+                                    generated_files.append(file_dict)
+                                    
                             await persist_db.commit()
                     except Exception:
-                        logger.exception("Failed to persist tool result")
+                        logger.exception("Failed to persist tool result or process media")
                     await bus.emit_dict(payload)
 
                 async def _emit_unknown(chunk: object) -> None:

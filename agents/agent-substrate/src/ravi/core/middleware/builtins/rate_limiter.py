@@ -35,23 +35,21 @@ class RateLimiterMiddleware(BaseMiddleware):
         self._lock = asyncio.Lock()
 
     async def before(self, ctx: MiddlewareContext) -> MiddlewareContext:
-        async with self._lock:
-            now = time.monotonic()
-            elapsed = now - self._last_refill
-            self._tokens = min(
-                self._max_tokens,
-                self._tokens + elapsed * self._refill_rate,
-            )
-            self._last_refill = now
-
-            if self._tokens < 1.0:
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                elapsed = now - self._last_refill
+                self._tokens = min(
+                    self._max_tokens,
+                    self._tokens + elapsed * self._refill_rate,
+                )
+                self._last_refill = now
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return ctx
                 wait = (1.0 - self._tokens) / self._refill_rate
-                await asyncio.sleep(wait)
-                self._tokens = 0.0
-            else:
-                self._tokens -= 1.0
-
-        return ctx
+            # Sleep outside the lock so other waiters can refill and check
+            await asyncio.sleep(wait)
 
     async def after(self, ctx: MiddlewareContext, result: Any) -> Any:
         return result

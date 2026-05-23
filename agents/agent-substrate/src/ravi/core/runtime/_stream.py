@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
-from ravi.core.runtime._protocol import AgentId, AgentRuntime, TopicId
-from ravi.core.runtime._types import StreamDone
+from ravi.core.runtime._identity import AgentId, TopicId
+from ravi.core.runtime._protocol import AgentRuntime
+from ravi.core.runtime._contracts import StreamDone
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class StreamPublisher:
     def topic(self) -> TopicId:
         return self._topic
 
-    async def emit(self, event: Any) -> None:
+    async def emit(self, event: object) -> None:
         """Publish a single event to the topic."""
         async with self._lock:
             if self._closed:
@@ -76,7 +76,6 @@ class StreamPublisher:
         async with self._lock:
             if self._closed:
                 return
-            # M4 fix: only mark closed after successful publish
             try:
                 await self._runtime.publish_message(
                     StreamDone(reason=reason),

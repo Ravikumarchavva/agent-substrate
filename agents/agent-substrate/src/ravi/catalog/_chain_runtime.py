@@ -115,7 +115,7 @@ class ChainRuntime:
     Parameters
     ----------
     catalog
-        The CapabilityRegistry to draw tools from.
+        The AgentCatalogRegistry to draw tools from.
     data_store
         DataRefStore for large intermediate data.
     """
@@ -125,9 +125,9 @@ class ChainRuntime:
         catalog: Any,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
-        from ravi.core.tools.catalog import CapabilityRegistry
+        from ravi.core.catalog import AgentCatalogRegistry
 
-        self._catalog: CapabilityRegistry = catalog
+        self._catalog: AgentCatalogRegistry = catalog
         self._data_store = data_store
 
     def build_namespace(self) -> _AdapterNamespace:

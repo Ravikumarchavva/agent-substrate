@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.server.database import get_db
 from ravi.server.schemas import FeedbackCreate, FeedbackOut
+from ravi.server.security.deps import get_current_user
 from ravi.server.services import create_feedback
 
-router = APIRouter(tags=["feedback"])
+router = APIRouter(tags=["feedback"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/feedbacks", response_model=FeedbackOut, status_code=201)

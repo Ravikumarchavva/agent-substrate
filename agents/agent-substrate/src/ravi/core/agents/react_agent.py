@@ -21,13 +21,16 @@ import asyncio
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
+from typing import AsyncIterator, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
+
+from ravi.core.messages.content import JsonObject
+from ravi.core.messages._types import StreamChunk
 
 
 from ravi.core.agents.base_agent import BaseAgent
 from ravi.core.execution.context import ExecutionContext
-from ravi.core.runtime._protocol import AgentId, AgentRuntime
+from ravi.core.runtime import AgentId, AgentRuntime, StreamPublisher, TopicId
 from ravi.core.agents.agent_result import (
     AgentRunResult,
     AggregatedUsage,
@@ -40,11 +43,11 @@ from ravi.core.agents._guardrail_runner import (
     build_tool_blocked_message,
     build_tool_blocked_record,
     check_input_guardrails,
-    check_output_guardrails,
     check_tool_call_guardrails,
 )
 from ravi.core.agents._tool_execution import (
     ParsedToolCall,
+    ToolExecutionContext,
     build_tool_error,
     content_to_str,
     execute_tool_direct,
@@ -61,8 +64,8 @@ from ravi.core.agents._stream_handler import (
 from ravi.core.context.base_context import ModelContext
 from ravi.exceptions import GuardrailTripwireError
 from ravi.core.guardrails.base_guardrail import (
-    BaseGuardrail,
     GuardrailResult,
+    GuardrailType,
 )
 from ravi.core.hooks import HookEvent, HookManager
 from ravi.core.memory.base_memory import BaseMemory
@@ -83,7 +86,7 @@ from ravi.core.messages.client_messages import (
     UserMessage,
 )
 from ravi.core.messages._types import MediaType
-from ravi.core.llm.base_client import BaseModelClient
+from ravi.core.llm.base_client import BaseModelClient, GenerateResult
 from ravi.shared.observability import global_metrics, global_tracer, logger
 from ravi.catalog.tools.human_input.tool import (
     ToolApprovalHandler,
@@ -95,9 +98,10 @@ from ravi.core.resilience import (
     _calculate_delay,
 )
 from ravi.core.tools.base_tool import BaseTool
-from ravi.core.tools.catalog import CapabilityRegistry
+from ravi.core.catalog import AgentCatalogRegistry
 from ravi.catalog import SkillManager
 from ravi.catalog.tools.capability_search.tool import CapabilitySearchTool
+from ravi.core.checkpointing import CheckpointStore
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +113,7 @@ _ParsedToolCall = ParsedToolCall
 
 def _resolve_user_message_content(
     input_text: str,
-    input_content: Any,
+    input_content: Optional[list[MediaType]],
 ) -> list[MediaType]:
     if input_content is None:
         return [input_text]
@@ -288,13 +292,25 @@ def _parse_textual_tool_call_sequence(text: str) -> list[ToolCallMessage]:
 class ReActAgent(BaseAgent):
     """Reasoning + Acting agent with tool calling loop.
 
+    All resources (model, memory, context, tools, skills, checkpointing) are
+    registered in the catalog before construction. Config-only params
+    (numbers, booleans, policies) are passed directly.
+
     Usage::
+
+        catalog = AgentCatalogRegistry()
+        catalog.register_model("primary", OpenAIClient(model="gpt-4o"))
+        catalog.register_tool(search_tool)
+        catalog.register_tool(calc_tool)
+        # optional — defaults are injected automatically:
+        # catalog.register_memory("main", RedisMemory(...))
+        # catalog.register_context("main", SlidingWindowContext(max_messages=40))
+        # catalog.init_skills(skill_dirs=["./skills"])
 
         agent = ReActAgent(
             name="researcher",
             description="Answers questions using web tools",
-            model_client=openai_client,
-            tools=mcp_tools,
+            catalog=catalog,
         )
         result = await agent.run("Find the top 3 repos for user X on GitHub")
         print(result.output)
@@ -308,19 +324,14 @@ class ReActAgent(BaseAgent):
         name: str,
         description: str,
         *,
-        model_client: BaseModelClient,
-        tools: Optional[List[BaseTool]] = None,
+        catalog: AgentCatalogRegistry,
         system_instructions: str = (
             "You are a helpful AI assistant. Use the provided tools to solve "
             "the user's request. Think step-by-step."
         ),
-        memory: Optional[BaseMemory] = None,
         memory_scope: MemoryScope = MemoryScope.ISOLATED,
-        model_context: ModelContext,
         max_iterations: int = 50,
         verbose: bool = True,
-        input_guardrails: Optional[List[BaseGuardrail]] = None,
-        output_guardrails: Optional[List[BaseGuardrail]] = None,
         # Production features
         hooks: Optional[HookManager] = None,
         llm_retry_policy: Optional[RetryPolicy] = None,
@@ -330,69 +341,47 @@ class ReActAgent(BaseAgent):
         # HITL: Tool approval
         tool_approval_handler: Optional[ToolApprovalHandler] = None,
         tools_requiring_approval: Optional[List[str]] = None,
-        # Skills
-        skill_dirs: Optional[List[str]] = None,
-        skill_manager: Optional[SkillManager] = None,
-        # Structured output: when set, run() / run_stream() parse the final
-        # answer into this Pydantic model.
+        # Structured output
         response_schema: Optional[type] = None,
-        # Middleware: opt-in composable pipeline for pre/post processing.
+        # Middleware
         middleware: Optional[List[BaseMiddleware]] = None,
         execution_context: Optional[ExecutionContext] = None,
         # Runtime
         runtime: Optional[AgentRuntime] = None,
         agent_id: Optional[AgentId] = None,
         enable_capability_search: bool = True,
+        # Fault recovery — checkpointing
+        checkpoint_every: int = 0,  # 0 = disabled; N > 0 = checkpoint every N steps
     ):
-        provided_tools = list(tools or [])
+        # Inject defaults for resources not explicitly registered in the catalog.
+        if catalog.primary_memory() is None:
+            catalog.register_memory("default", UnboundedMemory())
 
-        # Skills -- build SkillManager here (avoids core->extensions coupling in BaseAgent)
-        _skill_manager: Optional[SkillManager] = skill_manager
-        if _skill_manager is None and skill_dirs:
-            from pathlib import Path
+        if catalog.primary_context() is None:
+            from ravi.core.context.implementations import SlidingWindowContext
+            catalog.register_context("default", SlidingWindowContext(max_messages=40))
 
-            _skill_manager = SkillManager(skill_dirs=[Path(d) for d in skill_dirs])
-
-        # Build the unified capability catalog from tools + skills
-        self._catalog = CapabilityRegistry()
-        for tool in provided_tools:
-            self._catalog.register_tool(tool)
-        if _skill_manager is not None:
-            for meta in _skill_manager._discovered:
-                self._catalog.register_skill(meta)
-
-        # Inject the capability search tool (replaces old ToolSearchTool)
-        existing_search = self._catalog.get_tool("capability_search")
-        if enable_capability_search and existing_search is None:
-            search_tool = CapabilitySearchTool(self._catalog)
-            provided_tools.append(search_tool)
-            self._catalog.register_tool(search_tool)
-
-        # Resolve memory before super().__init__ so we can narrow the type below.
-        _resolved_memory: BaseMemory = memory or UnboundedMemory()
+        # Inject the capability search tool
+        if enable_capability_search and catalog.get_tool("capability_search") is None:
+            catalog.register_tool(CapabilitySearchTool(catalog))
 
         super().__init__(
             name=name,
             description=description,
-            model_client=model_client,
-            model_context=model_context,
-            tools=provided_tools,
+            catalog=catalog,
             system_instructions=system_instructions,
-            memory=_resolved_memory,
             memory_scope=memory_scope,
-            input_guardrails=input_guardrails,
-            output_guardrails=output_guardrails,
-            prompt_enricher=_skill_manager,
+            prompt_enricher=catalog,
             response_schema=response_schema,
             middleware=middleware,
             execution_context=execution_context,
             runtime=runtime,
             agent_id=agent_id,
         )
-        # Narrow type: self.memory is always non-None in ReActAgent.
-        self.memory: BaseMemory = _resolved_memory
-        # Keep skill_manager attribute for direct access / backwards compat
-        self.skill_manager: Optional[SkillManager] = _skill_manager
+        self._catalog = self.catalog
+        # Narrow type: memory is always non-None after the default injection above.
+        self.memory: BaseMemory = self.memory  # type: ignore[assignment]
+        self.skill_manager: Optional[SkillManager] = catalog.skill_manager
         self.max_iterations = max_iterations
         self.verbose = verbose
 
@@ -400,14 +389,12 @@ class ReActAgent(BaseAgent):
         self.hooks = hooks or HookManager()
         self.llm_retry_policy = llm_retry_policy or LLM_RETRY_POLICY
         self.tool_retry_policy = tool_retry_policy or TOOL_RETRY_POLICY
-        self.run_timeout = run_timeout  # None = no timeout
-        self.tool_timeout = tool_timeout  # Per-tool timeout in seconds
+        self.run_timeout = run_timeout
+        self.tool_timeout = tool_timeout
 
         # HITL: tool approval
         self.tool_approval_handler = tool_approval_handler
-        self.tools_requiring_approval = (
-            tools_requiring_approval  # None = all tools when handler set
-        )
+        self.tools_requiring_approval = tools_requiring_approval
         self._active_tool_names: set[str] = set()
         self._tool_search_name = "capability_search"
         self._always_visible_tool_names = {
@@ -416,6 +403,9 @@ class ReActAgent(BaseAgent):
             if self._catalog.get_tool(name) is not None
         }
         self._max_active_tools = self.DEFAULT_MAX_ACTIVE_TOOLS
+        # Fault recovery
+        self.checkpoint_store: Optional[CheckpointStore] = catalog.primary_checkpoint_store()
+        self.checkpoint_every: int = checkpoint_every
 
     # ── Core run ─────────────────────────────────────────────────────────────
 
@@ -448,6 +438,126 @@ class ReActAgent(BaseAgent):
         """Clear the currently advertised tool subset between runs."""
         self._active_tool_names.clear()
 
+    # ── Checkpoint helpers ────────────────────────────────────────────────────
+
+    async def _save_checkpoint(
+        self,
+        run_id: str,
+        iteration: int,
+        steps: list[StepResult],
+    ) -> None:
+        """Persist current agent state to the checkpoint store using RunCheckpoint."""
+        if self.checkpoint_store is None:
+            return
+        from ravi.core.runtime._checkpoint import RunCheckpoint
+
+        agent_id = (
+            self.execution_context.agent_id
+            if self.execution_context and self.execution_context.agent_id
+            else self.name
+        )
+        thread_id = self.execution_context.thread_id if self.execution_context else ""
+        messages = await self.memory.get_messages()
+
+        # Load existing tree or root
+        root = await self.checkpoint_store.load(run_id, agent_id)
+        if root is None:
+            root = RunCheckpoint(
+                run_id=run_id,
+                agent_id=agent_id,
+                thread_id=thread_id,
+            )
+
+        root.mark_in_progress(iteration=iteration)
+        root.messages = [m.model_dump(mode="json") for m in messages]
+
+        # Capture resource locks from runtime if available
+        if self.runtime and hasattr(self.runtime, "resource_locks"):
+            root.resource_locks = self.runtime.resource_locks.snapshot()
+
+        await self.checkpoint_store.save(root)
+        logger.debug(
+            "[%s] RunCheckpoint saved: iteration=%d run_id=%s status=%s",
+            self.name,
+            iteration,
+            run_id,
+            root.status,
+        )
+
+    async def run_with_recovery(
+        self,
+        input_text: str,
+        *,
+        response_schema: Optional[type] = None,
+        **kwargs,
+    ) -> AgentRunResult:
+        """Run with automatic tree-structured checkpoint recovery.
+
+        If a checkpoint exists for the current (run_id, agent_id) pair, the
+        agent's memory is restored from the checkpoint before running.  This
+        allows long runs to survive process restarts or transient failures.
+
+        Usage::
+
+            store = InMemoryCheckpointStore()
+            agent = ReActAgent(..., checkpoint_store=store, checkpoint_every=5)
+            # If the process crashed mid-run, this will resume from step 5:
+            result = await agent.run_with_recovery("Do the long task")
+        """
+        if self.checkpoint_store is not None:
+            run_id = self._resolve_run_id()
+            agent_id = (
+                self.execution_context.agent_id
+                if self.execution_context and self.execution_context.agent_id
+                else self.name
+            )
+            checkpoint = await self.checkpoint_store.load(run_id, agent_id)
+            if checkpoint is not None and checkpoint.messages:
+                # Restore memory from tree checkpoint
+                from ravi.core.messages.client_messages import (
+                    AssistantMessage,
+                    SystemMessage,
+                    ToolCallMessage,
+                    ToolExecutionResultMessage,
+                    UserMessage,
+                )
+
+                await self.memory.clear()
+                message_classes: dict[str, type[BaseClientMessage]] = {
+                    "system": SystemMessage,
+                    "user": UserMessage,
+                    "assistant": AssistantMessage,
+                    "tool_call": ToolCallMessage,
+                    "tool": ToolExecutionResultMessage,
+                }
+                for msg_dict in checkpoint.messages:
+                    role = str(msg_dict.get("role", ""))
+                    cls = message_classes.get(role)
+                    if cls is not None:
+                        try:
+                            await self.memory.add_message(cls.model_validate(msg_dict))
+                        except Exception:
+                            pass  # Skip malformed messages
+                logger.info(
+                    "[%s] Restored from tree checkpoint: iteration=%d status=%s",
+                    self.name,
+                    checkpoint.iteration,
+                    checkpoint.status,
+                )
+
+                # Restore any saved resource locks into runtime
+                if self.runtime and checkpoint.resource_locks and hasattr(self.runtime, "resource_locks"):
+                    for lock_data in checkpoint.resource_locks:
+                        try:
+                            await self.runtime.resource_locks.acquire(
+                                resource_uri=lock_data["resource_uri"],
+                                agent_id=lock_data["holder_agent_id"],
+                                mode=lock_data["mode"],
+                            )
+                        except Exception as e:
+                            logger.warning("Failed to restore lock on recovery: %s", e)
+        return await self.run(input_text, response_schema=response_schema, **kwargs)
+
     def _resolve_run_id(self) -> str:
         """Return the active execution run id or create a new one."""
         if self.execution_context is not None and self.execution_context.run_id:
@@ -456,9 +566,9 @@ class ReActAgent(BaseAgent):
 
     @staticmethod
     def _resolve_requested_tool_choice(
-        tool_schemas: List[Dict[str, Any]],
-        requested_tool_choice: Optional[str | dict[str, Any]] = None,
-    ) -> Optional[str | dict[str, Any]]:
+        tool_schemas: List[JsonObject],
+        requested_tool_choice: Optional[str | JsonObject] = None,
+    ) -> Optional[str | JsonObject]:
         """Return the tool-choice mode for the current LLM step.
 
         Most turns should stay on automatic tool selection. For a small set of
@@ -514,9 +624,10 @@ class ReActAgent(BaseAgent):
         total_tool_calls = 0
         status = RunStatus.COMPLETED
         error_msg: Optional[str] = None
-        final_output: List[Any] = []  # Multimodal output
+        final_output: List[MediaType] = []  # Multimodal output
         guardrail_results: List[GuardrailResult] = []
         response: Optional[AssistantMessage] = None
+        _run_end_dispatched = False  # guarantees RUN_END fires exactly once
         initial_tool_choice = kwargs.pop("tool_choice", None)
 
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
@@ -552,45 +663,50 @@ class ReActAgent(BaseAgent):
                 # 1. Add user message
                 await self.memory.add_message(persisted_user_message)
 
-                # ── INPUT GUARDRAILS ─────────────────────────────────────────
-                try:
-                    if self.input_guardrails:
-                        results = await check_input_guardrails(
-                            guardrails=self.input_guardrails,
-                            agent_name=self.name,
-                            run_id=run_id,
-                            input_text=input_text,
-                        )
-                        guardrail_results.extend(results)
-                except GuardrailTripwireError as e:
-                    logger.error(f"[{self.name}] Input guardrail tripwire: {e.message}")
-                    return build_guardrail_tripped_result(
-                        error=e,
-                        run_id=run_id,
-                        agent_name=self.name,
-                        run_start=run_start,
-                        steps=steps,
-                        usage=usage,
-                        max_iterations=self.max_iterations,
-                        guardrail_results=guardrail_results,
-                        output_prefix="Request blocked",
-                    )
-
                 # 2. ReAct loop
                 for step_num in range(1, self.max_iterations + 1):
                     with global_tracer.start_span(
                         f"step_{step_num}", {"step": step_num}
                     ):
+                        # Honour cancellation / deadline from ExecutionContext
+                        if (
+                            self.execution_context is not None
+                            and not self.execution_context.is_alive
+                        ):
+                            status = RunStatus.CANCELLED
+                            error_msg = (
+                                "Execution context cancelled or deadline exceeded"
+                            )
+                            break
+
                         # A. THINK — call LLM
-                        response = await self._call_llm(
-                            current_input=input_text,
-                            response_schema=response_schema,
-                            input_content=user_message_content,
-                            tool_choice=(
-                                initial_tool_choice if step_num == 1 else None
-                            ),
-                            **kwargs,
-                        )
+                        try:
+                            response = await self._call_llm(
+                                current_input=input_text,
+                                response_schema=response_schema,
+                                input_content=user_message_content,
+                                tool_choice=(
+                                    initial_tool_choice if step_num == 1 else None
+                                ),
+                                **kwargs,
+                            )
+                        except GuardrailTripwireError as e:
+                            logger.error(f"[{self.name}] Guardrail tripwire in middleware: {e.message}")
+                            tripped_res = e.details.get("result", {})
+                            g_type = tripped_res.get("guardrail_type")
+                            output_prefix = "Request blocked" if g_type == GuardrailType.INPUT else "Response blocked"
+                            return build_guardrail_tripped_result(
+                                error=e,
+                                run_id=run_id,
+                                agent_name=self.name,
+                                run_start=run_start,
+                                steps=steps,
+                                usage=usage,
+                                max_iterations=self.max_iterations,
+                                guardrail_results=guardrail_results,
+                                output_prefix=output_prefix,
+                            )
+
                         usage.add(response.usage)
                         await self.memory.add_message(response)
 
@@ -602,33 +718,6 @@ class ReActAgent(BaseAgent):
                                     f"[{self.name}] Step {step_num}: final answer"
                                 )
                             run_span.set_attribute("final_step", step_num)
-
-                            output_text = self._extract_text(response)
-                            try:
-                                if self.output_guardrails:
-                                    og_results = await check_output_guardrails(
-                                        guardrails=self.output_guardrails,
-                                        agent_name=self.name,
-                                        run_id=run_id,
-                                        output_text=output_text,
-                                        raw_message=response,
-                                    )
-                                    guardrail_results.extend(og_results)
-                            except GuardrailTripwireError as e:
-                                logger.error(
-                                    f"[{self.name}] Output guardrail tripwire: {e.message}"
-                                )
-                                return build_guardrail_tripped_result(
-                                    error=e,
-                                    run_id=run_id,
-                                    agent_name=self.name,
-                                    run_start=run_start,
-                                    steps=steps,
-                                    usage=usage,
-                                    max_iterations=self.max_iterations,
-                                    guardrail_results=guardrail_results,
-                                    output_prefix="Response blocked",
-                                )
 
                             steps.append(
                                 StepResult(
@@ -654,38 +743,30 @@ class ReActAgent(BaseAgent):
                         for tc_raw in response.tool_calls:
                             parsed = parse_tool_call(tc_raw)
 
-                            tool_blocked = False
                             try:
-                                tc_results = await check_tool_call_guardrails(
+                                await check_tool_call_guardrails(
                                     input_guardrails=self.input_guardrails,
                                     output_guardrails=self.output_guardrails,
                                     agent_name=self.name,
                                     run_id=run_id,
                                     parsed=parsed,
                                 )
-                                guardrail_results.extend(tc_results)
                             except GuardrailTripwireError as e:
-                                logger.error(
-                                    f"[{self.name}] Tool-call guardrail tripwire: {e.message}"
-                                )
-                                tool_blocked = True
                                 tool_msg = build_tool_blocked_message(parsed, e.message)
-                                await self.memory.add_message(tool_msg)
-                                tool_records.append(
-                                    build_tool_blocked_record(parsed, e.message)
-                                )
-                                guardrail_results.extend(
-                                    [e.details["result"]]
-                                    if "result" in e.details
-                                    else []
-                                )
-
-                            if not tool_blocked:
-                                record, tool_msg = await self._execute_tool(
-                                    parsed, step_num
-                                )
+                                record = build_tool_blocked_record(parsed, e.message)
                                 await self.memory.add_message(tool_msg)
                                 tool_records.append(record)
+                                tool_calls_by_name[parsed.name] = (
+                                    tool_calls_by_name.get(parsed.name, 0) + 1
+                                )
+                                total_tool_calls += 1
+                                continue
+
+                            record, tool_msg = await self._execute_tool(
+                                parsed, step_num
+                            )
+                            await self.memory.add_message(tool_msg)
+                            tool_records.append(record)
 
                             tool_calls_by_name[parsed.name] = (
                                 tool_calls_by_name.get(parsed.name, 0) + 1
@@ -701,6 +782,14 @@ class ReActAgent(BaseAgent):
                                 finish_reason="tool_calls",
                             )
                         )
+
+                        # Save checkpoint if configured
+                        if (
+                            self.checkpoint_store is not None
+                            and self.checkpoint_every > 0
+                            and step_num % self.checkpoint_every == 0
+                        ):
+                            await self._save_checkpoint(run_id, step_num, steps)
 
                 else:
                     # Loop exhausted without breaking → max iterations
@@ -770,12 +859,13 @@ class ReActAgent(BaseAgent):
                             ),
                             model_client=self.model_client,
                         )
-                        result.structured_output = await self.model_client.generate(
+                        result.structured_output = await self.model_client.generate(  # type: ignore[assignment]
                             context_messages,
                             response_format=response_schema,
                         )
 
                 # ── LIFECYCLE HOOK: RUN_END ──────────────────────────────
+                _run_end_dispatched = True
                 await self.hooks.dispatch(
                     HookEvent.RUN_END,
                     {
@@ -790,7 +880,49 @@ class ReActAgent(BaseAgent):
                     },
                 )
 
+                if self.checkpoint_store is not None:
+                    agent_id = (
+                        self.execution_context.agent_id
+                        if self.execution_context and self.execution_context.agent_id
+                        else self.name
+                    )
+                    root = await self.checkpoint_store.load(run_id, agent_id)
+                    if root is not None:
+                        root.mark_completed(result=result.model_dump(mode="json"))
+                        await self.checkpoint_store.save(root)
+
                 return result
+        except Exception as exc:
+            if not _run_end_dispatched:
+                try:
+                    run_end_err = datetime.now(timezone.utc)
+                    await self.hooks.dispatch(
+                        HookEvent.RUN_END,
+                        {
+                            "event": "on_run_end",
+                            "agent_name": self.name,
+                            "run_id": run_id,
+                            "status": "error",
+                            "steps_used": len(steps),
+                            "tool_calls_total": total_tool_calls,
+                            "tokens_used": usage.total_tokens,
+                            "duration_seconds": (run_end_err - run_start).total_seconds(),
+                            "error": str(exc),
+                        },
+                    )
+                except Exception:
+                    pass  # never let hook dispatch prevent checkpoint saving
+            if self.checkpoint_store is not None:
+                agent_id = (
+                    self.execution_context.agent_id
+                    if self.execution_context and self.execution_context.agent_id
+                    else self.name
+                )
+                root = await self.checkpoint_store.load(run_id, agent_id)
+                if root is not None:
+                    root.mark_failed(error=str(exc))
+                    await self.checkpoint_store.save(root)
+            raise exc
         finally:
             self._current_run_id = ""
 
@@ -847,7 +979,7 @@ class ReActAgent(BaseAgent):
         *,
         response_schema: Optional[type] = None,
         **kwargs,
-    ) -> AsyncIterator[Any]:
+    ) -> AsyncIterator[Union[StreamChunk, dict, ToolExecutionResultMessage]]:
         """Streaming variant — yields partial chunks and tool results.
 
         Guardrails are applied at the same points as run():
@@ -858,6 +990,17 @@ class ReActAgent(BaseAgent):
         If an input guardrail trips, yields a single error message and returns.
         """
         self._reset_tool_activation_state()
+
+        # Extract guardrails from GuardrailsMiddleware if present in middleware pipeline
+        input_guardrails = []
+        output_guardrails = []
+        if self.middleware_pipeline and self.middleware_pipeline.middleware:
+            for mw in self.middleware_pipeline.middleware:
+                if mw.name == "guardrails":
+                    input_guardrails = getattr(mw, "input_guardrails", [])
+                    output_guardrails = getattr(mw, "output_guardrails", [])
+                    break
+
         run_id = self._resolve_run_id()
         self._current_run_id = run_id
         attrs = {"agent_name": self.name, "input_length": len(input_text)}
@@ -874,9 +1017,6 @@ class ReActAgent(BaseAgent):
         # Optional: publish chunks to a topic for remote subscribers
         _stream_pub = None
         if self.runtime is not None and self.agent_id is not None:
-            from ravi.core.runtime._stream import StreamPublisher
-            from ravi.core.runtime._protocol import TopicId
-
             _stream_pub = StreamPublisher(
                 self.runtime,
                 TopicId(type="stream", source=self.agent_id.key),
@@ -897,9 +1037,9 @@ class ReActAgent(BaseAgent):
 
                 # ── INPUT GUARDRAILS ─────────────────────────────────────────
                 try:
-                    if self.input_guardrails:
+                    if input_guardrails:
                         await check_input_guardrails(
-                            guardrails=self.input_guardrails,
+                            guardrails=input_guardrails,
                             agent_name=self.name,
                             run_id=run_id,
                             input_text=input_text,
@@ -1035,7 +1175,7 @@ class ReActAgent(BaseAgent):
                             )
                             async for chunk in handle_stream_final_response(
                                 response=response,
-                                output_guardrails=self.output_guardrails,
+                                output_guardrails=output_guardrails,
                                 agent_name=self.name,
                                 run_id=run_id,
                                 model_client=self.model_client,
@@ -1071,14 +1211,15 @@ class ReActAgent(BaseAgent):
                         ):
                             async for tool_msg in process_stream_tool_calls(
                                 response=response,
-                                input_guardrails=self.input_guardrails,
-                                output_guardrails=self.output_guardrails,
+                                input_guardrails=input_guardrails,
+                                output_guardrails=output_guardrails,
                                 agent_name=self.name,
                                 run_id=run_id,
                                 step_num=step_num,
                                 memory=self.memory,
                                 execute_tool_fn=self._execute_tool,
                                 stream_pub=_stream_pub,
+                                tool_timeout=self.tool_timeout,
                             ):
                                 yield tool_msg
         finally:
@@ -1120,13 +1261,13 @@ class ReActAgent(BaseAgent):
             if self._catalog.get_tool(tool_name) is not None:
                 self._active_tool_names.add(tool_name)
 
-    def _build_tool_schemas(self, current_input: str = "") -> List[Dict[str, Any]]:
+    def _build_tool_schemas(self, current_input: str = "") -> List[JsonObject]:
         """Build tool schemas only for the currently advertised tool subset."""
         if not self._active_tool_names:
             self._bootstrap_active_tools(current_input)
 
         visible_names = self._always_visible_tool_names | self._active_tool_names
-        schemas: List[Dict[str, Any]] = []
+        schemas: List[JsonObject] = []
         for t in self.tools:
             tool_name = getattr(t, "name", None)
             if tool_name not in visible_names:
@@ -1146,7 +1287,7 @@ class ReActAgent(BaseAgent):
         current_input: str = "",
         *,
         response_schema: Optional[type] = None,
-        input_content: Any = None,
+        input_content: Optional[list[MediaType]] = None,
         **kwargs,
     ) -> AssistantMessage:
         """Single LLM call with retry, hooks, and observability."""
@@ -1185,7 +1326,7 @@ class ReActAgent(BaseAgent):
 
             for attempt in range(self.llm_retry_policy.max_retries + 1):
                 try:
-                    generate_kwargs: dict[str, Any] = {
+                    generate_kwargs: JsonObject = {
                         "messages": messages,
                         "tools": tool_schemas or None,
                         "tool_choice": self._resolve_requested_tool_choice(
@@ -1196,6 +1337,13 @@ class ReActAgent(BaseAgent):
 
                     # Wrap with middleware pipeline when middleware is configured
                     if self.middleware_pipeline.middleware:
+                        metadata_bag = (
+                            self.execution_context.inherited_metadata()
+                            if self.execution_context is not None
+                            else {}
+                        )
+                        metadata_bag["messages"] = list(messages)
+
                         mw_ctx = MiddlewareContext(
                             stage=MiddlewareStage.LLM_CALL,
                             agent_name=self.name,
@@ -1203,17 +1351,14 @@ class ReActAgent(BaseAgent):
                             correlation_id=self._current_middleware_run_id(),
                             input_text=current_input,
                             response_schema=response_schema,
-                            metadata=(
-                                self.execution_context.inherited_metadata()
-                                if self.execution_context is not None
-                                else {}
-                            ),
+                            metadata=metadata_bag,
                             parent_context=self.execution_context,
                         )
 
                         async def _do_generate(
                             ctx: MiddlewareContext,
-                        ) -> Any:
+                        ) -> GenerateResult:
+                            generate_kwargs["messages"] = ctx.metadata.get("messages", messages)
                             return await self.model_client.generate(**generate_kwargs)
 
                         response = await self.middleware_pipeline.run(
@@ -1278,7 +1423,7 @@ class ReActAgent(BaseAgent):
         raise RuntimeError("LLM call failed unexpectedly")
 
     @staticmethod
-    def _parse_tool_call(tc: Any) -> ParsedToolCall:
+    def _parse_tool_call(tc: ToolCallMessage | JsonObject) -> ParsedToolCall:
         """Normalise any tool-call shape into a ParsedToolCall.
 
         Delegates to ``_tool_execution.parse_tool_call``.
@@ -1313,6 +1458,25 @@ class ReActAgent(BaseAgent):
             # Look up tool from per-request catalog (correctly-wired instances)
             tool = find_tool(parsed.name, self._catalog, self.tools)
 
+            # Build the shared execution context once per call
+            exec_ctx = ToolExecutionContext(
+                agent_name=self.name,
+                run_id=self._current_middleware_run_id(),
+                tool_timeout=self.tool_timeout,
+                tool_retry_policy=self.tool_retry_policy,
+                verbose=self.verbose,
+                hooks=self.hooks,
+                middleware_pipeline=self.middleware_pipeline,
+                catalog=self._catalog,
+                tools=self.tools,
+                execution_context=self.execution_context,
+                tool_search_name=self._tool_search_name,
+                activate_tool_names_cb=self._activate_tool_names,
+                skill_manager=self.skill_manager,
+                runtime=self.runtime,
+                agent_id=self.agent_id,
+            )
+
             # ── RUNTIME DISPATCH PATH ────────────────────────────────
             # Only route through runtime when the tool declares a custom
             # agent_id for remote execution.  Default tools execute directly
@@ -1325,19 +1489,7 @@ class ReActAgent(BaseAgent):
                 and tool is not None
                 and getattr(tool, "agent_id", None) is not None
             ):
-                return await execute_tool_via_runtime(
-                    parsed,
-                    step_num,
-                    t0,
-                    span,
-                    runtime=self.runtime,
-                    agent_id=self.agent_id,
-                    agent_name=self.name,
-                    hooks=self.hooks,
-                    catalog=self._catalog,
-                    tools=self.tools,
-                    activate_tool_names_cb=self._activate_tool_names,
-                )
+                return await execute_tool_via_runtime(parsed, step_num, t0, span, exec_ctx)
 
             # ── DIRECT EXECUTION PATH ────────────────────────────────
 
@@ -1402,62 +1554,21 @@ class ReActAgent(BaseAgent):
                     return denial
 
             # Execute with retry, timeout, and middleware
-            return await execute_tool_direct(
-                parsed,
-                step_num,
-                t0,
-                span,
-                tool=tool,
-                agent_name=self.name,
-                verbose=self.verbose,
-                tool_timeout=self.tool_timeout,
-                tool_retry_policy=self.tool_retry_policy,
-                hooks=self.hooks,
-                middleware_pipeline=self.middleware_pipeline,
-                execution_context=self.execution_context,
-                run_id=self._current_middleware_run_id(),
-                tool_search_name=self._tool_search_name,
-                activate_tool_names_cb=self._activate_tool_names,
-                skill_manager=self.skill_manager,
-            )
+            return await execute_tool_direct(parsed, step_num, t0, span, tool, exec_ctx)
 
     def _tool_error(
         self,
         parsed: ParsedToolCall,
         step_num: int,
         t0: float,
-        span: Any,
+        span: object,
         error_msg: str,
         metric_name: str,
     ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
         """Build error record + message for a failed tool call."""
         return build_tool_error(parsed, t0, span, error_msg, metric_name, self.name)
 
-    async def _execute_tool_via_runtime(
-        self,
-        parsed: ParsedToolCall,
-        step_num: int,
-        t0: float,
-        span: Any,
-    ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
-        """Dispatch tool execution through the agent runtime."""
-        assert self.runtime is not None
-        assert self.agent_id is not None
-        return await execute_tool_via_runtime(
-            parsed,
-            step_num,
-            t0,
-            span,
-            runtime=self.runtime,
-            agent_id=self.agent_id,
-            agent_name=self.name,
-            hooks=self.hooks,
-            catalog=self._catalog,
-            tools=self.tools,
-            activate_tool_names_cb=self._activate_tool_names,
-        )
-
-    def _find_tool(self, name: str) -> Optional[Any]:
+    def _find_tool(self, name: str) -> Optional[BaseTool]:
         """Look up a tool by name (or alias) from the catalog."""
         return find_tool(name, self._catalog, self.tools)
 
@@ -1491,6 +1602,6 @@ class ReActAgent(BaseAgent):
         return response
 
     @staticmethod
-    def _content_to_str(content: Any) -> str:
+    def _content_to_str(content: list[MediaType] | str) -> str:
         """Convert tool result content to a plain string for the record."""
         return content_to_str(content)

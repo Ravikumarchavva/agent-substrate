@@ -93,7 +93,7 @@ async def exchange_token(body: TokenExchangeRequest, request: Request):
         email — user's email address
         role  — "user" | "admin"  (defaults to "user")
     """
-    payload = verify_token(body.frontend_token, expected_type=None)
+    payload = verify_token(body.frontend_token, expected_type="access")
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -46,6 +46,7 @@ def generate_code(config: PipelineConfig) -> str:
         import asyncio
         import os
 
+        from ravi.core.agent_catalog._catalog import AgentCatalog
         from ravi.core.agents.react_agent import ReActAgent
         from ravi.core.context.implementations import SlidingWindowContext
         from ravi.core.memory.unbounded_memory import UnboundedMemory
@@ -236,25 +237,23 @@ def generate_code(config: PipelineConfig) -> str:
         max_iter = an.config.get("max_iterations", 10)
         context_window = an.config.get("context_window", 40)
 
+        catalog_var = f"catalog_{_safe_var(an.id[:8])}"
+        main_lines.append(f"    {catalog_var} = AgentCatalog()")
+        main_lines.append(f"    {catalog_var}.register_model('primary', {client_var})")
+        main_lines.append(
+            f"    {catalog_var}.register_context('default', SlidingWindowContext(max_messages={context_window}))"
+        )
+        main_lines.append(f"    {catalog_var}.register_memory('default', {mem_var})")
+        for t in connected_tools:
+            main_lines.append(f"    {catalog_var}.register_tool({t})")
         main_lines.append(f"    {var} = ReActAgent(")
         main_lines.append(f'        name="{_escape(an.label or "agent")}",')
         main_lines.append(
             f'        description="{_escape(an.config.get("description", ""))}",'
         )
-        main_lines.append(f"        model_client={client_var},")
-        main_lines.append(
-            f"        model_context=SlidingWindowContext(max_messages={context_window}),"
-        )
-        main_lines.append(f"        tools=[{', '.join(connected_tools)}],")
+        main_lines.append(f"        catalog={catalog_var},")
         main_lines.append(f'        system_instructions="""{sys_prompt}""",')
-        main_lines.append(f"        memory={mem_var},")
         main_lines.append(f"        max_iterations={max_iter},")
-        if input_guards:
-            main_lines.append(f"        input_guardrails=[{', '.join(input_guards)}],")
-        if output_guards:
-            main_lines.append(
-                f"        output_guardrails=[{', '.join(output_guards)}],"
-            )
         main_lines.append("    )")
     main_lines.append("")
 

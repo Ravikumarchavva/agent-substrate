@@ -14,6 +14,7 @@ from ravi.core.middleware.base import (
     MiddlewareContext,
     MiddlewareStage,
 )
+from ravi.core.messages.content import TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +50,11 @@ class ContentTruncatorMiddleware(BaseMiddleware):
 
         truncated = False
         for i, block in enumerate(content):
-            if isinstance(block, dict) and block.get("type") == "text":
-                text = block.get("text", "")
-                if len(text) > self.max_chars:
-                    content[i] = {
-                        "type": "text",
-                        "text": text[: self.max_chars] + self.suffix,
-                    }
+            if isinstance(block, TextBlock):
+                if len(block.text) > self.max_chars:
+                    content[i] = TextBlock(
+                        text=block.text[: self.max_chars] + self.suffix
+                    )
                     truncated = True
 
         if truncated:

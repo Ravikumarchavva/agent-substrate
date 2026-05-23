@@ -149,6 +149,7 @@ async def persist_assistant_message(
     *,
     parent_id: Optional[uuid.UUID] = None,
     tool_meta_map: Optional[Dict[str, Dict]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> uuid.UUID:
     """Save an assistant message step and return its ID.
 
@@ -170,7 +171,7 @@ async def persist_assistant_message(
     if message.tool_calls:
         serialized_tcs = []
         for tc in message.tool_calls:
-            tc_data = tc.to_dict()
+            tc_data = tc.model_dump(mode="json")
             # Enrich with _meta UI info for MCP App restoration
             if tool_meta_map and tc.name in tool_meta_map:
                 meta = tool_meta_map[tc.name]
@@ -203,6 +204,7 @@ async def persist_assistant_message(
         output=output_text,
         generation=generation,
         parent_id=parent_id,
+        metadata=metadata,
     )
     return step.id
 

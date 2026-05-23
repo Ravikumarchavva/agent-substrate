@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from ravi.core.agent_catalog._catalog import AgentCatalog
 from ravi.core.agents.react_agent import ReActAgent
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
@@ -29,13 +30,15 @@ async def main():
     )
 
     # 3. Set up the agent with HITL support
-    client = OpenAIClient(model="gpt-4.1-nano")
+    catalog = AgentCatalog()
+    catalog.register_model("primary", OpenAIClient(model="gpt-4.1-nano"))
+    for tool in [ask_tool, CalculatorTool(), GetCurrentTimeTool()]:
+        catalog.register_tool(tool)
 
     agent = ReActAgent(
         name="hitl-assistant",
         description="An assistant that asks for human input when needed",
-        model_client=client,
-        tools=[ask_tool, CalculatorTool(), GetCurrentTimeTool()],
+        catalog=catalog,
         system_instructions="""\
 You are a helpful AI assistant. When you need the user's preference,
 confirmation, or are choosing between multiple approaches, use the

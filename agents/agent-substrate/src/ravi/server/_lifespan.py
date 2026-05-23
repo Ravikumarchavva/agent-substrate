@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 import redis.asyncio as aioredis
 
-from ravi.catalog.tools.code_interpreter import CodeInterpreterTool
+from ravi.catalog.tools.code_interpreter import K8sSandboxCodeInterpreterTool
 from ravi.catalog.tools.code_interpreter.http_client import (
     CodeInterpreterClient,
 )
@@ -30,9 +30,9 @@ from ravi.core.llm.base_embedding_client import BaseEmbeddingClient
 from ravi.core.runtime import LocalRuntime
 from ravi.core.storage.base import FileStore
 from ravi.core.storage.factory import create_file_store
-from ravi.core.tools.base_tool import ToolRisk
-from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.core.tools.catalog import CapabilityRegistry
+from ravi.core.tools.base_tool import BaseTool, ToolRisk
+from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool, GetBitcoinPriceTool
+from ravi.core.catalog import AgentCatalogRegistry
 from ravi.integrations.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_embedding_client,
@@ -89,11 +89,11 @@ class Infrastructure:
 class ToolRegistryResult:
     """Objects returned by :func:`init_tool_registry`."""
 
-    catalog: CapabilityRegistry
+    catalog: AgentCatalogRegistry
     task_tool: TaskManagerTool
     ask_tool: AskHumanTool
     ci_client: Optional[CodeInterpreterClient]
-    code_interpreter_tool: Optional[CodeInterpreterTool]
+    code_interpreter_tool: Optional[BaseTool]
     tools_requiring_approval: list[str]
 
 
@@ -234,7 +234,7 @@ async def init_tool_registry(
     bridge_registry: BridgeRegistry,
     redis_client: Any = None,
 ) -> ToolRegistryResult:
-    """Create all tools, register them in a :class:`CapabilityRegistry`."""
+    """Create all tools, register them in an :class:`AgentCatalogRegistry`."""
 
     # TaskManagerTool — emitter wired via dynamic closure through bridge_registry
     async def _task_event_emitter(event: dict) -> None:
@@ -256,35 +256,19 @@ async def init_tool_registry(
         )
 
     # Code Interpreter (HTTP client → separate pod)
-    code_interpreter_tool: CodeInterpreterTool | None = None
+    code_interpreter_tool: BaseTool | None = None
     ci_client: CodeInterpreterClient | None = None
 
-    ci_url = getattr(settings, "CODE_INTERPRETER_URL", "") or os.environ.get(
-        "CODE_INTERPRETER_URL", ""
-    )
-    if ci_url:
-        ci_client = CodeInterpreterClient(
-            base_url=ci_url,
-            auth_token=os.environ.get("CI_AUTH_TOKEN", ""),
-            replicas=int(os.environ.get("CI_REPLICAS", "1")),
-            headless_service=os.environ.get("CI_HEADLESS_SERVICE", ""),
-            namespace=os.environ.get("CI_NAMESPACE", "agent-framework"),
+    try:
+        code_interpreter_tool = K8sSandboxCodeInterpreterTool(
+            template=os.environ.get("CI_SANDBOX_TEMPLATE", "python-sandbox-template"),
+            namespace=os.environ.get("CI_SANDBOX_NAMESPACE", "default"),
         )
-        code_interpreter_tool = CodeInterpreterTool(http_client=ci_client)
-        logger.info("Code interpreter connected → %s", ci_url)
-    else:
-        # Fallback: try local mode (direct Firecracker, for dev)
-        try:
-            code_interpreter_tool = CodeInterpreterTool()  # auto-detect from env
-            if code_interpreter_tool._mode != "none":
-                await code_interpreter_tool.start()
-                logger.info("Code interpreter started (local mode)")
-            else:
-                code_interpreter_tool = None
-                logger.info("Code interpreter disabled (no URL configured)")
-        except Exception as e:
-            logger.warning("Code interpreter disabled: %s", e)
-            code_interpreter_tool = None
+        logger.info("Kubernetes agent-sandbox Code Interpreter registered successfully!")
+    except Exception as e:
+        logger.warning("Failed to initialize K8sSandboxCodeInterpreterTool: %s. Falling back to CodeInterpreterTool.", e)
+        from ravi.catalog.tools.code_interpreter.tool import CodeInterpreterTool
+        code_interpreter_tool = CodeInterpreterTool()
 
     file_manager_tool = FileManagerTool(
         file_store=file_store,
@@ -292,7 +276,7 @@ async def init_tool_registry(
     )
 
     # ── Capability Registry ──────────────────────────────────────────────
-    catalog = CapabilityRegistry()
+    catalog = AgentCatalogRegistry()
     catalog.register_tool(
         ask_tool,
         category="communication",
@@ -322,6 +306,12 @@ async def init_tool_registry(
         category="productivity",
         tags=["time", "date", "timezone", "clock", "now"],
         aliases=["clock"],
+    )
+    catalog.register_tool(
+        GetBitcoinPriceTool(),
+        category="productivity",
+        tags=["crypto", "bitcoin", "price", "finance"],
+        aliases=["btc_price"],
     )
     catalog.register_tool(
         DataVisualizerTool(),
@@ -386,6 +376,8 @@ async def init_tool_registry(
     tools_requiring_approval = [
         e.name for e in catalog.by_risk(ToolRisk.CRITICAL) if e.name != "ask_human"
     ]
+    if settings.DISABLE_TOOL_APPROVALS:
+        tools_requiring_approval = []
 
     return ToolRegistryResult(
         catalog=catalog,
@@ -400,7 +392,7 @@ async def init_tool_registry(
 async def init_runtime_services(
     settings: Settings,
     *,
-    catalog: CapabilityRegistry,
+    catalog: AgentCatalogRegistry,
     data_store: Any,
     session_factory: Any,
     runtime: LocalRuntime,

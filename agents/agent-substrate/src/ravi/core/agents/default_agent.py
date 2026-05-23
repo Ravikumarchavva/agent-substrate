@@ -40,6 +40,7 @@ from __future__ import annotations
 import os
 from typing import Any, AsyncIterator, Dict, List, Optional, Type
 
+from ravi.core.agent_catalog._catalog import AgentCatalog
 from ravi.core.agents.react_agent import ReActAgent
 from ravi.core.agents.agent_result import AgentRunResult
 from ravi.core.batch.config import BatchConfig, BatchResult
@@ -157,16 +158,18 @@ class Agent:
 
     def _build_agent(self) -> ReActAgent:
         """Build a fresh ``ReActAgent`` for a single run."""
-        context = SlidingWindowContext(max_messages=self.context_window)
+        catalog = AgentCatalog()
+        catalog.register_model("primary", self._model_client)
+        catalog.register_context("default", SlidingWindowContext(max_messages=self.context_window))
+        catalog.register_memory("default", self._memory)
+        for tool in self.tools:
+            catalog.register_tool(tool)
 
         return ReActAgent(
             name=self.name,
             description=f"Agent: {self.name}",
-            model_client=self._model_client,
-            model_context=context,
-            tools=list(self.tools),
+            catalog=catalog,
             system_instructions=self.instructions,
-            memory=self._memory,
             max_iterations=self.max_iterations,
             verbose=False,
             response_schema=self.response_schema,

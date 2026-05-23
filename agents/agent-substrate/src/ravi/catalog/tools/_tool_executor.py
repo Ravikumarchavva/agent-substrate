@@ -76,12 +76,30 @@ class ToolExecutorHandler:
         Validates the payload, looks up the tool, optionally runs HITL
         approval, then executes with timeout.
         """
+        if isinstance(payload, list) and len(payload) > 0:
+            block = payload[0]
+            if hasattr(block, "type") and block.type == "text" and hasattr(block, "text"):
+                import ast
+                import json
+                try:
+                    parsed_payload = ast.literal_eval(block.text)
+                    if isinstance(parsed_payload, dict):
+                        payload = parsed_payload
+                except Exception:
+                    try:
+                        parsed_payload = json.loads(block.text)
+                        if isinstance(parsed_payload, dict):
+                            payload = parsed_payload
+                    except Exception:
+                        pass
+
         if not isinstance(payload, dict):
             return self._error_response(
                 call_id="unknown",
                 tool_name="unknown",
                 error="Invalid payload: expected dict",
             )
+
 
         tool_name: str = payload.get("tool_name", "")
         arguments: dict = payload.get("arguments", {})

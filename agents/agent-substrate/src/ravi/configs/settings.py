@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import AliasChoices, Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,20 +11,15 @@ class Settings(BaseSettings):
     ROOT_DIR: Path = Path(__file__).parent.parent.parent.parent
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
-    GOOGLE_API_KEY: str = Field(
-        default="",
-        validation_alias=AliasChoices("GOOGLE_API_KEY", "GEMINI_API_KEY"),
-    )
-    GROQ_API_KEY: str = Field(
-        default="",
-        validation_alias=AliasChoices("GROQ_API_KEY", "GROK_API_KEY"),
-    )
+    GEMINI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
     OPENAI_BASE_URL: str = ""
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_SITE_URL: str = "http://localhost:3000"
     OPENROUTER_APP_NAME: str = "Ravi UI"
+    ASYNC_DATABASE_URL: str = ""
     DATABASE_URL: str = ""
 
     # Redis (short-term memory)
@@ -75,6 +70,8 @@ class Settings(BaseSettings):
     CORS_ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
         "http://localhost:3002",
         "http://127.0.0.1:3002",
     ]
@@ -87,10 +84,29 @@ class Settings(BaseSettings):
     # Keep False in production to avoid bloat.
     ENABLE_BUILDER: bool = False
 
+    # Disable high-risk tool approvals in local dev
+    DISABLE_TOOL_APPROVALS: bool = False
+
+    # Kubernetes Sandbox Code Interpreter Settings
+    CODE_INTERPRETER_URL: str = ""
+    CI_NAMESPACE: str = "agent-framework"
+    CI_HEADLESS_SERVICE: str = ""
+    CI_REPLICAS: int = 1
+
     # JWT authentication
     # JWT_SECRET must be set to a 32+ char random string in production.
     # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
     JWT_SECRET: str = "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET"
+
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def validate_jwt_secret(cls, v: str) -> str:
+        if v == "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET" or len(v) < 32:
+            raise ValueError(
+                "JWT_SECRET must be set to a strong random secret (min 32 chars). "
+                "Generate one with: openssl rand -hex 32"
+            )
+        return v
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30

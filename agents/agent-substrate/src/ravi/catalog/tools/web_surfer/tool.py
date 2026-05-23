@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import ImageBlock, TextBlock
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright
@@ -238,9 +239,7 @@ class WebSurferTool(BaseTool):
             if action == "close":
                 await self._close_browser()
                 return ToolResult(
-                    content=[
-                        {"type": "text", "text": "Browser session closed successfully"}
-                    ],
+                    content=[TextBlock(text="Browser session closed successfully")],
                     is_error=False,
                 )
 
@@ -314,15 +313,11 @@ class WebSurferTool(BaseTool):
                 # Handle screenshot with image content
                 return ToolResult(
                     content=[
-                        {
-                            "type": "text",
-                            "text": f"Screenshot captured: {result['url']}",
-                        },
-                        {
-                            "type": "image",
-                            "data": result["screenshot"],
-                            "mimeType": "image/png",
-                        },
+                        TextBlock(text=f"Screenshot captured: {result['url']}"),
+                        ImageBlock(
+                            data=result["screenshot"],
+                            media_type="image/png",
+                        ),
                     ],
                     is_error=False,
                 )
@@ -331,15 +326,13 @@ class WebSurferTool(BaseTool):
                 import json
 
                 return ToolResult(
-                    content=[{"type": "text", "text": json.dumps(result, indent=2)}],
+                    content=[TextBlock(text=json.dumps(result, indent=2))],
                     is_error=False,
                 )
 
         except Exception as e:
             return ToolResult(
-                content=[
-                    {"type": "text", "text": f"Error executing {action}: {str(e)}"}
-                ],
+                content=[TextBlock(text=f"Error executing {action}: {str(e)}")],
                 is_error=True,
             )
 

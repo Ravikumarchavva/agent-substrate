@@ -1,20 +1,28 @@
 """Local in-process runtime — the default ``AgentRuntime`` implementation.
 
 Uses ``asyncio`` primitives only — no external infrastructure required.
-Agents are lazily instantiated from their factory on first message.  The
-runtime composes a ``Dispatcher`` (routing) and ``Supervisor`` (crash
-recovery) internally.
+Agent mailboxes and loops are created lazily on first message. The runtime
+composes:
+- ``Dispatcher``          — message routing + fan-out
+- ``Supervisor``          — Erlang-style crash recovery
+- ``ResourceLockManager`` — advisory file/resource locking
+- ``ClientWriteChannel``  — sequenced multi-agent client output
+- ``SagaCoordinator``     — exactly-once critical action execution
+
+All messages are ``Envelope`` objects carrying ``list[ContentBlock]``
+as their multimodal content.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, Set
+from typing import Optional
 
+from ravi.core.messages.content import ContentBlock, TextBlock
 from ravi.core.runtime._base import BaseRuntime
-from ravi.core.runtime._protocol import AgentFactory, AgentId, TopicId
-from ravi.core.runtime._types import (
+from ravi.core.runtime._identity import AgentId, TopicId
+from ravi.core.runtime._contracts import (
     CancellationToken,
     Envelope,
     MessageContext,
@@ -22,27 +30,25 @@ from ravi.core.runtime._types import (
     RestartPolicy,
 )
 from ravi.core.runtime._mailbox import Mailbox
-from ravi.core.runtime._dispatcher import AgentNotFoundError, Dispatcher
+from ravi.core.runtime._dispatcher import Dispatcher
+from ravi.core.runtime._errors import (
+    AgentNotFoundError,
+    EnvelopeExpiredError,
+    HandlerError,
+)
 from ravi.core.runtime._supervisor import Supervisor
+from ravi.core.runtime._resource_lock import ResourceLockManager
+from ravi.core.runtime._client_channel import ClientWriteChannel, ClientSink
+from ravi.core.runtime._saga import SagaCoordinator, SagaStore
 
 logger = logging.getLogger("ravi.core.runtime.local")
+
+# Re-export so existing ``from _local import HandlerError`` works.
+__all__ = ["LocalRuntime", "HandlerError"]
 
 # Default mailbox capacity per agent
 _DEFAULT_CAPACITY = 100
 _DEFAULT_SEND_TIMEOUT = 30.0
-
-
-# ---------------------------------------------------------------------------
-# Errors
-# ---------------------------------------------------------------------------
-
-
-class HandlerError(Exception):
-    """Raised when a message handler crashes.
-
-    Wraps the original exception so callers of ``send_message`` receive
-    a proper error instead of a silent ``None``.
-    """
 
 
 class LocalRuntime(BaseRuntime):
@@ -62,6 +68,13 @@ class LocalRuntime(BaseRuntime):
     send_timeout:
         Maximum seconds ``send_message`` waits for a response.
         ``None`` disables the timeout. Default: 30 seconds.
+    resource_lock_timeout:
+        Default timeout for resource lock acquisition.
+    client_sink:
+        Optional async sink for client-bound frames.  When provided,
+        a ``ClientWriteChannel`` is created automatically.
+    saga_store:
+        Optional persistent store for saga records.
     """
 
     __slots__ = (
@@ -72,6 +85,9 @@ class LocalRuntime(BaseRuntime):
         "_mailbox_capacity",
         "_send_timeout",
         "_active_handlers",
+        "_resource_locks",
+        "_client_channel",
+        "_saga_coordinator",
     )
 
     def __init__(
@@ -79,27 +95,59 @@ class LocalRuntime(BaseRuntime):
         restart_policy: RestartPolicy | None = None,
         mailbox_capacity: int = _DEFAULT_CAPACITY,
         send_timeout: float | None = _DEFAULT_SEND_TIMEOUT,
+        resource_lock_timeout: float | None = 30.0,
+        client_sink: Optional[ClientSink] = None,
+        saga_store: Optional[SagaStore] = None,
     ) -> None:
         super().__init__()
         self._dispatcher = Dispatcher()
         self._supervisor = Supervisor(restart_policy)
-        self._agents_started: Set[AgentId] = set()
-        self._pending_responses: Dict[str, asyncio.Future[Any]] = {}
+        self._agents_started: set[AgentId] = set()
+        self._pending_responses: dict[str, asyncio.Future[object]] = {}
         self._mailbox_capacity = mailbox_capacity
         self._send_timeout = send_timeout
         self._active_handlers = 0
+
+        # New runtime subsystems
+        self._resource_locks = ResourceLockManager(default_timeout=resource_lock_timeout)
+        self._client_channel: Optional[ClientWriteChannel] = None
+        if client_sink is not None:
+            self._client_channel = ClientWriteChannel(sink=client_sink)
+        self._saga_coordinator = SagaCoordinator(store=saga_store)
+
+    # -- Subsystem accessors ------------------------------------------------
+
+    @property
+    def resource_locks(self) -> ResourceLockManager:
+        """Access the resource lock manager for file/resource locking."""
+        return self._resource_locks
+
+    @property
+    def client_channel(self) -> Optional[ClientWriteChannel]:
+        """Access the client write channel (None if no sink configured)."""
+        return self._client_channel
+
+    @property
+    def saga_coordinator(self) -> SagaCoordinator:
+        """Access the saga coordinator for critical action management."""
+        return self._saga_coordinator
 
     # -- AgentRuntime protocol ----------------------------------------------
 
     async def send_message(
         self,
-        message: Any,
+        message: object,
         *,
         sender: AgentId | None = None,
         recipient: AgentId,
         cancellation_token: CancellationToken | None = None,
-    ) -> Any:
+    ) -> object:
         """Point-to-point message delivery with response.
+
+        ``message`` can be:
+        - A ``list[ContentBlock]`` (preferred multimodal path)
+        - A bare string (auto-wrapped in ``[TextBlock(text=...)]``)
+        - Any other object (auto-wrapped in ``[TextBlock(text=str(...))]``)
 
         Lazily creates the recipient agent if it hasn't been instantiated yet.
         Returns the value produced by the recipient's handler.
@@ -113,17 +161,18 @@ class LocalRuntime(BaseRuntime):
 
         await self._ensure_agent(recipient)
 
-        envelope = Envelope(sender=sender, target=recipient, payload=message)
+        content = self._normalize_content(message)
+        envelope = Envelope(sender=sender, target=recipient, content=content)
 
         # Create a Future so we can collect the handler's return value
-        future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        future: asyncio.Future[object] = asyncio.get_running_loop().create_future()
         self._pending_responses[envelope.correlation_id] = future
 
         # Link cancellation token to the future
         if cancellation_token is not None:
             cancellation_token.link_future(future)
 
-        # C3 fix: if dispatch fails, clean up the future before re-raising
+        # If dispatch fails, clean up the future before re-raising
         try:
             await self._dispatcher.dispatch(envelope)
         except Exception:
@@ -132,7 +181,7 @@ class LocalRuntime(BaseRuntime):
                 future.cancel()
             raise
 
-        # C5 fix: await with configurable timeout
+        # Await with configurable timeout
         try:
             if self._send_timeout is not None:
                 result = await asyncio.wait_for(future, timeout=self._send_timeout)
@@ -150,7 +199,7 @@ class LocalRuntime(BaseRuntime):
 
     async def publish_message(
         self,
-        message: Any,
+        message: object,
         *,
         sender: AgentId | None = None,
         topic: TopicId,
@@ -162,20 +211,20 @@ class LocalRuntime(BaseRuntime):
         # Ensure all subscribed agents are running
         for agent_type, bound_topic in self._topic_bindings:
             if bound_topic == topic:
-                # Create a default-keyed instance for each type
                 aid = AgentId(type=agent_type, key=topic.source)
                 await self._ensure_agent(aid)
 
-        envelope = Envelope(sender=sender, target=topic, payload=message)
+        content = self._normalize_content(message)
+        envelope = Envelope(sender=sender, target=topic, content=content)
         await self._dispatcher.dispatch(envelope)
 
     async def register(
         self,
         agent_type: str,
-        factory: AgentFactory,
+        handler: MessageHandler,
     ) -> None:
-        """Register an agent type and its factory."""
-        await super().register(agent_type, factory)
+        """Register an agent type and its message handler."""
+        await super().register(agent_type, handler)
 
     async def subscribe(
         self,
@@ -188,12 +237,14 @@ class LocalRuntime(BaseRuntime):
         logger.debug("subscribed %r to %s", agent_type, topic)
 
     async def start(self) -> None:
-        """No-op for LocalRuntime — agents are lazy-created on first message."""
+        """Start the runtime and all subsystems."""
         self._started = True
+        if self._client_channel is not None:
+            await self._client_channel.start()
         logger.info("LocalRuntime started")
 
     async def stop(self) -> None:
-        """Gracefully shut down: cancel agent loops, drain mailboxes."""
+        """Gracefully shut down: cancel agent loops, drain mailboxes, stop subsystems."""
         self._started = False
         await self._supervisor.stop_all()
 
@@ -210,6 +261,10 @@ class LocalRuntime(BaseRuntime):
         self._pending_responses.clear()
         self._agents_started.clear()
 
+        # Stop client channel
+        if self._client_channel is not None:
+            await self._client_channel.stop()
+
         logger.info("LocalRuntime stopped")
 
     async def stop_when_idle(self, poll_interval: float = 0.05) -> None:
@@ -219,7 +274,6 @@ class LocalRuntime(BaseRuntime):
         all published messages before shutting down.
         """
         while True:
-            # Check if any mailbox still has messages
             has_work = False
             for aid in self._dispatcher.registered_agents:
                 mbox = self._dispatcher.get_mailbox(aid)
@@ -243,9 +297,9 @@ class LocalRuntime(BaseRuntime):
         if agent_id in self._agents_started:
             return
 
-        if agent_id.type not in self._factories:
+        if agent_id.type not in self._handlers:
             raise AgentNotFoundError(
-                f"no factory registered for agent type {agent_id.type!r}"
+                f"no handler registered for agent type {agent_id.type!r}"
             )
 
         # Create mailbox and register with dispatcher
@@ -275,6 +329,21 @@ class LocalRuntime(BaseRuntime):
             except StopAsyncIteration:
                 break  # mailbox closed
 
+            # Skip expired envelopes
+            if envelope.is_expired:
+                logger.warning(
+                    "dropping expired envelope %s (ttl exceeded)",
+                    envelope.correlation_id,
+                )
+                future = self._pending_responses.pop(envelope.correlation_id, None)
+                if future is not None and not future.done():
+                    future.set_exception(
+                        EnvelopeExpiredError(
+                            f"envelope {envelope.correlation_id} expired before delivery"
+                        )
+                    )
+                continue
+
             ctx = MessageContext(
                 runtime=self,
                 sender=envelope.sender,
@@ -282,11 +351,11 @@ class LocalRuntime(BaseRuntime):
                 agent_id=agent_id,
             )
 
-            result: Any = None
+            result: object = None
             error: Exception | None = None
             self._active_handlers += 1
             try:
-                result = await handler(ctx, envelope.payload)
+                result = await handler(ctx, envelope.content)
             except Exception as exc:
                 logger.exception(
                     "handler for %s raised on message %s",
@@ -296,16 +365,31 @@ class LocalRuntime(BaseRuntime):
                 error = exc
             finally:
                 self._active_handlers -= 1
-                # C4 fix: always resolve the future, even on CancelledError
                 future = self._pending_responses.pop(envelope.correlation_id, None)
                 if future is not None and not future.done():
                     if error is not None:
-                        # H4 fix: propagate handler errors to callers
                         future.set_exception(
                             HandlerError(f"handler for {agent_id} raised: {error}")
                         )
                     else:
                         future.set_result(result)
+
+    # -- content normalization ----------------------------------------------
+
+    @staticmethod
+    def _normalize_content(message: object) -> list[ContentBlock]:
+        """Normalize any message input to list[ContentBlock].
+
+        Accepts:
+        - list[ContentBlock] → pass through
+        - str → wrap in [TextBlock]
+        - Any other object → wrap in [TextBlock(text=str(...))]
+        """
+        if isinstance(message, list):
+            return message  # type: ignore[return-value]
+        if isinstance(message, str):
+            return [TextBlock(text=message)]
+        return [TextBlock(text=str(message))]
 
     # -- introspection ------------------------------------------------------
 

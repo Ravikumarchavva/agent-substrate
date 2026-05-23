@@ -23,6 +23,17 @@ from ravi.core.messages._types import (
     AudioContent,
     ImageContent,
     VideoContent,
+    DocumentContent,
+)
+from ravi.core.messages.content import (
+    AudioBlock,
+    CodeBlock,
+    DataBlock,
+    DocumentBlock,
+    ErrorBlock,
+    ImageBlock,
+    TextBlock,
+    VideoBlock,
 )
 from ravi.core.messages.base_message import BaseClientMessage
 from ravi.core.messages.client_messages import (
@@ -162,19 +173,21 @@ def _encode_video_content(vc: VideoContent, role: str) -> dict[str, Any]:
             video_bytes = f.read()
     else:
         video_bytes = vc.data
+    if video_bytes is None:
+        raise ValueError("VideoContent requires data bytes to encode for OpenAI")
     video_type = "input_video" if role == "user" else "output_video"
     return {
         "type": video_type,
         "source": {
             "type": "base64",
-            "media_type": f"video/{vc.format}",
+            "media_type": vc.media_type,
             "data": base64.b64encode(video_bytes).decode("utf-8"),
         },
     }
 
 
 def _encode_media_item(
-    item: str | Image.Image | ImageContent | AudioContent | VideoContent, role: str
+    item: str | Image.Image | ImageContent | AudioContent | VideoContent | DocumentContent, role: str
 ) -> dict[str, Any]:
     """Encode a single MediaType item to OpenAI Responses API format."""
     if isinstance(item, Image.Image):
@@ -185,6 +198,10 @@ def _encode_media_item(
         return _encode_audio_content(item, role)
     if isinstance(item, VideoContent):
         return _encode_video_content(item, role)
+    if isinstance(item, DocumentContent):
+        text_type = "input_text" if role == "user" else "output_text"
+        ref = item.filename or item.url or "document"
+        return {"type": text_type, "text": f"[Document Attachment: {ref}]"}
     if isinstance(item, str):
         text_type = "input_text" if role == "user" else "output_text"
         return {"type": text_type, "text": item}
@@ -224,30 +241,84 @@ def _encode_assistant(msg: AssistantMessage, items: list[dict[str, Any]]) -> Non
             items.append(
                 {
                     "type": "function_call",
-                    "call_id": tc.id,
+                    "call_id": tc.tool_call_id,
                     "name": tc.name,
                     "arguments": tc_args,
                 }
             )
 
 
-def _encode_tool_result(msg: ToolExecutionResultMessage) -> dict[str, Any]:
-    """ToolExecutionResultMessage → Responses API function_call_output item."""
+def _encode_content_block(block: Any) -> str:
+    """Encode a single ContentBlock to a string for OpenAI tool output."""
+    if isinstance(block, TextBlock):
+        return block.text
+    if isinstance(block, ImageBlock):
+        return f"[Image: {block.media_type}]"
+    if isinstance(block, AudioBlock):
+        if block.transcript:
+            return f"[Audio transcript]: {block.transcript}"
+        return f"[Audio: {block.media_type}]"
+    if isinstance(block, VideoBlock):
+        ref = block.url or block.media_type
+        return f"[Video: {ref}]"
+    if isinstance(block, DocumentBlock):
+        name = block.filename or block.media_type
+        return f"[Document: {name}]"
+    if isinstance(block, DataBlock):
+        return json.dumps(block.data)
+    if isinstance(block, CodeBlock):
+        return f"```{block.language}\n{block.code}\n```"
+    if isinstance(block, ErrorBlock):
+        return f"[{block.error_type}]: {block.message}"
+    # Fallback for unknown block types or legacy dicts
+    max_len = 100
+    if isinstance(block, dict):
+        if "text" in block:
+            text = block["text"]
+            if isinstance(text, str):
+                return text if len(text) <= max_len else text[:max_len] + "..."
+        try:
+            return json.dumps(block)[:max_len] + "..."
+        except Exception:
+            return "[Unserializable content]"
+    return str(block)[:max_len] + "..."
+
+
+def _encode_tool_result(msg: ToolExecutionResultMessage) -> list[dict[str, Any]]:
     content_str = ""
     if msg.content:
         if isinstance(msg.content, list):
-            content_str = "\n".join(
-                block.get("text", "")
-                for block in msg.content
-                if isinstance(block, dict) and block.get("type") == "text"
-            )
+            parts = [_encode_content_block(block) for block in msg.content]
+            content_str = "\n".join(p for p in parts if p)
         elif isinstance(msg.content, str):
             content_str = msg.content  # type: ignore[assignment]
-    return {
-        "type": "function_call_output",
-        "call_id": msg.tool_call_id,
-        "output": content_str,
-    }
+
+    items: list[dict[str, Any]] = [
+        {
+            "type": "function_call_output",
+            "call_id": msg.tool_call_id,
+            "output": content_str,
+        }
+    ]
+    if msg.media:
+        media_content = [
+            {
+                "type": "input_text",
+                "text": (
+                    f"Tool-generated artifact(s) from {msg.name or 'tool'} for the previous step. "
+                    "Use these attachments if they are relevant."
+                ),
+            }
+        ]
+        media_content.extend(_encode_media_item(item, "user") for item in msg.media)
+        items.append(
+            {
+                "type": "message",
+                "role": "user",
+                "content": media_content,
+            }
+        )
+    return items
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
@@ -273,7 +344,7 @@ def encode_messages(
         elif isinstance(msg, AssistantMessage):
             _encode_assistant(msg, conversation_input)
         elif isinstance(msg, ToolExecutionResultMessage):
-            conversation_input.append(_encode_tool_result(msg))
+            conversation_input.extend(_encode_tool_result(msg))
         elif isinstance(msg, ToolCallMessage):
             # Standalone tool call (rare — usually embedded in AssistantMessage)
             tc_args = msg.arguments
@@ -282,7 +353,7 @@ def encode_messages(
             conversation_input.append(
                 {
                     "type": "function_call",
-                    "call_id": msg.id,
+                    "call_id": msg.tool_call_id,
                     "name": msg.name,
                     "arguments": tc_args,
                 }

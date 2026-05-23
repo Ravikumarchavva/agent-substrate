@@ -22,6 +22,7 @@ from ravi.core.messages._types import (
     AudioContent,
     ImageContent,
     VideoContent,
+    DocumentContent,
 )
 from ravi.core.messages.base_message import BaseClientMessage
 from ravi.core.messages.client_messages import (
@@ -66,7 +67,7 @@ def _encode_image_content(ic: ImageContent) -> dict[str, Any]:
 
 
 def _encode_media_item(
-    item: str | Image.Image | ImageContent | AudioContent | VideoContent,
+    item: str | Image.Image | ImageContent | AudioContent | VideoContent | DocumentContent,
 ) -> dict[str, Any]:
     """Encode a single MediaType item to Anthropic content block."""
     if isinstance(item, Image.Image):
@@ -79,6 +80,20 @@ def _encode_media_item(
     if isinstance(item, VideoContent):
         # Anthropic doesn't support video natively — text fallback
         return _encode_text("[Video content]")
+    if isinstance(item, DocumentContent):
+        # Anthropic supports PDF documents natively!
+        if item.media_type == "application/pdf" and item.data:
+            b64 = base64.b64encode(item.data).decode("utf-8")
+            return {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": b64,
+                },
+            }
+        ref = item.filename or item.url or "document"
+        return _encode_text(f"[Document Attachment: {ref}]")
     if isinstance(item, str):
         return _encode_text(item)
     raise ValueError(f"Unsupported content type: {type(item)}")
@@ -110,7 +125,7 @@ def _encode_assistant(msg: AssistantMessage) -> dict[str, Any] | None:
             blocks.append(
                 {
                     "type": "tool_use",
-                    "id": tc.id,
+                    "id": tc.tool_call_id,
                     "name": tc.name,
                     "input": tc_args,
                 }
@@ -121,18 +136,78 @@ def _encode_assistant(msg: AssistantMessage) -> dict[str, Any] | None:
     return None
 
 
+def _get_block_text(block: Any) -> str:
+    if isinstance(block, str):
+        return block
+    if hasattr(block, "type"):
+        if block.type == "text" and hasattr(block, "text"):
+            return block.text
+        if block.type == "code" and hasattr(block, "code"):
+            lang = getattr(block, "language", "python")
+            return f"```{lang}\n{block.code}\n```"
+        if block.type == "data" and hasattr(block, "data"):
+            try:
+                return json.dumps(block.data)
+            except Exception:
+                return str(block.data)
+        if block.type == "error":
+            err_type = getattr(block, "error_type", "Error")
+            msg = getattr(block, "message", "")
+            return f"[{err_type}]: {msg}"
+        if block.type == "document" and hasattr(block, "data"):
+            filename = getattr(block, "filename", None) or "document"
+            media_type = getattr(block, "media_type", "application/octet-stream")
+            return f"[Document: {filename} ({media_type})]"
+        return ""
+    if isinstance(block, dict):
+        b_type = block.get("type", "text")
+        if b_type == "text":
+            return str(block.get("text", ""))
+        if b_type == "code":
+            lang = block.get("language", "python")
+            return f"```{lang}\n{block.get('code', '')}\n```"
+        if b_type == "data":
+            try:
+                return json.dumps(block.get("data", {}))
+            except Exception:
+                return str(block.get("data", ""))
+        if b_type == "error":
+            return f"[{block.get('error_type', 'Error')}]: {block.get('message', '')}"
+        if b_type == "document":
+            filename = block.get("filename") or "document"
+            media_type = block.get("media_type", "application/octet-stream")
+            return f"[Document: {filename} ({media_type})]"
+    return ""
+
+
 def _encode_tool_result(msg: ToolExecutionResultMessage) -> dict[str, Any]:
     """ToolExecutionResultMessage → Anthropic tool_result in user message."""
-    content_str = ""
+    content_blocks: list[dict[str, Any]] = []
+
+    # 1. Add text content from content blocks
     if msg.content:
         if isinstance(msg.content, list):
-            content_str = "\n".join(
-                block.get("text", "")
-                for block in msg.content
-                if isinstance(block, dict) and block.get("type") == "text"
-            )
+            for block in msg.content:
+                text = _get_block_text(block)
+                if text:
+                    content_blocks.append(_encode_text(text))
         elif isinstance(msg.content, str):
-            content_str = msg.content  # type: ignore[assignment]
+            content_blocks.append(_encode_text(msg.content))
+
+    # 2. Add media content from msg.media
+    if msg.media:
+        for item in msg.media:
+            try:
+                content_blocks.append(_encode_media_item(item))
+            except Exception as e:
+                import logging
+                logging.getLogger("ravi.core.messages.encoders.anthropic").warning(
+                    "Failed to encode media item for Anthropic tool result: %s", e
+                )
+
+    # 3. Fallback to empty string if no content blocks were generated
+    if not content_blocks:
+        content_blocks.append(_encode_text(""))
 
     return {
         "role": "user",
@@ -140,10 +215,11 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> dict[str, Any]:
             {
                 "type": "tool_result",
                 "tool_use_id": msg.tool_call_id,
-                "content": content_str,
+                "content": content_blocks,
             }
         ],
     }
+
 
 
 # ── Public API ───────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import asyncio
 import os
+from ravi.core.agent_catalog._catalog import AgentCatalog
 from ravi.core.agents.react_agent import ReActAgent
 from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.integrations.mcp import MCPClient
@@ -38,18 +39,19 @@ async def main():
         # Mocking for demonstration if key missing? 
         # No, better to fail loud or use a mock client if I had one.
     
-    client = OpenAIClient(model="gpt-4o")
-    memory = UnboundedMemory()
+    catalog = AgentCatalog()
+    catalog.register_model("primary", OpenAIClient(model="gpt-4o"))
+    catalog.register_memory("default", UnboundedMemory())
+    for tool in tools:
+        catalog.register_tool(tool)
 
     # 4. Initialize Agent
     agent = ReActAgent(
         name="DemoBot",
         description="A helpful assistant for demonstration.",
-        model_client=client,
-        tools=tools,
-        memory=memory,
+        catalog=catalog,
         max_iterations=5,
-        verbose=True # Enable verbose logging for "observability" demo
+        verbose=True,
     )
 
     print(f"🤖 Agent '{agent.name}' initialized with {len(tools)} tools.")

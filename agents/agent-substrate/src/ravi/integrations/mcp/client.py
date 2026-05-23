@@ -1,7 +1,12 @@
 """MCP (Model Context Protocol) client for connecting to MCP servers."""
 
-from typing import Any, Optional, Literal
+from __future__ import annotations
+
 from contextlib import AsyncExitStack
+from typing import TYPE_CHECKING, Any, Literal, Optional
+
+if TYPE_CHECKING:
+    from ravi.integrations.mcp.tool import MCPTool
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -227,6 +232,11 @@ class MCPClient:
 
         except Exception as e:
             raise RuntimeError(f"Tool execution failed for '{name}': {e}") from e
+
+    async def discover_tools(self) -> list[MCPTool]:
+        """Discover all tools from the connected MCP server as MCPTool instances."""
+        from ravi.integrations.mcp.tool import MCPTool  # lazy — avoids circular import
+        return await MCPTool.from_mcp_client(self)
 
     async def list_resources(self) -> list[dict[str, Any]]:
         """List all available resources from the MCP server.

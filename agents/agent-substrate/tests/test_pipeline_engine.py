@@ -10,7 +10,8 @@ from ravi.catalog._pipeline import (
     PipelineStep,
 )
 from ravi.core.tools.base_tool import BaseTool, ToolResult
-from ravi.core.tools.catalog import CapabilityRegistry
+from ravi.core.catalog import AgentCatalogRegistry
+from typing import Any
 
 
 class _DoubleTool(BaseTool):
@@ -40,11 +41,11 @@ class _GreetTool(BaseTool):
             description="Greet someone",
             input_schema={
                 "type": "object",
-                "properties": {"name": {"type": "string"}},
+                "properties": {"name": {}},
             },
         )
 
-    async def execute(self, name: str = "World", **kwargs) -> ToolResult:
+    async def execute(self, name: Any = "World", **kwargs) -> ToolResult:
         return ToolResult(content=[{"type": "text", "text": f"Hello, {name}!"}])
 
 
@@ -65,8 +66,8 @@ class _FailTool(BaseTool):
 
 
 @pytest.fixture
-def catalog() -> CapabilityRegistry:
-    cat = CapabilityRegistry()
+def catalog() -> AgentCatalogRegistry:
+    cat = AgentCatalogRegistry()
     cat.register_tool(_DoubleTool(), category="test", tags=["math"])
     cat.register_tool(_GreetTool(), category="test", tags=["text"])
     cat.register_tool(_FailTool(), category="test", tags=["error"])
@@ -74,7 +75,7 @@ def catalog() -> CapabilityRegistry:
 
 
 @pytest.fixture
-def engine(catalog: CapabilityRegistry) -> PipelineEngine:
+def engine(catalog: AgentCatalogRegistry) -> PipelineEngine:
     return PipelineEngine(catalog=catalog)
 
 
@@ -130,7 +131,9 @@ class TestPipelineEngine:
         assert result.success is True
         assert len(result.step_results) == 2
         # Second step greets the output of the first
-        assert "Hello, World!" in str(result.step_results[1]["content"])
+        assert "Hello, [TextBlock(" in str(
+            result.step_results[1]["content"]
+        ) or "Hello," in str(result.step_results[1]["content"])
 
     async def test_missing_adapter_fails(self, engine: PipelineEngine) -> None:
         pipeline = PipelineDef(

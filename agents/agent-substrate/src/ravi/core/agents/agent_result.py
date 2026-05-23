@@ -11,14 +11,23 @@ Design principles:
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional, Any, Dict, Union
+from typing import Any, List, Optional, Dict, Union
 from pydantic import BaseModel, Field, computed_field
+
+from ravi.core.structured.result import StructuredOutputResult
 from datetime import datetime, timezone
 from uuid import uuid4
-from PIL import Image
 
 from ravi.core.messages.base_message import UsageStats
-from ravi.core.messages._types import MediaType, AudioContent, VideoContent
+from ravi.core.messages.content import (
+    AudioContent,
+    ImageContent,
+    JsonObject,
+    MessageContent,
+    VideoContent,
+)
+
+from ravi.core.guardrails.base_guardrail import GuardrailResult
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +55,7 @@ class ToolCallRecord(BaseModel):
 
     tool_name: str
     call_id: str
-    arguments: Dict[str, Any] = Field(default_factory=dict)
+    arguments: JsonObject = Field(default_factory=dict)
     result: str = ""
     is_error: bool = False
     duration_ms: Optional[float] = None  # wall-clock for this call
@@ -69,7 +78,7 @@ class StepResult(BaseModel):
     """
 
     step: int  # 1-based
-    thought: Optional[List[MediaType]] = None  # LLM output (can be multimodal)
+    thought: Optional[List[MessageContent]] = None  # LLM output (can be multimodal)
     tool_calls: List[ToolCallRecord] = Field(default_factory=list)
     usage: Optional[UsageStats] = None  # tokens for *this* step's LLM call
     finish_reason: str = "stop"  # stop | tool_calls | error
@@ -93,7 +102,7 @@ class StepResult(BaseModel):
                 parts.append(item)
             elif isinstance(item, (AudioContent, VideoContent)):
                 parts.append(f"[{item.__class__.__name__}]")
-            elif isinstance(item, Image.Image):
+            elif isinstance(item, ImageContent):
                 parts.append("[Image]")
         return " ".join(parts) if parts else None
 
@@ -140,7 +149,7 @@ class AgentRunResult(BaseModel):
     agent_name: str
 
     # Output (multimodal)
-    output: List[MediaType] = Field(
+    output: List[MessageContent] = Field(
         default_factory=list
     )  # Can contain text, images, audio, video
     status: RunStatus = RunStatus.COMPLETED
@@ -164,10 +173,10 @@ class AgentRunResult(BaseModel):
     error: Optional[str] = None
 
     # Guardrail audit trail
-    guardrail_results: List[Any] = Field(default_factory=list)
+    guardrail_results: List[GuardrailResult] = Field(default_factory=list)
 
     # Structured output (only set when response_schema was passed to run())
-    structured_output: Optional[Any] = None
+    structured_output: Optional[StructuredOutputResult[Any]] = None
 
     # Config snapshot
     max_iterations: int = 0
@@ -203,9 +212,9 @@ class AgentRunResult(BaseModel):
             elif isinstance(item, AudioContent):
                 parts.append(f"[Audio: {item.format}]")
             elif isinstance(item, VideoContent):
-                parts.append(f"[Video: {item.format}]")
-            elif isinstance(item, Image.Image):
-                parts.append(f"[Image: {item.size[0]}x{item.size[1]}]")
+                parts.append(f"[Video: {item.media_type}]")
+            elif isinstance(item, ImageContent):
+                parts.append("[Image]")
         return " ".join(parts)
 
     @computed_field
@@ -222,7 +231,7 @@ class AgentRunResult(BaseModel):
         for item in self.output:
             if isinstance(item, str):
                 types.add("text")
-            elif isinstance(item, Image.Image):
+            elif isinstance(item, ImageContent):
                 types.add("image")
             elif isinstance(item, AudioContent):
                 types.add("audio")
@@ -230,7 +239,7 @@ class AgentRunResult(BaseModel):
                 types.add("video")
         return sorted(types)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> Dict[str, object]:
         """Full JSON-serializable snapshot for persistence / API responses."""
         return self.model_dump(mode="json")
 

@@ -37,7 +37,9 @@ class FakeStreamingAgent:
 
 async def test_stream_agent_run_dispatches_callbacks_and_restores_context() -> None:
     completion = CompletionChunk(
-        AssistantMessage(role="assistant", content=["done"], finish_reason="stop")
+        message=AssistantMessage(
+            role="assistant", content=["done"], finish_reason="stop"
+        )
     )
     tool_result = ToolExecutionResultMessage(
         tool_call_id="call-1",
@@ -46,8 +48,8 @@ async def test_stream_agent_run_dispatches_callbacks_and_restores_context() -> N
     )
     agent = FakeStreamingAgent(
         [
-            TextDeltaChunk("he"),
-            ReasoningDeltaChunk("thinking"),
+            TextDeltaChunk(text="he"),
+            ReasoningDeltaChunk(text="thinking"),
             tool_result,
             completion,
             {"other": True},
@@ -89,15 +91,15 @@ async def test_stream_agent_run_dispatches_callbacks_and_restores_context() -> N
 async def test_execute_agent_run_publishes_completion_events() -> None:
     agent = FakeStreamingAgent(
         [
-            TextDeltaChunk("hello"),
-            ReasoningDeltaChunk("plan"),
+            TextDeltaChunk(text="hello"),
+            ReasoningDeltaChunk(text="plan"),
             ToolExecutionResultMessage(
                 tool_call_id="call-1",
                 name="search_docs",
                 content=[{"type": "text", "text": "found it"}],
             ),
             CompletionChunk(
-                AssistantMessage(
+                message=AssistantMessage(
                     role="assistant",
                     content=["final answer"],
                     finish_reason="stop",

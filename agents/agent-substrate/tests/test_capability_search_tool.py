@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult
-from ravi.core.tools.catalog import CapabilityRegistry
+from ravi.core.catalog import AgentCatalogRegistry
 from ravi.catalog.tools.capability_search.tool import CapabilitySearchTool
 
 
@@ -20,9 +20,9 @@ class _Stub(BaseTool):
         return ToolResult(content=[{"type": "text", "text": "ok"}])
 
 
-def _make_populated_catalog() -> CapabilityRegistry:
+def _make_populated_catalog() -> AgentCatalogRegistry:
     """Create a catalog with a few items for testing."""
-    cat = CapabilityRegistry()
+    cat = AgentCatalogRegistry()
     cat.register_tool(
         _Stub(name="calculator", description="Perform arithmetic"),
         category="productivity",
@@ -73,7 +73,7 @@ async def test_search_returns_results():
     result = await tool.execute(action="search", query="math calculate")
 
     assert not result.is_error
-    text = result.content[0]["text"]
+    text = result.content[0].text
     assert "calculator" in text
     assert result.app_data["matched_tool_names"] == ["calculator"]
 
@@ -106,7 +106,7 @@ async def test_search_empty_query_is_error():
     result = await tool.execute(action="search", query="")
 
     assert result.is_error
-    assert "query" in result.content[0]["text"].lower()
+    assert "query" in result.content[0].text.lower()
 
 
 async def test_search_no_results():
@@ -116,7 +116,7 @@ async def test_search_no_results():
     result = await tool.execute(action="search", query="zzzznonexistentzzzz")
 
     assert not result.is_error
-    text = result.content[0]["text"]
+    text = result.content[0].text
     assert "No matching" in text
     assert result.app_data["matched_tool_names"] == []
     assert result.app_data["matched_skill_names"] == []
@@ -141,7 +141,7 @@ async def test_search_shows_parameters():
 
     result = await tool.execute(action="search", query="chart graph visualization")
 
-    text = result.content[0]["text"]
+    text = result.content[0].text
     assert "data_visualizer" in text
     assert "parameters:" in text
 
@@ -158,7 +158,7 @@ async def test_browse_category():
     result = await tool.execute(action="browse", category_path="productivity")
 
     assert not result.is_error
-    text = result.content[0]["text"]
+    text = result.content[0].text
     assert "calculator" in text
     assert result.app_data["matched_tool_names"] == ["calculator"]
 
@@ -170,7 +170,7 @@ async def test_browse_subcategory():
     result = await tool.execute(action="browse", category_path="data/visualization")
 
     assert not result.is_error
-    text = result.content[0]["text"]
+    text = result.content[0].text
     assert "data_visualizer" in text
 
 
@@ -190,7 +190,7 @@ async def test_browse_nonexistent_category_is_error():
     result = await tool.execute(action="browse", category_path="nonexistent/thing")
 
     assert result.is_error
-    text = result.content[0]["text"]
+    text = result.content[0].text
     assert "not found" in text.lower()
 
 
@@ -202,12 +202,13 @@ async def test_browse_nonexistent_category_is_error():
 async def test_list_categories():
     cat = _make_populated_catalog()
     tool = CapabilitySearchTool(cat)
+    cat.register_tool(tool)  # Register the search tool itself so 'system' category appears
 
     result = await tool.execute(action="list_categories")
 
     assert not result.is_error
-    text = result.content[0]["text"]
-    # Should include top-level categories
+    text = result.content[0].text
+    # Should include top-level categories derived from asset metadata
     assert "system" in text
     assert "productivity" in text
     assert "research" in text
@@ -226,7 +227,7 @@ async def test_unknown_action_is_error():
     result = await tool.execute(action="explode")
 
     assert result.is_error
-    assert "Unknown action" in result.content[0]["text"]
+    assert "Unknown action" in result.content[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -237,5 +238,5 @@ async def test_unknown_action_is_error():
 def test_constructor_rejects_non_catalog():
     import pytest
 
-    with pytest.raises(TypeError, match="CapabilityRegistry"):
+    with pytest.raises(TypeError, match="AgentCatalogRegistry"):
         CapabilitySearchTool(catalog="not a catalog")

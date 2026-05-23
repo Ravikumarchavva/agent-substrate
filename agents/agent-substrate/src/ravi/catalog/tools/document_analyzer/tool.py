@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ class DocumentAnalyzerTool(BaseTool):
         path = Path(file_path)
         if not path.exists():
             return ToolResult(
-                content=[{"type": "text", "text": f"File not found: {file_path}"}],
+                content=[TextBlock(text=f"File not found: {file_path}")],
                 is_error=True,
             )
 
@@ -82,7 +83,7 @@ class DocumentAnalyzerTool(BaseTool):
             content = path.read_text(encoding="utf-8", errors="replace")
         except Exception as exc:
             return ToolResult(
-                content=[{"type": "text", "text": f"Error reading file: {exc}"}],
+                content=[TextBlock(text=f"Error reading file: {exc}")],
                 is_error=True,
             )
 
@@ -95,7 +96,7 @@ class DocumentAnalyzerTool(BaseTool):
 
         if action == "extract":
             return ToolResult(
-                content=[{"type": "text", "text": display_content}],
+                content=[TextBlock(text=display_content)],
                 app_data={
                     "file": str(path),
                     "chars": len(content),
@@ -107,10 +108,9 @@ class DocumentAnalyzerTool(BaseTool):
             if self._model_client is None:
                 return ToolResult(
                     content=[
-                        {
-                            "type": "text",
-                            "text": f"LLM not configured for {action}. Here is the raw content:\n\n{display_content}",
-                        }
+                        TextBlock(
+                            text=f"LLM not configured for {action}. Here is the raw content:\n\n{display_content}"
+                        )
                     ],
                 )
 
@@ -121,10 +121,9 @@ class DocumentAnalyzerTool(BaseTool):
                 if not question.strip():
                     return ToolResult(
                         content=[
-                            {
-                                "type": "text",
-                                "text": "Please provide a 'question' for the question action.",
-                            }
+                            TextBlock(
+                                text="Please provide a 'question' for the question action."
+                            )
                         ],
                         is_error=True,
                     )
@@ -142,11 +141,11 @@ class DocumentAnalyzerTool(BaseTool):
             if response.content:
                 answer = " ".join(str(c) for c in response.content if c)
             return ToolResult(
-                content=[{"type": "text", "text": answer or "No response generated."}],
+                content=[TextBlock(text=answer or "No response generated.")],
                 app_data={"file": str(path), "action": action},
             )
 
         return ToolResult(
-            content=[{"type": "text", "text": f"Unknown action: {action!r}"}],
+            content=[TextBlock(text=f"Unknown action: {action!r}")],
             is_error=True,
         )

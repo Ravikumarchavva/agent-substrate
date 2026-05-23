@@ -505,6 +505,12 @@ Tests pod health, endpoints, chat flow, and observability stack.
 - Canonical enum re-exports live in `core/__init__.py` (e.g. `from ravi.core import ToolRisk, RunStatus`).
 - **DB session dependency** — all microservice routes use `get_db_session` from `shared.database.dependency`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: no `@pytest.mark.asyncio` decorator needed. Write `async def test_*` directly.
+- **Jupyter Notebook Guides** — **REQUIRED** after every change that touches a public API, new subsystem, or behaviour change. Rules:
+  1. New subsystem or module → create `examples/NN_<slug>.ipynb` (next sequential number).
+  2. Changed API on an existing subsystem → update the corresponding existing notebook AND add a new cell showing the new usage.
+  3. Bug fix that changes observable behaviour → add a cell to the relevant notebook demonstrating correct behaviour.
+  4. Notebook cells must run top-to-bottom without error (use `# type: ignore` sparingly, never skip cells).
+  5. Each notebook must have a markdown cell at the top with: title, one-sentence summary, and the module path(s) being demonstrated.
 
 ---
 

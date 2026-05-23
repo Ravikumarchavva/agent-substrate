@@ -25,6 +25,7 @@ from ravi.server.schemas import (
     ThreadOut,
     ThreadUpdate,
 )
+from ravi.server.security.deps import get_current_user
 from ravi.server.services import (
     create_thread,
     delete_thread,
@@ -35,7 +36,11 @@ from ravi.server.services import (
 )
 from ravi.server.services.file_service import purge_thread_files
 
-router = APIRouter(prefix="/threads", tags=["threads"])
+router = APIRouter(
+    prefix="/threads",
+    tags=["threads"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("", response_model=ThreadOut, status_code=201)

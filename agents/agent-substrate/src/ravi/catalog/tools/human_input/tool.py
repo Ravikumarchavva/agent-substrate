@@ -54,6 +54,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 logger = logging.getLogger("ravi.hitl")
 
@@ -377,9 +378,8 @@ class AskHumanTool(BaseTool):
         if self._request_count >= self._max_requests:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "error": (
                                     f"Maximum human input requests reached "
@@ -387,8 +387,8 @@ class AskHumanTool(BaseTool):
                                     f"judgement and proceed."
                                 ),
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )
@@ -407,14 +407,13 @@ class AskHumanTool(BaseTool):
         if len(options) < 2:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "error": "Please provide at least 2 options.",
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )
@@ -436,14 +435,13 @@ class AskHumanTool(BaseTool):
             )
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "error": "Human input handler not configured for this session",
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )
@@ -455,14 +453,13 @@ class AskHumanTool(BaseTool):
             logger.error(f"Human input handler error: {e}")
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "error": f"Failed to get human input: {e}",
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )
@@ -483,9 +480,8 @@ class AskHumanTool(BaseTool):
         if response.timed_out:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "status": "timed_out",
                                 "message": (
@@ -493,8 +489,8 @@ class AskHumanTool(BaseTool):
                                     "Proceed with your best judgement."
                                 ),
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=False,
             )
@@ -510,12 +506,7 @@ class AskHumanTool(BaseTool):
         }
 
         return ToolResult(
-            content=[
-                {
-                    "type": "text",
-                    "text": json.dumps(result_data),
-                }
-            ],
+            content=[TextBlock(text=json.dumps(result_data))],
             is_error=False,
         )
 

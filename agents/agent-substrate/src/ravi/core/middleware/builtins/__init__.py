@@ -9,6 +9,9 @@ from ravi.core.middleware.builtins.retry import RetryMiddleware
 from ravi.core.middleware.builtins.cache import CacheMiddleware
 from ravi.core.middleware.builtins.audit_logger import AuditLoggerMiddleware
 from ravi.core.middleware.builtins.rate_limiter import RateLimiterMiddleware
+from ravi.core.middleware.builtins.guardrails import GuardrailsMiddleware
+from ravi.core.middleware.builtins.history_truncator import HistoryTruncatorMiddleware
+from ravi.core.middleware.builtins.governance import GovernanceMiddleware
 
 __all__ = [
     "SchemaValidatorMiddleware",
@@ -18,4 +21,7 @@ __all__ = [
     "CacheMiddleware",
     "AuditLoggerMiddleware",
     "RateLimiterMiddleware",
+    "GuardrailsMiddleware",
+    "HistoryTruncatorMiddleware",
+    "GovernanceMiddleware",
 ]

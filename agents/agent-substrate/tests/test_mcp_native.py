@@ -73,13 +73,9 @@ async def test_mcp_native_tool():
     print(f"Content: {msg.content}")
 
     # Test format conversion
-    print("\n5. OpenAI Format:")
-    openai_msg = msg.to_openai_format()
-    print(json.dumps(openai_msg, indent=2))
-
-    print("\n6. MCP Format:")
-    mcp_msg = msg.to_mcp_format()
-    print(json.dumps(mcp_msg, indent=2))
+    print("\n5. Serialized Format:")
+    serialized_msg = msg.model_dump(mode="json")
+    print(json.dumps(serialized_msg, indent=2))
 
     print("\n✅ All tests passed! MCP-native architecture is working correctly.")
 

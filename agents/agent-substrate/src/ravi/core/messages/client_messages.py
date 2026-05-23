@@ -1,22 +1,41 @@
+"""Concrete client message types for LLM API communication.
+
+All messages are fully serializable Pydantic models.  Provider-specific
+encoding (OpenAI, Anthropic, Gemini wire formats) lives in
+``core.messages.encoders.<provider>`` — messages themselves are
+provider-agnostic data containers.
+
+Serialization: ``msg.model_dump(mode="json")`` for storage / wire.
+Deserialization: ``SystemMessage.model_validate(data)`` etc.
+"""
+
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Literal
+import json
+from typing import TYPE_CHECKING, List, Literal, Optional
+from uuid import uuid4
+
 from pydantic import (
     BaseModel as PydanticBaseModel,
     ConfigDict,
     field_validator,
-    model_serializer,
     Field,
 )
-from .base_message import BaseClientMessage, CLIENT_ROLES, UsageStats
-from ravi.core.tools.base_tool import ToolResult
-import json
-from uuid import uuid4
 
-from ravi.core.messages._types import (
-    MediaType,
-    serialize_media_content,
-    deserialize_media_content,
+from ravi.core.messages.base_message import BaseClientMessage, CLIENT_ROLES, UsageStats
+from ravi.core.messages.content import (
+    ContentBlock,
+    ImageContent,
+    AudioContent,
+    VideoContent,
+    DocumentContent,
+    JsonObject,
+    MediaContent,
+    MessageContent,
+    TextBlock,
+    ImageBlock,
+    DocumentBlock,
+    content_block_from_dict,
 )
 
 
@@ -27,53 +46,51 @@ class SystemMessage(BaseClientMessage[str]):
     content: str
     type: Literal["SystemMessage"] = "SystemMessage"  # type: ignore[override]
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {"role": self.role, "content": self.content, "type": self.type}
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SystemMessage":
-        return cls(content=data["content"])
-
-
-class UserMessage(BaseClientMessage[List[MediaType]]):
+class UserMessage(BaseClientMessage[List[MessageContent]]):
     """User message with text or multimodal content."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     role: CLIENT_ROLES = "user"
-    content: List[MediaType]
+    content: List[MessageContent]
     name: Optional[str] = None
     type: Literal["UserMessage"] = "UserMessage"  # type: ignore[override]
 
-    @model_serializer
-    def ser_model(self) -> Dict[str, Any]:
-        serialized_content = [
-            serialize_media_content(item, role=self.role) for item in self.content
-        ]
-        msg = {
-            "role": self.role,
-            "content": serialized_content,
-            "type": self.type,
-        }
-        if self.name:
-            msg["name"] = self.name
-        return msg
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format for storage."""
-        return self.ser_model()
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "UserMessage":
-        """Create from dictionary."""
-        return cls(**data)
-
     @field_validator("content", mode="before")
-    def des_content(cls, v: Any) -> List[MediaType]:
+    @classmethod
+    def _coerce_content(cls, v: object) -> List[MessageContent]:
         if isinstance(v, list):
-            return [deserialize_media_content(item) for item in v]
-        else:
-            raise ValueError("Content must be a list")
+            result: List[MessageContent] = []
+            for item in v:
+                if isinstance(item, str):
+                    result.append(item)
+                elif isinstance(item, (ImageContent, AudioContent, VideoContent, DocumentContent)):
+                    result.append(item)
+                elif isinstance(item, dict):
+                    # Reconstruct from serialized form
+                    item_type = item.get("type", "")
+                    if item_type in (
+                        "text",
+                        "input_text",
+                        "output_text",
+                        "summary_text",
+                    ):
+                        result.append(str(item.get("text", "")))
+                    elif item_type in ("image", "input_image"):
+                        result.append(ImageContent.model_validate(item))
+                    elif item_type in ("audio", "input_audio"):
+                        result.append(AudioContent.model_validate(item))
+                    elif item_type in ("video", "input_video"):
+                        result.append(VideoContent.model_validate(item))
+                    elif item_type in ("document", "input_document", "input_file"):
+                        result.append(DocumentContent.model_validate(item))
+                    else:
+                        result.append(str(item.get("text", str(item))))
+                else:
+                    result.append(str(item))
+            return result
+        raise ValueError("Content must be a list")
 
 
 class ToolCallMessage(BaseClientMessage[Optional[str]]):
@@ -82,71 +99,38 @@ class ToolCallMessage(BaseClientMessage[Optional[str]]):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     role: CLIENT_ROLES = "tool_call"
-    content: Optional[str] = None  # Override base - not needed for tool calls
+    content: Optional[str] = None
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    arguments: Dict[str, Any] = Field(default_factory=dict)
+    arguments: JsonObject = Field(default_factory=dict)
     type: Literal["ToolCallMessage"] = "ToolCallMessage"  # type: ignore[override]
 
+    @property
+    def tool_call_id(self) -> str:
+        """Canonical tool-call correlation ID — same value as ``id``."""
+        return self.id
+
     @field_validator("arguments", mode="before")
-    def validate_arguments(cls, v: Any) -> Dict[str, Any]:
+    @classmethod
+    def _coerce_arguments(cls, v: object) -> JsonObject:
         if isinstance(v, str):
             try:
-                return json.loads(v)
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    return parsed
             except Exception:
-                raise ValueError("arguments must be a dict or JSON string")
+                pass
+            raise ValueError("arguments must be a dict or JSON string")
         if isinstance(v, dict):
-            return v
+            return v  # type: ignore[return-value]
         raise ValueError("arguments must be a dict")
 
-    @model_serializer
-    def ser_model(self) -> Dict[str, Any]:
-        return {
-            "role": self.role,
-            "type": self.type,
-            "id": self.id,
-            "name": self.name,
-            "arguments": self.arguments,
-        }
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format for storage."""
-        return self.ser_model()
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ToolCallMessage":
-        """Create from dictionary."""
-        return cls(**data)
-
-    def to_mcp_format(self) -> Dict[str, Any]:
-        """Convert to MCP tool call format."""
-        return {
-            "name": self.name,
-            "arguments": self.arguments,
-        }
-
-    def to_openai_format(self) -> Dict[str, Any]:
-        """Convert to OpenAI Chat Completions tool call format.
-
-        .. deprecated::
-            Prefer using ``encoders.openai.encode_messages()`` instead.
-        """
-        return {
-            "id": self.id,
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "arguments": json.dumps(self.arguments),
-            },
-        }
-
-
-class AssistantMessage(BaseClientMessage[Optional[List[MediaType]]]):
+class AssistantMessage(BaseClientMessage[Optional[List[MessageContent]]]):
     """Assistant message with optional tool calls.
 
-    Provider-specific serialisation is handled by the encoder modules
-    in ``core.messages.encoders``.  The ``to_dict()`` / ``ser_model()``
-    methods produce a provider-agnostic storage format.
+    Provider-specific serialization is handled by the encoder modules
+    in ``core.messages.encoders``.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -155,145 +139,138 @@ class AssistantMessage(BaseClientMessage[Optional[List[MediaType]]]):
     role: CLIENT_ROLES = "assistant"
     name: Optional[str] = None
     reasoning: Optional[str] = None
-    content: Optional[List[MediaType]] = None
+    content: Optional[List[MessageContent]] = None
     tool_calls: Optional[List[ToolCallMessage]] = None
-    finish_reason: str = "stop"  # e.g., "stop", "tool_call", etc.
+    finish_reason: str = "stop"
     usage: Optional[UsageStats] = None
-    cached: bool = False  # Indicates if response used input caching or not
-    parsed: Optional[PydanticBaseModel] = None  # Structured output Pydantic instance
+    cached: bool = False
+    parsed: Optional[PydanticBaseModel] = None
 
-    @model_serializer
-    def ser_model(self) -> Dict[str, Any]:
-        msg: Dict[str, Any] = {
-            "role": self.role,
-            "finish_reason": self.finish_reason,
-            "cached": self.cached,
-            "type": self.type,
-        }
-        if self.name:
-            msg["name"] = self.name
-        if self.reasoning:
-            msg["reasoning"] = self.reasoning
-        if self.content is not None:
-            serialized_content = [
-                serialize_media_content(item, role=self.role) for item in self.content
-            ]
-            msg["content"] = serialized_content
-        if self.tool_calls is not None:
-            msg["tool_calls"] = [tc.ser_model() for tc in self.tool_calls]
-        if self.usage is not None:
-            msg["usage"] = self.usage.model_dump()
-        return msg
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format for storage."""
-        return self.ser_model()
-
+    @field_validator("content", mode="before")
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AssistantMessage":
-        """Create from dictionary."""
-        return cls(**data)
+    def _coerce_content(cls, v: object) -> Optional[List[MessageContent]]:
+        if v is None:
+            return None
+        if isinstance(v, list):
+            result: List[MessageContent] = []
+            for item in v:
+                if isinstance(item, str):
+                    result.append(item)
+                elif isinstance(item, (ImageContent, AudioContent, VideoContent, DocumentContent)):
+                    result.append(item)
+                elif isinstance(item, dict):
+                    item_type = item.get("type", "")
+                    if item_type in (
+                        "text",
+                        "input_text",
+                        "output_text",
+                        "summary_text",
+                    ):
+                        result.append(str(item.get("text", "")))
+                    elif item_type in ("image", "input_image"):
+                        result.append(ImageContent.model_validate(item))
+                    elif item_type in ("audio", "input_audio"):
+                        result.append(AudioContent.model_validate(item))
+                    elif item_type in ("video", "input_video"):
+                        result.append(VideoContent.model_validate(item))
+                    elif item_type in ("document", "input_document", "input_file"):
+                        result.append(DocumentContent.model_validate(item))
+                    else:
+                        result.append(str(item.get("text", str(item))))
+                else:
+                    result.append(str(item))
+            return result
+        raise ValueError("Content must be a list or None")
 
 
-class ToolExecutionResultMessage(BaseClientMessage[List[Dict[str, Any]]]):
-    """Tool execution result message (MCP-compatible)."""
+class ToolExecutionResultMessage(BaseClientMessage[List[ContentBlock]]):
+    """Tool execution result message (MCP-compatible).
+
+    Content is a list of typed ``ContentBlock`` objects instead of raw
+    dicts — fully typed and serializable.
+    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     role: CLIENT_ROLES = "tool_response"
-    tool_call_id: str  # Links back to the tool call
-    name: Optional[str] = None  # Tool name
-    content: List[Dict[str, Any]]  # MCP format: list of content blocks
+    tool_call_id: str
+    name: Optional[str] = None
+    content: List[ContentBlock]
     is_error: bool = False
-    app_data: Optional[Dict[str, Any]] = None  # Structured data for MCP App UIs
+    app_data: Optional[JsonObject] = None
+    media: Optional[List[MediaContent]] = None
     type: Literal["ToolExecutionResultMessage"] = "ToolExecutionResultMessage"  # type: ignore[override]
 
     @field_validator("content", mode="before")
-    def validate_content(cls, v: Any) -> List[Dict[str, Any]]:
-        """Validate and convert content to MCP format."""
-        if isinstance(v, str):
-            # Convert plain string to MCP text content block
-            return [{"type": "text", "text": v}]
-        elif isinstance(v, list):
-            result = []
-            for item in v:
-                if isinstance(item, dict):
-                    # Already in proper format
-                    result.append(item)
-                elif isinstance(item, str):
-                    # Convert string to text content block
-                    result.append({"type": "text", "text": item})
-                else:
-                    # Try to serialize other types
-                    result.append({"type": "text", "text": str(item)})
-            return result
-        elif isinstance(v, dict):
-            # Single dict - wrap in list
-            return [v]
-        else:
-            # Convert to text content block
-            return [{"type": "text", "text": str(v)}]
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format for storage."""
-        return self.ser_model()
-
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ToolExecutionResultMessage":
-        """Create from dictionary."""
-        return cls(**data)
+    def _coerce_content(cls, v: object) -> List[ContentBlock]:
+        """Coerce various input formats to typed ContentBlock list."""
+        if isinstance(v, str):
+            return [TextBlock(text=v)]
+        if isinstance(v, list):
+            result: list[ContentBlock] = []
+            for item in v:
+                if isinstance(item, (TextBlock, ImageBlock)):
+                    result.append(item)
+                elif isinstance(item, dict):
+                    result.append(content_block_from_dict(item))
+                elif isinstance(item, str):
+                    result.append(TextBlock(text=item))
+                else:
+                    result.append(TextBlock(text=str(item)))
+            return result
+        if isinstance(v, dict):
+            return [content_block_from_dict(v)]
+        return [TextBlock(text=str(v))]
 
-    @model_serializer
-    def ser_model(self) -> Dict[str, Any]:
-        msg = {
-            "role": self.role,
-            "tool_call_id": self.tool_call_id,
-            "content": self.content,
-            "isError": self.is_error,
-            "type": self.type,
-        }
-        if self.name:
-            msg["name"] = self.name
-        return msg
+    @field_validator("media", mode="before")
+    @classmethod
+    def _coerce_media(cls, v: object) -> Optional[List[MediaContent]]:
+        if v is None:
+            return None
+        if isinstance(v, list):
+            result: List[MediaContent] = []
+            for item in v:
+                if isinstance(item, (ImageContent, AudioContent, VideoContent, DocumentContent)):
+                    result.append(item)
+                elif isinstance(item, dict):
+                    item_type = item.get("type", "")
+                    if item_type == "image":
+                        result.append(ImageContent.model_validate(item))
+                    elif item_type == "audio":
+                        result.append(AudioContent.model_validate(item))
+                    elif item_type == "video":
+                        result.append(VideoContent.model_validate(item))
+                    elif item_type == "document":
+                        result.append(DocumentContent.model_validate(item))
+                # Skip unrecognized items
+            return result
+        raise ValueError("media must be a list or None")
 
     @classmethod
     def from_tool_result(
-        cls, tool_result: ToolResult, tool_call_id: str, tool_name: Optional[str] = None
+        cls,
+        tool_result: "ToolResult",
+        tool_call_id: str,
+        tool_name: Optional[str] = None,
     ) -> "ToolExecutionResultMessage":
-        """Create ToolExecutionResultMessage from ToolResult."""
+        """Create ToolExecutionResultMessage from ToolResult.
+
+        Content blocks (TextBlock, ImageBlock, …) pass through to the LLM
+        as-is via the encoder.  Rich media (ImageContent, AudioContent, …)
+        passes through ``media`` so encoders can attach it as a separate
+        context item without duplicating it in the content list.
+        """
         return cls(
             tool_call_id=tool_call_id,
             name=tool_name,
             content=tool_result.content,
             is_error=tool_result.is_error,
             app_data=tool_result.app_data,
+            media=list(tool_result.media) if tool_result.media else None,
         )
 
-    def to_mcp_format(self) -> Dict[str, Any]:
-        """Convert to MCP tool result format."""
-        return {
-            "content": self.content,
-            "isError": self.is_error,
-        }
 
-    def to_openai_format(self) -> Dict[str, Any]:
-        """Convert to OpenAI tool message format."""
-        # OpenAI expects simple string content
-        text_parts = []
-        for block in self.content:
-            if block.get("type") == "text":
-                text_parts.append(block.get("text", ""))
-            elif block.get("type") == "image":
-                text_parts.append("[Image]")
-            elif block.get("type") == "resource":
-                text_parts.append(
-                    f"[Resource: {block.get('resource', {}).get('uri', '')}]"
-                )
-            else:
-                text_parts.append(str(block))
 
-        return {
-            "role": "tool",
-            "tool_call_id": self.tool_call_id,
-            "content": "\n".join(text_parts) if text_parts else "",
-        }
+if TYPE_CHECKING:
+    from ravi.core.tools.base_tool import ToolResult

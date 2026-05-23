@@ -10,27 +10,17 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
-from ravi.core.runtime._protocol import AgentId, TopicId
-from ravi.core.runtime._types import Envelope, Subscription
+from ravi.core.runtime._identity import AgentId, TopicId
+from ravi.core.runtime._contracts import Envelope, Subscription
+from ravi.core.runtime._errors import AgentNotFoundError
 from ravi.core.runtime._mailbox import Mailbox
 
 logger = logging.getLogger("ravi.core.runtime.dispatcher")
 
-
-# ---------------------------------------------------------------------------
-# Errors
-# ---------------------------------------------------------------------------
-
-
-class AgentNotFoundError(Exception):
-    """Raised when dispatching to an ``AgentId`` that has no registered mailbox."""
-
-
-# ---------------------------------------------------------------------------
-# Dispatcher
-# ---------------------------------------------------------------------------
+# Re-export so existing ``from _dispatcher import AgentNotFoundError`` works.
+__all__ = ["Dispatcher", "AgentNotFoundError"]
 
 
 class Dispatcher:
@@ -43,10 +33,9 @@ class Dispatcher:
     __slots__ = ("_mailboxes", "_topic_subscribers", "_type_agents")
 
     def __init__(self) -> None:
-        self._mailboxes: Dict[AgentId, Mailbox] = {}
-        self._topic_subscribers: Dict[TopicId, List[Subscription]] = {}
-        # M1 fix: reverse index for O(1) fan-out by agent type
-        self._type_agents: Dict[str, Set[AgentId]] = {}
+        self._mailboxes: dict[AgentId, Mailbox] = {}
+        self._topic_subscribers: dict[TopicId, list[Subscription]] = {}
+        self._type_agents: dict[str, set[AgentId]] = {}
 
     # -- agent registration -------------------------------------------------
 
@@ -57,19 +46,14 @@ class Dispatcher:
         logger.debug("registered agent %s", agent_id)
 
     def unregister_agent(self, agent_id: AgentId) -> None:
-        """Remove *agent_id* from the routing table.
-
-        H1 fix: only removes this specific AgentId, not all agents of
-        the same type.
-        """
+        """Remove *agent_id* from the routing table."""
         self._mailboxes.pop(agent_id, None)
-        # Remove from reverse index
         type_set = self._type_agents.get(agent_id.type)
         if type_set is not None:
             type_set.discard(agent_id)
             if not type_set:
                 del self._type_agents[agent_id.type]
-        # H1 fix: only remove subscriptions for this specific agent_id
+        # Only remove subscriptions when no agents of this type remain.
         for topic, subs in self._topic_subscribers.items():
             self._topic_subscribers[topic] = [
                 s
@@ -129,14 +113,13 @@ class Dispatcher:
         elif isinstance(target, TopicId):
             subscribers = self._topic_subscribers.get(target, [])
             for sub in subscribers:
-                # M1 fix: O(1) lookup via reverse index instead of scanning all agents
                 agent_ids = self._type_agents.get(sub.agent_type, set())
-                # H2 fix: snapshot to avoid mutation during iteration
+                # Snapshot to avoid mutation during iteration
                 for aid in list(agent_ids):
                     mbox = self._mailboxes.get(aid)
                     if mbox is None:
                         continue
-                    # C6 fix: isolate each put — one failure doesn't stop others
+                    # Isolate each put — one failure doesn't stop others
                     try:
                         mbox.put_nowait(envelope)
                     except Exception:

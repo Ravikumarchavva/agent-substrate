@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 
 _DEFAULT_ALLOWED_DOMAINS: List[str] = [
@@ -80,13 +81,12 @@ class HttpRequestTool(BaseTool):
             parsed = urlparse(url)
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": (
+                    TextBlock(
+                        text=(
                             f"Domain '{parsed.hostname}' is not in the allowed list. "
                             f"Allowed: {', '.join(sorted(self._allowed_domains))}"
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )
@@ -107,7 +107,7 @@ class HttpRequestTool(BaseTool):
                 )
         except httpx.HTTPError as exc:
             return ToolResult(
-                content=[{"type": "text", "text": f"HTTP error: {exc}"}],
+                content=[TextBlock(text=f"HTTP error: {exc}")],
                 is_error=True,
             )
 
@@ -122,7 +122,7 @@ class HttpRequestTool(BaseTool):
             f"{body_text}"
         )
         return ToolResult(
-            content=[{"type": "text", "text": result_text}],
+            content=[TextBlock(text=result_text)],
             app_data={
                 "status_code": response.status_code,
                 "url": url,

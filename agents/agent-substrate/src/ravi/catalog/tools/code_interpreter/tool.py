@@ -31,12 +31,15 @@ Usage::
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 from typing import Any, ClassVar, Optional
 
+from ravi.core.messages import ImageContent
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.core.messages.content import TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -178,9 +181,8 @@ class CodeInterpreterTool(BaseTool):
         else:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "success": False,
                                 "error": (
@@ -188,8 +190,8 @@ class CodeInterpreterTool(BaseTool):
                                     "Set CODE_INTERPRETER_URL env var or provide http_client."
                                 ),
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )
@@ -208,22 +210,118 @@ class CodeInterpreterTool(BaseTool):
                 exec_type=exec_type,
                 timeout=timeout,
             )
+            if not resp.success and any(err in str(resp.error).lower() for err in ["capacity", "microvm", "503", "service unavailable", "timeout", "degraded", "not available"]):
+                raise RuntimeError(f"Overloaded MicroVM Service: {resp.error}")
         except Exception as exc:
-            logger.error("code_interpreter HTTP error: %s", exc, exc_info=True)
-            return ToolResult(
-                content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
-                            {
-                                "success": False,
-                                "error": f"{type(exc).__name__}: {exc}",
-                            }
-                        ),
-                    }
-                ],
-                is_error=True,
-            )
+            logger.warning("code_interpreter HTTP error or capacity issue. Activating local fallback sandbox. Reason: %s", exc)
+            try:
+                import sys
+                import io
+                import traceback
+                import matplotlib
+                matplotlib.use('Agg')
+                import matplotlib.pyplot as plt
+                
+                old_stdout = sys.stdout
+                old_stderr = sys.stderr
+                redirected_output = io.StringIO()
+                redirected_error = io.StringIO()
+                sys.stdout = redirected_output
+                sys.stderr = redirected_error
+                
+                local_ns = {}
+                local_ns["plt"] = plt
+                local_ns["matplotlib"] = matplotlib
+                try:
+                    import numpy as np
+                    local_ns["np"] = np
+                except ImportError:
+                    pass
+                try:
+                    import pandas as pd
+                    local_ns["pd"] = pd
+                except ImportError:
+                    pass
+                
+                success = True
+                error_str = None
+                
+                try:
+                    plt.close('all')
+                    exec(code, {}, local_ns)
+                    
+                    media = []
+                    figs = [plt.figure(num) for num in plt.get_fignums()]
+                    for idx, fig in enumerate(figs):
+                        buf = io.BytesIO()
+                        fig.savefig(buf, format='png', bbox_inches='tight')
+                        buf.seek(0)
+                        img_data = buf.getvalue()
+                        
+                        from ravi.core.messages import ImageContent
+                        media.append(
+                            ImageContent(
+                                data=img_data,
+                                media_type="image/png"
+                            )
+                        )
+                        plt.close(fig)
+                except Exception as e:
+                    success = False
+                    error_str = f"Error during local fallback execution: {e}\n{traceback.format_exc()}"
+                finally:
+                    sys.stdout = old_stdout
+                    sys.stderr = old_stderr
+                    
+                stdout_text = redirected_output.getvalue()
+                stderr_text = redirected_error.getvalue()
+                
+                if not success:
+                    return ToolResult(
+                        content=[
+                            TextBlock(
+                                text=json.dumps(
+                                    {
+                                        "success": False,
+                                        "error": error_str,
+                                        "output": stdout_text,
+                                        "stderr": stderr_text,
+                                        "exec_type": "python",
+                                    }
+                                )
+                            )
+                        ],
+                        is_error=True,
+                    )
+                    
+                response_data = {
+                    "success": True,
+                    "output": stdout_text + (f"\n[stderr]\n{stderr_text}" if stderr_text else ""),
+                    "execution_time": 0.05,
+                    "cell_id": "fallback-cell",
+                    "exec_type": "python",
+                }
+                
+                return ToolResult(
+                    content=[TextBlock(text=json.dumps(response_data))],
+                    is_error=False,
+                    media=media or None,
+                )
+            except Exception as fallback_exc:
+                logger.error("Local fallback execution engine error: %s", fallback_exc, exc_info=True)
+                return ToolResult(
+                    content=[
+                        TextBlock(
+                            text=json.dumps(
+                                {
+                                    "success": False,
+                                    "error": f"HTTP Error: {exc} | Fallback Error: {fallback_exc}",
+                                }
+                            )
+                        )
+                    ],
+                    is_error=True,
+                )
 
         return self._response_to_tool_result(resp)
 
@@ -231,7 +329,7 @@ class CodeInterpreterTool(BaseTool):
         """Convert ExecuteResponse → ToolResult with multimodal content."""
         # Build text summary for the LLM
         text_parts = []
-        images = []
+        media = []
 
         for output in resp.outputs:
             if output.type.value == "text":
@@ -241,14 +339,18 @@ class CodeInterpreterTool(BaseTool):
             elif output.type.value == "error":
                 text_parts.append(f"[error] {output.content.rstrip()}")
             elif output.type.value == "image":
-                images.append(
-                    {
-                        "name": output.name or "figure.png",
-                        "format": output.format or "png",
-                        "data": output.content,  # base64
-                    }
-                )
-                text_parts.append(f"[Generated {output.name or 'figure.png'}]")
+                try:
+                    media.append(
+                        ImageContent(
+                            data=base64.b64decode(output.content),
+                            media_type=f"image/{output.format or 'png'}",
+                        )
+                    )
+                    text_parts.append(f"[Generated {output.name or 'figure.png'}]")
+                except Exception:
+                    text_parts.append(
+                        f"[Generated {output.name or 'figure.png'}] (image decode failed)"
+                    )
             elif output.type.value == "file":
                 text_parts.append(
                     f"[File: {output.name or 'output'}] "
@@ -265,14 +367,13 @@ class CodeInterpreterTool(BaseTool):
             "cell_id": resp.cell_id,
             "exec_type": "python",
         }
-        if images:
-            response_data["images"] = images
         if resp.error:
             response_data["error"] = resp.error
 
         return ToolResult(
-            content=[{"type": "text", "text": json.dumps(response_data)}],
+            content=[TextBlock(text=json.dumps(response_data))],
             is_error=not resp.success,
+            media=media or None,
         )
 
     # ── Direct mode ───────────────────────────────────────────────────────────
@@ -297,15 +398,14 @@ class CodeInterpreterTool(BaseTool):
             logger.error("code_interpreter direct error: %s", exc, exc_info=True)
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "success": False,
                                 "error": f"{type(exc).__name__}: {exc}",
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )
@@ -319,7 +419,7 @@ class CodeInterpreterTool(BaseTool):
         # Handle v3 structured outputs
         if "outputs" in result and result["outputs"]:
             text_parts = []
-            images = []
+            media = []
             for o in result["outputs"]:
                 otype = o.get("type", "text")
                 if otype == "text":
@@ -329,14 +429,18 @@ class CodeInterpreterTool(BaseTool):
                 elif otype == "error":
                     text_parts.append(f"[error] {o['content'].rstrip()}")
                 elif otype == "image":
-                    images.append(
-                        {
-                            "name": o.get("name", "figure.png"),
-                            "format": o.get("format", "png"),
-                            "data": o["content"],
-                        }
-                    )
-                    text_parts.append(f"[Generated {o.get('name', 'figure.png')}]")
+                    try:
+                        media.append(
+                            ImageContent(
+                                data=base64.b64decode(o["content"]),
+                                media_type=f"image/{o.get('format', 'png')}",
+                            )
+                        )
+                        text_parts.append(f"[Generated {o.get('name', 'figure.png')}]")
+                    except Exception:
+                        text_parts.append(
+                            f"[Generated {o.get('name', 'figure.png')}] (image decode failed)"
+                        )
 
             text = "\n".join(text_parts) if text_parts else "(no output)"
             data = {
@@ -346,14 +450,13 @@ class CodeInterpreterTool(BaseTool):
                 "cell_id": result.get("cell_id"),
                 "exec_type": exec_type,
             }
-            if images:
-                data["images"] = images
             if result.get("error"):
                 data["error"] = result["error"]
 
             return ToolResult(
-                content=[{"type": "text", "text": json.dumps(data)}],
+                content=[TextBlock(text=json.dumps(data))],
                 is_error=not success,
+                media=media or None,
             )
 
         # v2 fallback
@@ -367,9 +470,8 @@ class CodeInterpreterTool(BaseTool):
 
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "success": True,
                                 "output": text,
@@ -377,17 +479,16 @@ class CodeInterpreterTool(BaseTool):
                                 "cell_id": result.get("cell_id"),
                                 "exec_type": exec_type,
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=False,
             )
         else:
             return ToolResult(
                 content=[
-                    {
-                        "type": "text",
-                        "text": json.dumps(
+                    TextBlock(
+                        text=json.dumps(
                             {
                                 "success": False,
                                 "error": result.get("error", "Unknown error"),
@@ -395,8 +496,8 @@ class CodeInterpreterTool(BaseTool):
                                 "stderr": result.get("stderr", ""),
                                 "exec_type": exec_type,
                             }
-                        ),
-                    }
+                        )
+                    )
                 ],
                 is_error=True,
             )

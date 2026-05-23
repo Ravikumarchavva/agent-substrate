@@ -14,7 +14,8 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@example.com  # CHANGE ME
+    # CHANGEME: replace with your real email for Let's Encrypt notifications
+    email: chavvaravikumarreddy2004@gmail.com
     privateKeySecretRef:
       name: letsencrypt-prod-key
     solvers:
@@ -57,9 +58,11 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
+        # CHANGEME: replace with your real domain
         - app.example.com  # CHANGE ME
       secretName: ravi-tls
   rules:
+    # CHANGEME: replace with your real domain
     - host: app.example.com  # CHANGE ME
       http:
         paths:

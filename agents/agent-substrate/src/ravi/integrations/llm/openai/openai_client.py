@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import logging
 from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional
 
+import tiktoken
 from openai import AsyncOpenAI
+from PIL import Image
 from openai.types.responses.response_completed_event import ResponseCompletedEvent
 from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
-import tiktoken
 
 from ravi.core.messages.client_messages import (
-    ToolCallMessage,
     AssistantMessage,
+    ToolCallMessage,
+    ToolExecutionResultMessage,
 )
 
 from ravi.core.llm.base_client import (
@@ -26,7 +29,7 @@ from ravi.core.llm.base_client import (
     ModelStreamEvent,
 )
 from ravi.core.messages.base_message import BaseClientMessage
-from ravi.core.messages._types import MediaType
+from ravi.core.messages._types import ImageContent, MediaType
 from ravi.core.messages.encoders.openai import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
@@ -123,7 +126,7 @@ class OpenAIClient(BaseModelClient):
 
     def __init__(
         self,
-        model: str = "gpt-5-mini",
+        model: str = "gpt-5.4-mini",
         api_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
@@ -164,6 +167,7 @@ class OpenAIClient(BaseModelClient):
         self._default_tts_format = default_tts_format
         self._realtime_model = realtime_model
         self._encoding = None
+        self._uploaded_image_file_ids: dict[str, str] = {}
 
     # ── Audio capability flags ────────────────────────────────────────────────
 
@@ -191,7 +195,7 @@ class OpenAIClient(BaseModelClient):
 
         .. deprecated:: Use ``_serialize_messages`` instead.
         """
-        return [msg.to_dict() for msg in messages]
+        return [msg.model_dump(mode="json") for msg in messages]
 
     def _tools_to_openai_format(
         self, tools: Optional[list[dict[str, Any]]]
@@ -208,7 +212,79 @@ class OpenAIClient(BaseModelClient):
     # Private helpers — delegates to ``core.messages.encoders.openai``
     # ------------------------------------------------------------------
 
-    def _serialize_messages(
+    @staticmethod
+    def _image_extension(media_type: str) -> str:
+        return {
+            "image/png": "png",
+            "image/jpeg": "jpg",
+            "image/webp": "webp",
+            "image/gif": "gif",
+        }.get(media_type, "bin")
+
+    async def _upload_image_input(
+        self,
+        *,
+        image_bytes: bytes,
+        media_type: str,
+        filename: str,
+    ) -> str:
+        cache_key = hashlib.sha256(
+            media_type.encode("utf-8") + b"\0" + image_bytes
+        ).hexdigest()
+        cached = self._uploaded_image_file_ids.get(cache_key)
+        if cached:
+            return cached
+
+        uploaded = await self.client.files.create(
+            file=(filename, image_bytes, media_type),
+            purpose="user_data",
+        )
+        self._uploaded_image_file_ids[cache_key] = uploaded.id
+        return uploaded.id
+
+    async def _materialize_tool_result_media(
+        self,
+        messages: list[BaseClientMessage],
+    ) -> list[BaseClientMessage]:
+        prepared: list[BaseClientMessage] = []
+        for msg in messages:
+            if not isinstance(msg, ToolExecutionResultMessage) or not msg.media:
+                prepared.append(msg)
+                continue
+
+            uploaded_media: list[MediaType] = []
+            changed = False
+            for item in msg.media:
+                if isinstance(item, Image.Image):
+                    buf = io.BytesIO()
+                    item.save(buf, format="PNG")
+                    file_id = await self._upload_image_input(
+                        image_bytes=buf.getvalue(),
+                        media_type="image/png",
+                        filename="tool-artifact.png",
+                    )
+                    uploaded_media.append(ImageContent(file_id=file_id))
+                    changed = True
+                elif isinstance(item, ImageContent) and item.data is not None:
+                    media_type = item.media_type or "image/png"
+                    file_id = await self._upload_image_input(
+                        image_bytes=item.data,
+                        media_type=media_type,
+                        filename=(f"tool-artifact.{self._image_extension(media_type)}"),
+                    )
+                    uploaded_media.append(
+                        ImageContent(file_id=file_id, detail=item.detail)
+                    )
+                    changed = True
+                else:
+                    uploaded_media.append(item)
+
+            prepared.append(
+                msg.model_copy(update={"media": uploaded_media}) if changed else msg
+            )
+        return prepared
+
+    async def _serialize_messages(
         self, messages: list[BaseClientMessage]
     ) -> tuple[str, list[dict[str, Any]]]:
         """Serialise framework messages into (instructions, conversation_input).
@@ -216,7 +292,8 @@ class OpenAIClient(BaseModelClient):
         Delegates to the centralised OpenAI encoder so that message
         serialisation logic lives in one place.
         """
-        return _encode_messages(messages)
+        prepared = await self._materialize_tool_result_media(messages)
+        return _encode_messages(prepared)
 
     def _serialize_tools(
         self, tools: Optional[list[dict[str, Any]]]
@@ -250,7 +327,7 @@ class OpenAIClient(BaseModelClient):
         **kwargs: Any,
     ) -> GenerateResult:
         """Generate a single response from OpenAI using Responses API."""
-        instructions, conversation_input = self._serialize_messages(messages)
+        instructions, conversation_input = await self._serialize_messages(messages)
 
         # ── Unified path: tools + response_format together ────────────────
         # OpenAI Responses API supports both `tools` and `text.format`
@@ -535,7 +612,7 @@ class OpenAIClient(BaseModelClient):
             CompletionChunk,
         )
 
-        instructions, conversation_input = self._serialize_messages(messages)
+        instructions, conversation_input = await self._serialize_messages(messages)
 
         params: dict[str, Any] = {
             "model": self.model,
@@ -677,7 +754,7 @@ class OpenAIClient(BaseModelClient):
         for message in messages:
             # Every message follows <im_start>{role/name}\n{content}<im_end>\n
             num_tokens += 4
-            msg_dict = message.to_dict()
+            msg_dict = message.model_dump(mode="json")
 
             for key, value in msg_dict.items():
                 if isinstance(value, str):

@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from opentelemetry.trace import Status, StatusCode
@@ -26,10 +27,10 @@ from ravi.core.middleware.base import (
     MiddlewareContext,
     MiddlewareStage,
 )
-from ravi.core.resilience import RetryPolicy, _calculate_delay
-from ravi.core.runtime._protocol import AgentId, AgentRuntime
+from ravi.core.resilience import RetryPolicy, _calculate_delay, TOOL_RETRY_POLICY
+from ravi.core.runtime import AgentId, AgentRuntime
 from ravi.core.tools.base_tool import HitlMode, ToolResult
-from ravi.core.tools.catalog import CapabilityRegistry
+from ravi.core.catalog import AgentCatalogRegistry
 from ravi.catalog.tools.human_input.tool import (
     ToolApprovalAction,
     ToolApprovalHandler,
@@ -37,6 +38,8 @@ from ravi.catalog.tools.human_input.tool import (
     ToolApprovalResponse,
 )
 from ravi.shared.observability import global_metrics, logger
+from ravi.core.messages.content import TextBlock
+from ravi.exceptions import GuardrailTripwireError
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +56,46 @@ class ParsedToolCall:
         self.call_id = call_id
         self.name = name
         self.arguments = arguments
+
+
+# ---------------------------------------------------------------------------
+# Tool execution context (replaces 22-parameter signature)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ToolExecutionContext:
+    """Agent-level execution environment for a tool call.
+
+    Built once in ``_execute_tool()`` and passed down to both
+    ``execute_tool_direct`` and ``execute_tool_via_runtime``.
+
+    This replaces the 22-keyword-argument signature those functions used to
+    carry, making them testable in isolation without constructing a full agent.
+    """
+
+    # Agent identity
+    agent_name: str
+    run_id: str
+
+    # Execution policy
+    tool_timeout: Optional[float]
+    tool_retry_policy: RetryPolicy
+    verbose: bool
+
+    # Infrastructure
+    hooks: HookManager
+    middleware_pipeline: Any
+    catalog: AgentCatalogRegistry
+    tools: List[Any]
+
+    # Optional components
+    execution_context: Optional[ExecutionContext] = None
+    tool_search_name: str = ""
+    activate_tool_names_cb: Optional[Callable[[List[str]], None]] = None
+    skill_manager: Optional[Any] = None
+    runtime: Optional[AgentRuntime] = None
+    agent_id: Optional[AgentId] = None
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +116,7 @@ def parse_tool_call(tc: Any) -> ParsedToolCall:
     # 1. ToolCallMessage (our own type)
     if isinstance(tc, ToolCallMessage):
         return ParsedToolCall(
-            call_id=tc.id or str(uuid4()),
+            call_id=tc.tool_call_id or str(uuid4()),
             name=tc.name,
             arguments=tc.arguments or {},
         )
@@ -117,7 +160,7 @@ def parse_tool_call(tc: Any) -> ParsedToolCall:
 
 def find_tool(
     name: str,
-    catalog: CapabilityRegistry,
+    catalog: AgentCatalogRegistry,
     tools: List[Any],
 ) -> Optional[Any]:
     """Look up a tool by name (or alias) from the catalog, then fallback to list."""
@@ -166,7 +209,7 @@ def build_tool_error(
     global_metrics.increment_counter(metric_name, tags={"tool": parsed.name})
 
     tool_msg = ToolExecutionResultMessage(
-        content=[{"type": "text", "text": json.dumps({"error": error_msg})}],
+        content=[TextBlock(text=json.dumps({"error": error_msg}))],
         tool_call_id=parsed.call_id,
         name=parsed.name,
         is_error=True,
@@ -333,24 +376,29 @@ async def execute_tool_direct(
     step_num: int,
     t0: float,
     span: Any,
-    *,
     tool: Any,
-    agent_name: str,
-    verbose: bool,
-    tool_timeout: Optional[float],
-    tool_retry_policy: RetryPolicy,
-    hooks: HookManager,
-    middleware_pipeline: Any,
-    execution_context: Optional[ExecutionContext],
-    run_id: str,
-    tool_search_name: str,
-    activate_tool_names_cb: Any,
-    skill_manager: Any,
+    ctx: ToolExecutionContext,
 ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
     """Execute a tool with retry, timeout, middleware, and hooks.
 
     Returns the record + message tuple on success, or an error tuple on failure.
+    All agent-level configuration is carried by ``ctx``.
     """
+    agent_name = ctx.agent_name
+    run_id = ctx.run_id
+    verbose = ctx.verbose
+    tool_timeout = ctx.tool_timeout
+    tool_retry_policy = ctx.tool_retry_policy
+    hooks = ctx.hooks
+    middleware_pipeline = ctx.middleware_pipeline
+    execution_context = ctx.execution_context
+    tool_search_name = ctx.tool_search_name
+    activate_tool_names_cb = ctx.activate_tool_names_cb
+    skill_manager = ctx.skill_manager
+    runtime = ctx.runtime
+    catalog = ctx.catalog
+    tools = ctx.tools
+
     last_error: Optional[Exception] = None
     for attempt in range(tool_retry_policy.max_retries + 1):
         try:
@@ -361,12 +409,92 @@ async def execute_tool_direct(
 
             # Build the actual execution coroutine
             async def _run_tool() -> ToolResult:
-                if tool_timeout:
-                    return await asyncio.wait_for(
-                        tool.execute(**parsed.arguments),
-                        timeout=tool_timeout,
+                lock_handle = None
+                if runtime and hasattr(runtime, "resource_locks") and getattr(tool, "resource_uri", None):
+                    from ravi.core.tools.base_tool import ToolRisk
+                    from ravi.core.runtime._resource_lock import LockMode
+                    
+                    mode = LockMode.EXCLUSIVE
+                    if getattr(tool, "risk", None) == ToolRisk.SAFE:
+                        mode = LockMode.SHARED
+                    elif getattr(tool, "annotations", None) and getattr(tool.annotations, "readOnlyHint", None):
+                        mode = LockMode.SHARED
+                        
+                    try:
+                        uri = tool.resource_uri.format(**parsed.arguments)
+                    except Exception:
+                        uri = tool.resource_uri
+                        
+                    lock_handle = await runtime.resource_locks.acquire(
+                        resource_uri=uri,
+                        agent_id=agent_name,
+                        mode=mode,
                     )
-                return await tool.execute(**parsed.arguments)
+                
+                try:
+                    # Saga coordination for critical tools
+                    if runtime and hasattr(runtime, "saga_coordinator") and getattr(tool, "is_critical", False):
+                        saga_coordinator = runtime.saga_coordinator
+                        req_hash = saga_coordinator.hash_request(parsed.name, parsed.arguments)
+                        
+                        # Define compensating action
+                        compensate_fn = None
+                        if getattr(tool, "compensating_tool", None):
+                            async def do_compensate(step_result: Any) -> None:
+                                comp_tool = find_tool(
+                                    tool.compensating_tool,
+                                    catalog or (skill_manager._catalog if (skill_manager and hasattr(skill_manager, "_catalog")) else None),
+                                    tools or [],
+                                )
+                                if comp_tool:
+                                    comp_args = dict(parsed.arguments)
+                                    if isinstance(step_result, dict):
+                                        for k, v in step_result.items():
+                                            comp_args[f"step_result_{k}"] = v
+                                        comp_args["step_result"] = step_result
+                                    await comp_tool.execute(**comp_args)
+                                else:
+                                    logger.error(f"Compensating tool '{tool.compensating_tool}' not found for tool '{parsed.name}'")
+                            compensate_fn = do_compensate
+                            
+                        async def do_action() -> Any:
+                            if tool_timeout:
+                                res = await asyncio.wait_for(
+                                    tool.execute(**parsed.arguments),
+                                    timeout=tool_timeout,
+                                )
+                            else:
+                                res = await tool.execute(**parsed.arguments)
+                                
+                            if hasattr(res, "model_dump"):
+                                return res.model_dump(mode="json")
+                            return {"result": str(res)}
+                            
+                        # Run the step in the saga
+                        async with saga_coordinator.begin(run_id, agent_id=agent_name) as saga_ctx:
+                            saga_res = await saga_ctx.step(
+                                step_id=parsed.call_id,
+                                action=do_action,
+                                compensate=compensate_fn,
+                                request_hash=req_hash,
+                            )
+                            
+                        # Reconstruct ToolResult from saga result
+                        if isinstance(saga_res, dict) and "content" in saga_res:
+                            return ToolResult.model_validate(saga_res)
+                        else:
+                            return ToolResult(content=[TextBlock(text=str(saga_res))])
+                    else:
+                        # Standard execution
+                        if tool_timeout:
+                            return await asyncio.wait_for(
+                                tool.execute(**parsed.arguments),
+                                timeout=tool_timeout,
+                            )
+                        return await tool.execute(**parsed.arguments)
+                finally:
+                    if lock_handle and runtime and hasattr(runtime, "resource_locks"):
+                        await runtime.resource_locks.release(lock_handle)
 
             # Wrap with middleware pipeline when middleware is configured
             if middleware_pipeline.middleware:
@@ -406,10 +534,13 @@ async def execute_tool_direct(
                 matched_skill_names = exec_result.app_data.get(
                     "matched_skill_names", []
                 )
-                if isinstance(matched_skill_names, list) and skill_manager:
+                if isinstance(matched_skill_names, list):
                     for skill_name in matched_skill_names:
                         if isinstance(skill_name, str):
-                            skill_manager.activate(skill_name)
+                            if catalog is not None:
+                                catalog.activate_skill(skill_name)
+                            elif skill_manager is not None:
+                                skill_manager.activate(skill_name)
 
             duration_ms = (time.monotonic() - t0) * 1000
 
@@ -473,6 +604,29 @@ async def execute_tool_direct(
                 await asyncio.sleep(delay)
                 continue
 
+        except GuardrailTripwireError as e:
+            duration_ms = (time.monotonic() - t0) * 1000
+            from ravi.core.agents._guardrail_runner import (
+                build_tool_blocked_message,
+                build_tool_blocked_record,
+            )
+            tool_msg = build_tool_blocked_message(parsed, e.message)
+            record = build_tool_blocked_record(parsed, e.message)
+            record.duration_ms = duration_ms
+            await hooks.dispatch(
+                HookEvent.TOOL_END,
+                {
+                    "event": "on_tool_end",
+                    "agent_name": agent_name,
+                    "tool_name": parsed.name,
+                    "is_error": True,
+                    "error": f"Blocked by guardrail: {e.message}",
+                    "duration_ms": duration_ms,
+                    "step": step_num,
+                },
+            )
+            return record, tool_msg
+
         except Exception as e:
             last_error = e
             break  # Non-retryable — do not keep trying
@@ -506,16 +660,19 @@ async def execute_tool_via_runtime(
     step_num: int,
     t0: float,
     span: Any,
-    *,
-    runtime: AgentRuntime,
-    agent_id: AgentId,
-    agent_name: str,
-    hooks: HookManager,
-    catalog: CapabilityRegistry,
-    tools: List[Any],
-    activate_tool_names_cb: Any,
+    ctx: ToolExecutionContext,
 ) -> Tuple[ToolCallRecord, ToolExecutionResultMessage]:
     """Dispatch tool execution through the agent runtime."""
+    assert ctx.runtime is not None
+    assert ctx.agent_id is not None
+    runtime = ctx.runtime
+    agent_id = ctx.agent_id
+    agent_name = ctx.agent_name
+    hooks = ctx.hooks
+    catalog = ctx.catalog
+    tools = ctx.tools
+    activate_tool_names_cb = ctx.activate_tool_names_cb
+
     payload = {
         "tool_name": parsed.name,
         "arguments": parsed.arguments,
@@ -557,6 +714,7 @@ async def execute_tool_via_runtime(
         return result
 
     # Parse response dict from ToolExecutorHandler
+    assert isinstance(response, dict)
     duration_ms = (time.monotonic() - t0) * 1000
     is_error = response.get("is_error", False)
 
@@ -566,6 +724,7 @@ async def execute_tool_via_runtime(
         tool_call_id=parsed.call_id,
         name=parsed.name,
         is_error=is_error,
+        media=response.get("media"),
     )
     if response.get("app_data"):
         tool_msg.app_data = response["app_data"]

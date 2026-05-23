@@ -17,8 +17,6 @@ from ravi.shared.auth.claims import AuthClaims
 
 logger = logging.getLogger(__name__)
 
-# Defaults — overridden by each service's settings
-_DEFAULT_SECRET = "CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_RANDOM_SECRET"
 _DEFAULT_ALG = "HS256"
 
 
@@ -28,11 +26,12 @@ def _now() -> datetime:
 
 def create_access_token(
     user_id: str,
+    secret: str,
+    *,
     email: str = "",
     role: str = "end_user",
     tenant_id: str = "default",
     workspace_id: str = "default",
-    secret: str = _DEFAULT_SECRET,
     algorithm: str = _DEFAULT_ALG,
     expire_minutes: int = 60,
     extra: dict[str, Any] | None = None,
@@ -56,7 +55,8 @@ def create_access_token(
 
 def create_refresh_token(
     user_id: str,
-    secret: str = _DEFAULT_SECRET,
+    secret: str,
+    *,
     algorithm: str = _DEFAULT_ALG,
     expire_days: int = 30,
 ) -> tuple[str, str, datetime]:
@@ -75,7 +75,8 @@ def create_refresh_token(
 
 def create_service_token(
     service_name: str,
-    secret: str = _DEFAULT_SECRET,
+    secret: str,
+    *,
     algorithm: str = _DEFAULT_ALG,
     expire_minutes: int = 15,
 ) -> str:
@@ -96,8 +97,9 @@ def create_service_token(
 def create_agent_context_token(
     user_id: str,
     thread_id: str,
+    secret: str,
+    *,
     permissions: list[str] | None = None,
-    secret: str = _DEFAULT_SECRET,
     algorithm: str = _DEFAULT_ALG,
     expire_minutes: int = 5,
 ) -> str:
@@ -118,7 +120,8 @@ def create_agent_context_token(
 
 def verify_token(
     token: str,
-    secret: str = _DEFAULT_SECRET,
+    secret: str,
+    *,
     algorithm: str = _DEFAULT_ALG,
     expected_type: Optional[str] = None,
 ) -> Optional[AuthClaims]:

@@ -19,6 +19,7 @@ from typing import Any, Awaitable, Callable, ClassVar, Dict, Optional
 
 from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
 from ravi.shared.tasks.store import GlobalTaskStore, Task, TaskStore
+from ravi.core.messages.content import TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -368,14 +369,14 @@ class TaskManagerTool(BaseTool):
 
 def _ok(message: str) -> ToolResult:
     return ToolResult(
-        content=[{"type": "text", "text": message}],
+        content=[TextBlock(text=message)],
         is_error=False,
     )
 
 
 def _err(message: str) -> ToolResult:
     return ToolResult(
-        content=[{"type": "text", "text": message}],
+        content=[TextBlock(text=message)],
         is_error=True,
     )
 

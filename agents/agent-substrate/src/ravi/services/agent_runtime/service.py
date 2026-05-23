@@ -15,6 +15,7 @@ from ravi.core.messages.client_messages import (
     AssistantMessage,
     ToolExecutionResultMessage,
 )
+from ravi.core.messages.content import TextBlock
 from ravi.core.llm.base_client import BaseModelClient
 from ravi.core.tools.base_tool import BaseTool
 from ravi.integrations.memory.redis_memory import RedisMemory
@@ -128,7 +129,7 @@ async def execute_agent_run(
         tool_calls = None
         if message.tool_calls:
             tool_calls = [
-                {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                {"id": tc.tool_call_id, "name": tc.name, "arguments": tc.arguments}
                 for tc in message.tool_calls
             ]
 
@@ -153,10 +154,7 @@ async def execute_agent_run(
     async def _publish_tool_result(chunk: ToolExecutionResultMessage) -> None:
         content_text = ""
         if isinstance(chunk.content, list):
-            parts = []
-            for block in chunk.content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    parts.append(block.get("text", ""))
+            parts = [block.text for block in chunk.content if isinstance(block, TextBlock)]
             content_text = "\n".join(parts)
 
         await event_bus.publish(

@@ -194,6 +194,7 @@ async def process_stream_tool_calls(
     memory: Any,
     execute_tool_fn: Any,
     stream_pub: Any,
+    tool_timeout: Optional[float] = None,
 ) -> AsyncIterator[ToolExecutionResultMessage]:
     """Process tool calls in a streaming step, yielding result messages."""
     if not response.tool_calls:
@@ -222,7 +223,22 @@ async def process_stream_tool_calls(
                 await stream_pub.emit(tool_msg)
 
         if not tool_blocked:
-            _, tool_msg = await execute_tool_fn(parsed, step_num)
+            coro = execute_tool_fn(parsed, step_num)
+            if tool_timeout is not None:
+                try:
+                    _, tool_msg = await asyncio.wait_for(coro, timeout=tool_timeout)
+                except asyncio.TimeoutError:
+                    from ravi.core.messages.content import TextBlock
+                    from ravi.core.messages.client_messages import ToolExecutionResultMessage
+
+                    tool_msg = ToolExecutionResultMessage(
+                        content=[TextBlock(text=f"Tool '{parsed.name}' timed out after {tool_timeout}s")],
+                        tool_call_id=parsed.call_id,
+                        name=parsed.name,
+                        is_error=True,
+                    )
+            else:
+                _, tool_msg = await coro
             await memory.add_message(tool_msg)
             yield tool_msg
             if stream_pub is not None:

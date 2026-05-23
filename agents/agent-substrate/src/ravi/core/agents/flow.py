@@ -262,11 +262,9 @@ class SequentialFlow(BaseFlow):
             async for chunk in stream:
                 # Tag every chunk with the producing agent's id
                 if hasattr(chunk, "__dict__"):
-                    chunk_dict = (
-                        chunk.__dict__.copy() if hasattr(chunk, "__dict__") else {}
-                    )
+                    chunk_dict = vars(chunk).copy()
                     chunk_dict["agent_id"] = agent_id
-                    chunk.__dict__.update(chunk_dict)
+                    vars(chunk).update(chunk_dict)
                 yield chunk
 
                 # Accumulate text for next step's input
@@ -429,7 +427,7 @@ class ParallelFlow(BaseFlow):
                 )
                 async for chunk in stream:
                     if hasattr(chunk, "__dict__"):
-                        chunk.__dict__["agent_id"] = agent_id
+                        vars(chunk)["agent_id"] = agent_id
                     await q.put(chunk)
             finally:
                 await q.put(None)  # sentinel
@@ -579,7 +577,7 @@ class ConditionalFlow(BaseFlow):
         )
         async for chunk in stream:
             if hasattr(chunk, "__dict__"):
-                chunk.__dict__["agent_id"] = agent_id
+                vars(chunk)["agent_id"] = agent_id
             yield chunk
 
         await self.hooks.dispatch(

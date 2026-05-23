@@ -8,22 +8,27 @@ The contract is deliberately minimal:
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, List, Optional, Type
+from typing import AsyncIterator, List, Optional, Type, Union
 from abc import ABC, abstractmethod
 from typing import runtime_checkable, Protocol
+
+from pydantic import BaseModel
+
+from ravi.core.messages.content import JsonValue
+from ravi.core.messages._types import StreamChunk
+from ravi.core.messages.client_messages import ToolExecutionResultMessage
 
 from ravi.core.agents.agent_result import AgentRunResult
 from ravi.core.context.base_context import ModelContext
 from ravi.core.tools.base_tool import BaseTool
+from ravi.core.catalog import AgentCatalogRegistry
 from ravi.core.llm.base_client import BaseModelClient
 from ravi.core.memory.base_memory import BaseMemory
 from ravi.core.memory.memory_scope import MemoryScope
-from ravi.core.guardrails.base_guardrail import BaseGuardrail
 from ravi.core.execution.context import ExecutionContext
 from ravi.core.middleware.base import BaseMiddleware
 from ravi.core.middleware.runner import MiddlewarePipeline
-from ravi.core.runtime._protocol import AgentId, AgentRuntime
-from ravi.core.runtime._types import MessageContext
+from ravi.core.runtime import AgentId, AgentRuntime, MessageContext
 
 
 # ---------------------------------------------------------------------------
@@ -52,42 +57,47 @@ class BaseAgent(ABC):
         name: str,
         description: str,
         *,
-        model_client: BaseModelClient,
-        model_context: ModelContext,
-        tools: Optional[List[BaseTool]] = None,
+        catalog: AgentCatalogRegistry,
         system_instructions: str = "You are a helpful assistant.",
-        memory: Optional[BaseMemory] = None,
         memory_scope: MemoryScope = MemoryScope.ISOLATED,
-        input_guardrails: Optional[List[BaseGuardrail]] = None,
-        output_guardrails: Optional[List[BaseGuardrail]] = None,
-        # Prompt enrichment (replaces skill_manager / skill_dirs coupling)
         prompt_enricher: Optional[PromptEnricher] = None,
-        # Structured output: when set, run() / run_stream() parse the final
-        # answer into this Pydantic model before returning.
-        response_schema: Optional[Type[Any]] = None,
-        # Middleware: opt-in composable pipeline for pre/post processing.
+        response_schema: Optional[Type[BaseModel]] = None,
         middleware: Optional[List[BaseMiddleware]] = None,
         execution_context: Optional[ExecutionContext] = None,
-        # Runtime — makes the agent distributable
         runtime: Optional[AgentRuntime] = None,
         agent_id: Optional[AgentId] = None,
     ):
         self.name = name
         self.description = description
-        self.model_client = model_client
-        self.model_context = model_context
-        self.tools: List[BaseTool] = list(tools) if tools else []
+        self.catalog = catalog
+        # Pull primary resources from the catalog — subclasses ensure these
+        # are populated before calling super().__init__().
+        self.model_client: Optional[BaseModelClient] = catalog.primary_model()
+        self.model_context: Optional[ModelContext] = catalog.primary_context()
+        self.memory: Optional[BaseMemory] = catalog.primary_memory()
         self.system_instructions = system_instructions
-        self.memory = memory
         self.memory_scope = memory_scope
-        self.input_guardrails = input_guardrails or []
-        self.output_guardrails = output_guardrails or []
-        self.prompt_enricher: Optional[PromptEnricher] = prompt_enricher
-        self.response_schema: Optional[Type[Any]] = response_schema
+        self.prompt_enricher: Optional[PromptEnricher] = prompt_enricher or catalog
+        self.response_schema: Optional[Type[BaseModel]] = response_schema
         self.middleware_pipeline = MiddlewarePipeline(middleware)
         self.execution_context: Optional[ExecutionContext] = execution_context
         self.runtime: Optional[AgentRuntime] = runtime
         self.agent_id: Optional[AgentId] = agent_id
+
+    @property
+    def tools(self) -> List[BaseTool]:
+        """Dynamically fetch all tools registered in the unified capability catalog."""
+        return self.catalog.all_tools()
+
+    @tools.setter
+    def tools(self, value: List[BaseTool]) -> None:
+        """Replace tools in the unified capability catalog."""
+        # Unregister all current tools
+        for t in self.catalog.all_tools():
+            self.catalog.unregister(t.name)
+        # Register new tools
+        for t in value:
+            self.catalog.register_tool(t)
 
     def get_effective_system_prompt(self) -> str:
         """Return the system prompt, enriched by prompt_enricher if set."""
@@ -102,8 +112,8 @@ class BaseAgent(ABC):
         self,
         input_text: str,
         *,
-        response_schema: Optional[Type[Any]] = None,
-        **kwargs: Any,
+        response_schema: Optional[Type[BaseModel]] = None,
+        **kwargs,
     ) -> AgentRunResult:
         """Execute the agent to completion and return a structured result.
 
@@ -118,9 +128,9 @@ class BaseAgent(ABC):
         self,
         input_text: str,
         *,
-        response_schema: Optional[Type[Any]] = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[Any]:
+        response_schema: Optional[Type[BaseModel]] = None,
+        **kwargs,
+    ) -> AsyncIterator[Union[StreamChunk, dict, ToolExecutionResultMessage]]:
         """Execute the agent, yielding events/chunks as they happen.
 
         When ``response_schema`` is set, a ``StructuredOutputChunk`` is yielded
@@ -130,7 +140,9 @@ class BaseAgent(ABC):
 
     # -- Helpers --------------------------------------------------------------
 
-    async def handle_message(self, ctx: MessageContext, payload: Any) -> Any:
+    async def handle_message(
+        self, ctx: MessageContext, payload: JsonValue
+    ) -> JsonValue:
         """Adapter that makes this agent a valid ``MessageHandler``.
 
         Default implementation calls ``self.run()`` and returns the output.
@@ -141,7 +153,7 @@ class BaseAgent(ABC):
 
     async def reset(self) -> None:
         """Clear memory and return agent to initial state."""
-        if self.memory:
+        if self.memory is not None:
             await self.memory.clear()
 
     def __repr__(self) -> str:

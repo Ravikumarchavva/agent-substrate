@@ -1,4 +1,4 @@
-"""core.tools - BaseTool contract, built-in tools, and CapabilityRegistry."""
+"""core.tools - BaseTool contract and built-in tools."""
 
 from ravi.core.tools.base_tool import (
     BaseTool,
@@ -12,8 +12,9 @@ from ravi.core.tools.builtin_tools import (
     CalculatorTool,
     GetCurrentTimeTool,
     WebSearchTool,
+    GetBitcoinPriceTool,
 )
-from ravi.core.tools.catalog import CapabilityRegistry
+from ravi.core.tools.functional import tool
 
 __all__ = [
     "BaseTool",
@@ -22,8 +23,10 @@ __all__ = [
     "ToolResult",
     "ToolRisk",
     "Tool",
+    "tool",
     "CalculatorTool",
     "GetCurrentTimeTool",
     "WebSearchTool",
-    "CapabilityRegistry",
+    "GetBitcoinPriceTool",
 ]
+

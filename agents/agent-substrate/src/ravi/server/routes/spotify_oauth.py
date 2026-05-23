@@ -7,11 +7,12 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ravi.configs.settings import settings
 from ravi.integrations.spotify.auth import SpotifyAuthService
+from ravi.server.security.deps import TokenPayload, get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -164,13 +165,16 @@ async def spotify_callback(
 
 
 @router.post("/set-token")
-async def set_access_token_from_frontend(request: Request):
+async def set_access_token_from_frontend(
+    request: Request,
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """Accept and store an OAuth token pushed from the frontend after user-facing OAuth.
 
     Called by the Next.js callback route so the backend always has the latest user
     OAuth token without requiring the user to go through the backend OAuth flow.
     """
-    session_id = "default_user"
+    session_id = current_user.sub
     body = await request.json()
     _user_tokens[session_id] = {
         "access_token": body["access_token"],
@@ -182,13 +186,15 @@ async def set_access_token_from_frontend(request: Request):
 
 
 @router.get("/token")
-async def get_access_token(request: Request):
+async def get_access_token(
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """Get current user's Spotify access token.
 
     Returns:
         JSON with access_token for Web Playback SDK initialization
     """
-    session_id = "default_user"  # TODO: Use actual session management
+    session_id = current_user.sub
 
     tokens = _user_tokens.get(session_id)
     if not tokens:
@@ -206,12 +212,14 @@ async def get_access_token(request: Request):
 
 
 @router.post("/refresh")
-async def refresh_token(request: Request):
+async def refresh_token(
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """Refresh the access token using refresh token.
 
     Called automatically when access token expires.
     """
-    session_id = "default_user"  # TODO: Use actual session management
+    session_id = current_user.sub
 
     tokens = _user_tokens.get(session_id)
     if not tokens or not tokens.get("refresh_token"):
@@ -249,9 +257,11 @@ async def refresh_token(request: Request):
 
 
 @router.post("/logout")
-async def logout(request: Request):
+async def logout(
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """Log out user and clear tokens."""
-    session_id = "default_user"  # TODO: Use actual session management
+    session_id = current_user.sub
 
     if session_id in _user_tokens:
         del _user_tokens[session_id]
@@ -261,7 +271,10 @@ async def logout(request: Request):
 
 
 @router.post("/restore")
-async def restore_tokens(request: Request):
+async def restore_tokens(
+    request: Request,
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """Restore OAuth tokens from client-side localStorage.
 
     Called when the Spotify player iframe loads and has tokens saved
@@ -269,7 +282,7 @@ async def restore_tokens(request: Request):
     Uses the refresh_token to obtain a fresh access_token.
     """
     body = await request.json()
-    session_id = "default_user"
+    session_id = current_user.sub
 
     access_token_val = body.get("access_token")
     refresh_token_val = body.get("refresh_token")
@@ -350,12 +363,13 @@ async def get_liked_songs(
     limit: int = Query(50, ge=1, le=50),
     offset: int = Query(0, ge=0),
     market: Optional[str] = Query(None),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Fetch the current user's liked (saved) tracks.
 
     Requires user-library-read scope in the stored OAuth token.
     """
-    svc = _get_oauth_service_with_token()
+    svc = _get_oauth_service_with_token(current_user.sub)
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
 
@@ -371,12 +385,13 @@ async def get_liked_songs(
 async def get_playlists(
     limit: int = Query(50, ge=1, le=50),
     offset: int = Query(0, ge=0),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Fetch the current user's playlists.
 
     Requires playlist-read-private scope in the stored OAuth token.
     """
-    svc = _get_oauth_service_with_token()
+    svc = _get_oauth_service_with_token(current_user.sub)
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
 
@@ -394,9 +409,10 @@ async def get_playlist_tracks(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     market: Optional[str] = Query(None),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Fetch tracks for a specific playlist."""
-    svc = _get_oauth_service_with_token()
+    svc = _get_oauth_service_with_token(current_user.sub)
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
 

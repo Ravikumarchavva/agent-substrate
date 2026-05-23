@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
@@ -30,9 +30,10 @@ from ravi.core.pipelines.codegen import generate_code
 from ravi.core.pipelines.runner import PipelineRunner
 from ravi.core.pipelines.schema import PipelineConfig
 from ravi.server.models import Pipeline, PipelineRun
+from ravi.server.security.deps import get_current_user
 
 logger = logging.getLogger("ravi.server.routes.builder")
-router = APIRouter(prefix="/builder", tags=["builder"])
+router = APIRouter(prefix="/builder", tags=["builder"], dependencies=[Depends(get_current_user)])
 
 
 # ── Request / Response schemas ───────────────────────────────────────────────
@@ -459,7 +460,7 @@ async def run_pipeline(
                             )
                         yield _sse_event("completion", {"content": content})
                     elif isinstance(chunk, StreamChunk):
-                        yield _sse_event(chunk.type, {"content": str(chunk.data)})
+                        yield _sse_event(chunk.chunk_type, {"content": ""})
                     elif isinstance(chunk, dict):
                         yield _sse_event(chunk.get("type", "text_delta"), chunk)
                     else:

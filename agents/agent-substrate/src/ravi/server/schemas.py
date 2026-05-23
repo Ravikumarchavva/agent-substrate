@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from ravi.core.messages.content import JsonObject
 
 
 # ── Thread / Session schemas ─────────────────────────────────────────────────
@@ -27,7 +29,7 @@ class ThreadUpdate(BaseModel):
 
     name: Optional[str] = None
     tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[JsonObject] = None
 
 
 class ThreadOut(BaseModel):
@@ -37,7 +39,7 @@ class ThreadOut(BaseModel):
     name: Optional[str]
     user_id: Optional[uuid.UUID] = None
     tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[JsonObject] = None
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
@@ -59,8 +61,8 @@ class StepOut(BaseModel):
     input: Optional[str] = None
     output: Optional[str] = None
     is_error: Optional[bool] = None
-    metadata: Optional[Dict[str, Any]] = None
-    generation: Optional[Dict[str, Any]] = None
+    metadata: Optional[JsonObject] = None
+    generation: Optional[JsonObject] = None
     created_at: datetime
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
@@ -137,7 +139,7 @@ class HITLResponse(BaseModel):
 
     # For tool approval
     action: Optional[Literal["approve", "deny", "modify"]] = None
-    modified_arguments: Optional[Dict[str, Any]] = None
+    modified_arguments: Optional[JsonObject] = None
     reason: Optional[str] = None
     # For human input
     selected_key: Optional[str] = None
@@ -156,7 +158,7 @@ class McpAppContextPayload(BaseModel):
     """
 
     app_uri: str = Field(..., description="ui:// URI of the source MCP App")
-    data: Dict[str, Any] = Field(default_factory=dict)
+    data: JsonObject = Field(default_factory=dict)
 
 
 class McpContextUpdate(BaseModel):
@@ -168,7 +170,7 @@ class McpContextUpdate(BaseModel):
     """
 
     tool_name: str
-    context: Any  # arbitrary app-state dict from the MCP App iframe
+    context: JsonObject  # arbitrary app-state dict from the MCP App iframe
 
 
 # ── Element schemas ──────────────────────────────────────────────────────────
@@ -186,7 +188,7 @@ class ElementOut(BaseModel):
     display: Optional[str] = None
     url: Optional[str] = None
     for_id: Optional[uuid.UUID] = None
-    props: Optional[Dict[str, Any]] = None
+    props: Optional[JsonObject] = None
     document_type: Optional[str] = None
     document_class: Optional[str] = None
 
@@ -228,7 +230,7 @@ class UserOut(BaseModel):
 
     id: uuid.UUID
     identifier: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[JsonObject] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

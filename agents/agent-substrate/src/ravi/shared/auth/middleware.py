@@ -18,7 +18,13 @@ _bearer = HTTPBearer(auto_error=False)
 
 def _get_jwt_secret(request: Request) -> str:
     """Read JWT_SECRET from the app's service settings."""
-    return getattr(request.app.state, "jwt_secret", jwt_utils._DEFAULT_SECRET)
+    secret = getattr(request.app.state, "jwt_secret", None)
+    if not secret:
+        raise RuntimeError(
+            "jwt_secret not configured on app.state. "
+            "Set app.state.jwt_secret = settings.JWT_SECRET in your service lifespan."
+        )
+    return secret
 
 
 def get_current_user(

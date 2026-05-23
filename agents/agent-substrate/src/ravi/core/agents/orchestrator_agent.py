@@ -34,6 +34,8 @@ Usage::
 from __future__ import annotations
 
 from typing import Dict, List, Optional
+from pydantic import BaseModel
+from ravi.core.messages.content import JsonObject, TextBlock
 
 from ravi.core.agents.base_agent import BaseAgent
 from ravi.core.agents.react_agent import ReActAgent
@@ -50,7 +52,9 @@ from ravi.core.resilience import RetryPolicy
 from ravi.core.tools.base_tool import BaseTool, ToolResult
 from ravi.catalog import SkillManager
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
-from ravi.core.runtime._protocol import AgentId, AgentRuntime
+from ravi.core.runtime import AgentId, AgentRuntime
+from ravi.core.catalog import AgentCatalogRegistry
+from ravi.core.middleware.base import BaseMiddleware
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +78,10 @@ class _HandoffTool(BaseTool):
     """
 
     def __init__(
-        self, agent: BaseAgent, runtime: Optional[AgentRuntime] = None
+        self,
+        agent: BaseAgent,
+        runtime: Optional[AgentRuntime] = None,
+        orchestrator: Optional[BaseAgent] = None,
     ) -> None:
         super().__init__(
             name=f"handoff_{agent.name}",
@@ -103,6 +110,7 @@ class _HandoffTool(BaseTool):
         )
         self._agent = agent
         self._runtime = runtime
+        self._orchestrator = orchestrator
 
     @property
     def target_agent(self) -> BaseAgent:
@@ -122,6 +130,15 @@ class _HandoffTool(BaseTool):
             input,
         )
 
+        # Propagate execution context with depth tracking
+        exec_ctx = None
+        orchestrator_ctx = getattr(self._orchestrator, "execution_context", None)
+        if orchestrator_ctx is not None:
+            try:
+                exec_ctx = orchestrator_ctx.child_context(self._agent.name)
+            except Exception:
+                pass  # MaxAgentDepthError — will propagate naturally via run()
+
         # Distributed path: dispatch via runtime
         if self._runtime is not None and self._agent.agent_id is not None:
             output_text = await self._runtime.send_message(
@@ -134,16 +151,18 @@ class _HandoffTool(BaseTool):
                     str(p) for p in output_text if isinstance(p, str)
                 )
             return ToolResult(
-                content=[{"type": "text", "text": str(output_text) or "(no output)"}],
+                content=[TextBlock(text=str(output_text) or "(no output)")],
             )
 
         # Local path: call run() directly (backward compatible)
+        if exec_ctx is not None:
+            self._agent.execution_context = exec_ctx
         result: AgentRunResult = await self._agent.run(input)
         output_text = result.output
         if isinstance(output_text, list):
             output_text = "\n".join(str(p) for p in output_text if isinstance(p, str))
         return ToolResult(
-            content=[{"type": "text", "text": output_text or "(no output)"}],
+            content=[TextBlock(text=output_text or "(no output)")],
             is_error=result.status.value in ("error", "guardrail_tripped"),
         )
 
@@ -151,6 +170,16 @@ class _HandoffTool(BaseTool):
 # ---------------------------------------------------------------------------
 # OrchestratorAgent
 # ---------------------------------------------------------------------------
+
+
+class HandoffEventPayload(BaseModel):
+    """Structured payload emitted when the orchestrator delegates to a sub-agent."""
+
+    event: str = "on_handoff"
+    from_agent: str
+    to_agent: str
+    input: str
+    reason: str
 
 
 class OrchestratorAgent(ReActAgent):
@@ -214,13 +243,16 @@ class OrchestratorAgent(ReActAgent):
         verbose: bool = True,
         runtime: Optional[AgentRuntime] = None,
         agent_id: Optional[AgentId] = None,
+        middleware: Optional[List[BaseMiddleware]] = None,
+        catalog: Optional[AgentCatalogRegistry] = None,
     ) -> None:
         if not sub_agents:
             raise ValueError("OrchestratorAgent requires at least one sub_agent")
 
         # Build handoff tools from sub-agents
         handoff_tools: List[_HandoffTool] = [
-            _HandoffTool(agent, runtime=runtime) for agent in sub_agents
+            _HandoffTool(agent, runtime=runtime, orchestrator=None)
+            for agent in sub_agents
         ]
         all_tools = handoff_tools + (extra_tools or [])
 
@@ -235,6 +267,13 @@ class OrchestratorAgent(ReActAgent):
             "into a coherent final answer."
         )
 
+        resolved_middleware = list(middleware or [])
+        if handoff_guardrails:
+            from ravi.core.middleware.builtins.guardrails import GuardrailsMiddleware
+            resolved_middleware = [
+                GuardrailsMiddleware(tool_call_guardrails=handoff_guardrails)
+            ] + resolved_middleware
+
         super().__init__(
             name=name,
             description=description,
@@ -246,8 +285,6 @@ class OrchestratorAgent(ReActAgent):
             memory_scope=memory_scope,
             max_iterations=max_iterations,
             verbose=verbose,
-            input_guardrails=[],
-            output_guardrails=handoff_guardrails or [],
             hooks=hooks,
             llm_retry_policy=llm_retry_policy,
             tool_retry_policy=tool_retry_policy,
@@ -259,6 +296,8 @@ class OrchestratorAgent(ReActAgent):
             skill_manager=skill_manager,
             runtime=runtime,
             agent_id=agent_id,
+            middleware=resolved_middleware,
+            catalog=catalog,
         )
 
         self.sub_agents = sub_agents
@@ -266,6 +305,10 @@ class OrchestratorAgent(ReActAgent):
             t.name: t
             for t in handoff_tools  # type: ignore[misc]
         }
+
+        # Back-patch orchestrator reference now that self is available
+        for ht in handoff_tools:
+            ht._orchestrator = self
 
         # Patch the hook dispatcher so every handoff emits HANDOFF event
         self._patch_hooks()
@@ -276,22 +319,24 @@ class OrchestratorAgent(ReActAgent):
         """Wrap the underlying hooks dispatcher to intercept handoff tool calls."""
         original_dispatch = self.hooks.dispatch
 
-        async def _patched_dispatch(event: HookEvent, payload: Dict) -> None:
+        async def _patched_dispatch(event: HookEvent, payload: JsonObject) -> None:
             if event == HookEvent.TOOL_START:
                 tool_name = payload.get("tool_name", "")
-                if tool_name.startswith("handoff_"):
+                if isinstance(tool_name, str) and tool_name.startswith("handoff_"):
                     agent_name = tool_name[len("handoff_") :]
+                    args = payload.get("tool_arguments", {})
+                    if not isinstance(args, dict):
+                        args = {}
+
+                    handoff_payload = HandoffEventPayload(
+                        from_agent=self.name,
+                        to_agent=agent_name,
+                        input=str(args.get("input", "")),
+                        reason=str(args.get("reason", "")),
+                    )
                     await original_dispatch(
                         HookEvent.HANDOFF,
-                        {
-                            "event": "on_handoff",
-                            "from_agent": self.name,
-                            "to_agent": agent_name,
-                            "input": payload.get("tool_arguments", {}).get("input", ""),
-                            "reason": payload.get("tool_arguments", {}).get(
-                                "reason", ""
-                            ),
-                        },
+                        handoff_payload.model_dump(mode="json"),
                     )
             await original_dispatch(event, payload)
 

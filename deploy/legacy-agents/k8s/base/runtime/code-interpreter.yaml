@@ -120,8 +120,8 @@ spec:
       # Init container: pull kernel/rootfs from object storage if not present
       initContainers:
         - name: fetch-kernel
-          image: ghcr.io/example/agent-framework/ci-kernel-fetcher:0.1.0
-          command: ["/bin/sh", "-c", "echo 'Kernel fetch skipped — use pre-baked node image'"]
+          image: busybox:1.36
+          command: ["/bin/sh", "-c", "mkdir -p /opt/firecracker && echo 'Firecracker assets dir ready. Mount a PV or bake kernel+rootfs into the node image.'"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

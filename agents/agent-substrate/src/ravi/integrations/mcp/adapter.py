@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ravi.core.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
+from ravi.kernel.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
 from ravi.integrations.mcp.client import MCPClient
 from ravi.integrations.mcp.tool import MCPTool
 

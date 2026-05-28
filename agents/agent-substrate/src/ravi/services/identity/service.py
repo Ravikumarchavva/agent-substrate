@@ -1,8 +1,8 @@
 """Identity Auth Service — business logic."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import Optional
 
 from sqlalchemy import select
@@ -13,7 +13,7 @@ from ravi.shared.auth import jwt as jwt_utils
 from ravi.shared.events.bus import EventBus
 from ravi.shared.events import types as events
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 async def get_or_create_user(

@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ravi · Document Intelligence Pipeline</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #161921;
+    --surface2: #1e2330;
+    --border: #2a2f3e;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --muted: #64748b;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    --sans: Inter, system-ui, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  header {
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent2);
+    letter-spacing: -0.5px;
+  }
+
+  .logo span { color: var(--text2); font-weight: 400; }
+  header p { color: var(--text2); font-size: 13px; margin-left: auto; }
+
+  /* ── Layout ─────────────────────────────────────────────────────────── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 0;
+    height: calc(100vh - 61px);
+    overflow: hidden;
+  }
+
+  .sidebar {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--surface);
+  }
+
+  .panel { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 0; }
+
+  /* ── Section headers ─────────────────────────────────────────────────── */
+  .section {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header {
+    padding: 12px 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-body { padding: 20px; }
+
+  /* ── Drop zone ───────────────────────────────────────────────────────── */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.05);
+  }
+
+  .dropzone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .dropzone-icon { font-size: 32px; margin-bottom: 10px; }
+  .dropzone-label { font-size: 14px; color: var(--text2); }
+  .dropzone-label strong { color: var(--accent2); }
+  .dropzone-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  #selected-file {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-radius: 7px;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text2);
+    display: none;
+    word-break: break-all;
+  }
+
+  /* ── Upload button ───────────────────────────────────────────────────── */
+  .btn {
+    width: 100%;
+    padding: 11px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    margin-top: 14px;
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* ── Pipeline diagram ─────────────────────────────────────────────────── */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 18px 20px;
+  }
+
+  .pipe-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pipe-fan {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 28px;
+  }
+
+  .agent-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 500;
+    transition: border-color 0.2s, background 0.2s;
+    flex: 1;
+  }
+
+  .agent-chip.running {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.1);
+  }
+
+  .agent-chip.done {
+    border-color: var(--success);
+    background: rgba(34, 197, 94, 0.07);
+  }
+
+  .agent-chip.error {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.07);
+  }
+
+  .agent-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .agent-chip.running .agent-dot { background: var(--accent); animation: pulse 1s infinite; }
+  .agent-chip.done .agent-dot { background: var(--success); animation: none; }
+  .agent-chip.error .agent-dot { background: var(--danger); animation: none; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .pipe-arrow {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 0 2px;
+    flex-shrink: 0;
+  }
+
+  .agent-label { font-weight: 600; color: var(--text2); }
+  .agent-chip.running .agent-label, .agent-chip.done .agent-label { color: var(--text); }
+
+  .agent-status-text {
+    font-size: 10px;
+    color: var(--muted);
+    margin-left: auto;
+    font-family: var(--mono);
+  }
+
+  /* ── Activity log ─────────────────────────────────────────────────────── */
+  #log {
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 120px;
+  }
+
+  .log-entry {
+    display: flex;
+    gap: 8px;
+    line-height: 1.6;
+  }
+
+  .log-ts { color: var(--muted); flex-shrink: 0; }
+  .log-agent { color: var(--accent2); flex-shrink: 0; min-width: 100px; }
+  .log-msg { color: var(--text2); flex: 1; }
+  .log-entry.error .log-msg { color: var(--danger); }
+  .log-entry.success .log-msg { color: var(--success); }
+
+  /* ── Results ─────────────────────────────────────────────────────────── */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0 20px;
+    gap: 4px;
+  }
+
+  .tab {
+    padding: 11px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+
+  .tab:hover { color: var(--text2); }
+  .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+  .tab-dot {
+    display: inline-block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--border);
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .tab-dot.ready { background: var(--success); }
+  .tab-dot.running { background: var(--accent); animation: pulse 1s infinite; }
+
+  .tab-panel { display: none; flex: 1; overflow-y: auto; padding: 24px; }
+  .tab-panel.active { display: flex; flex-direction: column; gap: 16px; }
+
+  /* OCR tab: card fills the full panel height */
+  #tab-ocr.active { padding: 0; overflow: hidden; }
+  #tab-ocr.active #ocr-card { flex: 1; display: flex; flex-direction: column; border-radius: 0; border-top: none; border-left: none; border-right: none; }
+
+  /* ── Result cards ─────────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface2);
+  }
+
+  .card-title { font-size: 12px; font-weight: 600; color: var(--text); }
+  .card-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 100px;
+    background: var(--border);
+    color: var(--muted);
+  }
+
+  .card-badge.success { background: rgba(34,197,94,0.15); color: var(--success); }
+  .card-badge.warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+  .card-badge.danger { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+  .card-body {
+    padding: 16px;
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    font-family: var(--mono);
+    max-height: 340px;
+    overflow-y: auto;
+  }
+
+  /* ── PII tags ─────────────────────────────────────────────────────────── */
+  .pii-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .pii-tag {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: var(--mono);
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.25);
+    color: #fca5a5;
+  }
+
+  .pii-type { color: var(--muted); margin-right: 4px; }
+
+  /* ── Classifier ───────────────────────────────────────────────────────── */
+  .class-result {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .class-label {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .class-confidence {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text2);
+  }
+
+  .conf-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .conf-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(.4,0,.2,1);
+  }
+
+  /* ── Embedding ───────────────────────────────────────────────────────── */
+  .embedding-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .emb-stat {
+    padding: 12px 14px;
+    background: var(--surface2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .emb-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .emb-stat-value { font-size: 20px; font-weight: 700; color: var(--text); margin-top: 4px; font-family: var(--mono); }
+
+  .embedding-bar-wrap { padding: 0 16px 16px; }
+  .embedding-bars {
+    display: flex;
+    gap: 2px;
+    align-items: flex-end;
+    height: 60px;
+  }
+
+  .emb-bar {
+    flex: 1;
+    background: var(--accent);
+    opacity: 0.6;
+    border-radius: 2px 2px 0 0;
+    transition: height 0.4s;
+  }
+
+  /* ── Empty state ─────────────────────────────────────────────────────── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 200px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .empty-icon { font-size: 36px; opacity: 0.4; }
+
+  /* ── Markdown prose ─────────────────────────────────────────────────── */
+  .markdown-body {
+    padding: 20px 24px;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.75;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .markdown-body h1, .markdown-body h2, .markdown-body h3,
+  .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+    color: var(--text);
+    font-weight: 700;
+    margin: 1.2em 0 0.4em;
+    line-height: 1.3;
+  }
+
+  .markdown-body h1 { font-size: 1.6em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  .markdown-body h2 { font-size: 1.3em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+  .markdown-body h3 { font-size: 1.1em; }
+
+  .markdown-body p { margin: 0.6em 0; color: var(--text2); }
+
+  .markdown-body a { color: var(--accent2); text-decoration: none; }
+  .markdown-body a:hover { text-decoration: underline; }
+
+  .markdown-body code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--accent2);
+  }
+
+  .markdown-body pre {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0.8em 0;
+  }
+
+  .markdown-body pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text2);
+    font-size: 12px;
+  }
+
+  .markdown-body blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 0.8em 0;
+    padding: 4px 16px;
+    color: var(--text2);
+    background: rgba(99,102,241,0.05);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .markdown-body ul, .markdown-body ol {
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+    color: var(--text2);
+  }
+
+  .markdown-body li { margin: 0.2em 0; }
+
+  .markdown-body table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.8em 0;
+    font-size: 13px;
+  }
+
+  .markdown-body th, .markdown-body td {
+    border: 1px solid var(--border);
+    padding: 7px 12px;
+    text-align: left;
+  }
+
+  .markdown-body th {
+    background: var(--surface2);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .markdown-body td { color: var(--text2); }
+  .markdown-body tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .markdown-body hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.2em 0;
+  }
+
+  /* ── Scrollbar ───────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ravi<span>-engine</span></div>
+  <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+  <div style="font-size:13px;color:var(--text2)">Document Intelligence Pipeline</div>
+  <p>ProxyAgent → OCRAgent → [PII | Classifier | Embedding]</p>
+</header>
+
+<main>
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+
+    <!-- Upload -->
+    <div class="section">
+      <div class="section-header">Upload Document</div>
+      <div class="section-body">
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="file-input" accept=".txt,.md,.pdf,.png,.jpg,.jpeg,.csv,.json" />
+          <div class="dropzone-icon">📄</div>
+          <div class="dropzone-label"><strong>Choose file</strong> or drag & drop</div>
+          <div class="dropzone-hint">PDF · TXT · MD · CSV · JSON · PNG · JPG — max 20 MB</div>
+        </div>
+        <div id="selected-file"></div>
+        <button class="btn" id="upload-btn" disabled>Run Pipeline</button>
+      </div>
+    </div>
+
+    <!-- Pipeline diagram -->
+    <div class="section">
+      <div class="section-header">Pipeline</div>
+      <div class="pipeline">
+        <div class="pipe-row">
+          <div class="agent-chip" id="chip-proxy">
+            <span class="agent-dot"></span>
+            <span class="agent-label">ProxyAgent</span>
+            <span class="agent-status-text" id="status-proxy">idle</span>
+          </div>
+        </div>
+        <div class="pipe-row" style="padding-left:16px;gap:4px;color:var(--muted);font-size:12px;">
+          <span>└──</span><span>→</span>
+          <div class="agent-chip" id="chip-ocr" style="flex:1">
+            <span class="agent-dot"></span>
+            <span class="agent-label">OCRAgent</span>
+            <span class="agent-status-text" id="status-ocr">idle</span>
+          </div>
+        </div>
+        <div class="pipe-fan">
+          <div class="pipe-row" style="gap:4px;color:var(--muted);font-size:12px;">
+            <span>├──</span><span>→</span>
+            <div class="agent-chip" id="chip-pii" style="flex:1">
+              <span class="agent-dot"></span>
+              <span class="agent-label">PIIAgent</span>
+              <span class="agent-status-text" id="status-pii">idle</span>
+            </div>
+          </div>
+          <div class="pipe-row" style="gap:4px;color:var(--muted);font-size:12px;">
+            <span>├──</span><span>→</span>
+            <div class="agent-chip" id="chip-classifier" style="flex:1">
+              <span class="agent-dot"></span>
+              <span class="agent-label">ClassifierAgent</span>
+              <span class="agent-status-text" id="status-classifier">idle</span>
+            </div>
+          </div>
+          <div class="pipe-row" style="gap:4px;color:var(--muted);font-size:12px;">
+            <span>└──</span><span>→</span>
+            <div class="agent-chip" id="chip-embedding" style="flex:1">
+              <span class="agent-dot"></span>
+              <span class="agent-label">EmbeddingAgent</span>
+              <span class="agent-status-text" id="status-embedding">idle</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity log -->
+    <div class="section" style="flex:1;display:flex;flex-direction:column;">
+      <div class="section-header">Activity Log</div>
+      <div id="log">
+        <div class="log-entry" style="color:var(--muted);font-style:italic;">Waiting for upload…</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── Results panel ── -->
+  <div class="panel">
+    <div class="tabs">
+      <div class="tab active" data-tab="ocr">Extract Content <span class="tab-dot" id="dot-ocr"></span></div>
+      <div class="tab" data-tab="pii">PII Detection <span class="tab-dot" id="dot-pii"></span></div>
+      <div class="tab" data-tab="classifier">Classifier <span class="tab-dot" id="dot-classifier"></span></div>
+      <div class="tab" data-tab="embedding">Embedding <span class="tab-dot" id="dot-embedding"></span></div>
+    </div>
+
+    <!-- OCR -->
+    <div class="tab-panel active" id="tab-ocr">
+      <div class="empty-state" id="ocr-empty">
+        <div class="empty-icon">🔍</div>
+        <div>Extracted content will appear here</div>
+      </div>
+      <div class="card" id="ocr-card" style="display:none">
+        <div class="card-header">
+          <span class="card-title">Extracted Markdown</span>
+          <span class="card-badge" id="ocr-badge"></span>
+        </div>
+        <div class="markdown-body" id="ocr-body"></div>
+      </div>
+    </div>
+
+    <!-- PII -->
+    <div class="tab-panel" id="tab-pii">
+      <div class="empty-state" id="pii-empty">
+        <div class="empty-icon">🔒</div>
+        <div>PII findings will appear here</div>
+      </div>
+      <div id="pii-results" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Detected PII</span>
+            <span class="card-badge" id="pii-badge"></span>
+          </div>
+          <div class="pii-grid" id="pii-grid"></div>
+        </div>
+        <div class="card" id="pii-redacted-card" style="display:none">
+          <div class="card-header">
+            <span class="card-title">Redacted Text</span>
+          </div>
+          <div class="card-body" id="pii-redacted-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Classifier -->
+    <div class="tab-panel" id="tab-classifier">
+      <div class="empty-state" id="class-empty">
+        <div class="empty-icon">🗂</div>
+        <div>Classification will appear here</div>
+      </div>
+      <div id="class-results" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Document Classification</span>
+            <span class="card-badge success" id="class-badge"></span>
+          </div>
+          <div class="class-result">
+            <div class="class-label" id="class-label"></div>
+            <div class="class-confidence">
+              <span id="class-conf-pct">0%</span>
+              <div class="conf-bar"><div class="conf-fill" id="conf-fill" style="width:0%"></div></div>
+            </div>
+            <div style="font-size:12px;color:var(--muted)" id="class-keywords"></div>
+          </div>
+        </div>
+        <div class="card" id="class-scores-card">
+          <div class="card-header"><span class="card-title">Category Scores</span></div>
+          <div class="card-body" id="class-scores-body" style="font-family:var(--mono)"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Embedding -->
+    <div class="tab-panel" id="tab-embedding">
+      <div class="empty-state" id="emb-empty">
+        <div class="empty-icon">🧮</div>
+        <div>Embedding info will appear here</div>
+      </div>
+      <div id="emb-results" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Embedding</span>
+            <span class="card-badge" id="emb-badge"></span>
+          </div>
+          <div class="embedding-meta">
+            <div class="emb-stat">
+              <div class="emb-stat-label">Dimensions</div>
+              <div class="emb-stat-value" id="emb-dims">—</div>
+            </div>
+            <div class="emb-stat">
+              <div class="emb-stat-label">Method</div>
+              <div class="emb-stat-value" style="font-size:13px;" id="emb-method">—</div>
+            </div>
+            <div class="emb-stat">
+              <div class="emb-stat-label">File</div>
+              <div class="emb-stat-value" style="font-size:11px;word-break:break-all;" id="emb-file">—</div>
+            </div>
+            <div class="emb-stat">
+              <div class="emb-stat-label">Tokens</div>
+              <div class="emb-stat-value" id="emb-tokens">—</div>
+            </div>
+          </div>
+          <div class="embedding-bar-wrap">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Vector preview (first 64 dims)</div>
+            <div class="embedding-bars" id="emb-bars"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let selectedFile = null;
+let eventSource = null;
+
+const AGENTS = {
+  ProxyAgent:     'proxy',
+  OCRAgent:       'ocr',
+  PIIAgent:       'pii',
+  ClassifierAgent: 'classifier',
+  EmbeddingAgent: 'embedding',
+};
+
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmtTs = ts => new Date(ts).toISOString().substring(11, 23);
+
+function setAgentState(agentKey, state, statusText) {
+  const chip = $('chip-' + agentKey);
+  const status = $('status-' + agentKey);
+  if (!chip) return;
+  chip.className = 'agent-chip' + (state ? ' ' + state : '');
+  if (status && statusText) status.textContent = statusText;
+}
+
+function setTabDot(key, state) {
+  const dot = $('dot-' + key);
+  if (!dot) return;
+  dot.className = 'tab-dot' + (state ? ' ' + state : '');
+}
+
+function addLog(ts, agent, msg, type) {
+  const log = $('log');
+  // Clear the "waiting" placeholder on first real entry
+  if (log.children.length === 1 && log.children[0].style.fontStyle === 'italic') {
+    log.innerHTML = '';
+  }
+  const entry = document.createElement('div');
+  entry.className = 'log-entry' + (type ? ' ' + type : '');
+  entry.innerHTML = `<span class="log-ts">${fmtTs(ts)}</span><span class="log-agent">[${agent}]</span><span class="log-msg">${escHtml(msg)}</span>`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ── File selection ───────────────────────────────────────────────────────────
+const dropzone = $('dropzone');
+const fileInput = $('file-input');
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) onFileSelected(fileInput.files[0]);
+});
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) onFileSelected(e.dataTransfer.files[0]);
+});
+
+function onFileSelected(file) {
+  selectedFile = file;
+  const mb = (file.size / 1024 / 1024).toFixed(2);
+  $('selected-file').style.display = 'block';
+  $('selected-file').textContent = `${file.name}  (${mb} MB)`;
+  $('upload-btn').disabled = false;
+}
+
+// ── Upload & run ─────────────────────────────────────────────────────────────
+$('upload-btn').addEventListener('click', async () => {
+  if (!selectedFile) return;
+  resetUI();
+
+  const btn = $('upload-btn');
+  btn.disabled = true;
+  btn.textContent = 'Uploading…';
+
+  const form = new FormData();
+  form.append('file', selectedFile);
+
+  let jobId;
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    const data = await res.json();
+    jobId = data.job_id;
+    btn.textContent = 'Pipeline running…';
+    addLog(Date.now(), 'UI', `Job ${jobId.slice(0,8)} started — ${data.filename}`, '');
+  } catch(e) {
+    addLog(Date.now(), 'UI', 'Upload failed: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Run Pipeline';
+    return;
+  }
+
+  startSSE(jobId, btn);
+});
+
+// ── SSE ──────────────────────────────────────────────────────────────────────
+function startSSE(jobId, btn) {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(`/stream/${jobId}`);
+
+  eventSource.onmessage = e => {
+    if (e.data === '[DONE]') {
+      eventSource.close();
+      btn.disabled = false;
+      btn.textContent = 'Run Pipeline';
+      addLog(Date.now(), 'Pipeline', 'Complete ✓', 'success');
+      return;
+    }
+    try {
+      const ev = JSON.parse(e.data);
+      handleEvent(ev);
+    } catch {}
+  };
+
+  eventSource.onerror = () => {
+    eventSource.close();
+    btn.disabled = false;
+    btn.textContent = 'Run Pipeline';
+  };
+}
+
+// ── Event dispatcher ─────────────────────────────────────────────────────────
+function handleEvent(ev) {
+  const { agent, event, data, ts } = ev;
+  const key = AGENTS[agent] || agent.toLowerCase().replace('agent','');
+
+  // Log everything
+  const logMsg = data.message || data.error || event;
+  const logType = event.endsWith(':error') ? 'error' : event.endsWith(':done') ? 'success' : '';
+  addLog(ts, agent, logMsg, logType);
+
+  // Pipeline state
+  if (event.endsWith(':start')) {
+    setAgentState(key, 'running', 'running…');
+    setTabDot(key, 'running');
+  }
+  if (event.endsWith(':done')) {
+    setAgentState(key, 'done', '✓ done');
+    setTabDot(key, 'ready');
+  }
+  if (event.endsWith(':error')) {
+    setAgentState(key, 'error', 'error');
+  }
+
+  // Result rendering
+  if (event === 'agent:done') {
+    if (agent === 'OCRAgent')        renderOCR(data);
+    if (agent === 'PIIAgent')        renderPII(data);
+    if (agent === 'ClassifierAgent') renderClassifier(data);
+    if (agent === 'EmbeddingAgent')  renderEmbedding(data);
+  }
+}
+
+// ── Result renderers ─────────────────────────────────────────────────────────
+function renderOCR(data) {
+  const text = data.full_text || data.text || data.extracted_text || data.output || '';
+  if (!text) return;
+  $('ocr-empty').style.display = 'none';
+  $('ocr-card').style.display = 'flex';
+  const words = text.split(/\s+/).filter(Boolean).length;
+  $('ocr-badge').textContent = `${words} words · ${text.length} chars`;
+  $('ocr-badge').className = 'card-badge success';
+  $('ocr-body').innerHTML = marked.parse(text);
+}
+
+function renderPII(data) {
+  // findings is a dict: {pii_type: [match, ...], ...}
+  const rawFindings = data.findings || data.pii_findings || {};
+  const isDict = rawFindings && typeof rawFindings === 'object' && !Array.isArray(rawFindings);
+  const redacted = data.redacted_text || '';
+  $('pii-empty').style.display = 'none';
+  $('pii-results').style.display = 'block';
+
+  // Flatten dict → [{type, value}, ...]
+  let findings = [];
+  if (isDict) {
+    for (const [type, matches] of Object.entries(rawFindings)) {
+      (Array.isArray(matches) ? matches : [matches]).forEach(v => findings.push({type, value: v}));
+    }
+  } else if (Array.isArray(rawFindings)) {
+    findings = rawFindings;
+  }
+
+  if (findings.length === 0) {
+    $('pii-badge').textContent = 'No PII detected';
+    $('pii-badge').className = 'card-badge success';
+    $('pii-grid').innerHTML = '<div style="padding:8px;color:var(--muted);font-size:13px;">No PII detected in the document.</div>';
+  } else {
+    $('pii-badge').textContent = `${findings.length} finding${findings.length !== 1 ? 's' : ''}`;
+    $('pii-badge').className = 'card-badge danger';
+    $('pii-grid').innerHTML = findings.map(f => {
+      const type = f.type || f.pii_type || 'unknown';
+      const val = f.value || f.match || '';
+      return `<div class="pii-tag"><span class="pii-type">${escHtml(type)}</span>${escHtml(val)}</div>`;
+    }).join('');
+  }
+
+  if (redacted) {
+    $('pii-redacted-card').style.display = 'block';
+    $('pii-redacted-body').textContent = redacted;
+  }
+}
+
+function renderClassifier(data) {
+  const label = data.type || data.category || data.label || data.classification || 'unknown';
+  const confidence = data.confidence ?? data.score ?? 0;
+  const keywords = data.keywords || data.matched_keywords || [];
+  const scores = data.scores || data.category_scores || null;
+
+  $('class-empty').style.display = 'none';
+  $('class-results').style.display = 'block';
+  $('class-label').textContent = label.toUpperCase();
+  $('class-badge').textContent = label;
+  const pct = Math.round(confidence * 100);
+  $('class-conf-pct').textContent = pct + '%';
+  $('conf-fill').style.width = pct + '%';
+
+  if (keywords.length) {
+    $('class-keywords').textContent = 'Keywords: ' + keywords.join(', ');
+  }
+
+  if (scores) {
+    const entries = Object.entries(scores).sort((a,b) => b[1]-a[1]);
+    $('class-scores-body').textContent = entries.map(([k,v]) =>
+      `${k.padEnd(14)} ${'█'.repeat(Math.round(v*20))} ${(v*100).toFixed(1)}%`
+    ).join('\n');
+  }
+}
+
+function renderEmbedding(data) {
+  const dims = data.dimensions || data.dim || (data.embedding ? data.embedding.length : 0);
+  const method = data.method || data.model || 'tfidf';
+  const file = data.file || data.embedding_file || '';
+  const tokens = data.token_count || data.tokens || '—';
+  const vec = data.preview || data.embedding || data.sample || [];
+
+  $('emb-empty').style.display = 'none';
+  $('emb-results').style.display = 'block';
+  $('emb-badge').textContent = method;
+  $('emb-badge').className = 'card-badge success';
+  $('emb-dims').textContent = dims || '—';
+  $('emb-method').textContent = method;
+  $('emb-tokens').textContent = tokens;
+  $('emb-file').textContent = file ? file.split('/').pop() : '—';
+
+  // Bar chart of first 64 dims
+  const bars = $('emb-bars');
+  bars.innerHTML = '';
+  const preview = vec.slice(0, 64);
+  if (preview.length) {
+    const max = Math.max(...preview.map(Math.abs)) || 1;
+    preview.forEach(v => {
+      const b = document.createElement('div');
+      b.className = 'emb-bar';
+      b.style.height = Math.max(2, Math.abs(v) / max * 58) + 'px';
+      b.style.opacity = v >= 0 ? '0.75' : '0.4';
+      b.title = v.toFixed(4);
+      bars.appendChild(b);
+    });
+  } else {
+    bars.innerHTML = '<div style="color:var(--muted);font-size:12px;">Vector not returned (saved to disk)</div>';
+  }
+}
+
+// ── Reset ────────────────────────────────────────────────────────────────────
+function resetUI() {
+  // Chips
+  ['proxy','ocr','pii','classifier','embedding'].forEach(k => {
+    setAgentState(k, '', 'idle');
+    setTabDot(k, '');
+  });
+  // Log
+  $('log').innerHTML = '';
+  // Results
+  $('ocr-empty').style.display = 'flex'; $('ocr-card').style.display = 'none';
+  $('pii-empty').style.display = ''; $('pii-results').style.display = 'none';
+  $('class-empty').style.display = ''; $('class-results').style.display = 'none';
+  $('emb-empty').style.display = ''; $('emb-results').style.display = 'none';
+  $('pii-redacted-card').style.display = 'none';
+}
+</script>
+</body>
+</html>

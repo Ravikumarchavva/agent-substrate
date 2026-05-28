@@ -19,8 +19,8 @@ Security:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import re
 import uuid
 from datetime import datetime
@@ -45,13 +45,13 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from ravi.core.messages.base_message import BaseClientMessage
-from ravi.core.memory.message_serializer import (
+from ravi.kernel.messages.base_message import BaseClientMessage
+from ravi.kernel.memory.message_serializer import (
     serialize_message,
     deserialize_message,
 )
 
-logger = logging.getLogger("ravi.core.memory.postgres")
+logger = setup_logging()
 
 _SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 

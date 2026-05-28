@@ -23,14 +23,14 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union
 
-logger = logging.getLogger("ravi.server.sse.events")
+logger = setup_logging()
 
 # Sentinel that marks the end of the event stream
 _BUS_DONE = object()

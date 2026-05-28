@@ -5,14 +5,14 @@ capabilities.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 

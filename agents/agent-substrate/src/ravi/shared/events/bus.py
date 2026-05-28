@@ -6,9 +6,9 @@ are durable (stored in the stream) and replayable from offsets.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
-import logging
 from typing import Any, AsyncIterator, Optional, cast
 
 import redis.asyncio as aioredis
@@ -17,7 +17,7 @@ from opentelemetry.propagate import extract, inject
 
 from ravi.shared.events.envelope import EventEnvelope
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class EventBus:

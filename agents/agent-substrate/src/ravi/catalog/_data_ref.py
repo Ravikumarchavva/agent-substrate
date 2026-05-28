@@ -14,15 +14,15 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional, Union
 from uuid import uuid4
 
-logger = logging.getLogger("ravi.catalog.data_ref")
+logger = setup_logging()
 
 _DEFAULT_TTL = 3600  # 1 hour
 _DEFAULT_SIZE_THRESHOLD = 1_048_576  # 1 MB

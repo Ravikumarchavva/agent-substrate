@@ -14,15 +14,15 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
 
 class CapabilitySearchTool(BaseTool):
     """Meta-tool for discovering tools and skills in the capability catalogue."""
 
     def __init__(self, catalog: Any) -> None:
-        from ravi.core.agent_catalog import AgentCatalogRegistry
+        from ravi.kernel.agent_catalog import AgentCatalogRegistry
 
         if not isinstance(catalog, AgentCatalogRegistry):
             raise TypeError(

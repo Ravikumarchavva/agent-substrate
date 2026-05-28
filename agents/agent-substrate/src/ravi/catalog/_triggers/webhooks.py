@@ -1,14 +1,14 @@
 """Webhook-based triggers — incoming HTTP requests fire workflows."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @dataclass

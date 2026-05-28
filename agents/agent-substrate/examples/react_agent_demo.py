@@ -1,11 +1,11 @@
 import asyncio
 import os
-from ravi.core.agent_catalog._catalog import AgentCatalog
-from ravi.core.agents.react_agent import ReActAgent
-from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.kernel.agent_catalog._catalog import AgentCatalog
+from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.integrations.mcp import MCPClient
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.core.memory.unbounded_memory import UnboundedMemory
+from ravi.kernel.memory.unbounded_memory import UnboundedMemory
 from ravi.shared.observability.telemetry import configure_opentelemetry
 
 async def main():

@@ -5,15 +5,15 @@ produces an LLM-powered summary.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from pathlib import Path
 from typing import Any
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class DocumentAnalyzerTool(BaseTool):
@@ -130,7 +130,7 @@ class DocumentAnalyzerTool(BaseTool):
                 system = "Answer the user's question based on the document content."
                 user_msg = f"Document:\n{display_content}\n\nQuestion: {question}"
 
-            from ravi.core.messages.client_messages import (
+            from ravi.kernel.messages.client_messages import (
                 SystemMessage,
                 UserMessage,
             )

@@ -5,14 +5,14 @@ OpenTelemetry, and standard error handling.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import Any, Callable, Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 def create_service_app(

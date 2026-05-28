@@ -5,7 +5,7 @@ other S3-compatible API.  Uses ``aiobotocore`` for fully async operations.
 
 Requirements::
 
-    uv sync --group storage
+    uv sync --group optional
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from importlib import import_module
 from typing import Any, AsyncIterator, Optional
 
-from ravi.core.storage.base import FileRef, FileStore
+from ravi.kernel.storage.base import FileRef, FileStore
 
 
 class S3FileStore(FileStore):
@@ -65,7 +65,7 @@ class S3FileStore(FileStore):
             AioSession = import_module("aiobotocore.session").AioSession
         except ModuleNotFoundError as exc:
             raise ModuleNotFoundError(
-                "S3FileStore requires 'aiobotocore'. Install with: uv sync --group storage"
+                "S3FileStore requires 'aiobotocore'. Install with: uv sync --group optional"
             ) from exc
 
         kwargs: dict[str, Any] = {

@@ -1,8 +1,8 @@
 """FastAPI auth middleware and dependencies shared by all services."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from ravi.shared.auth.claims import AuthClaims
 from ravi.shared.auth import jwt as jwt_utils
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _bearer = HTTPBearer(auto_error=False)
 

@@ -6,15 +6,15 @@ Playback is handled client-side using Spotify 30-second preview URLs
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import base64
-import logging
 import time
 from typing import Any, Dict, List, Optional
 
 import httpx
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"

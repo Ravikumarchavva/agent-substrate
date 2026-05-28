@@ -14,8 +14,8 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -37,9 +37,9 @@ from sqlalchemy.orm import DeclarativeBase
 
 from pgvector.sqlalchemy import Vector
 
-from ravi.core.rag.vector_store import BaseVectorStore, Document, SearchResult
+from ravi.extensions.rag.vector_store import BaseVectorStore, Document, SearchResult
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # ── ORM Model ─────────────────────────────────────────────────────────────────
 

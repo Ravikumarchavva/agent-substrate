@@ -22,9 +22,9 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -32,7 +32,7 @@ from typing import Any, Dict, List, Optional
 
 from ravi.catalog._data_ref import DataRef, DataRefStore
 
-logger = logging.getLogger("ravi.catalog.pipeline")
+logger = setup_logging()
 
 
 @dataclass
@@ -126,7 +126,7 @@ class PipelineEngine:
         catalog: Any,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
-        from ravi.core.agent_catalog import AgentCatalogRegistry
+        from ravi.kernel.agent_catalog import AgentCatalogRegistry
 
         self._catalog: AgentCatalogRegistry = catalog
         self._data_store = data_store

@@ -5,18 +5,18 @@ pluggable storage backends (local, S3, encrypted).
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.core.storage.document import Document, create_document
+from ravi.kernel.storage.document import Document, create_document
 from ravi.services.file_store.models import FileMetadata
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 async def create_file_record(

@@ -9,8 +9,8 @@ POST /policy/seed           Seed default policies
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from ravi.shared.auth.claims import AuthClaims
 from ravi.shared.auth.middleware import get_current_user, require_role
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 router = APIRouter(prefix="/policy", tags=["policy"])
 
 

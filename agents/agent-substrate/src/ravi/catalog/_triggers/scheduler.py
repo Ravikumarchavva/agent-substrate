@@ -1,13 +1,13 @@
 """Cron/interval trigger scheduler backed by APScheduler + Redis."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @dataclass

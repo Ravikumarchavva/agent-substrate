@@ -1,11 +1,11 @@
 """OpenAI model client implementation."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import hashlib
 import io
 import json
-import logging
 from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional
 
 import tiktoken
@@ -17,20 +17,20 @@ from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
 
-from ravi.core.messages.client_messages import (
+from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     ToolCallMessage,
     ToolExecutionResultMessage,
 )
 
-from ravi.core.llm.base_client import (
+from ravi.kernel.llm.base_client import (
     BaseModelClient,
     GenerateResult,
     ModelStreamEvent,
 )
-from ravi.core.messages.base_message import BaseClientMessage
-from ravi.core.messages._types import ImageContent, MediaType
-from ravi.core.messages.encoders.openai import (
+from ravi.kernel.messages.base_message import BaseClientMessage
+from ravi.kernel.messages._types import ImageContent, MediaType
+from ravi.kernel.messages.encoders.openai import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
 )
@@ -38,7 +38,7 @@ from ravi.core.messages.encoders.openai import (
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # ── MIME helper ───────────────────────────────────────────────────────────────
 
@@ -419,7 +419,7 @@ class OpenAIClient(BaseModelClient):
 
             usage_dict = None
             if getattr(response, "usage", None):
-                from ravi.core.messages.base_message import UsageStats
+                from ravi.kernel.messages.base_message import UsageStats
 
                 usage_dict = UsageStats(
                     prompt_tokens=response.usage.input_tokens,
@@ -445,7 +445,7 @@ class OpenAIClient(BaseModelClient):
         # ── Structured-only path (no tools) ──────────────────────────────
         if response_format is not None:
             import openai
-            from ravi.core.structured.result import (
+            from ravi.kernel.structured.result import (
                 StructuredOutputError,
                 StructuredOutputResult,
             )
@@ -568,7 +568,7 @@ class OpenAIClient(BaseModelClient):
 
         usage_dict = None
         if getattr(response, "usage", None):
-            from ravi.core.messages.base_message import UsageStats
+            from ravi.kernel.messages.base_message import UsageStats
 
             usage_dict = UsageStats(
                 prompt_tokens=response.usage.input_tokens,
@@ -606,7 +606,7 @@ class OpenAIClient(BaseModelClient):
         - ReasoningDeltaChunk: Incremental reasoning (o1/o3 models)
         - CompletionChunk: Final response with complete AssistantMessage (includes tool calls)
         """
-        from ravi.core.messages._types import (
+        from ravi.kernel.messages._types import (
             TextDeltaChunk,
             ReasoningDeltaChunk,
             CompletionChunk,
@@ -708,7 +708,7 @@ class OpenAIClient(BaseModelClient):
         # Extract usage
         usage_dict = None
         if hasattr(final_response, "usage") and final_response.usage:
-            from ravi.core.messages.base_message import UsageStats
+            from ravi.kernel.messages.base_message import UsageStats
 
             usage_dict = UsageStats(
                 prompt_tokens=final_response.usage.input_tokens,

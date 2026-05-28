@@ -6,17 +6,17 @@ and delivers to connected clients.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 from typing import AsyncIterator, Dict, Optional, Set
 
 import redis.asyncio as aioredis
 
 from ravi.shared.events.bus import EventBus
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class StreamProjector:

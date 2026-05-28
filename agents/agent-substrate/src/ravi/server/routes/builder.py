@@ -14,9 +14,9 @@ All routes are conditionally mounted only when ``ENABLE_BUILDER=true``.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -26,13 +26,13 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 
-from ravi.core.pipelines.codegen import generate_code
-from ravi.core.pipelines.runner import PipelineRunner
-from ravi.core.pipelines.schema import PipelineConfig
+from ravi.extensions.pipelines.codegen import generate_code
+from ravi.extensions.pipelines.runner import PipelineRunner
+from ravi.kernel.pipelines.schema import PipelineConfig
 from ravi.server.models import Pipeline, PipelineRun
 from ravi.server.security.deps import get_current_user
 
-logger = logging.getLogger("ravi.server.routes.builder")
+logger = setup_logging()
 router = APIRouter(
     prefix="/builder", tags=["builder"], dependencies=[Depends(get_current_user)]
 )
@@ -430,7 +430,7 @@ async def run_pipeline(
             _runnable: Any = runnable
             if hasattr(_runnable, "run_stream"):
                 # Agent — stream chunks
-                from ravi.core.messages._types import (
+                from ravi.kernel.messages._types import (
                     StreamChunk,
                     TextDeltaChunk,
                     ReasoningDeltaChunk,
@@ -469,7 +469,7 @@ async def run_pipeline(
                         yield _sse_event("text_delta", {"content": str(chunk)})
             elif hasattr(_runnable, "route"):
                 # Router — single decision
-                from ravi.core.messages.client_messages import UserMessage
+                from ravi.kernel.messages.client_messages import UserMessage
 
                 messages = [UserMessage(content=[body.input_text])]
                 decision, sub_result = await _runnable.route(

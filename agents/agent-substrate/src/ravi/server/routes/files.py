@@ -19,7 +19,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.configs.settings import settings
-from ravi.core.storage.base import FileStore
+from ravi.kernel.storage.base import FileStore
 from ravi.server.context import ServerContext, get_ctx
 from ravi.server.database import get_db
 from ravi.server.schemas import FileOut

@@ -68,17 +68,39 @@ ravi/                            ← repo root
 
 ```
 src/ravi/
-├── core/                      ← Framework primitives (pure engine, no external deps)
-│   ├── agents/                ← BaseAgent, ReActAgent (+ _tool_execution, _guardrail_runner, _stream_handler), OrchestratorAgent, FlowAgent
-│   ├── memory/                ← BaseMemory, UnboundedMemory, SlidingWindowMemory, SessionManager
-│   ├── tools/                 ← BaseTool, ToolResult, CapabilityRegistry (abstractions)
-│   ├── context/               ← RedisModelContext, build() for prompt assembly
-│   ├── messages/              ← SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, …
-│   ├── guardrails/            ← ContentFilter, PII, PromptInjection, MaxToken, ToolCallValidation
-│   ├── pipelines/             ← Codegen and sequential processing pipelines
-│   ├── storage/               ← FileStore ABC, LocalFileStore, EncryptedFileStore
-│   ├── structured/            ← Structured output parsing
-│   └── llm/                   ← BaseModelClient ABC (base_client.py — no external deps)
+├── kernel/                    ← FROZEN. Contracts (ABCs, Protocols, dataclasses, enums) + minimal reference impls.
+│   ├── agents/                ← BaseAgent ABC + AgentRunResult dataclasses (concrete agents in extensions/)
+│   ├── memory/                ← BaseMemory ABC + UnboundedMemory reference (SessionManager in extensions/)
+│   ├── tools/                 ← BaseTool ABC + ResettableTool protocol + @tool decorator (builtins in extensions/)
+│   ├── context/               ← ModelContext ABC only (concrete strategies in extensions/)
+│   ├── messages/              ← SystemMessage / UserMessage / AssistantMessage / ToolCallMessage / encoders
+│   ├── guardrails/            ← BaseGuardrail ABC only (PII, ContentFilter, etc. in extensions/)
+│   ├── middleware/            ← BaseMiddleware ABC + MiddlewarePipeline (builtins in extensions/)
+│   ├── pipelines/             ← Pipeline schema dataclasses only (runner in extensions/)
+│   ├── storage/               ← FileStore ABC + LocalFileStore + Document + TenantContext
+│   ├── structured/            ← StructuredOutputResult + schemas (parse/judge/router in extensions/)
+│   ├── llm/                   ← BaseModelClient ABC + ProviderConfig + model registry
+│   ├── runtime/               ← AgentRuntime protocol + LocalRuntime reference + LocalRuntime internals
+│   ├── agent_catalog/         ← AgentCatalog (FQN registry) + SkillManagerProtocol
+│   ├── plugin/                ← Decorator registry: @register_agent, @register_guardrail, etc.
+│   ├── execution/             ← ExecutionContext + ExecutionMiddlewarePipeline
+│   └── batch/                 ← BatchConfig / BatchItem / BatchResult (BatchProcessor in extensions/)
+│
+├── extensions/                ← Built-in feature implementations over kernel contracts.
+│   ├── agents/                ← ReActAgent, OrchestratorAgent, Agent, FlowAgent, GraphAgent, RuntimeAgent
+│   ├── guardrails/            ← PIIDetectionGuardrail, ContentFilterGuardrail, PromptInjection, MaxToken, LLMJudge, ToolCallValidation, run_guardrails()
+│   ├── middleware/            ← AuditLogger, Cache, Retry, RateLimiter, GuardrailsMiddleware, HistoryTruncator, …
+│   ├── memory/                ← SessionManager + SessionState orchestration
+│   ├── context/               ← SlidingWindowContext, RedisModelContext, HybridContext, TokenBudgetContext, SummarizingContext
+│   ├── llm/                   ← CachedModelClient, FallbackClient, ModelRouter, SemanticCache
+│   ├── structured/            ← parse(), LLMJudge, StructuredRouter
+│   ├── extraction/            ← Extractor + Invoice/Receipt/Contract schemas
+│   ├── rag/                   ← VectorStore, GraphStore, chunkers, loaders, RAG pipeline, reranker
+│   ├── pipelines/             ← PipelineRunner, WhilePipelineRunner, workflow middleware, codegen
+│   ├── batch/                 ← BatchProcessor
+│   ├── storage/               ← EncryptedFileStore, factory, key providers
+│   ├── tools/                 ← Built-in CalculatorTool, WebSearchTool, GetBitcoinPriceTool, GetCurrentTimeTool
+│   └── resilience/            ← Retry / timeout / circuit-breaker policies
 │
 ├── integrations/              ← External/SDK-backed adapters
 │   ├── llm/
@@ -191,6 +213,37 @@ services/<name>/
 ```
 
 Services intentionally missing `models.py`/`service.py` by design: `gateway` (BFF proxy), `live_stream` (SSE projector), `tool_executor` (executor pattern).
+
+---
+
+## Frozen kernel — `ravi.kernel` is stable forever
+
+`ravi/kernel/` is the contract layer. Once built, it is **never edited to add capability**. New features live in `ravi/extensions/`.
+
+**Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
+
+```
+server | services  ←  catalog  ←  integrations  ←  extensions  ←  kernel
+```
+
+**Adding capability:**
+
+| You want to add… | Write it in… | How |
+|---|---|---|
+| A new agent type | `extensions/agents/<name>/agent.py` | `@register_agent("<name>")` decorator |
+| A new guardrail | `extensions/guardrails/<name>.py` | `@register_guardrail("<name>")` |
+| A new middleware | `extensions/middleware/<name>.py` | `@register_middleware("<name>")` |
+| A new LLM provider | `integrations/llm/<provider>/` | Subclass `BaseModelClient`, register via factory |
+| A new memory backend | `integrations/memory/<backend>.py` | Subclass `BaseMemory`, wire in lifespan |
+| A new context strategy | `extensions/context/<name>.py` | `@register_context("<name>")` |
+| A new tool | `catalog/tools/<name>/tool.py` | Convention-scanned (no decorator needed) |
+
+**Enforcement** (CI fails if violated):
+
+1. `tool.importlinter` contract `kernel is independent` — `ravi.kernel` may not import from `ravi.{extensions, integrations, catalog, server, services, shared, configs, logger}`.
+2. `tests/architecture/test_kernel_invariants.py` — LOC ceiling (15k), file-count ceiling (110), no concrete agents/guardrails/middleware in kernel.
+
+To add a new plugin category, extend `kernel/plugin/registry.py` with one `_make_decorator(...)` line. Everything else is downward.
 
 ---
 
@@ -404,6 +457,11 @@ Set via `OTLP_ENDPOINT` env var (injected by kustomize patch for Kind).
 - Backend services output structured JSON via `ravi/logger.py` → Promtail scrapes stdout
 - Frontend sends warn/error logs to `/api/logs` → structured JSON stdout → Promtail
 - Query in Grafana via Loki: `{namespace=~"af-.*"}`
+- Logging convention in Python modules:
+    - `from ravi.logger import setup_logging`
+    - `logger = setup_logging()`
+    - Do not call `logging.getLogger(...)` directly in app modules
+    - `setup_logging()` configures the `ravi` namespace once and uses rotating files by default
 
 ---
 
@@ -497,6 +555,7 @@ Tests pod health, endpoints, chat flow, and observability stack.
 - **Type-annotate everything** — no untyped arguments or return values
 - **No bare `except:`** — always catch specific exceptions
 - **`app.state.*`** is the DI container — inject in lifespan, read in routes
+- **`uv run` always** — never invoke `python`, `pytest`, `ruff`, `pyright`, or any other tool directly. Always prefix with `uv run` (e.g., `uv run pytest`, `uv run ruff check .`, `uv run pyright`). This applies in terminals, CI scripts, subagent prompts, and any automation.
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **Snake_case** — files, modules, functions, variables
 - New DB models → `server/models/`; new schemas → `server/schemas.py` (monolith) or service-local `models.py` (microservices)

@@ -10,8 +10,8 @@ Replaces the old ``main.py`` with proper:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -159,7 +159,7 @@ async def lifespan(app: FastAPI):
 
     # Quiet noisy loggers
     for name in ("httpx", "urllib3", "openai"):
-        logging.getLogger(name).setLevel(logging.WARNING)
+        setup_logging().setLevel(logging.WARNING)
 
     yield
 
@@ -238,7 +238,7 @@ def create_app() -> FastAPI:
         from ravi.server.routes.builder import router as builder_router
 
         app.include_router(builder_router)
-        logging.getLogger(__name__).info("Builder API mounted at /builder")
+        setup_logging().info("Builder API mounted at /builder")
 
     # Health check
     @app.get("/health", tags=["infra"])

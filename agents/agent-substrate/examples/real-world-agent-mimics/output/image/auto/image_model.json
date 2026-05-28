@@ -1,0 +1,495 @@
+[
+    {
+        "layout_dets": [
+            {
+                "cls_id": 13,
+                "label": "header_image",
+                "score": 0.6131,
+                "bbox": [
+                    97,
+                    120,
+                    243,
+                    264
+                ],
+                "index": 1
+            },
+            {
+                "cls_id": 12,
+                "label": "header",
+                "score": 0.9652,
+                "bbox": [
+                    886,
+                    139,
+                    1126,
+                    258
+                ],
+                "index": 2
+            },
+            {
+                "cls_id": 17,
+                "label": "paragraph_title",
+                "score": 0.914,
+                "bbox": [
+                    525,
+                    280,
+                    688,
+                    325
+                ],
+                "index": 3
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.779,
+                "bbox": [
+                    86,
+                    365,
+                    147,
+                    393
+                ],
+                "index": 4
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.7949,
+                "bbox": [
+                    86,
+                    397,
+                    244,
+                    426
+                ],
+                "index": 5
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.8704,
+                "bbox": [
+                    1008,
+                    365,
+                    1128,
+                    415
+                ],
+                "index": 6
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.7985,
+                "bbox": [
+                    86,
+                    427,
+                    255,
+                    453
+                ],
+                "index": 7
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.747,
+                "bbox": [
+                    86,
+                    454,
+                    170,
+                    479
+                ],
+                "index": 8
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.7998,
+                "bbox": [
+                    86,
+                    481,
+                    215,
+                    506
+                ],
+                "index": 9
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.7941,
+                "bbox": [
+                    86,
+                    508,
+                    137,
+                    532
+                ],
+                "index": 10
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.8268,
+                "bbox": [
+                    86,
+                    564,
+                    158,
+                    592
+                ],
+                "index": 11
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.8536,
+                "bbox": [
+                    86,
+                    596,
+                    257,
+                    622
+                ],
+                "index": 12
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.7486,
+                "bbox": [
+                    86,
+                    624,
+                    170,
+                    649
+                ],
+                "index": 13
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.8274,
+                "bbox": [
+                    86,
+                    650,
+                    215,
+                    676
+                ],
+                "index": 14
+            },
+            {
+                "cls_id": 22,
+                "label": "text",
+                "score": 0.8073,
+                "bbox": [
+                    87,
+                    678,
+                    136,
+                    702
+                ],
+                "index": 15
+            },
+            {
+                "cls_id": 21,
+                "label": "table",
+                "score": 0.9707,
+                "bbox": [
+                    89,
+                    761,
+                    1121,
+                    857
+                ],
+                "index": 16,
+                "html": "<table><tr><td rowspan=1 colspan=1>Invoice Date</td><td rowspan=1 colspan=1>Terms</td><td rowspan=1 colspan=1>Due Date</td></tr><tr><td rowspan=1 colspan=1>18May2023</td><td rowspan=1 colspan=1>Due on Receipt</td><td rowspan=1 colspan=1>18May2023</td></tr></table>"
+            },
+            {
+                "cls_id": 21,
+                "label": "table",
+                "score": 0.9797,
+                "bbox": [
+                    88,
+                    898,
+                    1120,
+                    1468
+                ],
+                "index": 17,
+                "html": "<table><tr><td>#</td><td>Item&amp; Description</td><td>Qty</td><td>Rate</td><td>Amount</td></tr><tr><td>1</td><td>PepeJeans TaperedfitMid rise-Blue</td><td>1.00 pcs</td><td>24.99</td><td>24.99</td></tr><tr><td>2</td><td>BoysShirt Size-36,Mosaicdesign</td><td>1.00 pcs</td><td>16.99</td><td>16.99</td></tr><tr><td>3</td><td>Men Shirt Size-42,Striped Blue</td><td>1.00 pcs</td><td>19.99</td><td>19.99</td></tr><tr><td colspan=\"2\">Thanks for your business.</td><td colspan=\"2\">Sub Total Tax Rate Total</td><td>61.97 5.00%</td></tr><tr><td colspan=\"2\"></td><td colspan=\"3\">$65.06 Balance Due $65.06</td></tr></table>"
+            },
+            {
+                "cls_id": 17,
+                "label": "paragraph_title",
+                "score": 0.5537,
+                "bbox": [
+                    86,
+                    1460,
+                    280,
+                    1489
+                ],
+                "index": 18
+            },
+            {
+                "cls_id": 24,
+                "label": "vision_footnote",
+                "score": 0.5315,
+                "bbox": [
+                    83,
+                    1501,
+                    1050,
+                    1554
+                ],
+                "index": 19
+            },
+            {
+                "cls_id": 16,
+                "label": "number",
+                "score": 0.807,
+                "bbox": [
+                    1117,
+                    1662,
+                    1130,
+                    1680
+                ],
+                "index": 20
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    886,
+                    139,
+                    1125,
+                    167
+                ],
+                "score": 0.985,
+                "text": "ZylkerThread&Weave"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    959,
+                    168,
+                    1125,
+                    193
+                ],
+                "score": 0.948,
+                "text": "14B,Northern Street"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    951,
+                    189,
+                    1126,
+                    216
+                ],
+                "score": 0.96,
+                "text": "Greater South Avenue"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    921,
+                    213,
+                    1124,
+                    235
+                ],
+                "score": 0.918,
+                "text": "NewYorkNewYork10001"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    1074,
+                    234,
+                    1126,
+                    257
+                ],
+                "score": 0.974,
+                "text": "U.S.A"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    522,
+                    278,
+                    690,
+                    331
+                ],
+                "score": 0.999,
+                "text": "INVOICE"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    84,
+                    393,
+                    246,
+                    428
+                ],
+                "score": 0.924,
+                "text": "Scott,Melba R."
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    85,
+                    1458,
+                    281,
+                    1490
+                ],
+                "score": 0.994,
+                "text": "Terms&Conditions"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    85,
+                    364,
+                    149,
+                    394
+                ],
+                "score": 0.907,
+                "text": "BillTo"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    86,
+                    453,
+                    168,
+                    479
+                ],
+                "score": 0.993,
+                "text": "Fairbanks"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    84,
+                    506,
+                    138,
+                    534
+                ],
+                "score": 0.962,
+                "text": "U.S.A"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    83,
+                    559,
+                    161,
+                    597
+                ],
+                "score": 0.993,
+                "text": "ShipTo"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    85,
+                    621,
+                    170,
+                    650
+                ],
+                "score": 0.996,
+                "text": "Fairbanks"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    85,
+                    675,
+                    138,
+                    703
+                ],
+                "score": 0.975,
+                "text": "U.S.A"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    1055,
+                    364,
+                    1129,
+                    387
+                ],
+                "score": 0.973,
+                "text": "Invoice#"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    1007,
+                    387,
+                    1128,
+                    413
+                ],
+                "score": 0.997,
+                "text": "INV-000002"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    87,
+                    428,
+                    255,
+                    450
+                ],
+                "score": 0.966,
+                "text": "2476BlackwellStreet"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    87,
+                    597,
+                    256,
+                    619
+                ],
+                "score": 0.976,
+                "text": "2476BlackwellStreet"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    86,
+                    480,
+                    213,
+                    506
+                ],
+                "score": 0.998,
+                "text": "99701Colorado"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    88,
+                    651,
+                    213,
+                    674
+                ],
+                "score": 0.996,
+                "text": "99701Colorado"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    84,
+                    1498,
+                    1051,
+                    1531
+                ],
+                "score": 0.972,
+                "text": "Fullpayment isdueupon receiptofthisinvoice.Latepaymentsmayincuradditional charges orinterestasper the"
+            },
+            {
+                "label": "ocr_text",
+                "bbox": [
+                    83,
+                    1524,
+                    228,
+                    1553
+                ],
+                "score": 0.996,
+                "text": "applicablelaws."
+            }
+        ],
+        "page_info": {
+            "page_no": 0,
+            "width": 1192,
+            "height": 1684
+        }
+    }
+]

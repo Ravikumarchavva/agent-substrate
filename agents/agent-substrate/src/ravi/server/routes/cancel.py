@@ -7,15 +7,14 @@ POST /chat/{thread_id}/cancel
 """
 
 from __future__ import annotations
-
-import logging
+from ravi.logger import setup_logging
 
 from fastapi import APIRouter, Depends
 
 from ravi.server.context import ServerContext, get_ctx
 from ravi.server.security.deps import get_current_user
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(
     tags=["chat"],

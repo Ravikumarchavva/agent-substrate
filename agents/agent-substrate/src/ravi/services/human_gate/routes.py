@@ -7,8 +7,8 @@ Routes:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from typing import Optional
 
@@ -25,7 +25,7 @@ from ravi.services.human_gate.service import (
     resolve_request,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/hitl", tags=["hitl"])
 

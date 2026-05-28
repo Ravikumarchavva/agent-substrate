@@ -11,16 +11,16 @@ The tool operates in the context of the current thread (via contextvars).
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import contextvars
-import logging
 import uuid
 from typing import Any, ClassVar, Optional
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # Set by chat route before agent.run_stream() — same pattern as TaskManagerTool
 current_thread_id: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -195,7 +195,7 @@ class FileManagerTool(BaseTool):
         content_type: str,
     ) -> ToolResult:
         from ravi.server.services.file_service import save_file
-        from ravi.core.storage.tenant import FileScope
+        from ravi.kernel.storage.tenant import FileScope
 
         if not filename:
             return _text_result(

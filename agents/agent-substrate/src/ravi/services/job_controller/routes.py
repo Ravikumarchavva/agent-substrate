@@ -8,9 +8,9 @@ Routes:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
-import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -29,7 +29,7 @@ from ravi.services.job_controller.service import (
     get_run,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 

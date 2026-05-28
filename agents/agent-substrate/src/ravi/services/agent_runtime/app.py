@@ -4,8 +4,8 @@ Entry point: uvicorn ravi.services.agent_runtime.app:app --port 8014
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -17,7 +17,7 @@ from ravi.services.agent_runtime.routes import router
 from ravi.services.base import create_service_app
 from ravi.shared.events.bus import EventBus
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 def _load_tools():

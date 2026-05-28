@@ -4,9 +4,9 @@ Entry point: uvicorn ravi.services.live_stream.app:app --port 8017
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -17,7 +17,7 @@ from ravi.services.live_stream.projector import StreamProjector
 from ravi.services.live_stream.routes import router
 from ravi.shared.events.bus import EventBus
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @asynccontextmanager

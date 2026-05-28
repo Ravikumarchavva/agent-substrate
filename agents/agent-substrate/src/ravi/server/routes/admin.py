@@ -6,8 +6,8 @@ returns True).
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from typing import Any, Dict, List
 
@@ -20,7 +20,7 @@ from ravi.server.models import Step, Thread
 from ravi.server.security.deps import TokenPayload, get_current_user
 from ravi.server.services.file_service import purge_thread_files
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

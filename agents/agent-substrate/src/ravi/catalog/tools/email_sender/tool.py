@@ -5,19 +5,19 @@ explicit human approval since it acts on behalf of the user.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import re
 
-from ravi.core.tools.base_tool import (
+from ravi.kernel.tools.base_tool import (
     BaseTool,
     HitlMode,
     ToolResult,
     ToolRisk,
 )
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.messages.content import TextBlock
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 

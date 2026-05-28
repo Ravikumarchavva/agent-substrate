@@ -1,13 +1,10 @@
-[tool.hatch.build.targets.wheel]
-packages = ["src/ravi"]
-
 [project]
 name = "ravi"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
-    { name = "Ravikumar Chavva", email = "chavvaravikumarreddy2004@gmail.com" }
+    { name = "Ravikumar Chavva", email = "chavvaravikumarreddy2004@gmail.com" },
 ]
 requires-python = ">=3.11"
 dependencies = [
@@ -16,15 +13,11 @@ dependencies = [
     "openai>=2.15.0",
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-otlp>=1.20.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
     "python-json-logger>=2.0.7",
     "tiktoken>=0.12.0",
     "fastapi>=0.128.0",
-    "opentelemetry-instrumentation-fastapi>=0.60b1",
-    "pillow>=12.1.1",
-    "fastmcp>=2.14.5",
     "redis[hiredis]>=5.0.0",
     "sqlalchemy>=2.0.46",
     "asyncpg>=0.30.0",
@@ -36,12 +29,17 @@ dependencies = [
     "cryptography>=46.0.6",
     "nats-py>=2.9",
     "apscheduler>=4.0.0a5",
-    "restate-sdk>=0.16.0",
-    "ipykernel>=7.1.0",
     "anthropic>=0.95.0",
     "google-genai>=1.73.0",
-    "pgvector>=0.3.6",
     "k8s-agent-sandbox>=0.4.6",
+    "msgspec>=0.21.1",
+    "pillow>=10.4.0",
+    "markitdown-ocr>=0.1.0",
+    "ipywidgets>=8.1.8",
+    "opentelemetry-exporter-otlp<1.20",
+    "opentelemetry-instrumentation-fastapi<0.60b1",
+    "paddleocr[all]",
+    "ipykernel>=7.2.0",
 ]
 
 [project.scripts]
@@ -49,76 +47,19 @@ ravi = "ravi.cli:main"
 start = "ravi.cli:start_main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "ruff>=0.15.7",
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.3.0",
-    "authlib>=1.6.9",
-    "protobuf>=6.33.5",
-    "pygments>=2.20.0",
-    "requests>=2.33.0",
-    "json2html>=1.3.0",
-    "matplotlib>=3.10.9",
-    "plotly>=6.7.0",
-]
-
-notebooks = [
-    "ipykernel>=7.1.0",
-    "ipywidgets>=8.1.8",
-]
-
-browser = [
-    "playwright>=1.58.0",
-]
-
-files = [
-    "pypdf>=6.9.2",
-    "openpyxl>=3.1.0",
-]
-
-pdf = [
-    "pdfplumber>=0.11.0",
-    "pypdf>=6.9.2",
-    "Pillow>=11.0.0",
-    "pytesseract>=0.3.10",
-]
-
-storage = [
-    "aiobotocore>=2.25.0",
-]
-
-distributed = [
-    "restate-sdk>=0.16",
-]
-
-docs = [
-    "mkdocs-material>=9.5",
-    "mkdocstrings[python]>=0.26",
-    "mkdocs-git-revision-date-localized-plugin>=1.2",
-    "mkdocs-minify-plugin>=0.8",
-    "mike>=2.1",                     # versioned docs
-]
-
-examples = [
-    "mcp-server-fetch>=2025.1.17",
-    "minio>=7.2.20",
-    "kafka-python-ng>=2.2.3",
-]
+dev = []
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
-exclude = [
-    "notebooks/",
-    "examples/",
-    ".venv",
-]
+exclude = ["notebooks/", "examples/", ".venv"]
 
 [tool.ruff.lint]
 # E701/E702: single-line if/semicolons are intentional in dispatch tables
@@ -126,3 +67,40 @@ exclude = [
 [tool.ruff.lint.per-file-ignores]
 "src/ravi/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
 "src/ravi/services/conversation/routes.py" = ["E402"]
+# plugin/registry.py deliberately imports base classes at the bottom of the
+# module to avoid circular imports with kernel.{agents,guardrails,...}.
+"src/ravi/kernel/plugin/registry.py" = ["E402"]
+
+# ---------------------------------------------------------------------------
+# import-linter — enforce the layered architecture so the kernel stays frozen.
+# Layers (strictly downward dependencies only):
+#   server | services  ← catalog  ← integrations  ← extensions  ← kernel
+# Run with: uv run lint-imports
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["ravi"]
+
+[[tool.importlinter.contracts]]
+name = "kernel is independent"
+type = "forbidden"
+source_modules = ["ravi.kernel"]
+forbidden_modules = [
+    "ravi.extensions",
+    "ravi.integrations",
+    "ravi.catalog",
+    "ravi.server",
+    "ravi.services",
+    "ravi.shared",
+    "ravi.configs",
+    "ravi.logger",
+]
+
+[tool.uv.sources]
+paddleocr = { git = "https://github.com/PaddlePaddle/PaddleOCR.git" }
+
+# Note: a strict "layers" contract for the full stack would treat
+# ``extensions → integrations`` and ``catalog → server`` as violations, but
+# those cross-edges encode legitimate dependencies (e.g. RedisModelContext
+# needs the Redis backend). The "kernel is independent" contract above is the
+# load-bearing guarantee — it makes it mechanically impossible to leak
+# upward imports into the frozen kernel layer.

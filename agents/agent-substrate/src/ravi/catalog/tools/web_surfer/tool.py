@@ -6,8 +6,8 @@ import base64
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import ImageBlock, TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import ImageBlock, TextBlock
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright
@@ -57,7 +57,7 @@ class WebSurferTool(BaseTool):
         if not PLAYWRIGHT_AVAILABLE:
             raise ImportError(
                 "Playwright is required for WebSurferTool. "
-                "Install it with: uv sync --group browser && uv run playwright install"
+                "Install it with: uv sync --group optional && uv run playwright install"
             )
 
         self.headless = headless
@@ -159,7 +159,7 @@ class WebSurferTool(BaseTool):
             if playwright_factory is None:
                 raise ImportError(
                     "Playwright is required for WebSurferTool. "
-                    "Install it with: uv sync --group browser && uv run playwright install"
+                    "Install it with: uv sync --group optional && uv run playwright install"
                 )
 
             self._playwright = await playwright_factory().start()

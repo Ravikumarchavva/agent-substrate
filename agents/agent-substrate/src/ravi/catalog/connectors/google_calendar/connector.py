@@ -5,12 +5,12 @@ user-delegated credentials.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class GoogleCalendarConnector:

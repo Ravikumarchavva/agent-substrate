@@ -4,8 +4,8 @@ Entry point: uvicorn ravi.services.tool_executor.app:app --port 8015
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -16,7 +16,7 @@ from ravi.services.tool_executor.executor import ToolRegistry
 from ravi.services.tool_executor.routes import router
 from ravi.shared.events.bus import EventBus
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 def _load_default_tools(ci_http_client=None) -> list:

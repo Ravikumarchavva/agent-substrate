@@ -15,25 +15,25 @@ Images are not converted to text here; the caller receives a separate
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import base64
 import csv
 import io
 from importlib import import_module
 import json
-import logging
 import uuid
 from typing import Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.core.storage.base import FileStore
-from ravi.core.storage.document import store_document
-from ravi.core.storage.tenant import FileScope, TenantContext
+from ravi.kernel.storage.base import FileStore
+from ravi.kernel.storage.document import store_document
+from ravi.kernel.storage.tenant import FileScope, TenantContext
 from ravi.server.models import FileMetadata
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # Maximum characters injected per file into the LLM context window
 _MAX_TEXT_CHARS = 50_000
@@ -349,7 +349,7 @@ def extract_text_from_bytes(
             )
             return (
                 f"(PDF file: {name} — text extraction unavailable, "
-                "run 'uv sync --group files' to enable it. "
+                "run 'uv sync --group optional' to enable it. "
                 "The file is available in the code interpreter at /data/{name})"
             )
         except Exception as exc:
@@ -378,7 +378,7 @@ def extract_text_from_bytes(
             )
             return (
                 f"(Excel file: {name} — text extraction unavailable, "
-                "run 'uv sync --group files' to enable it. "
+                "run 'uv sync --group optional' to enable it. "
                 f"The file is available in the code interpreter at /data/{name})"
             )
         except Exception as exc:

@@ -13,8 +13,8 @@ in-process asyncio state.  Scaling is done via StatefulSet replicas.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import time
 from contextlib import asynccontextmanager
 
@@ -36,7 +36,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 def _fc_config_from(svc: ServiceConfig) -> CodeInterpreterConfig:

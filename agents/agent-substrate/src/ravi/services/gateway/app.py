@@ -7,8 +7,8 @@ requests go through here and are routed to internal services.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import os
 import json as _json
 from contextlib import asynccontextmanager
@@ -33,7 +33,7 @@ from ravi.services.gateway.routes import (
     thread_router,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @asynccontextmanager

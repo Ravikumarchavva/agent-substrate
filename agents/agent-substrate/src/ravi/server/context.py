@@ -22,10 +22,10 @@ from typing import Any, Optional
 from fastapi import Request
 
 from ravi.integrations.memory.redis_memory import RedisMemory
-from ravi.core.runtime import AgentRuntime
-from ravi.core.storage.base import FileStore
-from ravi.core.agent_catalog import AgentCatalogRegistry
-from ravi.core.llm.base_client import BaseModelClient
+from ravi.kernel.runtime import AgentRuntime
+from ravi.kernel.storage.base import FileStore
+from ravi.kernel.agent_catalog import AgentCatalogRegistry
+from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.server.sse.bridge import BridgeRegistry
 
 

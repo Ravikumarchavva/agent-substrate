@@ -23,15 +23,15 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import importlib
 import inspect
-import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Set, Type
 
-logger = logging.getLogger("ravi.catalog.scanner")
+logger = setup_logging()
 
 ComponentKind = Literal["tool", "skill", "connector", "pipeline_step"]
 
@@ -194,7 +194,7 @@ class CatalogScanner:
             logger.exception("Failed to import tool module: %s", module_path)
             return None
 
-        from ravi.core.tools.base_tool import BaseTool
+        from ravi.kernel.tools.base_tool import BaseTool
 
         for _attr_name, obj in inspect.getmembers(mod, inspect.isclass):
             if issubclass(obj, BaseTool) and obj is not BaseTool:

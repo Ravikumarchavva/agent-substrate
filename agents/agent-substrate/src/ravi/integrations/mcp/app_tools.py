@@ -5,10 +5,10 @@ a sandboxed iframe with the interactive HTML app alongside their output.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, ClassVar, Dict, List
@@ -16,14 +16,14 @@ from typing import Any, ClassVar, Dict, List
 import httpx
 
 from ravi.configs.settings import settings
-from ravi.core.tools.base_tool import ToolResult, ToolRisk
+from ravi.kernel.tools.base_tool import ToolResult, ToolRisk
 from ravi.integrations.mcp.app_tool_base import McpAppTool
 from ravi.server.routes.workspace_oauth import (
     clear_workspace_tokens_async,
     get_workspace_access_token_async,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _SPOTIFY_TOKEN_PATH = "/api/spotify/token"
 

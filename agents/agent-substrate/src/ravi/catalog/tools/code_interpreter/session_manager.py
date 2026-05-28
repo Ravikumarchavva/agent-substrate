@@ -21,9 +21,9 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -31,7 +31,7 @@ from typing import Optional
 from .config import CodeInterpreterConfig
 from .vm_manager import VM, VMPool
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @dataclass

@@ -13,18 +13,18 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
-import logging
 import time
 import traceback
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ravi.catalog._data_ref import DataRef, DataRefStore
-from ravi.core.tools.base_tool import BaseTool
+from ravi.kernel.tools.base_tool import BaseTool
 
-logger = logging.getLogger("ravi.catalog.chain_runtime")
+logger = setup_logging()
 
 _LARGE_RESULT_THRESHOLD = 4096  # bytes — results larger than this become DataRefs
 
@@ -125,7 +125,7 @@ class ChainRuntime:
         catalog: Any,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
-        from ravi.core.agent_catalog import AgentCatalogRegistry
+        from ravi.kernel.agent_catalog import AgentCatalogRegistry
 
         self._catalog: AgentCatalogRegistry = catalog
         self._data_store = data_store

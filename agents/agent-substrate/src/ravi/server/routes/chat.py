@@ -5,10 +5,10 @@ including tool approval requests, human input requests, and tool results.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 from typing import Any, AsyncIterator
 from uuid import uuid4
 
@@ -27,14 +27,14 @@ from ravi.integrations.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
-from ravi.core.messages import (
+from ravi.kernel.messages import (
     ImageContent,
     MediaType,
     ReasoningDeltaChunk,
     TextDeltaChunk,
 )
-from ravi.core.execution.context import ExecutionContext
-from ravi.core.messages.client_messages import (
+from ravi.kernel.execution.context import ExecutionContext
+from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     ToolExecutionResultMessage,
 )
@@ -73,7 +73,7 @@ from ravi.server.sse.events import (
     RawDictEvent,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(tags=["chat"], dependencies=[Depends(get_current_user)])
 
@@ -802,7 +802,7 @@ async def chat(
                             tool_media = getattr(chunk, "media", None)
                             if tool_media:
                                 from ravi.server.services.file_service import save_file
-                                from ravi.core.storage.tenant import FileScope
+                                from ravi.kernel.storage.tenant import FileScope
                                 import uuid
                                 import base64
 

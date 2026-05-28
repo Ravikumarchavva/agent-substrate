@@ -24,22 +24,22 @@ a thread (cache miss), the Postgres cold store is read to seed Redis.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.core.agents.react_agent import ReActAgent
-from ravi.core.context.base_context import ModelContext
-from ravi.core.context.implementations import SlidingWindowContext
+from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.kernel.context.base_context import ModelContext
+from ravi.extensions.context.redis_model_context import SlidingWindowContext
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.integrations.memory.redis_memory import RedisMemory
-from ravi.core.messages.client_messages import AssistantMessage
-from ravi.core.llm.base_client import BaseModelClient
-from ravi.core.runtime import AgentId, AgentRuntime
-from ravi.core.tools.base_tool import BaseTool
+from ravi.kernel.messages.client_messages import AssistantMessage
+from ravi.kernel.llm.base_client import BaseModelClient
+from ravi.kernel.runtime import AgentId, AgentRuntime
+from ravi.kernel.tools.base_tool import BaseTool
 from ravi.shared.execution import create_react_agent, load_session_memory
 
 from ravi.server.services import (
@@ -47,7 +47,7 @@ from ravi.server.services import (
     load_messages_for_memory,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 async def load_agent_for_thread(

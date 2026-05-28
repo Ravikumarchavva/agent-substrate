@@ -6,9 +6,9 @@ Tokens survive backend restarts.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 import time
 from typing import Any
 
@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 
 from ravi.server.security.deps import TokenPayload, get_current_user
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/auth/workspace", tags=["workspace-oauth"])
 DEFAULT_SESSION_ID = "default_user"

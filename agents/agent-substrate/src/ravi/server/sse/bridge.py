@@ -29,9 +29,9 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
-import logging
 from typing import Any, Dict, Optional
 
 from ravi.catalog.tools.human_input.tool import (
@@ -46,7 +46,7 @@ from ravi.catalog.tools.human_input.tool import (
     HumanInputHandler,
 )
 
-logger = logging.getLogger("ravi.web_hitl")
+logger = setup_logging()
 
 # Sentinel used to signal the SSE generator that the agent is done
 _DONE = object()

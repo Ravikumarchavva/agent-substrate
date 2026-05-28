@@ -1,0 +1,1 @@
+"""Kernel metadata contract tests."""

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
 
 class ChainExecutorTool(BaseTool):

@@ -9,8 +9,8 @@ Routes:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from typing import Any, Dict, Optional
 
@@ -28,7 +28,7 @@ from ravi.services.admin.service import (
     list_tenants,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

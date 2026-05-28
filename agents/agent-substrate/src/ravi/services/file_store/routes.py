@@ -9,8 +9,8 @@ Routes:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from typing import Any, Dict, Optional
 
@@ -18,8 +18,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.core.storage.document import store_document
-from ravi.core.storage.tenant import FileScope, TenantContext
+from ravi.kernel.storage.document import store_document
+from ravi.kernel.storage.tenant import FileScope, TenantContext
 from ravi.shared.database.dependency import get_db_session
 
 from ravi.services.file_store.service import (
@@ -29,7 +29,7 @@ from ravi.services.file_store.service import (
     list_files,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 

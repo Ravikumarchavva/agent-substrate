@@ -5,16 +5,16 @@ Requires Spotify Premium subscription.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import base64
-import logging
 import secrets
 from typing import Any, Dict
 from urllib.parse import urlencode
 
 import httpx
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # Required scopes for Web Playback SDK
 SPOTIFY_SCOPES = [

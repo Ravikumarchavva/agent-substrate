@@ -13,10 +13,10 @@ override them.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 from typing import Annotated, Any
 
 from fastapi import (
@@ -33,7 +33,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 
 from ravi.configs.settings import settings
-from ravi.core.llm import BaseModelClient
+from ravi.kernel.llm import BaseModelClient
 from ravi.integrations.llm.factory import (
     create_model_client,
     detect_provider,
@@ -46,7 +46,7 @@ from ravi.server.schemas import (
 )
 from ravi.server.security.deps import get_current_user
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(
     prefix="/audio",

@@ -12,8 +12,8 @@ from datetime import datetime
 
 from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.integrations.memory.postgres_memory import PostgresMemory
-from ravi.core.memory.session_manager import SessionManager
-from ravi.core.messages.client_messages import (
+from ravi.extensions.memory.session_manager import SessionManager
+from ravi.kernel.messages.client_messages import (
     SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, ToolExecutionResultMessage,
 )
 

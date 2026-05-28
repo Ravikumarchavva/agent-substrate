@@ -13,11 +13,11 @@ and adds:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from abc import abstractmethod
 
-from ravi.core.runtime import (
+from ravi.kernel.runtime import (
     AgentId,
     BaseRuntime,
     Envelope,
@@ -26,7 +26,7 @@ from ravi.core.runtime import (
     TopicId,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class BaseRemoteRuntime(BaseRuntime):
@@ -130,7 +130,7 @@ class BaseRemoteRuntime(BaseRuntime):
     def _make_correlation_id(
         self, message: object, *, sender: AgentId | None, target: AgentId | TopicId
     ) -> str:
-        from ravi.core.messages.content import TextBlock
+        from ravi.kernel.messages.content import TextBlock
 
         # Envelope only needs content for routing; we just need the auto-generated correlation_id
         content = (

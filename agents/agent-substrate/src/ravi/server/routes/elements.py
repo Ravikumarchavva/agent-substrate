@@ -6,8 +6,8 @@ GET  /threads/{thread_id}/elements – list elements for a thread
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -16,9 +16,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.configs.settings import settings
-from ravi.core.storage.base import FileStore
-from ravi.core.storage.document import Document, store_document
-from ravi.core.storage.tenant import FileScope, TenantContext
+from ravi.kernel.storage.base import FileStore
+from ravi.kernel.storage.document import Document, store_document
+from ravi.kernel.storage.tenant import FileScope, TenantContext
 from ravi.server.context import ServerContext, get_ctx
 from ravi.server.database import get_db
 from ravi.server.models import Element
@@ -26,7 +26,7 @@ from ravi.server.schemas import ElementOut
 from ravi.server.security.deps import get_current_user
 from ravi.server.services import get_thread
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(tags=["elements"], dependencies=[Depends(get_current_user)])
 

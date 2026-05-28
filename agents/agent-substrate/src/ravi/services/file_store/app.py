@@ -4,21 +4,21 @@ Entry point: uvicorn ravi.services.file_store.app:app --port 8018
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
 from ravi.configs.settings import Settings
-from ravi.core.storage.factory import create_file_store
+from ravi.extensions.storage.factory import create_file_store
 from ravi.services.file_store.models import ServiceBase
 from ravi.services.file_store.routes import router
 from ravi.services.base import create_service_app, init_service_db
 from ravi.shared.events.bus import EventBus
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @asynccontextmanager

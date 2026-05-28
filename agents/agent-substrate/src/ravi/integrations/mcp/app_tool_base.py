@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from ravi.core.tools.base_tool import BaseTool
+from ravi.kernel.tools.base_tool import BaseTool
 
 
 class McpAppTool(BaseTool):

@@ -585,37 +585,11 @@ class TestNATSBridgeProtocol:
 class TestBackwardCompat:
     """Agents without runtime still work identically."""
 
-    async def test_agent_without_runtime_has_none(self) -> None:
-        """BaseAgent defaults to runtime=None, agent_id=None."""
-        from typing import AsyncIterator as _AsyncIterator
-
-        from ravi.kernel.agents.base_agent import BaseAgent
-
-        class _DummyAgent(BaseAgent):
-            def get_system_instructions(self) -> str:
-                return self._system_instructions
-
-            async def run(self, input_text: str, **kw: object) -> str:
-                return "ok"
-
-            async def run_stream(
-                self, input_text: str, **kw: object
-            ) -> _AsyncIterator[str]:
-                yield "ok"  # type: ignore[misc]
-
-        agent = _DummyAgent(
-            name="test",
-            description="test agent",
-            catalog=_make_catalog(),
-        )
-        assert agent.runtime is None
-        assert agent.agent_id is None
-
     async def test_server_context_runtime_optional(self) -> None:
-        """ServerContext.runtime defaults to None."""
-        from ravi.server.context import ServerContext
+        """ServerDependencies.runtime defaults to None."""
+        from ravi.server.dependencies import ServerDependencies
 
-        ctx = ServerContext(
+        ctx = ServerDependencies(
             model_client=MagicMock(),
             redis_memory=MagicMock(),
             tools=MagicMock(),
@@ -627,11 +601,11 @@ class TestBackwardCompat:
         assert ctx.runtime is None
 
     async def test_server_context_with_runtime(self) -> None:
-        """ServerContext accepts runtime kwarg."""
-        from ravi.server.context import ServerContext
+        """ServerDependencies accepts runtime kwarg."""
+        from ravi.server.dependencies import ServerDependencies
 
         runtime = LocalRuntime()
-        ctx = ServerContext(
+        ctx = ServerDependencies(
             model_client=MagicMock(),
             redis_memory=MagicMock(),
             tools=MagicMock(),

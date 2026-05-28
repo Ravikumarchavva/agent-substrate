@@ -1,23 +1,23 @@
-"""PipelineRunner — build live framework objects from a PipelineConfig.
+"""WorkflowRunner — build live framework objects from a PipelineConfig.
 
 Takes the JSON graph produced by the visual builder and instantiates
-real ``ReActAgent``, ``BaseTool``, ``LLMJudge``, ``StructuredRouter``,
+real ``AssistantAgent``, ``BaseTool``, ``LLMJudge``, ``StructuredRouter``,
 ``SkillManager``, and ``BaseMemory`` objects wired together exactly as
 the user drew them on the canvas.
 
 Usage::
 
-    from ravi.kernel.pipelines import PipelineRunner, PipelineConfig
+    from ravi.kernel.pipelines import WorkflowRunner, PipelineConfig
 
     config = PipelineConfig.model_validate(json_from_db)
-    pipeline = PipelineRunner()
+    pipeline = WorkflowRunner()
 
     # ``app_state`` is the FastAPI app.state that holds tool instances, etc.
     runnable = await pipeline.build(config, tools_registry=app_state.tools,
                                      model_client=app_state.model_client,
                                      redis_memory=app_state.redis_memory)
 
-    # ``runnable`` is either a ReActAgent (single agent) or StructuredRouter
+    # ``runnable`` is either a AssistantAgent (single agent) or StructuredRouter
     if hasattr(runnable, 'run'):
         result = await runnable.run("Hello!")
     else:
@@ -31,21 +31,21 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ravi.catalog import SkillManager
 from ravi.extensions.agents.flow.agent import BaseFlow, FlowStep, ParallelFlow, SequentialFlow
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.extensions.agents.assistant.agent import AssistantAgent
 from ravi.kernel.context.base_context import ModelContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.memory.base_memory import BaseMemory
 from ravi.kernel.memory.unbounded_memory import UnboundedMemory
 from ravi.extensions.pipelines.middleware import BaseWorkflowMiddleware, WorkflowRunnable
-from ravi.extensions.pipelines.condition_runner import ConditionPipelineRunner
+from ravi.extensions.pipelines.condition_runner import ConditionWorkflowRunner
 from ravi.kernel.pipelines.schema import (
     EdgeType,
     NodeConfig,
     NodeType,
     PipelineConfig,
 )
-from ravi.extensions.pipelines.while_runner import WhilePipelineRunner
+from ravi.extensions.pipelines.while_runner import WhileWorkflowRunner
 from ravi.extensions.structured.judge import LLMJudge
 from ravi.extensions.structured.router import StructuredRouter
 from ravi.kernel.tools.base_tool import BaseTool
@@ -77,8 +77,19 @@ def _load_guardrail_schemas() -> Dict[str, Any]:
     return _GUARDRAIL_SCHEMAS
 
 
-class PipelineRunner:
+class WorkflowRunner:
     """Turns a visual-builder ``PipelineConfig`` into live objects."""
+
+    def __init__(self) -> None:
+        self._runtime: Any = None
+
+    async def _get_or_create_runtime(self) -> Any:
+        """Return or lazily start a shared LocalRuntime for agents built by this runner."""
+        if self._runtime is None:
+            from ravi.kernel.runtime._local import LocalRuntime
+            self._runtime = LocalRuntime()
+            await self._runtime.start()
+        return self._runtime
 
     async def build(
         self,
@@ -93,31 +104,31 @@ class PipelineRunner:
         hitl_bridge: Optional[Any] = None,
     ) -> Union[
         WorkflowRunnable,
-        ReActAgent,
+        AssistantAgent,
         BaseFlow,
         StructuredRouter,
-        "ConditionPipelineRunner",
-        "WhilePipelineRunner",
+        "ConditionWorkflowRunner",
+        "WhileWorkflowRunner",
     ]:
         """Build the pipeline graph into a runnable agent or router.
 
         Topology detection (in priority order):
-        1. ``while`` node     → ``WhilePipelineRunner`` (repeat-until loop)
-        2. ``condition`` node  → ``ConditionPipelineRunner`` (expression-based branching)
+        1. ``while`` node     → ``WhileWorkflowRunner`` (repeat-until loop)
+        2. ``condition`` node  → ``ConditionWorkflowRunner`` (expression-based branching)
         3. ``router`` node     → ``StructuredRouter`` (LLM-based routing)
         4. ``agent_flow`` edges → ``SequentialFlow`` / ``ParallelFlow``
-        5. First ``agent``      → single ``ReActAgent``
+        5. First ``agent``      → single ``AssistantAgent``
 
         ``start``, ``end``, and ``note`` nodes are structural-only and are
         always skipped at runtime.
         """
         # While-loop pipeline
         runnable: Union[
-            ReActAgent,
+            AssistantAgent,
             BaseFlow,
             StructuredRouter,
-            "ConditionPipelineRunner",
-            "WhilePipelineRunner",
+            "ConditionWorkflowRunner",
+            "WhileWorkflowRunner",
         ]
         tools_list = self._normalize_tools_registry(tools_registry)
 
@@ -251,7 +262,7 @@ class PipelineRunner:
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
-    ) -> Union[BaseFlow, ReActAgent]:
+    ) -> Union[BaseFlow, AssistantAgent]:
         """Build a simple agent-to-agent flow graph.
 
         Supported shapes today:
@@ -310,7 +321,7 @@ class PipelineRunner:
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
         blocked_targets: Optional[set[str]] = None,
-    ) -> Union[BaseFlow, ReActAgent]:
+    ) -> Union[BaseFlow, AssistantAgent]:
         blocked = blocked_targets or set()
         current_agent = await self._build_agent(
             config,
@@ -463,8 +474,8 @@ class PipelineRunner:
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
-    ) -> "WhilePipelineRunner":
-        """Build a WhilePipelineRunner from a while node.
+    ) -> "WhileWorkflowRunner":
+        """Build a WhileWorkflowRunner from a while node.
 
         Expects:
         - One agent connected via a ``while_body`` edge (the loop body).
@@ -515,7 +526,7 @@ class PipelineRunner:
                 hitl_bridge=hitl_bridge,
             )
 
-        return WhilePipelineRunner(
+        return WhileWorkflowRunner(
             body_agent=body_agent,
             condition=str(while_node.config.get("condition", "")),
             max_iterations=int(while_node.config.get("max_iterations", 10)),
@@ -535,8 +546,8 @@ class PipelineRunner:
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
-    ) -> "ConditionPipelineRunner":
-        """Build a ConditionPipelineRunner from a condition node."""
+    ) -> "ConditionWorkflowRunner":
+        """Build a ConditionWorkflowRunner from a condition node."""
         # Find the upstream agent (connected to the condition node)
         upstream_agents = [
             config.node_by_id(e.source)
@@ -564,8 +575,8 @@ class PipelineRunner:
         )
 
         # Build branch agents (condition branches and else)
-        branch_agents: Dict[str, ReActAgent] = {}
-        else_agent: Optional[ReActAgent] = None
+        branch_agents: Dict[str, AssistantAgent] = {}
+        else_agent: Optional[AssistantAgent] = None
 
         for edge in config.edges_from(condition_node.id):
             target_node = config.node_by_id(edge.target)
@@ -588,7 +599,7 @@ class PipelineRunner:
                 branch_agents[handle] = branch_agent
 
         conditions = condition_node.config.get("conditions", [])
-        return ConditionPipelineRunner(
+        return ConditionWorkflowRunner(
             upstream_agent=upstream_agent,
             conditions=conditions,
             branch_agents=branch_agents,
@@ -606,8 +617,8 @@ class PipelineRunner:
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
-    ) -> ReActAgent:
-        """Build a single ReActAgent from an agent node and its edges."""
+    ) -> AssistantAgent:
+        """Build a single AssistantAgent from an agent node and its edges."""
         cfg = agent_node.config
 
         # -- Tools: find connected tool nodes --
@@ -670,9 +681,7 @@ class PipelineRunner:
 
         # -- Model context --
         if model_context is None:
-            from ravi.extensions.context.redis_model_context import (
-                SlidingWindowContext,
-            )
+            from ravi.extensions.context.sliding_window import SlidingWindowContext
 
             window = cfg.get("context_window", 40)
             model_context = SlidingWindowContext(max_messages=window)
@@ -719,9 +728,10 @@ class PipelineRunner:
             for meta in skill_manager._discovered:
                 catalog.register_skill(meta)
 
-        agent = ReActAgent(
+        agent = AssistantAgent(
             name=agent_node.label or cfg.get("name", "pipeline-agent"),
             description=cfg.get("description", "Pipeline-built agent"),
+            runtime=await self._get_or_create_runtime(),
             catalog=catalog,
             system_instructions=cfg.get(
                 "system_prompt", "You are a helpful assistant."

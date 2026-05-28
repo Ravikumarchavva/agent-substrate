@@ -8,9 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.kernel.agent_catalog._catalog import AgentCatalog
-from ravi.extensions.agents.react.agent import ReActAgent
 from ravi.kernel.context.base_context import ModelContext
-from ravi.extensions.context.redis_model_context import SlidingWindowContext
+from ravi.extensions.context.sliding_window import SlidingWindowContext
 from ravi.kernel.execution.context import ExecutionContext
 from ravi.extensions.guardrails.max_token import MaxTokenGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient
@@ -25,7 +24,7 @@ from ravi.kernel.messages.client_messages import (
     UserMessage,
 )
 from ravi.kernel.messages.content import TextBlock
-from ravi.kernel.runtime import AgentId, AgentRuntime
+from ravi.kernel.runtime import AgentRuntime
 from ravi.kernel.tools.base_tool import BaseTool
 from ravi.integrations.memory.redis_memory import RedisMemory
 
@@ -161,8 +160,9 @@ async def load_session_memory(
     return fallback_mem
 
 
-def create_react_agent(
+def create_assistant_agent(  # type: ignore[return]
     *,
+    runtime: AgentRuntime,
     model_client: BaseModelClient,
     tools: List[BaseTool],
     system_instructions: str,
@@ -175,15 +175,18 @@ def create_react_agent(
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
-    runtime: Optional[AgentRuntime] = None,
-    agent_id: Optional[AgentId] = None,
+    agent_key: str = "default",
     execution_context: Optional[ExecutionContext] = None,
     enable_capability_search: bool = True,
-) -> ReActAgent:
-    """Create a configured ``ReActAgent`` with shared defaults.
+):
+    """Create a configured ``AssistantAgent`` for the actor-model runtime.
 
-    Builds a catalog from the provided resources and passes it to ``ReActAgent``.
+    Unlike ``create_react_agent``, this function requires a runtime — every
+    ``AssistantAgent`` is registered as an actor in the fabric.
+
+    The caller must ``await agent.start()`` before sending messages to it.
     """
+    from ravi.extensions.agents.assistant.agent import AssistantAgent
     from ravi.extensions.middleware.guardrails import GuardrailsMiddleware
 
     resolved_context = model_context or SlidingWindowContext(
@@ -199,7 +202,8 @@ def create_react_agent(
 
     kwargs: Dict[str, Any] = dict(
         name="ChatBot",
-        description="A helpful AI assistant with tool access.",
+        runtime=runtime,
+        key=agent_key,
         catalog=catalog,
         system_instructions=system_instructions,
         max_iterations=max_iterations,
@@ -215,6 +219,7 @@ def create_react_agent(
                 ]
             )
         ],
+        enable_capability_search=enable_capability_search,
     )
     if tool_approval_handler is not None:
         kwargs["tool_approval_handler"] = tool_approval_handler
@@ -222,11 +227,6 @@ def create_react_agent(
         kwargs["tools_requiring_approval"] = tools_requiring_approval
     if tool_timeout is not None:
         kwargs["tool_timeout"] = tool_timeout
-    if runtime is not None:
-        kwargs["runtime"] = runtime
-    if agent_id is not None:
-        kwargs["agent_id"] = agent_id
     if execution_context is not None:
         kwargs["execution_context"] = execution_context
-    kwargs["enable_capability_search"] = enable_capability_search
-    return ReActAgent(**kwargs)
+    return AssistantAgent(**kwargs)  # type: ignore[arg-type]

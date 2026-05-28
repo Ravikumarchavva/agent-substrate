@@ -13,6 +13,8 @@ from ravi.kernel.tools.base_tool import (
     ToolResult,
     ToolRisk,
 )
+from ravi.kernel.tools.parsing import ParsedToolCall, find_tool, parse_tool_call, parse_runtime_tool_payload
+from ravi.kernel.tools.approval import tool_needs_approval
 from ravi.kernel.tools.functional import tool
 
 __all__ = [
@@ -22,6 +24,11 @@ __all__ = [
     "ToolCall",
     "ToolResult",
     "ToolRisk",
+    "ParsedToolCall",
+    "parse_tool_call",
+    "parse_runtime_tool_payload",
+    "find_tool",
+    "tool_needs_approval",
     "Tool",
     "tool",
 ]

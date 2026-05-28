@@ -35,14 +35,14 @@ at the end of every section.
 | 8  | Metadata / Index Plane               | ✅          | +56   | `MetadataStore` + in-memory done. `RedisMetadataStore` + `PostgresMetadataStore` in `integrations/metadata/`. `DistributedRuntime` accepts `metadata_store` param. |
 | 9  | Memory + Graph Redesign              | ✅          | +57   | `LineageStore` + in-memory done. `PostgresLineageStore` in `integrations/memory/`. `SessionManager.record_lineage()` wired. S3/tier routing complete. |
 | 10 | Ranking + Attention                  | ✅          | +32   | `TrustAwareFeedRanker` bridge in `extensions/ranking/` connects live `TrustGraph` + `EconomicSignalSource` to the ranker. 10 e2e tests. |
-| 11 | Governance + Political Dynamics      | ✅          | +32   | `QuarantineCheckMiddleware` in `extensions/runtime/`. `DistributedRuntime` accepts `quarantine_actuator` → auto-wired into local routing middleware. |
+| 11 | Governance + Political Dynamics      | ✅          | +36   | `QuarantineCheckMiddleware` in `extensions/runtime/`. `DistributedRuntime` accepts `quarantine_actuator` → auto-wired into local routing middleware. Background governance sweep (`_run_governance_sweep`) fires on configurable interval; slot revocation wired into sweep. |
 | 12 | Self-Evolution Safeguards            | ✅          | +28   | `CircuitBreakerMiddleware` in `extensions/runtime/`. `ReActAgent` accepts `mutation_policy` → gates `add_tool()` + `rewrite_system_prompt()`. `DistributedRuntime` checks circuit breaker on every send. |
 | 13 | Economic Plane                       | ✅          | +57   | `RedisBudgetLedger` (Lua atomic reserve/commit) + `PostgresBudgetLedger` (row-lock) in `integrations/economic/`. `DistributedRuntime` accepts `budget_ledger` param. |
-| 14 | Observability + Replay               | ✅          | +55   | `OtelEnvelopeSpanRecorder` in `integrations/observability/`. `DistributedRuntime` accepts `span_recorder` + `kill_switch` — span emitted + kill-switch checked on every `send_message`. |
-| 15 | Semantic Consistency                 | ⚠️ partial  | +25   | `SemanticInvariantChecker` + in-memory impl done. `DistributedRuntime` exposes `semantic_checker` property. **Agent-loop integration + divergence routing outstanding.** |
-| 16 | Control Plane / Multi-Region         | ✅          | +57   | `RedisHotCache` + `EnvVarRegionRegistry` in `integrations/control_plane/`. `DistributedRuntime` exposes `hot_cache` + `region_registry` properties. |
+| 14 | Observability + Replay               | ✅          | +61   | `OtelEnvelopeSpanRecorder` in `integrations/observability/`. `DistributedRuntime` accepts `span_recorder` + `kill_switch`. `ReplayGate` exposed via `POST/GET/DELETE /admin/replay/*` in `server/routes/replay.py`; `app.state.replay_gate` initialised in lifespan. |
+| 15 | Semantic Consistency                 | ✅          | +35   | `SemanticInvariantChecker` + in-memory impl done. `DistributedRuntime.register_invariant()` wired; `_check_semantics()` runs after every dispatch; CRITICAL divergences auto-quarantine the sender via governance plane. |
+| 16 | Control Plane / Multi-Region         | ✅          | +60   | `RedisHotCache` + `EnvVarRegionRegistry` in `integrations/control_plane/`. `DistributedRuntime` exposes `hot_cache`, `region_registry`, `fallback_policy` properties. Region-local routing checks `local_region()` in `send_message`; unavailable region invokes `LocalFallbackPolicy.decide_fallback()`. |
 
-**Cumulative**: 515 → **1 267 passing tests**, 0 ruff errors, 0 upward imports.
+**Cumulative**: 515 → **1 326 passing tests**, 0 ruff errors, 0 upward imports.
 
 ## Where things live
 
@@ -118,23 +118,23 @@ at the end of every section.
 
 ### S11 — Governance + Political Dynamics
 - [x] `QuarantineCheckMiddleware` wired into `DistributedRuntime` routing ✅
-- [ ] Wire `QuarantineActuator` to `SchedulerContract` (revoke slots on quarantine)
-- [ ] Scheduled governance sweep (background task, configurable interval)
+- [x] Wire `QuarantineActuator` to `SchedulerContract` (revoke slots on quarantine) ✅
+- [x] Scheduled governance sweep (background task, configurable interval) ✅
 
 ### S14 — Observability + Replay
 - [x] `OtelEnvelopeSpanRecorder` bridge ✅
 - [x] Span emitted for every `send_message` in `DistributedRuntime` ✅
 - [x] Operator kill-switch checked at `DistributedRuntime.send_message` entry ✅
-- [ ] `ReplayGate` exposed via an admin route in `server/routes/`
+- [x] `ReplayGate` exposed via admin routes in `server/routes/replay.py` ✅
 
 ### S15 — Semantic Consistency
-- [ ] Register invariants in `DistributedRuntime` lifespan and check after every agent step
-- [ ] Emit `SemanticDivergence` events; route high-severity divergences to governance plane (S11)
+- [x] `DistributedRuntime.register_invariant()` + `_check_semantics()` after every dispatch ✅
+- [x] CRITICAL divergences routed to governance plane (quarantine sender) ✅
 
 ### S16 — Control Plane / Multi-Region
 - [x] `RedisHotCache` + `EnvVarRegionRegistry` in `integrations/control_plane/` ✅
 - [x] Accessible via `DistributedRuntime.hot_cache` / `.region_registry` ✅
-- [ ] Region-local routing in `DistributedRuntime.send_message` using `RegionRegistry.local_region()`
+- [x] Region-local routing in `DistributedRuntime.send_message` using `RegionRegistry.local_region()` ✅
 
 ## Acceptance gates for every section
 

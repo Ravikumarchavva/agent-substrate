@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 
 from ravi.extensions.pipelines.codegen import generate_code
-from ravi.extensions.pipelines.runner import PipelineRunner
+from ravi.extensions.pipelines.runner import WorkflowRunner
 from ravi.kernel.pipelines.schema import PipelineConfig
 from ravi.server.models import Pipeline, PipelineRun
 from ravi.server.security.deps import get_current_user
@@ -414,7 +414,7 @@ async def run_pipeline(
         try:
             yield _sse_event("status", {"status": "building", "run_id": str(run_id)})
 
-            runner = PipelineRunner()
+            runner = WorkflowRunner()
             runnable = await runner.build(
                 pipeline_config,
                 tools_registry=getattr(request.app.state, "tools", []),

@@ -1,12 +1,13 @@
-"""Shared fixtures for agent tests."""
+"""Shared fixtures for AssistantAgent tests."""
 
 from __future__ import annotations
 
 import pytest
 
 from ravi.kernel.agent_catalog import AgentCatalogRegistry
-from ravi.extensions.agents.react.agent import ReActAgent
 from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.kernel.runtime._local import LocalRuntime
+from ravi.extensions.agents.assistant.agent import AssistantAgent
 
 from tests.fixtures.mock_llm import MockLLMClient, Turn
 from tests.fixtures.fake_tools import EchoTool, AddTool, FailTool, SlowTool, CounterTool
@@ -14,7 +15,6 @@ from tests.fixtures.fake_tools import EchoTool, AddTool, FailTool, SlowTool, Cou
 
 @pytest.fixture
 def fresh_catalog():
-    """AgentCatalog with no model — caller must register one."""
     return AgentCatalogRegistry()
 
 
@@ -43,7 +43,7 @@ def counter_tool():
     return CounterTool()
 
 
-def make_agent(
+async def make_agent(
     script: list[Turn],
     *,
     tools: list | None = None,
@@ -52,16 +52,24 @@ def make_agent(
     tool_timeout: float = 30.0,
     system_instructions: str = "You are a test agent.",
     enable_capability_search: bool = False,
-) -> ReActAgent:
-    """Factory: build a ReActAgent from a scripted LLM and optional tools."""
+    runtime: LocalRuntime | None = None,
+) -> AssistantAgent:
+    """Factory: build an AssistantAgent from a scripted LLM and optional tools."""
     catalog = AgentCatalogRegistry()
     catalog.register_model("primary", MockLLMClient(script=script))
     catalog.register_memory("memory", UnboundedMemory())
     for tool in tools or []:
         catalog.register_tool(tool)
-    return ReActAgent(
-        name="test-agent",
-        description="A test agent",
+
+    rt = runtime
+    _owned_runtime = rt is None
+    if rt is None:
+        rt = LocalRuntime()
+        await rt.start()
+
+    agent = AssistantAgent(
+        "test-agent",
+        rt,
         catalog=catalog,
         system_instructions=system_instructions,
         max_iterations=max_iterations,
@@ -69,3 +77,6 @@ def make_agent(
         tool_timeout=tool_timeout,
         enable_capability_search=enable_capability_search,
     )
+    await agent.start()
+    agent._owned_runtime = rt if _owned_runtime else None  # type: ignore[attr-defined]
+    return agent

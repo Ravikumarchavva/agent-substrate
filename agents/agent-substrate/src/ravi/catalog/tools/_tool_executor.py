@@ -31,6 +31,8 @@ from typing import Any, Dict, List, Optional
 
 from ravi.logger import setup_logging
 from ravi.kernel.runtime._types import MessageContext
+from ravi.kernel.tools.approval import tool_needs_approval
+from ravi.kernel.tools.parsing import find_tool, parse_runtime_tool_payload
 from ravi.kernel.tools.base_tool import BaseTool, HitlMode, ToolResult
 from ravi.catalog.tools.human_input.tool import (
     ToolApprovalHandler,
@@ -68,7 +70,9 @@ class ToolExecutorHandler:
         self._tools = tools
         self._tool_timeout = tool_timeout
         self._approval_handler = tool_approval_handler
-        self._tools_requiring_approval = set(tools_requiring_approval or [])
+        self._tools_requiring_approval = (
+            None if tools_requiring_approval is None else set(tools_requiring_approval)
+        )
 
     async def __call__(self, ctx: MessageContext, payload: Any) -> Any:
         """Execute a tool call and return the result dict.
@@ -76,41 +80,21 @@ class ToolExecutorHandler:
         Validates the payload, looks up the tool, optionally runs HITL
         approval, then executes with timeout.
         """
-        if isinstance(payload, list) and len(payload) > 0:
-            block = payload[0]
-            if (
-                hasattr(block, "type")
-                and block.type == "text"
-                and hasattr(block, "text")
-            ):
-                import ast
-                import json
-
-                try:
-                    parsed_payload = ast.literal_eval(block.text)
-                    if isinstance(parsed_payload, dict):
-                        payload = parsed_payload
-                except Exception:
-                    try:
-                        parsed_payload = json.loads(block.text)
-                        if isinstance(parsed_payload, dict):
-                            payload = parsed_payload
-                    except Exception:
-                        pass
-
-        if not isinstance(payload, dict):
+        try:
+            parsed = parse_runtime_tool_payload(payload)
+        except ValueError:
             return self._error_response(
                 call_id="unknown",
                 tool_name="unknown",
                 error="Invalid payload: expected dict",
             )
 
-        tool_name: str = payload.get("tool_name", "")
-        arguments: dict = payload.get("arguments", {})
-        call_id: str = payload.get("call_id", "")
+        tool_name = parsed.name
+        arguments = parsed.arguments
+        call_id = parsed.call_id
 
         # Look up tool
-        tool = self._tools.get(tool_name)
+        tool = find_tool(tool_name, self._tools)
         if tool is None:
             return self._error_response(
                 call_id=call_id,
@@ -119,7 +103,9 @@ class ToolExecutorHandler:
             )
 
         # HITL approval gate
-        if self._approval_handler and tool_name in self._tools_requiring_approval:
+        if self._approval_handler and tool_needs_approval(
+            tool_name, self._tools_requiring_approval
+        ):
             hitl_mode: HitlMode = getattr(tool, "hitl_mode", HitlMode.BLOCKING)
             approval_request = ToolApprovalRequest(
                 tool_name=tool_name,

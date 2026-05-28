@@ -47,8 +47,8 @@ def generate_code(config: PipelineConfig) -> str:
         import os
 
         from ravi.kernel.agent_catalog._catalog import AgentCatalog
-        from ravi.extensions.agents.react.agent import ReActAgent
-        from ravi.extensions.context.redis_model_context import SlidingWindowContext
+        from ravi.extensions.agents.assistant.agent import AssistantAgent
+        from ravi.extensions.context.sliding_window import SlidingWindowContext
         from ravi.kernel.memory.unbounded_memory import UnboundedMemory
         from ravi.kernel.tools.base_tool import BaseTool, ToolResult
         from ravi.integrations.llm.openai.openai_client import OpenAIClient
@@ -85,7 +85,7 @@ def generate_code(config: PipelineConfig) -> str:
     if NodeType.CONDITION in node_types_used:
         sections.append(
             textwrap.dedent("""\
-            from ravi.extensions.pipelines.condition_runner import ConditionPipelineRunner
+            from ravi.extensions.pipelines.condition_runner import ConditionWorkflowRunner
         """)
         )
 
@@ -246,7 +246,7 @@ def generate_code(config: PipelineConfig) -> str:
         main_lines.append(f"    {catalog_var}.register_memory('memory', {mem_var})")
         for t in connected_tools:
             main_lines.append(f"    {catalog_var}.register_tool({t})")
-        main_lines.append(f"    {var} = ReActAgent(")
+        main_lines.append(f"    {var} = AssistantAgent(")
         main_lines.append(f'        name="{_escape(an.label or "agent")}",')
         main_lines.append(
             f'        description="{_escape(an.config.get("description", ""))}",'
@@ -319,7 +319,7 @@ def generate_code(config: PipelineConfig) -> str:
         main_lines.append("    print(f'Routed to: {decision.parsed}')")
         main_lines.append("    print(f'Result: {result}')")
     elif condition_nodes:
-        # Build ConditionPipelineRunner for the first condition node
+        # Build ConditionWorkflowRunner for the first condition node
         cn = condition_nodes[0]
         ccfg = cn.config
 
@@ -367,7 +367,7 @@ def generate_code(config: PipelineConfig) -> str:
         main_lines.append(
             "    # Condition pipeline — branches on expression evaluation"
         )
-        main_lines.append("    condition_runner = ConditionPipelineRunner(")
+        main_lines.append("    condition_runner = ConditionWorkflowRunner(")
         main_lines.append(f"        upstream_agent={upstream_var or 'None'},")
         main_lines.append(f"        conditions={conditions_repr},")
         main_lines.append("        branch_agents={")

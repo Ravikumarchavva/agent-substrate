@@ -8,7 +8,7 @@ from ravi.kernel.middleware.base import MiddlewareContext, MiddlewareStage
 from ravi.extensions.middleware.governance import GovernanceMiddleware
 from ravi.exceptions import GuardrailTripwireError
 from ravi.kernel.memory.unbounded_memory import UnboundedMemory
-from ravi.extensions.context.redis_model_context import SlidingWindowContext
+from ravi.extensions.context.sliding_window import SlidingWindowContext
 
 
 class DummyTaxTool(BaseTool):

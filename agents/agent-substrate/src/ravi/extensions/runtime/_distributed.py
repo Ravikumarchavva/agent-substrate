@@ -65,13 +65,25 @@ from ravi.kernel.runtime import (
 
 if TYPE_CHECKING:
     from ravi.kernel.economic._ledger import BudgetLedger
-    from ravi.kernel.governance._contracts import QuarantineActuator
+    from ravi.kernel.governance._contracts import (
+        CoalitionDetector,
+        GovernancePolicy,
+        QuarantineActuator,
+    )
     from ravi.kernel.metadata._store import MetadataStore
     from ravi.kernel.observability._killswitch import OperatorKillSwitch
     from ravi.kernel.observability._spans import EnvelopeSpanRecorder
     from ravi.kernel.safeguards._breaker import CircuitBreaker
-    from ravi.kernel.semantics._contracts import SemanticInvariantChecker
-    from ravi.kernel.control_plane._contracts import HotCache, RegionRegistry
+    from ravi.kernel.semantics._contracts import (
+        SemanticDivergenceDetector,
+        SemanticInvariant,
+        SemanticInvariantChecker,
+    )
+    from ravi.kernel.control_plane._contracts import (
+        HotCache,
+        LocalFallbackPolicy,
+        RegionRegistry,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +150,17 @@ class DistributedRuntime(BaseRuntime):
         "_scheduler",
         "_semantic_checker",
         "_span_recorder",
+        # S11 — governance sweep
+        "_governance_policy",
+        "_coalition_detector",
+        "_governance_sweep_interval",
+        "_governance_sweep_task",
+        "_active_grants_by_principal",
+        # S15 — semantic consistency
+        "_divergence_detector",
+        "_semantic_invariants",
+        # S16 — control-plane failover
+        "_fallback_policy",
     )
 
     def __init__(
@@ -167,9 +190,16 @@ class DistributedRuntime(BaseRuntime):
         kill_switch: OperatorKillSwitch | None = None,
         # S15 — semantic invariant checker (callers invoke via .semantic_checker)
         semantic_checker: SemanticInvariantChecker | None = None,
-        # S16 — control plane: hot cache + region registry
+        # S15 — divergence detector (wraps checker, retains failure history)
+        divergence_detector: SemanticDivergenceDetector | None = None,
+        # S16 — control plane: hot cache + region registry + failover policy
         hot_cache: HotCache | None = None,
         region_registry: RegionRegistry | None = None,
+        fallback_policy: LocalFallbackPolicy | None = None,
+        # S11 — governance: policy + coalition detector + periodic sweep
+        governance_policy: GovernancePolicy | None = None,
+        coalition_detector: CoalitionDetector | None = None,
+        governance_sweep_interval: float = 60.0,
     ) -> None:
         super().__init__(lease_registry=lease_registry, worker_id=worker_id)
         self._fabric = fabric
@@ -201,6 +231,17 @@ class DistributedRuntime(BaseRuntime):
         self._region_registry = region_registry
         self._semantic_checker = semantic_checker
         self._span_recorder = span_recorder
+        # S11 — governance sweep
+        self._governance_policy = governance_policy
+        self._coalition_detector = coalition_detector
+        self._governance_sweep_interval = governance_sweep_interval
+        self._governance_sweep_task: asyncio.Task[None] | None = None
+        self._active_grants_by_principal: dict[str, str] = {}
+        # S15 — semantic consistency
+        self._divergence_detector = divergence_detector
+        self._semantic_invariants: list[SemanticInvariant] = []
+        # S16 — control-plane failover
+        self._fallback_policy = fallback_policy
 
         # Wire quarantine actuator into the local routing middleware so
         # envelopes from quarantined principals are blocked at the gate.
@@ -257,6 +298,22 @@ class DistributedRuntime(BaseRuntime):
     def span_recorder(self) -> EnvelopeSpanRecorder | None:
         return self._span_recorder
 
+    @property
+    def governance_policy(self) -> GovernancePolicy | None:
+        return self._governance_policy
+
+    @property
+    def coalition_detector(self) -> CoalitionDetector | None:
+        return self._coalition_detector
+
+    @property
+    def divergence_detector(self) -> SemanticDivergenceDetector | None:
+        return self._divergence_detector
+
+    @property
+    def fallback_policy(self) -> LocalFallbackPolicy | None:
+        return self._fallback_policy
+
     # -- BaseRuntime overrides ---------------------------------------------
 
     async def register(self, agent_type: str, handler: MessageHandler) -> None:
@@ -292,12 +349,26 @@ class DistributedRuntime(BaseRuntime):
             timeout=5.0,
         )
         self._started = True
+        # S11: start governance sweep if policy + actuator are wired up.
+        if self._governance_policy is not None and self._quarantine_actuator is not None:
+            self._governance_sweep_task = loop.create_task(
+                self._run_governance_sweep(),
+                name=f"gov-sweep:{self._worker_id}",
+            )
         logger.info("DistributedRuntime %s started", self._worker_id)
 
     async def stop(self) -> None:
         if not self._started:
             return
         self._started = False
+        # Cancel governance sweep before inbox/reply to avoid sweep racing shutdown.
+        if self._governance_sweep_task is not None and not self._governance_sweep_task.done():
+            self._governance_sweep_task.cancel()
+            try:
+                await self._governance_sweep_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        self._governance_sweep_task = None
         for task in (self._inbox_task, self._reply_task):
             if task is not None and not task.done():
                 task.cancel()
@@ -344,6 +415,36 @@ class DistributedRuntime(BaseRuntime):
         # S12: circuit breaker check — reject senders whose circuit is open.
         if self._circuit_breaker is not None and sender is not None:
             await self._circuit_breaker.allow_request(str(sender))
+
+        # S16: region-local routing — validate placement against the local region.
+        if self._region_registry is not None:
+            from ravi.kernel.control_plane._contracts import FailoverReason
+            try:
+                local_region = self._region_registry.local_region()
+                if not local_region.available and self._fallback_policy is not None:
+                    available_regions = [
+                        r for r in self._region_registry.list_regions() if r.available
+                    ]
+                    if available_regions:
+                        failover = self._fallback_policy.decide_fallback(
+                            local_region.region_id,
+                            available_regions,
+                            FailoverReason.UNREACHABLE,
+                        )
+                        logger.warning(
+                            "Local region %s unavailable; failover to %s",
+                            failover.original_region_id,
+                            failover.fallback_region_id,
+                        )
+                msg_region = getattr(message, "placement_region", None)
+                if msg_region is not None and msg_region != local_region.region_id:
+                    logger.debug(
+                        "Message placement_region=%s differs from local region %s",
+                        msg_region,
+                        local_region.region_id,
+                    )
+            except RuntimeError:
+                pass  # local_region() raises RuntimeError when none is marked local
 
         # S14: start an envelope span to trace this dispatch.
         span_id: str | None = None
@@ -400,6 +501,9 @@ class DistributedRuntime(BaseRuntime):
                 logger.info("Claim queued for grant %s; waiting...", grant.grant_id)
                 await self._scheduler.wait_for_slot(grant.grant_id)
             grant_id = grant.grant_id
+            # S11: track active grant so the governance sweep can preempt it.
+            if sender is not None:
+                self._active_grants_by_principal[str(sender)] = grant_id
 
         # Optimistic local path: if we own (or can acquire) the lease, run
         # the message locally without touching the fabric.
@@ -420,9 +524,20 @@ class DistributedRuntime(BaseRuntime):
         else:
             if reservation is not None and self._budget_ledger is not None:
                 await self._budget_ledger.commit(reservation)
+            # S15: check semantic invariants after successful dispatch.
+            if self._semantic_invariants and (
+                self._semantic_checker is not None or self._divergence_detector is not None
+            ):
+                try:
+                    await self._check_semantics(result, sender, recipient)
+                except Exception:
+                    logger.exception("semantic check raised — treating as non-fatal")
         finally:
             if grant_id is not None and self._scheduler is not None:
                 await self._scheduler.release_slot(grant_id)
+            # S11: clean up grant tracking entry after slot release.
+            if sender is not None and grant_id is not None:
+                self._active_grants_by_principal.pop(str(sender), None)
 
         if span_id is not None and self._span_recorder is not None:
             from ravi.kernel.observability._spans import SpanStatus
@@ -719,3 +834,142 @@ class DistributedRuntime(BaseRuntime):
             future.set_exception(RuntimeError(f"remote handler raised: {error}"))
         else:
             future.set_result(wire.metadata.get("result_repr", ""))
+
+    # -- S11: governance sweep ---------------------------------------------
+
+    def register_invariant(self, invariant: SemanticInvariant) -> None:
+        """Register a semantic invariant to be checked after every agent step.
+
+        Checked via the semantic checker / divergence detector after each
+        successful ``send_message`` dispatch.  CRITICAL-severity failures are
+        also routed to the governance plane to quarantine the responsible sender.
+        """
+        self._semantic_invariants.append(invariant)
+
+    async def _run_governance_sweep(self) -> None:
+        """Periodic governance sweep — runs until the runtime is stopped."""
+        try:
+            while True:
+                await asyncio.sleep(self._governance_sweep_interval)
+                try:
+                    await self._do_governance_sweep()
+                except Exception:
+                    logger.exception("governance sweep iteration raised — continuing")
+        except asyncio.CancelledError:
+            pass
+
+    async def _do_governance_sweep(self) -> None:
+        """One governance sweep iteration.
+
+        Detects coalitions via the coalition detector, evaluates each member
+        via the governance policy, and quarantines principals whose risk
+        exceeds the policy threshold.  Active scheduler grants are revoked
+        for newly quarantined principals so they release capacity immediately.
+        """
+        if self._governance_policy is None or self._quarantine_actuator is None:
+            return
+
+        coalitions = ()
+        if self._coalition_detector is not None:
+            coalitions = await self._coalition_detector.detect()
+
+        from ravi.kernel.governance._contracts import GovernanceAction, GovernanceEvidence
+
+        evaluated: set[str] = set()
+        for coalition in coalitions:
+            for fqn in coalition.member_fqns:
+                if fqn in evaluated:
+                    continue
+                evaluated.add(fqn)
+                risk = await self._governance_policy.score_risk(fqn)
+                active = tuple(c for c in coalitions if fqn in c.member_fqns)
+                evidence = GovernanceEvidence(
+                    principal_fqn=fqn,
+                    risk_score=risk,
+                    active_coalitions=active,
+                )
+                decision = await self._governance_policy.evaluate(evidence)
+                if decision.action is GovernanceAction.QUARANTINE:
+                    await self._quarantine_actuator.quarantine(fqn, decision.rationale)
+                    # Revoke any active scheduler slot for this principal.
+                    if self._scheduler is not None:
+                        grant_id = self._active_grants_by_principal.pop(fqn, None)
+                        if grant_id is not None:
+                            try:
+                                await self._scheduler.release_slot(grant_id)
+                            except Exception:
+                                pass
+                    logger.warning(
+                        "Governance sweep quarantined %s: %s",
+                        fqn,
+                        decision.rationale,
+                    )
+
+    # -- S15: semantic consistency -----------------------------------------
+
+    async def _check_semantics(
+        self,
+        result: object,
+        sender: AgentId | None,
+        recipient: AgentId,
+    ) -> None:
+        """Evaluate registered invariants against the dispatch result.
+
+        Uses the divergence detector when available (it records history);
+        otherwise falls back to the bare checker.  CRITICAL-severity failures
+        are routed to the governance plane.
+        """
+        from ravi.kernel.semantics._contracts import SemanticDivergence, SemanticSeverity
+
+        event: dict[str, object] = {
+            "result_repr": repr(result),
+            "sender": str(sender) if sender is not None else "",
+            "recipient": str(recipient),
+        }
+        subject = str(sender) if sender is not None else None
+
+        if self._divergence_detector is not None:
+            divergences = self._divergence_detector.detect(
+                self._semantic_invariants,
+                event=event,
+                subject_id=subject,
+            )
+        elif self._semantic_checker is not None:
+            eval_results = self._semantic_checker.evaluate_many(
+                self._semantic_invariants, event=event, subject_id=subject
+            )
+            divergences = tuple(
+                SemanticDivergence(
+                    invariant_id=r.invariant_id,
+                    severity=r.severity,
+                    message=r.message or f"invariant {r.invariant_id!r} failed",
+                    result=r,
+                )
+                for r in eval_results
+                if not r.passed
+            )
+        else:
+            return
+
+        for div in divergences:
+            if div.severity.at_least(SemanticSeverity.CRITICAL):
+                # Route CRITICAL divergences to the governance plane.
+                if self._quarantine_actuator is not None and sender is not None:
+                    await self._quarantine_actuator.quarantine(
+                        str(sender),
+                        f"semantic divergence {div.invariant_id!r}: {div.message}",
+                    )
+                logger.error(
+                    "CRITICAL semantic divergence from %s: invariant %r — %s",
+                    sender,
+                    div.invariant_id,
+                    div.message,
+                )
+            elif div.severity.at_least(SemanticSeverity.ERROR):
+                logger.warning(
+                    "Semantic invariant %r failed (%s→%s): %s",
+                    div.invariant_id,
+                    sender,
+                    recipient,
+                    div.message,
+                )

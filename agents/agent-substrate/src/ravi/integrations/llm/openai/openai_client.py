@@ -143,7 +143,7 @@ class OpenAIClient(BaseModelClient):
         **kwargs,
     ):
         super().__init__(model, temperature, max_tokens, **kwargs)
-        self.api_key = api_key  # stored so PipelineRunner can build sibling clients
+        self.api_key = api_key  # stored so WorkflowRunner can build sibling clients
         self.base_url = base_url
 
         # Build AsyncOpenAI with optional overrides (base_url enables

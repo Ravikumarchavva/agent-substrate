@@ -37,9 +37,9 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 from ravi.kernel.messages.content import JsonObject, TextBlock
 
-from ravi.kernel.agents.base_agent import BaseAgent
+from ravi.kernel.agents.actor import ActorAgent
 from ravi.kernel.plugin import register_agent
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.extensions.agents.assistant.agent import AssistantAgent
 from ravi.kernel.agents.agent_result import AgentRunResult
 from ravi.kernel.context.base_context import ModelContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
@@ -79,9 +79,9 @@ class _HandoffTool(BaseTool):
 
     def __init__(
         self,
-        agent: BaseAgent,
+        agent: ActorAgent,
         runtime: Optional[AgentRuntime] = None,
-        orchestrator: Optional[BaseAgent] = None,
+        orchestrator: Optional[ActorAgent] = None,
     ) -> None:
         super().__init__(
             name=f"handoff_{agent.name}",
@@ -113,7 +113,7 @@ class _HandoffTool(BaseTool):
         self._orchestrator = orchestrator
 
     @property
-    def target_agent(self) -> BaseAgent:
+    def target_agent(self) -> ActorAgent:
         return self._agent
 
     async def execute(self, *, input: str, reason: str = "", **_kwargs) -> ToolResult:  # noqa: A002
@@ -140,11 +140,11 @@ class _HandoffTool(BaseTool):
                 pass  # MaxAgentDepthError — will propagate naturally via run()
 
         # Distributed path: dispatch via runtime
-        if self._runtime is not None and self._agent.agent_id is not None:
+        if self._runtime is not None:
             output_text = await self._runtime.send_message(
                 input,
                 sender=None,
-                recipient=self._agent.agent_id,
+                recipient=self._agent.id,
             )
             if isinstance(output_text, list):
                 output_text = "\n".join(
@@ -183,7 +183,7 @@ class HandoffEventPayload(BaseModel):
 
 
 @register_agent("orchestrator")
-class OrchestratorAgent(ReActAgent):
+class OrchestratorAgent(AssistantAgent):
     """Orchestrates a set of specialist sub-agents via tool-calling delegation.
 
     Each sub-agent is automatically wrapped in a ``_HandoffTool`` and
@@ -224,7 +224,7 @@ class OrchestratorAgent(ReActAgent):
         description: str,
         *,
         model_client: BaseModelClient,
-        sub_agents: List[BaseAgent],
+        sub_agents: List[ActorAgent],
         system_instructions: Optional[str] = None,
         memory: Optional[BaseMemory] = None,
         memory_scope: MemoryScope = MemoryScope.ISOLATED,
@@ -243,7 +243,6 @@ class OrchestratorAgent(ReActAgent):
         skill_manager: Optional[SkillManager] = None,
         verbose: bool = True,
         runtime: Optional[AgentRuntime] = None,
-        agent_id: Optional[AgentId] = None,
         middleware: Optional[List[BaseMiddleware]] = None,
         catalog: Optional[AgentCatalogRegistry] = None,
     ) -> None:
@@ -297,8 +296,14 @@ class OrchestratorAgent(ReActAgent):
                 SkillManager(skill_dirs=resolved_dirs, auto_discover=True)
             )
 
+        if runtime is None:
+            raise ValueError(
+                "OrchestratorAgent requires a runtime — "
+                "pass runtime=LocalRuntime() or the server's app.state.runtime"
+            )
         super().__init__(
-            name=name,
+            name,
+            runtime,
             description=description,
             catalog=resolved_catalog,
             system_instructions=system_instructions or default_instructions,
@@ -312,8 +317,6 @@ class OrchestratorAgent(ReActAgent):
             tool_timeout=tool_timeout,
             tool_approval_handler=tool_approval_handler,
             tools_requiring_approval=tools_requiring_approval,
-            runtime=runtime,
-            agent_id=agent_id,
             middleware=resolved_middleware,
             enable_capability_search=False,
         )

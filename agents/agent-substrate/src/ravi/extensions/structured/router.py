@@ -61,14 +61,14 @@ from ravi.kernel.structured.result import (
 )
 
 if TYPE_CHECKING:
-    from ravi.kernel.agents.base_agent import BaseAgent
+    from ravi.kernel.agents.actor import ActorAgent
     from ravi.kernel.messages.base_message import BaseClientMessage
     from ravi.kernel.llm.base_client import BaseModelClient
 
 logger = setup_logging()
 
 # A route target is either a BaseAgent or any async/sync callable
-RouteTarget = Union["BaseAgent", Callable[..., Any]]
+RouteTarget = Union["ActorAgent", Callable[..., Any]]
 
 
 class StructuredRouter:
@@ -86,7 +86,7 @@ class StructuredRouter:
         routing_key: Field name on ``routing_schema`` to read the dispatch
             value from.  The value is cast to ``str`` and looked up in
             ``routes``.
-        routes: Mapping of dispatch-value → ``BaseAgent | Callable``.
+        routes: Mapping of dispatch-value → ``ActorAgent | Callable``.
             If the target is a ``BaseAgent`` that has a ``run()`` method,
             it is called as ``await target.run(input_text)``.
             If the target is a coroutine function, it is called as

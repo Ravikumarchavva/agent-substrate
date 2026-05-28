@@ -6,13 +6,14 @@ from typing import Any, Optional
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 from ravi.kernel.agent_catalog import AgentCatalogRegistry
 from ravi.extensions.agents.runtime.agent import RuntimeAgent
-from ravi.extensions.agents.runtime.assistant_agent import RuntimeAssistantAgent
+from ravi.extensions.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
 from ravi.kernel.runtime._protocol import AgentRuntime
 from ravi.kernel.runtime._identity import TopicId, AgentId
 from ravi.kernel.runtime._contracts import MessageContext
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.messages.client_messages import AssistantMessage
-from ravi.extensions.context.redis_model_context import SlidingWindowContext
+from ravi.kernel.agents.agent_result import RunStatus
+from ravi.extensions.context.sliding_window import SlidingWindowContext
 
 
 class DummyCatalogTool(BaseTool):
@@ -94,15 +95,16 @@ async def test_runtime_assistant_agent_catalog_schemas():
     context = SlidingWindowContext(max_messages=10)
     cat = AgentCatalogRegistry()
     cat.register_tool(DummyCatalogTool())
+    cat.register_model("primary", client)
+    cat.register_context("default", context)
 
     # Instantiate RuntimeAssistantAgent with explicit catalog
     assistant = RuntimeAssistantAgent(
         name="assistant",
         runtime=runtime,
-        model_client=client,
-        model_context=context,
         catalog=cat,
         verbose=False,
+        enable_capability_search=False,
     )
 
     assert len(assistant.tools) == 1
@@ -118,4 +120,5 @@ async def test_runtime_assistant_agent_catalog_schemas():
     from ravi.kernel.messages.content import TextBlock
 
     res = await assistant.on_message(ctx, [TextBlock(text="hello")])
-    assert res == "mock response"
+    assert res.status == RunStatus.COMPLETED
+    assert res.output == ["mock response"]

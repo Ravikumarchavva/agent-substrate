@@ -136,8 +136,8 @@ class TestParseUtility:
         assert call_args.kwargs["response_format"] is ContentSafetyJudge
         assert result.ok is True
 
-    async def test_parse_prepends_system_message(self):
-        """When ``system=`` is supplied, a SystemMessage must appear first."""
+    async def test_parse_passes_system_as_kwarg(self):
+        """When ``system=`` is supplied it must reach generate() as system_instructions=."""
         fake_result = StructuredOutputResult(
             parsed=ContentSafetyJudge(safe=True, reasoning="ok", violated_categories=[])
         )
@@ -146,9 +146,12 @@ class TestParseUtility:
 
         await parse(client, messages, ContentSafetyJudge, system="You are a judge.")
 
+        call_kwargs = client.generate.call_args[1]
+        assert "system_instructions" in call_kwargs
+        assert "judge" in call_kwargs["system_instructions"].lower()
+        # Messages passed to generate() must NOT contain a SystemMessage.
         sent_messages = client.generate.call_args[0][0]
-        assert isinstance(sent_messages[0], SystemMessage)
-        assert "judge" in sent_messages[0].content.lower()
+        assert not any(isinstance(m, SystemMessage) for m in sent_messages)
 
     async def test_parse_returns_refusal_result(self):
         fake_result = StructuredOutputResult(parsed=None, refusal="I cannot help.")

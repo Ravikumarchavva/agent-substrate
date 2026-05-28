@@ -11,7 +11,7 @@ import pytest
 
 from ravi.kernel.contracts import TemporalSemantics
 from ravi.kernel.agents.agent_result import AgentRunResult, RunStatus
-from ravi.kernel.agents.base_agent import BaseAgent
+from ravi.kernel.agents.actor import ActorAgent
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.runtime import (
     AgentId,
@@ -481,25 +481,37 @@ class TestEnvelope:
 # -- Minimal concrete agent for testing ------------------------------------
 
 
-class _StubAgent(BaseAgent):
-    """Concrete BaseAgent subclass that returns canned responses."""
+class _StubAgent(ActorAgent):
+    """Concrete ActorAgent subclass that returns canned responses."""
 
-    def __init__(self, name: str = "stub", output: str = "hello", **kwargs: Any):
+    def __init__(
+        self,
+        name: str = "stub",
+        output: str = "hello",
+        runtime: Any = None,
+        agent_id: AgentId | None = None,
+        **kwargs: Any,
+    ):
         from unittest.mock import MagicMock
         from ravi.kernel.agent_catalog import AgentCatalog
 
         catalog = AgentCatalog()
         catalog.register_model("primary", MagicMock())
+
+        if agent_id is not None:
+            kwargs.setdefault("key", agent_id.key)
+
         super().__init__(
             name=name,
+            runtime=runtime or MagicMock(),
             description=f"Stub agent: {name}",
             catalog=catalog,
             **kwargs,
         )
         self._output = output
 
-    def get_system_instructions(self) -> str:
-        return self._system_instructions
+    async def on_message(self, ctx: Any, content: Any) -> list[str]:
+        return [self._output]
 
     async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
         return AgentRunResult(
@@ -513,23 +525,23 @@ class _StubAgent(BaseAgent):
 
 
 class TestBaseAgentRuntime:
-    """BaseAgent stores runtime and agent_id when provided."""
+    """ActorAgent always has a runtime and id."""
 
-    def test_defaults_are_none(self) -> None:
+    def test_id_always_set(self) -> None:
         agent = _StubAgent()
-        assert agent.runtime is None
-        assert agent.agent_id is None
+        assert agent.id == AgentId("stub", "default")
+        assert agent.runtime is not None
 
     def test_stores_runtime_and_id(self) -> None:
         rt = MagicMock()
         aid = AgentId("stub", "k1")
         agent = _StubAgent(runtime=rt, agent_id=aid)
         assert agent.runtime is rt
-        assert agent.agent_id == aid
+        assert agent.id == aid
 
 
 class TestHandleMessage:
-    """handle_message() adapts any BaseAgent into a MessageHandler."""
+    """on_message() is the actor entry point."""
 
     async def test_calls_run_and_returns_output(self) -> None:
         agent = _StubAgent(output="reply-42")
@@ -539,17 +551,17 @@ class TestHandleMessage:
             correlation_id="corr",
             agent_id=AgentId("stub", "1"),
         )
-        result = await agent.handle_message(ctx, "What is 6*7?")
+        result = await agent.on_message(ctx, "What is 6*7?")
         assert result == ["reply-42"]
 
     async def test_payload_is_stringified(self) -> None:
-        """Non-string payloads are str()-ified before reaching run()."""
+        """Non-string payloads can be passed to on_message directly."""
         calls: list[str] = []
 
         class CapturingAgent(_StubAgent):
-            async def run(self, input_text: str, **kw: Any) -> AgentRunResult:
-                calls.append(input_text)
-                return await super().run(input_text, **kw)
+            async def on_message(self, ctx: Any, content: Any) -> list[str]:
+                calls.append(str(content))
+                return await super().on_message(ctx, content)
 
         agent = CapturingAgent()
         ctx = MessageContext(
@@ -558,11 +570,11 @@ class TestHandleMessage:
             correlation_id="c",
             agent_id=AgentId("cap", "1"),
         )
-        await agent.handle_message(ctx, {"complex": True})
+        await agent.on_message(ctx, {"complex": True})
         assert calls == ["{'complex': True}"]
 
     async def test_registered_on_local_runtime(self) -> None:
-        """An agent with handle_message can be registered on LocalRuntime."""
+        """An agent registered via start() responds to send_message."""
         rt = LocalRuntime()
         await rt.start()
 
@@ -570,9 +582,8 @@ class TestHandleMessage:
             name="echo",
             output="pong",
             runtime=rt,
-            agent_id=AgentId("echo", "1"),
         )
-        await rt.register("echo", agent.handle_message)
+        await agent.start()
         result = await rt.send_message(
             "ping",
             sender=None,
@@ -595,10 +606,11 @@ class TestHandoffToolDualMode:
         assert result.content[0].text == "direct-result"
 
     async def test_dispatch_via_runtime(self) -> None:
-        """With runtime + agent_id, _HandoffTool uses runtime.send_message()."""
+        """With runtime + agent.id, _HandoffTool uses runtime.send_message()."""
         from ravi.extensions.agents.orchestrator.agent import _HandoffTool
 
         agent = _StubAgent(
+            name="sub",
             output="ignored",
             agent_id=AgentId("sub", "1"),
         )
@@ -615,19 +627,6 @@ class TestHandoffToolDualMode:
         )
         assert result.content[0].text == "runtime-result"
 
-    async def test_fallback_when_agent_has_no_id(self) -> None:
-        """Even with runtime, falls back if agent has no agent_id."""
-        from ravi.extensions.agents.orchestrator.agent import _HandoffTool
-
-        agent = _StubAgent(output="fallback-ok")  # no agent_id
-        mock_runtime = AsyncMock()
-
-        tool = _HandoffTool(agent, runtime=mock_runtime)
-        result = await tool.execute(input="test")
-
-        mock_runtime.send_message.assert_not_awaited()
-        assert result.content[0].text == "fallback-ok"
-
 
 class TestOrchestratorRuntimeIntegration:
     """OrchestratorAgent end-to-end with LocalRuntime."""
@@ -641,9 +640,8 @@ class TestOrchestratorRuntimeIntegration:
             name="specialist",
             output="specialist-answer",
             runtime=rt,
-            agent_id=AgentId("specialist", "1"),
         )
-        await rt.register("specialist", sub.handle_message)
+        await sub.start()
 
         # We can't instantiate OrchestratorAgent without a real LLM call,
         # but we can verify the _HandoffTool it creates works correctly.
@@ -668,10 +666,9 @@ class TestOrchestratorRuntimeIntegration:
             model_client=mc,
             sub_agents=[sub],
             runtime=rt,
-            agent_id=AgentId("orch", "1"),
         )
         assert orch.runtime is rt
-        assert orch.agent_id == AgentId("orch", "1")
+        assert orch.id == AgentId("orch", "default")
 
         # Verify handoff tools got the runtime
         for tool in orch._handoff_tools.values():

@@ -19,7 +19,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.services.job_controller.models import JobRun
-from ravi.shared.events.bus import EventBus
+from ravi.integrations.events import EventBus
 from ravi.shared.events.types import workflow_failed, workflow_started
 
 logger = setup_logging()

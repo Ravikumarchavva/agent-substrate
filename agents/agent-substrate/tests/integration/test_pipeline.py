@@ -7,10 +7,11 @@ network or DB dependencies.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
 
 from ravi.kernel.agent_catalog import AgentCatalogRegistry
 from ravi.kernel.agents.agent_result import RunStatus
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.extensions.agents.assistant.agent import AssistantAgent
 from ravi.kernel.guardrails import GuardrailType
 from ravi.extensions.guardrails import ContentFilterGuardrail, PIIDetectionGuardrail
 from ravi.kernel.memory.unbounded_memory import UnboundedMemory
@@ -35,9 +36,10 @@ def _build_agent(script, tools=(), guardrails=()):
     for t in tools:
         catalog.register_tool(t)
     middleware = [GuardrailsMiddleware(input_guardrails=list(guardrails))] if guardrails else None
-    return ReActAgent(
+    return AssistantAgent(
         name="integration-agent",
         description="Full integration test agent",
+        runtime=MagicMock(),
         catalog=catalog,
         middleware=middleware,
         enable_capability_search=False,
@@ -124,9 +126,10 @@ async def test_multi_turn_context_grows():
     catalog = AgentCatalogRegistry()
     catalog.register_model("primary", llm)
     catalog.register_memory("memory", UnboundedMemory())
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="multi-turn",
         description="multi-turn test",
+        runtime=MagicMock(),
         catalog=catalog,
         enable_capability_search=False,
     )

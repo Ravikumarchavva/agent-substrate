@@ -8,12 +8,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator, Dict, List, Optional, cast
 
-from ravi.extensions.agents.react._guardrail_runner import (
+from ravi.extensions.agents.assistant._guardrail_runner import (
     check_output_guardrails,
     check_tool_call_guardrails,
     build_tool_blocked_message,
 )
-from ravi.extensions.agents.react._tool_execution import (
+from ravi.extensions.agents.assistant._tool_execution import (
     parse_tool_call,
 )
 from ravi.exceptions import GuardrailTripwireError

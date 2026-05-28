@@ -9,7 +9,8 @@ Layer structure (dependencies flow downward only):
     services      - microservice FastAPI apps
 
 Recommended imports:
-    from ravi.extensions.agents.react.agent import ReActAgent
+    from ravi.extensions.agents.assistant.agent import AssistantAgent
+    from ravi.extensions.agents.user_proxy.agent import UserProxyAgent
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
     from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 
@@ -40,11 +41,16 @@ from ravi.extensions.structured import (
     parse,
 )
 
-# Default agent — the simplest way to use ravi:
-#   from ravi import Agent
-#   agent = Agent(name="Bot", model="claude-sonnet-4-20250514")
-#   result = await agent.run("Hello!")
-from ravi.extensions.agents.default.agent import Agent  # noqa: F401
+# Actor-model agents — the standard way to use ravi:
+#   from ravi import AssistantAgent, UserProxyAgent
+#   async with LocalRuntime() as rt:
+#       agent = AssistantAgent("bot", rt, catalog=catalog)
+#       await agent.start()
+#       proxy = UserProxyAgent("proxy", rt)
+#       await proxy.start()
+#       result = await proxy.ask("Hello!", recipient=agent.id)
+from ravi.extensions.agents.assistant.agent import AssistantAgent  # noqa: F401
+from ravi.extensions.agents.user_proxy.agent import UserProxyAgent  # noqa: F401
 
 # Batch processing:
 #   from ravi import BatchProcessor, BatchConfig
@@ -67,9 +73,9 @@ from ravi.extensions.extraction.schemas import (  # noqa: F401
 )
 
 # Model client factory + model metadata:
-#   from ravi import create_model_client, ModelProfile, ProviderConfig
-#   client = create_model_client("gemini/gemini-2.5-flash")
-from ravi.integrations.llm.factory import create_model_client  # noqa: F401
+#   from ravi import LLMFactory, ModelProfile
+#   client = LLMFactory("gemini-2.5-flash", api_key).build()
+from ravi.integrations.llm.factory import LLMFactory, create_model_client  # noqa: F401
 from ravi.kernel.llm.models import (  # noqa: F401
     ModelProfile,
     get_model_profile,
@@ -105,6 +111,7 @@ __all__ = [
     "ProviderConfig",
     "Receipt",
     "Resume",
+    "LLMFactory",
     "create_model_client",
     "estimate_cost",
     "get_context_length",

@@ -19,7 +19,7 @@ from ravi.kernel.pipelines.schema import (
     Position,
 )
 from ravi.extensions.pipelines.codegen import generate_code
-from ravi.extensions.pipelines.runner import PipelineRunner
+from ravi.extensions.pipelines.runner import WorkflowRunner
 
 
 # ---------------------------------------------------------------------------
@@ -295,23 +295,23 @@ class TestCodegen:
 # ===========================================================================
 
 
-class TestPipelineRunner:
+class TestWorkflowRunner:
     async def test_build_simple_agent(self):
-        """Build a minimal pipeline with one agent → verifies ReActAgent returned."""
+        """Build a minimal pipeline with one agent → verifies AssistantAgent returned."""
         cfg = PipelineConfig(
             name="Simple",
             nodes=[_agent_node()],
             edges=[],
         )
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         agent = await runner.build(
             cfg,
             tools_registry=[],
             model_client=_mock_model_client(),
         )
-        from ravi.extensions.agents.react.agent import ReActAgent
+        from ravi.extensions.agents.assistant.agent import AssistantAgent
 
-        assert isinstance(agent, ReActAgent)
+        assert isinstance(agent, AssistantAgent)
         assert agent.name == "TestAgent"
 
     async def test_build_agent_with_tools(self):
@@ -322,7 +322,7 @@ class TestPipelineRunner:
             nodes=[_agent_node(), _tool_node()],
             edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
         )
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         agent = await runner.build(
             cfg,
             tools_registry=[mock_tool],
@@ -347,7 +347,7 @@ class TestPipelineRunner:
             nodes=[_agent_node(), _tool_node()],
             edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
         )
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         agent = await runner.build(
             cfg,
             tools_registry=_Registry([mock_tool]),
@@ -375,7 +375,7 @@ class TestPipelineRunner:
                 _edge("actions", "join", EdgeType.AGENT_FLOW),
             ],
         )
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         flow = await runner.build(
             cfg,
             tools_registry=[],
@@ -396,7 +396,7 @@ class TestPipelineRunner:
             nodes=[_agent_node(), _memory_node()],
             edges=[_edge("agent_1", "mem_1", EdgeType.AGENT_MEMORY)],
         )
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         agent = await runner.build(
             cfg,
             tools_registry=[],
@@ -409,7 +409,7 @@ class TestPipelineRunner:
     async def test_build_missing_agent_raises(self):
         """Pipeline with no agent or router → ValueError."""
         cfg = PipelineConfig(name="Empty", nodes=[_tool_node()], edges=[])
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         with pytest.raises(ValueError, match="no agent"):
             await runner.build(
                 cfg,
@@ -424,7 +424,7 @@ class TestPipelineRunner:
             nodes=[_agent_node(), _tool_node(tool_name="nonexistent")],
             edges=[_edge("agent_1", "tool_1", EdgeType.AGENT_TOOL)],
         )
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         agent = await runner.build(
             cfg,
             tools_registry=[_mock_tool("calculator")],  # not "nonexistent"
@@ -447,7 +447,7 @@ class TestPipelineRunner:
                 _edge("router_1", "a2", EdgeType.ROUTER_ROUTE, label="question"),
             ],
         )
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         result = await runner.build(
             cfg,
             tools_registry=[],
@@ -459,7 +459,7 @@ class TestPipelineRunner:
 
     def test_build_routing_schema(self):
         """Dynamic Pydantic model from routing_fields config."""
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         cfg = {
             "routing_fields": [
                 {"name": "intent", "type": "str", "description": "User intent"},
@@ -472,7 +472,7 @@ class TestPipelineRunner:
 
     def test_build_routing_schema_fallback(self):
         """Empty routing_fields → default category + reasoning."""
-        runner = PipelineRunner()
+        runner = WorkflowRunner()
         schema = runner._build_routing_schema({})
         assert "category" in schema.model_fields
         assert "reasoning" in schema.model_fields

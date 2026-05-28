@@ -19,7 +19,7 @@ from ravi.configs.settings import settings
 from ravi.kernel.storage.base import FileStore
 from ravi.kernel.storage.document import Document, store_document
 from ravi.kernel.storage.tenant import FileScope, TenantContext
-from ravi.server.context import ServerContext, get_ctx
+from ravi.server.dependencies import ServerDependencies, get_ctx
 from ravi.server.database import get_db
 from ravi.server.models import Element
 from ravi.server.schemas import ElementOut
@@ -31,7 +31,7 @@ logger = setup_logging()
 router = APIRouter(tags=["elements"], dependencies=[Depends(get_current_user)])
 
 
-def _require_file_store(ctx: ServerContext) -> FileStore:
+def _require_file_store(ctx: ServerDependencies) -> FileStore:
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store is not configured")
     return ctx.file_store
@@ -71,7 +71,7 @@ async def upload_element(
     file: UploadFile = File(...),
     display: str = Form("inline"),
     for_id: uuid.UUID | None = Form(None),
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a file attachment and store it via the configured FileStore."""
@@ -120,7 +120,7 @@ async def upload_element(
 @router.get("/elements/{element_id}/content")
 async def get_element_content(
     element_id: uuid.UUID,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Stream binary content of an element."""

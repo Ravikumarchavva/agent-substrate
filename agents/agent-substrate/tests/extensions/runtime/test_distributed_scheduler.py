@@ -41,6 +41,9 @@ class MockMessage:
         self.priority = priority
         self.gpu_required = gpu_required
 
+    def __str__(self) -> str:
+        return self.text
+
     def __getitem__(self, idx: int) -> Any:
         # Mock payload compatibility
         return self

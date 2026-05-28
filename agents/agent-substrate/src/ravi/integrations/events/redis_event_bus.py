@@ -1,12 +1,10 @@
 """Redis Streams event backbone for async inter-service communication.
 
-Provides publish/subscribe over Redis Streams with consumer groups.
-Each service creates a consumer group for events it cares about. Events
-are durable (stored in the stream) and replayable from offsets.
+Concrete implementation of the legacy ``EventBus`` API.
+Lives in ``integrations`` because it is a Redis-backed adapter.
 """
 
 from __future__ import annotations
-from ravi.logger import setup_logging
 
 import asyncio
 from typing import Any, AsyncIterator, Optional, cast
@@ -15,25 +13,14 @@ import redis.asyncio as aioredis
 from opentelemetry import trace
 from opentelemetry.propagate import extract, inject
 
+from ravi.logger import setup_logging
 from ravi.shared.events.envelope import EventEnvelope
 
 logger = setup_logging()
 
 
 class EventBus:
-    """Redis Streams event bus for publishing and consuming domain events.
-
-    Usage:
-        bus = EventBus(redis_url="redis://localhost:6379/0")
-        await bus.connect()
-
-        # Publish
-        await bus.publish(EventEnvelope(event_type="thread.created", payload={...}))
-
-        # Consume (in a service worker)
-        async for event in bus.subscribe("thread.created", group="conversation-svc"):
-            await handle(event)
-    """
+    """Redis Streams event bus for publishing and consuming domain events."""
 
     def __init__(self, redis_url: str = "redis://localhost:6379/0"):
         self._redis_url = redis_url
@@ -52,18 +39,10 @@ class EventBus:
             self._client = None
 
     async def publish(self, event: EventEnvelope) -> str:
-        """Publish an event to the appropriate Redis Stream.
-
-        Injects the current OTel span context into ``event.trace_context`` so
-        consuming services can continue the distributed trace.
-        Also broadcasts via pub/sub for real-time fan-out to StreamProjector.
-        Returns the stream message ID.
-        """
+        """Publish an event to Redis Stream and fan out through pub/sub."""
         if not self._client:
             raise RuntimeError("EventBus not connected")
 
-        # Inject W3C trace context (traceparent / tracestate) into the envelope.
-        # Use a local dict carrier; inject() writes into it.
         carrier: dict[str, str] = {}
         inject(carrier)
         if carrier:
@@ -74,7 +53,6 @@ class EventBus:
         data = cast(Any, {"envelope": json_data})
         msg_id: str = await self._client.xadd(stream_key, data)
 
-        # Also publish via pub/sub for real-time fan-out to StreamProjector
         await self._client.publish(stream_key, json_data)
 
         logger.debug("Published %s to %s (id=%s)", event.event_type, stream_key, msg_id)
@@ -102,11 +80,7 @@ class EventBus:
         batch_size: int = 10,
         block_ms: int = 1000,
     ) -> AsyncIterator[EventEnvelope]:
-        """Consume events from a stream using a consumer group.
-
-        Yields EventEnvelope objects. Automatically acknowledges messages
-        after yielding. On consumer restart, pending messages are re-delivered.
-        """
+        """Consume events from a stream using a consumer group."""
         if not self._client:
             raise RuntimeError("EventBus not connected")
 
@@ -132,8 +106,6 @@ class EventBus:
                             envelope = EventEnvelope.model_validate_json(
                                 data["envelope"]
                             )
-                            # Restore the publishing span as a remote parent so the
-                            # consumer trace is linked to the producer trace.
                             parent_ctx = extract(envelope.trace_context)
                             tracer = trace.get_tracer("ravi.events")
                             with tracer.start_as_current_span(

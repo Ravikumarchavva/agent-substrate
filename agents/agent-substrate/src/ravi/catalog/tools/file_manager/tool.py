@@ -43,7 +43,7 @@ class FileManagerTool(BaseTool):
 
     Delegates to ``FileStore`` for I/O and ``FileMetadata`` for DB tracking.
     Must be initialised with ``session_factory`` and ``file_store`` from
-    ``ServerContext``.
+    ``ServerDependencies``.
     """
 
     risk: ClassVar[ToolRisk] = ToolRisk.SAFE

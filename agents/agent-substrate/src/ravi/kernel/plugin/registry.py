@@ -107,7 +107,7 @@ def unregister(category: str, name: str) -> None:
 # `from ravi.kernel.plugin import register_*` cheap and to avoid circular
 # imports between kernel.plugin and kernel.{agents,guardrails,...}.
 
-from ravi.kernel.agents.base_agent import BaseAgent
+from ravi.kernel.agents.actor import ActorAgent
 from ravi.kernel.context.base_context import ModelContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient
@@ -115,7 +115,37 @@ from ravi.kernel.memory.base_memory import BaseMemory
 from ravi.kernel.middleware.base import BaseMiddleware
 from ravi.kernel.tools.base_tool import BaseTool
 
-register_agent = _make_decorator("agent", base=BaseAgent)
+
+
+def _register_agent_decorator(name: str):  # type: ignore[return]
+    """Register an agent class — accepts both ActorAgent and BaseAgent subclasses."""
+    if not isinstance(name, str) or not name:
+        raise PluginRegistryError(
+            "@register_agent: name must be a non-empty string"
+        )
+
+    def wrap(cls: type) -> type:
+        if not (isinstance(cls, type) and issubclass(cls, ActorAgent)):
+            raise PluginRegistryError(
+                f"@register_agent('{name}'): {cls!r} must be a subclass of ActorAgent"
+            )
+        key = ("agent", name)
+        if key in _REGISTRY:
+            existing = _REGISTRY[key].cls
+            if existing is cls:
+                return cls
+            raise PluginRegistryError(
+                f"@register_agent('{name}'): already registered as "
+                f"{existing.__module__}.{existing.__name__}"
+            )
+        _REGISTRY[key] = PluginSpec(category="agent", name=name, cls=cls)
+        logger.debug("plugin registered: agent:%s -> %s", name, cls)
+        return cls
+
+    return wrap
+
+
+register_agent = _register_agent_decorator
 register_guardrail = _make_decorator("guardrail", base=BaseGuardrail)
 register_middleware = _make_decorator("middleware", base=BaseMiddleware)
 register_provider = _make_decorator("provider", base=BaseModelClient)

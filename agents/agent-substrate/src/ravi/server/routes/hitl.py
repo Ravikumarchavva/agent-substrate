@@ -13,7 +13,7 @@ from ravi.logger import setup_logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from ravi.server.schemas import HITLResponse
-from ravi.server.context import ServerContext, get_ctx
+from ravi.server.dependencies import ServerDependencies, get_ctx
 from ravi.server.security.deps import get_current_user
 
 logger = setup_logging()
@@ -28,7 +28,7 @@ router = APIRouter(
 async def respond_to_hitl(
     request_id: str,
     resp: HITLResponse,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Resolve a pending HITL request (tool approval or human input)."""
     data = resp.model_dump(exclude_none=True)
@@ -46,7 +46,7 @@ async def respond_to_hitl(
 @router.get("/hitl/status/{thread_id}")
 async def hitl_status(
     thread_id: str,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Return pending HITL requests for a thread.
 

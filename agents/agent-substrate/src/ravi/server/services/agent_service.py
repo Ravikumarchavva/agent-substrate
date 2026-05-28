@@ -31,16 +31,16 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.extensions.agents.assistant.agent import AssistantAgent
 from ravi.kernel.context.base_context import ModelContext
-from ravi.extensions.context.redis_model_context import SlidingWindowContext
+from ravi.extensions.context.sliding_window import SlidingWindowContext
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.kernel.messages.client_messages import AssistantMessage
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.runtime import AgentId, AgentRuntime
 from ravi.kernel.tools.base_tool import BaseTool
-from ravi.shared.execution import create_react_agent, load_session_memory
+from ravi.shared.execution import create_assistant_agent, load_session_memory
 
 from ravi.server.services import (
     create_step,
@@ -65,9 +65,9 @@ async def load_agent_for_thread(
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
-    runtime: Optional[AgentRuntime] = None,
+    runtime: AgentRuntime,
     enable_capability_search: bool = True,
-) -> ReActAgent:
+) -> AssistantAgent:
     """Load a per-session agent whose history comes from Redis (hot) or Postgres (cold).
 
     Stateless design — a fresh ``ReActAgent`` is created on every request.
@@ -91,7 +91,8 @@ async def load_agent_for_thread(
         …                     All other kwargs forwarded to the shared agent factory.
 
     Returns:
-        A configured ``ReActAgent`` ready for ``run_stream()``.
+        A configured ``AssistantAgent`` ready for ``run_stream()`` (server compat)
+        or actor-model dispatch via ``on_message()``.
     """
     session_id = str(thread_id)
     context: ModelContext = SlidingWindowContext(max_messages=model_context_window)
@@ -104,7 +105,13 @@ async def load_agent_for_thread(
         load_persisted_steps=lambda: load_messages_for_memory(db, thread_id),
     )
 
-    agent = create_react_agent(
+    if runtime is None:
+        raise ValueError(
+            "load_agent_for_thread() requires a runtime. "
+            "Pass app.state.runtime from the server lifespan."
+        )
+    agent = create_assistant_agent(
+        runtime=runtime,
         model_client=model_client,
         tools=tools,
         system_instructions=system_instructions,
@@ -116,8 +123,7 @@ async def load_agent_for_thread(
         tools_requiring_approval=tools_requiring_approval,
         tool_timeout=tool_timeout,
         max_input_tokens=max_input_tokens,
-        runtime=runtime,
-        agent_id=AgentId("chat_agent", session_id) if runtime else None,
+        agent_key=session_id,
         enable_capability_search=enable_capability_search,
     )
     return agent

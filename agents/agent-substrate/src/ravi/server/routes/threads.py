@@ -17,7 +17,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.server.context import ServerContext, get_ctx
+from ravi.server.dependencies import ServerDependencies, get_ctx
 from ravi.server.database import get_db
 from ravi.server.schemas import (
     StepOut,
@@ -125,7 +125,7 @@ async def update_thread_endpoint(
 @router.delete("/{thread_id}", status_code=204)
 async def delete_thread_endpoint(
     thread_id: uuid.UUID,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a thread and all its data."""

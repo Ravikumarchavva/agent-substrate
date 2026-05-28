@@ -1,60 +1,277 @@
-"""Model client factory — create the right LLM client from a model string.
+"""LLMFactory — build any LLM client from a single (model, api_key) pair.
 
-Convention (inspired by LiteLLM/Agentor but using native SDKs):
-    - ``gpt-*``, ``o1-*``, ``o3-*``, ``openai/*``   → OpenAIClient
-    - ``groq/*``                                     → OpenAIClient via Groq
-    - ``claude-*``, ``anthropic/*``                   → AnthropicClient
-    - ``gemini-*``, ``gemini/*``, ``google/*``        → GeminiClient
-    - ``openrouter/*``                                → OpenAIClient via OpenRouter
+    factory = LLMFactory("claude-sonnet-4-20250514", "sk-ant-...")
+    client  = factory.build()
+    cost    = factory.estimate_cost(input_tokens=1_000, output_tokens=500)
 
-Example::
+Provider is auto-detected from the model string.  No guessing, no dict of keys,
+no kwargs soup.  One model, one key — done.
 
-    from ravi.integrations.llm.factory import create_model_client
-    from ravi.kernel.llm.provider import ProviderConfig
+System instructions are NOT passed through this layer.  They travel as an
+explicit ``system_instructions=`` kwarg on every ``generate()`` call (see
+``BaseModelClient.generate``).  The factory only handles connection wiring.
 
-    # Simple usage (auto-detect provider, pass api_keys dict)
-    client = create_model_client("claude-sonnet-4-20250514", api_keys={
-        "anthropic": "sk-ant-...",
-    })
-
-    # Advanced usage — OpenAI-compatible provider (vLLM, Ollama, etc.)
-    client = create_model_client(
-        "meta-llama/Llama-3-70B",
-        provider_config=ProviderConfig(
-            provider="openai",
-            api_key="token-abc",
-            base_url="http://localhost:8080/v1",
-        ),
-    )
+Provider / model / cost table lives in ``ravi.kernel.llm.models``.
 """
 
 from __future__ import annotations
-from ravi.logger import setup_logging
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import ClassVar, Optional
 
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient
-from ravi.kernel.llm.models import get_model_profile
-
-if TYPE_CHECKING:
-    from ravi.kernel.llm.provider import ProviderConfig
+from ravi.kernel.llm.models import ModelProfile, get_model_profile, list_models
+from ravi.logger import setup_logging
 
 logger = setup_logging()
 
+
 # ── Provider detection ────────────────────────────────────────────────────────
 
-OPENAI_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "dall-e", "whisper", "tts-")
-ANTHROPIC_PREFIXES = ("claude-",)
-GEMINI_PREFIXES = ("gemini-",)
-CHAT_MODEL_FALLBACKS = (
+_OPENAI_PREFIXES  = ("gpt-", "o1-", "o3-", "o4-", "dall-e", "whisper", "tts-")
+_ANTHROPIC_PREFIXES = ("claude-",)
+_GEMINI_PREFIXES  = ("gemini-",)
+
+_PROVIDER_PREFIXES: dict[str, str] = {
+    "openai":      "openai",
+    "groq":        "groq",
+    "anthropic":   "anthropic",
+    "gemini":      "gemini",
+    "google":      "gemini",
+    "openrouter":  "openrouter",
+}
+
+
+def detect_provider(model: str) -> str:
+    """Return the provider for *model* — one of the keys in ``_PROVIDER_PREFIXES``.
+
+    Raises ``ValueError`` for unrecognised provider prefixes.
+    """
+    m = model.lower().strip()
+
+    if "/" in m:
+        prefix = m.split("/", 1)[0]
+        provider = _PROVIDER_PREFIXES.get(prefix)
+        if provider is None:
+            raise ValueError(
+                f"Unknown provider prefix {prefix!r} in model {model!r}. "
+                f"Supported: {', '.join(_PROVIDER_PREFIXES)}"
+            )
+        return provider
+
+    for p in _OPENAI_PREFIXES:
+        if m.startswith(p):
+            return "openai"
+    for p in _ANTHROPIC_PREFIXES:
+        if m.startswith(p):
+            return "anthropic"
+    for p in _GEMINI_PREFIXES:
+        if m.startswith(p):
+            return "gemini"
+
+    logger.warning("Cannot detect provider for %r — defaulting to openai", model)
+    return "openai"
+
+
+def strip_provider_prefix(model: str) -> str:
+    """Remove the leading ``provider/`` segment.
+
+    ``openrouter/org/model`` → ``org/model`` (nested path preserved).
+    """
+    if "/" in model:
+        return model.split("/", 1)[1]
+    return model
+
+
+# ── Factory class ─────────────────────────────────────────────────────────────
+
+
+class LLMFactory:
+    """Build and inspect an LLM client from a single *(model, api_key)* pair.
+
+    The class is intentionally minimal — connection wiring only.
+    Cost estimation and capability introspection go through :attr:`profile`.
+
+    Example::
+
+        factory = LLMFactory("gemini-2.5-flash", os.environ["GOOGLE_API_KEY"])
+        client  = factory.build(temperature=0.3)
+
+        # Cost estimation before calling
+        est = factory.estimate_cost(input_tokens=5_000, output_tokens=1_000)
+        print(f"Estimated cost: ${est:.6f}")
+
+        # Inspect model capabilities
+        if factory.profile and factory.profile.supports_vision:
+            ...
+    """
+
+    # Base URLs for providers that deviate from their SDK default.
+    _BASE_URLS: ClassVar[dict[str, str]] = {
+        "groq":       "https://api.groq.com/openai/v1",
+        "openrouter": "https://openrouter.ai/api/v1",
+    }
+
+    def __init__(self, model: str, api_key: str) -> None:
+        """
+        Args:
+            model:   Model identifier — with or without provider prefix.
+                     Examples: ``"gpt-4o"``, ``"anthropic/claude-sonnet-4-20250514"``,
+                     ``"groq/llama-3.3-70b-versatile"``.
+            api_key: API key for the detected provider.
+        """
+        if not model.strip():
+            raise ValueError("model must not be empty")
+        if not api_key.strip():
+            raise ValueError("api_key must not be empty")
+
+        self._raw_model = model.strip()
+        self._api_key = api_key.strip()
+        self._provider = detect_provider(self._raw_model)
+        self._bare_model = strip_provider_prefix(self._raw_model)
+        self._profile: Optional[ModelProfile] = get_model_profile(self._bare_model)
+
+        if self._profile is None:
+            logger.warning(
+                "No profile found for model %r — cost estimation will return 0.0.",
+                self._bare_model,
+            )
+
+    # ── Read-only properties ──────────────────────────────────────────────────
+
+    @property
+    def model(self) -> str:
+        """Original model string as passed to the constructor."""
+        return self._raw_model
+
+    @property
+    def provider(self) -> str:
+        """Detected provider: ``"openai"``, ``"anthropic"``, ``"gemini"``,
+        ``"groq"``, or ``"openrouter"``."""
+        return self._provider
+
+    @property
+    def bare_model(self) -> str:
+        """Model ID with the provider prefix stripped (used in API calls)."""
+        return self._bare_model
+
+    @property
+    def profile(self) -> Optional[ModelProfile]:
+        """Model profile from the registry, or ``None`` for unknown models."""
+        return self._profile
+
+    # ── Core factory method ───────────────────────────────────────────────────
+
+    def build(
+        self,
+        *,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        base_url: Optional[str] = None,
+    ) -> BaseModelClient:
+        """Create and return the configured :class:`BaseModelClient`.
+
+        Args:
+            temperature: Sampling temperature (0 = deterministic).
+            max_tokens:  Maximum output tokens.  ``None`` uses the client
+                         default (typically the model's ``max_output_tokens``).
+            base_url:    Override the provider API endpoint — useful for
+                         OpenAI-compatible local servers (vLLM, Ollama).
+        """
+        url = base_url or self._BASE_URLS.get(self._provider)
+
+        if self._provider == "openai":
+            from ravi.integrations.llm.openai.openai_client import OpenAIClient
+            return OpenAIClient(
+                model=self._bare_model,
+                api_key=self._api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                base_url=url,
+            )
+
+        if self._provider in ("groq", "openrouter"):
+            from ravi.integrations.llm.openai.openai_chat_client import (
+                OpenAIChatCompletionClient,
+            )
+            return OpenAIChatCompletionClient(
+                model=self._bare_model,
+                api_key=self._api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                base_url=url,
+            )
+
+        if self._provider == "anthropic":
+            from ravi.integrations.llm.anthropic.anthropic_client import AnthropicClient
+            return AnthropicClient(
+                model=self._bare_model,
+                api_key=self._api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+
+        if self._provider == "gemini":
+            from ravi.integrations.llm.gemini.gemini_client import GeminiClient
+            return GeminiClient(
+                model=self._bare_model,
+                api_key=self._api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+
+        raise ValueError(f"Unsupported provider: {self._provider!r}")
+
+    # ── Cost estimation ───────────────────────────────────────────────────────
+
+    def estimate_cost(self, *, input_tokens: int, output_tokens: int) -> float:
+        """Return the estimated cost in USD for one request.
+
+        Returns ``0.0`` if the model is not in the registry.
+        """
+        if not self._profile:
+            return 0.0
+        return (
+            self._profile.input_cost_per_mtok * input_tokens / 1_000_000
+            + self._profile.output_cost_per_mtok * output_tokens / 1_000_000
+        )
+
+    # ── Static helpers ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def models(provider: Optional[str] = None) -> list[ModelProfile]:
+        """Return all profiles in the registry, optionally filtered by provider."""
+        return list_models(provider)
+
+    @staticmethod
+    def profile_for(model: str) -> Optional[ModelProfile]:
+        """Look up a profile by model name or alias."""
+        return get_model_profile(strip_provider_prefix(model))
+
+    def __repr__(self) -> str:
+        cost = (
+            f"${self._profile.input_cost_per_mtok}/${self._profile.output_cost_per_mtok} /MTok"
+            if self._profile
+            else "unknown cost"
+        )
+        return f"LLMFactory(model={self._bare_model!r}, provider={self._provider!r}, {cost})"
+
+
+# ── Server-layer helpers (multi-key resolution for lifespan/route wiring) ────
+#
+# The server pulls multiple provider keys from settings and picks the right one
+# at runtime based on which providers are configured.  These helpers implement
+# that logic on top of LLMFactory.
+
+CHAT_MODEL_FALLBACKS: tuple[str, ...] = (
     "openai/gpt-5.4-mini",
     "google/gemini-2.5-flash",
     "groq/llama-3.3-70b-versatile",
     "openrouter/liquid/lfm-2.5-1.2b-thinking:free",
     "anthropic/claude-sonnet-4-20250514",
 )
-VISION_MODEL_FALLBACKS = (
+
+VISION_MODEL_FALLBACKS: tuple[str, ...] = (
     "google/gemini-2.5-flash",
     "openrouter/openai/gpt-4o-mini",
     "openai/gpt-4o-mini",
@@ -62,104 +279,19 @@ VISION_MODEL_FALLBACKS = (
 )
 
 
-def detect_provider(model: str) -> str:
-    """Detect the LLM provider from a model string.
-
-    Returns one of: ``"openai"``, ``"groq"``, ``"anthropic"``,
-    ``"gemini"``, ``"openrouter"``.
-    Raises ``ValueError`` for unrecognised model strings.
-    """
-    model_lower = model.lower().strip()
-
-    # Explicit provider prefix: "provider/model-name"
-    if "/" in model_lower:
-        prefix = model_lower.split("/", 1)[0]
-        if prefix in ("openai",):
-            return "openai"
-        if prefix in ("groq",):
-            return "groq"
-        if prefix in ("anthropic",):
-            return "anthropic"
-        if prefix in ("gemini", "google"):
-            return "gemini"
-        if prefix in ("openrouter",):
-            return "openrouter"
-        raise ValueError(
-            f"Unknown provider prefix '{prefix}' in model string '{model}'. "
-            f"Supported: openai/, groq/, anthropic/, gemini/, google/, openrouter/"
-        )
-
-    # Infer from model name
-    for p in OPENAI_PREFIXES:
-        if model_lower.startswith(p):
-            return "openai"
-
-    for p in ANTHROPIC_PREFIXES:
-        if model_lower.startswith(p):
-            return "anthropic"
-
-    for p in GEMINI_PREFIXES:
-        if model_lower.startswith(p):
-            return "gemini"
-
-    # Default to OpenAI for unrecognised models (most permissive)
-    logger.warning(
-        "Could not detect provider for model '%s', defaulting to OpenAI", model
-    )
-    return "openai"
-
-
-def strip_provider_prefix(model: str) -> str:
-    """Remove the leading ``provider/`` prefix if present.
-
-    For OpenRouter-routed models this preserves the routed model ID, e.g.
-    ``openrouter/liquid/lfm-2.5-1.2b-thinking:free`` becomes
-    ``liquid/lfm-2.5-1.2b-thinking:free``.
-    """
-    if "/" in model:
-        return model.split("/", 1)[1]
-    return model
-
-
-def provider_api_key_name(provider: str) -> str:
-    """Return the api_keys lookup key for a provider name."""
-    if provider == "gemini":
-        return "google"
-    return provider
-
-
-def _model_profile_lookup_name(model: str) -> str:
-    """Collapse provider prefixes to the canonical registry key."""
-    lookup = model.strip()
-    while "/" in lookup:
-        provider = lookup.split("/", 1)[0]
-        if provider not in (
-            "openai",
-            "groq",
-            "anthropic",
-            "gemini",
-            "google",
-            "openrouter",
-        ):
-            break
-        lookup = strip_provider_prefix(lookup)
-    return lookup
-
-
-def model_supports_vision(model: str) -> bool:
-    """Return True when the model is known to accept image inputs."""
-    profile = get_model_profile(_model_profile_lookup_name(model))
-    return bool(profile and profile.supports_vision)
-
-
 def has_provider_api_key(
     provider: str,
     api_keys: Optional[dict[str, str]] = None,
 ) -> bool:
-    """Return True when credentials are configured for the provider."""
+    """Return True when *api_keys* contains a non-empty key for *provider*."""
     keys = api_keys or {}
-    key_name = provider_api_key_name(provider)
-    return bool((keys.get(key_name) or "").strip())
+    lookup = "google" if provider == "gemini" else provider
+    return bool((keys.get(provider) or keys.get(lookup) or "").strip())
+
+
+def _pick_api_key(provider: str, api_keys: dict[str, str]) -> Optional[str]:
+    lookup = "google" if provider == "gemini" else provider
+    return (api_keys.get(provider) or api_keys.get(lookup)) or None
 
 
 def resolve_model_for_available_credentials(
@@ -168,22 +300,17 @@ def resolve_model_for_available_credentials(
     api_keys: Optional[dict[str, str]] = None,
     fallback_models: Optional[list[str] | tuple[str, ...]] = None,
 ) -> str:
-    """Return the first model whose provider has configured credentials."""
+    """Return the first model whose provider has a configured key in *api_keys*."""
     candidates: list[str] = []
     seen: set[str] = set()
-
     for candidate in (model, *(fallback_models or ())):
-        normalized = candidate.strip()
-        if not normalized or normalized in seen:
-            continue
-        candidates.append(normalized)
-        seen.add(normalized)
-
+        n = candidate.strip()
+        if n and n not in seen:
+            candidates.append(n)
+            seen.add(n)
     for candidate in candidates:
-        provider = detect_provider(candidate)
-        if has_provider_api_key(provider, api_keys):
+        if has_provider_api_key(detect_provider(candidate), api_keys):
             return candidate
-
     return model
 
 
@@ -193,291 +320,163 @@ def resolve_vision_model_for_available_credentials(
     api_keys: Optional[dict[str, str]] = None,
     fallback_models: Optional[list[str] | tuple[str, ...]] = None,
 ) -> str:
-    """Resolve to a credentialed model that is known to support vision."""
-    resolved_model = resolve_model_for_available_credentials(
-        model,
-        api_keys=api_keys,
-        fallback_models=fallback_models,
+    """Resolve to a credentialed model that supports vision."""
+    resolved = resolve_model_for_available_credentials(
+        model, api_keys=api_keys, fallback_models=fallback_models
     )
-    if model_supports_vision(resolved_model):
-        return resolved_model
+    if model_supports_vision(resolved):
+        return resolved
 
     candidates: list[str] = []
     seen: set[str] = set()
-    for candidate in (
-        resolved_model,
-        model,
-        *(fallback_models or ()),
-        *VISION_MODEL_FALLBACKS,
-    ):
-        normalized = candidate.strip()
-        if not normalized or normalized in seen:
-            continue
-        candidates.append(normalized)
-        seen.add(normalized)
-
+    for candidate in (resolved, model, *(fallback_models or ()), *VISION_MODEL_FALLBACKS):
+        n = candidate.strip()
+        if n and n not in seen:
+            candidates.append(n)
+            seen.add(n)
     for candidate in candidates:
-        provider = detect_provider(candidate)
-        if not has_provider_api_key(provider, api_keys):
+        if not has_provider_api_key(detect_provider(candidate), api_keys):
             continue
         if model_supports_vision(candidate):
             return candidate
-
-    return resolved_model
-
-
-# ── Factory function ─────────────────────────────────────────────────────────
+    return resolved
 
 
 def create_model_client(
     model: str,
     *,
-    provider_config: Optional[ProviderConfig] = None,
     api_keys: Optional[dict[str, str]] = None,
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
-    **kwargs: Any,
+    # OpenAI-compatible base URL overrides
+    openai_base_url: Optional[str] = None,
+    groq_base_url: Optional[str] = None,
+    openrouter_base_url: Optional[str] = None,
+    openrouter_site_url: Optional[str] = None,
+    openrouter_app_name: Optional[str] = None,
+    **_kwargs: object,
 ) -> BaseModelClient:
-    """Create a model client for the given model string.
+    """Server helper: create a client from a multi-provider *api_keys* dict.
 
-    Args:
-        model: Model identifier (e.g. ``"gpt-5-mini"``, ``"claude-sonnet-4-20250514"``,
-               ``"gemini/gemini-2.5-flash"``).
-        provider_config: Structured provider configuration.  When provided,
-            takes precedence over *api_keys*.  Use this to set ``base_url``
-            for OpenAI-compatible providers (vLLM, Ollama, etc.).
-        api_keys: Dict of provider API keys (backward-compatible shorthand),
-                  e.g. ``{"openai": "sk-...", "anthropic": "sk-ant-..."}``.
-        temperature: Default temperature for generation.
-        max_tokens: Default max output tokens.
-        **kwargs: Additional provider-specific arguments.
-
-    Returns:
-        A ``BaseModelClient`` instance for the detected provider.
+    Prefer ``LLMFactory(model, api_key).build()`` for direct use.
+    This helper exists for server lifespan wiring where keys come from settings.
     """
-    openai_base_url = kwargs.pop("openai_base_url", None)
-    groq_base_url = kwargs.pop("groq_base_url", None)
-    openrouter_base_url = kwargs.pop("openrouter_base_url", None)
-    openrouter_site_url = kwargs.pop("openrouter_site_url", None)
-    openrouter_app_name = kwargs.pop("openrouter_app_name", None)
+    keys = api_keys or {}
+    provider = detect_provider(model)
+    api_key = _pick_api_key(provider, keys) or ""
 
-    openrouter_headers = {
-        key: value
-        for key, value in {
-            "HTTP-Referer": openrouter_site_url,
-            "X-Title": openrouter_app_name,
-        }.items()
-        if value
-    }
+    base_url: Optional[str] = None
+    if provider == "openai":
+        base_url = openai_base_url
+    elif provider == "groq":
+        base_url = groq_base_url or "https://api.groq.com/openai/v1"
+    elif provider == "openrouter":
+        base_url = openrouter_base_url or "https://openrouter.ai/api/v1"
 
-    if provider_config is not None:
-        provider = provider_config.provider
-        api_key = provider_config.api_key
-        base_url = provider_config.base_url
-        organization = provider_config.organization
-        extra_headers = provider_config.extra_headers
-        timeout = provider_config.timeout
-
-        if provider == "groq":
-            base_url = base_url or groq_base_url or "https://api.groq.com/openai/v1"
-        elif provider == "openrouter":
-            base_url = base_url or openrouter_base_url or "https://openrouter.ai/api/v1"
-            if openrouter_headers:
-                extra_headers = {**openrouter_headers, **(extra_headers or {})}
-    else:
-        api_keys = api_keys or {}
-        provider = detect_provider(model)
-        api_key = api_keys.get(provider) or api_keys.get(
-            "google" if provider == "gemini" else provider
+    if provider == "openrouter" and (openrouter_site_url or openrouter_app_name):
+        from ravi.integrations.llm.openai.openai_chat_client import (
+            OpenAIChatCompletionClient,
         )
-        base_url = None
-        organization = None
-        extra_headers = None
-        timeout = None
-
-        if provider == "openai":
-            base_url = openai_base_url or None
-        elif provider == "groq":
-            base_url = groq_base_url or "https://api.groq.com/openai/v1"
-        elif provider == "openrouter":
-            base_url = openrouter_base_url or "https://openrouter.ai/api/v1"
-            extra_headers = openrouter_headers or None
-
-    bare_model = strip_provider_prefix(model)
-
-    if provider in ("openai", "groq", "openrouter"):
-        from ravi.integrations.llm.openai.openai_client import OpenAIClient
-
-        client_cls: type = OpenAIClient
-        if provider in ("groq", "openrouter"):
-            from ravi.integrations.llm.openai.openai_chat_client import (
-                OpenAIChatCompletionClient,
-            )
-
-            client_cls = OpenAIChatCompletionClient
-
-        client = client_cls(
-            model=bare_model,
+        bare = strip_provider_prefix(model)
+        extra_headers = {
+            k: v
+            for k, v in {
+                "HTTP-Referer": openrouter_site_url,
+                "X-Title": openrouter_app_name,
+            }.items()
+            if v
+        }
+        client = OpenAIChatCompletionClient(
+            model=bare,
             api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens,
             base_url=base_url,
-            organization=organization,
-            extra_headers=extra_headers,
-            timeout=timeout,
-            **kwargs,
+            extra_headers=extra_headers or None,
         )
         setattr(client, "provider", provider)
         return client
 
-    if provider == "anthropic":
-        from ravi.integrations.llm.anthropic.anthropic_client import AnthropicClient
-
-        client = AnthropicClient(
-            model=bare_model,
-            api_key=api_key,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **kwargs,
-        )
-        setattr(client, "provider", provider)
-        return client
-
-    if provider == "gemini":
-        from ravi.integrations.llm.gemini.gemini_client import GeminiClient
-
-        client = GeminiClient(
-            model=bare_model,
-            api_key=api_key,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **kwargs,
-        )
-        setattr(client, "provider", provider)
-        return client
-
-    raise ValueError(f"Unsupported provider: {provider}")
-
-
-# ── Embedding provider detection ──────────────────────────────────────────────
-
-OPENAI_EMBEDDING_PREFIXES = ("text-embedding-",)
-GEMINI_EMBEDDING_PREFIXES = ("text-embedding-004", "embedding-")
-
-
-def detect_embedding_provider(model: str) -> str:
-    """Detect the embedding provider from a model string.
-
-    Returns one of: ``"openai"``, ``"gemini"``.
-    """
-    model_lower = model.lower().strip()
-
-    # Explicit provider prefix: "provider/model-name"
-    if "/" in model_lower:
-        prefix = model_lower.split("/", 1)[0]
-        if prefix in ("openai",):
-            return "openai"
-        if prefix in ("gemini", "google"):
-            return "gemini"
-        # Unknown prefix — default to OpenAI (most OpenAI-compatible servers
-        # expose an /embeddings endpoint)
-        logger.warning(
-            "Unknown embedding provider prefix '%s', defaulting to OpenAI", prefix
-        )
-        return "openai"
-
-    # Gemini's text-embedding-004 must be checked first (before OpenAI's
-    # text-embedding-* wildcard)
-    if model_lower == "text-embedding-004":
-        return "gemini"
-
-    for p in OPENAI_EMBEDDING_PREFIXES:
-        if model_lower.startswith(p):
-            return "openai"
-
-    for p in GEMINI_EMBEDDING_PREFIXES:
-        if model_lower.startswith(p):
-            return "gemini"
-
-    # Default to OpenAI for unrecognised models
-    logger.warning(
-        "Could not detect embedding provider for model '%s', defaulting to OpenAI",
-        model,
+    client = LLMFactory(model, api_key or "sk-placeholder").build(
+        temperature=temperature,
+        max_tokens=max_tokens,
+        base_url=base_url,
     )
-    return "openai"
+    setattr(client, "provider", provider)
+    return client
 
 
-# ── Embedding factory ─────────────────────────────────────────────────────────
-
+# ── Embedding factory (kept separate — different key, different client) ────────
 
 def create_embedding_client(
     model: str = "text-embedding-3-small",
     *,
-    provider_config: Optional[ProviderConfig] = None,
+    api_key: Optional[str] = None,
     api_keys: Optional[dict[str, str]] = None,
     dimensions: Optional[int] = None,
-    **kwargs: Any,
+    base_url: Optional[str] = None,
 ) -> BaseEmbeddingClient:
-    """Create an embedding client for the given model string.
+    """Create an embedding client.
 
-    Args:
-        model: Embedding model identifier (e.g. ``"text-embedding-3-small"``,
-               ``"gemini/text-embedding-004"``).
-        provider_config: Structured provider configuration.  When provided,
-            takes precedence over *api_keys*.
-        api_keys: Dict of provider API keys.
-        dimensions: Default output dimensions (Matryoshka reduction).
-        **kwargs: Additional provider-specific arguments.
-
-    Returns:
-        A ``BaseEmbeddingClient`` instance for the detected provider.
+    Pass either ``api_key`` (direct) or ``api_keys`` dict (server multi-provider path).
     """
-    if provider_config is not None:
-        provider = provider_config.provider
-        api_key = provider_config.api_key
-        base_url = provider_config.base_url
-        organization = provider_config.organization
-        extra_headers = provider_config.extra_headers
-        timeout = provider_config.timeout
-    else:
-        api_keys = api_keys or {}
-        provider = detect_embedding_provider(model)
-        api_key = api_keys.get(provider) or api_keys.get(
-            "google" if provider == "gemini" else provider
-        )
-        base_url = None
-        organization = None
-        extra_headers = None
-        timeout = None
-
-    bare_model = strip_provider_prefix(model)
+    provider = detect_embedding_provider(model)
+    bare = strip_provider_prefix(model)
+    resolved_key = api_key or _pick_api_key(provider, api_keys or {})
 
     if provider == "openai":
         from ravi.integrations.llm.openai.openai_embedding_client import (
             OpenAIEmbeddingClient,
         )
-
         return OpenAIEmbeddingClient(
-            model=bare_model,
-            api_key=api_key,
+            model=bare,
+            api_key=resolved_key,
             dimensions=dimensions,
             base_url=base_url,
-            organization=organization,
-            extra_headers=extra_headers,
-            timeout=timeout,
-            **kwargs,
         )
 
     if provider == "gemini":
         from ravi.integrations.llm.gemini.gemini_embedding_client import (
             GeminiEmbeddingClient,
         )
-
         return GeminiEmbeddingClient(
-            model=bare_model,
-            api_key=api_key,
+            model=bare,
+            api_key=resolved_key,
             dimensions=dimensions,
-            **kwargs,
         )
 
-    raise ValueError(f"Unsupported embedding provider: {provider}")
+    raise ValueError(f"Unsupported embedding provider: {provider!r}")
+
+
+# ── Embedding provider detection ──────────────────────────────────────────────
+
+def detect_embedding_provider(model: str) -> str:
+    """Detect the embedding provider — ``"openai"`` or ``"gemini"``."""
+    m = model.lower().strip()
+
+    if "/" in m:
+        prefix = m.split("/", 1)[0]
+        if prefix in ("openai",):
+            return "openai"
+        if prefix in ("gemini", "google"):
+            return "gemini"
+        logger.warning("Unknown embedding provider prefix %r — defaulting to openai", prefix)
+        return "openai"
+
+    if m == "text-embedding-004":
+        return "gemini"
+    if m.startswith("text-embedding-"):
+        return "openai"
+    if m.startswith("embedding-"):
+        return "gemini"
+
+    logger.warning("Cannot detect embedding provider for %r — defaulting to openai", model)
+    return "openai"
+
+
+# ── Convenience helpers (used by server/lifespan wiring) ─────────────────────
+
+def model_supports_vision(model: str) -> bool:
+    """Return ``True`` when the model is known to accept image inputs."""
+    profile = LLMFactory.profile_for(model)
+    return bool(profile and profile.supports_vision)

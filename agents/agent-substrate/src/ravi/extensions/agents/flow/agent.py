@@ -38,7 +38,7 @@ from ravi.kernel.agents.agent_result import (
     AggregatedUsage,
     RunStatus,
 )
-from ravi.kernel.agents.base_agent import BaseAgent
+from ravi.kernel.agents.actor import ActorAgent
 from ravi.extensions.agents.graph.agent import FlowEdge, FlowGraph, FlowNode
 from ravi.kernel.memory.memory_scope import MemoryScope
 from ravi.kernel.hooks import HookEvent, HookManager
@@ -49,8 +49,8 @@ from ravi.shared.observability import logger
 # Type aliases
 # ---------------------------------------------------------------------------
 
-# A "step" in a flow is either a concrete agent or a nested flow.
-FlowStep = Union[BaseAgent, "BaseFlow"]
+# A "step" in a flow is either a concrete actor-model agent or a nested flow.
+FlowStep = Union[ActorAgent, "BaseFlow"]
 
 MergeStrategy = Union[
     str,  # "concat" | "vote"
@@ -158,7 +158,7 @@ class SequentialFlow(BaseFlow):
             return
         shared_mem = None
         for step in self.steps:
-            if isinstance(step, BaseAgent) and step.memory_scope == MemoryScope.SHARED:
+            if isinstance(step, ActorAgent) and getattr(step, "memory_scope", None) == MemoryScope.SHARED:
                 if shared_mem is None:
                     shared_mem = step.memory  # first SHARED agent owns the memory
                 else:
@@ -181,7 +181,7 @@ class SequentialFlow(BaseFlow):
 
         for step in self.steps:
             step_input = accumulated_output
-            if isinstance(step, BaseAgent):
+            if isinstance(step, ActorAgent):
                 result = await step.run(step_input, **kwargs)
             else:  # nested BaseFlow
                 result = await step.run(step_input, **kwargs)
@@ -249,12 +249,12 @@ class SequentialFlow(BaseFlow):
 
         for step in self.steps:
             agent_id = (
-                step.name if isinstance(step, (BaseAgent, BaseFlow)) else "unknown"
+                step.name if isinstance(step, (ActorAgent, BaseFlow)) else "unknown"
             )
             step_input = accumulated_output
             partial_chunks: List[str] = []
 
-            if isinstance(step, BaseAgent):
+            if isinstance(step, ActorAgent):
                 stream = step.run_stream(step_input, **kwargs)
             else:
                 stream = step.run_stream(step_input, **kwargs)
@@ -372,7 +372,7 @@ class ParallelFlow(BaseFlow):
         tasks = [
             (
                 step.run(input_text, **kwargs)
-                if isinstance(step, BaseAgent)
+                if isinstance(step, ActorAgent)
                 else step.run(input_text, **kwargs)
             )
             for step in self.branches
@@ -422,7 +422,7 @@ class ParallelFlow(BaseFlow):
             try:
                 stream = (
                     step.run_stream(input_text, **kwargs)
-                    if isinstance(step, BaseAgent)
+                    if isinstance(step, ActorAgent)
                     else step.run_stream(input_text, **kwargs)
                 )
                 async for chunk in stream:
@@ -542,7 +542,7 @@ class ConditionalFlow(BaseFlow):
         branch_name = branch.name if hasattr(branch, "name") else str(branch)
         logger.debug("[%s] routing to branch: %s", self.name, branch_name)
 
-        if isinstance(branch, BaseAgent):
+        if isinstance(branch, ActorAgent):
             result = await branch.run(input_text, **kwargs)
         else:
             result = await branch.run(input_text, **kwargs)
@@ -572,7 +572,7 @@ class ConditionalFlow(BaseFlow):
 
         stream = (
             branch.run_stream(input_text, **kwargs)
-            if isinstance(branch, BaseAgent)
+            if isinstance(branch, ActorAgent)
             else branch.run_stream(input_text, **kwargs)
         )
         async for chunk in stream:

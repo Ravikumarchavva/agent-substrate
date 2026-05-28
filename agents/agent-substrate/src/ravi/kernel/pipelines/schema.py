@@ -6,7 +6,7 @@ guardrails, routers, memory backends) connected by typed **edges**.
 These schemas are:
   1. Serialised to/from JSONB in the ``Pipeline`` DB model.
   2. Sent over the wire in the ``/builder`` REST API.
-  3. Consumed by ``PipelineRunner.build()`` to construct live agent objects.
+    3. Consumed by ``WorkflowRunner.build()`` to construct live agent objects.
   4. Consumed by ``generate_code()`` to emit standalone Python modules.
 """
 

@@ -1,9 +1,9 @@
-"""ConditionPipelineRunner — expression-based branching pipeline executor.
+"""ConditionWorkflowRunner — expression-based branching workflow executor.
 
 Handles pipelines that contain a ``condition`` node.  At runtime:
 
 1. The upstream agent runs normally and produces a text response.
-2. The ``ConditionPipelineRunner`` evaluates each condition expression against
+2. The ``ConditionWorkflowRunner`` evaluates each condition expression against
    a simple context dict derived from the agent's output.
 3. The first matching branch agent is selected and executed.
 4. If no branch matches, the ``else_agent`` is used (if configured).
@@ -27,13 +27,13 @@ from ravi.logger import setup_logging
 import re
 from typing import Any, Dict, List, Optional
 
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.extensions.agents.assistant.agent import AssistantAgent
 from ravi.extensions.pipelines._expr_eval import safe_eval
 
 logger = setup_logging()
 
 
-class ConditionPipelineRunner:
+class ConditionWorkflowRunner:
     """Runs a condition branch pipeline.
 
     Parameters
@@ -44,7 +44,7 @@ class ConditionPipelineRunner:
         List of dicts with ``{"expression": str, "label": str}``.
         Expressions are evaluated against a simple context dict.
     branch_agents:
-        Mapping of branch handle/index to ``ReActAgent`` (e.g. ``"cond-0"``).
+        Mapping of branch handle/index to ``AssistantAgent`` (e.g. ``"cond-0"``).
     else_agent:
         Agent to use when no condition matches.  If ``None``, the upstream
         agent's output is returned as-is.
@@ -53,10 +53,10 @@ class ConditionPipelineRunner:
     def __init__(
         self,
         *,
-        upstream_agent: Optional[ReActAgent],
+        upstream_agent: Optional[AssistantAgent],
         conditions: List[Dict[str, Any]],
-        branch_agents: Dict[str, ReActAgent],
-        else_agent: Optional[ReActAgent],
+        branch_agents: Dict[str, AssistantAgent],
+        else_agent: Optional[AssistantAgent],
     ) -> None:
         self.upstream_agent = upstream_agent
         self.conditions = conditions
@@ -64,7 +64,7 @@ class ConditionPipelineRunner:
         self.else_agent = else_agent
 
     # ------------------------------------------------------------------
-    # Public API (matches ReActAgent.run / run_stream signature subset)
+    # Public API (matches AssistantAgent.run / run_stream signature subset)
     # ------------------------------------------------------------------
 
     async def run(self, input_text: str) -> Any:
@@ -75,7 +75,7 @@ class ConditionPipelineRunner:
 
         upstream_result = await self.upstream_agent.run(input_text)
         _raw = getattr(upstream_result, "output", upstream_result)
-        # Normalize to str (ReActAgent output may be a list from AssistantMessage.content)
+        # Normalize to str (AssistantAgent output may be a list from AssistantMessage.content)
         if isinstance(_raw, list):
             upstream_output = " ".join(str(x) for x in _raw if x)
         else:
@@ -151,7 +151,7 @@ class ConditionPipelineRunner:
             ctx[m.group(1).lower()] = m.group(2).lower()
         return ctx
 
-    def _evaluate(self, ctx: Dict[str, Any]) -> tuple[Optional[ReActAgent], str]:
+    def _evaluate(self, ctx: Dict[str, Any]) -> tuple[Optional[AssistantAgent], str]:
         """Evaluate condition expressions and return the matching branch agent."""
         for idx, cond in enumerate(self.conditions):
             expr = cond.get("expression", "")

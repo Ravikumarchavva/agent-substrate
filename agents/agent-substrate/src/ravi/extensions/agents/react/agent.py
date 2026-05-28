@@ -20,7 +20,10 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import datetime, timezone
-from typing import AsyncIterator, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, AsyncIterator, Dict, List, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from ravi.kernel.safeguards._mutation import MutationPolicy
 from uuid import uuid4
 
 from ravi.kernel.messages.content import JsonObject
@@ -182,6 +185,8 @@ class ReActAgent(BaseAgent):
         enable_capability_search: bool = True,
         # Fault recovery — checkpointing
         checkpoint_every: int = 0,  # 0 = disabled; N > 0 = checkpoint every N steps
+        # Self-evolution safeguard — gates dynamic tool/prompt mutations
+        mutation_policy: Optional[MutationPolicy] = None,
     ):
         # Inject defaults for resources not explicitly registered in the catalog.
         if catalog.primary_memory() is None:
@@ -239,6 +244,8 @@ class ReActAgent(BaseAgent):
             catalog.primary_checkpoint_store()
         )
         self.checkpoint_every: int = checkpoint_every
+        # Self-evolution safeguard
+        self._mutation_policy: Optional[MutationPolicy] = mutation_policy
 
     # ── Core run ─────────────────────────────────────────────────────────────
 
@@ -248,6 +255,71 @@ class ReActAgent(BaseAgent):
             await self.memory.add_message(
                 SystemMessage(content=self.get_effective_system_prompt())
             )
+
+    # ── Self-evolution mutation gates ─────────────────────────────────────────
+
+    async def add_tool(self, tool: object) -> bool:
+        """Dynamically register a tool — gated by :attr:`mutation_policy`.
+
+        When no ``mutation_policy`` was configured, the tool is registered
+        unconditionally and ``True`` is returned.  When a policy is
+        present, ``MutationKind.TOOL_ADD`` is evaluated; the tool is only
+        registered when the policy grants permission.
+
+        Returns:
+            ``True`` if the tool was registered; ``False`` if the policy denied.
+        """
+        if self._mutation_policy is not None:
+            from datetime import datetime, timezone
+            from uuid import uuid4
+            from ravi.kernel.safeguards._mutation import MutationKind, MutationRequest
+
+            request = MutationRequest(
+                request_id=uuid4().hex,
+                principal_fqn=self.name,
+                target_agent_fqn=self.name,
+                kind=MutationKind.TOOL_ADD,
+                family_depth=0,
+                payload_summary=getattr(tool, "name", repr(tool))[:100],
+                requested_at=datetime.now(timezone.utc).isoformat(),
+            )
+            permission = await self._mutation_policy.evaluate(request)
+            if not permission.granted:
+                return False
+
+        self._catalog.register_tool(tool)  # type: ignore[arg-type]
+        return True
+
+    async def rewrite_system_prompt(self, new_instructions: str) -> bool:
+        """Rewrite the agent's system instructions — gated by :attr:`mutation_policy`.
+
+        When no ``mutation_policy`` was configured, the rewrite is applied
+        unconditionally and ``True`` is returned.  When a policy is present,
+        ``MutationKind.PROMPT_REWRITE`` is evaluated first.
+
+        Returns:
+            ``True`` if the rewrite was applied; ``False`` if the policy denied.
+        """
+        if self._mutation_policy is not None:
+            from datetime import datetime, timezone
+            from uuid import uuid4
+            from ravi.kernel.safeguards._mutation import MutationKind, MutationRequest
+
+            request = MutationRequest(
+                request_id=uuid4().hex,
+                principal_fqn=self.name,
+                target_agent_fqn=self.name,
+                kind=MutationKind.PROMPT_REWRITE,
+                family_depth=0,
+                payload_summary=new_instructions[:100],
+                requested_at=datetime.now(timezone.utc).isoformat(),
+            )
+            permission = await self._mutation_policy.evaluate(request)
+            if not permission.granted:
+                return False
+
+        self.system_instructions = new_instructions
+        return True
 
     async def reset(self) -> None:
         """Clear memory and return agent to initial state with system message."""

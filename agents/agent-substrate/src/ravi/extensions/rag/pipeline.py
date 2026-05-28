@@ -175,7 +175,7 @@ class RAGPipeline:
         Returns:
             The generated answer string.
         """
-        from ravi.kernel.messages.client_messages import SystemMessage, UserMessage
+        from ravi.kernel.messages.client_messages import UserMessage
 
         results = await self.query(
             question,
@@ -197,11 +197,13 @@ class RAGPipeline:
         )
 
         messages = [
-            SystemMessage(content=f"{system_prompt}\n\nContext:\n{context_block}"),
             UserMessage(role="user", content=[question]),
         ]
 
-        response = await model_client.generate_text(messages)
+        response = await model_client.generate_text(
+            messages,
+            system_instructions=f"{system_prompt}\n\nContext:\n{context_block}",
+        )
 
         # Extract text from AssistantMessage
         if response.content:

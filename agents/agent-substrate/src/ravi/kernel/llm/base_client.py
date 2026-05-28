@@ -68,6 +68,8 @@ TTS_VOICE = Literal[
 TTS_FORMAT = Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
 
 
+
+
 class BaseModelClient(ABC):
     """Base class for all model clients (OpenAI, Anthropic, etc.).
 
@@ -102,8 +104,9 @@ class BaseModelClient(ABC):
     async def generate(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
+        tools: Optional[list[dict[str, Any]]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional["Type[BaseModel]"] = None,
         **kwargs: Any,
@@ -122,8 +125,9 @@ class BaseModelClient(ABC):
     async def generate_stream(
         self,
         messages: list[BaseClientMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
+        tools: Optional[list[dict[str, Any]]] = None,
         response_format: Optional["Type[BaseModel]"] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ModelStreamEvent]:
@@ -140,6 +144,7 @@ class BaseModelClient(ABC):
         self,
         messages: list[BaseClientMessage],
         *,
+        system_instructions: str = "",
         tools: Optional[list[dict[str, Any]]] = None,
         **kwargs: Any,
     ) -> AssistantMessage:
@@ -150,7 +155,12 @@ class BaseModelClient(ABC):
         ``TypeError`` if the underlying provider unexpectedly returns a
         ``StructuredOutputResult``.
         """
-        result = await self.generate(messages, tools=tools, **kwargs)
+        result = await self.generate(
+            messages,
+            system_instructions=system_instructions,
+            tools=tools,
+            **kwargs,
+        )
         if not isinstance(result, AssistantMessage):
             raise TypeError(
                 f"generate_text expects AssistantMessage but got {type(result).__name__}."

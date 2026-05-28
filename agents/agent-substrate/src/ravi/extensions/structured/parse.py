@@ -72,10 +72,23 @@ async def parse(
             ``result.refused == True``).
     """
 
-    full_messages: List[BaseClientMessage] = []
+    system_parts: List[str] = []
     if system:
-        full_messages.append(SystemMessage(content=system))
-    full_messages.extend(messages)
+        system_parts.append(system)
 
-    result = await client.generate(full_messages, response_format=schema)  # type: ignore[arg-type]
+    clean_messages: List[BaseClientMessage] = []
+    for msg in messages:
+        if isinstance(msg, SystemMessage):
+            if msg.content:
+                system_parts.append(msg.content)
+        else:
+            clean_messages.append(msg)
+
+    system_instructions = "\n\n".join(system_parts)
+
+    result = await client.generate(
+        clean_messages,
+        system_instructions=system_instructions,
+        response_format=schema,
+    )  # type: ignore[arg-type]
     return cast("StructuredOutputResult[T]", result)

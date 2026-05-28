@@ -16,12 +16,19 @@ from ravi.kernel.agent_catalog._catalog import AgentCatalog
 from ravi.extensions.agents.react.agent import ReActAgent
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.catalog.tools.human_input.tool import CLIHumanHandler, AskHumanTool
+from ravi.catalog.tools.human_input.tool import CLIHumanHandler, AskHumanTool, HumanInputResponse
 
 
 async def main():
-    # 1. Set up human input handler (CLI = terminal interaction)
-    handler = CLIHumanHandler()
+    class MockHumanHandler:
+        async def request_input(self, request) -> HumanInputResponse:
+            print(f"\n[Mocked Human Input Request]\n  Q: {request.question}")
+            return HumanInputResponse(
+                request_id=request.request_id,
+                selected_label="Italian cuisine, $50 per person budget, casual style.",
+            )
+
+    handler = MockHumanHandler()
 
     # 2. Create the AskHuman tool (max 3 questions per run)
     ask_tool = AskHumanTool(
@@ -30,8 +37,10 @@ async def main():
     )
 
     # 3. Set up the agent with HITL support
+    from ravi.configs.settings import settings
     catalog = AgentCatalog()
-    catalog.register_model("primary", OpenAIClient(model="gpt-4.1-nano"))
+    model_name = settings.CHAT_MODEL.split("/")[-1]
+    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY))
     for tool in [ask_tool, CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(tool)
 

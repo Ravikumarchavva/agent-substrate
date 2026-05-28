@@ -28,9 +28,11 @@ from ravi.kernel.memory.unbounded_memory import UnboundedMemory
 
 def _make_agent(user_id: str) -> ReActAgent:
     """Create a fully isolated agent for one user session."""
+    from ravi.configs.settings import settings
     catalog = AgentCatalog()
+    model_name = settings.CHAT_MODEL.split("/")[-1]
     # Each agent gets its own model client and its own memory instance
-    catalog.register_model("primary", OpenAIClient(model="gpt-4o"))
+    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY))
     catalog.register_memory("memory", UnboundedMemory())
     for t in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(t)

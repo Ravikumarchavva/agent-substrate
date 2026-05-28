@@ -434,13 +434,13 @@ class SummarizingContext(ModelContext):
         from ravi.kernel.messages.client_messages import UserMessage
 
         summary_request: List[BaseClientMessage] = [
-            SystemMessage(content=self._summary_system),
             *messages,
             UserMessage(content=["Summarize the conversation above."]),
         ]
         try:
             response = await self._summary_client.generate_text(
-                messages=summary_request
+                summary_request,
+                system_instructions=self._summary_system,
             )
             if response.content:
                 text_parts = [

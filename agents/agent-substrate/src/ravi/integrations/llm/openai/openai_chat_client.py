@@ -300,12 +300,15 @@ class OpenAIChatCompletionClient(OpenAIClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         **kwargs: Any,
     ) -> GenerateResult:
         """Generate a response via Chat Completions API."""
         chat_messages = self._serialize_messages_chat(messages)
+        if system_instructions:
+            chat_messages.insert(0, {"role": "system", "content": system_instructions})
         params: dict[str, Any] = {
             "model": self.model,
             "messages": chat_messages,
@@ -418,6 +421,7 @@ class OpenAIChatCompletionClient(OpenAIClient):
         tools: Optional[list[dict[str, Any]]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         *,
+        system_instructions: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ModelStreamEvent]:
@@ -425,6 +429,8 @@ class OpenAIChatCompletionClient(OpenAIClient):
         from ravi.kernel.messages._types import CompletionChunk, TextDeltaChunk
 
         chat_messages = self._serialize_messages_chat(messages)
+        if system_instructions:
+            chat_messages.insert(0, {"role": "system", "content": system_instructions})
         params: dict[str, Any] = {
             "model": self.model,
             "messages": chat_messages,

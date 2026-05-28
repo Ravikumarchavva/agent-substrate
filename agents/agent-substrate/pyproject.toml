@@ -40,6 +40,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi<0.60b1",
     "paddleocr[all]",
     "ipykernel>=7.2.0",
+    "playwright>=1.60.0",
 ]
 
 [project.scripts]

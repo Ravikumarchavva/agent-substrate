@@ -42,6 +42,9 @@ class _CaptureAgent(BaseAgent):
         super().__init__(name="capture", description="captures input", catalog=catalog)
         self.received_inputs: list[str] = []
 
+    def get_system_instructions(self) -> str:
+        return self._system_instructions
+
     async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:  # type: ignore[override]
         self.received_inputs.append(input_text)
         return AgentRunResult(agent_name=self.name, output=[input_text])

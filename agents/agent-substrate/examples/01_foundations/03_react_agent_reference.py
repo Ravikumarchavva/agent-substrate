@@ -32,15 +32,16 @@ async def main():
         print(f"Skipping MCP tools: {e}")
 
     # 3. Initialize Client & Memory
-    # Check for API Key
-    api_key = os.environ.get("OPENAI_API_KEY")
+    from ravi.configs.settings import settings
+    api_key = settings.OPENAI_API_KEY
     if not api_key:
         print("⚠️  Warning: OPENAI_API_KEY not found in environment. Example might fail.")
         # Mocking for demonstration if key missing? 
         # No, better to fail loud or use a mock client if I had one.
     
     catalog = AgentCatalog()
-    catalog.register_model("primary", OpenAIClient(model="gpt-4o"))
+    model_name = settings.CHAT_MODEL.split("/")[-1]
+    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=api_key))
     catalog.register_memory("memory", UnboundedMemory())
     for tool in tools:
         catalog.register_tool(tool)

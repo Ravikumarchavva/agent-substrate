@@ -133,11 +133,9 @@ class LLMJudge:
             try:
                 response = await self.model_client.generate_text(
                     messages=[
-                        SystemMessage(
-                            content="You are a precise evaluation judge. Always respond with valid JSON only."
-                        ),
                         UserMessage(content=[prompt]),
                     ],
+                    system_instructions="You are a precise evaluation judge. Always respond with valid JSON only.",
                     tools=None,
                 )
 

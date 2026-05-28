@@ -592,6 +592,9 @@ class TestBackwardCompat:
         from ravi.kernel.agents.base_agent import BaseAgent
 
         class _DummyAgent(BaseAgent):
+            def get_system_instructions(self) -> str:
+                return self._system_instructions
+
             async def run(self, input_text: str, **kw: object) -> str:
                 return "ok"
 

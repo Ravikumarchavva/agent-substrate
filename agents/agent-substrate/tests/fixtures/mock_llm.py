@@ -80,6 +80,7 @@ class MockLLMClient(BaseModelClient):
         super().__init__(model="mock-llm-v1", temperature=0.0)
         self._script: list[Turn] = list(script or [])
         self.calls: list[list[BaseClientMessage]] = []
+        self.system_calls: list[str] = []
 
     # -- helpers -------------------------------------------------------------
 
@@ -114,11 +115,13 @@ class MockLLMClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[Type[BaseModel]] = None,
         **kwargs: Any,
     ) -> GenerateResult:
         self.calls.append(list(messages))
+        self.system_calls.append(system_instructions)
         turn = self._next_turn()
         if turn.delay:
             await asyncio.sleep(turn.delay)
@@ -131,10 +134,12 @@ class MockLLMClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
         response_format: Optional[Type[BaseModel]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ModelStreamEvent]:
         self.calls.append(list(messages))
+        self.system_calls.append(system_instructions)
         turn = self._next_turn()
         if turn.error:
             raise turn.error

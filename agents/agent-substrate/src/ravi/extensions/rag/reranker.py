@@ -55,20 +55,12 @@ class LLMReranker:
         if len(results) <= top_k:
             return results
 
-        from ravi.kernel.messages.client_messages import SystemMessage, UserMessage
+        from ravi.kernel.messages.client_messages import UserMessage
 
         # Build scoring prompt
         docs_block = "\n".join(f"[{i}] {r.text[:500]}" for i, r in enumerate(results))
 
         messages = [
-            SystemMessage(
-                content=(
-                    "You are a relevance judge. Given a query and numbered documents, "
-                    "return a JSON array of document indices sorted by relevance to "
-                    "the query (most relevant first). Return ONLY the JSON array of "
-                    "integer indices, e.g. [2, 0, 4, 1, 3]."
-                )
-            ),
             UserMessage(
                 role="user",
                 content=[f"Query: {query}\n\nDocuments:\n{docs_block}"],
@@ -76,7 +68,15 @@ class LLMReranker:
         ]
 
         try:
-            response = await self._client.generate_text(messages)
+            response = await self._client.generate_text(
+                messages,
+                system_instructions=(
+                    "You are a relevance judge. Given a query and numbered documents, "
+                    "return a JSON array of document indices sorted by relevance to "
+                    "the query (most relevant first). Return ONLY the JSON array of "
+                    "integer indices, e.g. [2, 0, 4, 1, 3]."
+                ),
+            )
             text = ""
             if response.content:
                 text = "".join(

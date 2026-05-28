@@ -39,7 +39,8 @@ async def main():
         # Example: Use with OpenAI client
         print("🤖 Using MCP tools with agent...\n")
         
-        client = OpenAIClient(model="gpt-4o")
+        from ravi.configs.settings import settings
+        client = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY)
         memory = UnboundedMemory()
         
         # Add system message
@@ -49,7 +50,7 @@ async def main():
         
         # Add user message
         await memory.add_message(UserMessage(
-            content="List the files in the /tmp directory"
+            content=["List the files in the /tmp directory"]
         ))
         
         # Generate response with MCP tools

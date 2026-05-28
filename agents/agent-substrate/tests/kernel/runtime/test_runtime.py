@@ -498,6 +498,9 @@ class _StubAgent(BaseAgent):
         )
         self._output = output
 
+    def get_system_instructions(self) -> str:
+        return self._system_instructions
+
     async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
         return AgentRunResult(
             agent_name=self.name,

@@ -76,27 +76,27 @@ class GraphRAGPipeline:
 
     async def _extract_and_store_graph(self, text: str) -> None:
         """Use an LLM to extract entities and relationships from text."""
-        from ravi.kernel.messages.client_messages import SystemMessage, UserMessage
+        from ravi.kernel.messages.client_messages import UserMessage
 
         # Truncate very long texts for entity extraction
         extract_text = text[:5000] if len(text) > 5000 else text
 
         messages = [
-            SystemMessage(
-                content=(
+            UserMessage(role="user", content=[extract_text]),
+        ]
+
+        try:
+            response = await self._model.generate_text(
+                messages,
+                system_instructions=(
                     "Extract entities and relationships from the text. "
                     "Return a JSON object with two arrays:\n"
                     '- "entities": [{"label": "Person", "properties": {"name": "Alice"}}]\n'
                     '- "relationships": [{"source": "Alice", "target": "Acme Corp", '
                     '"type": "WORKS_AT"}]\n'
                     "Return ONLY valid JSON."
-                )
-            ),
-            UserMessage(role="user", content=[extract_text]),
-        ]
-
-        try:
-            response = await self._model.generate_text(messages)
+                ),
+            )
             text_content = ""
             if response.content:
                 text_content = "".join(

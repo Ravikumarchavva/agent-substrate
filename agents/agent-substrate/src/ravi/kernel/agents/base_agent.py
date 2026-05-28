@@ -8,7 +8,7 @@ The contract is deliberately minimal:
 
 from __future__ import annotations
 
-from typing import AsyncIterator, List, Optional, Type, Union
+from typing import AsyncIterator, ClassVar, List, Optional, Type, Union
 from abc import ABC, abstractmethod
 from typing import runtime_checkable, Protocol
 
@@ -52,6 +52,8 @@ class PromptEnricher(Protocol):
 class BaseAgent(ABC):
     """Abstract base for all agent implementations."""
 
+    _DEFAULT_SYSTEM_INSTRUCTIONS: ClassVar[str] = "You are a helpful assistant."
+
     def __init__(
         self,
         name: str,
@@ -75,7 +77,17 @@ class BaseAgent(ABC):
         self.model_client: Optional[BaseModelClient] = catalog.primary_model()
         self.model_context: Optional[ModelContext] = catalog.primary_context()
         self.memory: Optional[BaseMemory] = catalog.primary_memory()
-        self.system_instructions = system_instructions
+        # Pillar D: reject custom system instructions when there is no LLM client.
+        if (
+            self.model_client is None
+            and system_instructions != self._DEFAULT_SYSTEM_INSTRUCTIONS
+        ):
+            raise ValueError(
+                f"Agent {name!r} has no LLM client — "
+                "system_instructions may only be customised on LLM-backed agents."
+            )
+        # Pillar A: private backing store; public attribute is read-only.
+        self._system_instructions: str = system_instructions
         self.memory_scope = memory_scope
         self.prompt_enricher: Optional[PromptEnricher] = prompt_enricher or catalog
         self.response_schema: Optional[Type[BaseModel]] = response_schema
@@ -99,11 +111,39 @@ class BaseAgent(ABC):
         for t in value:
             self.catalog.register_tool(t)
 
+    @property
+    def system_instructions(self) -> str:
+        """Read-only view of the agent's current system instructions.
+
+        Use ``rewrite_system_prompt()`` (gated by ``MutationPolicy``) to change them.
+        """
+        return self._system_instructions
+
+    @system_instructions.setter
+    def system_instructions(self, value: str) -> None:
+        raise AttributeError(
+            "system_instructions is read-only. "
+            "Call rewrite_system_prompt() — it is gated by MutationPolicy."
+        )
+
+    def _update_system_instructions(self, value: str) -> None:
+        """Internal write path — only called from rewrite_system_prompt()."""
+        self._system_instructions = value
+
+    @abstractmethod
+    def get_system_instructions(self) -> str:
+        """Return the base system instructions for this agent.
+
+        Every subclass must implement this method and return the current
+        system instructions string. Typically ``return self._system_instructions``.
+        """
+
     def get_effective_system_prompt(self) -> str:
         """Return the system prompt, enriched by prompt_enricher if set."""
+        base_instructions = self.get_system_instructions()
         if self.prompt_enricher is not None:
-            return self.prompt_enricher.inject_into_prompt(self.system_instructions)
-        return self.system_instructions
+            return self.prompt_enricher.inject_into_prompt(base_instructions)
+        return base_instructions
 
     # -- Core lifecycle -------------------------------------------------------
 

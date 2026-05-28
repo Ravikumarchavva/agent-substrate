@@ -46,11 +46,12 @@ async def main():
         print()
         
         # Use with agent
-        client = OpenAIClient(model="gpt-4o")
+        from ravi.configs.settings import settings
+        client = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY)
         memory = UnboundedMemory()
         
         # System message
-        memory.add_message(SystemMessage(
+        await memory.add_message(SystemMessage(
             content="""You are a helpful assistant with access to:
             - Calculator for math operations
             - Current time tool
@@ -60,8 +61,8 @@ async def main():
         ))
         
         # User request
-        memory.add_message(UserMessage(
-            content="Calculate 123 * 456 and save the result to /tmp/calculation.txt"
+        await memory.add_message(UserMessage(
+            content=["Calculate 123 * 456 and save the result to /tmp/calculation.txt"]
         ))
         
         # Agent loop
@@ -70,8 +71,8 @@ async def main():
             print(f"\n--- Iteration {i + 1} ---")
             
             response = await client.generate(
-                messages=memory.get_messages(),
-                tools=[t.get_schema() for t in all_tools]
+                messages=await memory.get_messages(),
+                tools=[t.get_openai_schema() for t in all_tools]
             )
             
             # No tool calls? We're done!
@@ -80,12 +81,12 @@ async def main():
                 break
             
             # Add assistant message
-            memory.add_message(response)
+            await memory.add_message(response)
             
             # Execute tool calls
             for tool_call in response.tool_calls:
-                tool_name = tool_call.function["name"]
-                tool_args = json.loads(tool_call.function["arguments"])
+                tool_name = tool_call.name
+                tool_args = tool_call.arguments
                 
                 print(f"🔧 Calling: {tool_name}({tool_args})")
                 
@@ -93,13 +94,14 @@ async def main():
                 tool = next((t for t in all_tools if t.name == tool_name), None)
                 if tool:
                     result = await tool.execute(**tool_args)
-                    print(f"   Result: {result[:100]}...")
+                    first_text = result.content[0].text if result.content else ""
+                    print(f"   Result: {first_text[:100]}...")
                     
                     # Add tool result
-                    memory.add_message(ToolExecutionResultMessage(
-                        content=result,
+                    await memory.add_message(ToolExecutionResultMessage.from_tool_result(
+                        tool_result=result,
                         tool_call_id=tool_call.id,
-                        name=tool_name
+                        tool_name=tool_name
                     ))
         
         print("\n✅ Task completed!")

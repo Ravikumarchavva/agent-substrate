@@ -60,13 +60,15 @@ class LLMJudgeGuardrail(BaseGuardrail):
             return self._pass("No text to judge")
 
         try:
-            from ravi.kernel.messages.client_messages import SystemMessage, UserMessage
+            from ravi.kernel.messages.client_messages import UserMessage
 
             messages = [
-                SystemMessage(content=self._judge_prompt),
                 UserMessage(content=[text]),
             ]
-            response = await self._model_client.generate_text(messages=messages)
+            response = await self._model_client.generate_text(
+                messages,
+                system_instructions=self._judge_prompt,
+            )
 
             response_text = ""
             if response.content:

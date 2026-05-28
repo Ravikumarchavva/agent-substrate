@@ -322,12 +322,14 @@ class OpenAIClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         **kwargs: Any,
     ) -> GenerateResult:
         """Generate a single response from OpenAI using Responses API."""
-        instructions, conversation_input = await self._serialize_messages(messages)
+        _, conversation_input = await self._serialize_messages(messages)
+        instructions = system_instructions
 
         # ── Unified path: tools + response_format together ────────────────
         # OpenAI Responses API supports both `tools` and `text.format`
@@ -596,6 +598,7 @@ class OpenAIClient(BaseModelClient):
         tools: Optional[list[dict[str, Any]]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         *,
+        system_instructions: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ModelStreamEvent]:
@@ -612,7 +615,8 @@ class OpenAIClient(BaseModelClient):
             CompletionChunk,
         )
 
-        instructions, conversation_input = await self._serialize_messages(messages)
+        _, conversation_input = await self._serialize_messages(messages)
+        instructions = system_instructions
 
         params: dict[str, Any] = {
             "model": self.model,

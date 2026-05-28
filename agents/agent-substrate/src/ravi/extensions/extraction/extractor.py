@@ -104,12 +104,12 @@ class Extractor(Generic[T]):
         resolved_client = self._get_client(client)
 
         messages: List[Any] = [
-            SystemMessage(content=self.instructions),
             UserMessage(content=[content]),
         ]
 
         generate_kwargs: dict[str, Any] = {
             "response_format": self.schema,
+            "system_instructions": self.instructions,
             **kwargs,
         }
         if self._model:

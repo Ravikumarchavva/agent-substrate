@@ -25,7 +25,7 @@ async def main():
         # Example: Connect to a running MCP server
         # Note: You need to have an MCP server running on this endpoint
         await mcp_client.connect_sse(
-            url="http://localhost:8000/sse",
+            url="http://localhost:9000/sse",
             headers={
                 # Optional: Add authentication headers
                 # "Authorization": "Bearer your-api-token",
@@ -48,7 +48,8 @@ async def main():
         # Use with agent
         print("🤖 Using MCP tools with agent...\n")
         
-        client = OpenAIClient(model="gpt-4o")
+        from ravi.configs.settings import settings
+        client = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY)
         memory = UnboundedMemory()
         
         await memory.add_message(SystemMessage(
@@ -56,7 +57,7 @@ async def main():
         ))
         
         await memory.add_message(UserMessage(
-            content="Use the available tools to help me"
+            content=["Use the available tools to help me"]
         ))
         
         response = await client.generate(
@@ -121,7 +122,7 @@ async def compare_transports():
     sse_client = MCPClient()
     try:
         await sse_client.connect_sse(
-            url="http://localhost:8000/sse"
+            url="http://localhost:9000/sse"
         )
         print(f"   Connected via: {sse_client.transport_type}")
         await sse_client.disconnect()

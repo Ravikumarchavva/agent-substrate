@@ -249,12 +249,9 @@ class ReActAgent(BaseAgent):
 
     # ── Core run ─────────────────────────────────────────────────────────────
 
-    async def _seed_system_message(self) -> None:
-        """Seed the system prompt into memory if it is empty (lazy, async-safe)."""
-        if await self.memory.size() == 0:
-            await self.memory.add_message(
-                SystemMessage(content=self.get_effective_system_prompt())
-            )
+    def get_system_instructions(self) -> str:
+        """Return the current system instructions (implements BaseAgent abstract method)."""
+        return self._system_instructions
 
     # ── Self-evolution mutation gates ─────────────────────────────────────────
 
@@ -318,17 +315,15 @@ class ReActAgent(BaseAgent):
             if not permission.granted:
                 return False
 
-        self.system_instructions = new_instructions
+        self._update_system_instructions(new_instructions)
         return True
 
     async def reset(self) -> None:
-        """Clear memory and return agent to initial state with system message."""
+        """Clear memory and return agent to initial state."""
         await super().reset()
         self._reset_tool_activation_state()
-        await self.memory.add_message(
-            SystemMessage(content=self.get_effective_system_prompt())
-        )
-        # Reset HITL tool counters
+        # System instructions are not stored in memory — they are passed
+        # as an explicit kwarg on every LLM call from _system_instructions.
         self._reset_hitl_tools()
 
     def _reset_hitl_tools(self) -> None:
@@ -576,10 +571,7 @@ class ReActAgent(BaseAgent):
                     },
                 )
 
-                # Ensure system prompt is loaded (lazy seed for async memory)
-                await self._seed_system_message()
-
-                # 1. Add user message
+                # 1. Add user message (system instructions travel via kwarg, not memory)
                 await self.memory.add_message(persisted_user_message)
 
                 # 2. ReAct loop
@@ -784,8 +776,12 @@ class ReActAgent(BaseAgent):
                             ),
                             model_client=self.model_client,
                         )
+                        clean_ctx = [
+                            m for m in context_messages if not isinstance(m, SystemMessage)
+                        ]
                         result.structured_output = await self.model_client.generate(  # type: ignore[assignment]
-                            context_messages,
+                            clean_ctx,
+                            system_instructions=self.get_effective_system_prompt(),
                             response_format=response_schema,
                         )
 
@@ -958,8 +954,7 @@ class ReActAgent(BaseAgent):
                         f"[{self.name}] Starting streaming run: {input_text[:80]}..."
                     )
 
-                # Ensure system prompt is loaded (lazy seed for async memory)
-                await self._seed_system_message()
+                # system instructions travel via kwarg, not memory
                 await self.memory.add_message(persisted_user_message)
 
                 # ── INPUT GUARDRAILS ─────────────────────────────────────────
@@ -1024,9 +1019,13 @@ class ReActAgent(BaseAgent):
                             # mid-stream before a CompletionChunk is received.
                             partial_text: str = ""
 
+                            stream_messages = [
+                                m for m in messages if not isinstance(m, SystemMessage)
+                            ]
                             try:
                                 async for chunk in self.model_client.generate_stream(
-                                    messages=messages,
+                                    messages=stream_messages,
+                                    system_instructions=self.get_effective_system_prompt(),
                                     tools=tool_schemas or None,
                                     tool_choice=self._resolve_requested_tool_choice(
                                         tool_schemas,
@@ -1253,8 +1252,16 @@ class ReActAgent(BaseAgent):
 
             for attempt in range(self.llm_retry_policy.max_retries + 1):
                 try:
+                    # Strip SystemMessage entries from history — system instructions
+                    # travel through the dedicated kwarg, not the conversation list.
+                    # This prevents injected SystemMessage entries from overriding
+                    # the agent's real instructions.
+                    clean_messages = [
+                        m for m in messages if not isinstance(m, SystemMessage)
+                    ]
                     generate_kwargs: JsonObject = {
-                        "messages": messages,
+                        "messages": clean_messages,
+                        "system_instructions": self.get_effective_system_prompt(),
                         "tools": tool_schemas or None,
                         "tool_choice": self._resolve_requested_tool_choice(
                             tool_schemas,
@@ -1269,7 +1276,7 @@ class ReActAgent(BaseAgent):
                             if self.execution_context is not None
                             else {}
                         )
-                        metadata_bag["messages"] = list(messages)
+                        metadata_bag["messages"] = list(clean_messages)
 
                         mw_ctx = MiddlewareContext(
                             stage=MiddlewareStage.LLM_CALL,
@@ -1285,9 +1292,10 @@ class ReActAgent(BaseAgent):
                         async def _do_generate(
                             ctx: MiddlewareContext,
                         ) -> GenerateResult:
-                            generate_kwargs["messages"] = ctx.metadata.get(
-                                "messages", messages
-                            )
+                            raw = ctx.metadata.get("messages", clean_messages)
+                            generate_kwargs["messages"] = [
+                                m for m in raw if not isinstance(m, SystemMessage)
+                            ]
                             return await self.model_client.generate(**generate_kwargs)
 
                         response = await self.middleware_pipeline.run(

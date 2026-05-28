@@ -169,12 +169,14 @@ class GeminiClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
     ) -> GenerateResult:
         """Generate a single response from Gemini using GenerateContent API."""
-        system_instruction, contents = self._serialize_messages(messages)
+        _, contents = self._serialize_messages(messages)
+        system_instruction = system_instructions
 
         config: dict[str, Any] = {}
 
@@ -270,6 +272,7 @@ class GeminiClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
@@ -280,7 +283,8 @@ class GeminiClient(BaseModelClient):
         """
         from ravi.kernel.messages._types import TextDeltaChunk, CompletionChunk
 
-        system_instruction, contents = self._serialize_messages(messages)
+        _, contents = self._serialize_messages(messages)
+        system_instruction = system_instructions
 
         config: dict[str, Any] = {}
 

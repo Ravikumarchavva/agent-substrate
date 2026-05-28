@@ -22,8 +22,10 @@ from ravi.kernel.tools import tool
 
 
 def _make_catalog() -> AgentCatalog:
+    from ravi.configs.settings import settings
     catalog = AgentCatalog()
-    catalog.register_model("primary", OpenAIClient(model="gpt-4o"))
+    model_name = settings.CHAT_MODEL.split("/")[-1]
+    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY))
     catalog.register_memory("memory", UnboundedMemory())
     return catalog
 

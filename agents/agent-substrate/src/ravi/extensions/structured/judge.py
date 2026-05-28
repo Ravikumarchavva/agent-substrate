@@ -136,11 +136,11 @@ class LLMJudge(BaseGuardrail):
 
         try:
             messages = [
-                SystemMessage(content=self._system_prompt),
                 UserMessage(content=[text_to_judge]),
             ]
             result = await self._client.generate(
                 messages,
+                system_instructions=self._system_prompt,
                 response_format=self._schema,
             )
         except Exception as exc:

@@ -121,12 +121,14 @@ class AnthropicClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
     ) -> GenerateResult:
         """Generate a single response from Anthropic using Messages API."""
-        system, conversation = self._serialize_messages(messages)
+        _, conversation = self._serialize_messages(messages)
+        system = system_instructions
 
         thinking_param = self._build_thinking_param(kwargs)
 
@@ -247,6 +249,7 @@ class AnthropicClient(BaseModelClient):
         messages: list[BaseClientMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
+        system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
@@ -261,7 +264,8 @@ class AnthropicClient(BaseModelClient):
             TextDeltaChunk,
         )
 
-        system, conversation = self._serialize_messages(messages)
+        _, conversation = self._serialize_messages(messages)
+        system = system_instructions
 
         thinking_param = self._build_thinking_param(kwargs)
 

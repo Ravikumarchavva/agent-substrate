@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from ravi.extensions.observability import (
+from ravi.platform.observability import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
     InMemoryReplayGate,

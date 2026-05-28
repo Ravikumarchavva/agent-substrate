@@ -7,7 +7,7 @@ from ravi.kernel.guardrails import (
     GuardrailContext,
     GuardrailType,
 )
-from ravi.extensions.guardrails import (
+from ravi.reasoning.guardrails import (
     ContentFilterGuardrail,
 )
 

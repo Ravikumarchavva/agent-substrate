@@ -2,7 +2,7 @@
 
 Tiered key/value index for small objects looked up by string key. See
 :mod:`ravi.kernel.metadata._store` for the contract; reference
-implementations live in :mod:`ravi.extensions.metadata`.
+implementations live in :mod:`ravi.fabric.metadata`.
 """
 
 from __future__ import annotations

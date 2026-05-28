@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ravi.extensions.trust import InMemoryTrustGraph
+from ravi.guardrails.trust import InMemoryTrustGraph
 from ravi.kernel.contracts._coordination import TrustSignal
 from ravi.kernel.contracts._trust import TrustGraph
 from ravi.kernel.runtime._identity import PrincipalId, PrincipalKind

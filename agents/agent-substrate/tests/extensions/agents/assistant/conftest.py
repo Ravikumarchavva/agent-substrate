@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
-from ravi.kernel.runtime._local import LocalRuntime
-from ravi.extensions.agents.assistant.agent import AssistantAgent
+from ravi.fabric.catalog import AgentCatalogRegistry
+from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.fabric.runtime.local import LocalRuntime
+from ravi.reasoning.agents.assistant.agent import AssistantAgent
 
 from tests.fixtures.mock_llm import MockLLMClient, Turn
 from tests.fixtures.fake_tools import EchoTool, AddTool, FailTool, SlowTool, CounterTool

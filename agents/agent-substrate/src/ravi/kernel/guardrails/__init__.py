@@ -2,7 +2,7 @@
 
 Only the base ABC, context, result, and type enum live here. Concrete
 guardrails (``PIIDetectionGuardrail``, ``ContentFilterGuardrail``, …)
-and the parallel runner live in :mod:`ravi.extensions.guardrails`.
+and the parallel runner live in :mod:`ravi.reasoning.guardrails`.
 """
 
 from ravi.kernel.guardrails.base_guardrail import (

@@ -18,7 +18,7 @@ Anywhere downstream::
 
 The registry is a simple in-process dict keyed by (category, name). It holds
 the *class*, not an instance — instance construction with configuration is
-the responsibility of :class:`ravi.kernel.agent_catalog.AgentCatalog`.
+the responsibility of :class:`ravi.fabric.catalog.AgentCatalog`.
 """
 
 from __future__ import annotations

@@ -24,12 +24,12 @@ from typing import Any
 
 import pytest
 
-from ravi.extensions.runtime import (
+from ravi.fabric.runtime import (
     IdentityRequiredMiddleware,
     TrustDecayMiddleware,
     TrustEnrichmentMiddleware,
 )
-from ravi.extensions.trust import InMemoryTrustGraph
+from ravi.guardrails.trust import InMemoryTrustGraph
 from ravi.kernel.contracts._coordination import (
     TrustContext,
     TrustLevel,
@@ -40,11 +40,11 @@ from ravi.kernel.runtime import (
     AgentId,
     Envelope,
     IdentityContext,
-    LocalRuntime,
     MessageContext,
     PrincipalId,
-    PrincipalKind,
+    PrincipalKind
 )
+from ravi.fabric.runtime.local import LocalRuntime
 
 
 UTC = timezone.utc

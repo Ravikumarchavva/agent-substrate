@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from ravi.kernel.economic import (
+from ravi.guardrails.economic import (
     BudgetExhausted,
     EconomicSignal,
     EconomicSignalKind,

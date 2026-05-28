@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
     app.state.cancel_registry = {}  # dict[str, asyncio.Event]
 
     # S14: replay gate — operator-controlled admission for envelope replays.
-    from ravi.extensions.observability._in_memory import InMemoryReplayGate
+    from ravi.platform.observability._in_memory import InMemoryReplayGate
     app.state.replay_gate = InMemoryReplayGate()
 
     # MCP server registry: maps server_id → RegistryMcpServer dict.

@@ -126,7 +126,7 @@ class PipelineEngine:
         catalog: Any,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
-        from ravi.kernel.agent_catalog import AgentCatalogRegistry
+        from ravi.fabric.catalog import AgentCatalogRegistry
 
         self._catalog: AgentCatalogRegistry = catalog
         self._data_store = data_store

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.extensions.safeguards._in_memory import InMemoryCircuitBreaker
-from ravi.extensions.runtime._middleware import CircuitBreakerMiddleware
+from ravi.guardrails.mutation._in_memory import InMemoryCircuitBreaker
+from ravi.fabric.runtime._middleware import CircuitBreakerMiddleware
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.runtime import (
     AgentId,

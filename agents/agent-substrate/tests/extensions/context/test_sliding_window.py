@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.extensions.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
 from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     SystemMessage,

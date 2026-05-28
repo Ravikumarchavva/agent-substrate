@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
+from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.catalog.tools.capability_search.tool import CapabilitySearchTool
 
 

@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from ravi.extensions.runtime import (
+from ravi.fabric.runtime import (
     DepthLimitMiddleware,
     IdentityRequiredMiddleware,
     TenantIsolationMiddleware,
@@ -33,12 +33,12 @@ from ravi.kernel.runtime import (
     AgentLifecycleState,
     Envelope,
     IdentityContext,
-    LocalRuntime,
     MessageContext,
     PrincipalId,
     PrincipalKind,
-    RoutingMiddlewareRejection,
+    RoutingMiddlewareRejection
 )
+from ravi.fabric.runtime.local import LocalRuntime
 
 
 def _identity(tenant: str = "t1", name: str = "alice") -> IdentityContext:

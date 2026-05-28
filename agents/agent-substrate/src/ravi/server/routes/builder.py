@@ -26,8 +26,8 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 
-from ravi.extensions.pipelines.codegen import generate_code
-from ravi.extensions.pipelines.runner import WorkflowRunner
+from ravi.orchestration.workflows.codegen import generate_code
+from ravi.orchestration.workflows.runner import WorkflowRunner
 from ravi.kernel.pipelines.schema import PipelineConfig
 from ravi.server.models import Pipeline, PipelineRun
 from ravi.server.security.deps import get_current_user

@@ -5,7 +5,7 @@
 ``TrustGraph``            — Protocol the fabric uses to look up a principal's
                             current ``TrustScore`` and ingest fresh signals.
 
-The graph implementation lives in ``ravi.extensions.trust``; the kernel only
+The graph implementation lives in ``ravi.guardrails.trust``; the kernel only
 defines the contract so every backend (in-memory, Redis, Postgres, Neo4j)
 is swappable.
 """

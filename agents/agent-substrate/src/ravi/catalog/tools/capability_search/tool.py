@@ -22,7 +22,7 @@ class CapabilitySearchTool(BaseTool):
     """Meta-tool for discovering tools and skills in the capability catalogue."""
 
     def __init__(self, catalog: Any) -> None:
-        from ravi.kernel.agent_catalog import AgentCatalogRegistry
+        from ravi.fabric.catalog import AgentCatalogRegistry
 
         if not isinstance(catalog, AgentCatalogRegistry):
             raise TypeError(

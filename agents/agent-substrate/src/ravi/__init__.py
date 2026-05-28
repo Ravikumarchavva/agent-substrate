@@ -9,8 +9,8 @@ Layer structure (dependencies flow downward only):
     services      - microservice FastAPI apps
 
 Recommended imports:
-    from ravi.extensions.agents.assistant.agent import AssistantAgent
-    from ravi.extensions.agents.user_proxy.agent import UserProxyAgent
+    from ravi.reasoning.agents.assistant.agent import AssistantAgent
+    from ravi.orchestration.agents.proxy.agent import UserProxyAgent
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
     from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 
@@ -35,7 +35,7 @@ from ravi.kernel.structured import (
     StructuredOutputError,
     StructuredOutputResult,
 )
-from ravi.extensions.structured import (
+from ravi.reasoning.structured import (
     LLMJudge,
     StructuredRouter,
     parse,
@@ -49,22 +49,22 @@ from ravi.extensions.structured import (
 #       proxy = UserProxyAgent("proxy", rt)
 #       await proxy.start()
 #       result = await proxy.ask("Hello!", recipient=agent.id)
-from ravi.extensions.agents.assistant.agent import AssistantAgent  # noqa: F401
-from ravi.extensions.agents.user_proxy.agent import UserProxyAgent  # noqa: F401
+from ravi.reasoning.agents.assistant.agent import AssistantAgent  # noqa: F401
+from ravi.orchestration.agents.proxy.agent import UserProxyAgent  # noqa: F401
 
 # Batch processing:
 #   from ravi import BatchProcessor, BatchConfig
 #   processor = BatchProcessor(fn=my_fn, config=BatchConfig(max_concurrency=5))
 #   result = await processor.run(inputs)
 from ravi.kernel.batch import BatchConfig  # noqa: F401
-from ravi.extensions.batch import BatchProcessor  # noqa: F401
+from ravi.platform.batch import BatchProcessor  # noqa: F401
 
 # Structured data extraction:
 #   from ravi import Extractor, Invoice
 #   extractor = Extractor(schema=Invoice, client=client)
 #   result = await extractor.extract("Invoice text ...")
-from ravi.extensions.extraction import Extractor  # noqa: F401
-from ravi.extensions.extraction.schemas import (  # noqa: F401
+from ravi.reasoning.extraction import Extractor  # noqa: F401
+from ravi.reasoning.extraction.schemas import (  # noqa: F401
     BusinessCard,
     Contract,
     Invoice,

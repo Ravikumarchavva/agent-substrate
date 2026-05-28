@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ravi.kernel.middleware.base import MiddlewareContext, MiddlewareStage
-from ravi.extensions.middleware.history_truncator import HistoryTruncatorMiddleware
+from ravi.reasoning.middleware.history_truncator import HistoryTruncatorMiddleware
 from ravi.kernel.messages.client_messages import (
     SystemMessage,
     UserMessage,

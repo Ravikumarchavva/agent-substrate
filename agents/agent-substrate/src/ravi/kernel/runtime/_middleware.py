@@ -16,7 +16,7 @@ Use cases
 - ``TrustDecayMiddleware`` — decay trust score per hop, quarantine below threshold
 
 The kernel only ships the contract. Concrete middlewares live in
-``ravi.extensions.runtime.middleware`` so they can be swapped without
+``ravi.fabric.runtime.middleware`` so they can be swapped without
 touching the kernel.
 
 Concurrency

@@ -155,13 +155,13 @@ class Console:
 
     def _is_actor_agent(self) -> bool:
         """Return True if the agent uses the actor model (has on_message)."""
-        from ravi.kernel.agents.actor import ActorAgent
+        from ravi.fabric.actors.actor import ActorAgent
         return isinstance(self.agent, ActorAgent)
 
     async def _get_proxy(self) -> Any:
         """Lazily create and start the UserProxyAgent for actor-model agents."""
         if self._proxy is None:
-            from ravi.extensions.agents.user_proxy.agent import UserProxyAgent
+            from ravi.orchestration.agents.proxy.agent import UserProxyAgent
             self._proxy = UserProxyAgent(
                 "console-proxy",
                 self.agent.runtime,

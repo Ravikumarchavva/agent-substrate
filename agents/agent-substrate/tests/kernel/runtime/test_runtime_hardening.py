@@ -15,19 +15,19 @@ from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.runtime import (
     AgentId,
     AgentNotFoundError,
-    Dispatcher,
     Envelope,
     HandlerError,
-    LocalRuntime,
-    Mailbox,
     MailboxFullError,
     MessageContext,
     RestartPolicy,
     StreamPublisher,
-    Supervisor,
     SupervisorEscalation,
-    TopicId,
+    TopicId
 )
+from ravi.fabric.runtime.supervisor import Supervisor
+from ravi.fabric.runtime.dispatcher import Dispatcher
+from ravi.fabric.runtime.mailbox import Mailbox
+from ravi.fabric.runtime.local import LocalRuntime
 from ravi.integrations.runtime._base import BaseRemoteRuntime
 
 

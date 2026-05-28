@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.extensions.memory._lineage import InMemoryLineageStore
+from ravi.reasoning.memory.lineage import InMemoryLineageStore
 from ravi.kernel.memory import (
     LineageNotFoundError,
     LineageRecord,

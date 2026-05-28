@@ -11,15 +11,15 @@ import asyncio
 from typing import Any
 import pytest
 
-from ravi.extensions.events import InMemoryEventFabric
-from ravi.extensions.scheduler import InMemoryFairShareScheduler
-from ravi.extensions.runtime import DistributedRuntime
+from ravi.fabric.events import InMemoryEventFabric
+from ravi.platform.scheduling import InMemoryFairShareScheduler
+from ravi.fabric.runtime import DistributedRuntime
 from ravi.kernel.runtime import (
     AgentId,
     InMemoryLeaseRegistry,
     MessageContext,
 )
-from ravi.kernel.scheduler import ResourceClaim, SlotGrantStatus
+from ravi.platform.scheduling import ResourceClaim, SlotGrantStatus
 
 
 async def _echo_handler(ctx: MessageContext, payload: Any) -> str:

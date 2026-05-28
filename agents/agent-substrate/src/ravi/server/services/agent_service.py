@@ -31,9 +31,9 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.extensions.agents.assistant.agent import AssistantAgent
+from ravi.reasoning.agents.assistant.agent import AssistantAgent
 from ravi.kernel.context.base_context import ModelContext
-from ravi.extensions.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.kernel.messages.client_messages import AssistantMessage

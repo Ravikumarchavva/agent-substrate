@@ -7,8 +7,8 @@ from dataclasses import replace
 
 import pytest
 
-from ravi.extensions.economic import InMemoryBudgetLedger
-from ravi.kernel.economic import (
+from ravi.guardrails.economic import InMemoryBudgetLedger
+from ravi.guardrails.economic import (
     BudgetExhausted,
     BudgetLedger,
     EconomicSignalKind,

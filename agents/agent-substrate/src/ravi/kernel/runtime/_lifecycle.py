@@ -65,7 +65,7 @@ class CheckpointRef:
     primary key, ``checkpoint_id`` identifies the specific snapshot, and
     ``store_uri`` indicates which backend holds it.
 
-    The ``RunCheckpoint`` (in :mod:`ravi.kernel.runtime._checkpoint`) is
+    The ``RunCheckpoint`` (in :mod:`ravi.fabric.checkpoint`) is
     the source-of-truth shape; ``CheckpointRef`` is the lightweight
     locator carried inside :class:`AgentActivationContract`. Use
     :meth:`from_run_checkpoint` to build a ref from a freshly persisted
@@ -91,7 +91,7 @@ class CheckpointRef:
         """Build a ``CheckpointRef`` from a persisted ``RunCheckpoint``.
 
         Accepts the checkpoint as ``object`` to avoid a circular import
-        on :mod:`ravi.kernel.runtime._checkpoint`; the real type contract
+        on :mod:`ravi.fabric.checkpoint`; the real type contract
         is :class:`ravi.kernel.runtime.RunCheckpoint`.
         """
         return cls(

@@ -4,16 +4,16 @@ import pytest
 from typing import Any, Optional
 
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
+from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.extensions.agents.runtime.agent import RuntimeAgent
-from ravi.extensions.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
+from ravi.reasoning.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
 from ravi.kernel.runtime._protocol import AgentRuntime
 from ravi.kernel.runtime._identity import TopicId, AgentId
 from ravi.kernel.runtime._contracts import MessageContext
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.messages.client_messages import AssistantMessage
 from ravi.kernel.agents.agent_result import RunStatus
-from ravi.extensions.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
 
 
 class DummyCatalogTool(BaseTool):

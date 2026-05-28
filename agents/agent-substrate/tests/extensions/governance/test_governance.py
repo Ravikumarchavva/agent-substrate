@@ -16,12 +16,12 @@ import asyncio
 
 import pytest
 
-from ravi.extensions.governance import (
+from ravi.guardrails.governance import (
     InMemoryCoalitionDetector,
     InMemoryGovernancePolicy,
     InMemoryQuarantineActuator,
 )
-from ravi.kernel.governance import (
+from ravi.guardrails.governance import (
     Coalition,
     CoalitionDetector,
     CoalitionKind,

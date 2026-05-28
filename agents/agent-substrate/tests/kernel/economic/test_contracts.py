@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ravi.kernel.economic import (
+from ravi.guardrails.economic import (
     BudgetExhausted,
     EconomicSignal,
     EconomicSignalKind,

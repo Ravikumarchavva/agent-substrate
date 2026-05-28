@@ -48,12 +48,12 @@ from ravi.kernel.runtime import (
     Envelope,
     InMemoryLeaseRegistry,
     LeaseAcquisitionFailed,
-    LocalRuntime,
-    Mailbox,
     MailboxFullError,
     MessageContext,
-    TopicId,
+    TopicId
 )
+from ravi.fabric.runtime.mailbox import Mailbox
+from ravi.fabric.runtime.local import LocalRuntime
 
 
 # ---------------------------------------------------------------------------

@@ -17,14 +17,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ravi.extensions.events import InMemoryEventFabric
-from ravi.extensions.governance._in_memory import (
+from ravi.fabric.events import InMemoryEventFabric
+from ravi.guardrails.governance._in_memory import (
     InMemoryGovernancePolicy,
     InMemoryCoalitionDetector,
     InMemoryQuarantineActuator,
 )
-from ravi.extensions.runtime import DistributedRuntime
-from ravi.extensions.semantics._in_memory import (
+from ravi.fabric.runtime import DistributedRuntime
+from ravi.guardrails.semantic._in_memory import (
     DeterministicSemanticInvariantChecker,
     InMemorySemanticDivergenceDetector,
 )
@@ -33,7 +33,7 @@ from ravi.kernel.control_plane._contracts import (
     LocalFallbackPolicy,
     RegionSpec,
 )
-from ravi.kernel.governance._contracts import (
+from ravi.guardrails.governance._contracts import (
     Coalition,
     CoalitionKind,
     GovernanceAction,
@@ -42,14 +42,14 @@ from ravi.kernel.governance._contracts import (
     GovernancePolicy,
     RiskScore,
 )
-from ravi.kernel.observability._replay import ReplayDenyRule, ReplayRequest
+from ravi.platform.observability.replay import ReplayDenyRule, ReplayRequest
 from ravi.kernel.runtime import AgentId, InMemoryLeaseRegistry, MessageContext
-from ravi.kernel.scheduler._contracts import (
+from ravi.platform.scheduling._contracts import (
     ResourceClaim,
     SlotGrant,
     SlotGrantStatus,
 )
-from ravi.kernel.semantics._contracts import (
+from ravi.guardrails.semantic._contracts import (
     SemanticInvariant,
     SemanticInvariantKind,
     SemanticSeverity,
@@ -417,8 +417,8 @@ class TestRegionLocalRouting:
 
 class TestReplayGate:
     async def test_admit_allows_new_request(self) -> None:
-        from ravi.extensions.observability._in_memory import InMemoryReplayGate
-        from ravi.kernel.observability._replay import ReplayAdmissionStatus
+        from ravi.platform.observability._in_memory import InMemoryReplayGate
+        from ravi.platform.observability.replay import ReplayAdmissionStatus
 
         gate = InMemoryReplayGate()
         req = ReplayRequest(
@@ -433,8 +433,8 @@ class TestReplayGate:
         assert admission.replay_token is not None
 
     async def test_repeat_key_returns_duplicate(self) -> None:
-        from ravi.extensions.observability._in_memory import InMemoryReplayGate
-        from ravi.kernel.observability._replay import ReplayAdmissionStatus
+        from ravi.platform.observability._in_memory import InMemoryReplayGate
+        from ravi.platform.observability.replay import ReplayAdmissionStatus
 
         gate = InMemoryReplayGate()
         req = ReplayRequest(
@@ -450,8 +450,8 @@ class TestReplayGate:
         assert second.replay_token == first.replay_token
 
     async def test_deny_rule_blocks_matching_envelope(self) -> None:
-        from ravi.extensions.observability._in_memory import InMemoryReplayGate
-        from ravi.kernel.observability._replay import ReplayAdmissionStatus
+        from ravi.platform.observability._in_memory import InMemoryReplayGate
+        from ravi.platform.observability.replay import ReplayAdmissionStatus
 
         gate = InMemoryReplayGate()
         rule = ReplayDenyRule(
@@ -471,8 +471,8 @@ class TestReplayGate:
         assert admission.status == ReplayAdmissionStatus.DENIED
 
     async def test_clear_denial_removes_rule(self) -> None:
-        from ravi.extensions.observability._in_memory import InMemoryReplayGate
-        from ravi.kernel.observability._replay import ReplayAdmissionStatus
+        from ravi.platform.observability._in_memory import InMemoryReplayGate
+        from ravi.platform.observability.replay import ReplayAdmissionStatus
 
         gate = InMemoryReplayGate()
         rule = ReplayDenyRule(
@@ -494,7 +494,7 @@ class TestReplayGate:
         assert admission.status == ReplayAdmissionStatus.ALLOWED
 
     async def test_admission_for_returns_prior_decision(self) -> None:
-        from ravi.extensions.observability._in_memory import InMemoryReplayGate
+        from ravi.platform.observability._in_memory import InMemoryReplayGate
 
         gate = InMemoryReplayGate()
         req = ReplayRequest(
@@ -510,7 +510,7 @@ class TestReplayGate:
         assert found.replay_token == original.replay_token
 
     async def test_admission_for_unknown_key_returns_none(self) -> None:
-        from ravi.extensions.observability._in_memory import InMemoryReplayGate
+        from ravi.platform.observability._in_memory import InMemoryReplayGate
 
         gate = InMemoryReplayGate()
         result = await gate.admission_for("no-such-key")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ravi.kernel.safeguards import (
+from ravi.guardrails.mutation import (
     BreakerSnapshot,
     BreakerState,
     CircuitBreaker,

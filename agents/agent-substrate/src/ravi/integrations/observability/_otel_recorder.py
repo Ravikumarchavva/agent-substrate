@@ -30,8 +30,8 @@ from opentelemetry.sdk.trace.export import (
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.trace import StatusCode
 
-from ravi.extensions.observability._in_memory import InMemoryEnvelopeSpanRecorder
-from ravi.kernel.observability._spans import (
+from ravi.platform.observability._in_memory import InMemoryEnvelopeSpanRecorder
+from ravi.platform.observability.spans import (
     EnvelopeSpan,
     SpanQuery,
     SpanStatus,

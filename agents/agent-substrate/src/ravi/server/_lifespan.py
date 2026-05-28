@@ -27,16 +27,16 @@ from ravi.catalog.tools.task_manager.tool import (
 from ravi.configs.settings import Settings
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient
-from ravi.kernel.runtime import LocalRuntime
+from ravi.fabric.runtime.local import LocalRuntime
 from ravi.kernel.storage.base import FileStore
-from ravi.extensions.storage.factory import create_file_store
+from ravi.fabric.storage.factory import create_file_store
 from ravi.kernel.tools.base_tool import BaseTool, ToolRisk
-from ravi.extensions.tools.builtin_tools import (
+from ravi.fabric.tools.builtin_tools import (
     CalculatorTool,
     GetCurrentTimeTool,
     GetBitcoinPriceTool,
 )
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
+from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.integrations.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_embedding_client,
@@ -197,7 +197,7 @@ async def init_infrastructure(
 
     # Vector store + RAG pipeline (pgvector-backed)
     from ravi.integrations.vector.pgvector_store import PgVectorStore
-    from ravi.extensions.rag.pipeline import RAGPipeline
+    from ravi.platform.rag.pipeline import RAGPipeline
 
     vector_store = PgVectorStore(
         session_factory=session_factory,

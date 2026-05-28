@@ -22,9 +22,9 @@ from ravi.kernel.structured.schemas import (
     ExtractionResult,
     RelevanceJudge,
 )
-from ravi.extensions.structured.parse import parse
-from ravi.extensions.structured.judge import LLMJudge
-from ravi.extensions.structured.router import StructuredRouter
+from ravi.reasoning.structured.parse import parse
+from ravi.reasoning.structured.judge import LLMJudge
+from ravi.reasoning.structured.router import StructuredRouter
 from ravi.kernel.guardrails.base_guardrail import (
     GuardrailContext,
     GuardrailType,

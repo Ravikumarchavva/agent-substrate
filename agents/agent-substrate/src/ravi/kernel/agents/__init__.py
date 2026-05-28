@@ -5,7 +5,7 @@ Only abstractions live here. Concrete agent implementations
 :mod:`ravi.extensions.agents`.
 """
 
-from ravi.kernel.agents.actor import ActorAgent, StreamChannel, StreamEnvelope
+from ravi.fabric.actors.actor import ActorAgent, StreamChannel, StreamEnvelope
 from ravi.kernel.agents.config import AgentConfig
 from ravi.kernel.agents.agent_result import (
     AgentRunResult,

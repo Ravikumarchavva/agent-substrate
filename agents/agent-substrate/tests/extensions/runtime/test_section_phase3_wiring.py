@@ -17,15 +17,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ravi.extensions.events import InMemoryEventFabric
-from ravi.extensions.governance._in_memory import InMemoryQuarantineActuator
-from ravi.extensions.observability._in_memory import (
+from ravi.fabric.events import InMemoryEventFabric
+from ravi.guardrails.governance._in_memory import InMemoryQuarantineActuator
+from ravi.platform.observability._in_memory import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
 )
-from ravi.extensions.runtime import DistributedRuntime
-from ravi.extensions.safeguards._in_memory import InMemoryCircuitBreaker
-from ravi.kernel.observability._killswitch import (
+from ravi.fabric.runtime import DistributedRuntime
+from ravi.guardrails.mutation._in_memory import InMemoryCircuitBreaker
+from ravi.guardrails.killswitch import (
     KillSwitchRule,
     KillSwitchScope,
 )
@@ -38,7 +38,7 @@ from ravi.kernel.runtime import (
     PrincipalKind,
 )
 from ravi.kernel.runtime._middleware import DropEnvelope
-from ravi.kernel.safeguards._breaker import CircuitOpen
+from ravi.guardrails.mutation._breaker import CircuitOpen
 
 
 async def _echo_handler(ctx: MessageContext, payload: Any) -> str:
@@ -203,11 +203,11 @@ async def test_span_recorder_captures_successful_dispatch() -> None:
     await rt.stop()
 
     # At least one span should have been recorded.
-    from ravi.kernel.observability._spans import SpanQuery
+    from ravi.platform.observability.spans import SpanQuery
     spans = await recorder.query_spans(SpanQuery())
     assert len(spans) >= 1
     # The finished span should be OK.
-    from ravi.kernel.observability._spans import SpanStatus
+    from ravi.platform.observability.spans import SpanStatus
     assert any(s.status is SpanStatus.OK for s in spans)
 
 
@@ -233,7 +233,7 @@ async def test_span_recorder_marks_failed_on_error() -> None:
     # The kill switch fires BEFORE the span recorder, so no span is emitted —
     # the span recorder only tracks dispatches that pass the kill-switch gate.
     # This test documents that behaviour explicitly.
-    from ravi.kernel.observability._spans import SpanQuery
+    from ravi.platform.observability.spans import SpanQuery
     spans = await recorder.query_spans(SpanQuery())
     assert len(spans) == 0
 

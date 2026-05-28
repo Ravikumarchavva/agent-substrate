@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.messages.client_messages import UserMessage, AssistantMessage
 
 

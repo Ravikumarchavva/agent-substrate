@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
+from ravi.fabric.catalog import AgentCatalogRegistry
 
 from tests.fixtures.fake_tools import EchoTool, AddTool
 
@@ -87,7 +87,7 @@ def test_no_model_registered_returns_none(catalog):
 
 
 def test_register_and_get_memory(catalog):
-    from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+    from ravi.fabric.memory.unbounded import UnboundedMemory
     mem = UnboundedMemory()
     catalog.register_memory("main", mem)
     assert catalog.primary_memory() is mem

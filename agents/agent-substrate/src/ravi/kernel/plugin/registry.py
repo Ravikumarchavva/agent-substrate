@@ -2,7 +2,7 @@
 
 A single in-process registry keyed by ``(category, name)``. Decorators register
 *classes* at import time — instances with configuration are constructed and
-registered separately via :class:`ravi.kernel.agent_catalog.AgentCatalog`.
+registered separately via :class:`ravi.fabric.catalog.AgentCatalog`.
 
 Subclass-check on registration is structural: each category's decorator is
 bound to a base class (ABC or Protocol) and refuses to register classes that
@@ -107,7 +107,7 @@ def unregister(category: str, name: str) -> None:
 # `from ravi.kernel.plugin import register_*` cheap and to avoid circular
 # imports between kernel.plugin and kernel.{agents,guardrails,...}.
 
-from ravi.kernel.agents.actor import ActorAgent
+from ravi.fabric.actors.actor import ActorAgent
 from ravi.kernel.context.base_context import ModelContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient

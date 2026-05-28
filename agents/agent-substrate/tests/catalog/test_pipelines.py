@@ -18,8 +18,8 @@ from ravi.kernel.pipelines.schema import (
     PipelineConfig,
     Position,
 )
-from ravi.extensions.pipelines.codegen import generate_code
-from ravi.extensions.pipelines.runner import WorkflowRunner
+from ravi.orchestration.workflows.codegen import generate_code
+from ravi.orchestration.workflows.runner import WorkflowRunner
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ class TestWorkflowRunner:
             tools_registry=[],
             model_client=_mock_model_client(),
         )
-        from ravi.extensions.agents.assistant.agent import AssistantAgent
+        from ravi.reasoning.agents.assistant.agent import AssistantAgent
 
         assert isinstance(agent, AssistantAgent)
         assert agent.name == "TestAgent"
@@ -382,7 +382,7 @@ class TestWorkflowRunner:
             model_client=_mock_model_client(),
         )
 
-        from ravi.extensions.agents.flow.agent import ParallelFlow, SequentialFlow
+        from ravi.orchestration.agents.flow.agent import ParallelFlow, SequentialFlow
 
         assert isinstance(flow, SequentialFlow)
         assert len(flow.steps) == 3
@@ -402,7 +402,7 @@ class TestWorkflowRunner:
             tools_registry=[],
             model_client=_mock_model_client(),
         )
-        from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+        from ravi.fabric.memory.unbounded import UnboundedMemory
 
         assert isinstance(agent.memory, UnboundedMemory)
 
@@ -453,7 +453,7 @@ class TestWorkflowRunner:
             tools_registry=[],
             model_client=_mock_model_client(),
         )
-        from ravi.extensions.structured.router import StructuredRouter
+        from ravi.reasoning.structured.router import StructuredRouter
 
         assert isinstance(result, StructuredRouter)
 

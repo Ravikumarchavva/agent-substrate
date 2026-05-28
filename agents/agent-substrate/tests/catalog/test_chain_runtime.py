@@ -10,7 +10,7 @@ from ravi.catalog._chain_runtime import (
     _AdapterNamespace,
 )
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
+from ravi.fabric.catalog import AgentCatalogRegistry
 
 
 class _AddTool(BaseTool):

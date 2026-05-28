@@ -7,14 +7,14 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional
 
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
-from ravi.kernel.agent_catalog._catalog import AgentCatalog
+from ravi.fabric.catalog._catalog import AgentCatalog
 from ravi.kernel.context.base_context import ModelContext
-from ravi.extensions.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
 from ravi.kernel.execution.context import ExecutionContext
-from ravi.extensions.guardrails.max_token import MaxTokenGuardrail
+from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.memory.base_memory import BaseMemory
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.messages.base_message import BaseClientMessage
 from ravi.kernel.messages.client_messages import (
     AssistantMessage,
@@ -186,8 +186,8 @@ def create_assistant_agent(  # type: ignore[return]
 
     The caller must ``await agent.start()`` before sending messages to it.
     """
-    from ravi.extensions.agents.assistant.agent import AssistantAgent
-    from ravi.extensions.middleware.guardrails import GuardrailsMiddleware
+    from ravi.reasoning.agents.assistant.agent import AssistantAgent
+    from ravi.reasoning.middleware.guardrails import GuardrailsMiddleware
 
     resolved_context = model_context or SlidingWindowContext(
         max_messages=model_context_window

@@ -1,5 +1,3 @@
-"""core - agents, memory, messages, context, guardrails, tools, runtime, middleware."""
-
 from __future__ import annotations
 
 # Canonical contracts
@@ -49,7 +47,7 @@ from ravi.kernel.middleware.base import (
 from ravi.kernel.middleware.runner import MiddlewarePipeline
 
 # Runtime primitives
-from ravi.kernel.runtime import AgentId, TopicId, AgentRuntime, LocalRuntime, PrincipalId, PrincipalKind, DelegationToken, IdentityContext
+from ravi.kernel.runtime import AgentId, TopicId, AgentRuntime, PrincipalId, PrincipalKind, DelegationToken, IdentityContext
 
 # Dormant agent lifecycle contracts
 from ravi.kernel.runtime import (
@@ -108,7 +106,6 @@ __all__ = [
     "AgentId",
     "TopicId",
     "AgentRuntime",
-    "LocalRuntime",
     "PrincipalId",
     "PrincipalKind",
     "DelegationToken",

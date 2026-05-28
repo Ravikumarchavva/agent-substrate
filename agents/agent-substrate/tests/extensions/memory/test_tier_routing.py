@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from ravi.extensions.memory.session_manager import SessionManager, SessionStatus
+from ravi.reasoning.memory.session import SessionManager, SessionStatus
 from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.integrations.memory.postgres_memory import PostgresMemory
 from ravi.kernel.memory._lineage import LineageStore, ProvenanceTag, LineageRecord, StorageTier

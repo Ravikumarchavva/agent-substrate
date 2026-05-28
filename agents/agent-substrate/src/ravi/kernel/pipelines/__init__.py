@@ -1,7 +1,7 @@
 """ravi.kernel.pipelines — Pipeline schema dataclasses only.
 
 The runtime builder, runners, codegen, workflow middleware, and while/condition
-helpers live in :mod:`ravi.extensions.pipelines`.
+helpers live in :mod:`ravi.orchestration.workflows`.
 """
 
 from __future__ import annotations

@@ -17,7 +17,7 @@ from ravi.integrations.economic._postgres_ledger import (
     EconomicReservation,
     EconomicSignalRow,
 )
-from ravi.kernel.economic import (
+from ravi.guardrails.economic import (
     BudgetExhausted,
     BudgetLedger,
     EconomicSignalKind,

@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.extensions.ranking import InMemoryFeedRanker
-from ravi.kernel.ranking import (
+from ravi.platform.ranking import InMemoryFeedRanker
+from ravi.platform.ranking import (
     FeedRanker,
     FeedRequest,
     RankingCandidate,

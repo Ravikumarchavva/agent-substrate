@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from ravi.extensions.safeguards import InMemoryMutationPolicy
-from ravi.kernel.safeguards import (
+from ravi.guardrails.mutation import InMemoryMutationPolicy
+from ravi.guardrails.mutation import (
     MutationKind,
     MutationPolicy,
     MutationRequest,

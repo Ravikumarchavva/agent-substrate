@@ -6,7 +6,7 @@ import asyncio
 import pytest
 
 from ravi.kernel.agents.agent_result import RunStatus
-from ravi.kernel.runtime._local import LocalRuntime
+from ravi.fabric.runtime.local import LocalRuntime
 
 from tests.fixtures.mock_llm import tool_turn, text_turn
 from tests.fixtures.fake_tools import SlowTool

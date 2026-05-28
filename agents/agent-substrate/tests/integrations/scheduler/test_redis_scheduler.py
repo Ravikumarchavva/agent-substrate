@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ravi.integrations.scheduler import RedisScheduler
-from ravi.kernel.scheduler import (
+from ravi.platform.scheduling import (
     PreemptionReason,
     ResourceClaim,
     SchedulerContract,

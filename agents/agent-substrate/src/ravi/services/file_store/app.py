@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 import redis.asyncio as aioredis
 
 from ravi.configs.settings import Settings
-from ravi.extensions.storage.factory import create_file_store
+from ravi.fabric.storage.factory import create_file_store
 from ravi.services.file_store.models import ServiceBase
 from ravi.services.file_store.routes import router
 from ravi.services.base import create_service_app, init_service_db

@@ -10,7 +10,7 @@ from ravi.catalog._pipeline import (
     PipelineStep,
 )
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
+from ravi.fabric.catalog import AgentCatalogRegistry
 from typing import Any
 
 

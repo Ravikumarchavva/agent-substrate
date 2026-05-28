@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
+from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.kernel.middleware.base import MiddlewareContext, MiddlewareStage
-from ravi.extensions.middleware.governance import GovernanceMiddleware
+from ravi.reasoning.middleware.governance import GovernanceMiddleware
 from ravi.exceptions import GuardrailTripwireError
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
-from ravi.extensions.context.sliding_window import SlidingWindowContext
+from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
 
 
 class DummyTaxTool(BaseTool):

@@ -14,8 +14,8 @@ import asyncio
 
 import pytest
 
-from ravi.extensions.scheduler import InMemoryFairShareScheduler
-from ravi.kernel.scheduler import (
+from ravi.platform.scheduling import InMemoryFairShareScheduler
+from ravi.platform.scheduling import (
     ResourceClaim,
     SchedulerContract,
     SlotGrantStatus,

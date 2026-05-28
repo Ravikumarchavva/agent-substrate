@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ravi.integrations.economic import RedisBudgetLedger
-from ravi.kernel.economic import (
+from ravi.guardrails.economic import (
     BudgetExhausted,
     BudgetLedger,
     EconomicSignalSource,
@@ -354,7 +354,7 @@ class TestSignalsFor:
 
         assert len(signals) == 1
         assert signals[0].principal_fqn == "human/t/w/alice"
-        from ravi.kernel.economic import EconomicSignalKind
+        from ravi.guardrails.economic import EconomicSignalKind
 
         assert signals[0].signal_type == EconomicSignalKind.BUDGET_EXHAUSTED
 

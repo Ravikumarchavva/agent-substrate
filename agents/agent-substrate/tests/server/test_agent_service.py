@@ -300,7 +300,7 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
 async def test_load_agent_no_redis_uses_unbounded_memory():
     """When redis_memory=None, agent falls back to Postgres-only UnboundedMemory."""
     from ravi.server.services.agent_service import load_agent_for_thread
-    from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+    from ravi.fabric.memory.unbounded import UnboundedMemory
 
     captured_memory = {}
 

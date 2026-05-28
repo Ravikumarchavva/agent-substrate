@@ -19,12 +19,12 @@ from abc import abstractmethod
 
 from ravi.kernel.runtime import (
     AgentId,
-    BaseRuntime,
     Envelope,
     MessageContext,
     MessageHandler,
-    TopicId,
+    TopicId
 )
+from ravi.fabric.runtime.base import BaseRuntime
 
 logger = setup_logging()
 

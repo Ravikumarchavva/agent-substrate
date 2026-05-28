@@ -316,7 +316,7 @@ async def test_postgres_memory():
 async def test_session_manager():
     from ravi.integrations.memory.redis_memory import RedisMemory
     from ravi.integrations.memory.postgres_memory import PostgresMemory
-    from ravi.extensions.memory.session_manager import (
+    from ravi.reasoning.memory.session import (
         SessionManager,
         SessionStatus,
     )

@@ -6,7 +6,7 @@
 """
 
 from ravi.kernel.memory.base_memory import BaseMemory
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.memory.memory_scope import MemoryScope
 from ravi.kernel.memory.message_serializer import (
     serialize_message,

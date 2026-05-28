@@ -1,73 +1,3 @@
-"""Actor-based agent runtime primitives.
-
-Public API::
-
-    from ravi.kernel.runtime import (
-        # Identity
-        AgentId,
-        TopicId,
-        PrincipalId,
-        PrincipalKind,
-        TrustTier,
-        LifecycleState,
-        # Protocol
-        AgentRuntime,
-        # Base class
-        BaseRuntime,
-        # Contracts
-        CancellationToken,
-        Envelope,
-        MessageContext,
-        MessageHandler,
-        RuntimeRef,
-        Subscription,
-        # Streaming
-        StreamDone,
-        StreamPublisher,
-        # Supervisor
-        RestartPolicy,
-        Supervisor,
-        SupervisorEscalation,
-        # Dispatcher
-        Dispatcher,
-        AgentNotFoundError,
-        # Mailbox
-        Mailbox,
-        MailboxFullError,
-        # Resource Locking
-        ResourceLockManager,
-        LockHandle,
-        LockMode,
-        ResourceConflictError,
-        DeadlockDetectedError,
-        # Client Channel
-        ClientWriteChannel,
-        ClientFrame,
-        WriteLane,
-        # Saga
-        SagaCoordinator,
-        SagaRecord,
-        SagaStep,
-        SagaFailedError,
-        # Checkpointing
-        RunCheckpoint,
-        CheckpointStore,
-        InMemoryCheckpointStore,
-        CheckpointStatus,
-        # Default runtime
-        LocalRuntime,
-        HandlerError,
-        # Dormant agent lifecycle contracts
-        AgentLifecycleState,
-        ActivationTrigger,
-        ExecutionLease,
-        CheckpointRef,
-        AgentActivationContract,
-        Checkpointable,
-        ActivationAware,
-    )
-"""
-
 from __future__ import annotations
 
 # Identity value-objects
@@ -82,9 +12,6 @@ from ravi.kernel.runtime._identity import (
 
 # Protocol
 from ravi.kernel.runtime._protocol import AgentRuntime
-
-# Base runtime
-from ravi.kernel.runtime._base import BaseRuntime
 
 # Contracts (typed data structures)
 from ravi.kernel.runtime._contracts import (
@@ -134,42 +61,8 @@ from ravi.kernel.runtime._middleware import (
     RoutingMiddlewareRejection,
 )
 
-# Infrastructure
-from ravi.kernel.runtime._mailbox import Mailbox
-from ravi.kernel.runtime._dispatcher import Dispatcher
-from ravi.kernel.runtime._supervisor import Supervisor
-
-# Resource locking
-from ravi.kernel.runtime._resource_lock import (
-    LockHandle,
-    LockMode,
-    ResourceLockManager,
-)
-
-# Client write channel
-from ravi.kernel.runtime._client_channel import (
-    ClientFrame,
-    ClientWriteChannel,
-    WriteLane,
-)
-
-# Saga coordinator
-from ravi.kernel.runtime._saga import (
-    SagaCoordinator,
-    SagaRecord,
-    SagaStep,
-)
-
-# Hierarchical checkpointing
-from ravi.kernel.runtime._checkpoint import (
-    CheckpointStatus,
-    CheckpointStore,
-    InMemoryCheckpointStore,
-    RunCheckpoint,
-)
-
-# Default runtime
-from ravi.kernel.runtime._local import LocalRuntime
+# Streaming
+from ravi.kernel.runtime._stream import StreamPublisher
 
 # Dormant agent lifecycle contracts
 from ravi.kernel.runtime._lifecycle import (
@@ -182,9 +75,6 @@ from ravi.kernel.runtime._lifecycle import (
     ExecutionLease,
 )
 
-# Streaming
-from ravi.kernel.runtime._stream import StreamPublisher
-
 __all__ = [
     # Identity
     "AgentId",
@@ -195,8 +85,6 @@ __all__ = [
     "IdentityContext",
     # Protocol
     "AgentRuntime",
-    # Base class
-    "BaseRuntime",
     # Contracts
     "CancellationToken",
     "Envelope",
@@ -207,16 +95,9 @@ __all__ = [
     # Streaming
     "StreamDone",
     "StreamPublisher",
-    # Supervisor
+    # Supervisor / Dispatcher
     "RestartPolicy",
-    "Supervisor",
-    "SupervisorEscalation",
-    # Dispatcher
-    "Dispatcher",
     "AgentNotFoundError",
-    # Mailbox
-    "Mailbox",
-    "MailboxFullError",
     # Backpressure
     "BackpressureAction",
     "BackpressurePolicy",
@@ -231,32 +112,16 @@ __all__ = [
     "DropEnvelope",
     "RoutingMiddleware",
     "RoutingMiddlewareRejection",
-    # Resource Locking
-    "ResourceLockManager",
-    "LockHandle",
-    "LockMode",
-    "ResourceConflictError",
-    "DeadlockDetectedError",
-    # Client Channel
-    "ClientWriteChannel",
-    "ClientFrame",
-    "WriteLane",
-    # Saga
-    "SagaCoordinator",
-    "SagaRecord",
-    "SagaStep",
-    "SagaFailedError",
-    # Checkpointing
-    "RunCheckpoint",
-    "CheckpointStore",
-    "InMemoryCheckpointStore",
-    "CheckpointStatus",
-    "CheckpointCorruptedError",
     # Errors
     "HandlerError",
     "EnvelopeExpiredError",
-    # Default runtime
-    "LocalRuntime",
+    "CheckpointCorruptedError",
+    "DeadlockDetectedError",
+    "LeaseAcquisitionFailed",
+    "MailboxFullError",
+    "ResourceConflictError",
+    "SagaFailedError",
+    "SupervisorEscalation",
     # Dormant agent lifecycle contracts
     "AgentLifecycleState",
     "ActivationTrigger",

@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Awaitable, Callable, List, Optional
 
-from ravi.kernel.execution.pipeline import ExecutionMiddlewarePipeline
+from ravi.reasoning.middleware.pipeline import ExecutionMiddlewarePipeline
 from ravi.kernel.middleware.base import BaseMiddleware, MiddlewareContext
 
 logger = logging.getLogger(__name__)

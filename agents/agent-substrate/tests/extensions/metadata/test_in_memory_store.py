@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ravi.extensions.metadata import InMemoryMetadataStore
+from ravi.fabric.metadata import InMemoryMetadataStore
 from ravi.kernel.metadata import (
     KeyNotFoundError,
     MetadataStore,

@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ravi.extensions.safeguards import InMemoryCircuitBreaker
-from ravi.kernel.safeguards import BreakerState, CircuitBreaker, CircuitOpen
+from ravi.guardrails.mutation import InMemoryCircuitBreaker
+from ravi.guardrails.mutation import BreakerState, CircuitBreaker, CircuitOpen
 
 UTC = timezone.utc
 

@@ -20,8 +20,8 @@ from typing import Any
 
 import pytest
 
-from ravi.extensions.events import InMemoryEventFabric
-from ravi.extensions.runtime import DistributedRuntime
+from ravi.fabric.events import InMemoryEventFabric
+from ravi.fabric.runtime import DistributedRuntime
 from ravi.kernel.runtime import (
     AgentId,
     AgentLifecycleState,

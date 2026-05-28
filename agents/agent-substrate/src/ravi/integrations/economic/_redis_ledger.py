@@ -28,7 +28,7 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from ravi.kernel.economic import (
+from ravi.guardrails.economic import (
     BudgetExhausted,
     EconomicSignal,
     EconomicSignalKind,

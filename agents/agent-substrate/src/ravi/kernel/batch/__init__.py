@@ -1,6 +1,6 @@
 """ravi.kernel.batch — Batch processing config dataclasses only.
 
-The ``BatchProcessor`` lives in :mod:`ravi.extensions.batch`.
+The ``BatchProcessor`` lives in :mod:`ravi.platform.batch`.
 """
 
 from __future__ import annotations

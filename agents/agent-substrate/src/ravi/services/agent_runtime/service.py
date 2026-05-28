@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from ravi.extensions.agents.assistant.agent import AssistantAgent
-from ravi.extensions.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
 from ravi.kernel.execution.context import ExecutionContext
 from ravi.kernel.memory.base_memory import BaseMemory
 from ravi.kernel.messages.client_messages import (

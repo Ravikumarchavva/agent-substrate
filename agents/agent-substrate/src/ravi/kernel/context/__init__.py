@@ -1,7 +1,7 @@
 """ravi.kernel.context — ModelContext contract.
 
 Concrete strategies (``SlidingWindowContext``, ``RedisModelContext``,
-``HybridContext``, …) live in :mod:`ravi.extensions.context`.
+``HybridContext``, …) live in :mod:`ravi.reasoning.memory.context`.
 """
 
 from __future__ import annotations

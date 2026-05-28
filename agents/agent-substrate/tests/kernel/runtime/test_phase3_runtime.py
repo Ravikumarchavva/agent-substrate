@@ -9,15 +9,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ravi.kernel.agent_catalog import AgentCatalog
+from ravi.fabric.catalog import AgentCatalog
 from ravi.kernel.runtime import (
     AgentId,
-    LocalRuntime,
     MessageContext,
     StreamDone,
     StreamPublisher,
-    TopicId,
+    TopicId
 )
+from ravi.fabric.runtime.local import LocalRuntime
 from ravi.kernel.tools.base_tool import BaseTool, HitlMode, ToolResult, ToolRisk
 from ravi.catalog.tools._tool_executor import ToolExecutorHandler
 from ravi.catalog.tools.human_input.tool import (

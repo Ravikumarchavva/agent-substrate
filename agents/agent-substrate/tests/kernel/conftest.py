@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.kernel.agent_catalog import AgentCatalogRegistry
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.catalog import AgentCatalogRegistry
+from ravi.fabric.memory.unbounded import UnboundedMemory
 from tests.fixtures.mock_llm import MockLLMClient
 
 

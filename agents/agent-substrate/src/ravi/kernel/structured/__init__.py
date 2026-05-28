@@ -1,7 +1,7 @@
 """ravi.kernel.structured — Structured output result types and schemas.
 
 The kernel exposes only the *result* and *schema* primitives. Concrete
-parsers and judges live in ``ravi.extensions.structured``.
+parsers and judges live in ``ravi.reasoning.structured``.
 
 Public API::
 

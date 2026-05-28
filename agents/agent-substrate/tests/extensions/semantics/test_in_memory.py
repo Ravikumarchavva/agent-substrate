@@ -6,11 +6,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from ravi.extensions.semantics import (
+from ravi.guardrails.semantic import (
     DeterministicSemanticInvariantChecker,
     InMemorySemanticDivergenceDetector,
 )
-from ravi.kernel.semantics import (
+from ravi.guardrails.semantic import (
     SemanticDivergenceDetector,
     SemanticInvariant,
     SemanticInvariantChecker,

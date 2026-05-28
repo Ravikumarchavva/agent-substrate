@@ -5,7 +5,7 @@ from typing import Any, Optional
 from pydantic import BaseModel
 
 from ravi.kernel.execution.context import ExecutionContext
-from ravi.extensions.pipelines.middleware import (
+from ravi.orchestration.workflows.middleware import (
     BaseWorkflowMiddleware,
     WorkflowMiddlewareContext,
     WorkflowRunnable,

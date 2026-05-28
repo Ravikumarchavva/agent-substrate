@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from ravi.kernel.semantics import (
+from ravi.guardrails.semantic import (
     InvariantEvaluationResult,
     SemanticDivergence,
     SemanticDivergenceDetector,

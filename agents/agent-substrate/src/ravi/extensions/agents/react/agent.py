@@ -468,6 +468,33 @@ class ReActAgent(BaseAgent):
             return self.execution_context.run_id
         return str(uuid4())
 
+    async def _record_lineage(
+        self,
+        msg: BaseClientMessage,
+        parent_message_id: Optional[str] = None,
+        tool_call_id: Optional[str] = None,
+    ) -> None:
+        """Tag message write with lineage causal provenance DAG metadata."""
+        try:
+            session_mgr = self._catalog.resolve("session_manager")
+        except Exception:
+            session_mgr = None
+            
+        if session_mgr is None or not hasattr(session_mgr, "record_lineage"):
+            return
+            
+        from ravi.kernel.memory._lineage import ProvenanceTag
+        prov = ProvenanceTag(
+            agent_fqn=self.name,
+            activation_id=getattr(self, "_current_run_id", "unknown"),
+            timestamp_utc=datetime.now(timezone.utc).isoformat(),
+            tool_call_id=tool_call_id,
+            parent_message_id=parent_message_id,
+            trust_score=None,
+        )
+        session_id = getattr(self, "_session_id", self.name)
+        await session_mgr.record_lineage(session_id, msg.id, prov)
+
     @staticmethod
     def _resolve_requested_tool_choice(
         tool_schemas: List[JsonObject],
@@ -573,6 +600,8 @@ class ReActAgent(BaseAgent):
 
                 # 1. Add user message (system instructions travel via kwarg, not memory)
                 await self.memory.add_message(persisted_user_message)
+                await self._record_lineage(persisted_user_message)
+                last_msg_id = persisted_user_message.id
 
                 # 2. ReAct loop
                 for step_num in range(1, self.max_iterations + 1):
@@ -626,6 +655,8 @@ class ReActAgent(BaseAgent):
 
                         usage.add(response.usage)
                         await self.memory.add_message(response)
+                        await self._record_lineage(response, parent_message_id=last_msg_id)
+                        last_msg_id = response.id
 
                         thought_content = response.content if response.content else None
 
@@ -672,6 +703,11 @@ class ReActAgent(BaseAgent):
                                 tool_msg = build_tool_blocked_message(parsed, e.message)
                                 record = build_tool_blocked_record(parsed, e.message)
                                 await self.memory.add_message(tool_msg)
+                                await self._record_lineage(
+                                    tool_msg, 
+                                    parent_message_id=last_msg_id, 
+                                    tool_call_id=parsed.id
+                                )
                                 tool_records.append(record)
                                 tool_calls_by_name[parsed.name] = (
                                     tool_calls_by_name.get(parsed.name, 0) + 1
@@ -683,6 +719,11 @@ class ReActAgent(BaseAgent):
                                 parsed, step_num
                             )
                             await self.memory.add_message(tool_msg)
+                            await self._record_lineage(
+                                tool_msg, 
+                                parent_message_id=last_msg_id, 
+                                tool_call_id=parsed.id
+                            )
                             tool_records.append(record)
 
                             tool_calls_by_name[parsed.name] = (

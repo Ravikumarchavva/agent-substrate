@@ -7,6 +7,7 @@ from ravi.integrations.memory.postgres_memory import (
     MemoryMessage,
 )
 from ravi.integrations.memory.lineage_postgres import PostgresLineageStore
+from ravi.integrations.memory.lineage_s3 import S3LineageStore
 
 __all__ = [
     "RedisMemory",
@@ -14,4 +15,5 @@ __all__ = [
     "MemorySession",
     "MemoryMessage",
     "PostgresLineageStore",
+    "S3LineageStore",
 ]

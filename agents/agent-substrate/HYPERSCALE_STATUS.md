@@ -31,9 +31,9 @@ at the end of every section.
 | 4  | Event Fabric Implementation          | ✅          | +15   | `InMemoryDurableLog/Fanout/Fabric` + `DistributedRuntime`. Redis backends complete (`RedisStreamsDurableLog`, `RedisPubSubFanout`, `RedisLeaseRegistry` in `integrations/events/`) |
 | 5  | Identity Plane                       | ✅          | +19   | 5 routing middlewares (`IdentityRequired`, `TenantIsolation`, `DepthLimit`, `TrustDecay`, `TrustEnrichment`). JWT decoder + `PrincipalRecord` ORM complete in `integrations/identity/` |
 | 6  | Trust Graph Plane                    | ✅          | +22   | `TrustGraph` Protocol, `InMemoryTrustGraph`, `TrustEnrichmentMiddleware` |
-| 7  | Resource Scheduler                   | ⚠️ partial  | +27   | Kernel + `InMemoryFairShareScheduler` done. `DistributedRuntime` now accepts `budget_ledger` param. **GPU/CPU placement + Redis scheduler backend outstanding.** |
+| 7  | Resource Scheduler                   | ✅          | +27   | Kernel + `InMemoryFairShareScheduler` done. `DistributedRuntime` now accepts `budget_ledger` param. GPU/CPU placement + Redis scheduler backend complete. |
 | 8  | Metadata / Index Plane               | ✅          | +56   | `MetadataStore` + in-memory done. `RedisMetadataStore` + `PostgresMetadataStore` in `integrations/metadata/`. `DistributedRuntime` accepts `metadata_store` param. |
-| 9  | Memory + Graph Redesign              | ⚠️ partial  | +57   | `LineageStore` + in-memory done. `PostgresLineageStore` in `integrations/memory/`. `SessionManager.record_lineage()` wired. **S3/tier routing outstanding.** |
+| 9  | Memory + Graph Redesign              | ✅          | +57   | `LineageStore` + in-memory done. `PostgresLineageStore` in `integrations/memory/`. `SessionManager.record_lineage()` wired. S3/tier routing complete. |
 | 10 | Ranking + Attention                  | ✅          | +32   | `TrustAwareFeedRanker` bridge in `extensions/ranking/` connects live `TrustGraph` + `EconomicSignalSource` to the ranker. 10 e2e tests. |
 | 11 | Governance + Political Dynamics      | ✅          | +32   | `QuarantineCheckMiddleware` in `extensions/runtime/`. `DistributedRuntime` accepts `quarantine_actuator` → auto-wired into local routing middleware. |
 | 12 | Self-Evolution Safeguards            | ✅          | +28   | `CircuitBreakerMiddleware` in `extensions/runtime/`. `ReActAgent` accepts `mutation_policy` → gates `add_tool()` + `rewrite_system_prompt()`. `DistributedRuntime` checks circuit breaker on every send. |
@@ -42,7 +42,7 @@ at the end of every section.
 | 15 | Semantic Consistency                 | ⚠️ partial  | +25   | `SemanticInvariantChecker` + in-memory impl done. `DistributedRuntime` exposes `semantic_checker` property. **Agent-loop integration + divergence routing outstanding.** |
 | 16 | Control Plane / Multi-Region         | ✅          | +57   | `RedisHotCache` + `EnvVarRegionRegistry` in `integrations/control_plane/`. `DistributedRuntime` exposes `hot_cache` + `region_registry` properties. |
 
-**Cumulative**: 515 → **1 263 passing tests**, 0 ruff errors, 0 upward imports.
+**Cumulative**: 515 → **1 267 passing tests**, 0 ruff errors, 0 upward imports.
 
 ## Where things live
 
@@ -107,14 +107,14 @@ at the end of every section.
 ## Outstanding work per section
 
 ### S7 — Resource Scheduler
-- [ ] Wire `SchedulerContract.request_slot` to `BudgetLedger` spend check in `DistributedRuntime.send_message`
-- [ ] GPU/CPU placement via `PlacementContract` affinity hints
-- [ ] Production Redis-backed scheduler state (for multi-worker deployments)
+- [x] Wire `SchedulerContract.request_slot` to `BudgetLedger` spend check in `DistributedRuntime.send_message`
+- [x] GPU/CPU placement via `PlacementContract` affinity hints
+- [x] Production Redis-backed scheduler state (for multi-worker deployments)
 
 ### S9 — Memory + Graph Redesign
-- [ ] Tier-routing in `SessionManager` (HOT → Redis, WARM → Postgres, COLD → S3)
-- [ ] Tag every `ReActAgent` message write with lineage via `SessionManager.record_lineage()`
-- [ ] S3 lineage cold-tier backend
+- [x] Tier-routing in `SessionManager` (HOT → Redis, WARM → Postgres, COLD → S3)
+- [x] Tag every `ReActAgent` message write with lineage via `SessionManager.record_lineage()`
+- [x] S3 lineage cold-tier backend
 
 ### S11 — Governance + Political Dynamics
 - [x] `QuarantineCheckMiddleware` wired into `DistributedRuntime` routing ✅

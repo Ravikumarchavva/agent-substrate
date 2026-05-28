@@ -96,6 +96,8 @@ class ResourceClaim:
     """Higher value = higher urgency within the same share class."""
     placement_region: str | None = None
     """Optional region preference for multi-region deployments."""
+    gpu_required: bool = False
+    """True if this claim requires GPU placement."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,6 +179,13 @@ class SchedulerContract(Protocol):
 
         Dequeues the next waiting :class:`ResourceClaim` if any.  No-op when
         ``grant_id`` is unknown or already released.
+        """
+        ...
+
+    async def wait_for_slot(self, grant_id: str) -> None:
+        """Suspend execution until the queued grant ``grant_id`` is promoted to active.
+
+        Returns immediately if the grant is already active or not found.
         """
         ...
 

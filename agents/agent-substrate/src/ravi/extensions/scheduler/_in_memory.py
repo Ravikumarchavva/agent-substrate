@@ -26,6 +26,7 @@ held across ``await``.
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import uuid
 from collections import deque
@@ -55,7 +56,7 @@ def _iso_now() -> str:
 class _ActiveGrant:
     """Internal record for a running slot."""
 
-    __slots__ = ("grant_id", "principal_fqn", "weight", "priority", "granted_at")
+    __slots__ = ("grant_id", "principal_fqn", "weight", "priority", "granted_at", "gpu_required")
 
     def __init__(
         self,
@@ -63,12 +64,14 @@ class _ActiveGrant:
         principal_fqn: str,
         weight: float,
         priority: int,
+        gpu_required: bool = False,
     ) -> None:
         self.grant_id = grant_id
         self.principal_fqn = principal_fqn
         self.weight = weight
         self.priority = priority
         self.granted_at = datetime.now(UTC)
+        self.gpu_required = gpu_required
 
 
 class InMemoryFairShareScheduler:
@@ -87,11 +90,13 @@ class InMemoryFairShareScheduler:
         self,
         *,
         max_slots: int = _DEFAULT_MAX_SLOTS,
+        max_gpu_slots: int = 4,
         allow_preemption: bool = False,
     ) -> None:
         if max_slots <= 0:
             raise ValueError(f"max_slots must be > 0, got {max_slots!r}")
         self._max_slots = max_slots
+        self._max_gpu_slots = max_gpu_slots
         self._allow_preemption = allow_preemption
         self._lock = threading.RLock()
         # grant_id → _ActiveGrant
@@ -102,6 +107,8 @@ class InMemoryFairShareScheduler:
         self._preemptions: dict[str, PreemptionSignal] = {}
         # per-principal share weights
         self._weights: dict[str, float] = {}
+        # grant_id → asyncio.Event
+        self._events: dict[str, asyncio.Event] = {}
 
     # ------------------------------------------------------------------
     # SchedulerContract protocol
@@ -117,14 +124,16 @@ class InMemoryFairShareScheduler:
         grant_id = uuid.uuid4().hex
         with self._lock:
             weight = self._weights.get(claim.principal_fqn, claim.share_weight)
+            active_gpu = sum(1 for g in self._active.values() if g.gpu_required)
 
-            if len(self._active) < self._max_slots:
+            if len(self._active) < self._max_slots and (not claim.gpu_required or active_gpu < self._max_gpu_slots):
                 # Pool has capacity — grant immediately.
                 self._active[grant_id] = _ActiveGrant(
                     grant_id=grant_id,
                     principal_fqn=claim.principal_fqn,
                     weight=weight,
                     priority=claim.priority,
+                    gpu_required=claim.gpu_required,
                 )
                 return SlotGrant(
                     grant_id=grant_id,
@@ -154,6 +163,7 @@ class InMemoryFairShareScheduler:
                         principal_fqn=claim.principal_fqn,
                         weight=weight,
                         priority=claim.priority,
+                        gpu_required=claim.gpu_required,
                     )
                     return SlotGrant(
                         grant_id=grant_id,
@@ -167,6 +177,7 @@ class InMemoryFairShareScheduler:
             # Enqueue the claim.
             queue_pos = len(self._queue)
             self._queue.append((claim, grant_id))
+            self._events[grant_id] = asyncio.Event()
             return SlotGrant(
                 grant_id=grant_id,
                 principal_fqn=claim.principal_fqn,
@@ -181,17 +192,42 @@ class InMemoryFairShareScheduler:
             self._active.pop(grant_id, None)
             self._preemptions.pop(grant_id, None)
 
-            if self._queue and len(self._active) < self._max_slots:
-                queued_claim, queued_grant_id = self._queue.popleft()
-                weight = self._weights.get(
-                    queued_claim.principal_fqn, queued_claim.share_weight
-                )
-                self._active[queued_grant_id] = _ActiveGrant(
-                    grant_id=queued_grant_id,
-                    principal_fqn=queued_claim.principal_fqn,
-                    weight=weight,
-                    priority=queued_claim.priority,
-                )
+            # Promote waiting claims from the queue that fit
+            temp_queue = deque(self._queue)
+            self._queue.clear()
+
+            while temp_queue:
+                queued_claim, queued_grant_id = temp_queue.popleft()
+                active_gpu = sum(1 for g in self._active.values() if g.gpu_required)
+
+                if len(self._active) < self._max_slots and (not queued_claim.gpu_required or active_gpu < self._max_gpu_slots):
+                    # Promote
+                    weight = self._weights.get(
+                        queued_claim.principal_fqn, queued_claim.share_weight
+                    )
+                    self._active[queued_grant_id] = _ActiveGrant(
+                        grant_id=queued_grant_id,
+                        principal_fqn=queued_claim.principal_fqn,
+                        weight=weight,
+                        priority=queued_claim.priority,
+                        gpu_required=queued_claim.gpu_required,
+                    )
+                    event = self._events.pop(queued_grant_id, None)
+                    if event is not None:
+                        event.set()
+                else:
+                    self._queue.append((queued_claim, queued_grant_id))
+
+    async def wait_for_slot(self, grant_id: str) -> None:
+        """Suspend execution until the queued grant ``grant_id`` is promoted to active."""
+        event = None
+        with self._lock:
+            if grant_id in self._active:
+                return
+            event = self._events.get(grant_id)
+
+        if event is not None:
+            await event.wait()
 
     async def check_preemption(self, grant_id: str) -> PreemptionSignal | None:
         """Return a pending preemption signal or ``None`` if clear."""

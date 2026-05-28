@@ -18,6 +18,8 @@ from __future__ import annotations
 import logging
 from dataclasses import replace
 
+from typing import TYPE_CHECKING
+
 from ravi.kernel.contracts._coordination import TrustContext, TrustLevel
 from ravi.kernel.contracts._trust import TrustGraph
 from ravi.kernel.runtime._contracts import Envelope
@@ -27,10 +29,16 @@ from ravi.kernel.runtime._middleware import (
     RoutingMiddlewareRejection,
 )
 
+if TYPE_CHECKING:
+    from ravi.kernel.governance._contracts import QuarantineActuator
+    from ravi.kernel.safeguards._breaker import CircuitBreaker
+
 __all__ = [
-    "IdentityRequiredMiddleware",
-    "TenantIsolationMiddleware",
+    "CircuitBreakerMiddleware",
     "DepthLimitMiddleware",
+    "IdentityRequiredMiddleware",
+    "QuarantineCheckMiddleware",
+    "TenantIsolationMiddleware",
     "TrustDecayMiddleware",
     "TrustEnrichmentMiddleware",
 ]
@@ -310,3 +318,74 @@ class TrustEnrichmentMiddleware:
             score=score.value,
             level=_level_for_score(score.value),
         )
+
+
+# ---------------------------------------------------------------------------
+# Quarantine check
+# ---------------------------------------------------------------------------
+
+
+class QuarantineCheckMiddleware:
+    """Enforce governance quarantine — drop envelopes from quarantined principals.
+
+    Checks the sender's principal FQN against the :class:`QuarantineActuator`.
+    Raises :class:`DropEnvelope` when the sender is currently quarantined so
+    the envelope never reaches the handler.
+
+    Place *after* :class:`IdentityRequiredMiddleware` so ``envelope.identity``
+    is guaranteed non-None when this check fires.
+    """
+
+    name = "quarantine_check"
+
+    def __init__(self, *, quarantine_actuator: QuarantineActuator) -> None:
+        self._actuator = quarantine_actuator
+
+    async def __call__(self, envelope: Envelope) -> None:
+        if envelope.identity is None:
+            return  # IdentityRequired runs upstream; skip if somehow absent.
+
+        principal = envelope.identity.principal
+        if await self._actuator.is_quarantined(principal.fqn):
+            raise DropEnvelope(
+                self.name,
+                f"principal {principal.fqn!r} is quarantined",
+            )
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker
+# ---------------------------------------------------------------------------
+
+
+class CircuitBreakerMiddleware:
+    """Gate dispatch through a per-principal :class:`CircuitBreaker`.
+
+    Raises :class:`DropEnvelope` when the sender's circuit is open (too many
+    recent failures) so that a misbehaving or compromised principal cannot
+    hammer the rest of the fabric.
+
+    Place *after* :class:`IdentityRequiredMiddleware` so ``envelope.identity``
+    is guaranteed non-None when this check fires.  When no identity is
+    present the middleware is a no-op.
+    """
+
+    name = "circuit_breaker"
+
+    def __init__(self, *, circuit_breaker: CircuitBreaker) -> None:
+        self._breaker = circuit_breaker
+
+    async def __call__(self, envelope: Envelope) -> None:
+        if envelope.identity is None:
+            return
+
+        from ravi.kernel.safeguards._breaker import CircuitOpen  # local to avoid kernel→extensions
+
+        principal_fqn = envelope.identity.principal.fqn
+        try:
+            await self._breaker.allow_request(principal_fqn)
+        except CircuitOpen as exc:
+            raise DropEnvelope(
+                self.name,
+                f"circuit open for {principal_fqn!r}: {exc.reason}",
+            ) from exc

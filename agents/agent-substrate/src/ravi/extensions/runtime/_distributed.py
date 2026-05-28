@@ -37,7 +37,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ravi.kernel.contracts._event import EventEnvelope
 from ravi.kernel.events._fabric import (
@@ -61,6 +61,16 @@ from ravi.kernel.runtime import (
     RestartPolicy,
     TopicId,
 )
+
+if TYPE_CHECKING:
+    from ravi.kernel.economic._ledger import BudgetLedger
+    from ravi.kernel.governance._contracts import QuarantineActuator
+    from ravi.kernel.metadata._store import MetadataStore
+    from ravi.kernel.observability._killswitch import OperatorKillSwitch
+    from ravi.kernel.observability._spans import EnvelopeSpanRecorder
+    from ravi.kernel.safeguards._breaker import CircuitBreaker
+    from ravi.kernel.semantics._contracts import SemanticInvariantChecker
+    from ravi.kernel.control_plane._contracts import HotCache, RegionRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +126,16 @@ class DistributedRuntime(BaseRuntime):
         "_remote_send_timeout",
         "_inbox_ready",
         "_reply_ready",
+        # Optional plane-wide service handles (S7–S16)
+        "_budget_ledger",
+        "_circuit_breaker",
+        "_hot_cache",
+        "_kill_switch",
+        "_metadata_store",
+        "_quarantine_actuator",
+        "_region_registry",
+        "_semantic_checker",
+        "_span_recorder",
     )
 
     def __init__(
@@ -131,6 +151,22 @@ class DistributedRuntime(BaseRuntime):
         send_timeout: float | None = 30.0,
         resource_lock_timeout: float | None = 30.0,
         lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
+        # S7 — economic scheduler
+        budget_ledger: BudgetLedger | None = None,
+        # S8 — metadata store (callers read/write via .metadata_store property)
+        metadata_store: MetadataStore | None = None,
+        # S11 — governance: quarantine routing gate
+        quarantine_actuator: QuarantineActuator | None = None,
+        # S12 — self-evolution: per-principal circuit breaker
+        circuit_breaker: CircuitBreaker | None = None,
+        # S14 — observability: envelope span recorder + operator kill switch
+        span_recorder: EnvelopeSpanRecorder | None = None,
+        kill_switch: OperatorKillSwitch | None = None,
+        # S15 — semantic invariant checker (callers invoke via .semantic_checker)
+        semantic_checker: SemanticInvariantChecker | None = None,
+        # S16 — control plane: hot cache + region registry
+        hot_cache: HotCache | None = None,
+        region_registry: RegionRegistry | None = None,
     ) -> None:
         super().__init__(lease_registry=lease_registry, worker_id=worker_id)
         self._fabric = fabric
@@ -151,6 +187,25 @@ class DistributedRuntime(BaseRuntime):
         self._inbox_ready: asyncio.Event | None = None
         self._reply_ready: asyncio.Event | None = None
 
+        # Optional plane-wide service handles
+        self._budget_ledger = budget_ledger
+        self._circuit_breaker = circuit_breaker
+        self._hot_cache = hot_cache
+        self._kill_switch = kill_switch
+        self._metadata_store = metadata_store
+        self._quarantine_actuator = quarantine_actuator
+        self._region_registry = region_registry
+        self._semantic_checker = semantic_checker
+        self._span_recorder = span_recorder
+
+        # Wire quarantine actuator into the local routing middleware so
+        # envelopes from quarantined principals are blocked at the gate.
+        if quarantine_actuator is not None:
+            from ravi.extensions.runtime._middleware import QuarantineCheckMiddleware
+            self._local.add_routing_middleware(
+                QuarantineCheckMiddleware(quarantine_actuator=quarantine_actuator)
+            )
+
     # -- subsystem accessors -----------------------------------------------
 
     @property
@@ -161,6 +216,38 @@ class DistributedRuntime(BaseRuntime):
     @property
     def fabric(self) -> EventFabric:
         return self._fabric
+
+    @property
+    def budget_ledger(self) -> BudgetLedger | None:
+        return self._budget_ledger
+
+    @property
+    def hot_cache(self) -> HotCache | None:
+        return self._hot_cache
+
+    @property
+    def kill_switch(self) -> OperatorKillSwitch | None:
+        return self._kill_switch
+
+    @property
+    def metadata_store(self) -> MetadataStore | None:
+        return self._metadata_store
+
+    @property
+    def quarantine_actuator(self) -> QuarantineActuator | None:
+        return self._quarantine_actuator
+
+    @property
+    def region_registry(self) -> RegionRegistry | None:
+        return self._region_registry
+
+    @property
+    def semantic_checker(self) -> SemanticInvariantChecker | None:
+        return self._semantic_checker
+
+    @property
+    def span_recorder(self) -> EnvelopeSpanRecorder | None:
+        return self._span_recorder
 
     # -- BaseRuntime overrides ---------------------------------------------
 
@@ -230,8 +317,68 @@ class DistributedRuntime(BaseRuntime):
     ) -> object:
         if not self._started:
             await self.start()
+
+        # S14: operator kill-switch check — block before any side effects.
+        if self._kill_switch is not None:
+            from ravi.kernel.observability._killswitch import KillSwitchTarget
+            ks_target = KillSwitchTarget(
+                sender=str(sender) if sender is not None else None,
+                target=str(recipient),
+            )
+            decision = await self._kill_switch.check(ks_target)
+            if decision.blocked:
+                from ravi.kernel.runtime._middleware import DropEnvelope
+                raise DropEnvelope(
+                    "kill_switch",
+                    decision.reason or f"blocked for target {recipient}",
+                )
+
+        # S12: circuit breaker check — reject senders whose circuit is open.
+        if self._circuit_breaker is not None and sender is not None:
+            await self._circuit_breaker.allow_request(str(sender))
+
+        # S14: start an envelope span to trace this dispatch.
+        span_id: str | None = None
+        if self._span_recorder is not None:
+            from ravi.kernel.observability._spans import EnvelopeSpan, SpanStatus
+            span = EnvelopeSpan(
+                envelope_id=uuid.uuid4().hex,
+                correlation_id=uuid.uuid4().hex,
+                name="send_message",
+                sender=str(sender) if sender is not None else None,
+                target=str(recipient),
+            )
+            span = await self._span_recorder.start_span(span)
+            span_id = span.span_id
+
         # Optimistic local path: if we own (or can acquire) the lease, run
         # the message locally without touching the fabric.
+        try:
+            result = await self._try_send(
+                message,
+                sender=sender,
+                recipient=recipient,
+                cancellation_token=cancellation_token,
+            )
+        except Exception:
+            if span_id is not None and self._span_recorder is not None:
+                from ravi.kernel.observability._spans import SpanStatus
+                await self._span_recorder.finish_span(span_id, status=SpanStatus.FAILED)
+            raise
+
+        if span_id is not None and self._span_recorder is not None:
+            from ravi.kernel.observability._spans import SpanStatus
+            await self._span_recorder.finish_span(span_id, status=SpanStatus.OK)
+        return result
+
+    async def _try_send(
+        self,
+        message: object,
+        *,
+        sender: AgentId | None,
+        recipient: AgentId,
+        cancellation_token: CancellationToken | None,
+    ) -> object:
         try:
             return await self._local.send_message(
                 message,

@@ -45,6 +45,7 @@ from ravi.kernel.messages.base_message import BaseClientMessage
 if TYPE_CHECKING:
     from ravi.integrations.memory.redis_memory import RedisMemory
     from ravi.integrations.memory.postgres_memory import PostgresMemory
+    from ravi.kernel.memory._lineage import LineageStore, ProvenanceTag
 
 logger = setup_logging()
 
@@ -91,6 +92,9 @@ class SessionManager:
         postgres: A ``PostgresMemory`` instance (already configured, not yet connected).
         auto_checkpoint_threshold: Number of new messages before auto-flushing to
             Postgres.  ``0`` disables auto-checkpoint.
+        lineage_store: Optional :class:`LineageStore` for provenance tracking.
+            When provided, callers can call :meth:`record_lineage` after each
+            message write to tag it with causal provenance metadata.
     """
 
     def __init__(
@@ -98,10 +102,12 @@ class SessionManager:
         redis: RedisMemory,
         postgres: PostgresMemory,
         auto_checkpoint_threshold: int = 50,
+        lineage_store: LineageStore | None = None,
     ):
         self._redis = redis
         self._postgres = postgres
         self._auto_checkpoint_threshold = auto_checkpoint_threshold
+        self._lineage_store = lineage_store
         # Track how many messages were added since last checkpoint per session
         self._dirty_counts: Dict[str, int] = {}
         # Per-session locks to prevent concurrent checkpoint races
@@ -295,6 +301,25 @@ class SessionManager:
         if await self._redis.exists(session_id):
             return await self._redis.count(session_id)
         return await self._postgres.get_message_count(session_id)
+
+    # -- Lineage tracking -----------------------------------------------------
+
+    async def record_lineage(
+        self,
+        session_id: str,
+        message_id: str,
+        provenance: ProvenanceTag,
+    ) -> None:
+        """Record causal provenance for a message in the configured lineage store.
+
+        No-op when no ``lineage_store`` was provided at construction time.
+        Callers (e.g. ReActAgent) should call this immediately after
+        :meth:`add_message` with the agent FQN, activation ID, and causal
+        parent so lineage is captured alongside the message itself.
+        """
+        if self._lineage_store is None:
+            return
+        await self._lineage_store.record(session_id, message_id, provenance)
 
     # -- Checkpointing --------------------------------------------------------
 

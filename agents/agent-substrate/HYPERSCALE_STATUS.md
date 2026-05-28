@@ -22,27 +22,27 @@ at the end of every section.
 
 ## Section status
 
-| #  | Section                              | Status | Tests added | Notes |
-|----|--------------------------------------|--------|------------:|-------|
-| 1  | Contract Foundation                  | ✅      | (pre)       | `TemporalSemantics`, `LocalityHint`, `Envelope` wired |
-| 2  | Core Fabric Contracts                | ✅      | (pre)       | `PrincipalId`, `IdentityContext`, `AgentLifecycleState`, `DurableEventLog/RealtimeFanout/EventFabric`, `TrustContext`, `PlacementContract` |
-| 0  | Hardening Pass (B1–B10)              | ✅      | +19         | Logger purge, dead fabric removed, `Envelope ⇆ EventEnvelope[T]` unified, `CheckpointRef ⇆ RunCheckpoint` reconciled, `_normalize_content` tightened |
-| 3  | Runtime Redesign                     | ✅      | +24         | `LeaseRegistry`, `BackpressurePolicy`, lifecycle FSM, partition-affinity dispatch, RLock guards |
-| 4  | Event Fabric Implementation          | ⚠️ partial | +15        | `InMemoryDurableLog/Fanout/Fabric` + `DistributedRuntime` proven. **Redis backends still to do.** |
-| 5  | Identity Plane                       | ⚠️ partial | +19        | `RoutingMiddleware` Protocol + `IdentityRequired/TenantIsolation/DepthLimit/TrustDecay`. **JWT decoder + `Principal` ORM still to do.** |
-| 6  | Trust Graph Plane                    | ✅      | +22         | `TrustGraph` Protocol, `InMemoryTrustGraph`, `TrustEnrichmentMiddleware` |
-| 7  | Resource Scheduler                   | 🔲      |             | `FairShareScheduler`, spend authority, preemption, GPU/CPU placement |
-| 8  | Metadata / Index Plane               | 🔲      |             | `MetadataStore` Protocol, Postgres + Redis tiers, hot-key compaction |
-| 9  | Memory + Graph Redesign              | 🔲      |             | `LineageStore`, tier separation (Redis/Postgres/S3), provenance tagging |
-| 10 | Ranking + Attention                  | 🔲      |             | Feed generation, trust-weighted scoring, sybil suppression |
-| 11 | Governance + Political Dynamics      | 🔲      |             | Coalition detection, risk scorer, quarantine actuators |
-| 12 | Self-Evolution Safeguards            | 🔲      |             | `MutationPermission`, family depth ceiling, circuit breakers |
-| 13 | Economic Plane                       | 🔲      |             | `BudgetLedger`, spend enforcement, loop/farming detection |
-| 14 | Observability + Replay               | 🔲      |             | Span-per-envelope, replay gate, operator kill-switch |
-| 15 | Semantic Consistency                 | 🔲      |             | `SemanticInvariant`, invariant checker, divergence detection |
-| 16 | Control Plane / Multi-Region         | 🔲      |             | Cached hot-path reads, local fallbacks, region-local routing |
+| #  | Section                              | Status     | Tests | Notes |
+|----|--------------------------------------|------------|------:|-------|
+| 1  | Contract Foundation                  | ✅          | (pre) | `TemporalSemantics`, `LocalityHint`, `Envelope` wired |
+| 2  | Core Fabric Contracts                | ✅          | (pre) | `PrincipalId`, `IdentityContext`, `AgentLifecycleState`, `DurableEventLog/RealtimeFanout/EventFabric`, `TrustContext`, `PlacementContract` |
+| 0  | Hardening Pass (B1–B10)              | ✅          | +19   | Logger purge, dead fabric removed, `Envelope ⇆ EventEnvelope[T]` unified, `CheckpointRef ⇆ RunCheckpoint` reconciled, `_normalize_content` tightened |
+| 3  | Runtime Redesign                     | ✅          | +24   | `LeaseRegistry`, `BackpressurePolicy`, lifecycle FSM, partition-affinity dispatch, RLock guards |
+| 4  | Event Fabric Implementation          | ✅          | +15   | `InMemoryDurableLog/Fanout/Fabric` + `DistributedRuntime`. Redis backends complete (`RedisStreamsDurableLog`, `RedisPubSubFanout`, `RedisLeaseRegistry` in `integrations/events/`) |
+| 5  | Identity Plane                       | ✅          | +19   | 5 routing middlewares (`IdentityRequired`, `TenantIsolation`, `DepthLimit`, `TrustDecay`, `TrustEnrichment`). JWT decoder + `PrincipalRecord` ORM complete in `integrations/identity/` |
+| 6  | Trust Graph Plane                    | ✅          | +22   | `TrustGraph` Protocol, `InMemoryTrustGraph`, `TrustEnrichmentMiddleware` |
+| 7  | Resource Scheduler                   | ⚠️ partial  | +27   | Kernel + `InMemoryFairShareScheduler` done. `DistributedRuntime` now accepts `budget_ledger` param. **GPU/CPU placement + Redis scheduler backend outstanding.** |
+| 8  | Metadata / Index Plane               | ✅          | +56   | `MetadataStore` + in-memory done. `RedisMetadataStore` + `PostgresMetadataStore` in `integrations/metadata/`. `DistributedRuntime` accepts `metadata_store` param. |
+| 9  | Memory + Graph Redesign              | ⚠️ partial  | +57   | `LineageStore` + in-memory done. `PostgresLineageStore` in `integrations/memory/`. `SessionManager.record_lineage()` wired. **S3/tier routing outstanding.** |
+| 10 | Ranking + Attention                  | ✅          | +32   | `TrustAwareFeedRanker` bridge in `extensions/ranking/` connects live `TrustGraph` + `EconomicSignalSource` to the ranker. 10 e2e tests. |
+| 11 | Governance + Political Dynamics      | ✅          | +32   | `QuarantineCheckMiddleware` in `extensions/runtime/`. `DistributedRuntime` accepts `quarantine_actuator` → auto-wired into local routing middleware. |
+| 12 | Self-Evolution Safeguards            | ✅          | +28   | `CircuitBreakerMiddleware` in `extensions/runtime/`. `ReActAgent` accepts `mutation_policy` → gates `add_tool()` + `rewrite_system_prompt()`. `DistributedRuntime` checks circuit breaker on every send. |
+| 13 | Economic Plane                       | ✅          | +57   | `RedisBudgetLedger` (Lua atomic reserve/commit) + `PostgresBudgetLedger` (row-lock) in `integrations/economic/`. `DistributedRuntime` accepts `budget_ledger` param. |
+| 14 | Observability + Replay               | ✅          | +55   | `OtelEnvelopeSpanRecorder` in `integrations/observability/`. `DistributedRuntime` accepts `span_recorder` + `kill_switch` — span emitted + kill-switch checked on every `send_message`. |
+| 15 | Semantic Consistency                 | ⚠️ partial  | +25   | `SemanticInvariantChecker` + in-memory impl done. `DistributedRuntime` exposes `semantic_checker` property. **Agent-loop integration + divergence routing outstanding.** |
+| 16 | Control Plane / Multi-Region         | ✅          | +57   | `RedisHotCache` + `EnvVarRegionRegistry` in `integrations/control_plane/`. `DistributedRuntime` exposes `hot_cache` + `region_registry` properties. |
 
-**Cumulative**: 515 → **769 passing tests**, 0 ruff errors, 0 upward imports.
+**Cumulative**: 515 → **1 263 passing tests**, 0 ruff errors, 0 upward imports.
 
 ## Where things live
 
@@ -60,64 +60,81 @@ at the end of every section.
 | `RoutingMiddleware`            | [`runtime/_middleware.py`](src/ravi/kernel/runtime/_middleware.py)                        |
 | `DurableEventLog, RealtimeFanout, EventFabric` | [`events/_fabric.py`](src/ravi/kernel/events/_fabric.py)                  |
 | `TrustGraph, TrustScore, ProvenanceChain` | [`contracts/_trust.py`](src/ravi/kernel/contracts/_trust.py)                   |
+| `SchedulerContract, ResourceClaim, SlotGrant, PreemptionSignal` | [`scheduler/_contracts.py`](src/ravi/kernel/scheduler/_contracts.py) |
+| `BudgetLedger, ReservationToken, BudgetExhausted, EconomicSignal` | [`economic/_ledger.py`](src/ravi/kernel/economic/_ledger.py), [`economic/_signals.py`](src/ravi/kernel/economic/_signals.py) |
+| `MetadataStore, MetadataRecord, Tier` | [`metadata/_store.py`](src/ravi/kernel/metadata/_store.py)                    |
+| `LineageStore, LineageRecord, ProvenanceTag, StorageTier` | [`memory/_lineage.py`](src/ravi/kernel/memory/_lineage.py)            |
+| `FeedRanker, FeedRequest, FeedResult, RankingCandidate, RankingPolicy` | [`ranking/_contracts.py`](src/ravi/kernel/ranking/_contracts.py) |
+| `GovernancePolicy, CoalitionDetector, QuarantineActuator, Coalition, RiskScore` | [`governance/_contracts.py`](src/ravi/kernel/governance/_contracts.py) |
+| `MutationPolicy, MutationPermission, MutationRequest` | [`safeguards/_mutation.py`](src/ravi/kernel/safeguards/_mutation.py) |
+| `CircuitBreaker, BreakerState, CircuitOpen` | [`safeguards/_breaker.py`](src/ravi/kernel/safeguards/_breaker.py)         |
+| `EnvelopeSpanRecorder, EnvelopeSpan, SpanStatus` | [`observability/_spans.py`](src/ravi/kernel/observability/_spans.py)     |
+| `ReplayGate, ReplayRequest, ReplayAdmission` | [`observability/_replay.py`](src/ravi/kernel/observability/_replay.py)   |
+| `OperatorKillSwitch, KillSwitchRule, KillSwitchScope` | [`observability/_killswitch.py`](src/ravi/kernel/observability/_killswitch.py) |
+| `SemanticInvariantChecker, SemanticDivergenceDetector, SemanticInvariant` | [`semantics/_contracts.py`](src/ravi/kernel/semantics/_contracts.py) |
+| `RegionRegistry, HotCache, LocalFallbackPolicy, RegionSpec` | [`control_plane/_contracts.py`](src/ravi/kernel/control_plane/_contracts.py) |
 
 ### Extension implementations (this is where new capability lands)
 
 | Module                        | What's there                                                                                  |
-|-------------------------------|------------------------------------------------------------------------------------------------|
-| `extensions/events/`          | `InMemoryDurableLog`, `InMemoryRealtimeFanout`, `InMemoryEventFabric`                          |
-| `extensions/runtime/`         | `DistributedRuntime`, 5 routing middlewares                                                    |
-| `extensions/trust/`           | `InMemoryTrustGraph`                                                                           |
-| `extensions/economic/`        | 🔲 (S13)                                                                                       |
-| `extensions/metadata/`        | 🔲 (S8)                                                                                        |
-| `extensions/safeguards/`      | 🔲 (S12)                                                                                       |
-| `extensions/observability/`   | 🔲 (S14)                                                                                       |
-| `extensions/semantics/`       | 🔲 (S15)                                                                                       |
-| `extensions/scheduler/`       | 🔲 (S7)                                                                                        |
+|-------------------------------|-----------------------------------------------------------------------------------------------|
+| `extensions/events/`          | `InMemoryDurableLog`, `InMemoryRealtimeFanout`, `InMemoryEventFabric`                         |
+| `extensions/runtime/`         | `DistributedRuntime` (with full plane-wide service wiring), 7 routing middlewares (`QuarantineCheck`, `CircuitBreaker` added) |
+| `extensions/trust/`           | `InMemoryTrustGraph`                                                                          |
+| `extensions/scheduler/`       | `InMemoryFairShareScheduler` (S7)                                                             |
+| `extensions/economic/`        | `InMemoryBudgetLedger` (S13)                                                                  |
+| `extensions/metadata/`        | `InMemoryMetadataStore` (S8)                                                                  |
+| `extensions/memory/`          | `InMemoryLineageStore`, `SessionManager` (S9)                                                 |
+| `extensions/ranking/`         | In-memory feed ranker with sybil suppression (S10)                                            |
+| `extensions/governance/`      | In-memory coalition detector + governance policy + quarantine actuator (S11)                  |
+| `extensions/safeguards/`      | `InMemoryMutationPolicy`, `InMemoryCircuitBreaker` (S12)                                      |
+| `extensions/observability/`   | `InMemorySpanRecorder`, `InMemoryReplayGate`, `InMemoryKillSwitch` (S14)                      |
+| `extensions/semantics/`       | `InMemorySemanticDivergenceDetector` (S15)                                                    |
+| `extensions/control_plane/`   | `InMemoryRegionRegistry`, `InMemoryHotCache`, `LowestLatencyFallbackPolicy` (S16)             |
 
-## Standing in-flight deferrals
+### Integration backends (production-grade adapters)
 
-These were deliberately punted as **non-architectural SDK / web-adapter
-work**. They can land any time without disturbing the kernel.
+| Module                        | What's there                                                                                  |
+|-------------------------------|-----------------------------------------------------------------------------------------------|
+| `integrations/events/`        | `RedisStreamsDurableLog`, `RedisPubSubFanout`, `RedisLeaseRegistry` (S4 — complete)           |
+| `integrations/identity/`      | `decode_jwt_to_identity()`, `PrincipalRecord` ORM + `PrincipalNotFound` (S5 — complete)       |
+| `integrations/economic/`      | `RedisBudgetLedger` (Lua scripts for atomic reserve/commit) + `PostgresBudgetLedger` (S13 ✅) |
+| `integrations/metadata/`      | `RedisMetadataStore` + `PostgresMetadataStore` (S8 ✅)                                         |
+| `integrations/memory/`        | `RedisMemory`, `PostgresMemory` (pre-existing); `PostgresLineageStore` (S9)                   |
+| `integrations/observability/` | `OtelEnvelopeSpanRecorder` — bridges kernel spans to OTel SDK / Tempo (S14 ✅)                 |
+| `integrations/control_plane/` | `RedisHotCache` + `EnvVarRegionRegistry` (S16 ✅)                                              |
 
-- **Section 4 (Event Fabric) — Redis backends**: `RedisStreamsDurableLog`,
-  `RedisPubSubFanout`, `RedisLeaseRegistry`. Mechanical: each one wraps a
-  ~150-line `redis.asyncio` call sequence against the same kernel
-  Protocols. Location: `integrations/events/`.
-- **Section 5 (Identity Plane) — Web boundary**: `Principal` ORM model,
-  `PrincipalStore` Protocol, JWT → `IdentityContext` decoder, delegation
-  token persistence. Location: split across `integrations/identity/` and
-  `server/security/`.
+## Outstanding work per section
 
-## Parallelization plan for the remaining sections
+### S7 — Resource Scheduler
+- [ ] Wire `SchedulerContract.request_slot` to `BudgetLedger` spend check in `DistributedRuntime.send_message`
+- [ ] GPU/CPU placement via `PlacementContract` affinity hints
+- [ ] Production Redis-backed scheduler state (for multi-worker deployments)
 
-The following sections can run **in isolation** — they touch separate
-kernel subpackages and separate extension directories, so multiple
-contributors (or subagents) can work simultaneously without merge
-conflict.
+### S9 — Memory + Graph Redesign
+- [ ] Tier-routing in `SessionManager` (HOT → Redis, WARM → Postgres, COLD → S3)
+- [ ] Tag every `ReActAgent` message write with lineage via `SessionManager.record_lineage()`
+- [ ] S3 lineage cold-tier backend
 
-| Track | Section | Kernel subpackage              | Extension subpackage          | Blocks?       |
-|-------|---------|--------------------------------|-------------------------------|---------------|
-| A     | 13 Economic Plane                | `kernel/economic/`            | `extensions/economic/`        | None — S7 will read from it later |
-| B     | 8 Metadata / Index Plane         | `kernel/metadata/`            | `extensions/metadata/`        | None |
-| C     | 12 Self-Evolution Safeguards     | `kernel/safeguards/`          | `extensions/safeguards/`      | None |
-| D     | 14 Observability + Replay        | `kernel/observability/`       | `extensions/observability/`   | None — already imported broadly via `logging` |
-| E     | 15 Semantic Consistency          | `kernel/semantics/`           | `extensions/semantics/`       | None |
+### S11 — Governance + Political Dynamics
+- [x] `QuarantineCheckMiddleware` wired into `DistributedRuntime` routing ✅
+- [ ] Wire `QuarantineActuator` to `SchedulerContract` (revoke slots on quarantine)
+- [ ] Scheduled governance sweep (background task, configurable interval)
 
-Each track creates **new directories**; none modify existing files except
-to add lines to its own `__init__.py`. Top-level `kernel/contracts/__init__.py`
-and `extensions/__init__.py` are reconciled at review time, not by the
-subagents themselves, to avoid concurrent-edit conflicts.
+### S14 — Observability + Replay
+- [x] `OtelEnvelopeSpanRecorder` bridge ✅
+- [x] Span emitted for every `send_message` in `DistributedRuntime` ✅
+- [x] Operator kill-switch checked at `DistributedRuntime.send_message` entry ✅
+- [ ] `ReplayGate` exposed via an admin route in `server/routes/`
 
-Tracks that need sequencing afterwards:
+### S15 — Semantic Consistency
+- [ ] Register invariants in `DistributedRuntime` lifespan and check after every agent step
+- [ ] Emit `SemanticDivergence` events; route high-severity divergences to governance plane (S11)
 
-- **S7 (Resource Scheduler)** reads `BudgetLedger` from S13 → runs after.
-- **S9 (Memory + Graph)** touches `kernel/memory/` which has live
-  references; needs careful surgery and a single owner.
-- **S10 (Ranking)** + **S11 (Governance)** both consume `TrustGraph` (S6,
-  done) plus possibly S13 budget signals — run after S13.
-- **S16 (Multi-Region)** needs the fabric (S4) Redis backends — runs after
-  the Section 4 deferrals close.
+### S16 — Control Plane / Multi-Region
+- [x] `RedisHotCache` + `EnvVarRegionRegistry` in `integrations/control_plane/` ✅
+- [x] Accessible via `DistributedRuntime.hot_cache` / `.region_registry` ✅
+- [ ] Region-local routing in `DistributedRuntime.send_message` using `RegionRegistry.local_region()`
 
 ## Acceptance gates for every section
 

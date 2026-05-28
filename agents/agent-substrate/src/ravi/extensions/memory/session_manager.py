@@ -103,11 +103,13 @@ class SessionManager:
         postgres: PostgresMemory,
         auto_checkpoint_threshold: int = 50,
         lineage_store: LineageStore | None = None,
+        cold_store: LineageStore | None = None,
     ):
         self._redis = redis
         self._postgres = postgres
         self._auto_checkpoint_threshold = auto_checkpoint_threshold
         self._lineage_store = lineage_store
+        self._cold_store = cold_store
         # Track how many messages were added since last checkpoint per session
         self._dirty_counts: Dict[str, int] = {}
         # Per-session locks to prevent concurrent checkpoint races
@@ -379,6 +381,33 @@ class SessionManager:
         self._dirty_counts.pop(session_id, None)
         self._locks.pop(session_id, None)
         logger.info("Session %s permanently deleted", session_id)
+
+    async def archive_session(self, session_id: str) -> None:
+        """Archive a session, moving lineage to COLD tier and clearing HOT."""
+        # Flush to Postgres
+        await self.checkpoint(session_id)
+
+        # Move lineage to cold store
+        if self._lineage_store is not None and self._cold_store is not None:
+            records = await self._lineage_store.list_session(session_id)
+            for record in records:
+                await self._cold_store.record(
+                    session_id,
+                    record.message_id,
+                    record.provenance,
+                )
+            await self._lineage_store.drop_session(session_id)
+
+        # Update status
+        await self._postgres.update_session_status(
+            session_id, SessionStatus.ARCHIVED.value
+        )
+
+        # Clean Redis
+        await self._redis.delete_session(session_id)
+        self._dirty_counts.pop(session_id, None)
+
+        logger.info("Session %s archived to cold tier", session_id)
 
     # -- Query ----------------------------------------------------------------
 

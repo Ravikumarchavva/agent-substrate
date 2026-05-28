@@ -3,7 +3,7 @@
 import asyncio
 from uuid import uuid4
 
-from ravi.kernel.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
+from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.kernel.contracts import (
     CanonicalMessage,
     EventEnvelope,

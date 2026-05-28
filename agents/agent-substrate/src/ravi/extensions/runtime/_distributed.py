@@ -40,6 +40,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Optional
 
 from ravi.kernel.contracts._event import EventEnvelope
+from ravi.kernel.scheduler._contracts import ResourceClaim, SlotGrantStatus, SchedulerContract
 from ravi.kernel.events._fabric import (
     EventDeliveryMode,
     EventFabric,
@@ -134,6 +135,7 @@ class DistributedRuntime(BaseRuntime):
         "_metadata_store",
         "_quarantine_actuator",
         "_region_registry",
+        "_scheduler",
         "_semantic_checker",
         "_span_recorder",
     )
@@ -153,6 +155,7 @@ class DistributedRuntime(BaseRuntime):
         lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
         # S7 — economic scheduler
         budget_ledger: BudgetLedger | None = None,
+        scheduler: SchedulerContract | None = None,
         # S8 — metadata store (callers read/write via .metadata_store property)
         metadata_store: MetadataStore | None = None,
         # S11 — governance: quarantine routing gate
@@ -189,6 +192,7 @@ class DistributedRuntime(BaseRuntime):
 
         # Optional plane-wide service handles
         self._budget_ledger = budget_ledger
+        self._scheduler = scheduler
         self._circuit_breaker = circuit_breaker
         self._hot_cache = hot_cache
         self._kill_switch = kill_switch
@@ -240,6 +244,10 @@ class DistributedRuntime(BaseRuntime):
     @property
     def region_registry(self) -> RegionRegistry | None:
         return self._region_registry
+
+    @property
+    def scheduler(self) -> SchedulerContract | None:
+        return self._scheduler
 
     @property
     def semantic_checker(self) -> SemanticInvariantChecker | None:
@@ -351,6 +359,48 @@ class DistributedRuntime(BaseRuntime):
             span = await self._span_recorder.start_span(span)
             span_id = span.span_id
 
+        # S7: Resource Scheduler integration
+        grant_id: str | None = None
+        reservation = None
+        if self._scheduler is not None:
+            from ravi.kernel.scheduler._contracts import ResourceClaim, SlotGrantStatus
+            
+            sender_fqn = str(sender) if sender is not None else "anonymous"
+            token_budget = int(getattr(message, "token_budget", 0) or 0)
+            step_budget = int(getattr(message, "step_budget", 0) or 0)
+            
+            # --- Budget Ledger Spend Check ---
+            if self._budget_ledger is not None and sender is not None and token_budget > 0:
+                from ravi.kernel.economic._ledger import BudgetExhausted
+                try:
+                    reservation = await self._budget_ledger.reserve(sender, float(token_budget))
+                except BudgetExhausted as exc:
+                    raise ValueError(f"Scheduler denied slot request for {sender}: {exc}") from exc
+                    
+            # --- Placement Hint Extraction ---
+            placement_region = None
+            placement = getattr(message, "placement", None)
+            if placement is not None:
+                placement_region = getattr(placement, "region", None)
+
+            claim = ResourceClaim(
+                principal_fqn=sender_fqn,
+                gpu_required=bool(getattr(message, "gpu_required", False)),
+                priority=int(getattr(message, "priority", 0)),
+                token_budget=token_budget,
+                step_budget=step_budget,
+                placement_region=placement_region,
+            )
+            grant = await self._scheduler.request_slot(claim)
+            if grant.status == SlotGrantStatus.DENIED:
+                if reservation is not None and self._budget_ledger is not None:
+                    await self._budget_ledger.release(reservation)
+                raise ValueError(f"Scheduler denied slot request for {sender}")
+            elif grant.status == SlotGrantStatus.QUEUED:
+                logger.info("Claim queued for grant %s; waiting...", grant.grant_id)
+                await self._scheduler.wait_for_slot(grant.grant_id)
+            grant_id = grant.grant_id
+
         # Optimistic local path: if we own (or can acquire) the lease, run
         # the message locally without touching the fabric.
         try:
@@ -364,7 +414,15 @@ class DistributedRuntime(BaseRuntime):
             if span_id is not None and self._span_recorder is not None:
                 from ravi.kernel.observability._spans import SpanStatus
                 await self._span_recorder.finish_span(span_id, status=SpanStatus.FAILED)
+            if reservation is not None and self._budget_ledger is not None:
+                await self._budget_ledger.release(reservation)
             raise
+        else:
+            if reservation is not None and self._budget_ledger is not None:
+                await self._budget_ledger.commit(reservation)
+        finally:
+            if grant_id is not None and self._scheduler is not None:
+                await self._scheduler.release_slot(grant_id)
 
         if span_id is not None and self._span_recorder is not None:
             from ravi.kernel.observability._spans import SpanStatus

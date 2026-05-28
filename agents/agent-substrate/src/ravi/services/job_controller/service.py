@@ -6,9 +6,9 @@ and Stream services via events and direct calls.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
-import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -22,7 +22,7 @@ from ravi.services.job_controller.models import JobRun
 from ravi.shared.events.bus import EventBus
 from ravi.shared.events.types import workflow_failed, workflow_started
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 # ── Run CRUD ─────────────────────────────────────────────────────────────────

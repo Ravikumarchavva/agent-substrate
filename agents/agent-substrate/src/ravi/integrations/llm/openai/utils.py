@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Union
 from PIL import Image
 
-from ravi.core.messages.client_messages import UserMessage, AssistantMessage
+from ravi.kernel.messages.client_messages import UserMessage, AssistantMessage
 
 
 def user_message_to_openai(msg: UserMessage) -> Dict[str, Any]:

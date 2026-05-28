@@ -4,9 +4,9 @@ Supports:
 - **PDF** files  → pdfplumber (text layer + table detection)
 - **TIF/PNG/JPG** → Pillow + pytesseract OCR
 
-Optional dependency group ``pdf``.  Install with::
+Optional dependency group ``optional``.  Install with::
 
-    uv sync --group pdf
+    uv sync --group optional
 
 Tesseract binary is required for image OCR.  Install separately:
 - Windows: https://github.com/UB-Mannheim/tesseract/wiki
@@ -15,15 +15,15 @@ Tesseract binary is required for image OCR.  Install separately:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from pathlib import Path
 from typing import Any
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _IMAGE_SUFFIXES = {".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 _PDF_SUFFIXES = {".pdf"}
@@ -128,7 +128,7 @@ class InvoiceExtractorTool(BaseTool):
         except ImportError:
             return ToolResult(
                 content=[
-                    TextBlock(text="Pillow is not installed. Run: uv sync --group pdf")
+                    TextBlock(text="Pillow is not installed. Run: uv sync --group optional")
                 ],
                 is_error=True,
             )
@@ -139,7 +139,7 @@ class InvoiceExtractorTool(BaseTool):
                 content=[
                     TextBlock(
                         text=(
-                            "pytesseract is not installed. Run: uv sync --group pdf. "
+                            "pytesseract is not installed. Run: uv sync --group optional. "
                             "Also ensure the Tesseract binary is installed on your system."
                         )
                     )
@@ -228,7 +228,7 @@ class InvoiceExtractorTool(BaseTool):
             return ToolResult(
                 content=[
                     TextBlock(
-                        text="pdfplumber is not installed. Run: uv sync --group pdf"
+                        text="pdfplumber is not installed. Run: uv sync --group optional"
                     )
                 ],
                 is_error=True,

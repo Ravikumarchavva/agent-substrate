@@ -4,8 +4,8 @@ Platform administration: stats aggregation, tenant management, audit logging.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.services.admin.models import AuditLog, Tenant
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 # ── Audit Log ────────────────────────────────────────────────────────────────

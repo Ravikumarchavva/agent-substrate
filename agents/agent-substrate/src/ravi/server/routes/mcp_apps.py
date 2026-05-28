@@ -6,14 +6,14 @@ POST /threads/{thread_id}/mcp-context – update model context from interactive 
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 from pydantic import BaseModel
-from ravi.core.tools.base_tool import BaseTool
+from ravi.kernel.tools.base_tool import BaseTool
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -24,7 +24,7 @@ from ravi.server.schemas import McpContextUpdate
 from ravi.server.security.deps import get_current_user
 from ravi.server.services import create_step, get_thread
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(tags=["mcp-apps"], dependencies=[Depends(get_current_user)])
 

@@ -9,15 +9,15 @@ Integration pattern (agentskills.io spec):
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ravi.catalog._skill_loader import SkillLoader
 from ravi.catalog._skill_models import Skill, SkillMetadata
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class SkillManager:

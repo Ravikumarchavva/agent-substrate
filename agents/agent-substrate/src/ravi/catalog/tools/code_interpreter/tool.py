@@ -30,18 +30,18 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import base64
 import json
-import logging
 import os
 from typing import Any, ClassVar, Optional
 
-from ravi.core.messages import ImageContent
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.messages import ImageContent
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _DEFAULT_SESSION = "default"
 
@@ -275,7 +275,7 @@ class CodeInterpreterTool(BaseTool):
                         buf.seek(0)
                         img_data = buf.getvalue()
 
-                        from ravi.core.messages import ImageContent
+                        from ravi.kernel.messages import ImageContent
 
                         media.append(
                             ImageContent(data=img_data, media_type="image/png")

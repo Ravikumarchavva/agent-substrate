@@ -8,10 +8,10 @@ Manages the full lifecycle:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 import os
 import shutil
 import socket
@@ -26,7 +26,7 @@ from typing import Optional
 
 from .config import CodeInterpreterConfig
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 # ── Data types ───────────────────────────────────────────────────────────────

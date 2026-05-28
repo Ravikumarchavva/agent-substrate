@@ -1,0 +1,230 @@
+[
+    {
+        "type": "text",
+        "text": "INVOICE",
+        "text_level": 2,
+        "bbox": [
+            441,
+            165,
+            577,
+            193
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "BillTo",
+        "bbox": [
+            70,
+            216,
+            121,
+            232
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Scott,Melba R.",
+        "bbox": [
+            70,
+            234,
+            203,
+            252
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Invoice# INV-000002",
+        "bbox": [
+            845,
+            216,
+            948,
+            245
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "2476BlackwellStreet",
+        "bbox": [
+            70,
+            252,
+            212,
+            268
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Fairbanks",
+        "bbox": [
+            70,
+            268,
+            142,
+            283
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "99701Colorado",
+        "bbox": [
+            70,
+            285,
+            179,
+            300
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "U.S.A",
+        "bbox": [
+            70,
+            300,
+            114,
+            315
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "ShipTo",
+        "bbox": [
+            70,
+            334,
+            130,
+            351
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "2476BlackwellStreet",
+        "bbox": [
+            70,
+            353,
+            214,
+            367
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Fairbanks",
+        "bbox": [
+            70,
+            369,
+            142,
+            384
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "99701Colorado",
+        "bbox": [
+            70,
+            386,
+            179,
+            400
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "U.S.A",
+        "bbox": [
+            72,
+            402,
+            112,
+            415
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "table",
+        "img_path": "images/f2b5bf2d6b2572ed45e60f7378ddfe64b5b841c86a42453e1ab7b62c19eb1860.jpg",
+        "table_caption": [],
+        "table_footnote": [],
+        "table_body": "<table><tr><td rowspan=1 colspan=1>Invoice Date</td><td rowspan=1 colspan=1>Terms</td><td rowspan=1 colspan=1>Due Date</td></tr><tr><td rowspan=1 colspan=1>18May2023</td><td rowspan=1 colspan=1>Due on Receipt</td><td rowspan=1 colspan=1>18May2023</td></tr></table>",
+        "bbox": [
+            74,
+            450,
+            941,
+            508
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "table",
+        "img_path": "images/e44cefebaf19b1cfbd5f801d645d343ec08a255b8cba9898bcda5f2363eb6875.jpg",
+        "table_caption": [],
+        "table_footnote": [],
+        "table_body": "<table><tr><td>#</td><td>Item&amp; Description</td><td>Qty</td><td>Rate</td><td>Amount</td></tr><tr><td>1</td><td>PepeJeans TaperedfitMid rise-Blue</td><td>1.00 pcs</td><td>24.99</td><td>24.99</td></tr><tr><td>2</td><td>BoysShirt Size-36,Mosaicdesign</td><td>1.00 pcs</td><td>16.99</td><td>16.99</td></tr><tr><td>3</td><td>Men Shirt Size-42,Striped Blue</td><td>1.00 pcs</td><td>19.99</td><td>19.99</td></tr><tr><td colspan=\"2\">Thanks for your business.</td><td colspan=\"2\">Sub Total Tax Rate Total</td><td>61.97 5.00%</td></tr><tr><td colspan=\"2\"></td><td colspan=\"3\">$65.06 Balance Due $65.06</td></tr></table>",
+        "bbox": [
+            72,
+            533,
+            941,
+            871
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Terms&Conditions",
+        "text_level": 2,
+        "bbox": [
+            70,
+            866,
+            233,
+            884
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Fullpayment isdueupon receiptofthisinvoice.Latepaymentsmayincuradditional charges orinterestasper the applicablelaws.",
+        "bbox": [
+            67,
+            891,
+            883,
+            922
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "header",
+        "text": "",
+        "bbox": [
+            79,
+            70,
+            203,
+            156
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "header",
+        "text": "ZylkerThread&Weave 14B,Northern Street Greater South Avenue NewYorkNewYork10001 U.S.A",
+        "bbox": [
+            742,
+            82,
+            946,
+            151
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            939,
+            986,
+            948,
+            996
+        ],
+        "page_idx": 0
+    }
+]

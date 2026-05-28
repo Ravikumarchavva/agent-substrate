@@ -1,10 +1,10 @@
 """Spotify OAuth authentication routes for Web Playback SDK."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import html
 import json
-import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -14,7 +14,7 @@ from ravi.configs.settings import settings
 from ravi.integrations.spotify.auth import SpotifyAuthService
 from ravi.server.security.deps import TokenPayload, get_current_user
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/auth/spotify", tags=["spotify-oauth"])
 

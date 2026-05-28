@@ -4,8 +4,8 @@ Entry point: uvicorn ravi.services.conversation.app:app --port 8012
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -16,7 +16,7 @@ from ravi.services.conversation.models import ServiceBase
 from ravi.services.conversation.routes import memory_router, thread_router
 from ravi.shared.events.bus import EventBus
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @asynccontextmanager

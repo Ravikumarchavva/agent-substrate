@@ -18,9 +18,9 @@ Supports two routing modes:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import hashlib
-import logging
 from typing import Any
 
 import httpx
@@ -32,7 +32,7 @@ from ravi.services.code_interpreter.schemas import (
     SessionListResponse,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)
 

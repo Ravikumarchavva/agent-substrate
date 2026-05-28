@@ -7,12 +7,13 @@ from route handlers.
 
 from __future__ import annotations
 
-import logging
 from typing import Optional
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from ravi.logger import setup_logging
+
+logger = setup_logging()
 
 
 class ServiceClient:

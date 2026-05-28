@@ -4,8 +4,8 @@ Entry point: uvicorn ravi.services.identity.app:app --port 8010
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -18,7 +18,7 @@ from ravi.shared.events.bus import EventBus
 
 import ravi.services.identity.models  # noqa: F401 — register ORM models before create_all
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @asynccontextmanager

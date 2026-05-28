@@ -8,28 +8,28 @@ to use the Chat Completions API.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
-from ravi.core.llm.base_client import GenerateResult, ModelStreamEvent
-from ravi.core.messages._types import ImageContent, MediaType
-from ravi.core.messages.base_message import BaseClientMessage, UsageStats
-from ravi.core.messages.client_messages import (
+from ravi.kernel.llm.base_client import GenerateResult, ModelStreamEvent
+from ravi.kernel.messages._types import ImageContent, MediaType
+from ravi.kernel.messages.base_message import BaseClientMessage, UsageStats
+from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     SystemMessage,
     ToolCallMessage,
     ToolExecutionResultMessage,
     UserMessage,
 )
-from ravi.core.messages.encoders.openai import ensure_strict_tool_schema
+from ravi.kernel.messages.encoders.openai import ensure_strict_tool_schema
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class OpenAIChatCompletionClient(OpenAIClient):
@@ -422,7 +422,7 @@ class OpenAIChatCompletionClient(OpenAIClient):
         **kwargs: Any,
     ) -> AsyncIterator[ModelStreamEvent]:
         """Stream a response via Chat Completions API."""
-        from ravi.core.messages._types import CompletionChunk, TextDeltaChunk
+        from ravi.kernel.messages._types import CompletionChunk, TextDeltaChunk
 
         chat_messages = self._serialize_messages_chat(messages)
         params: dict[str, Any] = {

@@ -245,16 +245,16 @@ def cmd_chat(args: argparse.Namespace) -> None:
     """Launch an interactive CLI chat session with a ReAct agent."""
     # Late imports so the CLI stays fast for server commands
     from ravi.console import Console
-    from ravi.core.agent_catalog._catalog import AgentCatalog
-    from ravi.core.agents.react_agent import ReActAgent
+    from ravi.kernel.agent_catalog._catalog import AgentCatalog
+    from ravi.extensions.agents.react.agent import ReActAgent
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
-    from ravi.core.memory.unbounded_memory import UnboundedMemory
-    from ravi.core.context.implementations import UnboundedContext
+    from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+    from ravi.extensions.context.redis_model_context import UnboundedContext
 
     # Build tools
     tools = []
     if not args.no_tools:
-        from ravi.core.tools.builtin_tools import (
+        from ravi.extensions.tools.builtin_tools import (
             CalculatorTool,
             GetCurrentTimeTool,
         )

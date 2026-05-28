@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import ImageBlock, TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import ImageBlock, TextBlock
 
 
 class ImageGeneratorTool(BaseTool):

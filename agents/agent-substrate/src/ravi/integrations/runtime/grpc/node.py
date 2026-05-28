@@ -17,22 +17,22 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import argparse
 import asyncio
-import logging
 import os
 import platform
 import signal
 
-from ravi.core.runtime import MessageContext, MessageHandler
+from ravi.kernel.runtime import MessageContext, MessageHandler
 from ravi.integrations.runtime.grpc.runtime import GrpcRuntime
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger("ravi.runtime.node")
+logger = setup_logging()
 
 
 # ---------------------------------------------------------------------------

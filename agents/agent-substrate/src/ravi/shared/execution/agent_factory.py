@@ -1,35 +1,35 @@
 """Shared agent factory for monolith and distributed execution paths."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional
 
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
-from ravi.core.agent_catalog._catalog import AgentCatalog
-from ravi.core.agents.react_agent import ReActAgent
-from ravi.core.context.base_context import ModelContext
-from ravi.core.context.implementations import SlidingWindowContext
-from ravi.core.execution.context import ExecutionContext
-from ravi.core.guardrails.prebuilt import MaxTokenGuardrail
-from ravi.core.llm.base_client import BaseModelClient
-from ravi.core.memory.base_memory import BaseMemory
-from ravi.core.memory.unbounded_memory import UnboundedMemory
-from ravi.core.messages.base_message import BaseClientMessage
-from ravi.core.messages.client_messages import (
+from ravi.kernel.agent_catalog._catalog import AgentCatalog
+from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.kernel.context.base_context import ModelContext
+from ravi.extensions.context.redis_model_context import SlidingWindowContext
+from ravi.kernel.execution.context import ExecutionContext
+from ravi.extensions.guardrails.max_token import MaxTokenGuardrail
+from ravi.kernel.llm.base_client import BaseModelClient
+from ravi.kernel.memory.base_memory import BaseMemory
+from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.kernel.messages.base_message import BaseClientMessage
+from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     SystemMessage,
     ToolCallMessage,
     ToolExecutionResultMessage,
     UserMessage,
 )
-from ravi.core.messages.content import TextBlock
-from ravi.core.runtime import AgentId, AgentRuntime
-from ravi.core.tools.base_tool import BaseTool
+from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.runtime import AgentId, AgentRuntime
+from ravi.kernel.tools.base_tool import BaseTool
 from ravi.integrations.memory.redis_memory import RedisMemory
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 PersistedStepLoader = Callable[[], Awaitable[List[Dict[str, Any]]]]
 
@@ -184,7 +184,7 @@ def create_react_agent(
 
     Builds a catalog from the provided resources and passes it to ``ReActAgent``.
     """
-    from ravi.core.middleware.builtins.guardrails import GuardrailsMiddleware
+    from ravi.extensions.middleware.guardrails import GuardrailsMiddleware
 
     resolved_context = model_context or SlidingWindowContext(
         max_messages=model_context_window

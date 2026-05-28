@@ -6,15 +6,15 @@ embeddings when available; falls back to naive keyword matching.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import math
 from typing import List, Optional, Tuple
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:

@@ -27,11 +27,11 @@ Response schema (outgoing)::
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any, Dict, List, Optional
 
-from ravi.core.runtime._types import MessageContext
-from ravi.core.tools.base_tool import BaseTool, HitlMode, ToolResult
+from ravi.logger import setup_logging
+from ravi.kernel.runtime._types import MessageContext
+from ravi.kernel.tools.base_tool import BaseTool, HitlMode, ToolResult
 from ravi.catalog.tools.human_input.tool import (
     ToolApprovalHandler,
     ToolApprovalRequest,
@@ -39,7 +39,7 @@ from ravi.catalog.tools.human_input.tool import (
     ToolApprovalAction,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class ToolExecutorHandler:

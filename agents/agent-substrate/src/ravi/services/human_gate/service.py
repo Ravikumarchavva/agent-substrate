@@ -5,9 +5,9 @@ Uses Redis pub/sub to deliver responses back to the waiting agent.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -20,7 +20,7 @@ from ravi.services.human_gate.models import HITLRequest
 from ravi.shared.events.bus import EventBus
 from ravi.shared.events.envelope import EventEnvelope
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 # Redis channel pattern for HITL responses

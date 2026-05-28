@@ -35,22 +35,22 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import base64
 import json
-import logging
 import os
 from typing import Any, ClassVar, Optional
 
-from ravi.core.messages import ImageContent, MediaContent
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.messages import ImageContent, MediaContent
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
 from .sandbox_service import CodeInterpreterConfig, CodeInterpreterService
 from .session_store import JsonSessionStore, SessionStore
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _DEFAULT_SESSION = "default"
 

@@ -4,8 +4,8 @@ Entry point: uvicorn ravi.services.job_controller.app:app --port 8013
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -16,7 +16,7 @@ from ravi.services.job_controller.models import ServiceBase
 from ravi.services.job_controller.routes import router
 from ravi.shared.events.bus import EventBus
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 @asynccontextmanager

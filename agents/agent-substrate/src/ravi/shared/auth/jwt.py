@@ -5,8 +5,8 @@ instead of maintaining its own JWT logic.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
 from uuid import uuid4
@@ -15,7 +15,7 @@ import jwt
 
 from ravi.shared.auth.claims import AuthClaims
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 _DEFAULT_ALG = "HS256"
 

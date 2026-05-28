@@ -1,23 +1,23 @@
 """Agent Runtime service logic."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import Any, Dict, List, Optional
 
 import httpx
 
-from ravi.core.agents.react_agent import ReActAgent
-from ravi.core.context.implementations import SlidingWindowContext
-from ravi.core.execution.context import ExecutionContext
-from ravi.core.memory.base_memory import BaseMemory
-from ravi.core.messages.client_messages import (
+from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.extensions.context.redis_model_context import SlidingWindowContext
+from ravi.kernel.execution.context import ExecutionContext
+from ravi.kernel.memory.base_memory import BaseMemory
+from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     ToolExecutionResultMessage,
 )
-from ravi.core.messages.content import TextBlock
-from ravi.core.llm.base_client import BaseModelClient
-from ravi.core.tools.base_tool import BaseTool
+from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.llm.base_client import BaseModelClient
+from ravi.kernel.tools.base_tool import BaseTool
 from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.shared.events.bus import EventBus
 from ravi.shared.events.envelope import EventEnvelope
@@ -27,7 +27,7 @@ from ravi.shared.execution import (
     stream_agent_run,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 async def load_memory_for_thread(

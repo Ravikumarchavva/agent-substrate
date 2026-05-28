@@ -12,16 +12,16 @@ frontend KanbanPanel updates in real-time.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import contextvars
-import logging
 from typing import Any, Awaitable, Callable, ClassVar, Dict, Optional
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
 from ravi.shared.tasks.store import GlobalTaskStore, Task, TaskStore
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.messages.content import TextBlock
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # Type alias for the async event emitter (usually bridge.put_event)
 EventEmitter = Callable[[Dict[str, Any]], Awaitable[None]]

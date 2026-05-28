@@ -9,8 +9,8 @@ POST /auth/logout         Revoke the caller's refresh token.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -31,7 +31,7 @@ from ravi.shared.contracts.auth import (
     TokenResponse,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Redis key prefix for valid refresh-token JTIs

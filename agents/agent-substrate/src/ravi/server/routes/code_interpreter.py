@@ -9,15 +9,14 @@ GET  /api/execute/sessions — list sessions across all CI pods
 """
 
 from __future__ import annotations
-
-import logging
+from ravi.logger import setup_logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ravi.server.security.deps import get_current_user
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(
     prefix="/api/execute",

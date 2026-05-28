@@ -15,15 +15,15 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import Any, Optional
 
 from openai import AsyncOpenAI
 
-from ravi.core.llm.base_embedding_client import BaseEmbeddingClient, EmbeddingResult
+from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient, EmbeddingResult
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class OpenAIEmbeddingClient(BaseEmbeddingClient):

@@ -1,44 +1,33 @@
 """Standard event envelope for the domain event backbone.
 
-Every event published to Redis Streams MUST use this envelope format.
-Consumer services declare which event_type/event_version combos they handle.
+Thin subclass of :class:`ravi.kernel.contracts.EventEnvelope[Dict[str, Any]]`
+that fixes the payload type to a JSON-shaped ``Dict[str, Any]`` and supplies
+a default. All inter-service async events published to the Redis Streams
+backbone use this shape on the wire.
 
-Envelope fields (per docs/microservices/03-data-ownership-and-contract-standards.md):
-  event_id, event_type, event_version, emitted_at, tenant_id, workspace_id,
-  actor_id, correlation_id, payload, trace_context
+The kernel envelope is the source of truth — this subclass exists only to
+preserve the no-payload-required ergonomics that the existing
+``shared.events.types`` factories rely on, and to keep the
+``identity_context`` JSON sidecar that legacy services still emit.
 """
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from ravi.kernel.contracts._event import EventEnvelope as _KernelEventEnvelope
 
 
-class EventEnvelope(BaseModel):
-    """Immutable domain event envelope.
+class EventEnvelope(_KernelEventEnvelope[Dict[str, Any]]):
+    """Domain event envelope with a ``Dict[str, Any]`` payload default.
 
-    All inter-service async events are wrapped in this envelope before
-    being published to the Redis Streams backbone. Payloads must be
-    serializable to JSON.
-
-    ``trace_context`` carries W3C Trace Context headers (``traceparent``,
-    ``tracestate``) so consuming services can continue the distributed trace.
+    Inherits every fabric field from the kernel envelope (identity, trust,
+    provenance, activation, placement, temporal, locality, trace context).
+    Adds the legacy ``identity_context`` JSON dict for backward compat with
+    services that have not yet migrated to the typed ``identity`` field.
     """
 
-    event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    event_type: str
-    event_version: int = 1
-    emitted_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
-    tenant_id: str = "default"
-    workspace_id: str = "default"
-    actor_id: str = ""
-    correlation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     payload: Dict[str, Any] = Field(default_factory=dict)
-    trace_context: Dict[str, str] = Field(default_factory=dict)
-
-    def stream_key(self) -> str:
-        """Return the Redis Stream key for this event type."""
-        return f"events:{self.event_type}"
+    identity_context: Optional[Dict[str, str]] = None

@@ -1,0 +1,1 @@
+"""Extension metadata-store tests."""

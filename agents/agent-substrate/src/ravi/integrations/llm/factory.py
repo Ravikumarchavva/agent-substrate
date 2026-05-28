@@ -10,7 +10,7 @@ Convention (inspired by LiteLLM/Agentor but using native SDKs):
 Example::
 
     from ravi.integrations.llm.factory import create_model_client
-    from ravi.core.llm.provider import ProviderConfig
+    from ravi.kernel.llm.provider import ProviderConfig
 
     # Simple usage (auto-detect provider, pass api_keys dict)
     client = create_model_client("claude-sonnet-4-20250514", api_keys={
@@ -29,18 +29,18 @@ Example::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import TYPE_CHECKING, Any, Optional
 
-from ravi.core.llm.base_client import BaseModelClient
-from ravi.core.llm.base_embedding_client import BaseEmbeddingClient
-from ravi.core.llm.models import get_model_profile
+from ravi.kernel.llm.base_client import BaseModelClient
+from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient
+from ravi.kernel.llm.models import get_model_profile
 
 if TYPE_CHECKING:
-    from ravi.core.llm.provider import ProviderConfig
+    from ravi.kernel.llm.provider import ProviderConfig
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # ── Provider detection ────────────────────────────────────────────────────────
 

@@ -13,23 +13,23 @@ Design decisions:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 import re
 from typing import List, Optional
 
 from ravi.evals.criteria import EvalCriterion
 from ravi.evals.models import EvalScore
-from ravi.core.llm.base_client import BaseModelClient
-from ravi.core.messages.client_messages import (
+from ravi.kernel.llm.base_client import BaseModelClient
+from ravi.kernel.messages.client_messages import (
     SystemMessage,
     UserMessage,
     AssistantMessage,
 )
 
-logger = logging.getLogger("ravi.evals")
+logger = setup_logging()
 
 
 class LLMJudge:

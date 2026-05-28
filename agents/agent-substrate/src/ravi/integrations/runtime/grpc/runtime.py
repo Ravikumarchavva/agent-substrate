@@ -30,15 +30,15 @@ The wire format is JSON-encoded envelopes over unary RPCs at
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 from typing import Any, Dict, Optional
 
-from ravi.core.runtime import AgentId
+from ravi.kernel.runtime import AgentId
 from ravi.integrations.runtime._base import BaseRemoteRuntime
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 try:
     import grpc

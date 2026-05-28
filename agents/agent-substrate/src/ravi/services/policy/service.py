@@ -5,8 +5,7 @@ Every mutating endpoint in the platform calls this before executing side effects
 """
 
 from __future__ import annotations
-
-import logging
+from ravi.logger import setup_logging
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ravi.services.policy.models import PolicyRule, WorkspaceGrant
 from ravi.shared.auth.claims import AuthClaims
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # Default permission matrix (per docs/microservices/02-role-and-responsibility-matrix.md)
 DEFAULT_PERMISSIONS: dict[str, set[str]] = {

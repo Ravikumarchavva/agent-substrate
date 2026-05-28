@@ -16,11 +16,11 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from ravi.core.agent_catalog._catalog import AgentCatalog
-from ravi.core.agents.react_agent import ReActAgent
+from ravi.kernel.agent_catalog._catalog import AgentCatalog
+from ravi.extensions.agents.react.agent import ReActAgent
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.core.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.core.hooks import HookEvent, HookManager, CostTracker
+from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.kernel.hooks import HookEvent, HookManager, CostTracker
 
 # Evals
 from ravi.evals import (

@@ -12,16 +12,16 @@ Features:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from ravi.core.agents.base_agent import BaseAgent
+from ravi.kernel.agents.base_agent import BaseAgent
 from ravi.evals.judge import LLMJudge
 from ravi.evals.models import (
     EvalCase,
@@ -30,7 +30,7 @@ from ravi.evals.models import (
     EvalReport,
 )
 
-logger = logging.getLogger("ravi.evals")
+logger = setup_logging()
 
 
 class EvalRunner:

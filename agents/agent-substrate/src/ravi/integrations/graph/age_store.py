@@ -14,21 +14,21 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 from typing import Any, Optional
 
 import asyncpg
 
-from ravi.core.rag.graph_store import (
+from ravi.extensions.rag.graph_store import (
     BaseGraphStore,
     Entity,
     Relationship,
     SubGraph,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 def _escape_props(props: dict[str, Any]) -> str:

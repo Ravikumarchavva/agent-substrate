@@ -14,9 +14,9 @@ File output bridge (code_interpreter):
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import base64
-import logging
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from ravi.services.tool_executor.executor import execute_tool
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 

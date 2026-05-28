@@ -1,0 +1,1535 @@
+{
+    "pdf_info": [
+        {
+            "preproc_blocks": [
+                {
+                    "score": 0.914,
+                    "bbox": [
+                        189,
+                        100,
+                        247,
+                        117
+                    ],
+                    "index": 3,
+                    "type": "title",
+                    "lines": [
+                        {
+                            "bbox": [
+                                187,
+                                100,
+                                248,
+                                119
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        187,
+                                        100,
+                                        248,
+                                        119
+                                    ],
+                                    "type": "text",
+                                    "content": "INVOICE",
+                                    "score": 0.999
+                                }
+                            ]
+                        }
+                    ],
+                    "level": 2
+                },
+                {
+                    "score": 0.779,
+                    "bbox": [
+                        30,
+                        131,
+                        52,
+                        141
+                    ],
+                    "index": 4,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                131,
+                                53,
+                                141
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        131,
+                                        53,
+                                        141
+                                    ],
+                                    "type": "text",
+                                    "content": "BillTo",
+                                    "score": 0.907
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.7949,
+                    "bbox": [
+                        30,
+                        142,
+                        87,
+                        153
+                    ],
+                    "index": 5,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                141,
+                                88,
+                                154
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        141,
+                                        88,
+                                        154
+                                    ],
+                                    "type": "text",
+                                    "content": "Scott,Melba R.",
+                                    "score": 0.924
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.8704,
+                    "bbox": [
+                        362,
+                        131,
+                        406,
+                        149
+                    ],
+                    "index": 6,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                379,
+                                131,
+                                406,
+                                139
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        379,
+                                        131,
+                                        406,
+                                        139
+                                    ],
+                                    "type": "text",
+                                    "content": "Invoice#",
+                                    "score": 0.973
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                362,
+                                139,
+                                406,
+                                148
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        362,
+                                        139,
+                                        406,
+                                        148
+                                    ],
+                                    "type": "text",
+                                    "content": "INV-000002",
+                                    "score": 0.997
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.7985,
+                    "bbox": [
+                        30,
+                        153,
+                        91,
+                        163
+                    ],
+                    "index": 7,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                31,
+                                154,
+                                91,
+                                162
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        31,
+                                        154,
+                                        91,
+                                        162
+                                    ],
+                                    "type": "text",
+                                    "content": "2476BlackwellStreet",
+                                    "score": 0.966
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.747,
+                    "bbox": [
+                        30,
+                        163,
+                        61,
+                        172
+                    ],
+                    "index": 8,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                163,
+                                60,
+                                172
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        163,
+                                        60,
+                                        172
+                                    ],
+                                    "type": "text",
+                                    "content": "Fairbanks",
+                                    "score": 0.993
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.7998,
+                    "bbox": [
+                        30,
+                        173,
+                        77,
+                        182
+                    ],
+                    "index": 9,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                172,
+                                76,
+                                182
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        172,
+                                        76,
+                                        182
+                                    ],
+                                    "type": "text",
+                                    "content": "99701Colorado",
+                                    "score": 0.998
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.7941,
+                    "bbox": [
+                        30,
+                        182,
+                        49,
+                        191
+                    ],
+                    "index": 10,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                182,
+                                49,
+                                192
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        182,
+                                        49,
+                                        192
+                                    ],
+                                    "type": "text",
+                                    "content": "U.S.A",
+                                    "score": 0.962
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.8268,
+                    "bbox": [
+                        30,
+                        203,
+                        56,
+                        213
+                    ],
+                    "index": 11,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                29,
+                                201,
+                                57,
+                                214
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        29,
+                                        201,
+                                        57,
+                                        214
+                                    ],
+                                    "type": "text",
+                                    "content": "ShipTo",
+                                    "score": 0.993
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.8536,
+                    "bbox": [
+                        30,
+                        214,
+                        92,
+                        223
+                    ],
+                    "index": 12,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                31,
+                                214,
+                                92,
+                                222
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        31,
+                                        214,
+                                        92,
+                                        222
+                                    ],
+                                    "type": "text",
+                                    "content": "2476BlackwellStreet",
+                                    "score": 0.976
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.7486,
+                    "bbox": [
+                        30,
+                        224,
+                        61,
+                        233
+                    ],
+                    "index": 13,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                223,
+                                61,
+                                234
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        223,
+                                        61,
+                                        234
+                                    ],
+                                    "type": "text",
+                                    "content": "Fairbanks",
+                                    "score": 0.996
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.8274,
+                    "bbox": [
+                        30,
+                        234,
+                        77,
+                        243
+                    ],
+                    "index": 14,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                31,
+                                234,
+                                76,
+                                242
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        31,
+                                        234,
+                                        76,
+                                        242
+                                    ],
+                                    "type": "text",
+                                    "content": "99701Colorado",
+                                    "score": 0.996
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.8073,
+                    "bbox": [
+                        31,
+                        244,
+                        48,
+                        252
+                    ],
+                    "index": 15,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                243,
+                                49,
+                                253
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        243,
+                                        49,
+                                        253
+                                    ],
+                                    "type": "text",
+                                    "content": "U.S.A",
+                                    "score": 0.975
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "table",
+                    "bbox": [
+                        32,
+                        273,
+                        403,
+                        308
+                    ],
+                    "blocks": [
+                        {
+                            "score": 0.9707,
+                            "bbox": [
+                                32,
+                                273,
+                                403,
+                                308
+                            ],
+                            "index": 16,
+                            "type": "table_body",
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        32,
+                                        273,
+                                        403,
+                                        308
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                32,
+                                                273,
+                                                403,
+                                                308
+                                            ],
+                                            "type": "table",
+                                            "html": "<table><tr><td rowspan=1 colspan=1>Invoice Date</td><td rowspan=1 colspan=1>Terms</td><td rowspan=1 colspan=1>Due Date</td></tr><tr><td rowspan=1 colspan=1>18May2023</td><td rowspan=1 colspan=1>Due on Receipt</td><td rowspan=1 colspan=1>18May2023</td></tr></table>",
+                                            "image_path": "f2b5bf2d6b2572ed45e60f7378ddfe64b5b841c86a42453e1ab7b62c19eb1860.jpg"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 16,
+                    "score": 0.9707
+                },
+                {
+                    "type": "table",
+                    "bbox": [
+                        31,
+                        323,
+                        403,
+                        528
+                    ],
+                    "blocks": [
+                        {
+                            "score": 0.9797,
+                            "bbox": [
+                                31,
+                                323,
+                                403,
+                                528
+                            ],
+                            "index": 17,
+                            "type": "table_body",
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        31,
+                                        323,
+                                        403,
+                                        528
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                31,
+                                                323,
+                                                403,
+                                                528
+                                            ],
+                                            "type": "table",
+                                            "html": "<table><tr><td>#</td><td>Item&amp; Description</td><td>Qty</td><td>Rate</td><td>Amount</td></tr><tr><td>1</td><td>PepeJeans TaperedfitMid rise-Blue</td><td>1.00 pcs</td><td>24.99</td><td>24.99</td></tr><tr><td>2</td><td>BoysShirt Size-36,Mosaicdesign</td><td>1.00 pcs</td><td>16.99</td><td>16.99</td></tr><tr><td>3</td><td>Men Shirt Size-42,Striped Blue</td><td>1.00 pcs</td><td>19.99</td><td>19.99</td></tr><tr><td colspan=\"2\">Thanks for your business.</td><td colspan=\"2\">Sub Total Tax Rate Total</td><td>61.97 5.00%</td></tr><tr><td colspan=\"2\"></td><td colspan=\"3\">$65.06 Balance Due $65.06</td></tr></table>",
+                                            "image_path": "e44cefebaf19b1cfbd5f801d645d343ec08a255b8cba9898bcda5f2363eb6875.jpg"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 17,
+                    "score": 0.9797
+                },
+                {
+                    "score": 0.5537,
+                    "bbox": [
+                        30,
+                        525,
+                        100,
+                        536
+                    ],
+                    "index": 18,
+                    "type": "title",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                524,
+                                101,
+                                536
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        524,
+                                        101,
+                                        536
+                                    ],
+                                    "type": "text",
+                                    "content": "Terms&Conditions",
+                                    "score": 0.994
+                                }
+                            ]
+                        }
+                    ],
+                    "level": 2
+                },
+                {
+                    "score": 0.5315,
+                    "bbox": [
+                        29,
+                        540,
+                        378,
+                        559
+                    ],
+                    "index": 19,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                539,
+                                378,
+                                551
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        539,
+                                        378,
+                                        551
+                                    ],
+                                    "type": "text",
+                                    "content": "Fullpayment isdueupon receiptofthisinvoice.Latepaymentsmayincuradditional charges orinterestasper the",
+                                    "score": 0.972
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                29,
+                                548,
+                                82,
+                                559
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        29,
+                                        548,
+                                        82,
+                                        559
+                                    ],
+                                    "type": "text",
+                                    "content": "applicablelaws.",
+                                    "score": 0.996
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "page_idx": 0,
+            "page_size": [
+                428,
+                606
+            ],
+            "discarded_blocks": [
+                {
+                    "score": 0.6131,
+                    "bbox": [
+                        34,
+                        43,
+                        87,
+                        95
+                    ],
+                    "index": 1,
+                    "type": "header",
+                    "lines": []
+                },
+                {
+                    "score": 0.9652,
+                    "bbox": [
+                        318,
+                        50,
+                        405,
+                        92
+                    ],
+                    "index": 2,
+                    "type": "header",
+                    "lines": [
+                        {
+                            "bbox": [
+                                318,
+                                50,
+                                405,
+                                60
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        318,
+                                        50,
+                                        405,
+                                        60
+                                    ],
+                                    "type": "text",
+                                    "content": "ZylkerThread&Weave",
+                                    "score": 0.985
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                345,
+                                60,
+                                405,
+                                69
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        345,
+                                        60,
+                                        405,
+                                        69
+                                    ],
+                                    "type": "text",
+                                    "content": "14B,Northern Street",
+                                    "score": 0.948
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                342,
+                                68,
+                                405,
+                                77
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        342,
+                                        68,
+                                        405,
+                                        77
+                                    ],
+                                    "type": "text",
+                                    "content": "Greater South Avenue",
+                                    "score": 0.96
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                331,
+                                76,
+                                404,
+                                84
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        331,
+                                        76,
+                                        404,
+                                        84
+                                    ],
+                                    "type": "text",
+                                    "content": "NewYorkNewYork10001",
+                                    "score": 0.918
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                386,
+                                84,
+                                405,
+                                92
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        386,
+                                        84,
+                                        405,
+                                        92
+                                    ],
+                                    "type": "text",
+                                    "content": "U.S.A",
+                                    "score": 0.974
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "score": 0.807,
+                    "bbox": [
+                        402,
+                        598,
+                        406,
+                        604
+                    ],
+                    "index": 20,
+                    "type": "page_number",
+                    "lines": []
+                }
+            ],
+            "para_blocks": [
+                {
+                    "score": 0.914,
+                    "bbox": [
+                        189,
+                        100,
+                        247,
+                        117
+                    ],
+                    "index": 3,
+                    "type": "title",
+                    "lines": [
+                        {
+                            "bbox": [
+                                187,
+                                100,
+                                248,
+                                119
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        187,
+                                        100,
+                                        248,
+                                        119
+                                    ],
+                                    "type": "text",
+                                    "content": "INVOICE",
+                                    "score": 0.999
+                                }
+                            ]
+                        }
+                    ],
+                    "level": 2
+                },
+                {
+                    "score": 0.779,
+                    "bbox": [
+                        30,
+                        131,
+                        52,
+                        141
+                    ],
+                    "index": 4,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                131,
+                                53,
+                                141
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        131,
+                                        53,
+                                        141
+                                    ],
+                                    "type": "text",
+                                    "content": "BillTo",
+                                    "score": 0.907
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        30,
+                        131,
+                        53,
+                        141
+                    ]
+                },
+                {
+                    "score": 0.7949,
+                    "bbox": [
+                        30,
+                        142,
+                        87,
+                        153
+                    ],
+                    "index": 5,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                141,
+                                88,
+                                154
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        141,
+                                        88,
+                                        154
+                                    ],
+                                    "type": "text",
+                                    "content": "Scott,Melba R.",
+                                    "score": 0.924
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        30,
+                        141,
+                        88,
+                        154
+                    ]
+                },
+                {
+                    "score": 0.8704,
+                    "bbox": [
+                        362,
+                        131,
+                        406,
+                        149
+                    ],
+                    "index": 6,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                379,
+                                131,
+                                406,
+                                139
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        379,
+                                        131,
+                                        406,
+                                        139
+                                    ],
+                                    "type": "text",
+                                    "content": "Invoice#",
+                                    "score": 0.973
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                362,
+                                139,
+                                406,
+                                148
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        362,
+                                        139,
+                                        406,
+                                        148
+                                    ],
+                                    "type": "text",
+                                    "content": "INV-000002",
+                                    "score": 0.997
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        362,
+                        131,
+                        406,
+                        148
+                    ]
+                },
+                {
+                    "score": 0.7985,
+                    "bbox": [
+                        30,
+                        153,
+                        91,
+                        163
+                    ],
+                    "index": 7,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                31,
+                                154,
+                                91,
+                                162
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        31,
+                                        154,
+                                        91,
+                                        162
+                                    ],
+                                    "type": "text",
+                                    "content": "2476BlackwellStreet",
+                                    "score": 0.966
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        31,
+                        154,
+                        91,
+                        162
+                    ]
+                },
+                {
+                    "score": 0.747,
+                    "bbox": [
+                        30,
+                        163,
+                        61,
+                        172
+                    ],
+                    "index": 8,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                163,
+                                60,
+                                172
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        163,
+                                        60,
+                                        172
+                                    ],
+                                    "type": "text",
+                                    "content": "Fairbanks",
+                                    "score": 0.993
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        30,
+                        163,
+                        60,
+                        172
+                    ]
+                },
+                {
+                    "score": 0.7998,
+                    "bbox": [
+                        30,
+                        173,
+                        77,
+                        182
+                    ],
+                    "index": 9,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                172,
+                                76,
+                                182
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        172,
+                                        76,
+                                        182
+                                    ],
+                                    "type": "text",
+                                    "content": "99701Colorado",
+                                    "score": 0.998
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        30,
+                        172,
+                        76,
+                        182
+                    ]
+                },
+                {
+                    "score": 0.7941,
+                    "bbox": [
+                        30,
+                        182,
+                        49,
+                        191
+                    ],
+                    "index": 10,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                182,
+                                49,
+                                192
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        182,
+                                        49,
+                                        192
+                                    ],
+                                    "type": "text",
+                                    "content": "U.S.A",
+                                    "score": 0.962
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        30,
+                        182,
+                        49,
+                        192
+                    ]
+                },
+                {
+                    "score": 0.8268,
+                    "bbox": [
+                        30,
+                        203,
+                        56,
+                        213
+                    ],
+                    "index": 11,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                29,
+                                201,
+                                57,
+                                214
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        29,
+                                        201,
+                                        57,
+                                        214
+                                    ],
+                                    "type": "text",
+                                    "content": "ShipTo",
+                                    "score": 0.993
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        29,
+                        201,
+                        57,
+                        214
+                    ]
+                },
+                {
+                    "score": 0.8536,
+                    "bbox": [
+                        30,
+                        214,
+                        92,
+                        223
+                    ],
+                    "index": 12,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                31,
+                                214,
+                                92,
+                                222
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        31,
+                                        214,
+                                        92,
+                                        222
+                                    ],
+                                    "type": "text",
+                                    "content": "2476BlackwellStreet",
+                                    "score": 0.976
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        31,
+                        214,
+                        92,
+                        222
+                    ]
+                },
+                {
+                    "score": 0.7486,
+                    "bbox": [
+                        30,
+                        224,
+                        61,
+                        233
+                    ],
+                    "index": 13,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                223,
+                                61,
+                                234
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        223,
+                                        61,
+                                        234
+                                    ],
+                                    "type": "text",
+                                    "content": "Fairbanks",
+                                    "score": 0.996
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        30,
+                        223,
+                        61,
+                        234
+                    ]
+                },
+                {
+                    "score": 0.8274,
+                    "bbox": [
+                        30,
+                        234,
+                        77,
+                        243
+                    ],
+                    "index": 14,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                31,
+                                234,
+                                76,
+                                242
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        31,
+                                        234,
+                                        76,
+                                        242
+                                    ],
+                                    "type": "text",
+                                    "content": "99701Colorado",
+                                    "score": 0.996
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        31,
+                        234,
+                        76,
+                        242
+                    ]
+                },
+                {
+                    "score": 0.8073,
+                    "bbox": [
+                        31,
+                        244,
+                        48,
+                        252
+                    ],
+                    "index": 15,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                243,
+                                49,
+                                253
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        243,
+                                        49,
+                                        253
+                                    ],
+                                    "type": "text",
+                                    "content": "U.S.A",
+                                    "score": 0.975
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        30,
+                        243,
+                        49,
+                        253
+                    ]
+                },
+                {
+                    "type": "table",
+                    "bbox": [
+                        32,
+                        273,
+                        403,
+                        308
+                    ],
+                    "blocks": [
+                        {
+                            "score": 0.9707,
+                            "bbox": [
+                                32,
+                                273,
+                                403,
+                                308
+                            ],
+                            "index": 16,
+                            "type": "table_body",
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        32,
+                                        273,
+                                        403,
+                                        308
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                32,
+                                                273,
+                                                403,
+                                                308
+                                            ],
+                                            "type": "table",
+                                            "html": "<table><tr><td rowspan=1 colspan=1>Invoice Date</td><td rowspan=1 colspan=1>Terms</td><td rowspan=1 colspan=1>Due Date</td></tr><tr><td rowspan=1 colspan=1>18May2023</td><td rowspan=1 colspan=1>Due on Receipt</td><td rowspan=1 colspan=1>18May2023</td></tr></table>",
+                                            "image_path": "f2b5bf2d6b2572ed45e60f7378ddfe64b5b841c86a42453e1ab7b62c19eb1860.jpg"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 16,
+                    "score": 0.9707
+                },
+                {
+                    "type": "table",
+                    "bbox": [
+                        31,
+                        323,
+                        403,
+                        528
+                    ],
+                    "blocks": [
+                        {
+                            "score": 0.9797,
+                            "bbox": [
+                                31,
+                                323,
+                                403,
+                                528
+                            ],
+                            "index": 17,
+                            "type": "table_body",
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        31,
+                                        323,
+                                        403,
+                                        528
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                31,
+                                                323,
+                                                403,
+                                                528
+                                            ],
+                                            "type": "table",
+                                            "html": "<table><tr><td>#</td><td>Item&amp; Description</td><td>Qty</td><td>Rate</td><td>Amount</td></tr><tr><td>1</td><td>PepeJeans TaperedfitMid rise-Blue</td><td>1.00 pcs</td><td>24.99</td><td>24.99</td></tr><tr><td>2</td><td>BoysShirt Size-36,Mosaicdesign</td><td>1.00 pcs</td><td>16.99</td><td>16.99</td></tr><tr><td>3</td><td>Men Shirt Size-42,Striped Blue</td><td>1.00 pcs</td><td>19.99</td><td>19.99</td></tr><tr><td colspan=\"2\">Thanks for your business.</td><td colspan=\"2\">Sub Total Tax Rate Total</td><td>61.97 5.00%</td></tr><tr><td colspan=\"2\"></td><td colspan=\"3\">$65.06 Balance Due $65.06</td></tr></table>",
+                                            "image_path": "e44cefebaf19b1cfbd5f801d645d343ec08a255b8cba9898bcda5f2363eb6875.jpg"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 17,
+                    "score": 0.9797
+                },
+                {
+                    "score": 0.5537,
+                    "bbox": [
+                        30,
+                        525,
+                        100,
+                        536
+                    ],
+                    "index": 18,
+                    "type": "title",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                524,
+                                101,
+                                536
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        524,
+                                        101,
+                                        536
+                                    ],
+                                    "type": "text",
+                                    "content": "Terms&Conditions",
+                                    "score": 0.994
+                                }
+                            ]
+                        }
+                    ],
+                    "level": 2
+                },
+                {
+                    "score": 0.5315,
+                    "bbox": [
+                        29,
+                        540,
+                        378,
+                        559
+                    ],
+                    "index": 19,
+                    "type": "text",
+                    "lines": [
+                        {
+                            "bbox": [
+                                30,
+                                539,
+                                378,
+                                551
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        30,
+                                        539,
+                                        378,
+                                        551
+                                    ],
+                                    "type": "text",
+                                    "content": "Fullpayment isdueupon receiptofthisinvoice.Latepaymentsmayincuradditional charges orinterestasper the",
+                                    "score": 0.972
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                29,
+                                548,
+                                82,
+                                559
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        29,
+                                        548,
+                                        82,
+                                        559
+                                    ],
+                                    "type": "text",
+                                    "content": "applicablelaws.",
+                                    "score": 0.996
+                                }
+                            ]
+                        }
+                    ],
+                    "bbox_fs": [
+                        29,
+                        539,
+                        378,
+                        559
+                    ]
+                }
+            ]
+        }
+    ],
+    "_backend": "pipeline",
+    "_version_name": "3.1.15"
+}

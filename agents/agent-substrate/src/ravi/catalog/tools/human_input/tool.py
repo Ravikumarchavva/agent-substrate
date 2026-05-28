@@ -42,10 +42,10 @@ Usage::
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
 import json
-import logging
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, ClassVar
@@ -53,10 +53,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.core.messages.content import TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.messages.content import TextBlock
 
-logger = logging.getLogger("ravi.hitl")
+logger = setup_logging()
 
 
 # ---------------------------------------------------------------------------

@@ -29,21 +29,21 @@ Security:
 from __future__ import annotations
 
 import json
-import logging
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import redis.asyncio as aioredis
 
-from ravi.core.memory.base_memory import BaseMemory
-from ravi.core.memory.message_serializer import (
+from ravi.kernel.memory.base_memory import BaseMemory
+from ravi.kernel.memory.message_serializer import (
     deserialize_message,
     serialize_message,
 )
-from ravi.core.messages.base_message import BaseClientMessage
+from ravi.kernel.messages.base_message import BaseClientMessage
+from ravi.logger import setup_logging
 
-logger = logging.getLogger("ravi.core.memory.redis")
+logger = setup_logging()
 
 _SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ravi.core.messages.content import ImageBlock, ResourceBlock, TextBlock
-from ravi.core.tools.base_tool import BaseTool, ToolResult
+from ravi.kernel.messages.content import ImageBlock, ResourceBlock, TextBlock
+from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 from ravi.integrations.mcp.client import MCPClient
 
 

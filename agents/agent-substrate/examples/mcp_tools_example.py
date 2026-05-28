@@ -8,8 +8,8 @@ This example demonstrates how to:
 import asyncio
 from ravi.integrations.mcp import MCPClient, MCPTool
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.core.memory.unbounded_memory import UnboundedMemory
-from ravi.core.messages.client_messages import UserMessage, SystemMessage
+from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.kernel.messages.client_messages import UserMessage, SystemMessage
 
 
 async def main():

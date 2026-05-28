@@ -5,8 +5,8 @@ Authentication is via ``Bearer <token>`` header (optional, configurable).
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import time
 from typing import Annotated
 
@@ -25,7 +25,7 @@ from .schemas import (
     SessionListResponse,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/v1", tags=["code-interpreter"])
 

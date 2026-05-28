@@ -15,10 +15,10 @@ from rich.box import DOUBLE
 from rich.prompt import Prompt
 
 from ravi.configs.settings import settings
-from ravi.core.runtime import LocalRuntime
-from ravi.core.agents.runtime_assistant_agent import RuntimeAssistantAgent
-from ravi.core.tools import tool
-from ravi.core.context.implementations import UnboundedContext
+from ravi.kernel.runtime import LocalRuntime
+from ravi.extensions.agents.runtime.assistant_agent import RuntimeAssistantAgent
+from ravi.kernel.tools import tool
+from ravi.extensions.context.redis_model_context import UnboundedContext
 from ravi.integrations.llm.openai.openai_chat_client import OpenAIChatCompletionClient
 
 _console = Console()

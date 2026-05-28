@@ -6,8 +6,8 @@ returned objects to ``app.state.*``.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -25,18 +25,18 @@ from ravi.catalog.tools.task_manager.tool import (
     current_thread_id as _task_thread_id,
 )
 from ravi.configs.settings import Settings
-from ravi.core.llm.base_client import BaseModelClient
-from ravi.core.llm.base_embedding_client import BaseEmbeddingClient
-from ravi.core.runtime import LocalRuntime
-from ravi.core.storage.base import FileStore
-from ravi.core.storage.factory import create_file_store
-from ravi.core.tools.base_tool import BaseTool, ToolRisk
-from ravi.core.tools.builtin_tools import (
+from ravi.kernel.llm.base_client import BaseModelClient
+from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient
+from ravi.kernel.runtime import LocalRuntime
+from ravi.kernel.storage.base import FileStore
+from ravi.extensions.storage.factory import create_file_store
+from ravi.kernel.tools.base_tool import BaseTool, ToolRisk
+from ravi.extensions.tools.builtin_tools import (
     CalculatorTool,
     GetCurrentTimeTool,
     GetBitcoinPriceTool,
 )
-from ravi.core.agent_catalog import AgentCatalogRegistry
+from ravi.kernel.agent_catalog import AgentCatalogRegistry
 from ravi.integrations.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_embedding_client,
@@ -57,7 +57,7 @@ from ravi.integrations.spotify.client import SpotifyService
 from ravi.server.database import get_session_factory
 from ravi.server.sse.bridge import BridgeRegistry
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 # ── Return containers ────────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ async def init_infrastructure(
 
     # Vector store + RAG pipeline (pgvector-backed)
     from ravi.integrations.vector.pgvector_store import PgVectorStore
-    from ravi.core.rag.pipeline import RAGPipeline
+    from ravi.extensions.rag.pipeline import RAGPipeline
 
     vector_store = PgVectorStore(
         session_factory=session_factory,

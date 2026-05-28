@@ -5,11 +5,11 @@ Marked as SENSITIVE risk because it reads potentially sensitive data.
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class PostgresQueryConnector:

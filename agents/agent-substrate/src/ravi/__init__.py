@@ -9,9 +9,9 @@ Layer structure (dependencies flow downward only):
     services      - microservice FastAPI apps
 
 Recommended imports:
-    from ravi.core.agents.react_agent import ReActAgent
+    from ravi.extensions.agents.react.agent import ReActAgent
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
-    from ravi.core.tools.base_tool import BaseTool, ToolResult
+    from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 
 Structured outputs quick-start:
     from ravi import (
@@ -26,14 +26,16 @@ from __future__ import annotations
 
 # Re-export structured outputs so callers can do:
 #   from ravi import parse, LLMJudge, StructuredRouter, ...
-from ravi.core.structured import (
+from ravi.kernel.structured import (
     ClassificationResult,
     ContentSafetyJudge,
     ExtractionResult,
-    LLMJudge,
     RelevanceJudge,
     StructuredOutputError,
     StructuredOutputResult,
+)
+from ravi.extensions.structured import (
+    LLMJudge,
     StructuredRouter,
     parse,
 )
@@ -42,20 +44,21 @@ from ravi.core.structured import (
 #   from ravi import Agent
 #   agent = Agent(name="Bot", model="claude-sonnet-4-20250514")
 #   result = await agent.run("Hello!")
-from ravi.core.agents.default_agent import Agent  # noqa: F401
+from ravi.extensions.agents.default.agent import Agent  # noqa: F401
 
 # Batch processing:
 #   from ravi import BatchProcessor, BatchConfig
 #   processor = BatchProcessor(fn=my_fn, config=BatchConfig(max_concurrency=5))
 #   result = await processor.run(inputs)
-from ravi.core.batch import BatchConfig, BatchProcessor  # noqa: F401
+from ravi.kernel.batch import BatchConfig  # noqa: F401
+from ravi.extensions.batch import BatchProcessor  # noqa: F401
 
 # Structured data extraction:
 #   from ravi import Extractor, Invoice
 #   extractor = Extractor(schema=Invoice, client=client)
 #   result = await extractor.extract("Invoice text ...")
-from ravi.core.extraction import Extractor  # noqa: F401
-from ravi.core.extraction.schemas import (  # noqa: F401
+from ravi.extensions.extraction import Extractor  # noqa: F401
+from ravi.extensions.extraction.schemas import (  # noqa: F401
     BusinessCard,
     Contract,
     Invoice,
@@ -67,14 +70,14 @@ from ravi.core.extraction.schemas import (  # noqa: F401
 #   from ravi import create_model_client, ModelProfile, ProviderConfig
 #   client = create_model_client("gemini/gemini-2.5-flash")
 from ravi.integrations.llm.factory import create_model_client  # noqa: F401
-from ravi.core.llm.models import (  # noqa: F401
+from ravi.kernel.llm.models import (  # noqa: F401
     ModelProfile,
     get_model_profile,
     get_context_length,
     estimate_cost,
     list_models,
 )
-from ravi.core.llm.provider import ProviderConfig  # noqa: F401
+from ravi.kernel.llm.provider import ProviderConfig  # noqa: F401
 
 # Root-level primitives (canonical locations)
 from ravi.exceptions import (  # noqa: F401

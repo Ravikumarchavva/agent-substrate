@@ -23,7 +23,6 @@ from __future__ import annotations
 
 from io import UnsupportedOperation
 import json
-import logging
 import time
 from typing import Any, AsyncIterator, Optional, List
 
@@ -66,12 +65,12 @@ def _ensure_types() -> None:
         _CompletionChunk, \
         _ToolExecutionResultMessage
     if _TextDeltaChunk is None:
-        from ravi.core.messages._types import (
+        from ravi.kernel.messages._types import (
             TextDeltaChunk,
             ReasoningDeltaChunk,
             CompletionChunk,
         )
-        from ravi.core.messages.client_messages import (
+        from ravi.kernel.messages.client_messages import (
             ToolExecutionResultMessage,
         )
 

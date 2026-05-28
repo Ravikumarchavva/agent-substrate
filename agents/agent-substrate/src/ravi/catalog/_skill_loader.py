@@ -21,8 +21,8 @@ SKILL.md format expected:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -36,7 +36,7 @@ try:
 except ImportError:
     _YAML_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 def _default_skill_dirs() -> List[Path]:

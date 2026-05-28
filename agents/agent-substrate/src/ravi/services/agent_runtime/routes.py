@@ -6,9 +6,9 @@ Routes:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import asyncio
-import logging
 from typing import Optional
 
 from fastapi import APIRouter, Request
@@ -20,7 +20,7 @@ from ravi.services.agent_runtime.service import (
     load_memory_for_thread,
 )
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(prefix="/agent", tags=["agent-runtime"])
 

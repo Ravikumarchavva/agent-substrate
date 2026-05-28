@@ -18,9 +18,9 @@ Routes mirror the public API surface:
 """
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
 import json
-import logging
 from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request
@@ -33,7 +33,7 @@ from ravi.shared.contracts.conversation import (
 )
 from ravi.shared.contracts.human_gate import HITLResponse
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(tags=["gateway"])
 

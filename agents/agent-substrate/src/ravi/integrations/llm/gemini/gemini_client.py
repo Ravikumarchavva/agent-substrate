@@ -1,25 +1,25 @@
 """Google Gemini model client implementation."""
 
 from __future__ import annotations
+from ravi.logger import setup_logging
 
-import logging
 from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional, cast
 
 from google import genai
 from google.genai import types as genai_types
 
-from ravi.core.llm.base_client import (
+from ravi.kernel.llm.base_client import (
     BaseModelClient,
     GenerateResult,
     ModelStreamEvent,
 )
-from ravi.core.messages.base_message import BaseClientMessage, UsageStats
-from ravi.core.messages._types import MediaType
-from ravi.core.messages.client_messages import (
+from ravi.kernel.messages.base_message import BaseClientMessage, UsageStats
+from ravi.kernel.messages._types import MediaType
+from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     ToolCallMessage,
 )
-from ravi.core.messages.encoders.gemini import (
+from ravi.kernel.messages.encoders.gemini import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
 )
@@ -27,7 +27,7 @@ from ravi.core.messages.encoders.gemini import (
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class GeminiClient(BaseModelClient):
@@ -278,7 +278,7 @@ class GeminiClient(BaseModelClient):
 
         Yields TextDeltaChunk objects, then a final CompletionChunk.
         """
-        from ravi.core.messages._types import TextDeltaChunk, CompletionChunk
+        from ravi.kernel.messages._types import TextDeltaChunk, CompletionChunk
 
         system_instruction, contents = self._serialize_messages(messages)
 

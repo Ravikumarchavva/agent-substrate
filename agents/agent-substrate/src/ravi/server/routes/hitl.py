@@ -8,8 +8,7 @@ GET /hitl/status/{thread_id} – check for pending HITL requests
 """
 
 from __future__ import annotations
-
-import logging
+from ravi.logger import setup_logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -17,7 +16,7 @@ from ravi.server.schemas import HITLResponse
 from ravi.server.context import ServerContext, get_ctx
 from ravi.server.security.deps import get_current_user
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 router = APIRouter(
     tags=["hitl"],

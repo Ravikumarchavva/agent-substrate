@@ -13,12 +13,20 @@ Usage:
 
 from __future__ import annotations
 
+import inspect
 import logging
-import sys
-import io
+import threading
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Literal
 
-from pythonjsonlogger.json import JsonFormatter
+from ravi.configs.settings import settings
+
+from pythonjsonlogger.msgspec import MsgspecFormatter
+
+_LOGGER_NAMESPACE = "ravi"
+_CONFIG_LOCK = threading.Lock()
+_CONFIGURED = False
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +34,7 @@ from pythonjsonlogger.json import JsonFormatter
 # ---------------------------------------------------------------------------
 
 
-class CustomJsonFormatter(JsonFormatter):
+class JsonFormatter(MsgspecFormatter):
     """JSON formatter for server / structured-log pipelines."""
 
     def add_fields(self, log_record, record, message_dict):  # type: ignore[override]
@@ -41,7 +49,7 @@ class CustomJsonFormatter(JsonFormatter):
             log_record["level"] = record.levelname
 
 
-class PrettyFormatter(logging.Formatter):
+class TextFormatter(logging.Formatter):
     """Concise, coloured formatter for interactive use (CLI / notebooks).
 
     Only shows the message — no timestamp, no logger name — unless the level
@@ -49,85 +57,138 @@ class PrettyFormatter(logging.Formatter):
     """
 
     LEVEL_TAGS = {
-        logging.WARNING: "\033[33m⚠\033[0m ",  # yellow
-        logging.ERROR: "\033[31m✖\033[0m ",  # red
+        logging.WARNING: "\033[33m⚠\033[0m ",      # yellow
+        logging.ERROR: "\033[31m✖\033[0m ",        # red
         logging.CRITICAL: "\033[1;31m✖✖\033[0m ",  # bold red
     }
 
     def format(self, record: logging.LogRecord) -> str:
         prefix = self.LEVEL_TAGS.get(record.levelno, "")
-        return f"{prefix}{record.getMessage()}"
+        msg = f"{prefix}{record.getMessage()}"
+        if record.exc_info:
+            msg = msg + "\n" + self.formatException(record.exc_info)
+        return msg
 
 
 # ---------------------------------------------------------------------------
 # Global mode flag — allows Console to flip _before_ first import of agent code
 # ---------------------------------------------------------------------------
-_current_mode: Literal["json", "pretty"] = "json"
+
+def _resolve_logger_name(name: str | None) -> str:
+    """Resolve logger name for module-level usage.
+
+    When ``name`` is omitted, infer the caller module name so modules can use:
+
+        logger = setup_logging()
+    """
+    if name:
+        return name
+    frame = inspect.currentframe()
+    if frame is None or frame.f_back is None or frame.f_back.f_back is None:
+        return _LOGGER_NAMESPACE
+    caller_globals = frame.f_back.f_back.f_globals
+    caller_name = caller_globals.get("__name__")
+    if isinstance(caller_name, str) and caller_name:
+        return caller_name
+    return _LOGGER_NAMESPACE
 
 
-def _is_interactive() -> bool:
-    """Heuristic: running inside Jupyter or an interactive terminal."""
-    try:
-        # IPython / Jupyter
-        shell = get_ipython().__class__.__name__  # type: ignore[name-defined]
-        return shell in ("ZMQInteractiveShell", "TerminalInteractiveShell")
-    except NameError:
-        pass
-    return hasattr(sys, "ps1") or sys.stdout.isatty()
+def _build_handler(
+    *,
+    sink: Literal["rotating_file", "file", "console"],
+    mode: Literal["json", "pretty"],
+    service_name: str,
+    max_bytes: int,
+    backup_count: int,
+) -> logging.Handler:
+    if sink in ("file", "rotating_file"):
+        path = Path(settings.ROOT_DIR) / "logs" / f"{service_name}.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if sink == "rotating_file":
+            handler: logging.Handler = RotatingFileHandler(
+                filename=path,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding="utf-8",
+            )
+        else:
+            handler = logging.FileHandler(filename=path, encoding="utf-8")
+    else:
+        handler = logging.StreamHandler()
+
+    if mode == "pretty":
+        handler.setFormatter(TextFormatter())
+    else:
+        handler.setFormatter(JsonFormatter("%(timestamp)s %(level)s %(name)s %(message)s"))
+    setattr(handler, "_ravi_managed", True)
+    return handler
 
 
 def setup_logging(
+    name: str | None = None,
     level: int = logging.INFO,
     *,
-    mode: Literal["json", "pretty", "auto"] = "auto",
+    mode: Literal["json", "pretty"] = "json",
+    sink: Literal["rotating_file", "file", "console"] = "rotating_file",
     service_name: str = "agent-framework",
-) -> None:
-    """Configure the root logger.
+    max_bytes: int = 10 * 1024 * 1024,
+    backup_count: int = 5,
+) -> logging.Logger:
+    """Configure ``ravi`` logger namespace and return a module logger.
+
+    Safe to call from every module at import time::
+
+        from ravi.logger import setup_logging
+        logger = setup_logging()
+
+    The first call configures the ``ravi`` namespace. Subsequent calls are
+    constant-time and return a logger bound to the caller module.
 
     Parameters
     ----------
+    name:
+        Explicit logger name. If omitted, inferred from caller module.
     level:
-        Minimum log level.
+        Minimum log level for the ``ravi`` namespace.
     mode:
         ``"json"``   — structured JSON (server / production).
         ``"pretty"`` — concise coloured lines (CLI / notebook).
-        ``"auto"``   — pick based on environment (Jupyter or tty → pretty).
+    sink:
+        ``"rotating_file"`` (default), ``"file"``, or ``"console"``.
+    service_name:
+        Log filename stem under ``<ROOT_DIR>/logs/``.
+    max_bytes:
+        Max file size before rotation (rotating sink only).
+    backup_count:
+        Number of rotated files to retain (rotating sink only).
     """
-    global _current_mode
+    global _CONFIGURED
 
-    if mode == "auto":
-        mode = "pretty" if _is_interactive() else "json"
-    _current_mode = mode
-
-    root = logging.getLogger()
-    # Remove existing handlers to avoid duplicates
-    for handler in root.handlers[:]:
-        root.removeHandler(handler)
-
-    # Build stream (handle Jupyter OutStream lacking .buffer)
-    if hasattr(sys.stdout, "buffer"):
-        stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    else:
-        stream = sys.stdout
-
-    handler = logging.StreamHandler(stream)
-
-    if mode == "pretty":
-        handler.setFormatter(PrettyFormatter())
-        # In pretty mode, silence noisy third-party loggers entirely
-        for noisy in ("httpx", "httpcore", "openai", "urllib3", "asyncio"):
-            logging.getLogger(noisy).setLevel(logging.WARNING)
-    else:
-        handler.setFormatter(
-            CustomJsonFormatter(
-                "%(timestamp)s %(level)s %(name)s %(message)s",
-                json_ensure_ascii=False,
+    with _CONFIG_LOCK:
+        namespace_logger = logging.getLogger(_LOGGER_NAMESPACE)
+        if not _CONFIGURED:
+            # Replace only handlers we own; keep foreign handlers untouched.
+            namespace_logger.handlers = [
+                h for h in namespace_logger.handlers if not getattr(h, "_ravi_managed", False)
+            ]
+            namespace_logger.addHandler(
+                _build_handler(
+                    sink=sink,
+                    mode=mode,
+                    service_name=service_name,
+                    max_bytes=max_bytes,
+                    backup_count=backup_count,
+                )
             )
-        )
+            namespace_logger.setLevel(level)
+            namespace_logger.propagate = False
 
-    root.addHandler(handler)
-    root.setLevel(level)
+            if mode == "pretty":
+                for noisy in ("httpx", "httpcore", "openai", "urllib3", "asyncio"):
+                    logging.getLogger(noisy).setLevel(logging.WARNING)
 
+            _CONFIGURED = True
+        else:
+            namespace_logger.setLevel(level)
 
-# Module-level convenience logger
-logger = logging.getLogger("ravi")
+    return logging.getLogger(_resolve_logger_name(name))

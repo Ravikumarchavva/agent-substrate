@@ -2,7 +2,7 @@
 
 Each sub-package provides an ``AgentRuntime`` backend for a different
 infrastructure. All backends conform to the same protocol defined
-in ``ravi.core.runtime`` and inherit from ``BaseRuntime`` (also in
+in ``ravi.kernel.runtime`` and inherit from ``BaseRuntime`` (also in
 ``core/runtime``).
 
 Available backends:

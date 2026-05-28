@@ -1,4 +1,3 @@
-import logging
 from typing import Any, Dict, Generator, Optional
 from contextlib import contextmanager
 
@@ -25,7 +24,7 @@ from ravi.logger import setup_logging
 # No module-level side effects.
 # ------------------------------------------------------------------------------
 
-logger = logging.getLogger("ravi")
+logger = setup_logging()
 
 # ------------------------------------------------------------------------------
 # OpenTelemetry (SAFE, SINGLE INIT)

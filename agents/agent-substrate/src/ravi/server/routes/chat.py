@@ -39,7 +39,7 @@ from ravi.kernel.messages.client_messages import (
     ToolExecutionResultMessage,
 )
 from ravi.shared.execution import stream_agent_run
-from ravi.server.context import ServerContext, get_ctx
+from ravi.server.dependencies import ServerDependencies, get_ctx
 from ravi.server.database import get_db
 from ravi.server.hooks import ChatContext, hooks
 from ravi.server.schemas import ChatRequest
@@ -257,7 +257,7 @@ def _serialize_attached_file(meta: Any) -> dict[str, Any]:
     }
 
 
-async def _get_agent_deps(ctx: ServerContext, thread_id: str):
+async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
     """Assemble per-request agent dependencies with an isolated HITL bridge."""
     bridge_registry: BridgeRegistry = ctx.bridge_registry
     bridge = await bridge_registry.acquire(str(thread_id))
@@ -410,7 +410,7 @@ async def _build_file_context(
     db: AsyncSession,
     body: ChatRequest,
     request: Request,
-    ctx: ServerContext,
+    ctx: ServerDependencies,
 ) -> tuple[str, list[ImageContent], list[dict[str, Any]]]:
     """Load file IDs from the request, extract text and push to CI VM.
 
@@ -505,7 +505,7 @@ async def _build_file_context(
 async def chat(
     body: ChatRequest,
     request: Request,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Stream agent response as Server-Sent Events with HITL support.

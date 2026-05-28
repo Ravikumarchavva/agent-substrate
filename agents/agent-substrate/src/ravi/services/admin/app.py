@@ -14,7 +14,7 @@ import redis.asyncio as aioredis
 from ravi.services.admin.models import ServiceBase
 from ravi.services.admin.routes import router
 from ravi.services.base import create_service_app, init_service_db
-from ravi.shared.events.bus import EventBus
+from ravi.shared.events.factory import get_event_bus
 
 logger = setup_logging()
 
@@ -33,7 +33,7 @@ async def lifespan(app):
 
     app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
 
-    event_bus = EventBus(redis_url)
+    event_bus = get_event_bus(redis_url)
     await event_bus.connect()
     app.state.event_bus = event_bus
 

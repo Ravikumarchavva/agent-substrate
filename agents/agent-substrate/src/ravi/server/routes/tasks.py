@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ravi.shared.tasks.store import GlobalTaskStore
-from ravi.server.context import ServerContext, get_ctx
+from ravi.server.dependencies import ServerDependencies, get_ctx
 from ravi.server.security.deps import get_current_user
 
 router = APIRouter(
@@ -50,7 +50,7 @@ async def update_task(
     task_list_id: str,
     task_id: str,
     req: TaskUpdateRequest,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Update a task's status or title (drag-drop / inline edit from frontend)."""
     store = GlobalTaskStore.get()
@@ -91,7 +91,7 @@ async def update_task(
 async def add_tasks(
     task_list_id: str,
     req: AddTasksRequest,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Append new tasks to an existing task list (user-initiated)."""
     store = GlobalTaskStore.get()
@@ -121,7 +121,7 @@ async def add_tasks(
 async def delete_task(
     task_list_id: str,
     task_id: str,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Delete a task (user-initiated)."""
     store = GlobalTaskStore.get()

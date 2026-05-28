@@ -3,6 +3,9 @@
 Inspired by AutoGen's ``Console`` — provides a rich, formatted view of agent
 execution including streaming text, tool calls, reasoning traces, and results.
 
+Supports both actor-model agents (``ActorAgent`` subclasses) and legacy callable
+agents.  For actor-model agents, a ``UserProxyAgent`` is created transparently.
+
 Usage (single task)::
 
     from ravi.console import Console
@@ -21,6 +24,8 @@ Usage (stream watcher — attach to any ``run_stream`` iterator)::
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from io import UnsupportedOperation
 import json
 import time
@@ -33,6 +38,39 @@ from rich.table import Table
 from rich.theme import Theme
 
 from ravi.logger import setup_logging
+
+
+# ---------------------------------------------------------------------------
+# Streaming channel for actor-model agents
+# ---------------------------------------------------------------------------
+
+
+class _ConsoleStreamChannel:
+    """StreamChannel adapter that exposes chunks as an async iterator.
+
+    Bridges the push-based StreamChannel protocol (used by ActorAgent) to the
+    pull-based iteration the Console rendering loop expects.
+    """
+
+    def __init__(self) -> None:
+        self._queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._done = object()
+
+    async def emit(self, chunk: object) -> None:
+        await self._queue.put(chunk)
+
+    def close(self) -> None:
+        self._queue.put_nowait(self._done)
+
+    def __aiter__(self) -> AsyncIterator[Any]:
+        return self._iterate()
+
+    async def _iterate(self) -> AsyncIterator[Any]:
+        while True:
+            item = await self._queue.get()
+            if item is self._done:
+                return
+            yield item  # type: ignore[misc]
 
 # ---------------------------------------------------------------------------
 # Theme
@@ -88,10 +126,16 @@ def _ensure_types() -> None:
 class Console:
     """Rich interactive console for agent execution.
 
+    Works with both actor-model agents (``ActorAgent`` subclasses) and
+    legacy callable agents (``BaseAgent`` subclasses).
+
+    For actor-model agents, a ``UserProxyAgent`` is created automatically
+    using the agent's own runtime.  No extra setup required.
+
     Parameters
     ----------
     agent:
-        A ``ReActAgent`` (or any agent with ``.run()`` / ``.run_stream()``).
+        An ``ActorAgent`` (new) or a legacy ``BaseAgent`` / ``ReActAgent``.
     output:
         Optional ``RichConsole`` instance. Created automatically if *None*.
     """
@@ -104,23 +148,46 @@ class Console:
     ) -> None:
         self.agent = agent
         self.console = output or RichConsole(theme=_THEME, highlight=False)
+        self._proxy: Optional[Any] = None
 
         # Configure logging for interactive use (once per process)
         setup_logging(mode="pretty", level=logging.WARNING)
+
+    def _is_actor_agent(self) -> bool:
+        """Return True if the agent uses the actor model (has on_message)."""
+        from ravi.kernel.agents.actor import ActorAgent
+        return isinstance(self.agent, ActorAgent)
+
+    async def _get_proxy(self) -> Any:
+        """Lazily create and start the UserProxyAgent for actor-model agents."""
+        if self._proxy is None:
+            from ravi.extensions.agents.user_proxy.agent import UserProxyAgent
+            self._proxy = UserProxyAgent(
+                "console-proxy",
+                self.agent.runtime,
+                key=f"console-{id(self):x}",
+            )
+            await self._proxy.start()
+        return self._proxy
 
     # ------------------------------------------------------------------
     # Single-shot run (non-streaming)
     # ------------------------------------------------------------------
 
-    async def run(self, task: str, **kwargs: Any) -> Any:
+    async def run(self, task: str, *, _echo: bool = True, **kwargs: Any) -> Any:
         """Run the agent on *task* and pretty-print the result.
 
         Returns the ``AgentRunResult``.
         """
-        self._print_user(task)
+        if _echo:
+            self._print_user(task)
         t0 = time.monotonic()
 
-        result = await self.agent.run(task, **kwargs)
+        if self._is_actor_agent():
+            proxy = await self._get_proxy()
+            result = await proxy.ask(task, recipient=self.agent.id)
+        else:
+            result = await self.agent.run(task, **kwargs)
 
         elapsed = time.monotonic() - t0
         self._print_result(result, elapsed)
@@ -130,7 +197,7 @@ class Console:
     # Streaming run
     # ------------------------------------------------------------------
 
-    async def run_stream(self, task: str, **kwargs: Any) -> Any:
+    async def run_stream(self, task: str, *, _echo: bool = True, **kwargs: Any) -> Any:
         """Run the agent with streaming and pretty-print each chunk.
 
         Returns the final ``CompletionChunk.message`` (or *None*).
@@ -145,7 +212,8 @@ class Console:
         assert completion_cls is not None
         assert tool_result_cls is not None
 
-        self._print_user(task)
+        if _echo:
+            self._print_user(task)
         t0 = time.monotonic()
 
         partial_text = ""
@@ -153,7 +221,17 @@ class Console:
         final_message: Any = None
         tool_calls_count = 0
 
-        async for chunk in self.agent.run_stream(task, **kwargs):
+        if self._is_actor_agent():
+            proxy = await self._get_proxy()
+            channel = _ConsoleStreamChannel()
+            asyncio.ensure_future(
+                proxy.ask_stream(task, recipient=self.agent.id, channel=channel)
+            )
+            chunk_iter: AsyncIterator[Any] = channel.__aiter__()
+        else:
+            chunk_iter = self.agent.run_stream(task, **kwargs)
+
+        async for chunk in chunk_iter:
             if isinstance(chunk, text_delta_cls):
                 partial_text += chunk.text
                 # Live-print streaming text
@@ -261,7 +339,7 @@ class Console:
                 self.console.print("👋 Bye!", style="info")
                 break
             if stripped.lower() == "/reset":
-                self.agent.reset()
+                await self.agent.reset()
                 self.console.print("🔄 Agent memory cleared.", style="info")
                 continue
             if stripped.lower() == "/tools":
@@ -273,9 +351,9 @@ class Console:
 
             try:
                 if stream:
-                    await self.run_stream(stripped)
+                    await self.run_stream(stripped, _echo=False)
                 else:
-                    await self.run(stripped)
+                    await self.run(stripped, _echo=False)
             except Exception as exc:
                 self.console.print(f"[error]Error: {exc}[/error]")
 

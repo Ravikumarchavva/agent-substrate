@@ -2,7 +2,7 @@
 
 Each test pins a specific behaviour so it can't silently regress:
 
-1. ``BaseAgent.handle_message`` extracts text from ``list[ContentBlock]`` —
+1. ``ActorAgent.handle_message`` extracts text from ``list[ContentBlock]`` —
    never a Python ``repr`` like ``"[TextBlock(text='hi')]"``.
 2. Repeated ``subscribe`` for the same ``(agent_type, topic)`` does NOT
    create duplicate deliveries.
@@ -22,8 +22,7 @@ from unittest.mock import MagicMock
 
 
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.agents.base_agent import BaseAgent
-from ravi.kernel.agents.agent_result import AgentRunResult
+from ravi.kernel.agents.actor import ActorAgent
 from ravi.kernel.messages.content import ImageBlock, TextBlock, blocks_to_text
 from ravi.kernel.runtime import AgentId, LocalRuntime, MessageContext, TopicId
 
@@ -33,33 +32,38 @@ from ravi.kernel.runtime import AgentId, LocalRuntime, MessageContext, TopicId
 # ---------------------------------------------------------------------------
 
 
-class _CaptureAgent(BaseAgent):
-    """BaseAgent whose ``run`` records the input it received."""
+class _CaptureAgent(ActorAgent):
+    """ActorAgent whose on_message records the text it received."""
 
     def __init__(self) -> None:
         catalog = AgentCatalog()
         catalog.register_model("primary", MagicMock())
-        super().__init__(name="capture", description="captures input", catalog=catalog)
+        super().__init__(
+            name="capture",
+            runtime=MagicMock(),
+            description="captures input",
+            catalog=catalog,
+        )
         self.received_inputs: list[str] = []
 
-    def get_system_instructions(self) -> str:
-        return self._system_instructions
-
-    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:  # type: ignore[override]
-        self.received_inputs.append(input_text)
-        return AgentRunResult(agent_name=self.name, output=[input_text])
-
-    def run_stream(self, input_text: str, **kwargs: Any):  # type: ignore[override]
-        raise NotImplementedError
+    async def on_message(self, ctx: Any, content: Any) -> str:
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            text = blocks_to_text(content)
+        else:
+            text = str(content)
+        self.received_inputs.append(text)
+        return text
 
 
 # ---------------------------------------------------------------------------
-# Finding 1 — BaseAgent.handle_message must not stringify ContentBlock list
+# Finding 1 — ActorAgent.handle_message must not stringify ContentBlock list
 # ---------------------------------------------------------------------------
 
 
 class TestHandleMessageContentExtraction:
-    """``handle_message`` extracts text from blocks; never a Python repr."""
+    """``on_message`` extracts text from blocks; never a Python repr."""
 
     async def test_list_of_text_blocks_is_extracted(self) -> None:
         agent = _CaptureAgent()
@@ -69,7 +73,7 @@ class TestHandleMessageContentExtraction:
             correlation_id="c",
             agent_id=AgentId("capture", "1"),
         )
-        await agent.handle_message(ctx, [TextBlock(text="hello world")])
+        await agent.on_message(ctx, [TextBlock(text="hello world")])
         assert agent.received_inputs == ["hello world"]
         # Crucially: no Python repr leaks through.
         assert "TextBlock" not in agent.received_inputs[0]
@@ -82,7 +86,7 @@ class TestHandleMessageContentExtraction:
             correlation_id="c",
             agent_id=AgentId("capture", "1"),
         )
-        await agent.handle_message(
+        await agent.on_message(
             ctx, [TextBlock(text="hello"), TextBlock(text="world")]
         )
         assert agent.received_inputs == ["hello world"]
@@ -95,7 +99,7 @@ class TestHandleMessageContentExtraction:
             correlation_id="c",
             agent_id=AgentId("capture", "1"),
         )
-        await agent.handle_message(
+        await agent.on_message(
             ctx,
             [
                 TextBlock(text="hi"),
@@ -114,7 +118,7 @@ class TestHandleMessageContentExtraction:
             correlation_id="c",
             agent_id=AgentId("capture", "1"),
         )
-        await agent.handle_message(ctx, "plain")
+        await agent.on_message(ctx, "plain")
         assert agent.received_inputs == ["plain"]
 
 

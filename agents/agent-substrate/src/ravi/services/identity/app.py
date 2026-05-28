@@ -14,7 +14,7 @@ import redis.asyncio as aioredis
 from ravi.services.base import create_service_app, init_service_db
 from ravi.services.identity.routes import router
 from ravi.shared.database.base import ServiceBase
-from ravi.shared.events.bus import EventBus
+from ravi.shared.events.factory import get_event_bus
 
 import ravi.services.identity.models  # noqa: F401 — register ORM models before create_all
 
@@ -37,7 +37,7 @@ async def lifespan(app):
     app.state.redis_client = aioredis.from_url(redis_url, decode_responses=True)
 
     # Event bus
-    event_bus = EventBus(redis_url)
+    event_bus = get_event_bus(redis_url)
     await event_bus.connect()
     app.state.event_bus = event_bus
 

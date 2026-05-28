@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.context.redis_model_context import SlidingWindowContext
+from ravi.extensions.agents.assistant.agent import AssistantAgent
+from ravi.extensions.context.sliding_window import SlidingWindowContext
 from ravi.kernel.execution.context import ExecutionContext
 from ravi.kernel.memory.base_memory import BaseMemory
 from ravi.kernel.messages.client_messages import (
@@ -19,10 +19,10 @@ from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.tools.base_tool import BaseTool
 from ravi.integrations.memory.redis_memory import RedisMemory
-from ravi.shared.events.bus import EventBus
+from ravi.integrations.events import EventBus
 from ravi.shared.events.envelope import EventEnvelope
 from ravi.shared.execution import (
-    create_react_agent,
+    create_assistant_agent,
     load_session_memory,
     stream_agent_run,
 )
@@ -64,9 +64,9 @@ def create_agent(
     memory: BaseMemory,
     model_context_window: int = 40,
     max_iterations: int = 30,
-) -> ReActAgent:
+) -> AssistantAgent:
     """Create the agent used by the runtime service."""
-    return create_react_agent(
+    return create_assistant_agent(
         model_client=model_client,
         tools=tools,
         system_instructions=system_instructions,
@@ -86,7 +86,7 @@ def _serialize_completion_content(message: AssistantMessage) -> list[str] | None
 
 async def execute_agent_run(
     *,
-    agent: ReActAgent,
+    agent: AssistantAgent,
     user_content: str,
     run_id: str,
     thread_id: str,

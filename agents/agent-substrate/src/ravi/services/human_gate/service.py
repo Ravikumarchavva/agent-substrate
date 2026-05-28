@@ -17,7 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.services.human_gate.models import HITLRequest
-from ravi.shared.events.bus import EventBus
+from ravi.integrations.events import EventBus
 from ravi.shared.events.envelope import EventEnvelope
 
 logger = setup_logging()

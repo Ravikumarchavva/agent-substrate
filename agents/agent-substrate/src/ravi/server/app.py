@@ -24,7 +24,7 @@ from ravi.shared.observability.telemetry import (
     shutdown_opentelemetry,
 )
 from ravi.server.database import close_db, init_db
-from ravi.server.context import ServerContext
+from ravi.server.dependencies import ServerDependencies
 from ravi.server.routes.admin import router as admin_router
 from ravi.server.routes.auth import router as auth_router
 from ravi.server.routes.cancel import router as cancel_router
@@ -46,6 +46,7 @@ from ravi.server.routes.threads import router as threads_router
 from ravi.server.routes.triggers import router as triggers_router
 from ravi.server.routes.workflows import router as workflows_router
 from ravi.server.routes.rag import router as rag_router
+from ravi.server.routes.replay import router as replay_router
 from ravi.server._lifespan import (
     init_infrastructure,
     init_llm_clients,
@@ -116,6 +117,10 @@ async def lifespan(app: FastAPI):
     # be aborted from the POST /chat/{thread_id}/cancel endpoint.
     app.state.cancel_registry = {}  # dict[str, asyncio.Event]
 
+    # S14: replay gate — operator-controlled admission for envelope replays.
+    from ravi.extensions.observability._in_memory import InMemoryReplayGate
+    app.state.replay_gate = InMemoryReplayGate()
+
     # MCP server registry: maps server_id → RegistryMcpServer dict.
     # Populated at runtime via POST /builder/mcp-servers (in-memory, not persisted).
     app.state.mcp_servers = {}  # dict[str, dict]
@@ -139,7 +144,7 @@ async def lifespan(app: FastAPI):
     app.state.condition_monitor = rt.condition_monitor
 
     # Typed context — new code should prefer app.state.ctx over individual attrs.
-    app.state.ctx = ServerContext(
+    app.state.ctx = ServerDependencies(
         model_client=app.state.model_client,
         model_client_kwargs=app.state.model_client_kwargs,
         redis_memory=app.state.redis_memory,
@@ -232,6 +237,7 @@ def create_app() -> FastAPI:
     app.include_router(workflows_router)
     app.include_router(triggers_router)
     app.include_router(rag_router)
+    app.include_router(replay_router)
 
     # Visual Builder — only mounted when ENABLE_BUILDER=true (zero prod footprint)
     if settings.ENABLE_BUILDER:

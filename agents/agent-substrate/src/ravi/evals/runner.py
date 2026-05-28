@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from ravi.kernel.agents.base_agent import BaseAgent
+from ravi.kernel.agents.actor import ActorAgent
 from ravi.evals.judge import LLMJudge
 from ravi.evals.models import (
     EvalCase,
@@ -46,7 +46,7 @@ class EvalRunner:
 
     def __init__(
         self,
-        agent: BaseAgent,
+        agent: ActorAgent,
         judge: LLMJudge,
         *,
         concurrency: int = 1,

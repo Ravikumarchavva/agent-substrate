@@ -186,3 +186,12 @@ class BaseRuntime(ABC):
 
     @abstractmethod
     async def stop(self) -> None: ...
+
+    async def __aenter__(self) -> "BaseRuntime":
+        """Start the runtime and return self for use as a context manager."""
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        """Stop the runtime on context manager exit."""
+        await self.stop()

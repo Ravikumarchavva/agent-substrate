@@ -1,11 +1,11 @@
 """ravi.kernel.agents — Agent contracts and result types.
 
 Only abstractions live here. Concrete agent implementations
-(``ReActAgent``, ``OrchestratorAgent``, ``Agent``, flows, graphs) live in
+(``AssistantAgent``, ``UserProxyAgent``, ``OrchestratorAgent``, flows) live in
 :mod:`ravi.extensions.agents`.
 """
 
-from ravi.kernel.agents.base_agent import BaseAgent, PromptEnricher
+from ravi.kernel.agents.actor import ActorAgent, StreamChannel, StreamEnvelope
 from ravi.kernel.agents.config import AgentConfig
 from ravi.kernel.agents.agent_result import (
     AgentRunResult,
@@ -16,8 +16,9 @@ from ravi.kernel.agents.agent_result import (
 )
 
 __all__ = [
-    "BaseAgent",
-    "PromptEnricher",
+    "ActorAgent",
+    "StreamChannel",
+    "StreamEnvelope",
     "AgentConfig",
     "AgentRunResult",
     "AggregatedUsage",

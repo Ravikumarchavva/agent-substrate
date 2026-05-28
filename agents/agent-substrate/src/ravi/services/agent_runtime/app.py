@@ -15,7 +15,7 @@ from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.services.agent_runtime.routes import router
 from ravi.services.base import create_service_app
-from ravi.shared.events.bus import EventBus
+from ravi.shared.events.factory import get_event_bus
 
 logger = setup_logging()
 
@@ -45,7 +45,7 @@ async def lifespan(app):
     # Redis
     app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
 
-    event_bus = EventBus(redis_url)
+    event_bus = get_event_bus(redis_url)
     await event_bus.connect()
     app.state.event_bus = event_bus
 

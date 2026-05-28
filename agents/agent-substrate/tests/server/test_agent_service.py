@@ -206,7 +206,7 @@ async def test_load_agent_hot_path_calls_restore_without_limit():
             return_value=mock_per_request,
         ),
         patch(
-            "ravi.server.services.agent_service.create_react_agent",
+            "ravi.server.services.agent_service.create_assistant_agent",
             return_value=MagicMock(),
         ),
         patch(
@@ -228,6 +228,7 @@ async def test_load_agent_hot_path_calls_restore_without_limit():
             system_instructions="System",
             redis_memory=mock_redis,
             model_context_window=40,
+            runtime=MagicMock(),
         )
         # No limit — Redis holds the full history; SlidingWindowContext
         # is what filters messages at LLM-call time.
@@ -266,7 +267,7 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
             return_value=rows,
         ),
         patch(
-            "ravi.server.services.agent_service.create_react_agent",
+            "ravi.server.services.agent_service.create_assistant_agent",
             return_value=MagicMock(),
         ),
     ):
@@ -283,6 +284,7 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
             system_instructions=system_prompt,
             redis_memory=mock_redis,
             model_context_window=40,
+            runtime=MagicMock(),
         )
         # store_many must be called with (session_id, messages)
         mock_redis.store_many.assert_called_once()
@@ -317,7 +319,7 @@ async def test_load_agent_no_redis_uses_unbounded_memory():
             return_value=rows,
         ),
         patch(
-            "ravi.server.services.agent_service.create_react_agent",
+            "ravi.server.services.agent_service.create_assistant_agent",
             side_effect=_capture_agent,
         ),
     ):
@@ -329,6 +331,7 @@ async def test_load_agent_no_redis_uses_unbounded_memory():
             tools=[],
             system_instructions="Sys",
             redis_memory=None,
+            runtime=MagicMock(),
         )
 
     assert isinstance(captured_memory["mem"], UnboundedMemory)

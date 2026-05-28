@@ -7,8 +7,8 @@ from ravi.extensions.pipelines.middleware import (
     WorkflowRunnable,
     WorkflowStage,
 )
-from ravi.extensions.pipelines.runner import PipelineRunner
-from ravi.extensions.pipelines.while_runner import WhilePipelineRunner
+from ravi.extensions.pipelines.runner import WorkflowRunner
+from ravi.extensions.pipelines.while_runner import WhileWorkflowRunner
 from ravi.extensions.pipelines.codegen import generate_code
 
 __all__ = [
@@ -17,7 +17,7 @@ __all__ = [
     "WorkflowMiddlewarePipeline",
     "WorkflowRunnable",
     "WorkflowStage",
-    "PipelineRunner",
-    "WhilePipelineRunner",
+    "WorkflowRunner",
+    "WhileWorkflowRunner",
     "generate_code",
 ]

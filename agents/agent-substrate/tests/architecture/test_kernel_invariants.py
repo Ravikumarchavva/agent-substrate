@@ -93,14 +93,19 @@ def test_kernel_agents_contains_only_base() -> None:
     """``kernel/agents/`` may define only the base ABC and result dataclasses."""
     agents_dir = KERNEL_DIR / "agents"
     allowed_classes = {
-        "BaseAgent",  # ABC
-        "PromptEnricher",  # Protocol
-        "AgentConfig",  # dataclass / model
+        # Actor-model contracts (new)
+        "ActorAgent",       # ABC — single actor base
+        "StreamChannel",    # Protocol — streaming output channel
+        "StreamEnvelope",   # dataclass — streaming message payload
+        # Legacy callable contracts (kept while callers migrate)
+        "BaseAgent",        # ABC
+        "PromptEnricher",   # Protocol
+        "AgentConfig",      # dataclass / model
         "AgentRunResult",
         "AggregatedUsage",
         "StepResult",
         "ToolCallRecord",
-        "RunStatus",  # enum
+        "RunStatus",        # enum
     }
     found: list[str] = []
     for path in agents_dir.rglob("*.py"):

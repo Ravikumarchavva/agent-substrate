@@ -246,10 +246,12 @@ def cmd_chat(args: argparse.Namespace) -> None:
     # Late imports so the CLI stays fast for server commands
     from ravi.console import Console
     from ravi.kernel.agent_catalog._catalog import AgentCatalog
-    from ravi.extensions.agents.react.agent import ReActAgent
+    from ravi.extensions.agents.assistant.agent import AssistantAgent
+    from ravi.extensions.agents.user_proxy.agent import UserProxyAgent
+    from ravi.kernel.runtime._local import LocalRuntime
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
     from ravi.kernel.memory.unbounded_memory import UnboundedMemory
-    from ravi.extensions.context.redis_model_context import UnboundedContext
+    from ravi.extensions.context.unbounded import UnboundedContext
 
     # Build tools
     tools = []
@@ -273,16 +275,20 @@ def cmd_chat(args: argparse.Namespace) -> None:
     for tool in tools:
         catalog.register_tool(tool)
 
-    agent = ReActAgent(
-        name=args.name,
-        description="Interactive CLI assistant",
-        catalog=catalog,
-        max_iterations=args.max_iterations,
-        verbose=args.verbose,
-    )
+    async def _run_chat() -> None:
+        async with LocalRuntime() as rt:
+            agent = AssistantAgent(
+                args.name,
+                rt,
+                catalog=catalog,
+                max_iterations=args.max_iterations,
+                verbose=args.verbose,
+            )
+            await agent.start()
+            await Console(agent).interactive(stream=not args.no_stream)
 
     # Run the interactive REPL
-    asyncio.run(Console(agent).interactive(stream=not args.no_stream))
+    asyncio.run(_run_chat())
 
 
 def _load_mcp_tools(server_urls: list[str]) -> list:

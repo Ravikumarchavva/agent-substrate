@@ -21,7 +21,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.kernel.agents.base_agent import BaseAgent
+from ravi.kernel.agents.actor import ActorAgent
 
 logger = setup_logging()
 
@@ -35,7 +35,7 @@ class ChatContext:
 
     thread_id: uuid.UUID
     db: AsyncSession
-    agent: BaseAgent  # decoupled from concrete ReActAgent
+    agent: ActorAgent
     user_id: Optional[uuid.UUID] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 

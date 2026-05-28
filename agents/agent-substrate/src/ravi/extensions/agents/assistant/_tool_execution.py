@@ -12,7 +12,6 @@ import json
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from uuid import uuid4
 
 from opentelemetry.trace import Status, StatusCode
 
@@ -30,6 +29,8 @@ from ravi.kernel.middleware.base import (
 from ravi.extensions.resilience.policies import RetryPolicy, _calculate_delay
 from ravi.kernel.runtime import AgentId, AgentRuntime
 from ravi.kernel.tools.base_tool import HitlMode, ToolResult
+from ravi.kernel.tools.approval import tool_needs_approval
+from ravi.kernel.tools.parsing import ParsedToolCall, find_tool, parse_tool_call
 from ravi.kernel.agent_catalog import AgentCatalogRegistry
 from ravi.catalog.tools.human_input.tool import (
     ToolApprovalAction,
@@ -40,22 +41,6 @@ from ravi.catalog.tools.human_input.tool import (
 from ravi.shared.observability import global_metrics, logger
 from ravi.kernel.messages.content import TextBlock
 from ravi.exceptions import GuardrailTripwireError
-
-
-# ---------------------------------------------------------------------------
-# Parsed tool-call (normalised from any SDK shape)
-# ---------------------------------------------------------------------------
-
-
-class ParsedToolCall:
-    """Internal normalised representation of a tool call."""
-
-    __slots__ = ("call_id", "name", "arguments")
-
-    def __init__(self, call_id: str, name: str, arguments: Dict[str, Any]):
-        self.call_id = call_id
-        self.name = name
-        self.arguments = arguments
 
 
 # ---------------------------------------------------------------------------
@@ -96,84 +81,6 @@ class ToolExecutionContext:
     skill_manager: Optional[Any] = None
     runtime: Optional[AgentRuntime] = None
     agent_id: Optional[AgentId] = None
-
-
-# ---------------------------------------------------------------------------
-# Parsing
-# ---------------------------------------------------------------------------
-
-
-def parse_tool_call(tc: Any) -> ParsedToolCall:
-    """Normalise any tool-call shape into a ParsedToolCall.
-
-    Handles: ToolCallMessage, OpenAI SDK objects with .function dict,
-    raw dicts, and Pydantic ToolCall models.
-    """
-    call_id: Optional[str] = getattr(tc, "id", None)
-    name: Optional[str] = None
-    args: Any = None
-
-    # 1. ToolCallMessage (our own type)
-    if isinstance(tc, ToolCallMessage):
-        return ParsedToolCall(
-            call_id=tc.tool_call_id or str(uuid4()),
-            name=tc.name,
-            arguments=tc.arguments or {},
-        )
-
-    # 2. Object with .function dict (OpenAI SDK ChatCompletionMessageToolCall)
-    if hasattr(tc, "function") and isinstance(getattr(tc, "function", None), dict):
-        fn = tc.function
-        name = fn.get("name")
-        raw = fn.get("arguments")
-        args = json.loads(raw) if isinstance(raw, str) else (raw or {})
-
-    # 3. Plain dict
-    elif isinstance(tc, dict):
-        if "function" in tc and isinstance(tc["function"], dict):
-            fn = tc["function"]
-            name = fn.get("name")
-            raw = fn.get("arguments")
-            args = json.loads(raw) if isinstance(raw, str) else (raw or {})
-        else:
-            name = tc.get("name")
-            args = tc.get("arguments", {})
-            call_id = tc.get("id", call_id)
-
-    # 4. Generic object with .name / .arguments
-    elif hasattr(tc, "name") and hasattr(tc, "arguments"):
-        name = tc.name
-        args = tc.arguments if isinstance(tc.arguments, dict) else {}
-        call_id = getattr(tc, "id", call_id)
-
-    return ParsedToolCall(
-        call_id=call_id or str(uuid4()),
-        name=name or "unknown",
-        arguments=args if isinstance(args, dict) else {},
-    )
-
-
-# ---------------------------------------------------------------------------
-# Lookup helpers
-# ---------------------------------------------------------------------------
-
-
-def find_tool(
-    name: str,
-    catalog: AgentCatalogRegistry,
-    tools: List[Any],
-) -> Optional[Any]:
-    """Look up a tool by name (or alias) from the catalog, then fallback to list."""
-    catalog_tool = catalog.get_tool(name)
-    if catalog_tool is not None:
-        return catalog_tool
-    for t in tools:
-        t_name = getattr(t, "name", None) or (
-            t.get("name") if isinstance(t, dict) else None
-        )
-        if t_name == name:
-            return t
-    return None
 
 
 def content_to_str(content: Any) -> str:
@@ -223,22 +130,6 @@ def build_tool_error(
         duration_ms=duration_ms,
     )
     return record, tool_msg
-
-
-# ---------------------------------------------------------------------------
-# HITL approval gate
-# ---------------------------------------------------------------------------
-
-
-def tool_needs_approval(
-    tool_name: str,
-    tools_requiring_approval: Optional[List[str]],
-) -> bool:
-    """Check whether the given tool requires human approval."""
-    if tools_requiring_approval is None:
-        # Handler set but no explicit list → all tools need approval
-        return True
-    return tool_name in tools_requiring_approval
 
 
 async def run_hitl_approval(
@@ -456,16 +347,18 @@ async def execute_tool_direct(
                             async def do_compensate(step_result: Any) -> None:
                                 comp_tool = find_tool(
                                     tool.compensating_tool,
-                                    catalog
-                                    or (
-                                        skill_manager._catalog
-                                        if (
-                                            skill_manager
-                                            and hasattr(skill_manager, "_catalog")
-                                        )
-                                        else None
-                                    ),
                                     tools or [],
+                                    catalog=(
+                                        catalog
+                                        or (
+                                            skill_manager._catalog
+                                            if (
+                                                skill_manager
+                                                and hasattr(skill_manager, "_catalog")
+                                            )
+                                            else None
+                                        )
+                                    ),
                                 )
                                 if comp_tool:
                                     comp_args = dict(parsed.arguments)
@@ -632,7 +525,7 @@ async def execute_tool_direct(
 
         except GuardrailTripwireError as e:
             duration_ms = (time.monotonic() - t0) * 1000
-            from ravi.extensions.agents.react._guardrail_runner import (
+            from ravi.extensions.agents.assistant._guardrail_runner import (
                 build_tool_blocked_message,
                 build_tool_blocked_record,
             )
@@ -707,7 +600,7 @@ async def execute_tool_via_runtime(
     }
 
     # Check if the tool declares a custom agent_id for routing
-    tool = find_tool(parsed.name, catalog, tools)
+    tool = find_tool(parsed.name, tools, catalog=catalog)
     target_agent_id = getattr(tool, "agent_id", None)
     if target_agent_id is None:
         target_agent_id = AgentId("tool_executor", agent_id.key)

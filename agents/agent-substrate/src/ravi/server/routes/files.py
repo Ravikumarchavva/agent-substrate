@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.configs.settings import settings
 from ravi.kernel.storage.base import FileStore
-from ravi.server.context import ServerContext, get_ctx
+from ravi.server.dependencies import ServerDependencies, get_ctx
 from ravi.server.database import get_db
 from ravi.server.schemas import FileOut
 from ravi.server.security.deps import get_current_user
@@ -41,7 +41,7 @@ router = APIRouter(
 )
 
 
-def _require_file_store(ctx: ServerContext) -> FileStore:
+def _require_file_store(ctx: ServerDependencies) -> FileStore:
     if ctx.file_store is None:
         raise HTTPException(status_code=503, detail="File store is not configured")
     return ctx.file_store
@@ -64,7 +64,7 @@ def _to_file_out(meta) -> FileOut:
 async def upload_file(
     thread_id: uuid.UUID,
     file: UploadFile = File(...),
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a file and attach it to a thread.
@@ -125,7 +125,7 @@ async def list_thread_files(
 async def delete_thread_file(
     thread_id: uuid.UUID,
     file_id: uuid.UUID,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a file from a thread."""
@@ -140,7 +140,7 @@ async def delete_thread_file(
 async def download_file(
     thread_id: uuid.UUID,
     file_id: uuid.UUID,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Download the raw file content from the FileStore."""
@@ -166,7 +166,7 @@ async def download_file(
 async def get_download_url(
     thread_id: uuid.UUID,
     file_id: uuid.UUID,
-    ctx: ServerContext = Depends(get_ctx),
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a pre-signed download URL for a file.

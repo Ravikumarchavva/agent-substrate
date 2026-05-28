@@ -6,9 +6,11 @@ from unittest.mock import AsyncMock, MagicMock
 from typing import AsyncIterator
 import pytest
 
-from ravi.extensions.agents.runtime.assistant_agent import RuntimeAssistantAgent
+from ravi.extensions.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
+from ravi.kernel.agent_catalog import AgentCatalogRegistry
 from ravi.kernel.runtime import LocalRuntime
 from ravi.kernel.messages.client_messages import AssistantMessage
+from ravi.kernel.agents.agent_result import RunStatus
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 
@@ -46,17 +48,21 @@ class TestRuntimeAssistantAgent:
             tool_calls=None,
         )
 
+        catalog = AgentCatalogRegistry()
+        catalog.register_model("primary", mock_model_client)
+        catalog.register_context("default", mock_model_context)
         agent = RuntimeAssistantAgent(
             name="helper",
             runtime=runtime,
-            model_client=mock_model_client,
-            model_context=mock_model_context,
+            catalog=catalog,
+            enable_capability_search=False,
         )
         await agent.start()
 
         # Send a message to the agent
         response = await runtime.send_message("Hi", recipient=agent.id)
-        assert response == "Hello! I am a runtime agent."
+        assert response.status == RunStatus.COMPLETED
+        assert response.output == ["Hello! I am a runtime agent."]
         mock_model_client.generate.assert_called_once()
 
     @pytest.mark.asyncio
@@ -97,19 +103,23 @@ class TestRuntimeAssistantAgent:
             return_value=ToolResult(output_text="Sunny, 68F")
         )
 
+        catalog = AgentCatalogRegistry()
+        catalog.register_model("primary", mock_model_client)
+        catalog.register_context("default", mock_model_context)
+        catalog.register_tool(weather_tool)
         agent = RuntimeAssistantAgent(
             name="weather_agent",
             runtime=runtime,
-            model_client=mock_model_client,
-            model_context=mock_model_context,
-            tools=[weather_tool],
+            catalog=catalog,
+            enable_capability_search=False,
         )
         await agent.start()
 
         response = await runtime.send_message(
             "What is the weather like in SF?", recipient=agent.id
         )
-        assert response == "It is sunny in San Francisco."
+        assert response.status == RunStatus.COMPLETED
+        assert response.output == ["It is sunny in San Francisco."]
 
         # Verify tool was called and model generated twice
         weather_tool.execute.assert_called_once_with(location="San Francisco")
@@ -124,21 +134,34 @@ class TestRuntimeAssistantAgent:
     ) -> None:
         # Define a guardrail that raises an exception
         from ravi.extensions.middleware.guardrails import GuardrailsMiddleware
-        from ravi.kernel.guardrails.base_guardrail import GuardrailType
+        from ravi.kernel.guardrails.base_guardrail import GuardrailType, GuardrailResult
 
         guardrail = MagicMock(spec=BaseGuardrail)
+        guardrail.name = "test-input-guardrail"
         guardrail.guardrail_type = GuardrailType.INPUT
-        guardrail.check = AsyncMock(side_effect=ValueError("Spam detected"))
+        guardrail.check = AsyncMock(
+            return_value=GuardrailResult(
+                guardrail_name="test-input-guardrail",
+                guardrail_type=GuardrailType.INPUT,
+                passed=False,
+                tripwire=True,
+                message="Spam detected",
+            )
+        )
 
+        catalog = AgentCatalogRegistry()
+        catalog.register_model("primary", mock_model_client)
+        catalog.register_context("default", mock_model_context)
         agent = RuntimeAssistantAgent(
             name="safe_agent",
             runtime=runtime,
-            model_client=mock_model_client,
-            model_context=mock_model_context,
+            catalog=catalog,
+            enable_capability_search=False,
             middleware=[GuardrailsMiddleware(input_guardrails=[guardrail])],
         )
         await agent.start()
 
         response = await runtime.send_message("spam", recipient=agent.id)
-        assert "Request blocked by guardrails" in str(response)
+        assert response.status == RunStatus.GUARDRAIL_TRIPPED
+        assert "Request blocked" in str(response.output)
         mock_model_client.generate.assert_not_called()

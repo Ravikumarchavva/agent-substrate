@@ -1,74 +1,62 @@
-"""Example 1-1: ReAct Agent — demonstrates the ReAct loop with built-in tools."""
+"""Example 1-1: ReAct Agent
+
+Demonstrates the ReAct (Reason + Act) loop with built-in tools.
+
+Interactive streaming chat:
+    uv run 01_react_agent.py
+"""
 
 import asyncio
 
 from ravi.configs.settings import settings
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.integrations.llm.factory import create_model_client
+from ravi.console import Console
+from ravi.extensions.agents import UserProxyAgent, AssistantAgent
 from ravi.kernel.agent_catalog import AgentCatalog
+from ravi.integrations.llm.factory import LLMFactory
 from ravi.kernel.memory.unbounded_memory import UnboundedMemory
-from ravi.kernel.messages._types import TextDeltaChunk
+from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 
 
-async def main() -> None:
-    # --- 1. Setup & config
-    chat_model = settings.CHAT_MODEL
-    api_keys = {
-        "openai":     settings.OPENAI_API_KEY,
-        "anthropic":  settings.ANTHROPIC_API_KEY,
-        "google":     settings.GEMINI_API_KEY,
-        "groq":       settings.GROQ_API_KEY,
-        "openrouter": settings.OPENROUTER_API_KEY,
-    }
-    print(f"CHAT_MODEL : {chat_model}")
-    print(f"Keys ready : {[k for k, v in api_keys.items() if v]}")
+# ---------------------------------------------------------------------------
+# Agent factory
+# ---------------------------------------------------------------------------
 
-    # --- 2. Build the catalog
+
+def _build_agent(model: str, api_key: str) -> AssistantAgent:
+    llm = LLMFactory(model, api_key).build()
     catalog = AgentCatalog()
-    catalog.register_model("primary", create_model_client(chat_model, api_keys=api_keys))
+    catalog.register_model("primary", llm)
     catalog.register_memory("memory", UnboundedMemory())
     for tool in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(tool)
 
-    # --- 3. Create ReActAgent
-    agent = ReActAgent(
+    return AssistantAgent(
         name="DemoBot",
         description="A helpful assistant for demonstration.",
         catalog=catalog,
         max_iterations=5,
-        verbose=True,
+        verbose=False,
     )
-    print(f"\nAgent '{agent.name}' ready with {len(catalog.all_tools())} tools.")
 
-    # --- 4. Single-shot run
-    print("\n--- Single-shot run ---")
-    result = await agent.run(
-        "What is the square root of 256 multiplied by 14? Also what time is it?"
+
+async def main() -> None:
+
+    api_key = settings.OPENAI_API_KEY
+    if not api_key:
+        raise SystemExit("OPENAI_API_KEY is not set. Add it to .env or the environment.")
+
+    user = UserProxyAgent(name="User")
+    agent = _build_agent(settings.CHAT_MODEL, api_key)
+
+    con = Console(agent)
+    await con.interactive(
+        greeting=(
+            f"[bold cyan]{agent.name}[/bold cyan] ready · "
+            f"{len(agent.tools)} tools loaded\n"
+            "[dim]Commands: /reset  /tools  /help  exit[/dim]"
+        ),
+        stream=True,
     )
-    print(f"Result: {result.output_text}")
-
-    # --- 5. Streaming run
-    print("\n--- Streaming run ---")
-    await agent.reset()
-    print("Response: ", end="", flush=True)
-    async for chunk in agent.run_stream("Compute 15 factorial."):
-        if isinstance(chunk, TextDeltaChunk):
-            print(chunk.text, end="", flush=True)
-    print()
-
-    # --- 6. Multi-turn conversation
-    print("\n--- Multi-turn conversation ---")
-    await agent.reset()
-
-    turn1 = await agent.run("My favourite number is 42. Remember that.")
-    print(f"Turn 1: {turn1.output_text}")
-
-    turn2 = await agent.run("What is my favourite number multiplied by 3?")
-    print(f"Turn 2: {turn2.output_text}")
-
-    turn3 = await agent.run("What time is it right now?")
-    print(f"Turn 3: {turn3.output_text}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""WhilePipelineRunner — execute a while-loop pipeline.
+"""WhileWorkflowRunner — execute a while-loop workflow.
 
 The ``while`` node drives a repeating loop:
   - **body** edge: run the downstream agent and feed its output back
@@ -22,21 +22,21 @@ from ravi.logger import setup_logging
 from typing import Any, AsyncIterator, Optional
 
 from ravi.kernel.agents.agent_result import AgentRunResult
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.extensions.agents.assistant.agent import AssistantAgent
 from ravi.extensions.pipelines._expr_eval import safe_eval
 
 logger = setup_logging()
 
 
-class WhilePipelineRunner:
+class WhileWorkflowRunner:
     """Wraps a body agent and runs it in a loop until the condition is false."""
 
     def __init__(
         self,
-        body_agent: ReActAgent,
+        body_agent: AssistantAgent,
         condition: str = "",
         max_iterations: int = 10,
-        done_agent: Optional[ReActAgent] = None,
+        done_agent: Optional[AssistantAgent] = None,
     ) -> None:
         self.body_agent = body_agent
         self.condition = condition.strip()

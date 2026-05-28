@@ -10,9 +10,11 @@ Production implementations of the kernel event fabric Protocols:
 from ravi.integrations.events._redis_fanout import RedisPubSubFanout
 from ravi.integrations.events._redis_lease import RedisLeaseRegistry
 from ravi.integrations.events._redis_log import RedisStreamsDurableLog
+from ravi.integrations.events.redis_event_bus import EventBus
 
 __all__ = [
     "RedisStreamsDurableLog",
     "RedisPubSubFanout",
     "RedisLeaseRegistry",
+    "EventBus",
 ]

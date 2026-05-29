@@ -62,7 +62,9 @@ async def section_1_setup() -> CodeInterpreterTool:
 
     print(f"  Tool name   : {tool.name!r}")
     print(f"  Risk level  : {tool.risk.name}")
-    print(f"  Mode        : http (CODE_INTERPRETER_URL={os.environ.get('CODE_INTERPRETER_URL')})")
+    print(
+        f"  Mode        : http (CODE_INTERPRETER_URL={os.environ.get('CODE_INTERPRETER_URL')})"
+    )
     print(f"  Session ID  : {tool.session_id}")
     print()
     print("  Modes available:")
@@ -88,7 +90,9 @@ async def section_2_simple_execution(tool: CodeInterpreterTool) -> None:
 
     print(f"  is_error  : {result.is_error}")
     print(f"  success   : {data.get('success')}")
-    print(f"  output    : {data.get('output', data.get('stdout', data.get('raw', '')))!r}")
+    print(
+        f"  output    : {data.get('output', data.get('stdout', data.get('raw', '')))!r}"
+    )
     print()
 
 
@@ -100,7 +104,9 @@ async def section_3_state_persistence(tool: CodeInterpreterTool) -> None:
     print("=== Section 3: State persistence ===")
 
     # Call 1: define a variable
-    await tool.execute(code="squares = [i**2 for i in range(1, 6)]\nprint('defined squares')")
+    await tool.execute(
+        code="squares = [i**2 for i in range(1, 6)]\nprint('defined squares')"
+    )
 
     # Call 2: reference the same variable — it is still in scope
     result2 = await tool.execute(code="print('squares:', squares)")
@@ -114,8 +120,10 @@ async def section_3_state_persistence(tool: CodeInterpreterTool) -> None:
     tool.session_id = "example-session-002"
     result3 = await tool.execute(code="print('new session'); x = 99\nprint('x =', x)")
     data3 = _parse_result(result3.content[0].text)
-    print(f"  New session output: {data3.get('output', data3.get('stdout', data3.get('raw', '')))!r}")
-    tool.session_id = "example-session-001"   # restore
+    print(
+        f"  New session output: {data3.get('output', data3.get('stdout', data3.get('raw', '')))!r}"
+    )
+    tool.session_id = "example-session-001"  # restore
     print()
 
 
@@ -133,7 +141,9 @@ async def section_4_error_capture(tool: CodeInterpreterTool) -> None:
     print(f"    output: {str(data)[:120]}")
 
     # Runtime exception
-    result_runtime = await tool.execute(code="raise ValueError('intentional error for demo')")
+    result_runtime = await tool.execute(
+        code="raise ValueError('intentional error for demo')"
+    )
     data2 = _parse_result(result_runtime.content[0].text)
     print(f"  Runtime error — is_error: {result_runtime.is_error}")
     print(f"    output: {str(data2)[:120]}")
@@ -170,11 +180,15 @@ def section_6_k8s_note() -> None:
     print()
     print("  Or pass an explicit HTTP client:")
     print()
-    print("    from ravi.catalog.tools.code_interpreter.http_client import CodeInterpreterClient")
+    print(
+        "    from ravi.catalog.tools.code_interpreter.http_client import CodeInterpreterClient"
+    )
     print("    client = CodeInterpreterClient(base_url='http://code-interpreter:8080')")
     print("    tool = CodeInterpreterTool(http_client=client)")
     print()
-    print("  The service is a StatefulSet — each replica manages a Firecracker microVM pool.")
+    print(
+        "  The service is a StatefulSet — each replica manages a Firecracker microVM pool."
+    )
     print("  session_id maps to a specific VM; Python state survives across calls.")
     print()
     print("  Apply the manifests:")

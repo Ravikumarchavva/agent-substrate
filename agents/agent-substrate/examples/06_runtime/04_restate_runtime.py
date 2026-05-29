@@ -23,19 +23,19 @@ import uuid
 
 from ravi.configs.settings import settings
 from ravi.kernel.runtime import (
-    AgentId,
-    InMemoryCheckpointStore,
-    LocalRuntime,
     RestartPolicy,
+)
+from ravi.fabric.runtime import LocalRuntime
+from ravi.fabric.actors.actor import ActorAgent
+from ravi.fabric import (
+    CheckpointStatus,
+    InMemoryCheckpointStore,
+    RunCheckpoint,
     SagaCoordinator,
     SagaFailedError,
-    SagaRecord,
-    TopicId,
 )
-from ravi.kernel.runtime._checkpoint import CheckpointStatus, RunCheckpoint
 from ravi.kernel.runtime._contracts import MessageContext
-from ravi.kernel.messages.content import ContentBlock, TextBlock
-from ravi.extensions.agents.runtime.agent import RuntimeAgent
+from ravi.kernel.messages.content import ContentBlock
 
 # ---
 # Restate integration settings
@@ -195,7 +195,7 @@ async def demo_checkpoints() -> None:
     print(f"  run_id:           {recovered.run_id}")
     print(f"  orchestrator:     {recovered.status.value}")
     print(f"  needs_recovery:   {recovered.needs_recovery}")
-    print(f"  children:")
+    print("  children:")
     for child in recovered.children:
         needs = " (needs re-run)" if child.is_in_progress else " (skip — cached)"
         print(f"    {child.agent_id}: {child.status.value}{needs}")
@@ -218,10 +218,12 @@ async def demo_restate_fallback() -> None:
 
     try:
         import aiohttp  # noqa: F401
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(
-                    f"{ingress_url}/restate/health", timeout=aiohttp.ClientTimeout(total=2)
+                    f"{ingress_url}/restate/health",
+                    timeout=aiohttp.ClientTimeout(total=2),
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -229,18 +231,29 @@ async def demo_restate_fallback() -> None:
                     else:
                         print(f"  Restate returned HTTP {resp.status}")
             except Exception as exc:
-                print(f"  Restate not reachable ({type(exc).__name__}) — using local fallback.")
-                print(f"  To start Restate: docker run --rm -p 8080:8080 -p 9070:9070 \\")
-                print(f"    docker.restate.dev/restatedev/restate")
+                print(
+                    f"  Restate not reachable ({type(exc).__name__}) — using local fallback."
+                )
+                print(
+                    "  To start Restate: docker run --rm -p 8080:8080 -p 9070:9070 \\"
+                )
+                print("    docker.restate.dev/restatedev/restate")
     except ImportError:
         print("  aiohttp not installed — checking via urllib instead.")
         import urllib.request
+
         try:
-            with urllib.request.urlopen(f"{ingress_url}/restate/health", timeout=2) as resp:
+            with urllib.request.urlopen(
+                f"{ingress_url}/restate/health", timeout=2
+            ) as resp:
                 print(f"  Restate healthy: {resp.read().decode()[:80]}")
         except Exception as exc:
-            print(f"  Restate not reachable ({type(exc).__name__}) — using local fallback.")
-            print(f"  LocalRuntime + SagaCoordinator provide the same guarantees in-process.")
+            print(
+                f"  Restate not reachable ({type(exc).__name__}) — using local fallback."
+            )
+            print(
+                "  LocalRuntime + SagaCoordinator provide the same guarantees in-process."
+            )
 
 
 # --- Section 5: LocalRuntime with SagaCoordinator — the local equivalent ---
@@ -262,13 +275,17 @@ async def demo_local_durable_agent() -> None:
     )
     await runtime.start()
 
-    class DurableWorkflowAgent(RuntimeAgent):
+    class DurableWorkflowAgent(ActorAgent):
         """Runs a multi-step workflow with exactly-once semantics."""
 
         async def on_message(
             self, ctx: MessageContext, content: list[ContentBlock]
         ) -> object:
-            task_id = content[0].text if content and hasattr(content[0], "text") else "unknown"
+            task_id = (
+                content[0].text
+                if content and hasattr(content[0], "text")
+                else "unknown"
+            )
             saga = runtime.saga_coordinator
 
             results = {}
@@ -313,4 +330,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

@@ -1,15 +1,15 @@
-# Layered Architecture Proposal
+# Layered Architecture
 
-**Status**: Design proposal — not yet implemented  
-**Motivation**: The current `kernel/` is frozen but contains four conceptually different levels of abstraction. This document diagnoses the problem and proposes a clean six-layer model that enables true autonomous agents without the current compression.
+**Status**: Implemented — migrated 2026-05-29  
+**Background**: The original `kernel/` mixed pure contracts with full concrete implementations — `LocalRuntime` (643 lines), `SagaCoordinator` (411 lines), `ResourceLockManager` (354 lines), and more — all frozen alongside pure ABCs and Protocols. This document records the diagnosis that motivated the six-layer split, the design rationale for each layer, and the migration map that describes what moved where.
 
 ---
 
-## The Problem with One Frozen Layer
+## The Problem That Was Solved
 
-The kernel is supposed to be "pure contracts — no I/O, no concrete implementations." But look at what's actually inside it:
+The kernel was supposed to be "pure contracts — no I/O, no concrete implementations." What it actually contained:
 
-| File | Lines | What it actually is |
+| File | Lines | What it actually was |
 |------|-------|---------------------|
 | `kernel/runtime/_local.py` | 643 | Full concrete `LocalRuntime` with asyncio loops |
 | `kernel/runtime/_saga.py` | 411 | Complete `SagaCoordinator` implementation |
@@ -21,7 +21,7 @@ The kernel is supposed to be "pure contracts — no I/O, no concrete implementat
 | `kernel/scheduler/_contracts.py` | 212 | `SchedulerContract`, `ResourceClaim`, `PreemptionSignal` |
 | `kernel/semantics/_contracts.py` | 225 | `SemanticInvariantChecker`, `SemanticDivergenceDetector` |
 
-The kernel is mixing **four fundamentally different levels** into one frozen bucket:
+The kernel was mixing **four fundamentally different levels** into one frozen bucket:
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
@@ -58,9 +58,9 @@ The consequence is architectural: when you want to add a new governance rule tha
 
 ---
 
-## What True Autonomy Requires
+## The Six-Layer Model
 
-A truly autonomous agent needs six independent capabilities, each built on the one below it:
+A truly autonomous agent system needs six independent capabilities, each built on the one below it. These are the layers the codebase is now structured around:
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#334155", "lineColor": "#64748b"}}}%%
@@ -88,14 +88,14 @@ Each layer can import from any layer below it. Nothing ever imports upward.
 
 ## Layer-by-Layer Breakdown
 
-### L0 — Core (what the kernel should be)
+### L0 — Kernel (the frozen contract layer)
 
-The absolute bedrock. Only pure Python types: dataclasses, enums, ABCs with no logic in their bodies, and Protocols. No `asyncio`, no Pydantic `@field_validator` with business logic, no concrete method bodies. If a file has more than a few lines per class, it probably doesn't belong here.
+The absolute bedrock. Only pure Python types: dataclasses, enums, ABCs with no logic in their bodies, and Protocols. No `asyncio`, no Pydantic `@field_validator` with business logic, no concrete method bodies. If a file has more than a few lines per class, it does not belong here.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
 flowchart LR
-    subgraph P0["L0 · Core  —  kernel/"]
+    subgraph P0["L0 · Kernel  —  kernel/"]
         direction TB
         T["types/<br/>ContentBlock · TextBlock<br/>ImageBlock · AudioBlock · JsonObject"]
         I["identity/<br/>AgentId · TopicId<br/>PrincipalId · DelegationToken"]
@@ -109,10 +109,10 @@ flowchart LR
     style P0 fill:#1e3a5f,stroke:#60a5fa,color:#eff6ff
 ```
 
-**What moves OUT of kernel to make this possible:**
+**What was removed from kernel/ during the migration:**
 
-| Currently in `kernel/` | Moves to |
-|------------------------|----------|
+| Was in `kernel/` | Moved to |
+|------------------|----------|
 | `runtime/_local.py` (LocalRuntime — full concrete) | L1 · Fabric |
 | `runtime/_base.py` (BaseRuntime — abstract but with concrete methods) | L1 · Fabric |
 | `runtime/_saga.py` (SagaCoordinator — full impl) | L1 · Fabric |
@@ -136,7 +136,7 @@ flowchart LR
 | `ranking/_contracts.py` | L5 · Platform |
 | `observability/_spans.py` | L5 · Platform |
 
-**What stays in kernel (L0 Core):** pure types, ABCs with no implementations, Protocols, the plugin registry. The kernel's LOC drops from ~16,895 to roughly ~4,000. The remaining code is truly frozen — it changes only when a new fundamental primitive is needed (which is rare).
+**What stays in kernel/ (L0):** pure types, ABCs with no implementations, Protocols, the plugin registry. After the migration the kernel sits at ~11.8k LOC / 95 files, bounded by CI ceilings of 14k LOC / 115 files. The remaining code is genuinely frozen — it changes only when a new fundamental primitive is needed.
 
 ---
 
@@ -319,9 +319,9 @@ flowchart LR
 
 **Why guardrails is a separate layer and not part of reasoning:**
 
-An agent's reasoning (L2) decides *what* to do. Guardrails (L4) decides *whether* it is *allowed* to do it. These are different authorities — in production you want the ability to strengthen guardrail rules without redeploying reasoning logic, and vice versa.
+An agent's reasoning (L2) decides *what* to do. Guardrails (L4) decides *whether* it is *allowed* to do it. These are different authorities — in production you want to strengthen guardrail rules without redeploying reasoning logic, and vice versa.
 
-Currently `MutationPolicy` lives in `kernel/safeguards/` but `GovernancePolicy` lives in `kernel/governance/`. Both are contracts with no implementations — their implementations cannot live in `kernel/` (frozen), but the extensions layer has no way to compose them together. Moving both to `guardrails/` resolves this: guardrail implementations live alongside their contracts, not split across layers.
+Before the migration, `MutationPolicy` lived in `kernel/safeguards/` and `GovernancePolicy` in `kernel/governance/` — both contracts with no implementations, impossible to compose. Moving both to `guardrails/` (L4) fixed this: contracts and implementations share a layer, and the layer boundary is enforced by import-linter. The `guardrails/` layer can import from `orchestration/` downward; `orchestration/` cannot import from `guardrails/`.
 
 ---
 
@@ -367,7 +367,7 @@ flowchart LR
     style PL fill:#4a1d96,stroke:#c084fc,color:#faf5ff
 ```
 
-RAG moves here from `extensions/rag/` because retrieval is not a reasoning operation in the single-agent sense — it is a data-platform concern shared across agents and tenants. An `AssistantAgent` calls a tool that queries the RAG pipeline; the RAG pipeline itself is a platform service.
+RAG lives in `platform/rag/` because retrieval is not a single-agent reasoning operation — it is a data-platform concern shared across agents and tenants. An `AssistantAgent` calls a tool that queries the RAG pipeline; the RAG pipeline itself is a platform service.
 
 ---
 
@@ -429,44 +429,42 @@ flowchart TD
 
 ---
 
-## Why This Enables Better Autonomous Agents
+## Why the Six Layers Enable Better Autonomous Agents
 
-### Problem 1: You cannot build a minimal autonomous agent today
+### Problem 1: Minimal agent dependency was impossible
 
-Currently the only agent is `AssistantAgent` in `extensions/agents/assistant/`. To use it you must accept that `extensions/` has no internal structure — guardrail runner, context strategies, HITL, middleware, orchestration, RAG are all peers at the same directory level.
+Before the migration the only agent was `AssistantAgent` in `extensions/agents/assistant/`. Using it meant depending on the whole `extensions/` bucket — guardrail runner, context strategies, HITL, middleware, orchestration, and RAG as undifferentiated peers.
 
-You cannot take "just the agent loop" without implicitly depending on the whole `extensions/` bucket.
+**Now:** `AssistantAgent` depends on `reasoning/` which depends on `fabric/` which depends on `kernel/`. The dependency chain is explicit and minimal. Taking just `reasoning/` gives a fully working single agent with no multi-agent, no governance, no platform concerns.
 
-**With layers:** An `AssistantAgent` depends on `reasoning/` which depends on `fabric/` which depends on `kernel/`. The dependency is explicit and minimal. Taking just `reasoning/` gives you a fully working single agent with no multi-agent, no governance, no platform concerns.
+### Problem 2: Safety contracts had no home
 
-### Problem 2: Safety contracts have no home
+`MutationPolicy` was in `kernel/safeguards/` but implementations had to live in `extensions/`. `GovernancePolicy` was in `kernel/governance/` but implementations were nowhere — there was no clear place to put them.
 
-`MutationPolicy` is in `kernel/safeguards/` but its implementations must live in `extensions/`. `GovernancePolicy` is in `kernel/governance/` but its implementations are nowhere — nobody has built them because there is no clear place.
+**Now:** `guardrails/` contains both contracts and implementations. A `TenantBudgetPolicy(BudgetLedger)` lives in `guardrails/economic/` alongside the contract it implements. The layer boundary is enforced: `guardrails/` can import from `orchestration/` downward, but `orchestration/` cannot import from `guardrails/`.
 
-**With layers:** `guardrails/` contains both contracts AND implementations. You write a `TenantBudgetPolicy(BudgetLedger)` in `guardrails/economic/` and it is immediately usable. The layer boundary is enforced: guardrails can import from `orchestration/` downward, but `orchestration/` cannot import from `guardrails/`.
+### Problem 3: The "frozen" constraint was unenforceable
 
-### Problem 3: The "frozen" constraint is unenforceable
+The kernel had 16,895 LOC including full asyncio implementations. Import-linter prevented upward imports but could not prevent the kernel from growing with concrete code.
 
-The kernel has 16,895 LOC including full asyncio implementations. The import-linter can prevent upward imports, but it cannot prevent the kernel from growing with concrete code. `LocalRuntime` alone is 643 lines.
-
-**With layers:** The true kernel (L0 Core) contains only types and protocols — roughly 4,000 LOC. This is genuinely freezable. Adding a new feature never requires editing L0.
+**Now:** The kernel sits at ~11.8k LOC / 95 files (CI ceiling: 14k / 115). Only contracts remain — adding a feature never requires editing L0.
 
 ### Problem 4: No guidance for where new features live
 
-A new developer asks: "I want to add a budget-aware retry that stops the agent when it hits $10 in LLM costs." Where does this go?
+*"I want to add a budget-aware retry that stops the agent when it hits $10 in LLM costs. Where does this go?"*
 
-Today: unclear — `kernel/economic/` has the contract, `extensions/resilience/` has retry, `extensions/middleware/` has another retry, nobody has wired them together.
+Before: unclear — `kernel/economic/` had the contract, `extensions/resilience/` had retry, `extensions/middleware/` had another retry, nothing was wired together.
 
-**With layers:** Budget-aware retry is a **guardrails + reasoning** composition. Write `BudgetAwareRetryMiddleware` in `guardrails/economic/` (it reads from `BudgetLedger`) and register it as middleware. The layer guarantees it can import from `reasoning/` (middleware protocol) and from `guardrails/` (economic ledger).
+**Now:** Budget-aware retry is a guardrails + reasoning composition. Write `BudgetAwareRetryMiddleware` in `guardrails/economic/` (it reads from `BudgetLedger`) and register it as middleware. The layer guarantees it can import from `reasoning/` (middleware protocol) and `guardrails/` (economic ledger).
 
 ---
 
-## Migration Map
+## What Moved Where
 
-What moves where from the current structure:
+Complete file-to-layer reference for the migration.
 
-| Current path | New path | Layer |
-|---|---|---|
+| Old path | Current path | Layer |
+|----------|-------------|-------|
 | `kernel/runtime/_local.py` | `fabric/runtime/local.py` | L1 |
 | `kernel/runtime/_base.py` | `fabric/runtime/base.py` | L1 |
 | `kernel/runtime/_dispatcher.py` | `fabric/runtime/dispatcher.py` | L1 |
@@ -481,93 +479,73 @@ What moves where from the current structure:
 | `kernel/memory/unbounded_memory.py` | `fabric/memory/unbounded.py` | L1 |
 | `kernel/storage/local.py` | `fabric/storage/local.py` | L1 |
 | `kernel/hooks.py` | `reasoning/hooks/manager.py` | L2 |
-| `kernel/execution/pipeline.py` | `reasoning/middleware/pipeline.py` | L2 |
-| `extensions/agents/assistant/` | `reasoning/agents/assistant/` | L2 |
-| `extensions/context/` | `reasoning/memory/context/` | L2 |
-| `extensions/memory/session_manager.py` | `reasoning/memory/session.py` | L2 |
-| `extensions/guardrails/` | `reasoning/guardrails/` | L2 |
-| `extensions/middleware/` | `reasoning/middleware/` | L2 |
-| `extensions/structured/` | `reasoning/structured/` | L2 |
-| `extensions/agents/orchestrator/` | `orchestration/agents/orchestrator.py` | L3 |
-| `extensions/agents/flow/` | `orchestration/agents/flow.py` | L3 |
-| `extensions/agents/user_proxy/` | `orchestration/agents/proxy.py` | L3 |
-| `extensions/pipelines/` | `orchestration/workflows/` | L3 |
+| `kernel/execution/pipeline.py` | `reasoning/middleware/pipeline.py` (then kernel) | L2→L0 |
+| _(old extensions)_ `agents/assistant/` | `reasoning/agents/assistant/` | L2 |
+| _(old extensions)_ `context/` | `reasoning/memory/` | L2 |
+| _(old extensions)_ `guardrails/` | `reasoning/guardrails/` | L2 |
+| _(old extensions)_ `middleware/` | `reasoning/middleware/` | L2 |
+| _(old extensions)_ `structured/` | `reasoning/structured/` | L2 |
+| _(old extensions)_ `agents/orchestrator/` | `orchestration/agents/` | L3 |
+| _(old extensions)_ `agents/flow/` | `orchestration/agents/` | L3 |
+| _(old extensions)_ `agents/user_proxy/` | `orchestration/agents/proxy/` | L3 |
+| _(old extensions)_ `pipelines/` | `orchestration/workflows/` | L3 |
 | `kernel/safeguards/` | `guardrails/mutation/` | L4 |
 | `kernel/governance/` | `guardrails/governance/` | L4 |
 | `kernel/economic/` | `guardrails/economic/` | L4 |
-| `kernel/observability/_killswitch.py` | `guardrails/killswitch.py` | L4 |
+| `kernel/observability/_killswitch.py` | `guardrails/` | L4 |
 | `kernel/semantics/` | `guardrails/semantic/` | L4 |
-| `kernel/observability/_spans.py`, `_replay.py` | `platform/observability/` | L5 |
+| `kernel/observability/_spans.py` | `platform/observability/` | L5 |
 | `kernel/scheduler/` | `platform/scheduling/` | L5 |
 | `kernel/ranking/` | `platform/ranking/` | L5 |
 | `evals/` | `platform/evals/` | L5 |
-| `extensions/rag/` | `platform/rag/` | L5 |
-| `extensions/batch/` | `platform/batch/` | L5 |
+| _(old extensions)_ `rag/` | `platform/rag/` | L5 |
+| _(old extensions)_ `batch/` | `platform/batch/` | L5 |
 
-**Stays in kernel/ (L0 Core):** everything in `kernel/messages/`, `kernel/tools/base_tool.py`, `kernel/memory/base_memory.py`, `kernel/context/base_context.py`, `kernel/guardrails/base_guardrail.py`, `kernel/middleware/base.py`, `kernel/llm/base_client.py`, `kernel/storage/base.py`, `kernel/structured/result.py`, `kernel/runtime/_identity.py`, `kernel/runtime/_protocol.py`, `kernel/runtime/_contracts.py` (Envelope, MessageContext, RestartPolicy), `kernel/runtime/_errors.py`, `kernel/plugin/`, `kernel/contracts/`, `kernel/agents/agent_result.py`.
-
----
-
-## Implementation Order
-
-This migration is large. Do it in phases so CI stays green throughout.
-
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
-gantt
-    title Migration Phases
-    dateFormat  X
-    axisFormat %s
-
-    section Phase 1 - Create fabric/
-    Move LocalRuntime and runtime internals       :p1a, 0, 3
-    Move ActorAgent to fabric/actors/             :p1b, 1, 3
-    Move AgentCatalog to fabric/catalog/          :p1c, 2, 3
-    Move Saga + ResourceLock + Checkpoint         :p1d, 2, 3
-    Update all imports                            :p1e, 3, 4
-
-    section Phase 2 - Create reasoning/
-    Move AssistantAgent to reasoning/             :p2a, 4, 6
-    Move context strategies                       :p2b, 4, 6
-    Move guardrail runner and builtins            :p2c, 5, 6
-    Move middleware + builtins + HookManager      :p2d, 5, 6
-
-    section Phase 3 - Create orchestration/
-    Move OrchestratorAgent, FlowAgent, UserProxy  :p3a, 7, 9
-    Rename extensions/pipelines/ to workflows/   :p3b, 7, 9
-
-    section Phase 4 - Create guardrails/
-    Move MutationPolicy, CircuitBreaker           :p4a, 10, 12
-    Move GovernanceContracts + impls              :p4b, 10, 12
-    Move EconomicLedger + impls                   :p4c, 11, 12
-    Move SemanticInvariants + KillSwitch          :p4d, 11, 12
-
-    section Phase 5 - Create platform/
-    Move observability spans + replay             :p5a, 13, 15
-    Move scheduler contracts + Temporal           :p5b, 13, 15
-    Move evals/, rag/, batch/, ranking/           :p5c, 14, 15
-
-    section Phase 6 - Strip kernel/
-    Delete all moved files from kernel/           :p6a, 16, 17
-    Lower LOC + file-count ceilings in CI         :p6b, 16, 17
-```
-
-Each phase should pass all tests before the next begins. Phases 1–3 are load-bearing and should be done by one developer sequentially. Phases 4–5 can be parallelised after Phase 3 lands.
+**Stays in kernel/ (L0):** `kernel/messages/`, `kernel/tools/base_tool.py`, `kernel/memory/base_memory.py`, `kernel/context/`, `kernel/guardrails/base_guardrail.py`, `kernel/middleware/base.py`, `kernel/llm/base_client.py`, `kernel/storage/base.py`, `kernel/structured/result.py`, `kernel/runtime/_identity.py`, `kernel/runtime/_protocol.py`, `kernel/runtime/_contracts.py`, `kernel/runtime/_errors.py`, `kernel/plugin/`, `kernel/contracts/`, `kernel/agents/agent_result.py`, `kernel/safeguards/` (contracts only), `kernel/governance/` (contracts only), `kernel/economic/` (contracts only), `kernel/observability/` (contracts only), `kernel/semantics/` (contracts only).
 
 ---
 
-## What This Does Not Change
+## Migration Summary
 
-- The `catalog/`, `integrations/`, `server/`, `services/`, `shared/` directories are unchanged
-- The plugin registry API (`@register_agent`, `@register_guardrail`, etc.) is unchanged
-- The `AgentRuntime` protocol and `AgentId`/`TopicId` types are unchanged — they stay in kernel/
-- The `Envelope` dataclass stays in kernel/ (it is a pure value type)
-- `BaseTool`, `BaseMemory`, `BaseGuardrail`, `BaseModelClient`, `ModelContext` ABCs stay in kernel/
+The migration was completed in six phases on 2026-05-29. All 1297 tests pass. Import-linter reports 0 violations. Kernel sits at ~11.8k LOC / 95 files.
+
+| Phase | What was done | CI status |
+|-------|---------------|-----------|
+| 1 — Fabric | Moved `LocalRuntime`, runtime internals, `ActorAgent`, `AgentCatalog`, `SagaCoordinator`, `ResourceLockManager`, `UnboundedMemory` | Green |
+| 2 — Reasoning | Moved `AssistantAgent`, context strategies, guardrail runner and built-ins, middleware, `HookManager` | Green |
+| 3 — Orchestration | Moved `OrchestratorAgent`, `FlowAgent`, `UserProxyAgent`, pipeline runners → `orchestration/workflows/` | Green |
+| 4 — Guardrails | Moved `MutationPolicy`, `CircuitBreaker`, governance contracts, economic ledger, kill-switch, semantic invariants | Green |
+| 5 — Platform | Moved OTel span recorder, replay gate, scheduler contracts, evals, RAG, batch, ranking | Green |
+| 6 — Kernel strip | Removed all upward re-export shims from kernel `__init__.py` files; deleted dead `extensions/` tree; lowered CI ceilings | Green |
 
 ---
 
-## Breaking Changes & Backward Compatibility
+## What Did Not Change
 
-- **No Backward Compatibility Required**: We explicitly do not preserve backward compatibility. Public APIs can be changed, and import paths will be updated without adding `__init__.py` shims or maintaining legacy patterns. This allows a clean break to keep the implementation simple.
-- **Import Changes**: Consumers must update all import paths immediately to reflect the new structure. For example, `LocalRuntime` will no longer be importable from `kernel.runtime._local` and must instead be imported from `fabric.runtime.local.LocalRuntime`.
+- The `catalog/`, `integrations/`, `server/`, `services/`, `shared/` directories are unchanged.
+- The plugin registry API (`@register_agent`, `@register_guardrail`, etc.) is unchanged.
+- The `AgentRuntime` protocol and `AgentId`/`TopicId` types are unchanged — they remain in `kernel/`.
+- The `Envelope` dataclass stays in `kernel/` (pure value type with no runtime dependency).
+- `BaseTool`, `BaseMemory`, `BaseGuardrail`, `BaseModelClient`, `ModelContext` ABCs stay in `kernel/`.
+
+---
+
+## Import Paths After Migration
+
+There is no backward compatibility. Old `kernel.runtime._local.LocalRuntime` style imports must be updated:
+
+| What you need | Current import |
+|---|---|
+| `LocalRuntime` | `from ravi.fabric.runtime.local import LocalRuntime` |
+| `ActorAgent` | `from ravi.fabric.actors.actor import ActorAgent` |
+| `StreamChannel`, `StreamEnvelope` | `from ravi.fabric.actors.actor import StreamChannel, StreamEnvelope` |
+| `AgentCatalogRegistry` | `from ravi.fabric.catalog import AgentCatalogRegistry` |
+| `UnboundedMemory` | `from ravi.fabric.memory.unbounded import UnboundedMemory` |
+| `AssistantAgent` | `from ravi.reasoning.agents.assistant.agent import AssistantAgent` |
+| `UserProxyAgent` | `from ravi.orchestration.agents.proxy.agent import UserProxyAgent` |
+| `AgentId`, `TopicId` | `from ravi.kernel.runtime._identity import AgentId, TopicId` |
+| `AgentRuntime` (protocol) | `from ravi.kernel.runtime._protocol import AgentRuntime` |
+| `BaseTool`, `ToolResult` | `from ravi.kernel.tools.base_tool import BaseTool, ToolResult` |
+| `BaseMemory` | `from ravi.kernel.memory.base_memory import BaseMemory` |
+| `BaseGuardrail` | `from ravi.kernel.guardrails.base_guardrail import BaseGuardrail` |
 

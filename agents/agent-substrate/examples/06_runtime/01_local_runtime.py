@@ -12,14 +12,13 @@ from __future__ import annotations
 import asyncio
 
 from ravi.kernel.runtime import (
-    AgentId,
-    LocalRuntime,
     RestartPolicy,
     TopicId,
 )
+from ravi.fabric.runtime import LocalRuntime
 from ravi.kernel.runtime._contracts import MessageContext
 from ravi.kernel.messages.content import ContentBlock
-from ravi.extensions.agents.runtime.agent import RuntimeAgent
+from ravi.fabric.actors.actor import ActorAgent
 
 # ---
 # What LocalRuntime adds over plain asyncio functions:
@@ -35,10 +34,10 @@ from ravi.extensions.agents.runtime.agent import RuntimeAgent
 # ---
 
 
-# --- Section 1: define custom agent types via RuntimeAgent ---
+# --- Section 1: define custom agent types via ActorAgent ---
 
 
-class EchoAgent(RuntimeAgent):
+class EchoAgent(ActorAgent):
     """Returns the input text with a prefix."""
 
     async def on_message(
@@ -48,7 +47,7 @@ class EchoAgent(RuntimeAgent):
         return f"[echo] {text}"
 
 
-class UpperAgent(RuntimeAgent):
+class UpperAgent(ActorAgent):
     """Uppercases the input text."""
 
     async def on_message(
@@ -58,7 +57,7 @@ class UpperAgent(RuntimeAgent):
         return text.upper()
 
 
-class EventLogAgent(RuntimeAgent):
+class EventLogAgent(ActorAgent):
     """Records all topic events it receives."""
 
     def __init__(self, *args, **kwargs) -> None:
@@ -141,7 +140,7 @@ async def demo_pub_sub(runtime: LocalRuntime) -> None:
 # --- Section 4: supervisor restart on crash ---
 
 
-class FlakyAgent(RuntimeAgent):
+class FlakyAgent(ActorAgent):
     """Crashes on the first call, succeeds on subsequent calls."""
 
     def __init__(self, *args, **kwargs) -> None:
@@ -190,7 +189,9 @@ async def demo_introspection(runtime: LocalRuntime) -> None:
 
     print(f"  worker_id:        {runtime.worker_id}")
     print(f"  registered_types: {runtime.registered_types}")
-    print(f"  lease_registry:   {runtime.lease_registry!r}  (None = single-worker mode)")
+    print(
+        f"  lease_registry:   {runtime.lease_registry!r}  (None = single-worker mode)"
+    )
     print(f"  resource_locks:   {runtime.resource_locks!r}")
     print(f"  saga_coordinator: {runtime.saga_coordinator!r}")
 
@@ -215,4 +216,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

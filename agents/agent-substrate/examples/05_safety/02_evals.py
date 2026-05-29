@@ -16,7 +16,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from ravi.extensions.structured import LLMJudge, parse
+from ravi.reasoning.structured import LLMJudge, parse
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.guardrails.base_guardrail import GuardrailContext, GuardrailType
 from ravi.kernel.messages.client_messages import UserMessage
@@ -26,6 +26,7 @@ from ravi.kernel.messages.content import TextBlock
 # ---
 # Shared client
 # ---
+
 
 def _client(model: str = "gpt-4o-mini") -> OpenAIClient:
     api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -53,7 +54,9 @@ class Invoice(BaseModel):
 class QualityJudge(BaseModel):
     """Schema used by LLMJudge to score a response."""
 
-    good: bool = Field(description="True if the response is correct, helpful, and safe.")
+    good: bool = Field(
+        description="True if the response is correct, helpful, and safe."
+    )
     score: float = Field(description="Quality score from 0.0 (worst) to 1.0 (best).")
     reasoning: str = Field(description="Brief justification for the score.")
 
@@ -85,7 +88,9 @@ async def demo_structured_parse() -> None:
         print(f"  Vendor : {inv.vendor}")
         print(f"  Total  : {inv.total} {inv.currency}")
         for item in inv.line_items:
-            print(f"  Line   : {item.quantity}x {item.description} @ ${item.unit_price}")
+            print(
+                f"  Line   : {item.quantity}x {item.description} @ ${item.unit_price}"
+            )
     elif result.refused:
         print(f"  Model refused: {result.refusal}")
     else:
@@ -116,7 +121,10 @@ async def demo_llm_judge() -> None:
     for question, answer in [
         ("What is 2 + 2?", "The answer is 4."),
         ("What is the capital of France?", "I don't know, maybe London?"),
-        ("Summarise the water cycle.", "Water evaporates, forms clouds, and falls as rain."),
+        (
+            "Summarise the water cycle.",
+            "Water evaporates, forms clouds, and falls as rain.",
+        ),
     ]:
         ctx = GuardrailContext(
             agent_name="demo",
@@ -127,7 +135,9 @@ async def demo_llm_judge() -> None:
         score = result.metadata.get("score", "n/a")
         print(f"  Q: {question!r:.55s}")
         print(f"  A: {answer!r:.55s}")
-        print(f"  passed={result.passed}  score={score}  reason={result.message[:80]!r}")
+        print(
+            f"  passed={result.passed}  score={score}  reason={result.message[:80]!r}"
+        )
         print()
 
 
@@ -198,7 +208,7 @@ async def demo_schema_mismatch() -> None:
         schema=IncompleteSchema,
         system_prompt="Evaluate the text and return notes.",
         guardrail_type=GuardrailType.OUTPUT,
-        pass_field="good",       # 'good' does not exist on IncompleteSchema
+        pass_field="good",  # 'good' does not exist on IncompleteSchema
         name="misconfigured_judge",
     )
 
@@ -232,4 +242,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

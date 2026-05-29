@@ -247,11 +247,11 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from ravi.console import Console
     from ravi.fabric.catalog._catalog import AgentCatalog
     from ravi.reasoning.agents.assistant.agent import AssistantAgent
-    from ravi.orchestration.agents.proxy.agent import UserProxyAgent
     from ravi.fabric.runtime.local import LocalRuntime
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
-    from ravi.fabric.memory.unbounded import UnboundedMemory
-    from ravi.reasoning.memory.context.unbounded import UnboundedContext
+    from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+    from ravi.reasoning.memory.context.unbounded import UnboundedStrategy
+    from ravi.kernel.context.base_context import ModelContext
 
     # Build tools
     tools = []
@@ -269,9 +269,6 @@ def cmd_chat(args: argparse.Namespace) -> None:
             tools.extend(mcp_tools)
 
     catalog = AgentCatalog()
-    catalog.register_model("primary", OpenAIClient(model=args.model))
-    catalog.register_context("default", UnboundedContext())
-    catalog.register_memory("default", UnboundedMemory())
     for tool in tools:
         catalog.register_tool(tool)
 
@@ -280,6 +277,11 @@ def cmd_chat(args: argparse.Namespace) -> None:
             agent = AssistantAgent(
                 args.name,
                 rt,
+                model=OpenAIClient(model=args.model),
+                context=ModelContext(
+                    history=InMemoryHistoryProvider(),
+                    compaction_strategies=[UnboundedStrategy()]
+                ),
                 catalog=catalog,
                 max_iterations=args.max_iterations,
                 verbose=args.verbose,

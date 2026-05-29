@@ -1,17 +1,22 @@
 """Architecture invariants that keep the kernel frozen.
 
-These checks supplement the ``import-linter`` contract in ``pyproject.toml``
-with cheap heuristics that catch regressions early:
+These checks supplement the ``import-linter`` contracts in ``pyproject.toml``
+(``agent stack layers`` + ``kernel is independent``) with cheap heuristics that
+catch regressions early:
 
-* No upward imports (`integrations`, `extensions`, `catalog`, …).
+* No upward imports — the kernel (L0) must not import any layer above it
+  (``fabric``, ``reasoning``, ``orchestration``, ``guardrails``, ``platform``)
+  nor the orthogonal app modules (``integrations``, ``catalog``, ``server``, …).
 * LOC and file-count ceilings — large new feature additions should not land
   in the kernel.
-* No concrete agent / guardrail / middleware classes — only base ABCs.
+* No concrete agent / guardrail / middleware classes — only base ABCs,
+  Protocols, and pure value types.
 
-The ceilings are deliberately loose (20% headroom over current size) so
-small kernel refinements don't trip CI, but any *substantial* feature
-addition fails the build and forces the "should this be in extensions?"
-conversation.
+The kernel holds *all* contracts: ABCs, Protocols, dataclasses, enums (plus the
+generic middleware-pipeline runner). Concrete implementations live in the
+layers above. The ceilings carry ~20% headroom over the current size so small
+contract refinements don't trip CI, while any substantial concrete addition
+fails the build and forces the "which layer does this belong in?" conversation.
 """
 
 from __future__ import annotations
@@ -22,13 +27,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL_DIR = REPO_ROOT / "src" / "ravi" / "kernel"
 
-# Loose ceilings — current values are ~15.3k LOC and 102 files. Headroom of
-# ~30% covers the remaining S7/S9/S10/S11/S16 kernel contracts while still
-# flagging unintended feature drift. The kernel grew from ~11.5k to ~15.3k
-# during S8/S12/S13/S14/S15 contract additions (all legitimate — only
-# Protocols, ABCs, and pure dataclasses; zero concrete logic).
-MAX_KERNEL_LOC = 20_000
-MAX_KERNEL_FILES = 130
+# Loose ceilings — current values are ~11.8k LOC and 95 files. The kernel holds
+# only contracts (Protocols, ABCs, dataclasses, enums) + the generic middleware
+# pipeline; concrete runtime/agents/policies live in fabric/reasoning/guardrails/
+# platform. ~20% headroom flags unintended feature drift without nagging on
+# small contract refinements.
+MAX_KERNEL_LOC = 14_000
+MAX_KERNEL_FILES = 115
 
 
 def _iter_kernel_files() -> list[Path]:
@@ -40,7 +45,8 @@ def test_kernel_loc_ceiling() -> None:
     total = sum(len(p.read_text(encoding="utf-8").splitlines()) for p in files)
     assert total < MAX_KERNEL_LOC, (
         f"Kernel size grew to {total} LOC (ceiling {MAX_KERNEL_LOC}). "
-        f"New features should go in ravi/extensions/, not ravi/kernel/."
+        f"Concrete code belongs in fabric/reasoning/orchestration/guardrails/"
+        f"platform, not ravi/kernel/ — the kernel holds contracts only."
     )
 
 
@@ -48,13 +54,18 @@ def test_kernel_file_count_ceiling() -> None:
     n = len(_iter_kernel_files())
     assert n < MAX_KERNEL_FILES, (
         f"Kernel grew to {n} files (ceiling {MAX_KERNEL_FILES}). "
-        f"Have you added a new feature module here that belongs in extensions/?"
+        f"Have you added a feature module here that belongs in a layer above?"
     )
 
 
-# Upward-import patterns that must never appear in kernel source.
+# Upward-import patterns that must never appear in kernel source: the five
+# stack layers above L0, plus the orthogonal application modules.
 _FORBIDDEN_PREFIXES = (
-    "ravi.extensions",
+    "ravi.fabric",
+    "ravi.reasoning",
+    "ravi.orchestration",
+    "ravi.guardrails",
+    "ravi.platform",
     "ravi.integrations",
     "ravi.catalog",
     "ravi.server",
@@ -90,16 +101,10 @@ def test_kernel_has_no_upward_imports() -> None:
 
 
 def test_kernel_agents_contains_only_base() -> None:
-    """``kernel/agents/`` may define only the base ABC and result dataclasses."""
+    """``kernel/agents/`` may define only the agent contract and result types."""
     agents_dir = KERNEL_DIR / "agents"
     allowed_classes = {
-        # Actor-model contracts (new)
-        "ActorAgent",       # ABC — single actor base
-        "StreamChannel",    # Protocol — streaming output channel
-        "StreamEnvelope",   # dataclass — streaming message payload
-        # Legacy callable contracts (kept while callers migrate)
-        "BaseAgent",        # ABC
-        "PromptEnricher",   # Protocol
+        "AgentProtocol",    # Protocol — structural agent contract
         "AgentConfig",      # dataclass / model
         "AgentRunResult",
         "AggregatedUsage",
@@ -118,8 +123,9 @@ def test_kernel_agents_contains_only_base() -> None:
                 relpath = path.relative_to(REPO_ROOT)
                 found.append(f"{relpath}: defines {name}")
     assert not found, (
-        "Concrete agents must live in ravi/extensions/agents/, not kernel/. "
-        "Found in kernel:\n  " + "\n  ".join(found)
+        "Concrete agents must live in ravi/reasoning/agents/ or "
+        "ravi/orchestration/agents/, not kernel/. The ActorAgent base lives in "
+        "ravi/fabric/actors/. Found in kernel:\n  " + "\n  ".join(found)
     )
 
 
@@ -143,7 +149,7 @@ def test_kernel_guardrails_contains_only_base() -> None:
                 relpath = path.relative_to(REPO_ROOT)
                 found.append(f"{relpath}: defines {name}")
     assert not found, (
-        "Concrete guardrails must live in ravi/extensions/guardrails/. "
+        "Concrete guardrails must live in ravi/reasoning/guardrails/. "
         "Found in kernel:\n  " + "\n  ".join(found)
     )
 
@@ -168,6 +174,6 @@ def test_kernel_middleware_contains_only_base() -> None:
                 relpath = path.relative_to(REPO_ROOT)
                 found.append(f"{relpath}: defines {name}")
     assert not found, (
-        "Concrete middleware must live in ravi/extensions/middleware/. "
+        "Concrete middleware must live in ravi/reasoning/middleware/. "
         "Found in kernel:\n  " + "\n  ".join(found)
     )

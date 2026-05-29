@@ -103,31 +103,33 @@ def unregister(category: str, name: str) -> None:
 # Category-bound decorators
 # ---------------------------------------------------------------------------
 #
-# These decorators import their base classes lazily inside _bind() to keep
-# `from ravi.kernel.plugin import register_*` cheap and to avoid circular
-# imports between kernel.plugin and kernel.{agents,guardrails,...}.
+# All base classes are kernel-level (kernel → kernel is fine). Agents are
+# validated against the kernel ``AgentProtocol`` contract, not the concrete
+# ``ActorAgent`` base (which lives in the L1 fabric layer) — the kernel must
+# never import fabric.
 
-from ravi.fabric.actors.actor import ActorAgent
+from ravi.kernel.agents._protocol import AgentProtocol
 from ravi.kernel.context.base_context import ModelContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.memory.base_memory import BaseMemory
+from ravi.kernel.memory.history_provider import HistoryProvider
 from ravi.kernel.middleware.base import BaseMiddleware
 from ravi.kernel.tools.base_tool import BaseTool
 
 
 
 def _register_agent_decorator(name: str):  # type: ignore[return]
-    """Register an agent class — accepts both ActorAgent and BaseAgent subclasses."""
+    """Register an agent class — must be an ``ActorAgent`` subclass."""
     if not isinstance(name, str) or not name:
         raise PluginRegistryError(
             "@register_agent: name must be a non-empty string"
         )
 
     def wrap(cls: type) -> type:
-        if not (isinstance(cls, type) and issubclass(cls, ActorAgent)):
+        if not (isinstance(cls, type) and issubclass(cls, AgentProtocol)):
             raise PluginRegistryError(
-                f"@register_agent('{name}'): {cls!r} must be a subclass of ActorAgent"
+                f"@register_agent('{name}'): {cls!r} must implement the agent "
+                f"contract (on_message/start/stop) — e.g. subclass ActorAgent"
             )
         key = ("agent", name)
         if key in _REGISTRY:
@@ -149,7 +151,7 @@ register_agent = _register_agent_decorator
 register_guardrail = _make_decorator("guardrail", base=BaseGuardrail)
 register_middleware = _make_decorator("middleware", base=BaseMiddleware)
 register_provider = _make_decorator("provider", base=BaseModelClient)
-register_memory = _make_decorator("memory", base=BaseMemory)
+register_memory = _make_decorator("memory", base=HistoryProvider)
 register_context = _make_decorator("context", base=ModelContext)
 register_tool = _make_decorator("tool", base=BaseTool)
 # ``rag`` has no canonical base class in kernel yet; use ``object`` and let

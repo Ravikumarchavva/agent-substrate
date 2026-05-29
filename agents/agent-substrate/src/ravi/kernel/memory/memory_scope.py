@@ -19,7 +19,7 @@ class MemoryScope(str, Enum):
     Values
     ------
     ISOLATED
-        Default.  The agent owns its own private ``BaseMemory`` instance.
+        Default.  The agent owns its own private ``HistoryProvider`` instance.
         Messages are never automatically shared with other agents.
         Suitable for stand-alone agents and most sub-agents where information
         leakage between agents is undesirable.
@@ -27,7 +27,7 @@ class MemoryScope(str, Enum):
     SHARED
         The agent participates in a flow-level shared memory.  When an
         orchestrator or flow runner creates/binds agents with this scope they
-        all write to and read from the *same* ``BaseMemory`` instance.
+        all write to and read from the *same* ``HistoryProvider`` instance.
         Use this when agents need full visibility of the whole conversation
         (e.g. a critic agent reviewing a writer agent's output).
 

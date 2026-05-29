@@ -1,17 +1,17 @@
-"""ravi.reasoning.memory.context — Concrete ModelContext strategies."""
+"""ravi.reasoning.memory.context — Concrete CompactionStrategy implementations."""
 
-from ravi.reasoning.memory.context.hybrid import HybridContext
-from ravi.reasoning.memory.context.redis_context import RedisModelContext
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
-from ravi.reasoning.memory.context.summarizing import SummarizingContext
-from ravi.reasoning.memory.context.token_budget import TokenBudgetContext
-from ravi.reasoning.memory.context.unbounded import UnboundedContext
+from ravi.reasoning.memory.context.hybrid import HybridStrategy
+from ravi.reasoning.memory.context.cached_context import CachedStrategy
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
+from ravi.reasoning.memory.context.summarizing import SummarizingStrategy
+from ravi.reasoning.memory.context.token_budget import TokenBudgetStrategy
+from ravi.reasoning.memory.context.unbounded import UnboundedStrategy
 
 __all__ = [
-    "UnboundedContext",
-    "SlidingWindowContext",
-    "TokenBudgetContext",
-    "HybridContext",
-    "RedisModelContext",
-    "SummarizingContext",
+    "SlidingWindowStrategy",
+    "TokenBudgetStrategy",
+    "HybridStrategy",
+    "CachedStrategy",
+    "SummarizingStrategy",
+    "UnboundedStrategy",
 ]

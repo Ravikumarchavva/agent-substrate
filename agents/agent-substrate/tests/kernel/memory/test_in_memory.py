@@ -1,10 +1,12 @@
-"""Tests for UnboundedMemory."""
+"""Tests for InMemoryHistoryProvider."""
 
 from __future__ import annotations
 
 
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.kernel.messages.client_messages import UserMessage, AssistantMessage
+
+SID = "session-1"
 
 
 def _user(text: str) -> UserMessage:
@@ -20,35 +22,45 @@ def _assistant(text: str) -> AssistantMessage:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-async def test_empty_memory_returns_empty_list():
-    mem = UnboundedMemory()
-    msgs = await mem.get_messages()
-    assert msgs == []
+async def test_empty_session_returns_empty_list():
+    mem = InMemoryHistoryProvider()
+    assert await mem.load_messages(SID) == []
+    assert await mem.count_messages(SID) == 0
 
 
-async def test_add_and_retrieve_single_message():
-    mem = UnboundedMemory()
+async def test_save_and_load_single_message():
+    mem = InMemoryHistoryProvider()
     msg = _user("hello")
-    await mem.add_message(msg)
-    result = await mem.get_messages()
+    written = await mem.save_messages(SID, [msg])
+    assert written == 1
+    result = await mem.load_messages(SID)
     assert len(result) == 1
     assert result[0] is msg
 
 
 async def test_messages_preserve_insertion_order():
-    mem = UnboundedMemory()
+    mem = InMemoryHistoryProvider()
     msgs = [_user("first"), _assistant("second"), _user("third")]
-    for m in msgs:
-        await mem.add_message(m)
-    stored = await mem.get_messages()
+    await mem.save_messages(SID, msgs)
+    stored = await mem.load_messages(SID)
     assert [m.content for m in stored] == [m.content for m in msgs]
 
 
-async def test_clear_empties_memory():
-    mem = UnboundedMemory()
-    await mem.add_message(_user("hi"))
-    await mem.clear()
-    assert await mem.get_messages() == []
+async def test_clear_session_empties_only_that_session():
+    mem = InMemoryHistoryProvider()
+    await mem.save_messages(SID, [_user("hi")])
+    await mem.save_messages("other", [_user("keep")])
+    await mem.clear_session(SID)
+    assert await mem.load_messages(SID) == []
+    assert await mem.count_messages("other") == 1
+
+
+async def test_sessions_are_isolated():
+    mem = InMemoryHistoryProvider()
+    await mem.save_messages("a", [_user("a-msg")])
+    await mem.save_messages("b", [_user("b-msg")])
+    assert await mem.count_messages("a") == 1
+    assert (await mem.load_messages("b"))[0].content == ["b-msg"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -56,56 +68,41 @@ async def test_clear_empties_memory():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-async def test_get_messages_with_limit_returns_last_n():
-    mem = UnboundedMemory()
-    for i in range(10):
-        await mem.add_message(_user(f"msg {i}"))
-    last_3 = await mem.get_messages(limit=3)
+async def test_load_with_limit_returns_last_n():
+    mem = InMemoryHistoryProvider()
+    await mem.save_messages(SID, [_user(f"msg {i}") for i in range(10)])
+    last_3 = await mem.load_messages(SID, limit=3)
     assert len(last_3) == 3
     assert last_3[-1].content == ["msg 9"]
 
 
 async def test_limit_larger_than_count_returns_all():
-    mem = UnboundedMemory()
-    await mem.add_message(_user("only one"))
-    result = await mem.get_messages(limit=100)
-    assert len(result) == 1
+    mem = InMemoryHistoryProvider()
+    await mem.save_messages(SID, [_user("only one")])
+    assert len(await mem.load_messages(SID, limit=100)) == 1
 
 
 async def test_limit_zero_returns_empty():
-    mem = UnboundedMemory()
-    await mem.add_message(_user("hi"))
-    result = await mem.get_messages(limit=0)
-    assert result == []
+    mem = InMemoryHistoryProvider()
+    await mem.save_messages(SID, [_user("hi")])
+    assert await mem.load_messages(SID, limit=0) == []
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Token count heuristic
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-async def test_token_count_increases_with_messages():
-    mem = UnboundedMemory()
-    before = await mem.get_token_count()
-    await mem.add_message(_user("a" * 400))
-    after = await mem.get_token_count()
-    assert after > before
-
-
-async def test_token_count_zero_on_empty():
-    mem = UnboundedMemory()
-    assert await mem.get_token_count() == 0
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Isolation: get_messages returns a copy
+# Isolation: load_messages returns a copy
 # ══════════════════════════════════════════════════════════════════════════════
 
 
 async def test_returned_list_is_a_copy():
-    mem = UnboundedMemory()
-    await mem.add_message(_user("original"))
-    copy = await mem.get_messages()
+    mem = InMemoryHistoryProvider()
+    await mem.save_messages(SID, [_user("original")])
+    copy = await mem.load_messages(SID)
     copy.append(_user("injected"))
-    stored = await mem.get_messages()
+    stored = await mem.load_messages(SID)
     assert len(stored) == 1  # original list unchanged
+
+
+async def test_save_empty_list_is_noop():
+    mem = InMemoryHistoryProvider()
+    assert await mem.save_messages(SID, []) == 0
+    assert await mem.count_messages(SID) == 0

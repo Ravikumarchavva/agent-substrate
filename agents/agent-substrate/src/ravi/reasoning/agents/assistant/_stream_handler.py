@@ -13,9 +13,7 @@ from ravi.reasoning.agents.assistant._guardrail_runner import (
     check_tool_call_guardrails,
     build_tool_blocked_message,
 )
-from ravi.reasoning.agents.assistant._tool_execution import (
-    parse_tool_call,
-)
+from ravi.kernel.tools.parsing import parse_tool_call
 from ravi.exceptions import GuardrailTripwireError
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.messages.client_messages import (
@@ -41,7 +39,8 @@ async def stream_llm_generation(
     messages: List[Any],
     tool_schemas: Optional[List[Dict[str, Any]]],
     response_schema: Optional[type],
-    memory: Any,
+    history: Any,
+    session_id: str,
     kwargs: Dict[str, Any],
 ) -> AsyncIterator[Any]:
     """Yield chunks from model_client.generate_stream and return the final message.
@@ -70,7 +69,7 @@ async def stream_llm_generation(
                 final_response_obj = chunk.message
 
         if final_response_obj:
-            await memory.add_message(final_response_obj)
+            await history.save_messages(session_id, [final_response_obj])
 
         llm_t1 = asyncio.get_event_loop().time()
         global_metrics.record_histogram(
@@ -80,14 +79,17 @@ async def stream_llm_generation(
         )
     except asyncio.CancelledError:
         if final_response_obj is not None:
-            await memory.add_message(final_response_obj)
+            await history.save_messages(session_id, [final_response_obj])
         elif partial_text:
-            await memory.add_message(
-                AssistantMessage(
-                    role="assistant",
-                    content=[partial_text],
-                    finish_reason="cancelled",
-                )
+            await history.save_messages(
+                session_id,
+                [
+                    AssistantMessage(
+                        role="assistant",
+                        content=[partial_text],
+                        finish_reason="cancelled",
+                    )
+                ],
             )
         raise
     except Exception as e:
@@ -108,7 +110,8 @@ async def handle_stream_final_response(
     run_id: str,
     model_client: BaseModelClient,
     model_context: Any,
-    memory: Any,
+    history: Any,
+    session_id: str,
     input_text: str,
     response_schema: Optional[type],
     stream_pub: Any,
@@ -164,9 +167,9 @@ async def handle_stream_final_response(
             )
         else:
             context_messages = await model_context.build(
-                session_id=getattr(memory, "_session_id", agent_name),
+                session_id=session_id,
                 current_input=input_text,
-                raw_messages=await memory.get_messages(),
+                raw_messages=await history.load_messages(session_id),
                 model_client=model_client,
             )
             structured_result = await model_client.generate(
@@ -191,7 +194,8 @@ async def process_stream_tool_calls(
     agent_name: str,
     run_id: str,
     step_num: int,
-    memory: Any,
+    history: Any,
+    session_id: str,
     execute_tool_fn: Any,
     stream_pub: Any,
     tool_timeout: Optional[float] = None,
@@ -217,7 +221,7 @@ async def process_stream_tool_calls(
             )
             tool_blocked = True
             tool_msg = build_tool_blocked_message(parsed, e.message)
-            await memory.add_message(tool_msg)
+            await history.save_messages(session_id, [tool_msg])
             yield tool_msg
             if stream_pub is not None:
                 await stream_pub.emit(tool_msg)
@@ -245,7 +249,7 @@ async def process_stream_tool_calls(
                     )
             else:
                 _, tool_msg = await coro
-            await memory.add_message(tool_msg)
+            await history.save_messages(session_id, [tool_msg])
             yield tool_msg
             if stream_pub is not None:
                 await stream_pub.emit(tool_msg)

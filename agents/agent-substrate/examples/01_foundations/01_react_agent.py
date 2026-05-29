@@ -10,23 +10,22 @@ import asyncio
 
 from ravi.configs.settings import settings
 from ravi.console import Console
-from ravi.extensions.agents import UserProxyAgent, AssistantAgent
-from ravi.kernel.agent_catalog import AgentCatalog
+from ravi.fabric.runtime import LocalRuntime
+from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.integrations.llm.factory import LLMFactory
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
-from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 
 
-# ---------------------------------------------------------------------------
-# Agent factory
-# ---------------------------------------------------------------------------
+# Build agent catalog and assistant agent instance
 
 
-def _build_agent(model: str, api_key: str) -> AssistantAgent:
+def _build_agent(model: str, api_key: str, runtime: LocalRuntime) -> AssistantAgent:
     llm = LLMFactory(model, api_key).build()
-    catalog = AgentCatalog()
+    catalog = AgentCatalogRegistry()
     catalog.register_model("primary", llm)
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     for tool in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(tool)
 
@@ -35,6 +34,7 @@ def _build_agent(model: str, api_key: str) -> AssistantAgent:
         description="A helpful assistant for demonstration.",
         catalog=catalog,
         max_iterations=5,
+        runtime=runtime,
         verbose=False,
     )
 
@@ -43,20 +43,28 @@ async def main() -> None:
 
     api_key = settings.OPENAI_API_KEY
     if not api_key:
-        raise SystemExit("OPENAI_API_KEY is not set. Add it to .env or the environment.")
+        raise SystemExit(
+            "OPENAI_API_KEY is not set. Add it to .env or the environment."
+        )
 
-    user = UserProxyAgent(name="User")
-    agent = _build_agent(settings.CHAT_MODEL, api_key)
+    runtime = LocalRuntime()
+    await runtime.start()
 
-    con = Console(agent)
-    await con.interactive(
-        greeting=(
-            f"[bold cyan]{agent.name}[/bold cyan] ready · "
-            f"{len(agent.tools)} tools loaded\n"
-            "[dim]Commands: /reset  /tools  /help  exit[/dim]"
-        ),
-        stream=True,
-    )
+    try:
+        agent = _build_agent(settings.CHAT_MODEL, api_key, runtime)
+        await agent.start()
+
+        con = Console(agent)
+        await con.interactive(
+            greeting=(
+                "[bold cyan]User[/bold cyan] ready · "
+                f"{len(agent.tools)} tools loaded\n"
+                "[dim]Commands: /reset  /tools  /help  exit[/dim]"
+            ),
+            stream=True,
+        )
+    finally:
+        await runtime.stop()
 
 
 if __name__ == "__main__":

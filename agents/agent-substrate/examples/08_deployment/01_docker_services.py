@@ -19,8 +19,8 @@ from ravi.configs.settings import settings
 #   docker compose -f docker/docker-compose.yml up -d
 
 SERVICES = [
-    ("postgres",   "localhost", 5432),
-    ("redis",      "localhost", 6379),
+    ("postgres", "localhost", 5432),
+    ("redis", "localhost", 6379),
     ("mcp-server", "localhost", 3000),
 ]
 

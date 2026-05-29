@@ -16,11 +16,11 @@ Run:
 
 import asyncio
 
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.tools.builtin_tools import CalculatorTool, WebSearchTool
+from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.fabric.tools.builtin_tools import CalculatorTool, WebSearchTool
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 
 # Infrastructure: OPENAI_API_KEY environment variable
 
@@ -29,7 +29,7 @@ RESEARCH_TOPIC = "the impact of agentic AI on software engineering workflows in 
 # ---
 
 
-def build_research_agent(step_name: str, instructions: str) -> ReActAgent:
+def build_research_agent(step_name: str, instructions: str) -> AssistantAgent:
     """Build a single-purpose agent for one pipeline step."""
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o-mini"))
@@ -37,7 +37,7 @@ def build_research_agent(step_name: str, instructions: str) -> ReActAgent:
     catalog.register_tool(WebSearchTool())
     catalog.register_tool(CalculatorTool())
 
-    return ReActAgent(
+    return AssistantAgent(
         name=step_name,
         description=f"Research pipeline agent: {step_name}",
         system_instructions=instructions,
@@ -71,7 +71,9 @@ async def step_analyze(raw_findings: str) -> str:
             "evidence assessment."
         ),
     )
-    prompt = f"Analyze these research findings and extract key themes:\n\n{raw_findings}"
+    prompt = (
+        f"Analyze these research findings and extract key themes:\n\n{raw_findings}"
+    )
     result = await agent.run(prompt)
     return result.output_text
 

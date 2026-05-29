@@ -1,26 +1,24 @@
-"""Agent service – creates agents with restored per-session memory.
+"""Agent service – creates agents backed by a shared HistoryProvider.
 
 Responsibilities:
-  1. Build agent memory from persisted steps (Redis hot path, Postgres cold path)
-  2. Create configured ReActAgent per thread
-  3. Real-time write-through to Redis via per-request ``RedisMemory``
-  4. Persist new messages to database (Postgres cold store) during streaming
+  1. Ensure the session is populated in the shared ``HistoryProvider``
+     (cache hit; on a miss, seed it from the Postgres cold store).
+  2. Create a configured ``AssistantAgent`` per thread, bound to its session_id.
+  3. Persist new messages to the database (cold store) during streaming.
 
 Stateless agent design
 ──────────────────────
 Agents hold **no** state between requests.  Every request:
-  1. Creates a per-request ``RedisMemory(session_id=...)`` sharing the
-     parent's connection pool (zero new TCP connections).
-  2. Loads the full chat history from Redis into local cache via ``restore()``.
-     On cache miss, seeds Redis from the Postgres cold store first.
+  1. Reuses the shared, multi-session ``HistoryProvider`` from ``app.state``;
+     the agent addresses it by ``session_id`` (the thread id).
+  2. On a cache miss, seeds the session from the Postgres cold store.
   3. Passes a ``SlidingWindowContext(max_messages=N)`` to the agent — the LLM
-     only sees the last N messages, while the full history stays in memory
-     and Redis.
-  4. Runs the agent — each ``add_message()`` writes through to Redis in
-     real-time via a fire-and-forget background task.  No post-run sync needed.
+     only sees the last N messages, while the full history stays in the
+     provider.
+  4. Runs the agent — each ``save_messages()`` writes through to the provider.
 
-Redis is the source of truth for active sessions.  On the first request for
-a thread (cache miss), the Postgres cold store is read to seed Redis.
+The provider is the source of truth for active sessions.  On the first request
+for a thread (cache miss), the Postgres cold store is read to seed it.
 """
 
 from __future__ import annotations
@@ -33,12 +31,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
 from ravi.kernel.context.base_context import ModelContext
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
-from ravi.integrations.memory.redis_memory import RedisMemory
+from ravi.kernel.memory.history_provider import HistoryProvider
 from ravi.kernel.messages.client_messages import AssistantMessage
 from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.runtime import AgentId, AgentRuntime
+from ravi.kernel.runtime import AgentRuntime
 from ravi.kernel.tools.base_tool import BaseTool
 from ravi.shared.execution import create_assistant_agent, load_session_memory
 
@@ -57,7 +55,7 @@ async def load_agent_for_thread(
     model_client: BaseModelClient,
     tools: List[BaseTool],
     system_instructions: str,
-    redis_memory: Optional[RedisMemory] = None,
+    history: Optional[HistoryProvider] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
     verbose: bool = True,
@@ -68,24 +66,23 @@ async def load_agent_for_thread(
     runtime: AgentRuntime,
     enable_capability_search: bool = True,
 ) -> AssistantAgent:
-    """Load a per-session agent whose history comes from Redis (hot) or Postgres (cold).
+    """Load a per-session agent backed by the shared ``HistoryProvider``.
 
-    Stateless design — a fresh ``ReActAgent`` is created on every request.
-    The agent's memory is a per-request ``RedisMemory`` instance that shares
-    the connection pool from ``app.state.redis_memory``.  Every
-    ``add_message`` during the run writes through to Redis in real-time
-    (fire-and-forget background task), eliminating the need for post-run sync.
+    Stateless design — a fresh ``AssistantAgent`` is created on every request.
+    The agent shares the multi-session ``HistoryProvider`` from
+    ``app.state.history`` and addresses it by ``session_id`` (the thread id).
+    Every ``save_messages`` during the run writes through to that provider.
 
-    Windowing is delegated to ``SlidingWindowContext`` — the agent's memory
-    stores the full history while the LLM only sees the last
+    Windowing is delegated to ``SlidingWindowContext`` — the provider stores
+    the full history while the LLM only sees the last
     ``model_context_window`` messages per turn.
 
     Args:
         db:                   DB session (used only for the Postgres cold path).
         thread_id:            Thread / session identifier.
-        redis_memory:         Shared ``RedisMemory`` instance from ``app.state``.
-                              When ``None``, falls back to Postgres-only mode
-                              with ``UnboundedMemory``.
+        history:              Shared ``HistoryProvider`` from ``app.state``.
+                              When ``None``, falls back to an in-process
+                              ``InMemoryHistoryProvider`` seeded from Postgres.
         model_context_window: Max non-system messages passed to the LLM per
                               turn via ``SlidingWindowContext``.
         …                     All other kwargs forwarded to the shared agent factory.
@@ -95,14 +92,17 @@ async def load_agent_for_thread(
         or actor-model dispatch via ``on_message()``.
     """
     session_id = str(thread_id)
-    context: ModelContext = SlidingWindowContext(max_messages=model_context_window)
     memory = await load_session_memory(
         session_id=session_id,
         system_instructions=system_instructions,
-        redis_memory=redis_memory,
+        history=history,
         include_mcp_app_context=True,
         cold_store_name="Postgres",
         load_persisted_steps=lambda: load_messages_for_memory(db, thread_id),
+    )
+    context = ModelContext(
+        history=memory,
+        compaction_strategies=[SlidingWindowStrategy(max_messages=model_context_window)]
     )
 
     if runtime is None:
@@ -116,6 +116,7 @@ async def load_agent_for_thread(
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
+        session_id=session_id,
         model_context=context,
         max_iterations=max_iterations,
         verbose=verbose,

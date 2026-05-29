@@ -44,15 +44,15 @@ from ravi.kernel.agents.agent_result import AgentRunResult
 from ravi.kernel.context.base_context import ModelContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
-from ravi.kernel.memory.base_memory import BaseMemory
+from ravi.kernel.memory.history_provider import HistoryProvider
 from ravi.kernel.memory.memory_scope import MemoryScope
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.shared.observability import logger
-from ravi.guardrails.resilience.policies import RetryPolicy
+from ravi.fabric.resilience.policies import RetryPolicy
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 from ravi.catalog import SkillManager
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
-from ravi.kernel.runtime import AgentId, AgentRuntime
+from ravi.kernel.runtime import AgentRuntime
 from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.kernel.middleware.base import BaseMiddleware
 
@@ -226,7 +226,7 @@ class OrchestratorAgent(AssistantAgent):
         model_client: BaseModelClient,
         sub_agents: List[ActorAgent],
         system_instructions: Optional[str] = None,
-        memory: Optional[BaseMemory] = None,
+        memory: Optional[HistoryProvider] = None,
         memory_scope: MemoryScope = MemoryScope.ISOLATED,
         model_context: Optional[ModelContext] = None,
         max_iterations: int = 50,
@@ -275,15 +275,8 @@ class OrchestratorAgent(AssistantAgent):
                 GuardrailsMiddleware(tool_call_guardrails=handoff_guardrails)
             ] + resolved_middleware
 
-        # Build the catalog from legacy params (or use the provided one).
-        from ravi.fabric.catalog import AgentCatalog
-
-        resolved_catalog: AgentCatalogRegistry = catalog or AgentCatalog()
-        resolved_catalog.register_model("primary", model_client)
-        if model_context is not None:
-            resolved_catalog.register_context("default", model_context)
-        if memory is not None:
-            resolved_catalog.register_memory("default", memory)
+        # Build slim tool catalog
+        resolved_catalog: AgentCatalogRegistry = catalog or AgentCatalogRegistry()
         for tool in all_tools:
             resolved_catalog.register_tool(tool)
         if skill_manager is not None:
@@ -301,10 +294,25 @@ class OrchestratorAgent(AssistantAgent):
                 "OrchestratorAgent requires a runtime — "
                 "pass runtime=LocalRuntime() or the server's app.state.runtime"
             )
+        from ravi.fabric.memory.in_memory import InMemoryHistoryProvider as _IMP
+        from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
+
+        resolved_history = memory or _IMP()
+        if model_context is None:
+            strategies = [SlidingWindowStrategy(max_messages=40)]
+        elif isinstance(model_context, list):
+            strategies = model_context
+        else:
+            strategies = [model_context]
+
+        model_context_mgr = ModelContext(history=resolved_history, compaction_strategies=strategies)
+
         super().__init__(
             name,
             runtime,
             description=description,
+            model=model_client,
+            context=model_context_mgr,
             catalog=resolved_catalog,
             system_instructions=system_instructions or default_instructions,
             memory_scope=memory_scope,
@@ -326,6 +334,7 @@ class OrchestratorAgent(AssistantAgent):
             t.name: t
             for t in handoff_tools  # type: ignore[misc]
         }
+
 
         # Back-patch orchestrator reference now that self is available
         for ht in handoff_tools:

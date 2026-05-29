@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Any, AsyncIterator, List, Optional
 
 from ravi.kernel.execution.context import ExecutionContext
-from ravi.reasoning.middleware.pipeline import ExecutionMiddlewarePipeline
+from ravi.kernel.execution.pipeline import ExecutionMiddlewarePipeline
 
 
 class WorkflowStage(str, Enum):

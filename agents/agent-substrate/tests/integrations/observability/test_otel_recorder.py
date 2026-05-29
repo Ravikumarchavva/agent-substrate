@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ravi.integrations.observability import OtelEnvelopeSpanRecorder
-from ravi.platform.observability.spans import (
+from ravi.kernel.observability import (
     EnvelopeSpan,
     EnvelopeSpanRecorder,
     SpanQuery,

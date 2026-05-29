@@ -30,8 +30,8 @@ from typing import Any, Generic, List, Optional, Type, TypeVar
 from pydantic import BaseModel
 
 from ravi.kernel.batch.config import BatchConfig, BatchResult
-from ravi.platform.batch.processor import BatchProcessor
-from ravi.kernel.messages.client_messages import SystemMessage, UserMessage
+from ravi.fabric.batch.processor import BatchProcessor
+from ravi.kernel.messages.client_messages import UserMessage
 from ravi.kernel.structured.result import StructuredOutputResult
 
 logger = setup_logging()

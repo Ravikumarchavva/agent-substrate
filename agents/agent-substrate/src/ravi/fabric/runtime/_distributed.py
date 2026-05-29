@@ -40,7 +40,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Optional
 
 from ravi.kernel.contracts._event import EventEnvelope
-from ravi.platform.scheduling._contracts import ResourceClaim, SlotGrantStatus, SchedulerContract
+from ravi.kernel.scheduler._contracts import SchedulerContract
 from ravi.kernel.events._fabric import (
     EventDeliveryMode,
     EventFabric,
@@ -64,17 +64,17 @@ from ravi.fabric.runtime.base import BaseRuntime
 from ravi.fabric.runtime.local import LocalRuntime
 
 if TYPE_CHECKING:
-    from ravi.guardrails.economic._ledger import BudgetLedger
-    from ravi.guardrails.governance._contracts import (
+    from ravi.kernel.economic._ledger import BudgetLedger
+    from ravi.kernel.governance._contracts import (
         CoalitionDetector,
         GovernancePolicy,
         QuarantineActuator,
     )
     from ravi.kernel.metadata._store import MetadataStore
-    from ravi.guardrails.killswitch import OperatorKillSwitch
-    from ravi.platform.observability.spans import EnvelopeSpanRecorder
-    from ravi.guardrails.mutation._breaker import CircuitBreaker
-    from ravi.guardrails.semantic._contracts import (
+    from ravi.kernel.observability import OperatorKillSwitch
+    from ravi.kernel.observability import EnvelopeSpanRecorder
+    from ravi.kernel.safeguards._breaker import CircuitBreaker
+    from ravi.kernel.semantics._contracts import (
         SemanticDivergenceDetector,
         SemanticInvariant,
         SemanticInvariantChecker,
@@ -399,7 +399,7 @@ class DistributedRuntime(BaseRuntime):
 
         # S14: operator kill-switch check — block before any side effects.
         if self._kill_switch is not None:
-            from ravi.guardrails.killswitch import KillSwitchTarget
+            from ravi.kernel.observability import KillSwitchTarget
             ks_target = KillSwitchTarget(
                 sender=str(sender) if sender is not None else None,
                 target=str(recipient),
@@ -449,7 +449,7 @@ class DistributedRuntime(BaseRuntime):
         # S14: start an envelope span to trace this dispatch.
         span_id: str | None = None
         if self._span_recorder is not None:
-            from ravi.platform.observability.spans import EnvelopeSpan, SpanStatus
+            from ravi.kernel.observability import EnvelopeSpan, SpanStatus
             span = EnvelopeSpan(
                 envelope_id=uuid.uuid4().hex,
                 correlation_id=uuid.uuid4().hex,
@@ -464,7 +464,7 @@ class DistributedRuntime(BaseRuntime):
         grant_id: str | None = None
         reservation = None
         if self._scheduler is not None:
-            from ravi.platform.scheduling._contracts import ResourceClaim, SlotGrantStatus
+            from ravi.kernel.scheduler._contracts import ResourceClaim, SlotGrantStatus
             
             sender_fqn = str(sender) if sender is not None else "anonymous"
             token_budget = int(getattr(message, "token_budget", 0) or 0)
@@ -472,7 +472,7 @@ class DistributedRuntime(BaseRuntime):
             
             # --- Budget Ledger Spend Check ---
             if self._budget_ledger is not None and sender is not None and token_budget > 0:
-                from ravi.guardrails.economic._ledger import BudgetExhausted
+                from ravi.kernel.economic._ledger import BudgetExhausted
                 try:
                     reservation = await self._budget_ledger.reserve(sender, float(token_budget))
                 except BudgetExhausted as exc:
@@ -516,7 +516,7 @@ class DistributedRuntime(BaseRuntime):
             )
         except Exception:
             if span_id is not None and self._span_recorder is not None:
-                from ravi.platform.observability.spans import SpanStatus
+                from ravi.kernel.observability import SpanStatus
                 await self._span_recorder.finish_span(span_id, status=SpanStatus.FAILED)
             if reservation is not None and self._budget_ledger is not None:
                 await self._budget_ledger.release(reservation)
@@ -540,7 +540,7 @@ class DistributedRuntime(BaseRuntime):
                 self._active_grants_by_principal.pop(str(sender), None)
 
         if span_id is not None and self._span_recorder is not None:
-            from ravi.platform.observability.spans import SpanStatus
+            from ravi.kernel.observability import SpanStatus
             await self._span_recorder.finish_span(span_id, status=SpanStatus.OK)
         return result
 
@@ -873,7 +873,7 @@ class DistributedRuntime(BaseRuntime):
         if self._coalition_detector is not None:
             coalitions = await self._coalition_detector.detect()
 
-        from ravi.guardrails.governance._contracts import GovernanceAction, GovernanceEvidence
+        from ravi.kernel.governance._contracts import GovernanceAction, GovernanceEvidence
 
         evaluated: set[str] = set()
         for coalition in coalitions:
@@ -919,7 +919,7 @@ class DistributedRuntime(BaseRuntime):
         otherwise falls back to the bare checker.  CRITICAL-severity failures
         are routed to the governance plane.
         """
-        from ravi.guardrails.semantic._contracts import SemanticDivergence, SemanticSeverity
+        from ravi.kernel.semantics._contracts import SemanticDivergence, SemanticSeverity
 
         event: dict[str, object] = {
             "result_repr": repr(result),

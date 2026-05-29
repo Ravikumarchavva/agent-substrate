@@ -1,23 +1,21 @@
 """Redis-backed distributed fair-share resource scheduler — Section 7.
 
-Implements :class:`~ravi.platform.scheduling._contracts.SchedulerContract` using Redis
+Implements :class:`~ravi.kernel.scheduler._contracts.SchedulerContract` using Redis
 for cross-worker orchestration, atomic state transitions via Lua scripting,
 and real-time notifications via Redis Pub/Sub.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from redis.asyncio import Redis
 
-from ravi.platform.scheduling._contracts import (
+from ravi.kernel.scheduler._contracts import (
     PreemptionReason,
     PreemptionSignal,
     ResourceClaim,

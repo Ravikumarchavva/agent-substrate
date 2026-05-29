@@ -8,7 +8,7 @@ from ravi.kernel.execution.errors import (
     CircuitOpenError,
     MaxAgentDepthError,
 )
-from ravi.reasoning.middleware.pipeline import ExecutionMiddlewarePipeline
+from ravi.kernel.execution.pipeline import ExecutionMiddlewarePipeline
 
 __all__ = [
     "AgentTimeoutError",

@@ -672,7 +672,7 @@ async def chat(
             model_client=deps["model_client"],
             tools=deps["tools"],
             system_instructions=deps["system_instructions"],
-            redis_memory=ctx.redis_memory,
+            history=ctx.history,
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
             tool_approval_handler=deps["tool_approval_handler"],
             tools_requiring_approval=deps["tools_requiring_approval"],

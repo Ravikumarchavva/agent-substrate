@@ -2,7 +2,7 @@
 
 Takes the JSON graph produced by the visual builder and instantiates
 real ``AssistantAgent``, ``BaseTool``, ``LLMJudge``, ``StructuredRouter``,
-``SkillManager``, and ``BaseMemory`` objects wired together exactly as
+``SkillManager``, and ``HistoryProvider`` objects wired together exactly as
 the user drew them on the canvas.
 
 Usage::
@@ -15,7 +15,7 @@ Usage::
     # ``app_state`` is the FastAPI app.state that holds tool instances, etc.
     runnable = await pipeline.build(config, tools_registry=app_state.tools,
                                      model_client=app_state.model_client,
-                                     redis_memory=app_state.redis_memory)
+                                     history=app_state.history)
 
     # ``runnable`` is either a AssistantAgent (single agent) or StructuredRouter
     if hasattr(runnable, 'run'):
@@ -35,8 +35,8 @@ from ravi.reasoning.agents.assistant.agent import AssistantAgent
 from ravi.kernel.context.base_context import ModelContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.memory.base_memory import BaseMemory
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.kernel.memory.history_provider import HistoryProvider
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.orchestration.workflows.middleware import BaseWorkflowMiddleware, WorkflowRunnable
 from ravi.orchestration.workflows.condition_runner import ConditionWorkflowRunner
 from ravi.kernel.pipelines.schema import (
@@ -53,7 +53,6 @@ from ravi.kernel.tools.base_tool import BaseTool
 if TYPE_CHECKING:
     from ravi.integrations.mcp.client import MCPClient
     from ravi.integrations.mcp.tool import MCPTool
-    from ravi.integrations.memory.redis_memory import RedisMemory
 
 logger = setup_logging()
 
@@ -98,7 +97,7 @@ class WorkflowRunner:
         tools_registry: Any,
         model_client: BaseModelClient,
         workflow_middleware: Optional[List[BaseWorkflowMiddleware]] = None,
-        redis_memory: Optional[RedisMemory] = None,
+        history: Optional[HistoryProvider] = None,
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
@@ -139,7 +138,7 @@ class WorkflowRunner:
                 while_nodes[0],
                 tools_registry=tools_list,
                 model_client=model_client,
-                redis_memory=redis_memory,
+                history=history,
                 model_context=model_context,
                 session_id=session_id,
                 hitl_bridge=hitl_bridge,
@@ -154,7 +153,7 @@ class WorkflowRunner:
                     condition_nodes[0],
                     tools_registry=tools_list,
                     model_client=model_client,
-                    redis_memory=redis_memory,
+                    history=history,
                     model_context=model_context,
                     session_id=session_id,
                     hitl_bridge=hitl_bridge,
@@ -167,7 +166,7 @@ class WorkflowRunner:
                         router_nodes[0],
                         tools_registry=tools_list,
                         model_client=model_client,
-                        redis_memory=redis_memory,
+                        history=history,
                         model_context=model_context,
                         session_id=session_id,
                     )
@@ -189,7 +188,7 @@ class WorkflowRunner:
                                 config,
                                 tools_registry=tools_list,
                                 model_client=model_client,
-                                redis_memory=redis_memory,
+                                history=history,
                                 model_context=model_context,
                                 session_id=session_id,
                                 hitl_bridge=hitl_bridge,
@@ -204,7 +203,7 @@ class WorkflowRunner:
                                 agent_nodes[0],
                                 tools_registry=tools_list,
                                 model_client=model_client,
-                                redis_memory=redis_memory,
+                                history=history,
                                 model_context=model_context,
                                 session_id=session_id,
                                 hitl_bridge=hitl_bridge,
@@ -215,7 +214,7 @@ class WorkflowRunner:
                             agent_nodes[0],
                             tools_registry=tools_list,
                             model_client=model_client,
-                            redis_memory=redis_memory,
+                            history=history,
                             model_context=model_context,
                             session_id=session_id,
                             hitl_bridge=hitl_bridge,
@@ -258,7 +257,7 @@ class WorkflowRunner:
         *,
         tools_registry: List[BaseTool],
         model_client: BaseModelClient,
-        redis_memory: Optional[RedisMemory] = None,
+        history: Optional[HistoryProvider] = None,
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
@@ -301,7 +300,7 @@ class WorkflowRunner:
             outgoing=outgoing,
             tools_registry=tools_registry,
             model_client=model_client,
-            redis_memory=redis_memory,
+            history=history,
             model_context=model_context,
             session_id=session_id,
             hitl_bridge=hitl_bridge,
@@ -316,7 +315,7 @@ class WorkflowRunner:
         outgoing: Dict[str, List[str]],
         tools_registry: List[BaseTool],
         model_client: BaseModelClient,
-        redis_memory: Optional[RedisMemory] = None,
+        history: Optional[HistoryProvider] = None,
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
@@ -328,7 +327,7 @@ class WorkflowRunner:
             agent_node,
             tools_registry=tools_registry,
             model_client=model_client,
-            redis_memory=redis_memory,
+            history=history,
             model_context=model_context,
             session_id=session_id,
             hitl_bridge=hitl_bridge,
@@ -358,7 +357,7 @@ class WorkflowRunner:
                 outgoing=outgoing,
                 tools_registry=tools_registry,
                 model_client=model_client,
-                redis_memory=redis_memory,
+                history=history,
                 model_context=model_context,
                 session_id=session_id,
                 hitl_bridge=hitl_bridge,
@@ -385,7 +384,7 @@ class WorkflowRunner:
                     outgoing=outgoing,
                     tools_registry=tools_registry,
                     model_client=model_client,
-                    redis_memory=redis_memory,
+                    history=history,
                     model_context=model_context,
                     session_id=session_id,
                     hitl_bridge=hitl_bridge,
@@ -416,7 +415,7 @@ class WorkflowRunner:
                         outgoing=outgoing,
                         tools_registry=tools_registry,
                         model_client=model_client,
-                        redis_memory=redis_memory,
+                        history=history,
                         model_context=model_context,
                         session_id=session_id,
                         hitl_bridge=hitl_bridge,
@@ -470,7 +469,7 @@ class WorkflowRunner:
         *,
         tools_registry: List[BaseTool],
         model_client: BaseModelClient,
-        redis_memory: Optional[RedisMemory] = None,
+        history: Optional[HistoryProvider] = None,
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
@@ -507,7 +506,7 @@ class WorkflowRunner:
             body_agent_node,
             tools_registry=tools_registry,
             model_client=model_client,
-            redis_memory=redis_memory,
+            history=history,
             model_context=model_context,
             session_id=session_id,
             hitl_bridge=hitl_bridge,
@@ -520,7 +519,7 @@ class WorkflowRunner:
                 done_agent_node,
                 tools_registry=tools_registry,
                 model_client=model_client,
-                redis_memory=redis_memory,
+                history=history,
                 model_context=model_context,
                 session_id=session_id,
                 hitl_bridge=hitl_bridge,
@@ -542,7 +541,7 @@ class WorkflowRunner:
         *,
         tools_registry: List[BaseTool],
         model_client: BaseModelClient,
-        redis_memory: Optional[RedisMemory] = None,
+        history: Optional[HistoryProvider] = None,
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
@@ -565,7 +564,7 @@ class WorkflowRunner:
                 upstream_agents[0],  # type: ignore[arg-type]
                 tools_registry=tools_registry,
                 model_client=model_client,
-                redis_memory=redis_memory,
+                history=history,
                 model_context=model_context,
                 session_id=session_id,
                 hitl_bridge=hitl_bridge,
@@ -587,7 +586,7 @@ class WorkflowRunner:
                 target_node,
                 tools_registry=tools_registry,
                 model_client=model_client,
-                redis_memory=redis_memory,
+                history=history,
                 model_context=model_context,
                 session_id=session_id,
                 hitl_bridge=hitl_bridge,
@@ -613,7 +612,7 @@ class WorkflowRunner:
         *,
         tools_registry: List[BaseTool],
         model_client: BaseModelClient,
-        redis_memory: Optional[RedisMemory] = None,
+        history: Optional[HistoryProvider] = None,
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
@@ -673,7 +672,7 @@ class WorkflowRunner:
 
         # -- Memory --
         memory = await self._resolve_memory(
-            config, agent_node, redis_memory=redis_memory, session_id=session_id
+            config, agent_node, history=history, session_id=session_id
         )
 
         # -- Skills --
@@ -681,10 +680,10 @@ class WorkflowRunner:
 
         # -- Model context --
         if model_context is None:
-            from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
+            from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 
             window = cfg.get("context_window", 40)
-            model_context = SlidingWindowContext(max_messages=window)
+            model_context = SlidingWindowStrategy(max_messages=window)
 
         # -- Model client (could be overridden per agent node) --
         agent_model = cfg.get("model", "gpt-4o-mini")
@@ -716,11 +715,9 @@ class WorkflowRunner:
             )
 
         from ravi.fabric.catalog._catalog import AgentCatalog
+        from ravi.kernel.context.base_context import ModelContext
 
         catalog = AgentCatalog()
-        catalog.register_model("primary", agent_client)
-        catalog.register_context("default", model_context)
-        catalog.register_memory("memory", memory)
         for _tool in tools:
             catalog.register_tool(_tool)
         if skill_manager is not None:
@@ -728,11 +725,17 @@ class WorkflowRunner:
             for meta in skill_manager._discovered:
                 catalog.register_skill(meta)
 
+        strategies = model_context if isinstance(model_context, list) else [model_context]
+        model_context_mgr = ModelContext(history=memory, compaction_strategies=strategies)
+
         agent = AssistantAgent(
             name=agent_node.label or cfg.get("name", "pipeline-agent"),
             description=cfg.get("description", "Pipeline-built agent"),
             runtime=await self._get_or_create_runtime(),
+            model=agent_client,
+            context=model_context_mgr,
             catalog=catalog,
+            session_id=session_id or f"pipeline-{agent_node.id}",
             system_instructions=cfg.get(
                 "system_prompt", "You are a helpful assistant."
             ),
@@ -750,7 +753,7 @@ class WorkflowRunner:
         *,
         tools_registry: List[BaseTool],
         model_client: BaseModelClient,
-        redis_memory: Optional[RedisMemory] = None,
+        history: Optional[HistoryProvider] = None,
         model_context: Optional[ModelContext] = None,
         session_id: Optional[str] = None,
         hitl_bridge: Optional[Any] = None,
@@ -778,7 +781,7 @@ class WorkflowRunner:
                     target_node,
                     tools_registry=tools_registry,
                     model_client=model_client,
-                    redis_memory=redis_memory,
+                    history=history,
                     model_context=model_context,
                     session_id=session_id,
                     hitl_bridge=hitl_bridge,
@@ -932,9 +935,9 @@ class WorkflowRunner:
         config: PipelineConfig,
         agent_node: NodeConfig,
         *,
-        redis_memory: Optional[RedisMemory] = None,
+        history: Optional[HistoryProvider] = None,
         session_id: Optional[str] = None,
-    ) -> BaseMemory:
+    ) -> HistoryProvider:
         """Build the memory backend from the connected memory node."""
         mem_edges = [
             e
@@ -942,29 +945,22 @@ class WorkflowRunner:
             if e.edge_type == EdgeType.AGENT_MEMORY
         ]
         if not mem_edges:
-            return UnboundedMemory()
+            return InMemoryHistoryProvider()
 
         mem_node = config.node_by_id(mem_edges[0].target)
         if not mem_node:
-            return UnboundedMemory()
+            return InMemoryHistoryProvider()
 
         mcfg = mem_node.config
         backend = mcfg.get("backend", "unbounded")
 
-        if backend == "redis" and redis_memory is not None:
-            sid = session_id or f"pipeline-{agent_node.id}"
-            mem = RedisMemory(
-                session_id=sid,
-                redis_url=redis_memory._redis_url
-                if hasattr(redis_memory, "_redis_url")
-                else "redis://localhost:6379/0",
-                default_ttl=mcfg.get("ttl", 3600),
-                max_messages=mcfg.get("max_messages", 200),
-            )
-            await mem.connect()
-            return mem
+        # A cached/persistent backend is requested and a shared provider is
+        # available — reuse it (it is multi-session; agents address it by
+        # session_id). Otherwise fall back to in-process history.
+        if backend in ("redis", "cached", "persistent") and history is not None:
+            return history
 
-        return UnboundedMemory()
+        return InMemoryHistoryProvider()
 
     def _resolve_skills(
         self,

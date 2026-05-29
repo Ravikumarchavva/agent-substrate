@@ -17,13 +17,15 @@ Usage::
 """
 
 from __future__ import annotations
-from ravi.logger import setup_logging
 
 import argparse
 import asyncio
+import logging
 import os
 import platform
 import signal
+
+from ravi.logger import setup_logging
 
 from ravi.kernel.runtime import MessageContext, MessageHandler
 from ravi.integrations.runtime.grpc.runtime import GrpcRuntime

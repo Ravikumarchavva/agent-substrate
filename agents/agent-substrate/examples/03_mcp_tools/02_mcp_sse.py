@@ -108,6 +108,7 @@ async def main() -> None:
         )
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         print(f"Error: {type(e).__name__}: {e}")
     finally:

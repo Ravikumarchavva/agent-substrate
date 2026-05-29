@@ -11,7 +11,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 from opentelemetry.trace import Status, StatusCode
 
@@ -19,18 +19,16 @@ from ravi.kernel.agents.agent_result import ToolCallRecord
 from ravi.kernel.execution.context import ExecutionContext
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
 from ravi.kernel.messages.client_messages import (
-    ToolCallMessage,
     ToolExecutionResultMessage,
 )
 from ravi.kernel.middleware.base import (
     MiddlewareContext,
     MiddlewareStage,
 )
-from ravi.guardrails.resilience.policies import RetryPolicy, _calculate_delay
+from ravi.fabric.resilience.policies import RetryPolicy, _calculate_delay
 from ravi.kernel.runtime import AgentId, AgentRuntime
 from ravi.kernel.tools.base_tool import HitlMode, ToolResult
-from ravi.kernel.tools.approval import tool_needs_approval
-from ravi.kernel.tools.parsing import ParsedToolCall, find_tool, parse_tool_call
+from ravi.kernel.tools.parsing import ParsedToolCall, find_tool
 from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.catalog.tools.human_input.tool import (
     ToolApprovalAction,

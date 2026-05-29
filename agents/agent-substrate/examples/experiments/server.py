@@ -27,7 +27,7 @@ import tools as _tools
 from routes import router
 from ravi.logger import setup_logging
 
-logger = setup_logging(mode='pretty', handler='console')
+logger = setup_logging(mode="pretty", handler="console")
 
 # Prevents CUDA allocator fragmentation during vLLM profiling.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -46,17 +46,21 @@ async def lifespan(app: FastAPI):
                 model="opendatalab/MinerU2.5-2509-1.2B",
                 logits_processors=[MinerULogitsProcessor],
                 # ── memory: fit on small GPUs (3-4 GB) ──────────────────────
-                max_model_len=4096,          # invoices are short; 16 k wastes KV cache
+                max_model_len=4096,  # invoices are short; 16 k wastes KV cache
                 gpu_memory_utilization=0.90,
-                enforce_eager=False,          # skip CUDA-graph capture (~300 MB saved)
+                enforce_eager=False,  # skip CUDA-graph capture (~300 MB saved)
                 # ── disable video profiling (the direct cause of the OOM) ───
                 limit_mm_per_prompt={"image": 1, "video": 0},
             )
         )
-        _tools._mineru_client = MinerUClient(backend="vllm-async-engine", vllm_async_llm=_llm)
+        _tools._mineru_client = MinerUClient(
+            backend="vllm-async-engine", vllm_async_llm=_llm
+        )
         logger.info("MinerU vLLM engine ready (model=MinerU2.5-2509-1.2B)")
     except ImportError:
-        logger.warning("mineru-vl-utils / vllm not installed — OCR falls back to CLI subprocess")
+        logger.warning(
+            "mineru-vl-utils / vllm not installed — OCR falls back to CLI subprocess"
+        )
 
     yield
 

@@ -10,9 +10,11 @@ Replaces the old ``main.py`` with proper:
 """
 
 from __future__ import annotations
-from ravi.logger import setup_logging
 
+import logging
 from contextlib import asynccontextmanager
+
+from ravi.logger import setup_logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -81,7 +83,7 @@ async def lifespan(app: FastAPI):
 
     # Infrastructure (Redis, runtime, file store, vector store, RAG, data store)
     infra = await init_infrastructure(settings, llm.embedding_client)
-    app.state.redis_memory = infra.redis_memory
+    app.state.history = infra.history
     app.state.redis_client = infra.redis_client
     app.state.runtime = infra.runtime
     app.state.file_store = infra.file_store
@@ -147,7 +149,7 @@ async def lifespan(app: FastAPI):
     app.state.ctx = ServerDependencies(
         model_client=app.state.model_client,
         model_client_kwargs=app.state.model_client_kwargs,
-        redis_memory=app.state.redis_memory,
+        history=app.state.history,
         tools=app.state.tools,
         bridge_registry=app.state.bridge_registry,
         tools_requiring_approval=app.state.tools_requiring_approval,
@@ -183,8 +185,8 @@ async def lifespan(app: FastAPI):
         await app.state.file_store.shutdown()
     if getattr(app.state, "ci_client", None):
         await app.state.ci_client.close()  # type: ignore[union-attr]
-    if getattr(app.state, "redis_memory", None):
-        await app.state.redis_memory.disconnect()
+    if getattr(app.state, "history", None):
+        await app.state.history.disconnect()
     if getattr(app.state, "redis_client", None):
         await app.state.redis_client.aclose()
     for tool in app.state.tools.all_tools():

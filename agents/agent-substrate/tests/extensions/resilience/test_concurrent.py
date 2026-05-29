@@ -6,7 +6,7 @@ import asyncio
 
 from ravi.kernel.agents.agent_result import RunStatus
 from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.fabric.runtime.local import LocalRuntime
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
 
@@ -46,7 +46,7 @@ async def test_sequential_runs_on_same_agent_accumulate_memory():
     ])
     catalog = AgentCatalogRegistry()
     catalog.register_model("primary", llm)
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
 
     async with LocalRuntime() as rt:
         agent = AssistantAgent(

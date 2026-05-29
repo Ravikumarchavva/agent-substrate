@@ -33,7 +33,7 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Deque
 
-from ravi.platform.scheduling._contracts import (
+from ravi.kernel.scheduler._contracts import (
     PreemptionReason,
     PreemptionSignal,
     ResourceClaim,

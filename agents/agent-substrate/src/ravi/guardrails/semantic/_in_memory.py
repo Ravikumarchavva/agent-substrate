@@ -9,7 +9,7 @@ from numbers import Real
 import threading
 from typing import Any
 
-from ravi.guardrails.semantic import (
+from ravi.kernel.semantics._contracts import (
     InvariantEvaluationResult,
     SemanticDivergence,
     SemanticDivergenceDetector,

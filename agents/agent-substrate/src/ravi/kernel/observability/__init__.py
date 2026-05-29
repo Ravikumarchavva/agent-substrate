@@ -1,28 +1,28 @@
 """Observability and replay contracts for the hyperscale kernel.
 
 The kernel surface is intentionally vendor-neutral: spans, replay admission,
-and operator kill switches are Protocols plus immutable value objects. Local
-or production implementations live in ``ravi.platform.observability`` and
-integration packages.
+and operator kill switches are Protocols plus immutable value objects. They
+live here (L0) because the fabric runtime depends on them. Local or production
+implementations live in ``ravi.platform.observability`` and integration packages.
 """
 
 from __future__ import annotations
 
-from ravi.guardrails.killswitch import (
+from ravi.kernel.observability._killswitch import (
     KillSwitchDecision,
     KillSwitchRule,
     KillSwitchScope,
     KillSwitchTarget,
     OperatorKillSwitch,
 )
-from ravi.platform.observability.replay import (
+from ravi.kernel.observability._replay import (
     ReplayAdmission,
     ReplayAdmissionStatus,
     ReplayDenyRule,
     ReplayGate,
     ReplayRequest,
 )
-from ravi.platform.observability.spans import (
+from ravi.kernel.observability._spans import (
     EnvelopeSpan,
     EnvelopeSpanRecorder,
     SpanQuery,

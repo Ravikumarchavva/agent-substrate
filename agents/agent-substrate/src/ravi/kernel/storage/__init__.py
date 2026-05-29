@@ -1,8 +1,9 @@
-"""ravi.kernel.storage — File-storage contract + local reference driver.
+"""ravi.kernel.storage — File-storage contract + document types.
 
-Only the ``FileStore`` ABC, document types, and the local-disk driver
-live here. Encryption, multi-tenant routing, S3 driver, and the factory
-live in :mod:`ravi.fabric.storage` and :mod:`ravi.integrations.storage`.
+Only the ``FileStore`` ABC, document types, and tenant scoping live here.
+The ``LocalFileStore`` reference driver lives in
+:mod:`ravi.fabric.storage.local` (L1). Encryption, the S3 driver, and the
+factory live in :mod:`ravi.integrations.storage`.
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from ravi.kernel.storage.document import (
     create_document,
     store_document,
 )
-from ravi.fabric.storage.local import LocalFileStore
 from ravi.kernel.storage.tenant import FileScope, TenantContext
 
 __all__ = [
@@ -40,7 +40,6 @@ __all__ = [
     "BinaryDocument",
     "create_document",
     "store_document",
-    "LocalFileStore",
     "FileScope",
     "TenantContext",
 ]

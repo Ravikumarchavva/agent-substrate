@@ -2,15 +2,15 @@
 
 Tests:
   1. Message serializer round-trips for all 5 message types
-  2. RedisMemory CRUD (requires running Redis)
-  3. PostgresMemory CRUD (requires running Postgres)
-  4. SessionManager full lifecycle (requires both)
+  2. RedisHistoryProvider CRUD (requires running Redis)
+  3. PostgresHistoryProvider CRUD (requires running Postgres)
+  4. TieredHistoryProvider full lifecycle (requires both)
 
 Run via pytest:
-  uv run pytest tests/test_memory_system.py
+  uv run pytest tests/extensions/memory/test_memory_system.py
 
 Run standalone:
-  uv run python tests/test_memory_system.py
+  uv run python tests/extensions/memory/test_memory_system.py
 """
 
 from __future__ import annotations
@@ -137,28 +137,31 @@ def test_serializer_rejects_missing_type():
 
 
 @requires_redis
-async def test_redis_memory():
-    from ravi.integrations.memory.redis_memory import RedisMemory
+async def test_redis_history():
+    from ravi.integrations.memory.redis_history import RedisHistoryProvider
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-    async with RedisMemory(
-        redis_url=redis_url, default_ttl=60, max_messages=10
+    async with RedisHistoryProvider(
+        redis_url=redis_url, ttl=60, max_messages=10
     ) as redis:
         session_id = "test-redis-session-001"
 
         # Clean up from previous runs
-        await redis.delete_session(session_id)
+        await redis.clear_session(session_id)
 
         # Add messages
-        await redis.store(session_id, SystemMessage(content="Be concise"))
-        await redis.store(session_id, UserMessage(content=["What is 2+2?"]))
-        await redis.store(
-            session_id, AssistantMessage(content=["4"], finish_reason="stop")
+        await redis.save_messages(
+            session_id,
+            [
+                SystemMessage(content="Be concise"),
+                UserMessage(content=["What is 2+2?"]),
+                AssistantMessage(content=["4"], finish_reason="stop"),
+            ],
         )
 
         # Read back
-        messages = await redis.fetch(session_id)
+        messages = await redis.load_messages(session_id)
         assert len(messages) == 3
         assert type(messages[0]).__name__ == "SystemMessage"
         assert type(messages[1]).__name__ == "UserMessage"
@@ -166,54 +169,36 @@ async def test_redis_memory():
         print(f"  ✓ Retrieved {len(messages)} messages with correct types")
 
         # Count
-        count = await redis.count(session_id)
-        assert count == 3
-        print(f"  ✓ Message count: {count}")
-
-        # Exists
-        assert await redis.exists(session_id)
-        print("  ✓ Session exists check")
+        assert await redis.count_messages(session_id) == 3
+        print("  ✓ Message count: 3")
 
         # Limit
-        last_two = await redis.fetch(session_id, limit=2)
+        last_two = await redis.load_messages(session_id, limit=2)
         assert len(last_two) == 2
         print(f"  ✓ Limited retrieval: {len(last_two)} messages")
 
-        # Metadata
-        await redis.set_metadata(session_id, {"agent": "test", "turn": 1})
-        meta = await redis.get_metadata(session_id)
-        assert meta["agent"] == "test"
-        assert meta["turn"] == 1
-        print(f"  ✓ Metadata round-trip: {meta}")
-
         # Bulk add
         bulk_msgs = [UserMessage(content=[f"Message {i}"]) for i in range(5)]
-        await redis.store_many(session_id, bulk_msgs)
-        total = await redis.count(session_id)
+        await redis.save_messages(session_id, bulk_msgs)
+        total = await redis.count_messages(session_id)
         assert total == 8  # 3 + 5
         print(f"  ✓ Bulk add: total now {total}")
 
         # Max messages trim (max_messages=10)
         more_msgs = [UserMessage(content=[f"Overflow {i}"]) for i in range(5)]
-        await redis.store_many(session_id, more_msgs)
-        trimmed_count = await redis.count(session_id)
+        await redis.save_messages(session_id, more_msgs)
+        trimmed_count = await redis.count_messages(session_id)
         assert trimmed_count <= 10
         print(f"  ✓ Trim enforced: {trimmed_count} messages (max=10)")
 
-        # TTL
-        ttl = await redis.get_ttl(session_id)
-        assert ttl > 0
-        print(f"  ✓ TTL active: {ttl}s remaining")
+        # TTL refresh (no error)
+        await redis.refresh_ttl(session_id)
+        print("  ✓ TTL refreshed")
 
         # Clear
-        await redis.drop(session_id)
-        assert await redis.count(session_id) == 0
-        print("  ✓ Clear")
-
-        # Cleanup
-        await redis.delete_session(session_id)
-        assert not await redis.exists(session_id)
-        print("  ✓ Delete session")
+        await redis.clear_session(session_id)
+        assert await redis.count_messages(session_id) == 0
+        print("  ✓ Clear session")
 
     print("  ALL REDIS TESTS PASSED ✓\n")
 
@@ -224,39 +209,24 @@ async def test_redis_memory():
 
 
 @requires_postgres
-async def test_postgres_memory():
-    from ravi.integrations.memory.postgres_memory import PostgresMemory
-    from ravi.kernel.messages.client_messages import (
-        SystemMessage,
-        UserMessage,
-        AssistantMessage,
-    )
+async def test_postgres_history():
+    from ravi.integrations.memory.postgres_history import PostgresHistoryProvider
 
     print("=" * 60)
-    print("3. POSTGRES MEMORY TESTS")
+    print("3. POSTGRES HISTORY TESTS")
     print("=" * 60)
 
     db_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
 
-    async with PostgresMemory(database_url=db_url) as pg:
+    async with PostgresHistoryProvider(database_url=db_url) as pg:
         session_id = "test-pg-session-001"
 
         # Clean up
-        await pg.delete_session(session_id)
+        await pg.clear_session(session_id)
 
-        # Create session
-        session = await pg.create_session(
-            session_id=session_id,
-            agent_name="test-agent",
-            user_id="user-42",
-            metadata={"env": "test"},
-        )
-        assert session.id == session_id
-        print(f"  ✓ Created session: {session}")
-
-        # Save messages
+        # Save messages (session row auto-created)
         msgs = [
             SystemMessage(content="Be helpful"),
             UserMessage(content=["Hi"]),
@@ -273,35 +243,24 @@ async def test_postgres_memory():
         print(f"  ✓ Loaded {len(loaded)} messages with correct types")
 
         # Count
-        count = await pg.get_message_count(session_id)
-        assert count == 3
-        print(f"  ✓ Message count: {count}")
+        assert await pg.count_messages(session_id) == 3
+        print("  ✓ Message count: 3")
 
-        # Session retrieval
-        pg_session = await pg.get_session(session_id)
-        assert pg_session is not None
-        assert pg_session.agent_name == "test-agent"
-        print(f"  ✓ Retrieved session: agent={pg_session.agent_name}")
+        # Append more (sequence continues)
+        await pg.save_messages(session_id, [UserMessage(content=["again"])])
+        assert await pg.count_messages(session_id) == 4
+        print("  ✓ Append continues sequence: 4")
 
-        # List sessions
-        sessions = await pg.list_sessions(agent_name="test-agent")
-        assert len(sessions) >= 1
-        print(f"  ✓ Listed sessions: {len(sessions)} found")
-
-        # Partial load
+        # Partial load (last N, ascending)
         partial = await pg.load_messages(session_id, limit=2)
         assert len(partial) == 2
+        assert partial[-1].content == ["again"]
         print(f"  ✓ Partial load: {len(partial)} messages")
 
         # Clear messages
-        await pg.clear_messages(session_id)
-        assert await pg.get_message_count(session_id) == 0
-        print("  ✓ Cleared messages")
-
-        # Delete session
-        await pg.delete_session(session_id)
-        assert await pg.get_session(session_id) is None
-        print("  ✓ Deleted session")
+        await pg.clear_session(session_id)
+        assert await pg.count_messages(session_id) == 0
+        print("  ✓ Cleared session")
 
     print("  ALL POSTGRES TESTS PASSED ✓\n")
 
@@ -313,21 +272,13 @@ async def test_postgres_memory():
 
 @requires_redis
 @requires_postgres
-async def test_session_manager():
-    from ravi.integrations.memory.redis_memory import RedisMemory
-    from ravi.integrations.memory.postgres_memory import PostgresMemory
-    from ravi.reasoning.memory.session import (
-        SessionManager,
-        SessionStatus,
-    )
-    from ravi.kernel.messages.client_messages import (
-        SystemMessage,
-        UserMessage,
-        AssistantMessage,
-    )
+async def test_tiered_provider():
+    from ravi.integrations.memory.redis_history import RedisHistoryProvider
+    from ravi.integrations.memory.postgres_history import PostgresHistoryProvider
+    from ravi.fabric.memory.tiered import TieredHistoryProvider
 
     print("=" * 60)
-    print("4. SESSION MANAGER TESTS")
+    print("4. TIERED PROVIDER TESTS")
     print("=" * 60)
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -335,99 +286,52 @@ async def test_session_manager():
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
 
-    redis = RedisMemory(redis_url=redis_url, default_ttl=120, max_messages=100)
-    postgres = PostgresMemory(database_url=db_url)
+    cache = RedisHistoryProvider(redis_url=redis_url, ttl=120, max_messages=100)
+    store = PostgresHistoryProvider(database_url=db_url)
 
-    async with SessionManager(
-        redis=redis, postgres=postgres, auto_checkpoint_threshold=5
-    ) as mgr:
-        # Create session
-        state = await mgr.create_session(
-            agent_name="react-agent",
-            user_id="user-99",
-            metadata={"purpose": "test"},
-        )
-        sid = state.session_id
-        assert state.status == SessionStatus.ACTIVE
-        assert state.is_hot
-        print(f"  ✓ Created session: {sid[:16]}...")
+    async with TieredHistoryProvider(
+        cache=cache, store=store, checkpoint_every=5
+    ) as tiered:
+        sid = "test-tiered-session-001"
+        await tiered.clear_session(sid)
 
-        # Add messages
-        await mgr.add_message(sid, SystemMessage(content="You are a test agent"))
-        await mgr.add_message(sid, UserMessage(content=["Hello"]))
-        await mgr.add_message(
-            sid, AssistantMessage(content=["Hi!"], finish_reason="stop")
+        # Add messages (write-through to cache)
+        await tiered.save_messages(sid, [SystemMessage(content="You are a test agent")])
+        await tiered.save_messages(sid, [UserMessage(content=["Hello"])])
+        await tiered.save_messages(
+            sid, [AssistantMessage(content=["Hi!"], finish_reason="stop")]
         )
         print("  ✓ Added 3 messages")
 
-        # Read messages
-        messages = await mgr.get_messages(sid)
+        # Read messages (served from cache)
+        messages = await tiered.load_messages(sid)
         assert len(messages) == 3
         print(f"  ✓ Retrieved {len(messages)} messages")
 
-        # Checkpoint
-        saved = await mgr.checkpoint(sid)
+        # Manual checkpoint flushes cache → store
+        saved = await tiered.checkpoint(sid)
         assert saved == 3
-        print(f"  ✓ Checkpointed {saved} messages to Postgres")
+        assert await store.count_messages(sid) == 3
+        print("  ✓ Checkpoint flushed 3 messages to store")
 
-        # Verify Postgres has the data
-        pg_count = await postgres.get_message_count(sid)
-        assert pg_count == 3
-        print(f"  ✓ Postgres confirms {pg_count} messages")
-
-        # Get session state
-        full_state = await mgr.get_session_state(sid)
-        assert full_state is not None
-        assert full_state.message_count == 3
-        assert full_state.is_hot
-        print(
-            f"  ✓ Session state: count={full_state.message_count}, hot={full_state.is_hot}"
-        )
-
-        # Auto-checkpoint test: add enough messages to trigger
+        # Auto-checkpoint: pushing past threshold=5 flushes automatically
         for i in range(6):
-            await mgr.add_message(sid, UserMessage(content=[f"Auto msg {i}"]))
-        pg_count_after = await postgres.get_message_count(sid)
-        print(
-            f"  ✓ After 6 more messages: Postgres has {pg_count_after} (auto-checkpoint threshold=5)"
-        )
+            await tiered.save_messages(sid, [UserMessage(content=[f"Auto msg {i}"])])
+        assert await store.count_messages(sid) >= 5
+        print(f"  ✓ Auto-checkpoint: store has {await store.count_messages(sid)}")
 
-        # Close session
-        await mgr.close_session(sid)
-        print("  ✓ Session closed")
+        # Cold read: clear the cache, load should fall through to the store
+        await cache.clear_session(sid)
+        cold = await tiered.load_messages(sid)
+        assert len(cold) > 0
+        print(f"  ✓ Cold read from store warmed cache: {len(cold)} messages")
 
-        # Verify Redis cleaned up
-        assert not await redis.exists(sid)
-        print("  ✓ Redis cleaned up after close")
+        # Clear everything
+        await tiered.clear_session(sid)
+        assert await tiered.count_messages(sid) == 0
+        print("  ✓ Cleared both tiers")
 
-        # Verify Postgres still has data
-        pg_session = await postgres.get_session(sid)
-        assert pg_session is not None
-        assert pg_session.status == "closed"
-        print(f"  ✓ Postgres session status: {pg_session.status}")
-
-        # Resume from cold storage
-        resumed = await mgr.resume_session(sid)
-        assert resumed.is_hot
-        assert resumed.message_count > 0
-        print(f"  ✓ Resumed session: {resumed.message_count} messages reloaded")
-
-        # Verify messages are accessible again
-        restored_msgs = await mgr.get_messages(sid)
-        assert len(restored_msgs) > 0
-        print(f"  ✓ Messages accessible: {len(restored_msgs)}")
-
-        # List sessions
-        all_sessions = await mgr.list_sessions(agent_name="react-agent")
-        assert len(all_sessions) >= 1
-        print(f"  ✓ Listed sessions: {len(all_sessions)} found")
-
-        # Delete permanently
-        await mgr.delete_session(sid)
-        assert await mgr.get_session_state(sid) is None
-        print("  ✓ Session permanently deleted")
-
-    print("  ALL SESSION MANAGER TESTS PASSED ✓\n")
+    print("  ALL TIERED PROVIDER TESTS PASSED ✓\n")
 
 
 # ---------------------------------------------------------------------------
@@ -447,17 +351,17 @@ async def main():
     print("  Serializer tests passed\n")
 
     if _redis_available():
-        await test_redis_memory()
+        await test_redis_history()
     else:
         print("  Redis not available, skipping Redis tests\n")
 
     if _pg_available():
-        await test_postgres_memory()
+        await test_postgres_history()
     else:
         print("  Postgres not available, skipping Postgres tests\n")
 
     if _redis_available() and _pg_available():
-        await test_session_manager()
+        await test_tiered_provider()
 
     print("ALL AVAILABLE TESTS PASSED!")
 

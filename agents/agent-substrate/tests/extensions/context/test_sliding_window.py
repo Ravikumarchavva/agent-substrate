@@ -1,10 +1,12 @@
-"""Tests for SlidingWindowContext — the default context strategy."""
+"""Tests for SlidingWindowStrategy — the default context strategy."""
 
 from __future__ import annotations
 
 import pytest
 
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
+from ravi.kernel.context.base_context import ModelContext
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     SystemMessage,
@@ -24,8 +26,9 @@ def _asst(text: str) -> AssistantMessage:
     return AssistantMessage(content=[text])
 
 
-def _build(ctx, msgs):
-    """Helper: call build() with the required keyword args."""
+def _build(strategy: SlidingWindowStrategy, msgs):
+    """Helper: wrap the strategy in a ModelContext and call build()."""
+    ctx = ModelContext(history=InMemoryHistoryProvider(), compaction_strategies=[strategy])
     return ctx.build(
         session_id="test",
         current_input="",
@@ -39,16 +42,16 @@ def _build(ctx, msgs):
 
 
 async def test_fewer_messages_than_window_returned_unchanged():
-    ctx = SlidingWindowContext(max_messages=10)
+    strategy = SlidingWindowStrategy(max_messages=10)
     msgs = [_sys(), _user("hi"), _asst("hello")]
-    result = await _build(ctx, msgs)
+    result = await _build(strategy, msgs)
     assert len(result) == 3
 
 
 async def test_window_keeps_last_n_plus_system():
-    ctx = SlidingWindowContext(max_messages=3)
+    strategy = SlidingWindowStrategy(max_messages=3)
     msgs = [_sys()] + [_user(f"msg {i}") for i in range(6)]
-    result = await _build(ctx, msgs)
+    result = await _build(strategy, msgs)
     # system + last 3
     assert result[0].role == "system"
     assert len(result) == 4
@@ -58,16 +61,16 @@ async def test_window_keeps_last_n_plus_system():
 
 
 async def test_system_message_always_first():
-    ctx = SlidingWindowContext(max_messages=2)
+    strategy = SlidingWindowStrategy(max_messages=2)
     msgs = [_sys("sys")] + [_user(f"u{i}") for i in range(5)]
-    result = await _build(ctx, msgs)
+    result = await _build(strategy, msgs)
     assert result[0].role == "system"
 
 
 async def test_no_system_message_window_still_works():
-    ctx = SlidingWindowContext(max_messages=3)
+    strategy = SlidingWindowStrategy(max_messages=3)
     msgs = [_user(f"m{i}") for i in range(5)]
-    result = await _build(ctx, msgs)
+    result = await _build(strategy, msgs)
     assert len(result) == 3
 
 
@@ -77,22 +80,22 @@ async def test_no_system_message_window_still_works():
 
 
 async def test_empty_input_returns_empty():
-    ctx = SlidingWindowContext(max_messages=5)
-    result = await _build(ctx, [])
+    strategy = SlidingWindowStrategy(max_messages=5)
+    result = await _build(strategy, [])
     assert result == []
 
 
 async def test_only_system_message():
-    ctx = SlidingWindowContext(max_messages=5)
-    result = await _build(ctx, [_sys()])
+    strategy = SlidingWindowStrategy(max_messages=5)
+    result = await _build(strategy, [_sys()])
     assert len(result) == 1
     assert result[0].role == "system"
 
 
 async def test_window_size_one():
-    ctx = SlidingWindowContext(max_messages=1)
+    strategy = SlidingWindowStrategy(max_messages=1)
     msgs = [_sys()] + [_user(f"msg{i}") for i in range(4)]
-    result = await _build(ctx, msgs)
+    result = await _build(strategy, msgs)
     # system + last 1
     assert len(result) == 2
     assert result[-1].content == ["msg3"]
@@ -100,4 +103,4 @@ async def test_window_size_one():
 
 async def test_max_messages_zero_raises():
     with pytest.raises(ValueError, match="max_messages must be"):
-        SlidingWindowContext(max_messages=0)
+        SlidingWindowStrategy(max_messages=0)

@@ -131,7 +131,6 @@ class DocumentAnalyzerTool(BaseTool):
                 user_msg = f"Document:\n{display_content}\n\nQuestion: {question}"
 
             from ravi.kernel.messages.client_messages import (
-                SystemMessage,
                 UserMessage,
             )
 

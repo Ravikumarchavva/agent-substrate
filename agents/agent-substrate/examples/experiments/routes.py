@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import uuid
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from bus import bus
@@ -17,7 +16,7 @@ from pipeline import run_pipeline
 from tools import catalog, EMBEDDINGS_DIR
 from ravi.logger import setup_logging
 
-logger = setup_logging(mode='pretty', handler='console')
+logger = setup_logging(mode="pretty", handler="console")
 
 BASE_DIR = Path(__file__).parent
 HTML_FILE = BASE_DIR / "index.html"
@@ -49,7 +48,9 @@ async def upload_file(file: UploadFile = File(...)) -> dict:
     job_id = uuid.uuid4().hex[:12]
     dest = UPLOAD_DIR / f"{job_id}_{file.filename}"
     dest.write_bytes(data)
-    logger.info("Upload received job=%s filename=%s size=%d", job_id, file.filename, len(data))
+    logger.info(
+        "Upload received job=%s filename=%s size=%d", job_id, file.filename, len(data)
+    )
     asyncio.create_task(
         run_pipeline(job_id, dest, file.filename or "unknown", len(data))
     )
@@ -87,14 +88,16 @@ async def list_embeddings() -> list[dict]:
     for f in sorted(EMBEDDINGS_DIR.glob("*.json")):
         try:
             rec = json.loads(f.read_text())
-            result.append({
-                "job_id": rec.get("job_id"),
-                "filename": rec.get("filename"),
-                "method": rec.get("method"),
-                "dimensions": rec.get("dimensions"),
-                "created_at": rec.get("created_at"),
-                "preview": rec.get("embedding", [])[:4],
-            })
+            result.append(
+                {
+                    "job_id": rec.get("job_id"),
+                    "filename": rec.get("filename"),
+                    "method": rec.get("method"),
+                    "dimensions": rec.get("dimensions"),
+                    "created_at": rec.get("created_at"),
+                    "preview": rec.get("embedding", [])[:4],
+                }
+            )
         except Exception:
             logger.exception("Failed to parse embedding file %s", f.name)
     return result

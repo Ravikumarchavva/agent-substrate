@@ -10,6 +10,7 @@ Demonstrates:
 Usage:
     python examples/eval_example.py
 """
+
 import asyncio
 import os
 import sys
@@ -17,9 +18,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from ravi.kernel.agent_catalog._catalog import AgentCatalog
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.kernel.hooks import HookEvent, HookManager, CostTracker
 
 # Evals
@@ -91,7 +92,7 @@ async def main():
     catalog.register_tool(CalculatorTool())
     catalog.register_tool(GetCurrentTimeTool())
 
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="eval-agent",
         description="Agent under evaluation",
         catalog=catalog,
@@ -103,7 +104,7 @@ async def main():
     # ── 3. Set up the judge ───────────────────────────────────────────────
     # Judge model (typically stronger than the agent model)
     judge_client = OpenAIClient(model="gpt-4.1-mini")
-    
+
     judge = LLMJudge(
         model_client=judge_client,
         criteria=[CORRECTNESS, HELPFULNESS, SAFETY, CONCISENESS],
@@ -114,9 +115,9 @@ async def main():
     runner = EvalRunner(
         agent=agent,
         judge=judge,
-        concurrency=1,         # Sequential for deterministic results
-        case_timeout=60.0,     # 60s max per case
-        reset_agent=True,      # Fresh state per case
+        concurrency=1,  # Sequential for deterministic results
+        case_timeout=60.0,  # 60s max per case
+        reset_agent=True,  # Fresh state per case
     )
 
     print("\nRunning evaluation...\n")

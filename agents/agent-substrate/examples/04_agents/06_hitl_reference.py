@@ -6,6 +6,7 @@ presents options, collects feedback, and continues execution.
 Usage:
     python examples/human_in_the_loop_example.py
 """
+
 import asyncio
 import os
 import sys
@@ -13,10 +14,10 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from ravi.kernel.agent_catalog._catalog import AgentCatalog
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.catalog.tools.human_input.tool import CLIHumanHandler, AskHumanTool, HumanInputResponse
+from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.catalog.tools.human_input.tool import AskHumanTool, HumanInputResponse
 
 
 async def main():
@@ -38,13 +39,16 @@ async def main():
 
     # 3. Set up the agent with HITL support
     from ravi.configs.settings import settings
+
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
-    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY))
+    catalog.register_model(
+        "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
+    )
     for tool in [ask_tool, CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(tool)
 
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="hitl-assistant",
         description="An assistant that asks for human input when needed",
         catalog=catalog,
@@ -66,9 +70,7 @@ Guidelines for using ask_human:
     # 4. Run the agent — it will pause when it needs human input
     print("\n--- Human-in-the-Loop Demo ---\n")
 
-    result = await agent.run(
-        "Help me plan a team dinner for 8 people this Friday."
-    )
+    result = await agent.run("Help me plan a team dinner for 8 people this Friday.")
 
     print("\n--- Agent Result ---")
     print(result.output_text)

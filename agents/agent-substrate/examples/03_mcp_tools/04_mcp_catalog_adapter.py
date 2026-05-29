@@ -2,7 +2,7 @@
 
 Shows how to bridge an MCPClient and AgentCatalog using MCPCatalogAdapter so
 that MCP server tools become first-class catalog resources alongside built-in
-tools. A ReActAgent is then built from the catalog and run with the combined
+tools. A AssistantAgent is then built from the catalog and run with the combined
 tool set.
 
 Prerequisites:
@@ -13,13 +13,13 @@ Prerequisites:
 import asyncio
 
 from ravi.configs.settings import settings
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.tools.builtin_tools import CalculatorTool
+from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.fabric.tools.builtin_tools import CalculatorTool
 from ravi.integrations.llm.factory import create_model_client
 from ravi.integrations.mcp.adapter import MCPCatalogAdapter
 from ravi.integrations.mcp.client import MCPClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 
 # Infrastructure: Node.js / npx required to launch the MCP filesystem server.
 
@@ -36,7 +36,9 @@ API_KEYS = {
 async def main() -> None:
     # --- Setup catalog with model, memory, context, and built-in tool ---
     catalog = AgentCatalog()
-    catalog.register_model("primary", create_model_client(CHAT_MODEL, api_keys=API_KEYS))
+    catalog.register_model(
+        "primary", create_model_client(CHAT_MODEL, api_keys=API_KEYS)
+    )
     catalog.register_memory("memory", UnboundedMemory())
     catalog.register_tool(CalculatorTool())
 
@@ -57,7 +59,7 @@ async def main() -> None:
         print(f"Tools after MCP: {[t.name for t in catalog.all_tools()]}")
 
         # --- Create agent using all catalog tools ---
-        agent = ReActAgent(
+        agent = AssistantAgent(
             name="fs-agent",
             description="Can use the calculator and filesystem MCP tools",
             catalog=catalog,

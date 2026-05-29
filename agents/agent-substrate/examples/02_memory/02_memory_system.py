@@ -1,10 +1,9 @@
 """Example 2-2: Memory System — end-to-end SessionManager integration for multi-turn chat."""
 
 import os
-
 from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.integrations.memory.postgres_memory import PostgresMemory
-from ravi.extensions.memory.session_manager import SessionManager
+from ravi.reasoning.memory.session import SessionManager
 from ravi.kernel.messages.client_messages import (
     SystemMessage,
     UserMessage,
@@ -13,8 +12,6 @@ from ravi.kernel.messages.client_messages import (
     ToolExecutionResultMessage,
 )
 from ravi.kernel.messages.content import TextBlock
-
-# Infrastructure: Redis + PostgreSQL required (make infra-up)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 DB_URL = os.getenv(
@@ -25,21 +22,13 @@ DB_URL = os.getenv(
 
 async def main() -> None:
     try:
-        # ---
-        # Section 1: SessionManager setup
-        #
-        # Redis   = hot tier  (fast, TTL-based, local cache per session)
-        # Postgres = cold tier (durable, queryable, source-of-truth after checkpoint)
-        # ---
+        # 1. SessionManager Setup (Redis hot tier + Postgres cold tier)
         print("=== 1. SessionManager setup ===")
-
         redis = RedisMemory(redis_url=REDIS_URL, default_ttl=3600, max_messages=500)
         postgres = PostgresMemory(database_url=DB_URL)
 
         async with SessionManager(redis=redis, postgres=postgres) as mgr:
-            # ---
-            # Section 2: Create session
-            # ---
+            # 2. Create Session
             print("\n=== 2. Create session ===")
             session = await mgr.create_session(
                 agent_name="chat-agent",
@@ -52,11 +41,8 @@ async def main() -> None:
             print(f"  status     : {session.status.value}")
             print(f"  is_hot     : {session.is_hot}")
 
-            # ---
-            # Section 3: Add all 5 message types
-            # ---
+            # 3. Add all 5 Message Types
             print("\n=== 3. Add all 5 message types ===")
-
             tool_call = ToolCallMessage(
                 name="web_search",
                 arguments={"query": "current Python version"},
@@ -88,12 +74,7 @@ async def main() -> None:
             for m in msgs:
                 print(f"    {type(m).__name__}")
 
-            # ---
-            # Section 4: Checkpoint to Postgres
-            #
-            # Flushes the current Redis state to Postgres so messages survive
-            # Redis TTL expiry.  Hot path (Redis) → Cold path (Postgres).
-            # ---
+            # 4. Checkpoint to Postgres (Hot Redis state to Cold Postgres)
             print("\n=== 4. Checkpoint to Postgres ===")
             saved = await mgr.checkpoint(sid)
             print(f"  Messages persisted: {saved}")
@@ -103,13 +84,7 @@ async def main() -> None:
             print(f"  message_count : {state.message_count}")
             print(f"  is_hot        : {state.is_hot}")
 
-            # ---
-            # Section 5: Restore session (resume from cold storage)
-            #
-            # A brand-new SessionManager calls resume_session() to reload
-            # a session from Postgres back into Redis.  Simulates a new
-            # deployment or an expired Redis key.
-            # ---
+            # 5. Restore Session (Resume from Postgres Cold Storage)
             print("\n=== 5. Restore session ===")
 
         # Fresh SessionManager — simulates a new process / cold start
@@ -127,9 +102,7 @@ async def main() -> None:
             for m in restored_msgs:
                 print(f"    {type(m).__name__}")
 
-            # ---
-            # Section 6: List sessions
-            # ---
+            # 6. List Sessions
             print("\n=== 6. List sessions ===")
             sessions = await mgr2.list_sessions(agent_name="chat-agent", limit=10)
             print(f"  Found {len(sessions)} session(s) for agent 'chat-agent':")
@@ -141,13 +114,12 @@ async def main() -> None:
                     f"hot={s.is_hot}"
                 )
 
-            # ---
-            # Section 7: Session lifecycle — close then delete
-            # ---
+            # 7. Session Lifecycle (Close then Delete)
             print("\n=== 7. Session lifecycle ===")
-
             await mgr2.close_session(sid)
-            print("  close_session() — final checkpoint + status=closed + Redis cleaned")
+            print(
+                "  close_session() — final checkpoint + status=closed + Redis cleaned"
+            )
 
             closed_state = await mgr2.get_session_state(sid)
             print(f"  Status after close : {closed_state.status.value}")

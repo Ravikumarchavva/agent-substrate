@@ -47,7 +47,7 @@ async def start_agent_run(body: RunRequest, request: Request):
     """
     model_client = request.app.state.model_client
     tools = request.app.state.tools
-    redis_memory = request.app.state.redis_memory
+    history = request.app.state.history
     event_bus = request.app.state.event_bus
     conversation_url = request.app.state.conversation_service_url
 
@@ -59,7 +59,7 @@ async def start_agent_run(body: RunRequest, request: Request):
     memory = await load_memory_for_thread(
         thread_id=body.thread_id,
         system_instructions=system_instructions,
-        redis_memory=redis_memory,
+        history=history,
         conversation_service_url=conversation_url,
     )
 
@@ -69,6 +69,7 @@ async def start_agent_run(body: RunRequest, request: Request):
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
+        session_id=body.thread_id,
     )
 
     # Run asynchronously

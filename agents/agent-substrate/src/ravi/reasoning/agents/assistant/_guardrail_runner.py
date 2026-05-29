@@ -17,7 +17,7 @@ from ravi.kernel.agents.agent_result import (
     StepResult,
     ToolCallRecord,
 )
-from ravi.reasoning.agents.assistant._tool_execution import ParsedToolCall
+from ravi.kernel.tools.parsing import ParsedToolCall
 from ravi.exceptions import GuardrailTripwireError
 from ravi.kernel.guardrails.base_guardrail import (
     BaseGuardrail,

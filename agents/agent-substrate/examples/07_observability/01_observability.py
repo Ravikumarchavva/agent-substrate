@@ -2,7 +2,7 @@
 
 Demonstrates the ravi-engine observability layer:
 - configure_opentelemetry() wires up OTel SDK (console or OTLP to Tempo/Jaeger)
-- ReActAgent emits spans automatically on every run
+- AssistantAgent emits spans automatically on every run
 - EnvelopeSpan wraps arbitrary operations with structured span metadata
 - InMemoryReplayGate gates idempotent replay admissions
 - InMemoryOperatorKillSwitch enables/disables traffic by scope
@@ -14,16 +14,16 @@ import asyncio
 import os
 
 from ravi.configs.settings import settings
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.observability import (
+from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.platform.observability import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
     InMemoryReplayGate,
 )
-from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.integrations.llm.factory import create_model_client
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.observability import (
     EnvelopeSpan,
     KillSwitchRule,
@@ -75,8 +75,8 @@ async def section_1_configure_otel() -> None:
 
 
 async def section_2_agent_with_tracing() -> None:
-    """Section 2 — Run a ReActAgent; spans are emitted automatically."""
-    print("\n=== Section 2: ReActAgent with automatic tracing ===")
+    """Section 2 — Run a AssistantAgent; spans are emitted automatically."""
+    print("\n=== Section 2: AssistantAgent with automatic tracing ===")
 
     api_keys = {
         "openai": settings.OPENAI_API_KEY,
@@ -100,7 +100,7 @@ async def section_2_agent_with_tracing() -> None:
     for tool in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(tool)
 
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="ObservabilityBot",
         description="Demo agent for observability example.",
         catalog=catalog,
@@ -149,7 +149,9 @@ async def section_3_envelope_span() -> None:
         status=SpanStatus.OK,
         attributes=(("invoice.pages_extracted", "3"),),
     )
-    print(f"Span finished : status={finished.status.name}  duration={finished.duration_ms:.1f}ms")
+    print(
+        f"Span finished : status={finished.status.name}  duration={finished.duration_ms:.1f}ms"
+    )
 
     spans = await recorder.spans_for_correlation("corr-req-42")
     print(f"Spans for correlation 'corr-req-42': {len(spans)}")
@@ -174,16 +176,22 @@ async def section_4_replay_gate() -> None:
 
     # First admission — ALLOWED
     decision = await gate.admit(request)
-    print(f"First admission : allowed={decision.allowed}  status={decision.status.name}")
+    print(
+        f"First admission : allowed={decision.allowed}  status={decision.status.name}"
+    )
     print(f"  replay_token  : {decision.replay_token}")
 
     # Same idempotency key — returns the original decision (DUPLICATE)
     duplicate = await gate.admit(request)
-    print(f"Duplicate admit : allowed={duplicate.allowed}  status={duplicate.status.name}")
+    print(
+        f"Duplicate admit : allowed={duplicate.allowed}  status={duplicate.status.name}"
+    )
 
     looked_up = await gate.admission_for(request.idempotency_key)
     assert looked_up is not None
-    print(f"Looked up       : {looked_up.idempotency_key[:12]}...  token={looked_up.replay_token}")
+    print(
+        f"Looked up       : {looked_up.idempotency_key[:12]}...  token={looked_up.replay_token}"
+    )
 
     # Add a deny rule — subsequent replay for that envelope is DENIED
     deny_rule = ReplayDenyRule(
@@ -220,7 +228,9 @@ async def section_5_kill_switch() -> None:
         activated_by="billing-system",
     )
     activated = await ks.activate(rule)
-    print(f"Kill switch activated : id={activated.switch_id[:12]}...  scope={activated.scope.name}")
+    print(
+        f"Kill switch activated : id={activated.switch_id[:12]}...  scope={activated.scope.name}"
+    )
     print(f"Active switches: {ks.count()}")
 
     # Matching target — blocked
@@ -251,7 +261,9 @@ async def main() -> None:
     await section_5_kill_switch()
 
     print("\n--- Production note ---")
-    print("Set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://tempo:4318 to ship spans to Grafana Tempo.")
+    print(
+        "Set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://tempo:4318 to ship spans to Grafana Tempo."
+    )
     print("Start the full stack: cd ravi-engine && make infra-up")
 
 

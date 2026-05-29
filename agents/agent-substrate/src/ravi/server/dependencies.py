@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 from fastapi import Request
 
-from ravi.integrations.memory.redis_memory import RedisMemory
+from ravi.kernel.memory.history_provider import HistoryProvider
 from ravi.kernel.runtime import AgentRuntime
 from ravi.kernel.storage.base import FileStore
 from ravi.fabric.catalog import AgentCatalogRegistry
@@ -25,7 +25,7 @@ class ServerDependencies:
     """All shared dependencies available to route handlers."""
 
     model_client: BaseModelClient
-    redis_memory: RedisMemory
+    history: HistoryProvider
     tools: AgentCatalogRegistry
     bridge_registry: BridgeRegistry
     tools_requiring_approval: list[str]

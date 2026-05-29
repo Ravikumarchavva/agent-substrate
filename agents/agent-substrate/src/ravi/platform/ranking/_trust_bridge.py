@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from ravi.platform.ranking._in_memory import InMemoryFeedRanker
-from ravi.guardrails.economic._signals import EconomicSignalKind, EconomicSignalSource
+from ravi.kernel.economic._signals import EconomicSignalKind, EconomicSignalSource
 from ravi.platform.ranking._contracts import (
     FeedRequest,
     FeedResult,

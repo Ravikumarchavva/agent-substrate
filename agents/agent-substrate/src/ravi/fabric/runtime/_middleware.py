@@ -30,8 +30,8 @@ from ravi.kernel.runtime._middleware import (
 )
 
 if TYPE_CHECKING:
-    from ravi.guardrails.governance._contracts import QuarantineActuator
-    from ravi.guardrails.mutation._breaker import CircuitBreaker
+    from ravi.kernel.governance._contracts import QuarantineActuator
+    from ravi.kernel.safeguards._breaker import CircuitBreaker
 
 __all__ = [
     "CircuitBreakerMiddleware",
@@ -379,7 +379,7 @@ class CircuitBreakerMiddleware:
         if envelope.identity is None:
             return
 
-        from ravi.guardrails.mutation._breaker import CircuitOpen  # local to avoid kernel→extensions
+        from ravi.kernel.safeguards._breaker import CircuitOpen  # local to avoid kernel→extensions
 
         principal_fqn = envelope.identity.principal.fqn
         try:

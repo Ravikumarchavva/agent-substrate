@@ -3,7 +3,7 @@
 import asyncio
 from uuid import uuid4
 
-from ravi.kernel.agent_catalog import AgentCatalog
+from ravi.fabric.catalog import AgentCatalog
 from ravi.kernel.contracts import (
     CanonicalMessage,
     EventEnvelope,
@@ -19,10 +19,6 @@ from ravi.kernel.messages.client_messages import (
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.plugin import get_registered, list_registered, register_tool
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
-
-# Infrastructure: none required for this example
-
-# ---
 
 
 async def main() -> None:
@@ -58,7 +54,9 @@ async def main() -> None:
     assistant_msg = CanonicalMessage(
         role=MessageRole.ASSISTANT,
         tool_calls=[
-            ToolCallSpec(call_id="tc-001", name="calculator", arguments={"expression": "2+2"})
+            ToolCallSpec(
+                call_id="tc-001", name="calculator", arguments={"expression": "2+2"}
+            )
         ],
     )
     tool_msg = CanonicalMessage(
@@ -76,9 +74,13 @@ async def main() -> None:
     # --- 3. tool_call_id canonicalization
     print("\n=== 3. tool_call_id canonicalization ===")
 
-    tc_msg = ToolCallMessage(id="abc-123", name="calculator", arguments={"expression": "1+1"})
+    tc_msg = ToolCallMessage(
+        id="abc-123", name="calculator", arguments={"expression": "1+1"}
+    )
     print(f"tc.id           → {tc_msg.id!r}")
-    print(f"tc.tool_call_id → {tc_msg.tool_call_id!r}   ← canonical property alias for .id")
+    print(
+        f"tc.tool_call_id → {tc_msg.tool_call_id!r}   ← canonical property alias for .id"
+    )
     print(f"Same value?     → {tc_msg.id == tc_msg.tool_call_id}")
 
     tr_msg = ToolExecutionResultMessage(
@@ -91,14 +93,17 @@ async def main() -> None:
     # --- 4. AgentCatalog resource registry
     print("\n=== 4. AgentCatalog resource registry ===")
 
-    from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+    from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
-    from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+    from ravi.fabric.memory.unbounded import UnboundedMemory
 
     from ravi.configs.settings import settings
+
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
-    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY))
+    catalog.register_model(
+        "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
+    )
     catalog.register_memory("memory", UnboundedMemory())
     catalog.register_tool(CalculatorTool())
     catalog.register_tool(GetCurrentTimeTool())
@@ -128,7 +133,9 @@ async def main() -> None:
     registered_cls = get_registered("tool", "demo_echo")
     all_tool_names = list_registered("tool")
     print(f"get_registered('tool', 'demo_echo') → {registered_cls.__name__}")
-    print(f"list_registered('tool') contains 'demo_echo': {'demo_echo' in all_tool_names}")
+    print(
+        f"list_registered('tool') contains 'demo_echo': {'demo_echo' in all_tool_names}"
+    )
 
     # --- 6. EventEnvelope
     print("\n=== 6. EventEnvelope ===")

@@ -41,7 +41,7 @@ from ravi.kernel.guardrails.base_guardrail import (
     GuardrailResult,
     GuardrailType,
 )
-from ravi.kernel.messages.client_messages import SystemMessage, UserMessage
+from ravi.kernel.messages.client_messages import UserMessage
 
 if TYPE_CHECKING:
     from ravi.kernel.llm.base_client import BaseModelClient

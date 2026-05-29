@@ -1,19 +1,18 @@
 """04-1 — Combined Built-in Tools + Custom @tool Decorator
 
-Demonstrates building a ReActAgent with multiple built-in tools and a custom
+Demonstrates building a AssistantAgent with multiple built-in tools and a custom
 inline tool defined via the @tool decorator.
 
 Prerequisites: OPENAI_API_KEY set.
 """
 
 import asyncio
-import os
 
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.tools import tool
 
 # Infrastructure:
@@ -23,9 +22,12 @@ from ravi.kernel.tools import tool
 
 def _make_catalog() -> AgentCatalog:
     from ravi.configs.settings import settings
+
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
-    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY))
+    catalog.register_model(
+        "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
+    )
     catalog.register_memory("memory", UnboundedMemory())
     return catalog
 
@@ -39,7 +41,7 @@ async def main() -> None:
     for t in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(t)
 
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="assistant",
         description="Helpful assistant with calculator and clock tools",
         catalog=catalog,
@@ -49,9 +51,7 @@ async def main() -> None:
     # ---
     # Section 2: Single task that uses both tools in one query
 
-    result = await agent.run(
-        "What is 1337 * 42? Also tell me the current UTC time."
-    )
+    result = await agent.run("What is 1337 * 42? Also tell me the current UTC time.")
     print("=== Section 2: Combined tool call ===")
     print(result.output_text)
     print(result.summary())
@@ -83,7 +83,7 @@ async def main() -> None:
     catalog2 = _make_catalog()
     catalog2.register_tool(celsius_to_fahrenheit)
 
-    agent2 = ReActAgent(
+    agent2 = AssistantAgent(
         name="converter",
         description="Temperature converter assistant",
         catalog=catalog2,
@@ -97,4 +97,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

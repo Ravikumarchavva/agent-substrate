@@ -17,7 +17,7 @@ from ravi.guardrails.economic._in_memory import InMemoryBudgetLedger
 from ravi.platform.ranking._trust_bridge import RawCandidate, TrustAwareFeedRanker
 from ravi.guardrails.trust._in_memory import InMemoryTrustGraph
 from ravi.kernel.contracts._coordination import TrustSignal
-from ravi.guardrails.economic._signals import EconomicSignalKind
+from ravi.kernel.economic._signals import EconomicSignalKind
 from ravi.platform.ranking._contracts import FeedResult, ScoringStrategy
 from ravi.kernel.runtime._identity import PrincipalId, PrincipalKind
 

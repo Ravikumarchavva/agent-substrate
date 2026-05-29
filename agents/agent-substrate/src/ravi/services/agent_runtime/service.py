@@ -8,9 +8,9 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 from ravi.kernel.execution.context import ExecutionContext
-from ravi.kernel.memory.base_memory import BaseMemory
+from ravi.kernel.memory.history_provider import HistoryProvider
 from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     ToolExecutionResultMessage,
@@ -18,7 +18,6 @@ from ravi.kernel.messages.client_messages import (
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.tools.base_tool import BaseTool
-from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.integrations.events import EventBus
 from ravi.shared.events.envelope import EventEnvelope
 from ravi.shared.execution import (
@@ -34,10 +33,10 @@ async def load_memory_for_thread(
     *,
     thread_id: str,
     system_instructions: str,
-    redis_memory: Optional[RedisMemory],
+    history: Optional[HistoryProvider],
     conversation_service_url: str,
-) -> BaseMemory:
-    """Load agent memory from Redis or the conversation service."""
+) -> HistoryProvider:
+    """Load agent history from the cache or the conversation service."""
 
     async def _load_persisted_steps() -> List[Dict[str, Any]]:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -50,7 +49,7 @@ async def load_memory_for_thread(
     return await load_session_memory(
         session_id=thread_id,
         system_instructions=system_instructions,
-        redis_memory=redis_memory,
+        history=history,
         cold_store_name="Conversation service",
         load_persisted_steps=_load_persisted_steps,
     )
@@ -61,7 +60,8 @@ def create_agent(
     model_client: BaseModelClient,
     tools: List[BaseTool],
     system_instructions: str,
-    memory: BaseMemory,
+    memory: HistoryProvider,
+    session_id: Optional[str] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
 ) -> AssistantAgent:
@@ -71,7 +71,8 @@ def create_agent(
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
-        model_context=SlidingWindowContext(max_messages=model_context_window),
+        session_id=session_id,
+        model_context=SlidingWindowStrategy(max_messages=model_context_window),
         max_iterations=max_iterations,
         verbose=True,
     )

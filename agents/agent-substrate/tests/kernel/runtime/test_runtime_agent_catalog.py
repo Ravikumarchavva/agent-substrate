@@ -5,15 +5,16 @@ from typing import Any, Optional
 
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.extensions.agents.runtime.agent import RuntimeAgent
+from ravi.fabric.actors.actor import ActorAgent
 from ravi.reasoning.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
 from ravi.kernel.runtime._protocol import AgentRuntime
 from ravi.kernel.runtime._identity import TopicId, AgentId
 from ravi.kernel.runtime._contracts import MessageContext
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.messages.client_messages import AssistantMessage
+from ravi.kernel.messages.content import ContentBlock
 from ravi.kernel.agents.agent_result import RunStatus
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 
 
 class DummyCatalogTool(BaseTool):
@@ -64,6 +65,11 @@ class MockModelClient(BaseModelClient):
         return 0
 
 
+class RuntimeCatalogTestAgent(ActorAgent):
+    async def on_message(self, ctx: MessageContext, content: list[ContentBlock]) -> object:
+        return None
+
+
 @pytest.mark.asyncio
 async def test_runtime_agent_catalog_unification():
     runtime = MockAgentRuntime()
@@ -71,8 +77,12 @@ async def test_runtime_agent_catalog_unification():
     tool = DummyCatalogTool()
     cat.register_tool(tool)
 
-    # Instantiate RuntimeAgent with explicit catalog
-    agent = RuntimeAgent(name="test_runtime_agent", runtime=runtime, catalog=cat)
+    # Instantiate actor agent with explicit catalog
+    agent = RuntimeCatalogTestAgent(
+        name="test_runtime_agent",
+        runtime=runtime,
+        catalog=cat,
+    )
 
     # Dynamic tools property should fetch from the catalog
     assert len(agent.tools) == 1
@@ -92,16 +102,19 @@ async def test_runtime_agent_catalog_unification():
 async def test_runtime_assistant_agent_catalog_schemas():
     runtime = MockAgentRuntime()
     client = MockModelClient()
-    context = SlidingWindowContext(max_messages=10)
+    strategy = SlidingWindowStrategy(max_messages=10)
     cat = AgentCatalogRegistry()
     cat.register_tool(DummyCatalogTool())
-    cat.register_model("primary", client)
-    cat.register_context("default", context)
 
-    # Instantiate RuntimeAssistantAgent with explicit catalog
+    from ravi.kernel.context.base_context import ModelContext
+    from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+
+    # Instantiate RuntimeAssistantAgent with explicit catalog and context param
     assistant = RuntimeAssistantAgent(
         name="assistant",
         runtime=runtime,
+        model=client,
+        context=ModelContext(history=InMemoryHistoryProvider(), compaction_strategies=[strategy]),
         catalog=cat,
         verbose=False,
         enable_capability_search=False,

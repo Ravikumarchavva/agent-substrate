@@ -1,7 +1,8 @@
-"""AgentCatalog — unified resource governance for the agent runtime.
+"""AgentCatalog — capability registry for agent tools and skills.
 
-Single source of truth for all registered resources: tools, skills, memories,
-contexts, checkpoints, MCP tools, and models.
+Manages tools, skills, and MCP connector instances. Cognitive resources
+(model client, history, compaction strategy, checkpoint store) belong in
+:class:`~ravi.kernel.agents.agent_context.AgentContext`, not here.
 
 FQN format: ``{catalog}.{schema}.{name}``
 """
@@ -154,74 +155,6 @@ class AgentCatalog:
             if spec.resource_type in (ResourceType.TOOL, ResourceType.MCP_TOOL)
             else None
         )
-
-    def get_memory(
-        self, name: str, search_path: Optional[List[str]] = None
-    ) -> Optional[Any]:
-        """Return a memory instance by FQN or short-name."""
-        fqn = self._find_fqn(name, search_path)
-        if fqn is None:
-            return None
-        spec, inst = self._resources[fqn]
-        return inst if spec.resource_type == ResourceType.MEMORY else None
-
-    def get_context(
-        self, name: str, search_path: Optional[List[str]] = None
-    ) -> Optional[Any]:
-        """Return a model context instance by FQN or short-name."""
-        fqn = self._find_fqn(name, search_path)
-        if fqn is None:
-            return None
-        spec, inst = self._resources[fqn]
-        return inst if spec.resource_type == ResourceType.CONTEXT else None
-
-    def get_checkpoint_store(
-        self, name: str, search_path: Optional[List[str]] = None
-    ) -> Optional[Any]:
-        """Return a checkpoint store by FQN or short-name."""
-        fqn = self._find_fqn(name, search_path)
-        if fqn is None:
-            return None
-        spec, inst = self._resources[fqn]
-        return inst if spec.resource_type == ResourceType.CHECKPOINT else None
-
-    def get_model(
-        self, name: str, search_path: Optional[List[str]] = None
-    ) -> Optional[Any]:
-        """Return a registered model client by FQN or short-name."""
-        fqn = self._find_fqn(name, search_path)
-        if fqn is None:
-            return None
-        spec, inst = self._resources[fqn]
-        return inst if spec.resource_type == ResourceType.MODEL else None
-
-    # ── Primary resource accessors ───────────────────────────────────────────
-    # Return the first registered instance of each resource type. These are
-    # the "default" resources the agent uses when no explicit name is given.
-
-    def primary_model(self) -> Optional[Any]:
-        """Return the first registered model client, or None."""
-        for _, inst in self._by_type(ResourceType.MODEL):
-            return inst
-        return None
-
-    def primary_memory(self) -> Optional[Any]:
-        """Return the first registered memory backend, or None."""
-        for _, inst in self._by_type(ResourceType.MEMORY):
-            return inst
-        return None
-
-    def primary_context(self) -> Optional[Any]:
-        """Return the first registered model context, or None."""
-        for _, inst in self._by_type(ResourceType.CONTEXT):
-            return inst
-        return None
-
-    def primary_checkpoint_store(self) -> Optional[Any]:
-        """Return the first registered checkpoint store, or None."""
-        for _, inst in self._by_type(ResourceType.CHECKPOINT):
-            return inst
-        return None
 
     def get_asset(self, fqn: str) -> Optional[Any]:
         """Return a legacy asset view by exact FQN (for backward compat)."""
@@ -460,79 +393,7 @@ class AgentCatalog:
             return self
         return self.register(spec, skill_metadata)
 
-    def register_memory(
-        self,
-        name: str,
-        memory: Any,
-        *,
-        catalog: Optional[str] = None,
-        schema: Optional[str] = None,
-    ) -> "AgentCatalog":
-        """Register a memory instance. Raises on FQN collision (use ``unregister`` first to replace)."""
-        cat = catalog or self.default_catalog
-        sch = schema or "default"
-        spec = ResourceSpec(
-            name=name,
-            namespace=f"{cat}.{sch}",
-            resource_type=ResourceType.MEMORY,
-        )
-        return self.register(spec, memory)
 
-    def register_context(
-        self,
-        name: str,
-        context: Any,
-        *,
-        catalog: Optional[str] = None,
-        schema: Optional[str] = None,
-    ) -> "AgentCatalog":
-        """Register a context strategy. Raises on FQN collision."""
-        cat = catalog or self.default_catalog
-        sch = schema or "default"
-        spec = ResourceSpec(
-            name=name,
-            namespace=f"{cat}.{sch}",
-            resource_type=ResourceType.CONTEXT,
-        )
-        return self.register(spec, context)
-
-    def register_checkpoint_store(
-        self,
-        name: str,
-        checkpoint_store: Any,
-        *,
-        catalog: Optional[str] = None,
-        schema: Optional[str] = None,
-    ) -> "AgentCatalog":
-        """Register a checkpoint store. Raises on FQN collision."""
-        cat = catalog or self.default_catalog
-        sch = schema or "default"
-        spec = ResourceSpec(
-            name=name,
-            namespace=f"{cat}.{sch}",
-            resource_type=ResourceType.CHECKPOINT,
-        )
-        return self.register(spec, checkpoint_store)
-
-    def register_model(
-        self,
-        name: str,
-        model_client: Any,
-        *,
-        catalog: Optional[str] = None,
-        schema: Optional[str] = None,
-    ) -> "AgentCatalog":
-        """Register an LLM model client. Raises on FQN collision."""
-        cat = catalog or self.default_catalog
-        sch = schema or "default"
-        spec = ResourceSpec(
-            name=name,
-            namespace=f"{cat}.{sch}",
-            resource_type=ResourceType.MODEL,
-        )
-        return self.register(spec, model_client)
-
-    # ── SkillManager attachment ───────────────────────────────────────────────
 
     def init_skills(self, skill_manager: "SkillManagerProtocol") -> "AgentCatalog":
         """Attach a pre-constructed skill manager.
@@ -735,27 +596,6 @@ class _LegacyAssetView:
     def skill_metadata(self) -> Optional[Any]:
         return self.instance if self.spec.resource_type == ResourceType.SKILL else None
 
-    @property
-    def memory(self) -> Optional[Any]:
-        return self.instance if self.spec.resource_type == ResourceType.MEMORY else None
-
-    @property
-    def context(self) -> Optional[Any]:
-        return (
-            self.instance if self.spec.resource_type == ResourceType.CONTEXT else None
-        )
-
-    @property
-    def checkpoint_store(self) -> Optional[Any]:
-        return (
-            self.instance
-            if self.spec.resource_type == ResourceType.CHECKPOINT
-            else None
-        )
-
-    @property
-    def model_client(self) -> Optional[Any]:
-        return self.instance if self.spec.resource_type == ResourceType.MODEL else None
 
 
 class _SchemaStub:

@@ -1,38 +1,38 @@
 import asyncio
 import os
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
-from ravi.shared.observability.telemetry import configure_opentelemetry
+from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.platform.observability.telemetry import configure_opentelemetry
 from ravi.configs.settings import settings
+
 
 async def main():
     # 0. Configure Observability (OpenTelemetry) with Tempo
     # For Tempo, we use the HTTP OTLP endpoint (port 4318)
     # Traces: http://localhost:4318/v1/traces
-    otlp_trace_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "localhost:4318")
-    
+    otlp_trace_endpoint = os.environ.get(
+        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "localhost:4318"
+    )
+
     print("--- ReAct Agent Tempo Tracing Demo ---")
     print(f"Configuring OTLP HTTP exporter for traces at: {otlp_trace_endpoint}\n")
-    
+
     configure_opentelemetry(
         service_name="agent-framework-tempo-demo",
-        otlp_trace_endpoint=otlp_trace_endpoint
+        otlp_trace_endpoint=otlp_trace_endpoint,
     )
-    
+
     # 1. Initialize Tools
-    tools = [
-        CalculatorTool(),
-        GetCurrentTimeTool()
-    ]
-    
+    tools = [CalculatorTool(), GetCurrentTimeTool()]
+
     # 2. Initialize Client & Memory
     api_key = settings.OPENAI_API_KEY
     if not api_key:
         print("⚠️  Warning: OPENAI_API_KEY not found in environment.")
-    
+
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o", api_key=api_key))
     catalog.register_memory("memory", UnboundedMemory())
@@ -40,7 +40,7 @@ async def main():
         catalog.register_tool(tool)
 
     # 3. Initialize Agent
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="TempoDemoBot",
         description="A helpful assistant for demonstrating tracing.",
         catalog=catalog,
@@ -63,7 +63,10 @@ async def main():
     await asyncio.sleep(2)
 
     print("\nTraces should now be visible in Grafana at http://localhost:3001")
-    print("Go to Explore -> Tempo and search for the 'agent-framework-tempo-demo' service.")
+    print(
+        "Go to Explore -> Tempo and search for the 'agent-framework-tempo-demo' service."
+    )
+
 
 if __name__ == "__main__":
     asyncio.run(main())

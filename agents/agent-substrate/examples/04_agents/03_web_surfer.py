@@ -1,6 +1,6 @@
 """04-3 — Web Research Agent with Streaming Output
 
-Demonstrates a ReActAgent that uses WebSearchTool for multi-step web research
+Demonstrates a AssistantAgent that uses WebSearchTool for multi-step web research
 and streams partial output tokens to the console in real time.
 
 WebSearchTool (ravi.extensions.tools.builtin_tools) is the built-in search
@@ -13,11 +13,11 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.tools.builtin_tools import WebSearchTool
+from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.fabric.tools.builtin_tools import WebSearchTool
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.messages._types import TextDeltaChunk
 
 # Infrastructure:
@@ -34,13 +34,16 @@ async def main() -> None:
     # Section 1: Create agent with WebSearchTool
 
     from ravi.configs.settings import settings
+
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
-    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY))
+    catalog.register_model(
+        "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
+    )
     catalog.register_memory("memory", UnboundedMemory())
     catalog.register_tool(WebSearchTool())
 
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="researcher",
         description="Research assistant that searches the web for up-to-date information",
         catalog=catalog,
@@ -81,5 +84,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
 
+    asyncio.run(main())

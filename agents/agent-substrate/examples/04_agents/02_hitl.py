@@ -12,12 +12,12 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from ravi.catalog.tools.human_input.tool import AskHumanTool, CLIHumanHandler, HumanInputResponse
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.extensions.tools.builtin_tools import CalculatorTool
+from ravi.catalog.tools.human_input.tool import AskHumanTool, HumanInputResponse
+from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.fabric.tools.builtin_tools import CalculatorTool
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 
 # Infrastructure:
 # - OPENAI_API_KEY environment variable required
@@ -44,14 +44,17 @@ async def main() -> None:
     # Section 2: Build catalog with system prompt directing the agent to ask humans
 
     from ravi.configs.settings import settings
+
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
-    catalog.register_model("primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY))
+    catalog.register_model(
+        "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
+    )
     catalog.register_memory("memory", UnboundedMemory())
     for t in [ask_tool, CalculatorTool()]:
         catalog.register_tool(t)
 
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="hitl-assistant",
         description="Dinner planning assistant that checks preferences with the user",
         catalog=catalog,
@@ -68,9 +71,7 @@ async def main() -> None:
     # Section 3: Run the planning task
 
     print("=== Team Dinner Planner (answer the prompts below) ===\n")
-    result = await agent.run(
-        "Help me plan a team dinner for 8 people this Friday."
-    )
+    result = await agent.run("Help me plan a team dinner for 8 people this Friday.")
     print("\n=== Final Plan ===")
     print(result.output_text)
 
@@ -101,5 +102,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
 
+    asyncio.run(main())

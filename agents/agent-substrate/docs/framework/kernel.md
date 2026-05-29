@@ -1,39 +1,40 @@
 # The Kernel
 
-The kernel is the frozen contract layer of ravi-engine. It defines *what* everything is — ABCs, Protocols, dataclasses, enums — without implementing *how* anything works. Every concrete feature lives in `extensions/`, `integrations/`, `catalog/`, or `server/`. The kernel itself contains no databases, no HTTP calls, no Redis, no LLM API calls.
+Every framework needs a foundation that cannot change under you. Ravi's foundation is the kernel.
 
-The reason it exists is discipline. When a new feature lands — a new memory backend, a new guardrail strategy, a new agent type — the developer is forced to ask: does this fit an existing contract, or does the contract need to grow? The kernel stays small by design. If you find yourself wanting to add a `for` loop over agent instances or a `requests.get()` call inside `kernel/`, you are in the wrong layer.
+The kernel defines *what* everything is — ABCs, Protocols, dataclasses, enums — without implementing *how* anything works. There are no database calls, no HTTP requests, no Redis connections, no LLM API calls inside `src/ravi/kernel/`. Every concrete feature lives in the layers above it. The kernel itself contains only contracts.
+
+The reason this discipline matters: when a new feature lands — a new memory backend, a new guardrail strategy, a new agent type — the developer is forced to ask "does this fit an existing contract, or does the contract need to grow?" That question keeps the design honest. If you find yourself wanting to add a `for` loop over agent instances or a `requests.get()` call inside `kernel/`, you are in the wrong layer.
 
 ---
 
 ## Where the Kernel Sits
 
-The framework is five layers deep. Imports flow strictly downward — the kernel never imports from anything above it.
+The framework is six layers deep. Imports flow strictly downward — the kernel never imports from anything above it.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#334155", "lineColor": "#64748b", "secondaryColor": "#0f172a", "tertiaryColor": "#1e293b", "edgeLabelBackground": "#0f172a", "clusterBkg": "#0f172a"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#334155", "lineColor": "#64748b"}}}%%
 flowchart TD
-    S["🌐 server / services\nFastAPI routes, ORM, DI wiring"]:::server
-    CA["📦 catalog\ntools, skills, connectors, pipelines"]:::catalog
-    IN["🔌 integrations\nOpenAI, Redis, Postgres, S3, MCP"]:::integ
-    EX["⚡ extensions\nAssistantAgent, guardrails, middleware, RAG"]:::ext
-    KE["🧱 kernel\nABCs · Protocols · dataclasses"]:::kernel
+    P0["🔵 L0 · Kernel<br/>Pure types · ABCs · Protocols<br/>Zero behaviour · Zero I/O"]:::l0
+    P1["🟢 L1 · Fabric<br/>Message routing · Dispatch<br/>Runtime · Supervision · Saga"]:::l1
+    P2["🟡 L2 · Reasoning<br/>ReAct loop · Memory · Guardrails<br/>Middleware · Hooks · Extraction"]:::l2
+    P3["🟠 L3 · Orchestration<br/>Multi-agent workflows<br/>Handoffs · Shared memory"]:::l3
+    P4["🔴 L4 · Guardrails<br/>Mutation gates · Governance<br/>Budget limits · Kill-switch"]:::l4
+    P5["🟣 L5 · Platform<br/>Observability · Scheduling<br/>Batch · Evals · RAG"]:::l5
 
-    S --> CA
-    CA --> IN
-    IN --> EX
-    EX --> KE
+    P0 --> P1 --> P2 --> P3 --> P4 --> P5
 
-    classDef server fill:#1d4ed8,stroke:#3b82f6,color:#eff6ff
-    classDef catalog fill:#7c3aed,stroke:#a78bfa,color:#f5f3ff
-    classDef integ  fill:#065f46,stroke:#34d399,color:#ecfdf5
-    classDef ext    fill:#92400e,stroke:#fbbf24,color:#fffbeb
-    classDef kernel fill:#991b1b,stroke:#f87171,color:#fff1f2
+    classDef l0 fill:#1e3a5f,stroke:#60a5fa,color:#eff6ff
+    classDef l1 fill:#14532d,stroke:#4ade80,color:#f0fdf4
+    classDef l2 fill:#713f12,stroke:#fbbf24,color:#fffbeb
+    classDef l3 fill:#7c2d12,stroke:#fb923c,color:#fff7ed
+    classDef l4 fill:#7f1d1d,stroke:#f87171,color:#fff1f2
+    classDef l5 fill:#4c1d95,stroke:#c084fc,color:#faf5ff
 ```
 
-`shared/` and `configs/` are orthogonal — they sit beside the layers and can be imported by anyone above kernel.
+`shared/` and `configs/` sit beside the layers and can be imported by anything above the kernel. `integrations/` and `catalog/` live between fabric and server — they are concrete adapters (LLM clients, memory backends, tool implementations) that plug into the fabric and reasoning contracts.
 
-**Enforcement**: `uv run lint-imports` (import-linter) fails CI if anything in `ravi.kernel` imports from `ravi.extensions`, `ravi.integrations`, `ravi.catalog`, `ravi.server`, `ravi.services`, `ravi.shared`, `ravi.configs`, or `ravi.logger`. The architecture tests in `tests/architecture/test_kernel_invariants.py` add a hard ceiling on LOC (15k) and file count (110) so the kernel cannot silently balloon.
+**Enforcement**: `uv run lint-imports` (import-linter) fails CI if anything in `ravi.kernel` imports from `ravi.fabric`, `ravi.reasoning`, `ravi.orchestration`, `ravi.guardrails`, `ravi.platform`, `ravi.integrations`, `ravi.catalog`, `ravi.server`, or `ravi.services`. The architecture tests in `tests/architecture/test_kernel_invariants.py` add a hard ceiling on LOC (14k) and file count (115) so the kernel cannot silently balloon.
 
 ---
 
@@ -44,20 +45,20 @@ flowchart TD
 mindmap
   root((kernel/))
     agents
-      ActorAgent ABC
-      StreamChannel Protocol
-      StreamEnvelope
+      AgentProtocol
+      AgentConfig
       AgentRunResult
+      AggregatedUsage
+      StepResult
+      ToolCallRecord
+      RunStatus
     runtime
       AgentRuntime Protocol
-      BaseRuntime ABC
-      LocalRuntime
-      Envelope
       MessageContext
       AgentId · TopicId
-      Dispatcher · Supervisor
-      Mailbox · Backpressure
-      Saga · ResourceLock
+      Envelope
+      RestartPolicy
+      StreamPublisher
       Lifecycle state machine
     messages
       SystemMessage
@@ -72,9 +73,10 @@ mindmap
       ToolRisk · HitlMode
       ToolAnnotations · ToolResult
       ResettableTool Protocol
+      ParsedToolCall · parse_tool_call
+      tool_needs_approval
     memory
       BaseMemory ABC
-      UnboundedMemory
       LineageStore Protocol
     context
       ModelContext ABC
@@ -84,7 +86,7 @@ mindmap
       GuardrailResult
     middleware
       BaseMiddleware ABC
-      ExecutionMiddlewarePipeline
+      MiddlewarePipeline
     execution
       ExecutionContext
       ExecutionMiddlewarePipeline
@@ -99,13 +101,10 @@ mindmap
     safeguards
       MutationPolicy Protocol
       MutationKind · MutationPermission
-      CircuitBreaker
+      CircuitBreaker · BreakerState
     llm
       BaseModelClient ABC
       ProviderConfig
-    agent_catalog
-      AgentCatalog
-      AgentCatalogRegistry
     contracts
       EventEnvelope
       TrustContext
@@ -114,35 +113,34 @@ mindmap
       EventFabric Protocol
     storage
       FileStore ABC
-      LocalFileStore
+      Document · TenantContext
     structured
       StructuredOutputResult
     hooks
       HookManager
     economic
-      CostLedger · UsageSignal
+      BudgetLedger · EconomicSignal
     governance
       GovernanceContracts
     scheduler
       SchedulerContracts
     observability
-      SpanContract
-      KillSwitch · ReplayLog
-    ranking
-      RankingContracts
+      SpanContract · KillSwitch · ReplayLog
     semantics
       SemanticContracts
     metadata
       MetadataStore Protocol
     batch
-      BatchConfig · BatchItem
+      BatchConfig · BatchItem · BatchResult
 ```
 
 ---
 
 ## The Actor: Every Agent is a Fabric Node
 
-The single most important contract in the kernel is `ActorAgent`. Before the actor migration (completed 2026-05-28), the framework had two disconnected hierarchies: a callable `BaseAgent → ReActAgent` and an actor-model `RuntimeAgent → RuntimeAssistantAgent`. Features added to one did not appear in the other. That divergence is gone. There is now one hierarchy.
+The single most important contract in the kernel is `AgentProtocol`. Before the actor migration, the framework had two disconnected hierarchies: a callable `BaseAgent → ReActAgent` and an actor-model `RuntimeAgent`. Features added to one did not appear in the other. That divergence is gone. There is now one hierarchy.
+
+The protocol lives in `kernel/agents/_protocol.py`. The concrete base class that satisfies it — `ActorAgent` — lives in `fabric/actors/actor.py` (L1), because it depends on the runtime fabric. Every production agent extends `ActorAgent`.
 
 Every agent is an actor:
 - it lives inside a **runtime** (required, never `None`)
@@ -150,7 +148,7 @@ Every agent is an actor:
 - it receives work through a single entry point: **`on_message(ctx, content)`**
 - it communicates outward only via **`send()`** (point-to-point) or **`publish()`** (broadcast)
 
-External callers never call `agent.run()` directly. They enter the fabric through a `UserProxyAgent`, which is itself an actor that fires messages on the caller's behalf.
+External callers never call `agent.run()` directly. They enter the fabric through a `UserProxyAgent` (`orchestration/agents/proxy/agent.py`), which is itself an actor that fires messages on the caller's behalf.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569", "edgeLabelBackground": "#1e293b"}}}%%
@@ -158,7 +156,7 @@ classDiagram
     direction TB
 
     class ActorAgent {
-        <<abstract>>
+        <<abstract — fabric/actors/actor.py>>
         +name: str
         +runtime: AgentRuntime
         +key: str
@@ -172,30 +170,33 @@ classDiagram
     }
 
     class StreamChannel {
-        <<Protocol>>
+        <<Protocol — kernel>>
         +emit(event) async
         +close()
     }
 
     class StreamEnvelope {
-        <<dataclass>>
+        <<dataclass — fabric>>
         +task: str
         +channel: StreamChannel
     }
 
     class AssistantAgent {
+        <<reasoning/agents/assistant/agent.py>>
         +on_message(ctx, content) async
         -_run_impl(text) async
         -_run_stream_impl(text, channel) async
     }
 
     class UserProxyAgent {
+        <<orchestration/agents/proxy/agent.py>>
         +ask(text, recipient) async
         +ask_stream(text, recipient, channel) async
         +on_message(ctx, content) async
     }
 
     class OrchestratorAgent {
+        <<orchestration/agents/>>
         +sub_agents: list
         +on_message(ctx, content) async
     }
@@ -213,7 +214,7 @@ The class-level contract is minimal — only `on_message()` is abstract. Everyth
 
 ## The Runtime: How Messages Flow
 
-The `LocalRuntime` is the in-process implementation of the `AgentRuntime` protocol. It is the only runtime you need for development, tests, and scripts. Production swaps in a `DistributedRuntime` or `GrpcRuntime` that inherits from the same `BaseRuntime` ABC — the rest of the codebase never notices the difference.
+`LocalRuntime` (in `fabric/runtime/local.py`) is the in-process implementation of the `AgentRuntime` protocol from the kernel. It is the only runtime you need for development, tests, and scripts. Production swaps in a `DistributedRuntime` (in `fabric/runtime/_distributed.py`) that inherits from the same `BaseRuntime` ABC — the rest of the codebase never notices the difference.
 
 ### Point-to-point: `send_message`
 
@@ -251,18 +252,18 @@ sequenceDiagram
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
 flowchart LR
     subgraph Sender
-        P["publish_message\ntopic=TopicId(...)"]
+        P["publish_message<br/>topic=TopicId(...)"]
     end
 
     subgraph Runtime
-        MW2["Routing\nMiddleware"]
+        MW2["Routing<br/>Middleware"]
         D2["Dispatcher"]
     end
 
     subgraph Subscribers
-        A1["AgentA\non_message()"]
-        A2["AgentB\non_message()"]
-        A3["AgentC\non_message()"]
+        A1["AgentA<br/>on_message()"]
+        A2["AgentB<br/>on_message()"]
+        A3["AgentC<br/>on_message()"]
     end
 
     P --> MW2 --> D2
@@ -288,12 +289,12 @@ stateDiagram-v2
     direction LR
     [*] --> DORMANT : registered
     DORMANT --> ACTIVATING : first message arrives
-    ACTIVATING --> ACTIVE : lease acquired,\nmailbox created,\nloop spawned
+    ACTIVATING --> ACTIVE : lease acquired,<br/>mailbox created,<br/>loop spawned
     ACTIVE --> SUSPENDED : handler crashed
-    SUSPENDED --> ACTIVATING : supervisor restarts\n(within max_restarts)
-    SUSPENDED --> DORMANT : restart limit hit —\nsupervisor escalates
+    SUSPENDED --> ACTIVATING : supervisor restarts<br/>(within max_restarts)
+    SUSPENDED --> DORMANT : restart limit hit —<br/>supervisor escalates
     ACTIVE --> HIBERNATING : hibernate() called
-    HIBERNATING --> DORMANT : lease released,\nmailbox closed
+    HIBERNATING --> DORMANT : lease released,<br/>mailbox closed
     DORMANT --> [*] : runtime.stop()
 ```
 
@@ -501,7 +502,7 @@ Two fields on `BaseTool` hook into the `LocalRuntime` subsystems directly:
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
 classDiagram
     class BaseMemory {
-        <<abstract>>
+        <<abstract — kernel/memory/>>
         +add_message(msg) async
         +get_messages(limit?) async
         +clear() async
@@ -510,6 +511,7 @@ classDiagram
     }
 
     class UnboundedMemory {
+        <<fabric/memory/unbounded.py>>
         +add_message(msg) async
         +get_messages(limit?) async
         +clear() async
@@ -517,6 +519,7 @@ classDiagram
     }
 
     class RedisMemory {
+        <<integrations/memory/redis_memory.py>>
         +add_message(msg) async
         +get_messages(limit?) async
         +restore() async
@@ -524,19 +527,20 @@ classDiagram
     }
 
     class PostgresMemory {
+        <<integrations/memory/postgres_memory.py>>
         +add_message(msg) async
         +get_messages(limit?) async
         +clear() async
     }
 
-    BaseMemory <|-- UnboundedMemory : kernel reference impl
-    BaseMemory <|-- RedisMemory : integrations/memory/
-    BaseMemory <|-- PostgresMemory : integrations/memory/
+    BaseMemory <|-- UnboundedMemory : fabric reference impl
+    BaseMemory <|-- RedisMemory : integration
+    BaseMemory <|-- PostgresMemory : integration
 ```
 
-`UnboundedMemory` is the only concrete implementation inside the kernel — a plain in-memory list. It is intentionally simple: no trimming, no TTL, no persistence. Real deployments use `RedisMemory` (hot store) layered over `PostgresMemory` (cold store) via the `HybridContext` strategy in `extensions/context/`.
+`UnboundedMemory` (`fabric/memory/unbounded.py`) is the simplest concrete implementation — a plain in-memory list with no trimming, no TTL, no persistence. Real deployments use `RedisMemory` (hot store) layered over `PostgresMemory` (cold store) via context strategies in `reasoning/memory/`.
 
-The `LineageStore` Protocol (also in `kernel/memory/`) is a separate contract for immutable audit trails — session lineage, parent-child message relationships. It is not `BaseMemory`; it is append-only and never cleared.
+The `LineageStore` Protocol (in `kernel/memory/`) is a separate contract for immutable audit trails — session lineage, parent-child message relationships. It is append-only and never cleared.
 
 ---
 
@@ -547,15 +551,15 @@ Guardrails are async checks that fire at specific points in the agent loop. A ch
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
 flowchart TD
-    U["User Input"] --> IG{"INPUT\nguardrails\n(parallel)"}
+    U["User Input"] --> IG{"INPUT<br/>guardrails<br/>(parallel)"}
     IG -->|all pass| LLM["LLM Call"]
     IG -->|tripwire| ABORT1["🛑 Abort — return error"]
 
-    LLM --> OG{"OUTPUT\nguardrails\n(parallel)"}
+    LLM --> OG{"OUTPUT<br/>guardrails<br/>(parallel)"}
     OG -->|all pass| TC{Tool calls?}
     OG -->|tripwire| ABORT2["🛑 Abort — return error"]
 
-    TC -->|yes| TG{"TOOL_CALL\nguardrails\n(parallel)"}
+    TC -->|yes| TG{"TOOL_CALL<br/>guardrails<br/>(parallel)"}
     TC -->|no| RESP["Return to user"]
 
     TG -->|all pass| EXEC["Execute tool"]
@@ -577,7 +581,7 @@ All three injection points run guardrails in parallel via `asyncio.gather` — a
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
 classDiagram
     class BaseGuardrail {
-        <<abstract>>
+        <<abstract — kernel/guardrails/>>
         +name: str
         +guardrail_type: GuardrailType
         +check(ctx) async*
@@ -616,6 +620,8 @@ classDiagram
     BaseGuardrail ..> GuardrailType : declares
 ```
 
+Concrete guardrail implementations (PII detection, content filtering, prompt injection detection, LLM-as-judge) live in `reasoning/guardrails/`.
+
 ---
 
 ## Middleware: Before / Execute / After / OnError
@@ -643,10 +649,12 @@ sequenceDiagram
     M2A->>M1A: after(ctx, result) → result
     M1A-->>P: final result
 
-    note over M1,M3: on_error() runs in reverse\nif execute_fn throws
+    note over M1,M3: on_error() runs in reverse<br/>if execute_fn throws
 ```
 
 If `execute_fn` raises, each middleware's `on_error(ctx, exc)` runs in reverse order. The first non-`None` return from any `on_error` becomes the result; if all return `None`, the exception re-raises. This lets a retry middleware return a sentinel that the pipeline runner interprets as "try again."
+
+Concrete middleware implementations live in `reasoning/middleware/`.
 
 ---
 
@@ -694,13 +702,13 @@ flowchart LR
     style RP fill:#1d4ed8,stroke:#3b82f6,color:#eff6ff
 ```
 
-Each decorator is bound to a base class (e.g. `register_agent` → `ActorAgent`, `register_guardrail` → `BaseGuardrail`). Registration fails at import time with a `PluginRegistryError` if the class does not subclass the required base. Duplicate names also fail immediately. This makes misconfiguration loud and early — not silent at runtime.
+Each decorator is bound to a base class (e.g. `register_agent` → `AgentProtocol`, `register_guardrail` → `BaseGuardrail`). Registration fails at import time with a `PluginRegistryError` if the class does not satisfy the required protocol. Duplicate names also fail immediately — misconfiguration is loud and early, never silent at runtime.
 
 `get_registered(category, name)` retrieves a class. Construction and wiring is the caller's responsibility — the registry holds classes, not instances.
 
 ---
 
-## The AgentCatalog: Per-Agent Capability Registry
+## The AgentCatalogRegistry: Per-Agent Capability Inventory
 
 Every `ActorAgent` carries an `AgentCatalogRegistry` — a per-agent inventory of its models, memories, contexts, and tools. Unlike the global plugin registry (which holds classes), the catalog holds configured *instances* ready to use.
 
@@ -708,6 +716,7 @@ Every `ActorAgent` carries an `AgentCatalogRegistry` — a per-agent inventory o
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
 classDiagram
     class AgentCatalogRegistry {
+        <<fabric/catalog/>>
         +register_model(name, client)
         +register_memory(name, memory)
         +register_context(name, context)
@@ -717,7 +726,6 @@ classDiagram
         +get_context(name) ModelContext
         +get_tool(name) BaseTool | None
         +all_tools() list[BaseTool]
-        +from_tools_and_skills(tools) classmethod
     }
 
     class ActorAgent {
@@ -760,14 +768,14 @@ The kernel has two safeguard contracts that apply to agent self-modification and
 
 ### MutationPolicy — gating self-evolution
 
-An agent that wants to modify itself (rewrite its system prompt, add a tool, push a weight update, or visibly diverge from baseline) must first ask a `MutationPolicy` for permission. The policy returns a `MutationPermission`.
+An agent that wants to modify itself (rewrite its system prompt, add a tool, push a weight update, or visibly diverge from baseline) must first ask a `MutationPolicy` for permission.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
 flowchart LR
-    A["AssistantAgent\nrewrite_system_prompt()"] -->|MutationRequest| MP["MutationPolicy\n.evaluate()"]
+    A["AssistantAgent<br/>rewrite_system_prompt()"] -->|MutationRequest| MP["MutationPolicy<br/>.evaluate()"]
     MP -->|granted=True| APPLY["Apply mutation"]
-    MP -->|granted=False\nreason='forbidden_kind'| DENY["🛑 Reject — raise"]
+    MP -->|granted=False<br/>reason='forbidden_kind'| DENY["🛑 Reject — raise"]
 
     style DENY fill:#991b1b,stroke:#f87171,color:#fff1f2
     style APPLY fill:#065f46,stroke:#34d399,color:#ecfdf5
@@ -782,7 +790,7 @@ flowchart LR
 | `WEIGHT_UPDATE` | **Forbidden by default** — must go through operator model registry |
 | `BEHAVIOR_DIVERGENCE` | Triggers audit alert |
 
-`family_depth` in the request prevents depth-escalation attacks where a chain of agents-spawning-agents tries to escape the mutation ceiling by delegating one more level down.
+`family_depth` in the request prevents depth-escalation attacks where a chain of agents-spawning-agents tries to escape the mutation ceiling by delegating one more level down. Concrete `MutationPolicy` implementations live in `guardrails/mutation/`.
 
 ### Circuit Breaker — protecting downstream services
 
@@ -792,12 +800,14 @@ flowchart LR
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9"}}}%%
 stateDiagram-v2
     direction LR
-    [*] --> CLOSED : initial state\n(calls pass through)
-    CLOSED --> OPEN : failure_threshold\nexceeded in window
+    [*] --> CLOSED : initial state<br/>(calls pass through)
+    CLOSED --> OPEN : failure_threshold<br/>exceeded in window
     OPEN --> HALF_OPEN : reset_timeout elapsed
     HALF_OPEN --> CLOSED : probe call succeeds
     HALF_OPEN --> OPEN : probe call fails
 ```
+
+The concrete `CircuitBreaker` implementation (with asyncio-aware locking and configurable thresholds) lives in `fabric/resilience/`.
 
 ---
 
@@ -811,15 +821,14 @@ These contracts sit in the kernel but are used less frequently day-to-day. They 
 | `kernel/contracts/_trust.py` | `ProvenanceChain`, `PrincipalTrustContext` | When a guardrail needs to inspect *who* sent a message |
 | `kernel/contracts/_coordination.py` | `TemporalSemantics`, `LocalityHint`, `PlacementContract` | When messages have TTLs, scheduling constraints, or datacenter placement needs |
 | `kernel/events/_fabric.py` | `EventFabric`, `DurableEventLog`, `RealtimeFanout` Protocols | When implementing a new event bus backend |
-| `kernel/economic/` | `CostLedger`, `UsageSignal` | Chargeback and token-cost tracking per agent run |
+| `kernel/economic/` | `BudgetLedger`, `EconomicSignal` | Chargeback and token-cost tracking per agent run |
 | `kernel/governance/` | Governance policy contracts | When tenant-level operator rules gate capability access |
 | `kernel/scheduler/` | Scheduler trigger contracts | When tools or agents need time-based activation |
 | `kernel/observability/` | `SpanContract`, `KillSwitch`, `ReplayLog` | OTel span shaping; emergency kill-switch for runaway agents; replay audit log |
 | `kernel/semantics/` | Semantic search contracts | When the catalog needs embedding-based capability discovery |
-| `kernel/ranking/` | Ranking strategy contracts | When tool selection or memory retrieval needs a scoring function |
 | `kernel/metadata/` | `MetadataStore` Protocol | When agents need to persist and retrieve tagged metadata outside memory |
 | `kernel/structured/` | `StructuredOutputResult` | When an agent must return a validated Pydantic model instead of free text |
-| `kernel/storage/` | `FileStore`, `LocalFileStore`, `Document`, `TenantContext` | When tools or agents read/write files with tenant isolation |
+| `kernel/storage/` | `FileStore`, `Document`, `TenantContext` | When tools or agents read/write files with tenant isolation |
 | `kernel/batch/` | `BatchConfig`, `BatchItem`, `BatchResult` | When running the same agent over thousands of inputs in parallel |
 | `kernel/hooks.py` | `HookManager`, lifecycle hook types | When you need `on_run_start`, `on_run_end`, `on_tool_call`, `on_tool_result` callbacks |
 | `kernel/context/` | `ModelContext` ABC | When building a new message-windowing or summarisation strategy |
@@ -828,25 +837,25 @@ These contracts sit in the kernel but are used less frequently day-to-day. They 
 
 ## How to Add a New Feature
 
-Never edit the kernel to add capability. The kernel grows only when a new *contract* is needed — a new Protocol or ABC that extensions must satisfy.
+Never edit the kernel to add capability. The kernel grows only when a new *contract* is needed — a new Protocol or ABC that higher layers must satisfy. The question to ask is: "does this fit an existing contract, or does the contract need to grow?"
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#475569"}}}%%
 flowchart TD
-    Q{What do\nyou need?}
+    Q{What do<br/>you need?}
 
-    Q -->|New agent behaviour| E1["extensions/agents/<name>/agent.py\n@register_agent('name')"]
-    Q -->|New guardrail| E2["extensions/guardrails/<name>.py\n@register_guardrail('name')"]
-    Q -->|New middleware| E3["extensions/middleware/<name>.py\n@register_middleware('name')"]
-    Q -->|New LLM provider| E4["integrations/llm/<provider>/\nsubclass BaseModelClient"]
-    Q -->|New memory backend| E5["integrations/memory/<backend>.py\nsubclass BaseMemory"]
-    Q -->|New context strategy| E6["extensions/context/<name>.py\n@register_context('name')"]
-    Q -->|New tool| E7["catalog/tools/<name>/tool.py\nsubclass BaseTool"]
-    Q -->|New plugin category| E8["kernel/plugin/registry.py\n_make_decorator('category', base=YourABC)"]
-    Q -->|Truly new contract| E9["kernel/ — add ABC / Protocol / dataclass\nno implementation, no I/O"]
+    Q -->|New agent behaviour| E1["reasoning/agents/<name>/agent.py<br/>@register_agent('name')"]
+    Q -->|New guardrail check| E2["reasoning/guardrails/<name>.py<br/>@register_guardrail('name')"]
+    Q -->|New middleware| E3["reasoning/middleware/<name>.py<br/>@register_middleware('name')"]
+    Q -->|New LLM provider| E4["integrations/llm/<provider>/<br/>subclass BaseModelClient"]
+    Q -->|New memory backend| E5["integrations/memory/<backend>.py<br/>subclass BaseMemory"]
+    Q -->|New context strategy| E6["reasoning/memory/<name>.py<br/>@register_context('name')"]
+    Q -->|New tool| E7["catalog/tools/<name>/tool.py<br/>subclass BaseTool"]
+    Q -->|New plugin category| E8["kernel/plugin/registry.py<br/>_make_decorator('category', base=YourABC)"]
+    Q -->|Truly new contract| E9["kernel/ — add ABC / Protocol / dataclass<br/>no implementation, no I/O"]
 
     style Q fill:#7c3aed,stroke:#a78bfa,color:#f5f3ff
     style E9 fill:#991b1b,stroke:#f87171,color:#fff1f2
 ```
 
-The rule is: if you can build it in `extensions/` by implementing an existing kernel ABC, do that. If you need a new ABC that doesn't exist yet, that's the one case where the kernel grows — but only the contract, never the implementation.
+If you can build it in `reasoning/` or `orchestration/` by implementing an existing kernel ABC, do that. If you need a new ABC that doesn't exist yet, that is the one case where the kernel grows — but only the contract, never the implementation.

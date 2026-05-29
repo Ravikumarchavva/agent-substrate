@@ -1,7 +1,7 @@
 # %%
 # # Ravi Engine — Examples Overview
 #
-# All examples are organized into **8 folders**, each covering a distinct capability area.  
+# All examples are organized into **8 folders**, each covering a distinct capability area.
 # Every notebook is self-contained with its own imports and can be run independently.
 #
 # ---
@@ -57,15 +57,15 @@
 #
 # ### Build an agent
 # ```python
-# from ravi.extensions.agents.react.agent import ReActAgent
+# from ravi.reasoning.agents.assistant import AssistantAgent
 # from ravi.configs.settings import settings
 # from ravi.integrations.llm.factory import create_model_client
 # from ravi.kernel.agent_catalog import AgentCatalog
-# from ravi.kernel.memory.unbounded_memory import UnboundedMemory
-# from ravi.extensions.context.redis_model_context import UnboundedContext
-# from ravi.extensions.tools.builtin_tools import CalculatorTool
+# from ravi.fabric.memory.unbounded import UnboundedMemory
+# from ravi.reasoning.memory.context.unbounded import UnboundedContext
+# from ravi.fabric.tools.builtin_tools import CalculatorTool
 #
-# agent = ReActAgent(
+# agent = AssistantAgent(
 #     name="MyAgent",
 #     catalog=catalog,         # AgentCatalog with model + memory + tools
 #     tools=[CalculatorTool()],

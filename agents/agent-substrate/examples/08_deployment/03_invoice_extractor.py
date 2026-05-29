@@ -4,7 +4,7 @@ Demonstrates InvoiceExtractorTool for extracting text and tables from invoice fi
 (PDF, TIF, PNG, JPG). Sections cover:
 
   1. Tool setup and direct file extraction
-  2. ReActAgent integration with structured output
+  2. AssistantAgent integration with structured output
   3. Batch extraction with asyncio.gather
   4. Error handling — missing file, unsupported format, out-of-range page
 
@@ -22,10 +22,10 @@ from pathlib import Path
 
 from ravi.catalog.tools.invoice_extractor.tool import InvoiceExtractorTool
 from ravi.configs.settings import settings
-from ravi.extensions.agents.react.agent import ReActAgent
+from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.integrations.llm.factory import create_model_client
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 
 # Infrastructure: none required for direct tool calls.
 #   For the agent sections, set OPENAI_API_KEY (or another provider key).
@@ -74,7 +74,7 @@ async def section_1_direct_extraction(tool: InvoiceExtractorTool) -> None:
     print(f"  Found {len(all_files)} file(s): {[f.name for f in all_files]}")
     print()
 
-    for invoice_file in all_files[:2]:   # process first two
+    for invoice_file in all_files[:2]:  # process first two
         result = await tool.execute(file_path=str(invoice_file))
         print(f"  --- {invoice_file.name} ---")
         if result.is_error:
@@ -91,8 +91,8 @@ async def section_1_direct_extraction(tool: InvoiceExtractorTool) -> None:
 
 
 async def section_2_agent_extraction(tool: InvoiceExtractorTool) -> None:
-    """Section 2 — ReActAgent with InvoiceExtractorTool and structured output."""
-    print("=== Section 2: ReActAgent extraction ===")
+    """Section 2 — AssistantAgent with InvoiceExtractorTool and structured output."""
+    print("=== Section 2: AssistantAgent extraction ===")
 
     api_keys = {
         "openai": settings.OPENAI_API_KEY,
@@ -130,7 +130,7 @@ async def section_2_agent_extraction(tool: InvoiceExtractorTool) -> None:
     catalog.register_memory("memory", UnboundedMemory())
     catalog.register_tool(tool)
 
-    agent = ReActAgent(
+    agent = AssistantAgent(
         name="InvoiceAgent",
         description="Extracts structured data from invoice files.",
         catalog=catalog,
@@ -152,7 +152,9 @@ async def section_2_agent_extraction(tool: InvoiceExtractorTool) -> None:
     print(f"  Output: {result.output_text[:300]}")
     if result.structured_output and result.structured_output.parsed:
         inv = result.structured_output.parsed
-        print(f"  Structured: vendor={inv.vendor!r}  total={inv.total}  items={len(inv.line_items)}")
+        print(
+            f"  Structured: vendor={inv.vendor!r}  total={inv.total}  items={len(inv.line_items)}"
+        )
     print()
 
     # --- 2b. Agent on a real file ---
@@ -181,7 +183,9 @@ async def section_3_batch_extraction(tool: InvoiceExtractorTool) -> None:
         return
 
     file_paths = [str(f) for f in tif_files]
-    print(f"  Processing {len(file_paths)} files in parallel: {[Path(p).name for p in file_paths]}")
+    print(
+        f"  Processing {len(file_paths)} files in parallel: {[Path(p).name for p in file_paths]}"
+    )
 
     results = await asyncio.gather(
         *[tool.execute(file_path=p) for p in file_paths],
@@ -210,11 +214,13 @@ async def section_4_error_handling(tool: InvoiceExtractorTool) -> None:
     tif_files = sorted(PUBLIC_DIR.glob("*.tif"))
 
     cases = [
-        ("Missing file",       {"file_path": str(tmp / "does_not_exist.tif")}),
+        ("Missing file", {"file_path": str(tmp / "does_not_exist.tif")}),
         ("Unsupported format", {"file_path": str(tmp / "invoice.txt")}),
     ]
     if tif_files:
-        cases.append(("Out-of-range page", {"file_path": str(tif_files[0]), "pages": [9999]}))
+        cases.append(
+            ("Out-of-range page", {"file_path": str(tif_files[0]), "pages": [9999]})
+        )
 
     for label, kwargs in cases:
         result = await tool.execute(**kwargs)

@@ -57,7 +57,7 @@ from ravi.orchestration.agents.proxy.agent import UserProxyAgent  # noqa: F401
 #   processor = BatchProcessor(fn=my_fn, config=BatchConfig(max_concurrency=5))
 #   result = await processor.run(inputs)
 from ravi.kernel.batch import BatchConfig  # noqa: F401
-from ravi.platform.batch import BatchProcessor  # noqa: F401
+from ravi.fabric.batch import BatchProcessor  # noqa: F401
 
 # Structured data extraction:
 #   from ravi import Extractor, Invoice

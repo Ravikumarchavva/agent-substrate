@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from tests.fixtures.mock_llm import MockLLMClient
 
 
@@ -18,5 +18,5 @@ def empty_catalog():
 def catalog_with_llm():
     cat = AgentCatalogRegistry()
     cat.register_model("primary", MockLLMClient())
-    cat.register_memory("memory", UnboundedMemory())
+    cat.register_memory("memory", InMemoryHistoryProvider())
     return cat

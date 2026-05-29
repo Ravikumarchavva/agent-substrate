@@ -7,8 +7,7 @@ from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.kernel.middleware.base import MiddlewareContext, MiddlewareStage
 from ravi.reasoning.middleware.governance import GovernanceMiddleware
 from ravi.exceptions import GuardrailTripwireError
-from ravi.fabric.memory.unbounded import UnboundedMemory
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 
 
 class DummyTaxTool(BaseTool):
@@ -54,22 +53,6 @@ async def test_sql_style_short_name_resolution():
     assert resolved_tool == tool
 
 
-@pytest.mark.asyncio
-async def test_stateful_catalog_assets():
-    cat = AgentCatalogRegistry(default_catalog="main")
-    memory = UnboundedMemory()
-    context = SlidingWindowContext(max_messages=15)
-
-    # Register memory and context strategies in education schema
-    cat.register_memory("chat_memory", memory, catalog="main", schema="education")
-    cat.register_context("model_context", context, catalog="main", schema="education")
-
-    # Verify lookups
-    retrieved_memory = cat.get_memory("chat_memory", search_path=["education"])
-    assert retrieved_memory == memory
-
-    retrieved_context = cat.get_context("model_context", search_path=["education"])
-    assert retrieved_context == context
 
 
 @pytest.mark.asyncio

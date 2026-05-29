@@ -419,7 +419,7 @@ async def run_pipeline(
                 pipeline_config,
                 tools_registry=getattr(request.app.state, "tools", []),
                 model_client=request.app.state.model_client,
-                redis_memory=getattr(request.app.state, "redis_memory", None),
+                history=getattr(request.app.state, "history", None),
                 hitl_bridge=getattr(request.app.state, "bridge", None),
                 session_id=body.session_id,
             )

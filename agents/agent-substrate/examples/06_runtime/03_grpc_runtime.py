@@ -20,10 +20,11 @@ from __future__ import annotations
 
 import asyncio
 
-from ravi.kernel.runtime import AgentId, LocalRuntime, RestartPolicy, TopicId
+from ravi.kernel.runtime import AgentId
+from ravi.fabric.runtime import LocalRuntime
 from ravi.kernel.runtime._contracts import MessageContext
-from ravi.kernel.messages.content import ContentBlock, TextBlock
-from ravi.extensions.agents.runtime.agent import RuntimeAgent
+from ravi.kernel.messages.content import ContentBlock
+from ravi.fabric.actors.actor import ActorAgent
 
 # ---
 # What GrpcRuntime adds over LocalRuntime:
@@ -47,16 +48,23 @@ from ravi.extensions.agents.runtime.agent import RuntimeAgent
 def show_hierarchy() -> None:
     print("=== Runtime inheritance hierarchy ===")
 
-    from ravi.kernel.runtime import BaseRuntime, LocalRuntime as LR
+    from ravi.fabric.runtime import BaseRuntime, LocalRuntime as LR
     from ravi.integrations.runtime import BaseRemoteRuntime
 
     print(f"  LocalRuntime -> BaseRuntime:      {issubclass(LR, BaseRuntime)}")
-    print(f"  BaseRemoteRuntime -> BaseRuntime: {issubclass(BaseRemoteRuntime, BaseRuntime)}")
+    print(
+        f"  BaseRemoteRuntime -> BaseRuntime: {issubclass(BaseRemoteRuntime, BaseRuntime)}"
+    )
 
     try:
         from ravi.integrations.runtime.grpc import GrpcRuntime
-        print(f"  GrpcRuntime -> BaseRemoteRuntime: {issubclass(GrpcRuntime, BaseRemoteRuntime)}")
-        print(f"  GrpcRuntime -> BaseRuntime:       {issubclass(GrpcRuntime, BaseRuntime)}")
+
+        print(
+            f"  GrpcRuntime -> BaseRemoteRuntime: {issubclass(GrpcRuntime, BaseRemoteRuntime)}"
+        )
+        print(
+            f"  GrpcRuntime -> BaseRuntime:       {issubclass(GrpcRuntime, BaseRuntime)}"
+        )
         return GrpcRuntime
     except ImportError as exc:
         print(f"  GrpcRuntime not importable: {exc}")
@@ -66,7 +74,7 @@ def show_hierarchy() -> None:
 # --- Section 2: local echo agent shared between both runtime modes ---
 
 
-class EchoAgent(RuntimeAgent):
+class EchoAgent(ActorAgent):
     """Returns the received text with an echo prefix."""
 
     async def on_message(
@@ -76,7 +84,7 @@ class EchoAgent(RuntimeAgent):
         return {"echo": text, "agent": self.name, "key": self.key}
 
 
-class GreeterAgent(RuntimeAgent):
+class GreeterAgent(ActorAgent):
     """Returns a greeting for the given name."""
 
     async def on_message(
@@ -103,9 +111,7 @@ async def demo_local_baseline() -> None:
     r1 = await runtime.send_message("ping from local", recipient=echo.id)
     print(f"  echo:    {r1}")
 
-    r2 = await runtime.send_message(
-        "LocalRuntime", recipient=greeter.id
-    )
+    r2 = await runtime.send_message("LocalRuntime", recipient=greeter.id)
     print(f"  greeter: {r2}")
 
     print(f"  registered_types: {runtime.registered_types}")
@@ -151,7 +157,7 @@ async def demo_grpc_runtime() -> None:
     await greeter.start()
     await runtime.start()
 
-    print(f"  GrpcRuntime started: listen=0.0.0.0:50051")
+    print("  GrpcRuntime started: listen=0.0.0.0:50051")
     print(f"  registered_types: {runtime.registered_types}")
     print(f"  worker_id:        {runtime.worker_id}")
 
@@ -201,9 +207,9 @@ async def demo_grpc_remote_dispatch() -> None:
     await echo.start()
     await runtime_a.start()
 
-    print(f"  Node A started: listen=0.0.0.0:50052")
+    print("  Node A started: listen=0.0.0.0:50052")
     print(f"  Local agents:  {runtime_a.registered_types}")
-    print(f"  Remote peers:  summarizer → localhost:50053")
+    print("  Remote peers:  summarizer → localhost:50053")
 
     # Local dispatch works fine
     r = await runtime_a.send_message("local call", recipient=echo.id)
@@ -219,11 +225,11 @@ async def demo_grpc_remote_dispatch() -> None:
             timeout=3.0,
         )
     except asyncio.TimeoutError:
-        print(f"  Remote to node B timed out (node B not running — expected)")
-        print(f"  This would succeed when node B is running.")
+        print("  Remote to node B timed out (node B not running — expected)")
+        print("  This would succeed when node B is running.")
     except (RuntimeError, Exception) as exc:
         print(f"  Remote to node B (expected failure): {type(exc).__name__}")
-        print(f"  This would succeed when node B is running.")
+        print("  This would succeed when node B is running.")
 
     await echo.stop()
     await runtime_a.stop()
@@ -235,14 +241,14 @@ async def demo_grpc_remote_dispatch() -> None:
 def show_grpc_vs_local() -> None:
     print("\n=== GrpcRuntime vs LocalRuntime ===")
     comparison = [
-        ("Handler code",       "unchanged",         "unchanged"),
-        ("Call site",          "send_message()",     "send_message()"),
-        ("Transport",          "asyncio Queue",      "gRPC unary JSON"),
-        ("Process boundary",   "no",                 "yes"),
-        ("remote_peers",       "n/a",                "agent_type → host:port"),
-        ("Serialization",      "Python objects",     "JSON-encoded Envelope"),
-        ("Proto compilation",  "n/a",                "not needed (generic handler)"),
-        ("Location change",    "restart process",    "update remote_peers"),
+        ("Handler code", "unchanged", "unchanged"),
+        ("Call site", "send_message()", "send_message()"),
+        ("Transport", "asyncio Queue", "gRPC unary JSON"),
+        ("Process boundary", "no", "yes"),
+        ("remote_peers", "n/a", "agent_type → host:port"),
+        ("Serialization", "Python objects", "JSON-encoded Envelope"),
+        ("Proto compilation", "n/a", "not needed (generic handler)"),
+        ("Location change", "restart process", "update remote_peers"),
     ]
     header = f"  {'Feature':<25} {'LocalRuntime':<24} {'GrpcRuntime'}"
     print(header)
@@ -262,4 +268,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

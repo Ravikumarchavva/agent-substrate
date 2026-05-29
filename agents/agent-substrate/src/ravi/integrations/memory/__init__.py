@@ -1,8 +1,8 @@
-"""ravi.integrations.memory — Concrete memory backends (Redis, Postgres)."""
+"""ravi.integrations.memory — Concrete history backends (Redis, Postgres)."""
 
-from ravi.integrations.memory.redis_memory import RedisMemory
-from ravi.integrations.memory.postgres_memory import (
-    PostgresMemory,
+from ravi.integrations.memory.redis_history import RedisHistoryProvider
+from ravi.integrations.memory.postgres_history import (
+    PostgresHistoryProvider,
     MemorySession,
     MemoryMessage,
 )
@@ -10,8 +10,8 @@ from ravi.integrations.memory.lineage_postgres import PostgresLineageStore
 from ravi.integrations.memory.lineage_s3 import S3LineageStore
 
 __all__ = [
-    "RedisMemory",
-    "PostgresMemory",
+    "RedisHistoryProvider",
+    "PostgresHistoryProvider",
     "MemorySession",
     "MemoryMessage",
     "PostgresLineageStore",

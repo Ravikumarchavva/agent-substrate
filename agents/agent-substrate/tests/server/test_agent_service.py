@@ -187,37 +187,29 @@ async def test_rebuild_messages_assistant_none_content():
 
 
 # ---------------------------------------------------------------------------
-# load_agent_for_thread — Redis hot path (limit= contract)
+# load_agent_for_thread — shared HistoryProvider hot/cold paths
 # ---------------------------------------------------------------------------
 
 
-async def test_load_agent_hot_path_calls_restore_without_limit():
-    """Redis hit → restore() must be called with no limit (full history loaded)."""
-    mock_redis = AsyncMock()
-    mock_redis.exists = AsyncMock(return_value=True)
+async def test_load_agent_hot_path_reuses_provider_without_seeding():
+    """Cache hit → the shared provider is reused; the cold store is not read."""
+    history = AsyncMock()
+    history.count_messages = AsyncMock(return_value=3)
+    history.save_messages = AsyncMock()
 
-    mock_per_request = AsyncMock()
-    mock_per_request.restore = AsyncMock(return_value=3)
-    mock_per_request.get_messages = AsyncMock(return_value=[])
+    load_steps = AsyncMock(return_value=[])
 
     with (
-        patch(
-            "ravi.server.services.agent_service.RedisMemory.for_session",
-            return_value=mock_per_request,
-        ),
         patch(
             "ravi.server.services.agent_service.create_assistant_agent",
             return_value=MagicMock(),
         ),
         patch(
             "ravi.server.services.agent_service.load_messages_for_memory",
-            new_callable=AsyncMock,
-            return_value=[],
+            new=load_steps,
         ),
     ):
-        from ravi.server.services.agent_service import (
-            load_agent_for_thread,
-        )
+        from ravi.server.services.agent_service import load_agent_for_thread
 
         db = AsyncMock()
         await load_agent_for_thread(
@@ -226,24 +218,20 @@ async def test_load_agent_hot_path_calls_restore_without_limit():
             model_client=MagicMock(),
             tools=[],
             system_instructions="System",
-            redis_memory=mock_redis,
+            history=history,
             model_context_window=40,
             runtime=MagicMock(),
         )
-        # No limit — Redis holds the full history; SlidingWindowContext
-        # is what filters messages at LLM-call time.
-        mock_per_request.restore.assert_called_once_with()
+        # Cache hit — no seeding, no cold-store read.
+        history.save_messages.assert_not_called()
+        load_steps.assert_not_called()
 
 
-async def test_load_agent_cold_path_seeds_redis_with_all_messages():
-    """Redis miss → store_many called with system+user+assistant=3 messages."""
-    mock_redis = AsyncMock()
-    mock_redis.exists = AsyncMock(return_value=False)
-    mock_redis.store_many = AsyncMock()
-
-    mock_per_request = AsyncMock()
-    mock_per_request.restore = AsyncMock(return_value=0)
-    mock_per_request.get_messages = AsyncMock(return_value=[])
+async def test_load_agent_cold_path_seeds_provider_with_all_messages():
+    """Cache miss → save_messages called with system+user+assistant=3 messages."""
+    history = AsyncMock()
+    history.count_messages = AsyncMock(return_value=0)
+    history.save_messages = AsyncMock()
 
     system_prompt = "You are helpful."
     rows = [
@@ -258,10 +246,6 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
 
     with (
         patch(
-            "ravi.server.services.agent_service.RedisMemory.for_session",
-            return_value=mock_per_request,
-        ),
-        patch(
             "ravi.server.services.agent_service.load_messages_for_memory",
             new_callable=AsyncMock,
             return_value=rows,
@@ -271,9 +255,7 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
             return_value=MagicMock(),
         ),
     ):
-        from ravi.server.services.agent_service import (
-            load_agent_for_thread,
-        )
+        from ravi.server.services.agent_service import load_agent_for_thread
 
         db = AsyncMock()
         await load_agent_for_thread(
@@ -282,14 +264,13 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
             model_client=MagicMock(),
             tools=[],
             system_instructions=system_prompt,
-            redis_memory=mock_redis,
+            history=history,
             model_context_window=40,
             runtime=MagicMock(),
         )
-        # store_many must be called with (session_id, messages)
-        mock_redis.store_many.assert_called_once()
-        call_args = mock_redis.store_many.call_args
-        _, stored_messages = call_args.args
+        # save_messages must be called with (session_id, messages)
+        history.save_messages.assert_called_once()
+        _, stored_messages = history.save_messages.call_args.args
         # system(prepended) + user + assistant = 3
         assert len(stored_messages) == 3
         assert isinstance(stored_messages[0], SystemMessage)
@@ -297,10 +278,10 @@ async def test_load_agent_cold_path_seeds_redis_with_all_messages():
         assert isinstance(stored_messages[2], AssistantMessage)
 
 
-async def test_load_agent_no_redis_uses_unbounded_memory():
-    """When redis_memory=None, agent falls back to Postgres-only UnboundedMemory."""
+async def test_load_agent_no_history_uses_in_memory_provider():
+    """When history=None, the agent falls back to an InMemoryHistoryProvider."""
     from ravi.server.services.agent_service import load_agent_for_thread
-    from ravi.fabric.memory.unbounded import UnboundedMemory
+    from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 
     captured_memory = {}
 
@@ -330,11 +311,11 @@ async def test_load_agent_no_redis_uses_unbounded_memory():
             model_client=MagicMock(),
             tools=[],
             system_instructions="Sys",
-            redis_memory=None,
+            history=None,
             runtime=MagicMock(),
         )
 
-    assert isinstance(captured_memory["mem"], UnboundedMemory)
+    assert isinstance(captured_memory["mem"], InMemoryHistoryProvider)
 
 
 # ---------------------------------------------------------------------------

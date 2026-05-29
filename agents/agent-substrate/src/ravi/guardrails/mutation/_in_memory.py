@@ -16,10 +16,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Deque
 
-from ravi.guardrails.mutation import (
+from ravi.kernel.safeguards._breaker import (
     BreakerSnapshot,
     BreakerState,
     CircuitOpen,
+)
+from ravi.kernel.safeguards._mutation import (
     MutationKind,
     MutationPermission,
     MutationRequest,

@@ -1,4 +1,4 @@
-"""Tests for the memory system — RedisMemory lifecycle and message storage."""
+"""Tests for the memory system — RedisHistoryProvider lifecycle and storage."""
 
 from __future__ import annotations
 
@@ -33,15 +33,15 @@ class TestMessageTypes:
         assert msg.content is None
 
 
-class TestRedisMemory:
-    """Test RedisMemory with mocked Redis."""
+class TestRedisHistoryProvider:
+    """Test RedisHistoryProvider with mocked Redis."""
 
     @pytest.mark.asyncio
-    async def test_memory_lifecycle(self) -> None:
-        """Test connect → add → get → disconnect cycle."""
-        from ravi.integrations.memory.redis_memory import RedisMemory
+    async def test_history_lifecycle(self) -> None:
+        """Test connect → load → disconnect cycle."""
+        from ravi.integrations.memory.redis_history import RedisHistoryProvider
 
-        with patch("ravi.integrations.memory.redis_memory.aioredis") as mock_redis:
+        with patch("ravi.integrations.memory.redis_history.aioredis") as mock_redis:
             mock_conn = AsyncMock()
             mock_conn.ping = AsyncMock()
             mock_conn.lrange = AsyncMock(return_value=[])
@@ -50,13 +50,12 @@ class TestRedisMemory:
             mock_conn.aclose = AsyncMock()
             mock_redis.from_url.return_value = mock_conn
 
-            mem = RedisMemory(
-                session_id="test-123", redis_url="redis://localhost:6379/0"
-            )
-            await mem.connect()
+            provider = RedisHistoryProvider(redis_url="redis://localhost:6379/0")
+            await provider.connect()
 
             # Should start empty
-            msgs = await mem.get_messages()
+            msgs = await provider.load_messages("test-123")
             assert isinstance(msgs, list)
+            assert msgs == []
 
-            await mem.disconnect()
+            await provider.disconnect()

@@ -108,9 +108,12 @@ def section_3_namespaces() -> list[str]:
     print("\n=== Section 3: Namespaces ===")
 
     rc, out = run_cmd(
-        "kubectl", "get", "namespaces",
+        "kubectl",
+        "get",
+        "namespaces",
         "--no-headers",
-        "-o", "custom-columns=NAME:.metadata.name",
+        "-o",
+        "custom-columns=NAME:.metadata.name",
     )
     existing = set(out.splitlines()) if rc == 0 else set()
 
@@ -139,8 +142,12 @@ def section_4_deployments() -> list[str]:
     missing: list[str] = []
     for ns, name in REQUIRED_DEPLOYMENTS:
         rc, out = run_cmd(
-            "kubectl", "get", "deployment", name,
-            "-n", ns,
+            "kubectl",
+            "get",
+            "deployment",
+            name,
+            "-n",
+            ns,
             "--no-headers",
         )
         if rc == 0 and out and not out.lower().startswith("no "):

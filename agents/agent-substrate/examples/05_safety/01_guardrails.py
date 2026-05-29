@@ -5,14 +5,12 @@ run them in parallel via run_guardrails(), handle tripwire errors,
 and define a custom guardrail by subclassing BaseGuardrail.
 
 No LLM API key required — all guardrails in this file use pattern matching.
-
-# Infrastructure: none (pure in-process, no external services needed)
 """
 
 import asyncio
 
 from ravi.exceptions import GuardrailTripwireError
-from ravi.extensions.guardrails import (
+from ravi.reasoning.guardrails import (
     ContentFilterGuardrail,
     MaxTokenGuardrail,
     PIIDetectionGuardrail,
@@ -27,11 +25,6 @@ from ravi.kernel.guardrails.base_guardrail import (
 )
 
 
-# ---
-# Helpers
-# ---
-
-
 def _fmt(result: GuardrailResult) -> str:
     status = "PASS" if result.passed else ("TRIPWIRE" if result.tripwire else "FAIL")
     return f"[{status}] {result.guardrail_name}: {result.message}"
@@ -41,11 +34,7 @@ def _ctx(text: str) -> GuardrailContext:
     return GuardrailContext(agent_name="demo", run_id="ex-01", input_text=text)
 
 
-# ---
-# 1. Content filter guardrail
-# ---
-
-
+# 1. Content Filter Guardrail
 async def demo_content_filter() -> None:
     print("\n=== 1. ContentFilterGuardrail ===")
 
@@ -65,11 +54,7 @@ async def demo_content_filter() -> None:
         print(f"  {_fmt(result)}")
 
 
-# ---
-# 2. PII detection
-# ---
-
-
+# 2. PII Detection
 async def demo_pii_detection() -> None:
     print("\n=== 2. PIIDetectionGuardrail ===")
 
@@ -87,11 +72,7 @@ async def demo_pii_detection() -> None:
             print(f"  Detected types: {result.metadata.get('detected_types')}")
 
 
-# ---
-# 3. Prompt injection detection
-# ---
-
-
+# 3. Prompt Injection Detection
 async def demo_prompt_injection() -> None:
     print("\n=== 3. PromptInjectionGuardrail ===")
 
@@ -107,11 +88,7 @@ async def demo_prompt_injection() -> None:
         print(f"  {_fmt(result)}")
 
 
-# ---
-# 4. Parallel checking with run_guardrails()
-# ---
-
-
+# 4. Parallel Checking with run_guardrails()
 async def demo_parallel_run() -> None:
     print("\n=== 4. run_guardrails() — parallel execution ===")
 
@@ -133,17 +110,15 @@ async def demo_parallel_run() -> None:
         print(f"    {_fmt(r)}")
 
     print()
-    clean_results = await run_guardrails(all_guardrails, _ctx("What is the capital of France?"))
+    clean_results = await run_guardrails(
+        all_guardrails, _ctx("What is the capital of France?")
+    )
     print(f"  Clean message — {len(clean_results)} result(s):")
     for r in clean_results:
         print(f"    {_fmt(r)}")
 
 
-# ---
-# 5. Tripwire — hard stop raises GuardrailTripwireError
-# ---
-
-
+# 5. Tripwire — Hard Stop raises GuardrailTripwireError
 async def demo_tripwire() -> None:
     print("\n=== 5. Tripwire — hard stop ===")
 
@@ -155,11 +130,7 @@ async def demo_tripwire() -> None:
         print(f"  GuardrailTripwireError: {exc}")
 
 
-# ---
-# 6. Custom guardrail — subclass BaseGuardrail
-# ---
-
-
+# 6. Custom Guardrail (BananaGuardrail)
 class BananaGuardrail(BaseGuardrail):
     """Blocks any message that contains the word 'banana'."""
 
@@ -188,11 +159,6 @@ async def demo_custom_guardrail() -> None:
         print(f"  {_fmt(result)}")
 
 
-# ---
-# Entry point
-# ---
-
-
 async def main() -> None:
     await demo_content_filter()
     await demo_pii_detection()
@@ -205,4 +171,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

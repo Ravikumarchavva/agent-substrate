@@ -13,7 +13,7 @@ All endpoints require ``platform_admin`` or ``tenant_admin`` role.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -61,7 +61,7 @@ def _gate(request: Request):
 @router.post("/admit", summary="Admit or deny a replay request")
 async def admit_replay(body: ReplayRequestBody, request: Request) -> Dict[str, Any]:
     """Submit a replay request; idempotent on idempotency_key."""
-    from ravi.platform.observability.replay import ReplayRequest
+    from ravi.kernel.observability import ReplayRequest
 
     gate = _gate(request)
     kwargs: dict[str, Any] = dict(
@@ -112,7 +112,7 @@ async def get_admission(idempotency_key: str, request: Request) -> Dict[str, Any
 @router.post("/deny", summary="Add an operator deny rule")
 async def add_deny_rule(body: DenyRuleBody, request: Request) -> Dict[str, Any]:
     """Add a rule that permanently denies replay for matching envelopes."""
-    from ravi.platform.observability.replay import ReplayDenyRule
+    from ravi.kernel.observability import ReplayDenyRule
 
     if body.envelope_id is None and body.correlation_id is None:
         raise HTTPException(

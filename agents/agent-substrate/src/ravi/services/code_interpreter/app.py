@@ -13,10 +13,12 @@ in-process asyncio state.  Scaling is done via StatefulSet replicas.
 """
 
 from __future__ import annotations
-from ravi.logger import setup_logging
 
+import logging
 import time
 from contextlib import asynccontextmanager
+
+from ravi.logger import setup_logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

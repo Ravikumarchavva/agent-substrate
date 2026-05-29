@@ -6,15 +6,20 @@ without deleting at the end, so you can inspect the database.
 Run with:
   uv run python examples/memory_demo.py
 """
+
 import asyncio
 import os
 from datetime import datetime
 
 from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.integrations.memory.postgres_memory import PostgresMemory
-from ravi.extensions.memory.session_manager import SessionManager
+from ravi.reasoning.memory.session import SessionManager
 from ravi.kernel.messages.client_messages import (
-    SystemMessage, UserMessage, AssistantMessage, ToolCallMessage, ToolExecutionResultMessage,
+    SystemMessage,
+    UserMessage,
+    AssistantMessage,
+    ToolCallMessage,
+    ToolExecutionResultMessage,
 )
 
 
@@ -22,7 +27,9 @@ async def main():
     print("\n🧠 MEMORY SYSTEM DEMO\n")
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb")
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
+    )
 
     # Initialize storage backends
     redis = RedisMemory(redis_url=redis_url, default_ttl=3600, max_messages=500)
@@ -85,7 +92,7 @@ async def main():
         stored_messages = await mgr.get_messages(sid)
         for i, msg in enumerate(stored_messages, 1):
             msg_type = type(msg).__name__
-            if hasattr(msg, 'content'):
+            if hasattr(msg, "content"):
                 content_preview = str(msg.content)[:60]
             else:
                 content_preview = "N/A"
@@ -96,7 +103,9 @@ async def main():
         print("Sessions in database:")
         all_sessions = await mgr.list_sessions(limit=10)
         for s in all_sessions:
-            print(f"  - {s.session_id} | agent={s.agent_name} | msgs={s.message_count} | {s.status.value}")
+            print(
+                f"  - {s.session_id} | agent={s.agent_name} | msgs={s.message_count} | {s.status.value}"
+            )
         print()
 
         # Instructions for manual inspection

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from collections import defaultdict
 from typing import Any
 
 from ravi.logger import setup_logging
 
-logger = setup_logging(mode='pretty', handler='console')
+logger = setup_logging(mode="pretty", handler="console")
 
 
 class EventBus:

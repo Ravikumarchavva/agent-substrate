@@ -48,8 +48,9 @@ def generate_code(config: PipelineConfig) -> str:
 
         from ravi.fabric.catalog._catalog import AgentCatalog
         from ravi.reasoning.agents.assistant.agent import AssistantAgent
-        from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
-        from ravi.fabric.memory.unbounded import UnboundedMemory
+        from ravi.kernel.context.base_context import ModelContext
+        from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
+        from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
         from ravi.kernel.tools.base_tool import BaseTool, ToolResult
         from ravi.integrations.llm.openai.openai_client import OpenAIClient
     ''')
@@ -104,7 +105,7 @@ def generate_code(config: PipelineConfig) -> str:
         if _has_redis:
             sections.append(
                 textwrap.dedent("""\
-                from ravi.integrations.memory.redis_memory import RedisMemory
+                from ravi.integrations.memory.redis_history import RedisHistoryProvider
             """)
             )
 
@@ -161,11 +162,11 @@ def generate_code(config: PipelineConfig) -> str:
             ttl = mem_node.config.get("ttl", 3600)
             max_msgs = mem_node.config.get("max_messages", 200)
             main_lines.append(
-                f'    {var} = RedisMemory(session_id="pipeline", default_ttl={ttl}, max_messages={max_msgs})'
+                f"    {var} = RedisHistoryProvider(ttl={ttl}, max_messages={max_msgs})"
             )
             main_lines.append(f"    await {var}.connect()")
         else:
-            main_lines.append(f"    {var} = UnboundedMemory()")
+            main_lines.append(f"    {var} = InMemoryHistoryProvider()")
     if config.nodes_by_type(NodeType.MEMORY):
         main_lines.append("")
 
@@ -226,7 +227,7 @@ def generate_code(config: PipelineConfig) -> str:
                         output_guards.append(guardrail_vars[gn.id])
 
         # Find connected memory
-        mem_var = "UnboundedMemory()"
+        mem_var = "InMemoryHistoryProvider()"
         for edge in config.edges_from(an.id):
             if edge.edge_type == EdgeType.AGENT_MEMORY:
                 mn = config.node_by_id(edge.target)
@@ -239,17 +240,17 @@ def generate_code(config: PipelineConfig) -> str:
 
         catalog_var = f"catalog_{_safe_var(an.id[:8])}"
         main_lines.append(f"    {catalog_var} = AgentCatalog()")
-        main_lines.append(f"    {catalog_var}.register_model('primary', {client_var})")
-        main_lines.append(
-            f"    {catalog_var}.register_context('default', SlidingWindowContext(max_messages={context_window}))"
-        )
-        main_lines.append(f"    {catalog_var}.register_memory('memory', {mem_var})")
         for t in connected_tools:
             main_lines.append(f"    {catalog_var}.register_tool({t})")
         main_lines.append(f"    {var} = AssistantAgent(")
         main_lines.append(f'        name="{_escape(an.label or "agent")}",')
         main_lines.append(
             f'        description="{_escape(an.config.get("description", ""))}",'
+        )
+        main_lines.append(f"        model={client_var},")
+        main_lines.append(
+            f"        context=ModelContext(history={mem_var}, "
+            f"compaction_strategies=[SlidingWindowStrategy(max_messages={context_window})]),"
         )
         main_lines.append(f"        catalog={catalog_var},")
         main_lines.append(f'        system_instructions="""{sys_prompt}""",')

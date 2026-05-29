@@ -9,12 +9,12 @@ from typing import Any, Dict, List, Optional
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.fabric.catalog._catalog import AgentCatalog
 from ravi.kernel.context.base_context import ModelContext
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowContext
+from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 from ravi.kernel.execution.context import ExecutionContext
 from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.memory.base_memory import BaseMemory
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.kernel.memory.history_provider import HistoryProvider
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.kernel.messages.base_message import BaseClientMessage
 from ravi.kernel.messages.client_messages import (
     AssistantMessage,
@@ -26,7 +26,6 @@ from ravi.kernel.messages.client_messages import (
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.runtime import AgentRuntime
 from ravi.kernel.tools.base_tool import BaseTool
-from ravi.integrations.memory.redis_memory import RedisMemory
 
 logger = setup_logging()
 
@@ -106,28 +105,24 @@ async def load_session_memory(
     session_id: str,
     system_instructions: str,
     load_persisted_steps: PersistedStepLoader,
-    redis_memory: Optional[RedisMemory] = None,
+    history: Optional[HistoryProvider] = None,
     include_mcp_app_context: bool = False,
     cold_store_name: str = "persisted store",
-) -> BaseMemory:
-    """Load session memory from Redis hot store or a persisted cold store."""
-    if redis_memory is not None:
-        per_request_mem = RedisMemory.for_session(redis_memory, session_id)
-        in_redis = await redis_memory.exists(session_id)
+) -> HistoryProvider:
+    """Ensure *session_id* is populated in a history provider and return it.
 
-        if in_redis:
-            count = await per_request_mem.restore()
-            logger.debug(
-                "Redis hit for %s — %d messages restored",
-                session_id,
-                count,
-            )
-            return per_request_mem
+    When *history* is provided (the shared, multi-session provider), a cold
+    session is seeded from the persisted cold store on a cache miss.  When it
+    is ``None``, a fresh in-process provider is returned seeded from the cold
+    store.
+    """
+    if history is not None:
+        if await history.count_messages(session_id) > 0:
+            logger.debug("History hit for %s", session_id)
+            return history
 
         logger.debug(
-            "Redis miss for %s — loading from %s",
-            session_id,
-            cold_store_name,
+            "History miss for %s — loading from %s", session_id, cold_store_name
         )
         step_rows = await load_persisted_steps()
         all_messages = await rebuild_messages_from_steps(
@@ -135,18 +130,15 @@ async def load_session_memory(
             system_instructions,
             include_mcp_app_context=include_mcp_app_context,
         )
-
         if all_messages:
-            await redis_memory.store_many(session_id, all_messages)
+            await history.save_messages(session_id, all_messages)
             logger.debug(
-                "Seeded Redis session %s with %d messages from %s",
+                "Seeded session %s with %d messages from %s",
                 session_id,
                 len(all_messages),
                 cold_store_name,
             )
-
-        await per_request_mem.restore()
-        return per_request_mem
+        return history
 
     step_rows = await load_persisted_steps()
     all_messages = await rebuild_messages_from_steps(
@@ -154,10 +146,10 @@ async def load_session_memory(
         system_instructions,
         include_mcp_app_context=include_mcp_app_context,
     )
-    fallback_mem = UnboundedMemory()
-    for message in all_messages:
-        await fallback_mem.add_message(message)
-    return fallback_mem
+    fallback = InMemoryHistoryProvider()
+    if all_messages:
+        await fallback.save_messages(session_id, all_messages)
+    return fallback
 
 
 def create_assistant_agent(  # type: ignore[return]
@@ -166,7 +158,8 @@ def create_assistant_agent(  # type: ignore[return]
     model_client: BaseModelClient,
     tools: List[BaseTool],
     system_instructions: str,
-    memory: BaseMemory,
+    memory: HistoryProvider,
+    session_id: Optional[str] = None,
     model_context: Optional[ModelContext] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
@@ -187,40 +180,41 @@ def create_assistant_agent(  # type: ignore[return]
     The caller must ``await agent.start()`` before sending messages to it.
     """
     from ravi.reasoning.agents.assistant.agent import AssistantAgent
-    from ravi.reasoning.middleware.guardrails import GuardrailsMiddleware
+    from ravi.kernel.guardrails.spec import GuardrailSpec
+    from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
 
-    resolved_context = model_context or SlidingWindowContext(
-        max_messages=model_context_window
-    )
-
-    catalog = AgentCatalog()
-    catalog.register_model("primary", model_client)
-    catalog.register_context("default", resolved_context)
-    catalog.register_memory("default", memory)
-    for tool in tools:
-        catalog.register_tool(tool)
+    from ravi.kernel.context.base_context import ModelContext
 
     kwargs: Dict[str, Any] = dict(
         name="ChatBot",
         runtime=runtime,
         key=agent_key,
-        catalog=catalog,
+        model=model_client,
+        tools=tools,
+        guardrails=GuardrailSpec(
+            input=[
+                MaxTokenGuardrail(
+                    max_tokens=max_input_tokens,
+                    model="gpt-4o",
+                    tripwire=True,
+                )
+            ]
+        ),
+        session_id=session_id,
         system_instructions=system_instructions,
         max_iterations=max_iterations,
         verbose=verbose,
-        middleware=[
-            GuardrailsMiddleware(
-                input_guardrails=[
-                    MaxTokenGuardrail(
-                        max_tokens=max_input_tokens,
-                        model="gpt-4o",
-                        tripwire=True,
-                    )
-                ]
-            )
-        ],
         enable_capability_search=enable_capability_search,
     )
+
+    if isinstance(model_context, ModelContext):
+        kwargs["context"] = model_context
+    else:
+        resolved_compaction = model_context or SlidingWindowStrategy(
+            max_messages=model_context_window
+        )
+        strategies = resolved_compaction if isinstance(resolved_compaction, list) else [resolved_compaction]
+        kwargs["context"] = ModelContext(history=memory, compaction_strategies=strategies)
     if tool_approval_handler is not None:
         kwargs["tool_approval_handler"] = tool_approval_handler
     if tools_requiring_approval is not None:
@@ -230,3 +224,4 @@ def create_assistant_agent(  # type: ignore[return]
     if execution_context is not None:
         kwargs["execution_context"] = execution_context
     return AssistantAgent(**kwargs)  # type: ignore[arg-type]
+

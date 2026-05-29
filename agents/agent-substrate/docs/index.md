@@ -5,7 +5,9 @@ hide:
 ---
 # Ravi Agent Framework
 
-Production-ready infrastructure for building agent systems that can reason, call tools, stream progress, wait for humans, and resume safely after failures.
+You want to build an AI agent. Not a chatbot that wraps a single API call, but a real one — one that can call tools, remember what it said three conversations ago, wait for a human to approve a sensitive action, recover from crashes, and scale across workers when you need it to.
+
+That is what Ravi is for.
 
 <div class="grid cards" markdown>
 
@@ -13,23 +15,23 @@ Production-ready infrastructure for building agent systems that can reason, call
 
     ---
 
-    Install the framework, create your first agent, and understand the request lifecycle without reading the whole codebase.
+    Install the framework, create your first agent, run it against an OpenAI model, and understand what the runtime is doing behind the scenes.
 
     [:octicons-arrow-right-24: Getting Started](getting-started/index.md)
 
--   :material-graph-outline: **Understand the architecture**
+-   :material-layers-outline: **Understand the architecture**
 
     ---
 
-    See how the UI, FastAPI, Restate runtime, worker activities, memory, and SSE streaming fit together.
+    Six clean layers, each building on the one below. The kernel defines contracts. The fabric routes messages. Reasoning runs the ReAct loop. Orchestration coordinates fleets.
 
-    [:octicons-arrow-right-24: Architecture](architecture/index.md)
+    [:octicons-arrow-right-24: Layered Architecture](framework/layered-architecture.md)
 
 -   :material-tools: **Build with tools and HITL**
 
     ---
 
-    Add tools, approvals, human input, and MCP integrations using the same patterns the framework already uses internally.
+    Add custom tools, wire up human-in-the-loop approvals, and connect MCP servers using the same patterns the built-in tools follow.
 
     [:octicons-arrow-right-24: Tutorials](tutorials/index.md)
 
@@ -37,7 +39,7 @@ Production-ready infrastructure for building agent systems that can reason, call
 
     ---
 
-    Move from an in-process agent to a Restate-backed runtime with resumable workflows and exactly-once execution.
+    Move from an in-process agent to a runtime-backed deployment where every step is checkpointed and resumable after a crash.
 
     [:octicons-arrow-right-24: Durable Runtime](concepts/durable-runtime.md)
 
@@ -45,7 +47,7 @@ Production-ready infrastructure for building agent systems that can reason, call
 
     ---
 
-    Run locally, deploy with Docker or Kind, and inspect logs, traces, and metrics with the built-in observability stack.
+    Run locally, deploy with Docker or Kind, and inspect structured logs, distributed traces, and metrics with the built-in observability stack.
 
     [:octicons-arrow-right-24: Operate](operate/index.md)
 
@@ -53,13 +55,34 @@ Production-ready infrastructure for building agent systems that can reason, call
 
 ---
 
-## Developer Journey
+## The story in one picture
 
-1. Start with [Installation](getting-started/installation.md) and [Quickstart](getting-started/quickstart.md).
-2. Learn the runtime model in [Agent Lifecycle](concepts/agent-lifecycle.md) and [Streaming And Events](concepts/streaming-and-events.md).
-3. Extend the system with [Create A Tool](tutorials/create-tool.md) and [Connect MCP Tools](tutorials/mcp-tools.md).
-4. Move to the durable flow in [First Durable Run](getting-started/first-runtime.md) and [Local And Kind](deploy/local-and-kind.md).
-5. Use [Observability](operate/observability.md) and [Runbook](operate/runbook.md) when you deploy or debug.
+Every request follows the same path — from a human typing a message to an agent reasoning, calling tools, and streaming the response back.
+
+```mermaid
+graph LR
+    Human["🧑 Human\nor external caller"] -->|asks| Proxy["UserProxyAgent\nfabric entry point"]
+    Proxy -->|runtime.send_message| Runtime["LocalRuntime\nor DistributedRuntime"]
+    Runtime -->|on_message| Agent["AssistantAgent\nReAct loop"]
+    Agent -->|LLM call| LLM["OpenAI / Gemini\nor any BaseModelClient"]
+    Agent -->|tool call| Tools["catalog/tools/\nCustom or MCP"]
+    Tools -->|result| Agent
+    Agent -->|stream events| Channel["StreamChannel\nSSE → browser"]
+    Agent -->|store turn| Memory["Redis / Postgres\nor UnboundedMemory"]
+```
+
+The key insight: the caller never holds a reference to the agent. It sends a message to an address (`AgentId`). The runtime delivers it. Whether the agent is in the same process, a remote gRPC node, or a Kubernetes pod does not change the call site.
+
+---
+
+## Developer journey
+
+1. Read [Installation](getting-started/installation.md) and run [Quickstart](getting-started/quickstart.md) — you will have a working agent in under ten minutes.
+2. Understand why the actor model matters in [Agent Lifecycle](concepts/agent-lifecycle.md) and [Streaming and Events](concepts/streaming-and-events.md).
+3. Extend the system with [Create a Tool](tutorials/create-tool.md) and [Connect MCP Tools](tutorials/mcp-tools.md).
+4. Read [The Kernel](framework/kernel.md) when you are ready to understand the contracts everything is built on.
+5. Move to the durable flow in [First Durable Run](getting-started/first-runtime.md) and [Local and Kind](deploy/local-and-kind.md).
+6. Use [Observability](operate/observability.md) and [Runbook](operate/runbook.md) when debugging in production.
 
 ---
 
@@ -69,7 +92,7 @@ Production-ready infrastructure for building agent systems that can reason, call
 
     ```bash
     git clone https://github.com/Ravikumarchavva/ravi.git
-    cd ravi
+    cd ravi/ravi-engine
     uv sync
     ```
 
@@ -79,7 +102,7 @@ Production-ready infrastructure for building agent systems that can reason, call
     # Notebook support
     uv sync --group notebooks
 
-    # Browser automation
+    # Browser automation (WebSurferTool)
     uv sync --group browser
 
     # S3 / object storage
@@ -92,55 +115,89 @@ Production-ready infrastructure for building agent systems that can reason, call
 
 ```python
 import asyncio
-from ravi.core.agents.react_agent import ReActAgent
-from ravi.core.memory import UnboundedMemory
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.fabric.runtime.local import LocalRuntime
+from ravi.fabric.actors.actor import ActorAgent
+from ravi.fabric.catalog import AgentCatalogRegistry
+from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from ravi.orchestration.agents.proxy.agent import UserProxyAgent
+from ravi.integrations.llm.factory import LLMFactory
+
 
 async def main():
-    client = OpenAIClient(api_key="sk-...", model="gpt-4o")
-    memory = UnboundedMemory()
-    agent = ReActAgent(model_client=client, memory=memory, tools=[])
+    # 1. A runtime — the message bus that connects every agent.
+    runtime = LocalRuntime()
+    await runtime.start()
 
-    reply = await agent.run("What is 17 * 23?")
+    # 2. Wire the agent's capabilities into a catalog.
+    llm = LLMFactory(model="gpt-4o", api_key="sk-...").build()
+    catalog = AgentCatalogRegistry()
+    catalog.register_model("primary", llm)
+    catalog.register_memory("memory", UnboundedMemory())
+
+    # 3. Start the agent — it registers with the runtime and waits for messages.
+    agent = AssistantAgent(name="helper", runtime=runtime, catalog=catalog)
+    await agent.start()
+
+    # 4. A UserProxyAgent bridges the outside world into the fabric.
+    proxy = UserProxyAgent(name="user", runtime=runtime)
+    await proxy.start()
+
+    # 5. Ask — the proxy sends a message, the runtime delivers it, the agent replies.
+    reply = await proxy.ask("What is 17 * 23?", recipient=agent.id)
     print(reply)
+
+    await runtime.stop()
+
 
 asyncio.run(main())
 ```
+
+The shape stays the same whether you add tools, guardrails, streaming, HITL approvals, or swap in a distributed runtime. The call site does not change — only the configuration does.
 
 ---
 
 ## Architecture at a glance
 
 ```mermaid
-graph LR
-    Browser["🌐 Browser<br>(React UI)"] -->|SSE| BFF["⚡ Next.js BFF"]
-    BFF -->|HTTP| API["🔌 FastAPI"]
-    API -->|invoke| Restate["💾 Restate<br>(durable runtime)"]
-    Restate -->|dispatch| Worker["⚙️ Worker"]
-    Worker -->|LLM calls| OpenAI["🤖 OpenAI"]
-    Worker -->|memory| Redis["🟥 Redis"]
-    Worker -->|persist| PG["🐘 PostgreSQL"]
-    Worker -->|events| NATS["📡 NATS"]
-    NATS -->|stream| API
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#334155", "lineColor": "#64748b"}}}%%
+flowchart TD
+    P0["🔵 L0 · Kernel<br/>Pure types · ABCs · Protocols<br/>Zero behaviour · Zero I/O"]:::l0
+    P1["🟢 L1 · Fabric<br/>Message routing · Dispatch<br/>Runtime · Supervision · Saga"]:::l1
+    P2["🟡 L2 · Reasoning<br/>ReAct loop · Memory · Guardrails<br/>Middleware · Hooks · Extraction"]:::l2
+    P3["🟠 L3 · Orchestration<br/>Multi-agent workflows<br/>Handoffs · Shared memory"]:::l3
+    P4["🔴 L4 · Guardrails<br/>Mutation gates · Governance<br/>Budget limits · Kill-switch"]:::l4
+    P5["🟣 L5 · Platform<br/>Observability · Scheduling<br/>Batch · Evals · RAG"]:::l5
+
+    P0 --> P1 --> P2 --> P3 --> P4 --> P5
+
+    classDef l0 fill:#1e3a5f,stroke:#60a5fa,color:#eff6ff
+    classDef l1 fill:#14532d,stroke:#4ade80,color:#f0fdf4
+    classDef l2 fill:#713f12,stroke:#fbbf24,color:#fffbeb
+    classDef l3 fill:#7c2d12,stroke:#fb923c,color:#fff7ed
+    classDef l4 fill:#7f1d1d,stroke:#f87171,color:#fff1f2
+    classDef l5 fill:#4c1d95,stroke:#c084fc,color:#faf5ff
 ```
+
+Higher layers may import from lower ones. The reverse is never allowed. `uv run lint-imports` enforces this in CI.
 
 ---
 
 ## Features
 
-- Durable execution with Restate-backed workflows and resumable runtime state.
-- Human-in-the-loop approvals and structured human input flows.
-- Tool calling with JSON-schema validation and MCP integration support.
-- Async-first architecture across agents, tools, memory, and services.
+- Actor-model agents — every agent has an address, receives messages, and communicates only through the runtime.
+- Human-in-the-loop approvals and structured human input flows, pausable and resumable.
+- Tool calling with JSON-schema validation, risk tiers, and MCP server integration.
+- Async-first across agents, tools, memory, and every service boundary.
 - Streaming responses and event-driven UI updates over SSE.
-- Built-in observability with structured logs, tracing, and dashboards.
+- Built-in observability: structured logs, OpenTelemetry traces, Grafana dashboards.
 - Multiple deployment paths: local monolith, Docker Compose, and Kind/Kubernetes.
-- Notebook and example coverage for onboarding, tools, runtime, and operations.
+- Example notebooks covering foundations, memory, MCP tools, safety, runtime, and observability.
 
 ---
 
-## Notebooks
+## Examples
 
-Explore the [`examples/`](https://github.com/Ravikumarchavva/ravi/tree/main/examples) folder for 20 Jupyter notebooks covering everything from basic agents to Kubernetes deployments.
+Explore the [`examples/`](https://github.com/Ravikumarchavva/ravi/tree/main/ravi-engine/examples) folder for notebooks covering everything from a single-tool agent to Kubernetes deployments.
 
-For deeper historical design notes, planning documents, and the interactive legacy explorer, see [Archive](archive/index.md).
+For architecture deep-dives and the full kernel contract reference, see [The Kernel](framework/kernel.md) and [Layered Architecture](framework/layered-architecture.md).

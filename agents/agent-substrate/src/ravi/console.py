@@ -31,13 +31,63 @@ import json
 import time
 from typing import Any, AsyncIterator, Optional, List
 
-from rich.console import Console as RichConsole
+from rich.console import Console as RichConsole, Group, ConsoleOptions, RenderResult
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 from rich.theme import Theme
+from rich.segment import Segment
 
 from ravi.logger import setup_logging
+
+
+class GutterAccent:
+    """A custom Rich renderable that prepends a vertical gutter line to every line of content."""
+
+    def __init__(
+        self, renderable: Any, line_char: str = "┃", style: str = "bold cyan"
+    ) -> None:
+        self.renderable = renderable
+        self.line_char = line_char
+        self.style = style
+
+    def __rich_console__(
+        self, console: RichConsole, options: ConsoleOptions
+    ) -> RenderResult:
+        # Gutter string: line character plus 2 spaces (width 3)
+        gutter_str = f"{self.line_char}  "
+        # Update width to account for the 3-character gutter
+        child_options = options.update_width(max(1, options.max_width - 3))
+        segments = console.render(self.renderable, child_options)
+
+        gutter = Segment(gutter_str, console.get_style(self.style))
+        newline = Segment("\n")
+
+        for line in Segment.split_lines(segments):
+            yield gutter
+            yield from line
+            yield newline
+
+
+def _build_accent_layout(
+    name: str, content_markdown: Markdown, status: Optional[str] = None
+) -> Group:
+    """Build a timeline-based layout with an agent header and left vertical accent line."""
+    status_str = f" [dim]({status})[/dim]" if status else ""
+    header = f"   [agent]🤖 {name}[/agent]{status_str}"
+    accented_content = GutterAccent(content_markdown, line_char="┃", style="bold cyan")
+    return Group(header, accented_content)
+
+
+def _build_thinking_layout(
+    name: str, content: str, status: Optional[str] = None
+) -> Group:
+    """Build a layout for thinking/reasoning chunks with a dim vertical gutter."""
+    status_str = f" [dim]({status})[/dim]" if status else ""
+    header = f"   [thinking]💭 {name} thinking...[/thinking]{status_str}"
+    accented_content = GutterAccent(content, line_char="│", style="thinking")
+    return Group(header, accented_content)
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +121,7 @@ class _ConsoleStreamChannel:
             if item is self._done:
                 return
             yield item  # type: ignore[misc]
+
 
 # ---------------------------------------------------------------------------
 # Theme
@@ -156,12 +207,14 @@ class Console:
     def _is_actor_agent(self) -> bool:
         """Return True if the agent uses the actor model (has on_message)."""
         from ravi.fabric.actors.actor import ActorAgent
+
         return isinstance(self.agent, ActorAgent)
 
     async def _get_proxy(self) -> Any:
         """Lazily create and start the UserProxyAgent for actor-model agents."""
         if self._proxy is None:
             from ravi.orchestration.agents.proxy.agent import UserProxyAgent
+
             self._proxy = UserProxyAgent(
                 "console-proxy",
                 self.agent.runtime,
@@ -216,38 +269,220 @@ class Console:
             self._print_user(task)
         t0 = time.monotonic()
 
-        partial_text = ""
-        partial_reasoning = ""
+        text_buffer: List[str] = []
+        reasoning_buffer: List[str] = []
         final_message: Any = None
         tool_calls_count = 0
 
         if self._is_actor_agent():
             proxy = await self._get_proxy()
             channel = _ConsoleStreamChannel()
-            asyncio.ensure_future(
-                proxy.ask_stream(task, recipient=self.agent.id, channel=channel)
-            )
+            # ask_stream() returns as soon as on_message() spawns the background task.
+            await proxy.ask_stream(task, recipient=self.agent.id, channel=channel)
             chunk_iter: AsyncIterator[Any] = channel.__aiter__()
         else:
             chunk_iter = self.agent.run_stream(task, **kwargs)
 
-        async for chunk in chunk_iter:
-            if isinstance(chunk, text_delta_cls):
-                partial_text += chunk.text
-                # Live-print streaming text
-                self.console.print(chunk.text, end="", style="")
-            elif isinstance(chunk, reasoning_delta_cls):
-                if not partial_reasoning:
-                    self.console.print("\n💭 ", end="", style="thinking")
-                partial_reasoning += chunk.text
-                self.console.print(chunk.text, end="", style="thinking")
-            elif isinstance(chunk, completion_cls):
-                final_message = chunk.message
-                if partial_text or partial_reasoning:
-                    self.console.print()  # newline after streamed text
-            elif isinstance(chunk, tool_result_cls):
-                tool_calls_count += 1
-                self._print_tool_result(chunk)
+        live = None
+        text_stream_active = False
+        reasoning_stream_active = False
+        text_updated = asyncio.Event()
+        reasoning_updated = asyncio.Event()
+        refresh_task = None
+
+        async def text_refresh_loop(live_obj: Live, agent_name: str) -> None:
+            last_text = ""
+            while text_stream_active:
+                try:
+                    await asyncio.wait_for(text_updated.wait(), timeout=0.05)
+                    text_updated.clear()
+                except asyncio.TimeoutError:
+                    pass
+
+                current_text = "".join(text_buffer)
+                if current_text != last_text:
+                    live_obj.update(
+                        _build_accent_layout(
+                            agent_name, Markdown(current_text), status="generating..."
+                        )
+                    )
+                    live_obj.refresh()
+                    last_text = current_text
+
+        async def reasoning_refresh_loop(live_obj: Live, agent_name: str) -> None:
+            last_reasoning = ""
+            while reasoning_stream_active:
+                try:
+                    await asyncio.wait_for(reasoning_updated.wait(), timeout=0.05)
+                    reasoning_updated.clear()
+                except asyncio.TimeoutError:
+                    pass
+
+                current_reasoning = "".join(reasoning_buffer)
+                if current_reasoning != last_reasoning:
+                    live_obj.update(
+                        _build_thinking_layout(
+                            agent_name, current_reasoning, status="thinking..."
+                        )
+                    )
+                    live_obj.refresh()
+                    last_reasoning = current_reasoning
+
+        try:
+            async for chunk in chunk_iter:
+                if isinstance(chunk, text_delta_cls):
+                    # Finish reasoning loop if it was active
+                    if live and reasoning_stream_active:
+                        reasoning_stream_active = False
+                        reasoning_updated.set()
+                        if refresh_task:
+                            await refresh_task
+                        final_reasoning = "".join(reasoning_buffer)
+                        live.update(
+                            _build_thinking_layout(self.agent.name, final_reasoning)
+                        )
+                        live.stop()
+                        live = None
+                        refresh_task = None
+
+                    # Start text streaming if not already started
+                    if not live:
+                        live = Live(
+                            _build_accent_layout(
+                                self.agent.name, Markdown(""), status="generating..."
+                            ),
+                            console=self.console,
+                            auto_refresh=False,
+                        )
+                        live.start()
+                        text_stream_active = True
+                        text_updated.set()
+                        refresh_task = asyncio.create_task(
+                            text_refresh_loop(live, self.agent.name)
+                        )
+
+                    text_buffer.append(chunk.text)
+                    text_updated.set()
+
+                elif isinstance(chunk, reasoning_delta_cls):
+                    # Finish text loop if it was active (unlikely, but safe)
+                    if live and text_stream_active:
+                        text_stream_active = False
+                        text_updated.set()
+                        if refresh_task:
+                            await refresh_task
+                        final_text = "".join(text_buffer)
+                        live.update(
+                            _build_accent_layout(self.agent.name, Markdown(final_text))
+                        )
+                        live.stop()
+                        live = None
+                        refresh_task = None
+
+                    # Start reasoning streaming if not already started
+                    if not live:
+                        live = Live(
+                            _build_thinking_layout(
+                                self.agent.name, "", status="thinking..."
+                            ),
+                            console=self.console,
+                            auto_refresh=False,
+                        )
+                        live.start()
+                        reasoning_stream_active = True
+                        reasoning_updated.set()
+                        refresh_task = asyncio.create_task(
+                            reasoning_refresh_loop(live, self.agent.name)
+                        )
+
+                    reasoning_buffer.append(chunk.text)
+                    reasoning_updated.set()
+
+                elif isinstance(chunk, completion_cls):
+                    final_message = chunk.message
+                    if live:
+                        if text_stream_active:
+                            text_stream_active = False
+                            text_updated.set()
+                            if refresh_task:
+                                await refresh_task
+                            final_text = "".join(text_buffer)
+                            live.update(
+                                _build_accent_layout(
+                                    self.agent.name, Markdown(final_text)
+                                )
+                            )
+                        elif reasoning_stream_active:
+                            reasoning_stream_active = False
+                            reasoning_updated.set()
+                            if refresh_task:
+                                await refresh_task
+                            final_reasoning = "".join(reasoning_buffer)
+                            live.update(
+                                _build_thinking_layout(self.agent.name, final_reasoning)
+                            )
+                        live.stop()
+                        live = None
+                        refresh_task = None
+
+                elif isinstance(chunk, tool_result_cls):
+                    if live:
+                        if text_stream_active:
+                            text_stream_active = False
+                            text_updated.set()
+                            if refresh_task:
+                                await refresh_task
+                            final_text = "".join(text_buffer)
+                            live.update(
+                                _build_accent_layout(
+                                    self.agent.name, Markdown(final_text)
+                                )
+                            )
+                        elif reasoning_stream_active:
+                            reasoning_stream_active = False
+                            reasoning_updated.set()
+                            if refresh_task:
+                                await refresh_task
+                            final_reasoning = "".join(reasoning_buffer)
+                            live.update(
+                                _build_thinking_layout(self.agent.name, final_reasoning)
+                            )
+                        live.stop()
+                        live = None
+                        refresh_task = None
+                    tool_calls_count += 1
+                    self._print_tool_result(chunk)
+
+        finally:
+            # Set active flags to False to shut down background tasks cleanly
+            text_stream_active = False
+            reasoning_stream_active = False
+            text_updated.set()
+            reasoning_updated.set()
+            if refresh_task:
+                try:
+                    await refresh_task
+                except Exception:
+                    pass
+            if live:
+                try:
+                    # Final flush of active stream
+                    if text_buffer:
+                        final_text = "".join(text_buffer)
+                        live.update(
+                            _build_accent_layout(self.agent.name, Markdown(final_text))
+                        )
+                    elif reasoning_buffer:
+                        final_reasoning = "".join(reasoning_buffer)
+                        live.update(
+                            _build_thinking_layout(self.agent.name, final_reasoning)
+                        )
+                except Exception:
+                    pass
+                try:
+                    live.stop()
+                except Exception:
+                    pass
 
         elapsed = time.monotonic() - t0
         self._print_stream_footer(elapsed, tool_calls_count)
@@ -287,8 +522,14 @@ class Console:
             if isinstance(chunk, text_delta_cls):
                 partial_text += chunk.text
                 con.print(chunk.text, end="", style="")
+                if hasattr(con.file, "flush"):
+                    con.file.flush()
+                await asyncio.sleep(0)
             elif isinstance(chunk, reasoning_delta_cls):
                 con.print(chunk.text, end="", style="thinking")
+                if hasattr(con.file, "flush"):
+                    con.file.flush()
+                await asyncio.sleep(0)
             elif isinstance(chunk, completion_cls):
                 if partial_text:
                     con.print()  # newline
@@ -364,13 +605,13 @@ class Console:
     def _prompt(self) -> str:
         """Read user input (works in both terminal and Jupyter)."""
         try:
-            return self.console.input("[user]You → [/user]")
+            return self.console.input("\n[user]👤 You → [/user]")
         except UnsupportedOperation:
             # Fallback for Jupyter
-            return input("You → ")
+            return input("\nYou → ")
 
     def _print_user(self, text: str) -> None:
-        self.console.print(f"\n[user]You →[/user] {text}")
+        self.console.print(f"\n[user]👤 You →[/user] {text}")
 
     def _print_tool_result(self, msg: Any) -> None:
         _print_tool_result_static(self.console, msg)
@@ -382,12 +623,7 @@ class Console:
         if output_text:
             self.console.print()
             self.console.print(
-                Panel(
-                    Markdown(output_text),
-                    title=f"[agent]{result.agent_name}[/agent]",
-                    border_style="cyan",
-                    padding=(1, 2),
-                )
+                _build_accent_layout(result.agent_name, Markdown(output_text))
             )
 
         # Footer

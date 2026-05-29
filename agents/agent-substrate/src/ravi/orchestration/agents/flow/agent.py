@@ -122,7 +122,7 @@ class SequentialFlow(BaseFlow):
       plus the outputs of all previous steps (separated by ``\\n\\n``).
     * When ``shared_memory_scope`` is ``MemoryScope.SHARED``, all agents that
       have ``memory_scope == MemoryScope.SHARED`` are given the *same*
-      ``BaseMemory`` instance from the first SHARED agent encountered.
+      ``HistoryProvider`` instance from the first SHARED agent encountered.
       Agents with ``ISOLATED`` or ``READ_ONLY_SHARED`` keep their own memory.
     * Streaming chunks are tagged with ``{"agent_id": agent.name}``.
 
@@ -160,9 +160,9 @@ class SequentialFlow(BaseFlow):
         for step in self.steps:
             if isinstance(step, ActorAgent) and getattr(step, "memory_scope", None) == MemoryScope.SHARED:
                 if shared_mem is None:
-                    shared_mem = step.memory  # first SHARED agent owns the memory
+                    shared_mem = step.history  # first SHARED agent owns the history
                 else:
-                    step.memory = shared_mem  # subsequent ones borrow it
+                    step.history = shared_mem  # subsequent ones borrow it
 
     async def run(self, input_text: str, **kwargs) -> AgentRunResult:
         run_id = str(uuid4())

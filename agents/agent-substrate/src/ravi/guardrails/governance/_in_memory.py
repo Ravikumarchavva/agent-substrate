@@ -25,7 +25,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Sequence
 
-from ravi.guardrails.governance._contracts import (
+from ravi.kernel.governance._contracts import (
     Coalition,
     CoalitionKind,
     GovernanceAction,

@@ -52,7 +52,7 @@ from ravi.integrations.mcp.app_tools import (
     MarkdownPreviewerTool,
     SpotifyPlayerTool,
 )
-from ravi.integrations.memory.redis_memory import RedisMemory
+from ravi.integrations.memory.redis_history import RedisHistoryProvider
 from ravi.integrations.spotify.client import SpotifyService
 from ravi.server.database import get_session_factory
 from ravi.server.sse.bridge import BridgeRegistry
@@ -78,7 +78,7 @@ class LLMClients:
 class Infrastructure:
     """Objects returned by :func:`init_infrastructure`."""
 
-    redis_memory: RedisMemory
+    history: RedisHistoryProvider
     redis_client: Any
     runtime: LocalRuntime
     file_store: FileStore
@@ -173,13 +173,13 @@ async def init_infrastructure(
 ) -> Infrastructure:
     """Create Redis, runtime, file store, vector store, RAG, and bridge registry."""
 
-    # Redis — primary session store for stateless agents
-    redis_memory = RedisMemory(
+    # Redis — primary session history store for stateless agents
+    history = RedisHistoryProvider(
         redis_url=settings.REDIS_URL,
-        default_ttl=settings.REDIS_SESSION_TTL,
+        ttl=settings.REDIS_SESSION_TTL,
         max_messages=settings.SESSION_MAX_MESSAGES,
     )
-    await redis_memory.connect()
+    await history.connect()
 
     # Standalone Redis client for non-memory operations (auth token JTIs, etc.)
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
@@ -218,7 +218,7 @@ async def init_infrastructure(
     bridge_registry = BridgeRegistry(response_timeout=300.0)
 
     return Infrastructure(
-        redis_memory=redis_memory,
+        history=history,
         redis_client=redis_client,
         runtime=runtime,
         file_store=file_store,

@@ -14,7 +14,7 @@ from ravi.kernel.agents.agent_result import RunStatus
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
 from ravi.kernel.guardrails import GuardrailType
 from ravi.reasoning.guardrails import ContentFilterGuardrail, PIIDetectionGuardrail
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 
 from tests.fixtures.fake_tools import AddTool, CounterTool, EchoTool
 from tests.fixtures.mock_llm import MockLLMClient, text_turn, tool_turn
@@ -32,7 +32,7 @@ def _build_agent(script, tools=(), guardrails=()):
 
     catalog = AgentCatalogRegistry()
     catalog.register_model("primary", MockLLMClient(script=list(script)))
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     for t in tools:
         catalog.register_tool(t)
     middleware = [GuardrailsMiddleware(input_guardrails=list(guardrails))] if guardrails else None
@@ -125,7 +125,7 @@ async def test_multi_turn_context_grows():
     ])
     catalog = AgentCatalogRegistry()
     catalog.register_model("primary", llm)
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     agent = AssistantAgent(
         name="multi-turn",
         description="multi-turn test",

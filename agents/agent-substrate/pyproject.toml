@@ -84,11 +84,34 @@ exclude = ["notebooks/", "examples/", ".venv"]
 [tool.importlinter]
 root_packages = ["ravi"]
 
+# The six-layer agent stack. Higher layers may import lower ones; never the
+# reverse. import-linter's "layers" contract lists layers high → low.
+[[tool.importlinter.contracts]]
+name = "agent stack layers"
+type = "layers"
+layers = [
+    "ravi.platform",       # L5 — observability, scheduling, batch, evals, RAG
+    "ravi.guardrails",     # L4 — mutation gates, governance, economic, kill-switch
+    "ravi.orchestration",  # L3 — orchestrator, flow, proxy, workflows
+    "ravi.reasoning",      # L2 — AssistantAgent, ReAct loop, memory, middleware
+    "ravi.fabric",         # L1 — runtime, actors, dispatch, supervision, saga
+    "ravi.kernel",         # L0 — pure contracts: types, ABCs, Protocols, registry
+]
+
+# The kernel (L0) is the frozen leaf. It must not import any other ravi package
+# — neither the layers above (covered by the layers contract too, but listed
+# explicitly so a kernel violation names the real culprit) nor the orthogonal
+# application modules.
 [[tool.importlinter.contracts]]
 name = "kernel is independent"
 type = "forbidden"
 source_modules = ["ravi.kernel"]
 forbidden_modules = [
+    "ravi.fabric",
+    "ravi.reasoning",
+    "ravi.orchestration",
+    "ravi.guardrails",
+    "ravi.platform",
     "ravi.extensions",
     "ravi.integrations",
     "ravi.catalog",
@@ -102,9 +125,8 @@ forbidden_modules = [
 [tool.uv.sources]
 paddleocr = { git = "https://github.com/PaddlePaddle/PaddleOCR.git" }
 
-# Note: a strict "layers" contract for the full stack would treat
-# ``extensions → integrations`` and ``catalog → server`` as violations, but
-# those cross-edges encode legitimate dependencies (e.g. RedisModelContext
-# needs the Redis backend). The "kernel is independent" contract above is the
-# load-bearing guarantee — it makes it mechanically impossible to leak
-# upward imports into the frozen kernel layer.
+# Note: catalog/, integrations/, server/, services/, shared/, configs/ are
+# orthogonal to the six-layer stack and intentionally not part of the layers
+# contract — they carry legitimate cross-edges (e.g. RedisModelContext needs
+# the Redis backend). The two contracts above are the load-bearing guarantees:
+# the agent stack flows strictly downward, and the kernel imports nothing.

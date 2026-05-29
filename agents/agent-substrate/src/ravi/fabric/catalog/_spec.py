@@ -3,6 +3,10 @@
 Every entity registered in ``AgentCatalog`` is described by a
 ``ResourceSpec`` — a typed, immutable metadata model that carries the
 resource's identity, type, and governance attributes.
+
+The catalog manages **capabilities** (tools, skills, MCP connectors) only.
+Cognitive resources (model, memory, compaction strategy, checkpoint store)
+belong in :class:`~ravi.kernel.agents.agent_context.AgentContext`.
 """
 
 from __future__ import annotations
@@ -29,15 +33,11 @@ class SkillManagerProtocol(Protocol):
 
 
 class ResourceType(str, Enum):
-    """Typed classification for catalog resources."""
+    """Typed classification for catalog resources (capabilities only)."""
 
     TOOL = "tool"
     SKILL = "skill"
-    MEMORY = "memory"
-    CONTEXT = "context"
-    CHECKPOINT = "checkpoint"
-    MCP_TOOL = "mcp_tool"  # Sprint 5: MCP adapter layer
-    MODEL = "model"
+    MCP_TOOL = "mcp_tool"
 
 
 class ResourceSpec(BaseModel):

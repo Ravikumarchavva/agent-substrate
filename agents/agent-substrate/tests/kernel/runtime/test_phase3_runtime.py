@@ -591,7 +591,7 @@ class TestBackwardCompat:
 
         ctx = ServerDependencies(
             model_client=MagicMock(),
-            redis_memory=MagicMock(),
+            history=MagicMock(),
             tools=MagicMock(),
             bridge_registry=MagicMock(),
             tools_requiring_approval=[],
@@ -607,7 +607,7 @@ class TestBackwardCompat:
         runtime = LocalRuntime()
         ctx = ServerDependencies(
             model_client=MagicMock(),
-            redis_memory=MagicMock(),
+            history=MagicMock(),
             tools=MagicMock(),
             bridge_registry=MagicMock(),
             tools_requiring_approval=[],

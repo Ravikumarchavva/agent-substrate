@@ -1,26 +1,28 @@
 from __future__ import annotations
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from ravi.kernel.context.base_context import ModelContext
+from ravi.kernel.context.compaction import CompactionStrategy, Trigger
 from ravi.kernel.messages.base_message import BaseClientMessage
 
 if TYPE_CHECKING:
+    from ravi.kernel.memory.history_provider import HistoryProvider
     from ravi.kernel.llm.base_client import BaseModelClient
 
 
-class UnboundedContext(ModelContext):
-    """Pass-through context that returns all messages unchanged."""
+class UnboundedStrategy(CompactionStrategy):
+    """Pass-through strategy that returns all messages unchanged."""
 
-    async def build(
+    trigger = Trigger.BEFORE_LLM_CALL
+
+    async def apply(
         self,
-        *,
+        messages: List[BaseClientMessage],
         session_id: str,
-        current_input: str,
-        raw_messages: List[BaseClientMessage],
+        history: "HistoryProvider",
         model_client: Optional["BaseModelClient"] = None,
     ) -> List[BaseClientMessage]:
-        return raw_messages
+        return messages
 
     def __repr__(self) -> str:
-        return "<UnboundedContext>"
+        return "<UnboundedStrategy>"

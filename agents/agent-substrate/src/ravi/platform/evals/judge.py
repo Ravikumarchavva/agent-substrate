@@ -24,7 +24,6 @@ from ravi.platform.evals.criteria import EvalCriterion
 from ravi.platform.evals.models import EvalScore
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.messages.client_messages import (
-    SystemMessage,
     UserMessage,
     AssistantMessage,
 )

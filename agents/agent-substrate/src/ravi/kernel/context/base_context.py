@@ -1,62 +1,81 @@
-"""ModelContext ABC — builds the message list passed to every LLM call.
-
-A ``ModelContext`` sits between raw memory and the model client.  Before each
-LLM invocation the agent calls ``await context.build(...)`` which may:
-
-* Trim the history to fit a token budget.
-* Splice in long-term memory retrieved from Postgres / pgvector.
-* Apply a sliding-window strategy.
-* Fuse hot (Redis) and cold (Postgres) memory tiers.
-
-The contract is deliberately minimal so that any strategy can be dropped in
-without modifying the agent loop.
-"""
+"""ModelContext — first-class context manager orchestrator."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, List, Optional
 
-from ravi.kernel.messages.base_message import BaseClientMessage
+from ravi.kernel.context.compaction import CompactionStrategy, Trigger
 
 if TYPE_CHECKING:
+    from ravi.kernel.memory.history_provider import HistoryProvider
     from ravi.kernel.llm.base_client import BaseModelClient
+    from ravi.kernel.messages.base_message import BaseClientMessage
 
 
-class ModelContext(ABC):
-    """Abstract base for all context-building strategies.
+class ModelContext:
+    """Manages an agent's conversation context using history provider and compaction strategies.
 
-    Parameters passed to ``build`` are a *superset* of what most strategies
-    will need — implementations should simply ignore parameters they do not use.
+    ModelContext is the container and orchestrator. It holds a backing HistoryProvider
+    and a list of CompactionStrategy objects, and executes them at appropriate points
+    in the agent loop (before LLM calls, after runs, on token limit).
     """
 
-    @abstractmethod
+    def __init__(
+        self,
+        history: "HistoryProvider",
+        compaction_strategies: Optional[List[CompactionStrategy]] = None,
+    ) -> None:
+        self.history = history
+        self.compaction_strategies = compaction_strategies or []
+
     async def build(
         self,
-        *,
         session_id: str,
-        current_input: str,
         raw_messages: List[BaseClientMessage],
+        current_input: Optional[str] = None,
         model_client: Optional["BaseModelClient"] = None,
     ) -> List[BaseClientMessage]:
-        """Return the final ordered message list for the next LLM call.
+        """Apply all Trigger.BEFORE_LLM_CALL strategies to build the context for a model call."""
+        messages = list(raw_messages)
+        for strategy in self.compaction_strategies:
+            if strategy.trigger == Trigger.BEFORE_LLM_CALL:
+                messages = await strategy.apply(
+                    messages=messages,
+                    session_id=session_id,
+                    history=self.history,
+                    model_client=model_client,
+                )
+        return messages
 
-        Args:
-            session_id:    Identifier for the current conversation/session.
-            current_input: The latest user message text (informational; the
-                           message itself is already appended to
-                           ``raw_messages`` by the time this is called).
-            raw_messages:  The complete unfiltered message list from memory.
-            model_client:  Optional reference to the model client — useful for
-                           token-counting strategies that need the model's
-                           tokeniser.
+    async def compact(
+        self,
+        session_id: str,
+        trigger: Trigger,
+        model_client: Optional["BaseModelClient"] = None,
+    ) -> None:
+        """Run all strategies registered for a specific trigger to permanently compact history in backing memory."""
+        strategies = [s for s in self.compaction_strategies if s.trigger == trigger]
+        if not strategies:
+            return
 
-        Returns:
-            An ordered list of ``BaseClientMessage`` objects ready to be sent
-            to the model.  Must always begin with the SystemMessage (if one
-            exists in raw_messages) so that the model's persona is preserved.
-        """
-        ...
+        raw_messages = await self.history.load_messages(session_id)
+        messages = list(raw_messages)
+        original_len = len(messages)
 
-    def __repr__(self) -> str:  # pragma: no cover
-        return f"<{self.__class__.__name__}>"
+        for strategy in strategies:
+            messages = await strategy.apply(
+                messages=messages,
+                session_id=session_id,
+                history=self.history,
+                model_client=model_client,
+            )
+
+        if len(messages) != original_len or messages != raw_messages:
+            await self.history.clear_session(session_id)
+            await self.history.save_messages(session_id, messages)
+
+    def __repr__(self) -> str:
+        return f"<ModelContext(history={self.history!r}, strategies={self.compaction_strategies})>"
+
+
+__all__ = ["ModelContext", "CompactionStrategy", "Trigger"]

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import re
 import subprocess
 import tempfile
@@ -23,15 +22,17 @@ _mineru_client: MinerUClient | None = None
 def _to_md(extract_result: list) -> str:
     """Convert ExtractResult (list[ContentBlock]) to markdown via MinerU's own converter."""
     from mineru_vl_utils.post_process.json2markdown import json2md
+
     return json2md(extract_result)
+
 
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.kernel.messages.content import TextBlock
-from ravi.extensions.guardrails.pii import _PII_PATTERNS
+from ravi.reasoning.guardrails.pii import _PII_PATTERNS
 from ravi.logger import setup_logging
 
-logger = setup_logging(mode='pretty', handler='console')
+logger = setup_logging(mode="pretty", handler="console")
 
 BASE_DIR = Path(__file__).parent
 EMBEDDINGS_DIR = BASE_DIR / "embeddings"
@@ -73,7 +74,11 @@ class ValidateFileTool(BaseTool):
         size_mb = size_bytes / (1024 * 1024)
         if size_mb > max_mb:
             return ToolResult(
-                content=[TextBlock(text=f"REJECTED: {size_mb:.2f} MB exceeds {max_mb} MB limit")],
+                content=[
+                    TextBlock(
+                        text=f"REJECTED: {size_mb:.2f} MB exceeds {max_mb} MB limit"
+                    )
+                ],
                 app_data={"valid": False, "size_mb": round(size_mb, 3)},
             )
         ext = Path(filename).suffix.lower()
@@ -162,11 +167,17 @@ class ExtractTextTool(BaseTool):
             out_dir = Path(tmp) / "out"
             result = subprocess.run(
                 ["mineru", "-p", str(path), "-o", str(out_dir), "-b", "pipeline"],
-                capture_output=True, text=True, timeout=120,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             md_files = list(out_dir.rglob("*.md"))
             if not md_files:
-                logger.warning("mineru CLI produced no output for %s: %s", path.name, result.stderr[:200])
+                logger.warning(
+                    "mineru CLI produced no output for %s: %s",
+                    path.name,
+                    result.stderr[:200],
+                )
                 return f"[MinerU extraction failed for {path.name}]"
             return md_files[0].read_text(errors="replace").strip()
 
@@ -210,27 +221,66 @@ class ClassifyDocumentTool(BaseTool):
 
     _CATEGORIES: dict[str, set[str]] = {
         "invoice": {
-            "invoice", "bill to", "amount due", "payment due", "subtotal",
-            "purchase order", "po number", "net 30", "remittance", "vendor",
-            "invoice number", "due date", "quantity", "unit price",
+            "invoice",
+            "bill to",
+            "amount due",
+            "payment due",
+            "subtotal",
+            "purchase order",
+            "po number",
+            "net 30",
+            "remittance",
+            "vendor",
+            "invoice number",
+            "due date",
+            "quantity",
+            "unit price",
         },
         "credit_statement": {
-            "credit card", "credit score", "credit limit", "statement balance",
-            "minimum payment", "apr", "credit bureau", "available credit",
-            "payment due date", "credit account",
+            "credit card",
+            "credit score",
+            "credit limit",
+            "statement balance",
+            "minimum payment",
+            "apr",
+            "credit bureau",
+            "available credit",
+            "payment due date",
+            "credit account",
         },
         "receipt": {
-            "receipt", "thank you for your purchase", "cashier", "store #",
-            "change due", "total paid", "subtotal", "tax", "order #",
+            "receipt",
+            "thank you for your purchase",
+            "cashier",
+            "store #",
+            "change due",
+            "total paid",
+            "subtotal",
+            "tax",
+            "order #",
         },
         "contract": {
-            "agreement", "contract", "whereas", "parties agree", "obligations",
-            "indemnify", "liability", "termination", "governing law",
-            "intellectual property", "confidential",
+            "agreement",
+            "contract",
+            "whereas",
+            "parties agree",
+            "obligations",
+            "indemnify",
+            "liability",
+            "termination",
+            "governing law",
+            "intellectual property",
+            "confidential",
         },
         "report": {
-            "executive summary", "findings", "recommendations", "analysis",
-            "conclusion", "methodology", "appendix", "table of contents",
+            "executive summary",
+            "findings",
+            "recommendations",
+            "analysis",
+            "conclusion",
+            "methodology",
+            "appendix",
+            "table of contents",
         },
     }
 
@@ -299,7 +349,11 @@ class GenerateEmbeddingTool(BaseTool):
     ) -> ToolResult:
         result = await asyncio.to_thread(self._embed_and_store, text, job_id, filename)
         return ToolResult(
-            content=[TextBlock(text=f"Stored {result['dimensions']}-dim ({result['method']})")],
+            content=[
+                TextBlock(
+                    text=f"Stored {result['dimensions']}-dim ({result['method']})"
+                )
+            ],
             app_data=result,
         )
 
@@ -329,6 +383,7 @@ class GenerateEmbeddingTool(BaseTool):
     def _compute(text: str) -> tuple[list[float], str]:
         try:
             from sentence_transformers import SentenceTransformer  # type: ignore
+
             model = SentenceTransformer("all-MiniLM-L6-v2")
             vec: list[float] = model.encode(text).tolist()
             return vec, "sentence-transformers/all-MiniLM-L6-v2 (384-dim)"
@@ -336,18 +391,20 @@ class GenerateEmbeddingTool(BaseTool):
             pass
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore
+
             vect = TfidfVectorizer(max_features=128)
             vec = vect.fit_transform([text]).toarray()[0].tolist()
             return vec, "sklearn TF-IDF (128-dim)"
         except ImportError:
             pass
         import hashlib
+
         words = re.findall(r"\b\w+\b", text.lower())[:500]
         vec = [0.0] * 64
         for w in words:
             idx = int(hashlib.md5(w.encode()).hexdigest(), 16) % 64
             vec[idx] += 1.0
-        norm = (sum(x ** 2 for x in vec) ** 0.5) or 1.0
+        norm = (sum(x**2 for x in vec) ** 0.5) or 1.0
         return [x / norm for x in vec], "word-hash vector (64-dim)"
 
 

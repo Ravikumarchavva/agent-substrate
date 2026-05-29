@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.fabric.runtime.local import LocalRuntime
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
 
@@ -57,7 +57,7 @@ async def make_agent(
     """Factory: build an AssistantAgent from a scripted LLM and optional tools."""
     catalog = AgentCatalogRegistry()
     catalog.register_model("primary", MockLLMClient(script=script))
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     for tool in tools or []:
         catalog.register_tool(tool)
 

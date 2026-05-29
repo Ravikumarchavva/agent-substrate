@@ -2,15 +2,15 @@
 
 Lineage answers: *who wrote this message, when, and why?*
 
-Rather than bolting provenance onto the existing ``BaseMemory`` interface
+Rather than bolting provenance onto the existing ``HistoryProvider`` interface
 (which would require every backend to be updated), lineage is a **parallel
 store** keyed by ``(session_id, message_id)``.  The scheduler, trust plane,
 and observability plane can all query lineage without touching message
 storage.
 
 ``StorageTier`` formalises the Redis / Postgres / S3 tier split so
-integration adapters can self-describe where they reside and the
-``SessionManager`` can route accordingly.
+integration adapters can self-describe where they reside and a
+``TieredHistoryProvider`` can route accordingly.
 
 Design constraints
 ------------------
@@ -43,8 +43,8 @@ __all__ = [
 class StorageTier(Enum):
     """Describes where a memory backend physically stores data.
 
-    Used by ``SessionManager`` and routing logic to choose the right backend
-    for hot vs warm vs cold data.
+    Used by tiered routing logic to choose the right backend for hot vs
+    warm vs cold data.
     """
 
     HOT = auto()
@@ -136,8 +136,8 @@ class LineageStore(Protocol):
     """Async provenance store — tracks the causal origin of every message.
 
     Implementations must be thread-safe.  Methods accepting ``session_id``
-    must validate the ID against the same pattern used by ``RedisMemory``
-    and ``PostgresMemory`` (alphanumeric + underscore/hyphen, 1–128 chars)
+    must validate the ID against the same pattern used by ``RedisHistoryProvider``
+    and ``PostgresHistoryProvider`` (alphanumeric + underscore/hyphen, 1–128 chars)
     to prevent injection attacks.
     """
 

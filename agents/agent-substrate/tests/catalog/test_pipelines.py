@@ -390,7 +390,7 @@ class TestWorkflowRunner:
         assert len(flow.steps[1].branches) == 3
 
     async def test_build_agent_with_unbounded_memory(self):
-        """Agent + unbounded memory node → uses UnboundedMemory."""
+        """Agent + unbounded memory node → uses InMemoryHistoryProvider."""
         cfg = PipelineConfig(
             name="With Memory",
             nodes=[_agent_node(), _memory_node()],
@@ -402,9 +402,9 @@ class TestWorkflowRunner:
             tools_registry=[],
             model_client=_mock_model_client(),
         )
-        from ravi.fabric.memory.unbounded import UnboundedMemory
+        from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 
-        assert isinstance(agent.memory, UnboundedMemory)
+        assert isinstance(agent.history, InMemoryHistoryProvider)
 
     async def test_build_missing_agent_raises(self):
         """Pipeline with no agent or router → ValueError."""

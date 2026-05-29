@@ -3,7 +3,7 @@
 Retries the execute function when specific exception types are raised.
 Uses exponential backoff with jitter.
 
-Canonical retry math lives in ``ravi.guardrails.resilience.policies``.
+Canonical retry math lives in ``ravi.fabric.resilience.policies``.
 ``RetryMiddleware`` is middleware-pipeline sugar over that same policy.
 """
 
@@ -15,7 +15,7 @@ from typing import Any, Optional, Tuple, Type
 import warnings
 
 from ravi.kernel.middleware.base import BaseMiddleware, MiddlewareContext
-from ravi.guardrails.resilience.policies import RetryPolicy, _calculate_delay
+from ravi.fabric.resilience.policies import RetryPolicy, _calculate_delay
 
 logger = setup_logging()
 

@@ -1,11 +1,11 @@
-"""ravi.kernel.agents — Agent contracts and result types.
+"""ravi.kernel.agents — Agent result types and configuration.
 
-Only abstractions live here. Concrete agent implementations
-(``AssistantAgent``, ``UserProxyAgent``, ``OrchestratorAgent``, flows) live in
-:mod:`ravi.extensions.agents`.
+Only pure value types live here. The ``ActorAgent`` base class lives in
+:mod:`ravi.fabric.actors.actor` (L1 — it depends on the runtime). Concrete
+agents (``AssistantAgent``) live in :mod:`ravi.reasoning.agents`; multi-agent
+coordinators live in :mod:`ravi.orchestration.agents`.
 """
 
-from ravi.fabric.actors.actor import ActorAgent, StreamChannel, StreamEnvelope
 from ravi.kernel.agents.config import AgentConfig
 from ravi.kernel.agents.agent_result import (
     AgentRunResult,
@@ -16,9 +16,6 @@ from ravi.kernel.agents.agent_result import (
 )
 
 __all__ = [
-    "ActorAgent",
-    "StreamChannel",
-    "StreamEnvelope",
     "AgentConfig",
     "AgentRunResult",
     "AggregatedUsage",

@@ -1,21 +1,15 @@
 """Example 2-1: Memory Backends — raw memory operations across all three storage tiers."""
 
 import os
-
-from ravi.kernel.memory.unbounded_memory import UnboundedMemory
+from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.integrations.memory.redis_memory import RedisMemory
 from ravi.integrations.memory.postgres_memory import PostgresMemory
-from ravi.extensions.context.redis_model_context import RedisModelContext
+from ravi.reasoning.memory.context import RedisModelContext
 from ravi.kernel.messages.client_messages import (
     SystemMessage,
     UserMessage,
     AssistantMessage,
 )
-
-# Infrastructure:
-#   Section 2 (RedisMemory):    Redis required     — make infra-up
-#   Section 3 (PostgresMemory): PostgreSQL required — make infra-up
-#   Section 4 (Stateless):      Redis required     — make infra-up
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 DB_URL = os.getenv(
@@ -25,11 +19,8 @@ DB_URL = os.getenv(
 
 
 async def main() -> None:
-    # ---
-    # Section 1: UnboundedMemory — in-process, no infrastructure required
-    # ---
+    # 1. UnboundedMemory (In-Process / Offline)
     print("=== 1. UnboundedMemory (no infra) ===")
-
     mem = UnboundedMemory()
 
     await mem.add_message(SystemMessage(content="You are a helpful assistant."))
@@ -50,9 +41,7 @@ async def main() -> None:
     await mem.clear()
     print(f"  After clear           : {len(await mem.get_messages())} messages")
 
-    # ---
-    # Section 2: RedisMemory — requires Redis (make infra-up)
-    # ---
+    # 2. RedisMemory (Hot Tier / TTL-Based)
     print("\n=== 2. RedisMemory (requires Redis) ===")
     try:
         SESSION_A = "demo-backend-session-a"
@@ -61,7 +50,7 @@ async def main() -> None:
         )
         await redis_a.connect()
 
-        # restore() reloads any prior history; returns 0 on a fresh session
+        # restore() reloads prior history; returns 0 on a fresh session
         prior = await redis_a.restore()
         print(f"  Prior messages restored: {prior}")
 
@@ -79,7 +68,7 @@ async def main() -> None:
         SESSION_B = "demo-backend-session-b"
         redis_b = RedisMemory.for_session(redis_a, SESSION_B)
         isolated = await redis_b.restore()
-        print(f"  Session B (isolated)  : {isolated} messages")  # 0 — different key
+        print(f"  Session B (isolated)  : {isolated} messages")
 
         # Same session_id on a new handle picks up the stored state
         redis_a2 = RedisMemory.for_session(redis_a, SESSION_A)
@@ -91,26 +80,20 @@ async def main() -> None:
     except Exception as exc:
         print(f"  [SKIP] Redis unavailable: {exc}")
 
-    # ---
-    # Section 3: PostgresMemory — requires PostgreSQL (make infra-up)
-    # ---
+    # 3. PostgresMemory (Cold Tier / Durable Checkpointing)
     print("\n=== 3. PostgresMemory (requires PostgreSQL) ===")
     try:
         postgres = PostgresMemory(database_url=DB_URL)
         await postgres.connect()
 
         SESSION_PG = "demo-backend-pg"
-        await postgres.create_session(
-            session_id=SESSION_PG, agent_name="backend-demo"
-        )
+        await postgres.create_session(session_id=SESSION_PG, agent_name="backend-demo")
 
         saved = await postgres.save_messages(
             SESSION_PG,
             [
                 UserMessage(content=["Postgres turn 1"]),
-                AssistantMessage(
-                    content=["Postgres reply 1"], finish_reason="stop"
-                ),
+                AssistantMessage(content=["Postgres reply 1"], finish_reason="stop"),
             ],
         )
         print(f"  Messages saved        : {saved}")
@@ -132,13 +115,7 @@ async def main() -> None:
     except Exception as exc:
         print(f"  [SKIP] Postgres unavailable: {exc}")
 
-    # ---
-    # Section 4: Stateless agent pattern — RedisMemory + RedisModelContext
-    #
-    # Key insight: the only state needed to recreate the conversation is the
-    # session_id.  Two completely fresh Python objects can share the same
-    # conversation because all history lives in Redis, not in the process.
-    # ---
+    # 4. Stateless Agent Pattern (RedisMemory + RedisModelContext)
     print("\n=== 4. Stateless agent pattern ===")
     try:
         SESSION_SL = "demo-stateless"
@@ -150,9 +127,7 @@ async def main() -> None:
         await turn1.connect()
         await turn1.restore()
         await turn1.add_message(UserMessage(content=["What's 2 + 2?"]))
-        await turn1.add_message(
-            AssistantMessage(content=["4."], finish_reason="stop")
-        )
+        await turn1.add_message(AssistantMessage(content=["4."], finish_reason="stop"))
         print(
             f"  Turn 1: wrote {len(await turn1.get_messages())} messages — disconnecting"
         )
@@ -170,32 +145,38 @@ async def main() -> None:
         context_msgs = await ctx.build(
             session_id=SESSION_SL,
             current_input="Continue the conversation",
-            raw_messages=[],  # RedisModelContext ignores this — reads from Redis
+            raw_messages=[],  # RedisModelContext ignores raw_messages and reads from Redis
         )
-        print(
-            f"  Context visible to LLM: {[type(m).__name__ for m in context_msgs]}"
-        )
+        print(f"  Context visible to LLM: {[type(m).__name__ for m in context_msgs]}")
 
         await turn2.clear()
         await turn2.disconnect()
     except Exception as exc:
         print(f"  [SKIP] Redis unavailable: {exc}")
 
-    # ---
-    # Section 5: Quick reference
-    # ---
+    # 5. Quick Reference API Cheat-Sheet
     print("\n=== 5. Quick reference ===")
     print("  Imports:")
-    print("    from ravi.kernel.memory.unbounded_memory import UnboundedMemory")
+    print("    from ravi.fabric.memory.unbounded import UnboundedMemory")
     print("    from ravi.integrations.memory.redis_memory import RedisMemory")
     print("    from ravi.integrations.memory.postgres_memory import PostgresMemory")
-    print("    from ravi.extensions.context.redis_model_context import RedisModelContext")
+    print("    from ravi.reasoning.memory.context import RedisModelContext")
     print("  Key methods:")
-    print("    UnboundedMemory  : add_message(), get_messages(limit=N), clear(), get_token_count()")
-    print("    RedisMemory      : connect(), restore(), add_message(), get_messages(limit=N), clear(), disconnect()")
-    print("    RedisMemory      : for_session(parent, session_id)  ← share connection pool")
-    print("    RedisModelContext: build(session_id, current_input, raw_messages=[])  ← ignores raw_messages")
-    print("    PostgresMemory   : connect(), create_session(), save_messages(), load_messages(), disconnect()")
+    print(
+        "    UnboundedMemory  : add_message(), get_messages(limit=N), clear(), get_token_count()"
+    )
+    print(
+        "    RedisMemory      : connect(), restore(), add_message(), get_messages(limit=N), clear(), disconnect()"
+    )
+    print(
+        "    RedisMemory      : for_session(parent, session_id)  ← share connection pool"
+    )
+    print(
+        "    RedisModelContext: build(session_id, current_input, raw_messages=[])  ← ignores raw_messages"
+    )
+    print(
+        "    PostgresMemory   : connect(), create_session(), save_messages(), load_messages(), disconnect()"
+    )
 
 
 if __name__ == "__main__":

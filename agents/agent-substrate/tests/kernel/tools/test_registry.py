@@ -87,8 +87,8 @@ def test_no_model_registered_returns_none(catalog):
 
 
 def test_register_and_get_memory(catalog):
-    from ravi.fabric.memory.unbounded import UnboundedMemory
-    mem = UnboundedMemory()
+    from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+    mem = InMemoryHistoryProvider()
     catalog.register_memory("main", mem)
     assert catalog.primary_memory() is mem
 

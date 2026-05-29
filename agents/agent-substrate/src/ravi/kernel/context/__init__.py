@@ -1,11 +1,13 @@
-"""ravi.kernel.context — ModelContext contract.
+"""ravi.kernel.context — Context compaction contracts.
 
-Concrete strategies (``SlidingWindowContext``, ``RedisModelContext``,
-``HybridContext``, …) live in :mod:`ravi.reasoning.memory.context`.
+The canonical abstraction is :class:`CompactionStrategy`. ``ModelContext``
+is a backward-compat alias. Concrete strategies live in
+:mod:`ravi.reasoning.memory.context`.
 """
 
 from __future__ import annotations
 
+from ravi.kernel.context.compaction import CompactionStrategy, Trigger
 from ravi.kernel.context.base_context import ModelContext
 
-__all__ = ["ModelContext"]
+__all__ = ["CompactionStrategy", "Trigger", "ModelContext"]

@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
-from ravi.integrations.memory.redis_memory import RedisMemory
+from ravi.integrations.memory.redis_history import RedisHistoryProvider
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.services.agent_runtime.routes import router
 from ravi.services.base import create_service_app
@@ -49,13 +49,10 @@ async def lifespan(app):
     await event_bus.connect()
     app.state.event_bus = event_bus
 
-    # Redis Memory (shared pool)
-    redis_memory = RedisMemory(
-        session_id="__pool__",
-        redis_url=redis_url,
-    )
-    await redis_memory.connect()
-    app.state.redis_memory = redis_memory
+    # Redis history (shared, multi-session)
+    history = RedisHistoryProvider(redis_url=redis_url)
+    await history.connect()
+    app.state.history = history
 
     # Model client
     app.state.model_client = OpenAIClient(
@@ -77,7 +74,7 @@ async def lifespan(app):
     logger.info("Agent Runtime started — %d tools loaded", len(app.state.tools))
     yield
 
-    await redis_memory.disconnect()
+    await history.disconnect()
     await app.state.event_bus.disconnect()
     await app.state.redis.aclose()
 

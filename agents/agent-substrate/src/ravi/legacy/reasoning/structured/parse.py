@@ -4,7 +4,7 @@ structured outputs when you don't need a full ReAct agent loop.
 Example::
 
     from ravi.kernel.structured import parse, ClassificationResult
-    from ravi.integrations.llm.openai.openai_client import OpenAIClient
+    from ravi.adapters.llm.openai.openai_client import OpenAIClient
     from ravi.kernel.messages.client_messages import UserMessage
 
     client = OpenAIClient(model='gpt-4o-2024-08-06')

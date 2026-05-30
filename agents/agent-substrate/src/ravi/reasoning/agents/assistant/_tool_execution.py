@@ -30,7 +30,7 @@ from ravi.reasoning.agents.assistant._legacy_stubs import (
     ToolCallRecord,
     ToolExecutionResultMessage,
 )
-from ravi.shared.observability import global_metrics, logger
+from ravi.serving.shared.observability import global_metrics, logger
 
 # Deleted types — stubs
 AgentCatalogRegistry = object

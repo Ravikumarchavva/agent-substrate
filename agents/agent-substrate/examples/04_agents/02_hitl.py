@@ -15,7 +15,7 @@ import asyncio
 from ravi.catalog.tools.human_input.tool import AskHumanTool, HumanInputResponse
 from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.fabric.tools.builtin_tools import CalculatorTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.fabric.memory.unbounded import UnboundedMemory
 
@@ -43,7 +43,7 @@ async def main() -> None:
     # ---
     # Section 2: Build catalog with system prompt directing the agent to ask humans
 
-    from ravi.configs.settings import settings
+    from ravi.config import settings
 
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 
-from ravi.server.routes.workspace_oauth import (
+from ravi.serving.monolith.routes.workspace_oauth import (
     get_workspace_access_token_async,
     store_workspace_tokens_async,
 )

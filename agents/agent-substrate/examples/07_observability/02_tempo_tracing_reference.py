@@ -3,10 +3,10 @@ import os
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.fabric.memory.unbounded import UnboundedMemory
-from ravi.platform.observability.telemetry import configure_opentelemetry
-from ravi.configs.settings import settings
+from ravi.adapters.observability.telemetry import configure_opentelemetry
+from ravi.config import settings
 
 
 async def main():

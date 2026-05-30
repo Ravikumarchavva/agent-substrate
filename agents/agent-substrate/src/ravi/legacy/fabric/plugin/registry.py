@@ -108,13 +108,13 @@ def unregister(category: str, name: str) -> None:
 # ``ActorAgent`` base (which lives in the L1 fabric layer) — the kernel must
 # never import fabric.
 
-from ravi.fabric.agents_base._protocol import AgentProtocol
-from ravi.fabric.agents_base.agent_context import AgentContext
-from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
-from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.memory.history_provider import HistoryProvider
-from ravi.kernel.middleware.base import BaseMiddleware
-from ravi.kernel.tools.base_tool import BaseTool
+from ravi.fabric.agents_base._protocol import AgentProtocol  # noqa: E402
+from ravi.fabric.agents_base.agent_context import AgentContext  # noqa: E402
+from ravi.kernel.guardrails.base_guardrail import BaseGuardrail  # noqa: E402
+from ravi.kernel.llm.base_client import BaseModelClient  # noqa: E402
+from ravi.kernel.memory.history_provider import HistoryProvider  # noqa: E402
+from ravi.kernel.middleware.base import BaseMiddleware  # noqa: E402
+from ravi.kernel.tools.base_tool import BaseTool  # noqa: E402
 
 
 

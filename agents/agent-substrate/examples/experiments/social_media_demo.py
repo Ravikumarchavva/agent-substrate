@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.fabric.tools.builtin_tools import WebSearchTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.fabric.memory.unbounded import UnboundedMemory
 

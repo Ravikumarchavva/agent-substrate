@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from ravi.kernel.agent_catalog._catalog import AgentCatalog
 from ravi.reasoning.agents.assistant import AssistantAgent
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.kernel.hooks import HookEvent, HookManager, CostTracker
 

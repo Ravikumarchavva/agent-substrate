@@ -2,8 +2,8 @@
 
 import os
 from ravi.fabric.memory.unbounded import UnboundedMemory
-from ravi.integrations.memory.redis_memory import RedisMemory
-from ravi.integrations.memory.postgres_memory import PostgresMemory
+from ravi.adapters.memory.redis_memory import RedisMemory
+from ravi.adapters.memory.postgres_memory import PostgresMemory
 from ravi.reasoning.memory.context import RedisModelContext
 from ravi.kernel.messages.client_messages import (
     SystemMessage,
@@ -158,8 +158,8 @@ async def main() -> None:
     print("\n=== 5. Quick reference ===")
     print("  Imports:")
     print("    from ravi.fabric.memory.unbounded import UnboundedMemory")
-    print("    from ravi.integrations.memory.redis_memory import RedisMemory")
-    print("    from ravi.integrations.memory.postgres_memory import PostgresMemory")
+    print("    from ravi.adapters.memory.redis_memory import RedisMemory")
+    print("    from ravi.adapters.memory.postgres_memory import PostgresMemory")
     print("    from ravi.reasoning.memory.context import RedisModelContext")
     print("  Key methods:")
     print(

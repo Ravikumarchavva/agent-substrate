@@ -17,7 +17,7 @@ import asyncio
 
 from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.fabric.memory.unbounded import UnboundedMemory
 
@@ -28,7 +28,7 @@ from ravi.fabric.memory.unbounded import UnboundedMemory
 
 def _make_agent(user_id: str) -> AssistantAgent:
     """Create a fully isolated agent for one user session."""
-    from ravi.configs.settings import settings
+    from ravi.config import settings
 
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
@@ -119,7 +119,7 @@ async def main() -> None:
     # user/session ID and use RedisMemory for persistence across process
     # restarts:
     #
-    #   from ravi.integrations.memory.redis_memory import RedisMemory
+    #   from ravi.adapters.memory.redis_memory import RedisMemory
     #
     #   REDIS_URL = "redis://localhost:6379/0"
     #

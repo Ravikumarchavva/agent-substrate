@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from ravi.configs.settings import Settings
+from ravi.config import Settings
 
 
 def test_settings_accepts_common_provider_env_aliases(tmp_path: Path) -> None:

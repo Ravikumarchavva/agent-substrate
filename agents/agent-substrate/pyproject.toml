@@ -61,6 +61,7 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+norecursedirs = ["tests/legacy"]
 
 [tool.ruff]
 exclude = ["notebooks/", "examples/", ".venv"]
@@ -84,18 +85,16 @@ exclude = ["notebooks/", "examples/", ".venv"]
 [tool.importlinter]
 root_packages = ["ravi"]
 
-# The six-layer agent stack. Higher layers may import lower ones; never the
-# reverse. import-linter's "layers" contract lists layers high → low.
+# The four-layer cognitive stack. Higher layers may import lower ones; never
+# the reverse. import-linter's "layers" contract lists layers high → low.
 [[tool.importlinter.contracts]]
 name = "agent stack layers"
 type = "layers"
 layers = [
-    "ravi.platform",       # L5 — observability, scheduling, batch, evals, RAG
-    "ravi.guardrails",     # L4 — mutation gates, governance, economic, kill-switch
-    "ravi.orchestration",  # L3 — orchestrator, flow, proxy, workflows
-    "ravi.reasoning",      # L2 — AssistantAgent, ReAct loop, memory, middleware
-    "ravi.fabric",         # L1 — runtime, actors, dispatch, supervision, saga
-    "ravi.kernel",         # L0 — pure contracts: types, ABCs, Protocols, registry
+    "ravi.orchestration",  # L3 — orchestrator, flow, proxy, multi-agent workflows
+    "ravi.reasoning",      # L2 — AssistantAgent, ReAct loop, guardrails, middleware
+    "ravi.fabric",         # L1 — runtime, context, llm client, middleware, catalog registry
+    "ravi.kernel",         # L0 — pure contracts: types, Protocols, dataclasses
 ]
 
 # The kernel (L0) is the frozen leaf. It must not import any other ravi package
@@ -110,23 +109,21 @@ forbidden_modules = [
     "ravi.fabric",
     "ravi.reasoning",
     "ravi.orchestration",
-    "ravi.guardrails",
-    "ravi.platform",
-    "ravi.extensions",
-    "ravi.integrations",
+    "ravi.adapters",
     "ravi.catalog",
-    "ravi.server",
-    "ravi.services",
-    "ravi.shared",
-    "ravi.configs",
+    "ravi.evals",
+    "ravi.serving",
+    "ravi.config",
     "ravi.logger",
 ]
 
 [tool.uv.sources]
 paddleocr = { git = "https://github.com/PaddlePaddle/PaddleOCR.git" }
 
-# Note: catalog/, integrations/, server/, services/, shared/, configs/ are
-# orthogonal to the six-layer stack and intentionally not part of the layers
-# contract — they carry legitimate cross-edges (e.g. RedisModelContext needs
-# the Redis backend). The two contracts above are the load-bearing guarantees:
-# the agent stack flows strictly downward, and the kernel imports nothing.
+# Note: adapters/ (concrete I/O ports), catalog/ (the agent's tools/skills/rag),
+# evals/ (LLM-as-judge), and serving/ (monolith + microservices + shared infra)
+# are orthogonal to the four-layer stack and intentionally not part of the
+# layers contract — they carry legitimate cross-edges (e.g. a Redis history
+# adapter implements a fabric contract). The two contracts above are the
+# load-bearing guarantees: the agent stack flows strictly downward, and the
+# kernel imports nothing.

@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from ravi.server.sse.events import (
+from ravi.serving.monolith.sse.events import (
     BUS_CLOSED,
     CompletionEvent,
     ErrorEvent,
@@ -17,7 +17,7 @@ from ravi.server.sse.events import (
     TextDeltaEvent,
     _BUS_DONE,
 )
-from ravi.server.sse.bridge import BRIDGE_DONE, WebHITLBridge, _DONE
+from ravi.serving.monolith.sse.bridge import BRIDGE_DONE, WebHITLBridge, _DONE
 
 
 # ---------------------------------------------------------------------------

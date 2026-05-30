@@ -33,7 +33,7 @@ from ravi.kernel.message import (
     Subscription,
 )
 from ravi.kernel.protocol import AgentRuntime
-from ravi.kernel.tools import ToolCallRequest, ToolExecutionResult, Tool
+from ravi.kernel.tools import ToolRisk, ToolCallRequest, ToolExecutionResult, Tool
 from ravi.kernel.errors import AgentNotFoundError, HandlerError
 from ravi.kernel.stream import (
     TextDelta,
@@ -74,6 +74,7 @@ __all__ = [
     # Runtime
     "AgentRuntime",
     # Tools
+    "ToolRisk",
     "ToolCallRequest",
     "ToolExecutionResult",
     "Tool",

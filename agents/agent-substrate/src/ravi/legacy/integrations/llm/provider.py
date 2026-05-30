@@ -5,7 +5,7 @@ to use*.  This lets the same ``OpenAIClient`` work with the OpenAI API,
 vLLM, Ollama, Together, Perplexity, or any OpenAI-compatible endpoint.
 
     from ravi.kernel.llm.provider import ProviderConfig
-    from ravi.integrations.llm.factory import create_model_client
+    from ravi.adapters.llm.factory import create_model_client
 
     # Use vLLM with OpenAI-compatible API
     cfg = ProviderConfig(

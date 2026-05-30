@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from ravi.configs.settings import settings
+from ravi.config import settings
 from ravi.kernel.runtime import (
     RestartPolicy,
 )
@@ -51,7 +51,7 @@ from ravi.kernel.messages.content import ContentBlock
 #       NATS JetStream endpoint used by DistributedRuntime for cross-worker
 #       pub/sub (independent of Restate).
 #
-# These live in ravi.configs.settings and can be overridden in .env.
+# These live in ravi.config and can be overridden in .env.
 # ---
 
 

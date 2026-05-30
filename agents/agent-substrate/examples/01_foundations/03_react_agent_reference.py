@@ -19,10 +19,10 @@ import asyncio
 import datetime
 import math
 
-from ravi.configs.settings import settings
+from ravi.config import settings
 from ravi.fabric.context import InMemoryHistoryProvider, SlidingWindowCompaction
 from ravi.fabric.runtime.local import LocalRuntime
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel import TextBlock, ToolExecutionResult
 from ravi.kernel.stream import CompletionEvent, StreamDone, TextDelta
 from ravi.orchestration.agents.orchestrator.agent import OrchestratorAgent
@@ -238,23 +238,72 @@ async def demo_orchestrator(rt: LocalRuntime) -> None:
     print(f"  output : {result.output!r}")
 
 
-# ---------------------------------------------------------------------------
-# main
-# ---------------------------------------------------------------------------
+from ravi.console import Console
 
 
 async def main() -> None:
     if not settings.OPENAI_API_KEY:
         raise SystemExit("OPENAI_API_KEY not set — add it to ravi-engine/.env")
 
-    async with LocalRuntime() as rt:
-        await demo_basic_run(rt)
-        await demo_streaming(rt)
-        await demo_multi_turn(rt)
-        await demo_proxy(rt)
-        await demo_orchestrator(rt)
+    print("\n" + "=" * 50)
+    print("      Ravi Agent Framework Reference Demos      ")
+    print("=" * 50)
+    print("Select a demo to run:")
+    print("  1. Basic non-streaming single-turn run()")
+    print("  2. Token-by-token streaming run_stream()")
+    print("  3. Multi-turn conversation via shared history")
+    print("  4. UserProxyAgent routing via LocalRuntime")
+    print("  5. OrchestratorAgent (multi-agent Hub & Spoke)")
+    print("  6. Live Interactive REPL chat with OrchestratorAgent 🚀")
+    print("  exit. Exit the demo suite")
 
-    print("\nAll reference demos complete.")
+    async with LocalRuntime() as rt:
+        while True:
+            try:
+                choice = input("\nSelect demo [1-6, exit]: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\n👋 Bye!")
+                break
+
+            if choice.lower() in ("exit", "quit", "q"):
+                print("👋 Bye!")
+                break
+            elif choice == "1":
+                await demo_basic_run(rt)
+            elif choice == "2":
+                await demo_streaming(rt)
+            elif choice == "3":
+                await demo_multi_turn(rt)
+            elif choice == "4":
+                await demo_proxy(rt)
+            elif choice == "5":
+                await demo_orchestrator(rt)
+            elif choice == "6":
+                print("\n=== Live Interactive Chat with Orchestrator (Specialists: Math, Clock) ===")
+                # Instantiate Orchestrator
+                model = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1])
+                math_agent = AssistantAgent(
+                    "MathSpecialist", rt, model=model, tools=[MathTool()],
+                    system="You are a mathematics specialist. Use the math tool for every calculation."
+                )
+                math_agent.description = "Handles mathematical calculations and expressions."
+                time_agent = AssistantAgent(
+                    "TimeSpecialist", rt, model=model, tools=[ClockTool()],
+                    system="You are a time specialist. Always check the clock tool."
+                )
+                time_agent.description = "Reports current time and timezone information."
+                
+                orchestrator = OrchestratorAgent(
+                    "Router",
+                    rt,
+                    model=model,
+                    sub_agents=[math_agent, time_agent],
+                    description="Routes queries to math or time specialists.",
+                    max_iterations=10,
+                )
+                await Console(orchestrator).interactive(stream=True)
+            else:
+                print("Invalid choice, select 1 to 6 or exit.")
 
 
 if __name__ == "__main__":

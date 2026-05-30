@@ -134,7 +134,7 @@ class FileManagerTool:
             return _text_result(f"Error: {exc}", is_error=True)
 
     async def _list_files(self, thread_id: uuid.UUID) -> ToolExecutionResult:
-        from ravi.server.services.file_service import list_files
+        from ravi.serving.monolith.services.file_service import list_files
 
         async with self._session_factory() as db:
             files = await list_files(db, thread_id)
@@ -151,7 +151,7 @@ class FileManagerTool:
             return _text_result("\n".join(lines), app_data={"file_count": len(files)})
 
     async def _read_file(self, thread_id: uuid.UUID, file_id_str: str) -> ToolExecutionResult:
-        from ravi.server.services.file_service import extract_text, get_file
+        from ravi.serving.monolith.services.file_service import extract_text, get_file
 
         if not file_id_str:
             return _text_result(
@@ -194,7 +194,7 @@ class FileManagerTool:
         content: str,
         content_type: str,
     ) -> ToolExecutionResult:
-        from ravi.server.services.file_service import save_file
+        from ravi.serving.monolith.services.file_service import save_file
         from ravi.kernel.storage.tenant import FileScope
 
         if not filename:
@@ -229,7 +229,7 @@ class FileManagerTool:
             )
 
     async def _get_url(self, thread_id: uuid.UUID, file_id_str: str) -> ToolExecutionResult:
-        from ravi.server.services.file_service import get_file, get_file_url
+        from ravi.serving.monolith.services.file_service import get_file, get_file_url
 
         if not file_id_str:
             return _text_result("Error: file_id is required for get_url", is_error=True)
@@ -254,7 +254,7 @@ class FileManagerTool:
                 )
 
     async def _delete_file(self, thread_id: uuid.UUID, file_id_str: str) -> ToolExecutionResult:
-        from ravi.server.services.file_service import delete_file
+        from ravi.serving.monolith.services.file_service import delete_file
 
         if not file_id_str:
             return _text_result(

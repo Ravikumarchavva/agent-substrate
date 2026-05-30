@@ -1,0 +1,201 @@
+"""RedisHistoryProvider — Redis-backed HistoryProvider.
+
+Stores each agent's message log as a Redis list with a TTL and a hard
+max_messages cap (LTRIM on every write).
+
+Usage::
+
+    provider = RedisHistoryProvider(redis_url="redis://localhost:6379/0")
+    await provider.connect()
+
+    agent = AssistantAgent("bot", runtime, model=client, history=provider)
+    ...
+    await provider.disconnect()
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Optional
+from urllib.parse import urlparse
+
+import redis.asyncio as aioredis
+
+from ravi.kernel import AgentId, ChatMessage
+from ravi.kernel.message import Message
+from ravi.logger import setup_logging
+
+logger = setup_logging()
+
+
+def _serialize(message: Message) -> str:
+    """Serialize a Message envelope to a JSON string."""
+    target = message.target
+    sender = message.sender
+    payload = message.payload
+
+    payload_dict: dict = {}
+    payload_type = "unknown"
+    if isinstance(payload, ChatMessage):
+        payload_type = "ChatMessage"
+        payload_dict = payload.model_dump(mode="json")
+
+    return json.dumps(
+        {
+            "target_type": target.type if isinstance(target, AgentId) else str(target),
+            "target_key": target.key if isinstance(target, AgentId) else "",
+            "sender_type": sender.type if sender else None,
+            "sender_key": sender.key if sender else None,
+            "correlation_id": message.correlation_id,
+            "causation_id": message.causation_id,
+            "metadata": message.metadata,
+            "payload_type": payload_type,
+            "payload": payload_dict,
+        },
+        default=str,
+    )
+
+
+def _deserialize(raw: str) -> Message:
+    """Deserialize a JSON string back to a Message envelope."""
+    data = json.loads(raw)
+
+    target = AgentId(type=data["target_type"], key=data["target_key"])
+    sender: AgentId | None = None
+    if data.get("sender_type"):
+        sender = AgentId(type=data["sender_type"], key=data.get("sender_key", ""))
+
+    payload: object = data.get("payload", {})
+    if data.get("payload_type") == "ChatMessage":
+        try:
+            payload = ChatMessage.model_validate(data["payload"])
+        except Exception:
+            pass  # leave as raw dict if validation fails
+
+    return Message(
+        target=target,
+        sender=sender,
+        correlation_id=data.get("correlation_id", ""),
+        causation_id=data.get("causation_id"),
+        metadata=data.get("metadata", {}),
+        payload=payload,
+    )
+
+
+class RedisHistoryProvider:
+    """Redis-backed :class:`HistoryProvider`.
+
+    Parameters
+    ----------
+    redis_url:
+        Redis connection URL (default: ``redis://localhost:6379/0``).
+    ttl:
+        Key TTL in seconds; 0 = no expiry.
+    max_messages:
+        Hard cap per agent — oldest messages are dropped when exceeded.
+    key_prefix:
+        Namespace prefix for all Redis keys.
+    """
+
+    def __init__(
+        self,
+        *,
+        redis_url: str = "redis://localhost:6379/0",
+        ttl: int = 3600,
+        max_messages: int = 200,
+        key_prefix: str = "ravi:hist",
+    ) -> None:
+        self._ttl = ttl
+        self._max_messages = max_messages
+        self._redis_url = redis_url
+        self._key_prefix = key_prefix
+        self._client: Optional[aioredis.Redis] = None
+
+    # -- lifecycle ------------------------------------------------------------
+
+    async def connect(self) -> None:
+        if self._client is not None:
+            return
+        self._client = aioredis.from_url(
+            self._redis_url,
+            decode_responses=True,
+            max_connections=20,
+        )
+        await self._client.ping()  # type: ignore[misc]
+        parsed = urlparse(self._redis_url)
+        logger.info(
+            "RedisHistoryProvider connected: %s://%s:%s",
+            parsed.scheme,
+            parsed.hostname,
+            parsed.port,
+        )
+
+    async def disconnect(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            logger.info("RedisHistoryProvider disconnected")
+        self._client = None
+
+    async def __aenter__(self) -> RedisHistoryProvider:
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.disconnect()
+
+    def _require_client(self) -> aioredis.Redis:
+        if self._client is None:
+            raise RuntimeError(
+                "RedisHistoryProvider not connected — call `await connect()` first."
+            )
+        return self._client
+
+    def _key(self, agent_id: AgentId) -> str:
+        return f"{self._key_prefix}:{agent_id.type}:{agent_id.key}"
+
+    # -- HistoryProvider protocol ---------------------------------------------
+
+    async def append(self, agent_id: AgentId, message: Message) -> None:
+        client = self._require_client()
+        key = self._key(agent_id)
+        pipe = client.pipeline(transaction=True)
+        pipe.rpush(key, _serialize(message))
+        if self._max_messages > 0:
+            pipe.ltrim(key, -self._max_messages, -1)
+        if self._ttl > 0:
+            pipe.expire(key, self._ttl)
+        await pipe.execute()
+
+    async def get_messages(
+        self,
+        agent_id: AgentId,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[Message]:
+        client = self._require_client()
+        key = self._key(agent_id)
+        start = offset if offset is not None else 0
+        end = (start + limit - 1) if limit is not None else -1
+        raw_items: list[str] = await client.lrange(key, start, end)  # type: ignore[misc]
+        return [_deserialize(r) for r in raw_items]
+
+    async def clear(self, agent_id: AgentId) -> None:
+        client = self._require_client()
+        await client.delete(self._key(agent_id))
+
+    async def count_messages(self, agent_id: AgentId) -> int:
+        client = self._require_client()
+        return await client.llen(self._key(agent_id))  # type: ignore[misc]
+
+    async def refresh_ttl(self, agent_id: AgentId) -> None:
+        if self._ttl <= 0:
+            return
+        client = self._require_client()
+        await client.expire(self._key(agent_id), self._ttl)
+
+    def __repr__(self) -> str:
+        return (
+            f"<RedisHistoryProvider("
+            f"ttl={self._ttl}, max={self._max_messages}, "
+            f"connected={self._client is not None})>"
+        )

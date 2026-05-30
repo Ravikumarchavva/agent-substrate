@@ -1,12 +1,8 @@
-"""Tool execution contracts.
-
-Minimal kernel-level types: what an agent requests to run, and what comes back.
-Execution policy (risk rating, timeout, human-in-the-loop approval) is a
-fabric/guardrail concern and lives above this layer.
-"""
+"""Tool execution contracts."""
 
 from __future__ import annotations
 
+from enum import Enum
 from uuid import uuid4
 
 from typing import Protocol
@@ -14,6 +10,20 @@ from typing import Protocol
 from pydantic import BaseModel, Field
 
 from ravi.kernel.content import ContentBlock, JsonObject, content_blocks_to_str
+
+
+class ToolRisk(str, Enum):
+    """Risk classification for a tool.
+
+    SAFE     — no side-effects; execute without approval.
+    HIGH     — external side-effects (email, DB write); require approval when
+               an ApprovalHandler is configured.
+    CRITICAL — destructive / irreversible; always require approval.
+    """
+
+    SAFE = "safe"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class ToolCallRequest(BaseModel):
@@ -44,13 +54,16 @@ class ToolExecutionResult(BaseModel):
 
 
 class Tool(Protocol):
-    """Contract every catalog tool must satisfy."""
+    """Contract every catalog tool must satisfy.
+
+    ``risk`` is optional — defaults to ``ToolRisk.SAFE`` when absent.
+    """
+
     name: str
     description: str
     input_schema: dict[str, object]
 
-    async def execute(self, **kwargs: object) -> ToolExecutionResult:
-        ...
+    async def execute(self, **kwargs: object) -> ToolExecutionResult: ...
 
 
-__all__ = ["ToolCallRequest", "ToolExecutionResult", "Tool"]
+__all__ = ["ToolRisk", "ToolCallRequest", "ToolExecutionResult", "Tool"]

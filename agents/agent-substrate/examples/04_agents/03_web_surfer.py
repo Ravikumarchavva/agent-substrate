@@ -15,7 +15,7 @@ import asyncio
 
 from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.fabric.tools.builtin_tools import WebSearchTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.messages._types import TextDeltaChunk
@@ -33,7 +33,7 @@ async def main() -> None:
     # ---
     # Section 1: Create agent with WebSearchTool
 
-    from ravi.configs.settings import settings
+    from ravi.config import settings
 
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]

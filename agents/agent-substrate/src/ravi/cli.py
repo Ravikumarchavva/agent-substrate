@@ -87,7 +87,7 @@ def cmd_start(args: argparse.Namespace) -> None:
         sys.executable,
         "-m",
         "uvicorn",
-        "ravi.server.app:app",
+        "ravi.serving.monolith.app:app",
         "--host",
         host,
         "--port",
@@ -247,7 +247,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from ravi.console import Console
     from ravi.reasoning.agents.assistant.agent import AssistantAgent
     from ravi.fabric.runtime.local import LocalRuntime
-    from ravi.integrations.llm.openai.openai_client import OpenAIClient
+    from ravi.adapters.llm.openai.openai_client import OpenAIClient
     from ravi.fabric.context import (
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
@@ -285,7 +285,7 @@ def _load_mcp_tools(server_urls: list[str]) -> list:
     """
     tools: list = []
     try:
-        from ravi.integrations.mcp import MCPClient
+        from ravi.adapters.mcp import MCPClient
     except ImportError:
         print("⚠ MCP extension not available — skipping MCP tools.")
         return tools

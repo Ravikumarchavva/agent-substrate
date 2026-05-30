@@ -49,7 +49,7 @@ def show_hierarchy() -> None:
     print("=== Runtime inheritance hierarchy ===")
 
     from ravi.fabric.runtime import BaseRuntime, LocalRuntime as LR
-    from ravi.integrations.runtime import BaseRemoteRuntime
+    from ravi.adapters.runtime import BaseRemoteRuntime
 
     print(f"  LocalRuntime -> BaseRuntime:      {issubclass(LR, BaseRuntime)}")
     print(
@@ -57,7 +57,7 @@ def show_hierarchy() -> None:
     )
 
     try:
-        from ravi.integrations.runtime.grpc import GrpcRuntime
+        from ravi.adapters.runtime.grpc import GrpcRuntime
 
         print(
             f"  GrpcRuntime -> BaseRemoteRuntime: {issubclass(GrpcRuntime, BaseRemoteRuntime)}"
@@ -132,7 +132,7 @@ async def demo_grpc_runtime() -> None:
         print("  Install with: uv add grpcio")
         return
 
-    from ravi.integrations.runtime.grpc import GrpcRuntime
+    from ravi.adapters.runtime.grpc import GrpcRuntime
 
     # ---
     # Single-node setup: GrpcRuntime serving agents on 0.0.0.0:50051.
@@ -183,7 +183,7 @@ async def demo_grpc_remote_dispatch() -> None:
         print("  grpcio not installed — skipping.")
         return
 
-    from ravi.integrations.runtime.grpc import GrpcRuntime
+    from ravi.adapters.runtime.grpc import GrpcRuntime
 
     # ---
     # Two-node setup:

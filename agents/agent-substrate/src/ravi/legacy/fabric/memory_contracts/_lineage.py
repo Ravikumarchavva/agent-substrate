@@ -17,7 +17,7 @@ Design constraints
 * Zero concrete logic — this module holds only dataclasses + Protocols.
 * No external imports — only stdlib.
 * Implementations live in ``ravi.extensions.memory`` or
-  ``ravi.integrations.memory``.
+  ``ravi.adapters.memory``.
 """
 
 from __future__ import annotations

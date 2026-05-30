@@ -18,7 +18,7 @@ import contextvars
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from ravi.kernel.tools import ToolExecutionResult
-from ravi.shared.tasks.store import GlobalTaskStore, Task, TaskStore
+from ravi.serving.shared.tasks.store import GlobalTaskStore, Task, TaskStore
 from ravi.kernel import TextBlock
 
 logger = setup_logging()

@@ -20,7 +20,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Literal
 
-from ravi.configs.settings import settings
+from ravi.config import settings
 
 from pythonjsonlogger.msgspec import MsgspecFormatter
 

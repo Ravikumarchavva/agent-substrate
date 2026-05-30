@@ -15,10 +15,10 @@ from __future__ import annotations
 import asyncio
 import datetime
 
-from ravi.configs.settings import settings
+from ravi.config import settings
 from ravi.fabric.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
 from ravi.fabric.runtime.local import LocalRuntime
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel import TextBlock, ToolExecutionResult
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
 
@@ -99,26 +99,18 @@ def build_agent(runtime: LocalRuntime) -> AssistantAgent:
 # ---------------------------------------------------------------------------
 
 
+from ravi.console import Console
+
+
 async def main() -> None:
     if not settings.OPENAI_API_KEY:
         raise SystemExit("OPENAI_API_KEY not set — add it to ravi-engine/.env")
 
     async with LocalRuntime() as rt:
         agent = build_agent(rt)
-
-        questions = [
-            "What is 2 ** 10 + 7?",
-            "What is the current UTC time?",
-            "What is (123 * 456) / 789 rounded to 4 decimal places?",
-        ]
-
-        for q in questions:
-            print(f"\nUser: {q}")
-            result = await agent.run(q)
-            print(f"Agent [{result.status}]: {result.output}")
-            if result.tool_calls:
-                for tc in result.tool_calls:
-                    print(f"  tool={tc.name}  result={tc.result!r}")
+        
+        # Launch beautiful, premium interactive console session
+        await Console(agent).interactive(stream=True)
 
 
 if __name__ == "__main__":

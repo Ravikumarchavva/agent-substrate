@@ -14,7 +14,7 @@ from ravi.capabilities.internal.pipeline import (
     PipelineStore,
 )
 from ravi.capabilities.internal.scanner import CatalogPackage, CatalogScanner
-from ravi.capabilities.internal.skill_models import Skill, SkillMetadata
+from ravi.capabilities.internal.skill_models import SkillPackage, SkillMetadata
 from ravi.capabilities.internal.skill_loader import SkillLoader
 from ravi.capabilities.internal.skill_manager import SkillManager
 
@@ -27,7 +27,7 @@ __all__ = [
     "PipelineDef",
     "PipelineEngine",
     "PipelineStore",
-    "Skill",
+    "SkillPackage",
     "SkillLoader",
     "SkillManager",
     "SkillMetadata",

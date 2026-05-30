@@ -9,8 +9,8 @@ from ravi.logger import setup_logging
 
 import asyncio
 import json
+from dataclasses import dataclass
 from typing import Any, AsyncIterator
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -27,15 +27,8 @@ from ravi.adapters.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
-from ravi.agents.assistant._legacy_stubs import (
-    ImageContent,
-    MediaType,
-    ReasoningDeltaChunk,
-    TextDeltaChunk,
-    ExecutionContext,
-    AssistantMessage,
-    ToolExecutionResultMessage,
-)
+from ravi.kernel.content import TextBlock, ToolUseBlock
+from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.serving.shared.execution import stream_agent_run
 from ravi.serving.monolith.dependencies import ServerDependencies, get_ctx
 from ravi.serving.monolith.database import get_db
@@ -45,7 +38,6 @@ from ravi.serving.monolith.services import get_thread
 from ravi.serving.monolith.services.agent_service import (
     load_agent_for_thread,
     persist_assistant_message,
-    persist_tool_result,
     persist_user_message,
 )
 from ravi.serving.monolith.services.file_service import (
@@ -72,6 +64,17 @@ from ravi.serving.monolith.sse.events import (
 )
 
 logger = setup_logging()
+
+
+@dataclass
+class _ImagePayload:
+    """Raw image binary for multimodal user messages."""
+
+    data: bytes
+    media_type: str
+
+
+MediaType = str | _ImagePayload
 
 router = APIRouter(tags=["chat"], dependencies=[Depends(get_current_user)])
 
@@ -310,22 +313,21 @@ def _build_tool_meta_map(tools: list) -> dict:
     return meta_map
 
 
-def _build_completion_payload(message: AssistantMessage, tool_meta_map: dict) -> dict:
-    """Build the SSE ``completion`` event payload from an ``AssistantMessage``.
+def _build_completion_payload(event: CompletionEvent, tool_meta_map: dict) -> dict:
+    """Build the SSE ``completion`` event payload from a ``CompletionEvent``."""
+    text_parts = [b.text for b in event.content if isinstance(b, TextBlock)]
+    tool_use_blocks = [b for b in event.content if isinstance(b, ToolUseBlock)]
 
-    Extracts tool calls, decorates them with risk/colour/MCP-App metadata,
-    and assembles the full dict sent over the wire.
-    """
     serialized_tool_calls = None
-    if message.tool_calls:
+    if tool_use_blocks:
         serialized_tool_calls = []
-        for tc in message.tool_calls:
+        for b in tool_use_blocks:
             tc_data: dict = {
-                "id": tc.id,
-                "name": tc.name,
-                "arguments": tc.arguments,
+                "id": b.call_id,
+                "name": b.tool_name,
+                "arguments": b.arguments,
             }
-            meta = tool_meta_map.get(tc.name)
+            meta = tool_meta_map.get(b.tool_name)
             if meta:
                 tc_data["risk"] = meta.get("risk", "safe")
                 tc_data["color"] = meta.get("color", "green")
@@ -343,64 +345,14 @@ def _build_completion_payload(message: AssistantMessage, tool_meta_map: dict) ->
 
     return {
         "type": "completion",
-        "role": message.role,
-        "content": message.content,
+        "role": "assistant",
+        "content": "\n".join(text_parts),
         "tool_calls": serialized_tool_calls,
-        "finish_reason": message.finish_reason,
-        "has_tool_calls": bool(message.tool_calls),
-        "usage": {
-            "prompt_tokens": message.usage.prompt_tokens,
-            "completion_tokens": message.usage.completion_tokens,
-            "total_tokens": message.usage.total_tokens,
-        }
-        if message.usage
-        else None,
+        "finish_reason": "stop",
+        "has_tool_calls": bool(tool_use_blocks),
+        "usage": None,
         "partial": False,
         "complete": True,
-    }
-
-
-def _build_tool_result_payload(
-    chunk: ToolExecutionResultMessage, tool_meta_map: dict
-) -> dict:
-    """Build the SSE ``tool_result`` event payload from a ``ToolExecutionResultMessage``."""
-    content_text = ""
-    if isinstance(chunk.content, list):
-        parts = []
-        for block in chunk.content:
-            if isinstance(block, dict):
-                if block.get("type") == "text":
-                    parts.append(block.get("text", ""))
-            elif hasattr(block, "text"):
-                parts.append(getattr(block, "text") or "")
-            elif isinstance(block, str):
-                parts.append(block)
-        content_text = "\n".join(parts)
-
-    tool_name = getattr(chunk, "name", "unknown")
-    tool_meta = tool_meta_map.get(tool_name, {})
-    tool_http_url = ""
-    if "ui" in tool_meta:
-        ui_info = tool_meta["ui"]
-        resource_uri = ui_info.get("resourceUri", "")
-        tool_http_url = (
-            resolve_ui_uri(resource_uri) if resource_uri else f"/ui/{tool_name}"
-        )
-
-    return {
-        "type": "tool_result",
-        "tool_name": tool_name,
-        "tool_call_id": getattr(chunk, "tool_call_id", ""),
-        "content": content_text,
-        "is_error": getattr(chunk, "is_error", False),
-        "has_app": "ui" in tool_meta,
-        "http_url": tool_http_url,
-        "app_data": getattr(chunk, "app_data", None),
-        "risk": tool_meta.get("risk", "safe"),
-        "color": tool_meta.get("color", "green"),
-        "partial": False,
-        # Carry raw content text for persistence — not sent to frontend
-        "_raw_content": content_text,
     }
 
 
@@ -409,7 +361,7 @@ async def _build_file_context(
     body: ChatRequest,
     request: Request,
     ctx: ServerDependencies,
-) -> tuple[str, list[ImageContent], list[dict[str, Any]]]:
+) -> tuple[str, list[_ImagePayload], list[dict[str, Any]]]:
     """Load file IDs from the request, extract text and push to CI VM.
 
     Returns:
@@ -431,7 +383,7 @@ async def _build_file_context(
         return "", [], []
 
     text_parts: list[str] = []
-    image_inputs: list[ImageContent] = []
+    image_inputs: list[_ImagePayload] = []
     attachments = [_serialize_attached_file(meta) for meta in files]
 
     for meta in files:
@@ -440,7 +392,7 @@ async def _build_file_context(
             text_parts.append(f"### File: {meta.original_name}\n```\n{extracted}\n```")
         elif (meta.content_type or "").startswith("image/"):
             image_inputs.append(
-                ImageContent(
+                _ImagePayload(
                     data=await get_file_content(store, meta),
                     media_type=meta.content_type or "image/png",
                 )
@@ -739,7 +691,6 @@ async def chat(
         tool_meta_map = _build_tool_meta_map(agent.tools)
         bus: EventBus = EventBus()
         bridge_signaled = False
-        chat_run_id = str(uuid4())
 
         # Per-request cancel signal — set by POST /chat/{thread_id}/cancel
         # Key MUST be str to match cancel.py which receives thread_id as a path param.
@@ -752,16 +703,16 @@ async def chat(
             generated_files: list[dict] = []
             try:
 
-                async def _emit_text_delta(chunk: TextDeltaChunk) -> None:
+                async def _emit_text_delta(chunk: TextDelta) -> None:
                     await bus.emit(TextDeltaEvent(content=chunk.text, partial=True))
 
-                async def _emit_reasoning_delta(chunk: ReasoningDeltaChunk) -> None:
+                async def _emit_reasoning_delta(chunk: ReasoningDelta) -> None:
                     await bus.emit(
                         ReasoningDeltaEvent(content=chunk.text, partial=True)
                     )
 
-                async def _emit_completion(message: AssistantMessage) -> None:
-                    payload = _build_completion_payload(message, tool_meta_map)
+                async def _emit_completion(event: CompletionEvent) -> None:
+                    payload = _build_completion_payload(event, tool_meta_map)
                     metadata = None
                     if generated_files:
                         metadata = {"attachments": generated_files}
@@ -772,81 +723,13 @@ async def chat(
                             await persist_assistant_message(
                                 persist_db,
                                 body.thread_id,
-                                message,
+                                event,
                                 tool_meta_map=tool_meta_map,
                                 metadata=metadata,
                             )
                             await persist_db.commit()
                     except Exception:
                         logger.exception("Failed to persist assistant message")
-                    await bus.emit_dict(payload)
-
-                async def _emit_tool_result(
-                    chunk: ToolExecutionResultMessage,
-                ) -> None:
-                    payload = _build_tool_result_payload(chunk, tool_meta_map)
-                    raw_content = payload.pop("_raw_content", "")
-                    try:
-                        async with ctx.session_factory() as persist_db:
-                            await persist_tool_result(
-                                persist_db,
-                                body.thread_id,
-                                tool_call_id=getattr(chunk, "tool_call_id", ""),
-                                tool_name=getattr(chunk, "name", "unknown"),
-                                output=raw_content,
-                                is_error=getattr(chunk, "is_error", False),
-                            )
-
-                            tool_media = getattr(chunk, "media", None)
-                            if tool_media:
-                                from ravi.serving.monolith.services.file_service import save_file
-                                from ravi.kernel.storage.tenant import FileScope
-                                import uuid
-                                import base64
-
-                                for idx, media_item in enumerate(tool_media):
-                                    filename = f"generated_plot_{idx + 1}.png"
-                                    mime = media_item.media_type or "image/png"
-                                    if "image/jpeg" in mime:
-                                        filename = f"generated_plot_{idx + 1}.jpg"
-                                    elif "image/webp" in mime:
-                                        filename = f"generated_plot_{idx + 1}.webp"
-
-                                    raw_data = media_item.data
-                                    if isinstance(raw_data, str):
-                                        try:
-                                            raw_data = base64.b64decode(raw_data)
-                                        except Exception:
-                                            raw_data = raw_data.encode("utf-8")
-                                    elif isinstance(raw_data, bytes):
-                                        pass
-                                    else:
-                                        raw_data = str(raw_data).encode("utf-8")
-
-                                    file_meta = await save_file(
-                                        persist_db,
-                                        ctx.file_store,
-                                        thread_id=uuid.UUID(str(body.thread_id)),
-                                        name=filename,
-                                        mime=mime,
-                                        content=raw_data,
-                                        scope=FileScope.UPLOADS,
-                                    )
-
-                                    file_dict = {
-                                        "id": str(file_meta.id),
-                                        "thread_id": str(file_meta.thread_id),
-                                        "name": file_meta.original_name,
-                                        "mime": file_meta.content_type,
-                                        "size": file_meta.size_bytes,
-                                    }
-                                    generated_files.append(file_dict)
-
-                            await persist_db.commit()
-                    except Exception:
-                        logger.exception(
-                            "Failed to persist tool result or process media"
-                        )
                     await bus.emit_dict(payload)
 
                 async def _emit_unknown(chunk: object) -> None:
@@ -862,16 +745,9 @@ async def chat(
                     user_content=user_content,
                     input_content=user_input_content,
                     tool_choice=initial_tool_choice,
-                    execution_context=ExecutionContext(
-                        run_id=chat_run_id,
-                        correlation_id=chat_run_id,
-                        thread_id=str(body.thread_id),
-                        input_text=user_content,
-                    ),
                     on_text_delta=_emit_text_delta,
                     on_reasoning_delta=_emit_reasoning_delta,
                     on_completion=_emit_completion,
-                    on_tool_result=_emit_tool_result,
                     on_unknown=_emit_unknown,
                     on_error=_emit_error,
                 )

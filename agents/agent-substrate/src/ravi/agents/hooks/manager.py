@@ -182,31 +182,21 @@ class CostTracker:
         hooks.register(HookEvent.RUN_END, tracker.on_run_end)
     """
 
-    # Default pricing (GPT-4o as of 2025)
-    DEFAULT_PRICING = {
-        "gpt-4o": {"prompt": 0.0025, "completion": 0.01},
-        "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
-        "gpt-4.1": {"prompt": 0.002, "completion": 0.008},
-        "gpt-4.1-mini": {"prompt": 0.0004, "completion": 0.0016},
-        "gpt-4.1-nano": {"prompt": 0.0001, "completion": 0.0004},
-    }
-
     def __init__(
         self,
+        model: Optional[str] = None,
         cost_per_1k_prompt: Optional[float] = None,
         cost_per_1k_completion: Optional[float] = None,
-        model: Optional[str] = None,
     ):
-        if model and model in self.DEFAULT_PRICING:
-            pricing = self.DEFAULT_PRICING[model]
-            self.cost_per_1k_prompt = cost_per_1k_prompt or pricing["prompt"]
-            self.cost_per_1k_completion = (
-                cost_per_1k_completion or pricing["completion"]
-            )
-        else:
-            self.cost_per_1k_prompt = cost_per_1k_prompt or 0.0025
-            self.cost_per_1k_completion = cost_per_1k_completion or 0.01
+        from ravi.agents.llm.models import get_model_profile
 
+        profile = get_model_profile(model) if model else None
+        self.cost_per_1k_prompt = cost_per_1k_prompt or (
+            profile.input_cost_per_mtok / 1000 if profile else 0.0025
+        )
+        self.cost_per_1k_completion = cost_per_1k_completion or (
+            profile.output_cost_per_mtok / 1000 if profile else 0.01
+        )
         self.total_cost = 0.0
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
@@ -218,7 +208,6 @@ class CostTracker:
         if usage:
             prompt_tokens = getattr(usage, "prompt_tokens", 0)
             completion_tokens = getattr(usage, "completion_tokens", 0)
-
             cost = (prompt_tokens / 1000) * self.cost_per_1k_prompt + (
                 completion_tokens / 1000
             ) * self.cost_per_1k_completion

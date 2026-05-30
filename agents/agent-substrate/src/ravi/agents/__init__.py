@@ -1,8 +1,8 @@
 """ravi.agents — runtime services layer.
 
 Provides the infrastructure agents run on top of: context and history
-management, agent lifecycle (spawning, continuation), message middleware,
-resource budgets / secrets / tracing, and supervision trees.
+management, message middleware, resource budgets, supervision, and the
+concrete agent types (AssistantAgent, OrchestratorAgent, etc.).
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from ravi.agents.context import (
     SlidingWindowCompaction,
 )
 from ravi.agents.skills import Skill
-from ravi.agents.lifecycle import Continuation, Spawner
 from ravi.agents.llm import (
     EmbeddingClient,
     LLMClient,
@@ -30,16 +29,17 @@ from ravi.agents.middleware import (
     AuditLoggerMiddleware,
     Interceptor,
     MiddlewarePipeline,
-    PIIRedactionGuardrail,
+)
+from ravi.agents.guardrails import (
+    PIIDetectionGuardrail,
     PromptInjectionGuardrail,
 )
 from ravi.agents.resources import (
     BudgetExceededError,
     ExecutionBudget,
-    SecretVault,
     agent_span,
 )
-from ravi.agents.supervision import FailurePolicy, RetryPolicy, Supervisor
+from ravi.agents.supervision import RetryPolicy
 
 __all__ = [
     # context
@@ -49,9 +49,8 @@ __all__ = [
     "HistoryProvider",
     "InMemoryHistoryProvider",
     "SlidingWindowCompaction",
-    # lifecycle
-    "Continuation",
-    "Spawner",
+    # skills
+    "Skill",
     # llm
     "EmbeddingClient",
     "LLMClient",
@@ -64,17 +63,13 @@ __all__ = [
     "AuditLoggerMiddleware",
     "Interceptor",
     "MiddlewarePipeline",
-    "PIIRedactionGuardrail",
+    # guardrails
+    "PIIDetectionGuardrail",
     "PromptInjectionGuardrail",
     # resources
     "BudgetExceededError",
     "ExecutionBudget",
-    "SecretVault",
     "agent_span",
     # supervision
-    "FailurePolicy",
     "RetryPolicy",
-    "Supervisor",
-    # skills
-    "Skill",
 ]

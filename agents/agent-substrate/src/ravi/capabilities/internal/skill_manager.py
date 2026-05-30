@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ravi.capabilities.internal.skill_loader import SkillLoader
-from ravi.capabilities.internal.skill_models import Skill, SkillMetadata
+from ravi.capabilities.internal.skill_models import SkillPackage, SkillMetadata
 
 logger = setup_logging()
 
@@ -47,7 +47,7 @@ class SkillManager:
         auto_discover: bool = True,
     ) -> None:
         self._loader = SkillLoader(skill_dirs=skill_dirs)
-        self._active: Dict[str, Skill] = {}  # name -> fully loaded Skill
+        self._active: Dict[str, SkillPackage] = {}  # name -> fully loaded SkillPackage
         self._discovered: List[SkillMetadata] = []
 
         if auto_discover:
@@ -141,7 +141,7 @@ class SkillManager:
     # Activation (lazy full-load)
     # ------------------------------------------------------------------
 
-    def activate(self, name: str) -> Optional[Skill]:
+    def activate(self, name: str) -> Optional[SkillPackage]:
         """
         Activate a skill by name (loads full SKILL.md body lazily).
         Returns None if the skill is not found.
@@ -158,7 +158,7 @@ class SkillManager:
         logger.info("Activated skill: %r", name)
         return skill
 
-    def activate_by_path(self, skill_md_path: str | Path) -> Optional[Skill]:
+    def activate_by_path(self, skill_md_path: str | Path) -> Optional[SkillPackage]:
         """
         Activate a skill by its SKILL.md file path (as the model might reference).
         """
@@ -203,7 +203,7 @@ class SkillManager:
         parts.append("</active_skills>")
         return "\n".join(parts)
 
-    def get_skill(self, name: str) -> Optional[Skill]:
+    def get_skill(self, name: str) -> Optional[SkillPackage]:
         """Return an active skill by name; None if not activated."""
         return self._active.get(name)
 

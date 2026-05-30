@@ -26,7 +26,7 @@ from ravi.logger import setup_logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ravi.capabilities.internal.skill_models import Skill, SkillMetadata
+from ravi.capabilities.internal.skill_models import SkillPackage, SkillMetadata
 
 yaml: Any = None  # optional dependency; assigned below if available
 try:
@@ -123,8 +123,8 @@ class SkillLoader:
 
         # Cache: name -> SkillMetadata (populated by discover_all)
         self._metadata: Dict[str, SkillMetadata] = {}
-        # Cache: name -> Skill (populated lazily by load_skill)
-        self._loaded: Dict[str, Skill] = {}
+        # Cache: name -> SkillPackage (populated lazily by load_skill)
+        self._loaded: Dict[str, SkillPackage] = {}
 
     # ------------------------------------------------------------------
     # Discovery
@@ -235,7 +235,7 @@ class SkillLoader:
         """Return all discovered metadata objects."""
         return list(self._metadata.values())
 
-    def load_skill(self, name: str) -> Optional[Skill]:
+    def load_skill(self, name: str) -> Optional[SkillPackage]:
         """
         Fully load a skill by name (activates it).
         Returns cached Skill if already activated.
@@ -250,7 +250,7 @@ class SkillLoader:
 
         return self._load_full(meta)
 
-    def load_skill_by_path(self, skill_dir: Path) -> Optional[Skill]:
+    def load_skill_by_path(self, skill_dir: Path) -> Optional[SkillPackage]:
         """Directly load a skill from its directory path (bypasses index)."""
         skill_dir = Path(skill_dir).expanduser().resolve()
         skill_md = skill_dir / "SKILL.md"
@@ -265,7 +265,7 @@ class SkillLoader:
         self._metadata[meta.name] = meta
         return self._load_full(meta)
 
-    def _load_full(self, meta: SkillMetadata) -> Skill:
+    def _load_full(self, meta: SkillMetadata) -> SkillPackage:
         """Parse SKILL.md body and enumerate auxiliary files."""
         try:
             raw = meta.skill_md_path.read_text(encoding="utf-8")
@@ -275,7 +275,7 @@ class SkillLoader:
 
         _fm, body = _parse_frontmatter(raw)
 
-        skill = Skill(
+        skill = SkillPackage(
             metadata=meta,
             body=body,
             scripts=_list_dir_files(meta.path / "scripts"),

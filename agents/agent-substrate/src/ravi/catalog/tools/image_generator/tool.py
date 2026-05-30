@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import ImageBlock, TextBlock
 
 
-class ImageGeneratorTool(BaseTool):
+class ImageGeneratorTool:
     """Generate images from text prompts using OpenAI DALL-E."""
 
     def __init__(self, api_key: Optional[str] = None) -> None:
@@ -55,7 +55,7 @@ class ImageGeneratorTool(BaseTool):
         prompt: str,
         size: str = "1024x1024",
         quality: str = "standard",
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         if not prompt.strip():
             return ToolResult(
                 content=[

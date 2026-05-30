@@ -53,7 +53,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 logger = setup_logging()
@@ -286,7 +286,7 @@ class CallbackHumanHandler(HumanInputHandler):
 # ---------------------------------------------------------------------------
 
 
-class AskHumanTool(BaseTool):
+class AskHumanTool:
     """MCP-compatible tool that pauses execution to ask the user.
 
     The LLM calls this tool when it needs human guidance. It presents
@@ -371,7 +371,7 @@ class AskHumanTool(BaseTool):
         option_1: str,
         option_2: str,
         option_3: str = "",
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute the human input request."""
 
         # Guard: limit requests per run

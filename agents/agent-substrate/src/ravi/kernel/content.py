@@ -7,9 +7,12 @@ Every agent message, tool result, and pub/sub event carries a
 - Self-describing: discriminated on the ``type`` literal field
 - Self-rendering: every block has ``to_text_repr() -> str``
 
-Media blocks (image, audio, video, document) are unified — a single block type
-carries URL references, raw bytes, or provider file-IDs.  Provider encoders in
-``fabric/`` handle the final wire-format conversion.
+Binary media (images, audio, video, documents) is encoded as **base64** when
+serialized to JSON.  ``ser_json_bytes="base64"`` / ``val_json_bytes="base64"``
+on each model config handles the round-trip automatically.
+
+Provider encoders in ``fabric/`` handle the final wire-format conversion for
+each LLM API.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 JsonObject = dict[str, Any]
-"""A JSON-serializable string-keyed mapping.  Use instead of ``Dict[str, Any]``
+"""A JSON-serializable string-keyed mapping.  Use instead of ``dict[str, Any]``
 to signal intent: "this holds structured data", not "literally anything"."""
 
 
@@ -65,7 +68,7 @@ class DataBlock(BaseModel):
 
     type: Literal["data"] = "data"
     data: JsonObject
-    schema_id: Optional[str] = None  # optional JSON Schema reference
+    schema_id: Optional[str] = None
 
     model_config = {"frozen": True}
 
@@ -78,7 +81,7 @@ class ErrorBlock(BaseModel):
     """Typed error — use instead of TextBlock when a tool fails.
 
     Lets consumers detect and route errors programmatically without
-    string-matching.
+    string-matching on message text.
     """
 
     type: Literal["error"] = "error"
@@ -95,26 +98,36 @@ class ErrorBlock(BaseModel):
 
 # ---------------------------------------------------------------------------
 # Media blocks — unified (URL | bytes | file_id)
+#
+# Binary fields use base64 for JSON serialization:
+#   ser_json_bytes="base64"  → bytes → base64 string on model_dump(mode="json")
+#   val_json_bytes="base64"  → base64 string → bytes on model_validate(json_dict)
 # ---------------------------------------------------------------------------
+
+_MEDIA_CONFIG = {
+    "frozen": True,
+    "ser_json_bytes": "base64",
+    "val_json_bytes": "base64",
+}
 
 
 class ImageBlock(BaseModel):
     """Image — URL reference, raw bytes, or provider file-ID.
 
     Exactly one of ``url``, ``data``, or ``file_id`` must be set.
+    ``data`` is raw bytes; serializes as base64 in JSON.
 
-    ``detail`` is an optional rendering hint (e.g. OpenAI vision quality).
-    Provider encoders decide what to do with it.
+    ``detail`` is a rendering hint (e.g. OpenAI vision quality).
     """
 
     type: Literal["image"] = "image"
     url: Optional[str] = None
-    data: Optional[bytes] = None    # raw bytes — Pydantic auto-serializes as base64
-    file_id: Optional[str] = None  # provider-uploaded file reference
+    data: Optional[bytes] = None
+    file_id: Optional[str] = None
     media_type: str = "image/jpeg"
     detail: Literal["low", "high", "auto"] = "auto"
 
-    model_config = {"frozen": True}
+    model_config = _MEDIA_CONFIG  # type: ignore[assignment]
 
     @model_validator(mode="after")
     def _one_source(self) -> "ImageBlock":
@@ -128,15 +141,19 @@ class ImageBlock(BaseModel):
 
 
 class AudioBlock(BaseModel):
-    """Audio — URL reference or raw bytes."""
+    """Audio — URL reference or raw bytes.
+
+    ``data`` is raw bytes; serializes as base64 in JSON.
+    At least one of ``url`` or ``data`` must be provided.
+    """
 
     type: Literal["audio"] = "audio"
     url: Optional[str] = None
     data: Optional[bytes] = None
     media_type: str = "audio/wav"
-    transcript: Optional[str] = None  # optional pre-transcribed text
+    transcript: Optional[str] = None
 
-    model_config = {"frozen": True}
+    model_config = _MEDIA_CONFIG  # type: ignore[assignment]
 
     @model_validator(mode="after")
     def _one_source(self) -> "AudioBlock":
@@ -151,14 +168,18 @@ class AudioBlock(BaseModel):
 
 
 class VideoBlock(BaseModel):
-    """Video — URL reference or raw bytes."""
+    """Video — URL reference or raw bytes.
+
+    ``data`` is raw bytes; serializes as base64 in JSON.
+    At least one of ``url`` or ``data`` must be provided.
+    """
 
     type: Literal["video"] = "video"
     url: Optional[str] = None
     data: Optional[bytes] = None
     media_type: str = "video/mp4"
 
-    model_config = {"frozen": True}
+    model_config = _MEDIA_CONFIG  # type: ignore[assignment]
 
     @model_validator(mode="after")
     def _one_source(self) -> "VideoBlock":
@@ -174,6 +195,7 @@ class DocumentBlock(BaseModel):
     """Document — URL reference, raw bytes, or provider file-ID.
 
     Exactly one of ``url``, ``data``, or ``file_id`` must be set.
+    ``data`` is raw bytes; serializes as base64 in JSON.
     """
 
     type: Literal["document"] = "document"
@@ -183,7 +205,7 @@ class DocumentBlock(BaseModel):
     media_type: str = "application/pdf"
     filename: Optional[str] = None
 
-    model_config = {"frozen": True}
+    model_config = _MEDIA_CONFIG  # type: ignore[assignment]
 
     @model_validator(mode="after")
     def _one_source(self) -> "DocumentBlock":
@@ -252,6 +274,20 @@ class ThinkingBlock(BaseModel):
             return "[Thinking: redacted]"
         return f"[Thinking] {self.text}"
 
+
+# ---------------------------------------------------------------------------
+# ChatMessage — the role-tagged conversation turn
+# ---------------------------------------------------------------------------
+
+class ChatMessage(BaseModel):
+    """A role-tagged conversation turn containing multimodal blocks.
+    
+    This is the concrete element type passed to LLM generation.
+    """
+    role: str
+    content: list[ContentBlock] = Field(default_factory=list)
+
+    model_config = {"frozen": True}
 
 # ---------------------------------------------------------------------------
 # ContentBlock — the discriminated union
@@ -335,10 +371,7 @@ def content_block_from_dict(data: dict[str, object]) -> ContentBlock:
 
 
 def content_blocks_to_str(blocks: list[ContentBlock]) -> str:
-    """Human-readable string from a list of content blocks.
-
-    Each block provides its own representation via ``to_text_repr()``.
-    """
+    """Human-readable string from a list of content blocks."""
     return "\n".join(
         block.to_text_repr() if hasattr(block, "to_text_repr") else str(block)
         for block in blocks
@@ -365,4 +398,5 @@ __all__ = [
     "CONTENT_BLOCK_TYPES",
     "content_block_from_dict",
     "content_blocks_to_str",
+    "ChatMessage",
 ]

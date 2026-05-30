@@ -6,7 +6,7 @@ import base64
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import ImageBlock, TextBlock
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ except ImportError:
 PLAYWRIGHT_AVAILABLE = async_playwright is not None
 
 
-class WebSurferTool(BaseTool):
+class WebSurferTool:
     """Agentic web surfing tool with browser automation capabilities.
 
     Provides comprehensive web browsing actions:
@@ -217,7 +217,7 @@ class WebSurferTool(BaseTool):
         scroll_direction: Optional[str] = None,
         full_page: bool = True,
         timeout: int = 30000,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute web surfing action.
 
         Args:

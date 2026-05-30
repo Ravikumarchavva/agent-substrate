@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 
 from ravi.kernel.content import ContentBlock
 from ravi.kernel.identity import AgentId, TopicId
-from ravi.kernel.protocol import AgentRuntime
+from ravi.kernel.message import RuntimeRef
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +82,11 @@ class StreamPublisher:
     """
 
     __slots__ = ("_runtime", "_topic", "_sender", "_closed", "_lock")
+    _runtime: RuntimeRef
 
     def __init__(
         self,
-        runtime: AgentRuntime,
+        runtime: RuntimeRef,
         topic: TopicId,
         *,
         sender: AgentId,

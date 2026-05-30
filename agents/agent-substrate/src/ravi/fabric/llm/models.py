@@ -3,7 +3,7 @@
 Provides ``ModelProfile`` and a pre-populated ``MODEL_REGISTRY`` so the
 framework (and users) can query any model's capabilities:
 
-    from ravi.kernel.llm.models import get_model_profile, estimate_cost
+    from ravi.fabric.llm.models import get_model_profile, estimate_cost
 
     profile = get_model_profile("claude-sonnet-4-20250514")
     assert profile.context_length == 200_000
@@ -15,7 +15,6 @@ framework (and users) can query any model's capabilities:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -47,7 +46,7 @@ class ModelProfile:
     modalities: tuple[str, ...] = ("text",)
 
     # Embedding-specific: default output dimensions (None for non-embedding models)
-    default_dimensions: Optional[int] = None
+    default_dimensions: int | None = None
 
     # Alternative names that should resolve to this profile
     aliases: tuple[str, ...] = ()
@@ -460,7 +459,7 @@ MODEL_REGISTRY: dict[str, ModelProfile] = _build_registry()
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def get_model_profile(model: str) -> Optional[ModelProfile]:
+def get_model_profile(model: str) -> ModelProfile | None:
     """Look up a model's profile by name or alias.
 
     Returns ``None`` if the model is not in the registry (e.g. custom / local
@@ -493,7 +492,7 @@ def estimate_cost(
     )
 
 
-def list_models(provider: Optional[str] = None) -> list[ModelProfile]:
+def list_models(provider: str | None = None) -> list[ModelProfile]:
     """Return all registered models, optionally filtered by provider."""
     if provider:
         return [m for m in _MODELS if m.provider == provider]

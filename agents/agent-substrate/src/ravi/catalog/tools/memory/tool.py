@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 
-class MemoryTool(BaseTool):
+class MemoryTool:
     """Read/write persistent notes via Redis."""
 
     def __init__(self, redis_client: Any = None) -> None:
@@ -55,7 +55,7 @@ class MemoryTool(BaseTool):
         action: str,
         key: str = "",
         value: str = "",
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         if self._redis is None:
             return ToolResult(
                 content=[

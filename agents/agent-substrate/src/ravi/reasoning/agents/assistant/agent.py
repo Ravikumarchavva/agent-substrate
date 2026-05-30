@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, AsyncIterator, Dict, List, Optional, Tuple, Un
 
 if TYPE_CHECKING:
     from ravi.kernel.llm.base_client import BaseModelClient
-    from ravi.fabric.agents_base.compaction import CompactionStrategy
 from uuid import uuid4
 
 from ravi.kernel.messages.content import JsonObject
@@ -112,7 +111,6 @@ from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.catalog import SkillManager
 from ravi.catalog.tools.capability_search.tool import CapabilitySearchTool
 from ravi.fabric.checkpoint import CheckpointStore
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 
 
 def _extract_text(content: list[ContentBlock]) -> str:

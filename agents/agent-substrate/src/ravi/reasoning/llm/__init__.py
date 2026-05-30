@@ -1,4 +1,4 @@
-"""LLM extras — caching, fallback, routing on top of BaseModelClient."""
+"""LLM extras — caching, fallback, routing on top of LLMClient."""
 
 from ravi.reasoning.llm.cache import SemanticCache
 from ravi.reasoning.llm.cached_client import CachedModelClient

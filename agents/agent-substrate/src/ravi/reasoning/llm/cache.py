@@ -28,12 +28,12 @@ from ravi.logger import setup_logging
 
 import hashlib
 import struct
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis
 
 if TYPE_CHECKING:
-    from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient
+    from ravi.fabric.llm.client import EmbeddingClient
 
 logger = setup_logging()
 
@@ -77,7 +77,7 @@ class SemanticCache:
 
     def __init__(
         self,
-        embedding_client: BaseEmbeddingClient,
+        embedding_client: EmbeddingClient,
         redis_url: str = "redis://localhost:6379/0",
         threshold: float = 0.95,
         ttl: int = 3600,
@@ -90,7 +90,7 @@ class SemanticCache:
         self._ttl = ttl
         self._max_entries = max_entries
         self._namespace = namespace
-        self._redis: Optional[aioredis.Redis] = None
+        self._redis: aioredis.Redis | None = None
 
     async def connect(self) -> None:
         """Connect to Redis."""
@@ -105,7 +105,7 @@ class SemanticCache:
     def _key_prefix(self) -> str:
         return f"{_CACHE_PREFIX}{self._namespace}:"
 
-    async def get(self, query: str) -> Optional[str]:
+    async def get(self, query: str) -> str | None:
         """Look up a cached response by semantic similarity.
 
         Returns the cached response string, or ``None`` on miss.
@@ -118,7 +118,7 @@ class SemanticCache:
         # Scan all cache entries in this namespace
         prefix = self._key_prefix()
         best_score = 0.0
-        best_response: Optional[str] = None
+        best_response: str | None = None
 
         async for key in self._redis.scan_iter(match=f"{prefix}*", count=100):
             data = await self._redis.hgetall(key)  # type: ignore[arg-type]

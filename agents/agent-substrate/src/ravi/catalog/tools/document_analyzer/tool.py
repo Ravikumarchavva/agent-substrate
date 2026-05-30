@@ -10,13 +10,13 @@ from ravi.logger import setup_logging
 from pathlib import Path
 from typing import Any
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 logger = setup_logging()
 
 
-class DocumentAnalyzerTool(BaseTool):
+class DocumentAnalyzerTool:
     """Parse and analyze document content with optional summarization."""
 
     def __init__(self, model_client: Any = None) -> None:
@@ -70,7 +70,7 @@ class DocumentAnalyzerTool(BaseTool):
         file_path: str,
         action: str = "extract",
         question: str = "",
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         path = Path(file_path)
         if not path.exists():
             return ToolResult(

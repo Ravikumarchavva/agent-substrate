@@ -10,7 +10,7 @@ from ravi.logger import setup_logging
 import re
 
 from ravi.kernel.tools.base_tool import (
-    BaseTool,
+    Tool,
     HitlMode,
     ToolResult,
     ToolRisk,
@@ -22,7 +22,7 @@ logger = setup_logging()
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-class EmailSenderTool(BaseTool):
+class EmailSenderTool:
     """Send emails via SMTP — requires human approval for every send."""
 
     def __init__(
@@ -81,7 +81,7 @@ class EmailSenderTool(BaseTool):
         subject: str,
         body: str,
         html: bool = False,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         # Validate email format
         if not _EMAIL_RE.match(to):
             return ToolResult(

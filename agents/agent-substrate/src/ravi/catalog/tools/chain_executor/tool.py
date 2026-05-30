@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 
-class ChainExecutorTool(BaseTool):
+class ChainExecutorTool:
     """Execute a Python script that chains multiple adapters together."""
 
     def __init__(self, chain_runtime: Any) -> None:
@@ -68,7 +68,7 @@ class ChainExecutorTool(BaseTool):
         code: str,
         description: str = "",
         timeout: int = 120,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute the chain script via ChainRuntime."""
         from ravi.catalog._chain_runtime import ChainResult
 

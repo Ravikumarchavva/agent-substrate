@@ -18,6 +18,7 @@ from ravi.kernel.content import (
     ToolUseBlock,
     ToolResultBlock,
     ThinkingBlock,
+    ChatMessage,
     ContentBlock,
     CONTENT_BLOCK_TYPES,
     content_block_from_dict,
@@ -32,7 +33,7 @@ from ravi.kernel.message import (
     Subscription,
 )
 from ravi.kernel.protocol import AgentRuntime
-from ravi.kernel.tools import ToolCallRequest, ToolExecutionResult
+from ravi.kernel.tools import ToolCallRequest, ToolExecutionResult, Tool
 from ravi.kernel.errors import AgentNotFoundError, HandlerError
 from ravi.kernel.stream import (
     TextDelta,
@@ -56,6 +57,7 @@ __all__ = [
     "ToolUseBlock",
     "ToolResultBlock",
     "ThinkingBlock",
+    "ChatMessage",
     "ContentBlock",
     "CONTENT_BLOCK_TYPES",
     "content_block_from_dict",
@@ -74,6 +76,7 @@ __all__ = [
     # Tools
     "ToolCallRequest",
     "ToolExecutionResult",
+    "Tool",
     # Errors
     "AgentNotFoundError",
     "HandlerError",

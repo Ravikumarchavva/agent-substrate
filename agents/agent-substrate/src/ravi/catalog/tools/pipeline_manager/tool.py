@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 
-class PipelineManagerTool(BaseTool):
+class PipelineManagerTool:
     """Manage and execute saved adapter pipelines."""
 
     def __init__(
@@ -66,7 +66,7 @@ class PipelineManagerTool(BaseTool):
         action: str,
         name: str = "",
         definition: Optional[dict[str, Any]] = None,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute the pipeline management action."""
         if action == "run":
             return await self._run(name)
@@ -83,7 +83,7 @@ class PipelineManagerTool(BaseTool):
             is_error=True,
         )
 
-    async def _run(self, name: str) -> ToolResult:
+    async def _run(self, name: str) -> ToolExecutionResult:
         if not name:
             return ToolResult(
                 content=[TextBlock(text="Pipeline name required for 'run'")],
@@ -110,7 +110,7 @@ class PipelineManagerTool(BaseTool):
 
     async def _save(
         self, name: str, definition: Optional[dict[str, Any]]
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         if not name or not definition:
             return ToolResult(
                 content=[
@@ -129,7 +129,7 @@ class PipelineManagerTool(BaseTool):
             ],
         )
 
-    async def _list(self) -> ToolResult:
+    async def _list(self) -> ToolExecutionResult:
         pipelines = await self._store.list_all()
         if not pipelines:
             return ToolResult(
@@ -142,7 +142,7 @@ class PipelineManagerTool(BaseTool):
             )
         return ToolResult(content=[TextBlock(text="\n".join(lines))])
 
-    async def _delete(self, name: str) -> ToolResult:
+    async def _delete(self, name: str) -> ToolExecutionResult:
         if not name:
             return ToolResult(
                 content=[TextBlock(text="Pipeline name required for 'delete'")],
@@ -158,7 +158,7 @@ class PipelineManagerTool(BaseTool):
             is_error=True,
         )
 
-    async def _validate(self, name: str) -> ToolResult:
+    async def _validate(self, name: str) -> ToolExecutionResult:
         if not name:
             return ToolResult(
                 content=[TextBlock(text="Pipeline name required for 'validate'")],

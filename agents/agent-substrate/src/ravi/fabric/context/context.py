@@ -4,15 +4,11 @@ from typing import Protocol
 
 from ravi.kernel import AgentId, Message
 from .history import HistoryProvider
-from .compaction import CompactionStrategy
+from .compaction import CompactionStrategy, SlidingWindowCompaction
 
 
-class AgentContext(Protocol):
-    """Runtime context bound to a specific agent's execution loop.
-
-    Bridges the agent's identity, its raw history, and the compacted
-    window it feeds to the LLM.
-    """
+class AgentContextProtocol(Protocol):
+    """Structural protocol for the agent's runtime context."""
 
     @property
     def agent_id(self) -> AgentId: ...
@@ -23,12 +19,39 @@ class AgentContext(Protocol):
     @property
     def compaction(self) -> CompactionStrategy: ...
 
-    async def get_prompt_window(self) -> list[Message]:
-        """Fetch history and apply the compaction strategy.
+    async def get_prompt_window(self) -> list[Message]: ...
 
-        Returns the message sequence ready for the LLM encoder.
-        """
-        ...
+
+class AgentContext:
+    """User-facing context config — pass to ``AssistantAgent(context=...)``.
+
+    Usage::
+
+        context = AgentContext(
+            InMemoryHistoryProvider(),
+            [SlidingWindowCompaction(max_messages=40)],
+        )
+        agent = AssistantAgent("bot", runtime, model=client, context=context)
+
+    When ``compaction_strategies`` is a list the first strategy is used.
+    """
+
+    def __init__(
+        self,
+        history: HistoryProvider,
+        compaction_strategies: list[CompactionStrategy] | CompactionStrategy | None = None,
+    ) -> None:
+        self.history = history
+        if isinstance(compaction_strategies, list):
+            self.compaction: CompactionStrategy = (
+                compaction_strategies[0]
+                if compaction_strategies
+                else SlidingWindowCompaction()
+            )
+        elif compaction_strategies is not None:
+            self.compaction = compaction_strategies
+        else:
+            self.compaction = SlidingWindowCompaction()
 
 
 class DefaultAgentContext:

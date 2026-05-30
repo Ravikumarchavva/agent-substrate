@@ -249,7 +249,6 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from ravi.fabric.runtime.local import LocalRuntime
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
     from ravi.fabric.context import (
-        AgentContext,
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
     )
@@ -257,13 +256,6 @@ def cmd_chat(args: argparse.Namespace) -> None:
     # Build tools
     tools = []
     if not args.no_tools:
-        from ravi.fabric.tools.builtin_tools import (
-            CalculatorTool,
-            GetCurrentTimeTool,
-        )
-
-        tools = [CalculatorTool(), GetCurrentTimeTool()]
-
         # MCP tools (if --mcp supplied)
         if args.mcp:
             mcp_tools = _load_mcp_tools(args.mcp)
@@ -275,15 +267,11 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 args.name,
                 rt,
                 model=OpenAIClient(model=args.model),
-                context=AgentContext(
-                    history=InMemoryHistoryProvider(),
-                    compaction_strategies=[SlidingWindowCompaction(max_messages=1000)]
-                ),
-                tools=tools,
+                history=InMemoryHistoryProvider(),
+                compaction=SlidingWindowCompaction(max_messages=1000),
+                tools=tools or None,
                 max_iterations=args.max_iterations,
-                verbose=args.verbose,
             )
-            await agent.start()
             await Console(agent).interactive(stream=not args.no_stream)
 
     # Run the interactive REPL

@@ -4,19 +4,16 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Optional
 
-from ravi.reasoning.agents.assistant._legacy_stubs import (
-    ExecutionContext,
-    CompletionChunk,
-    ReasoningDeltaChunk,
-    TextDeltaChunk,
-    AssistantMessage,
-    ToolExecutionResultMessage,
+from ravi.kernel.stream import (
+    CompletionEvent,
+    ReasoningDelta,
+    StreamDone,
+    TextDelta,
 )
 
-TextDeltaHandler = Callable[[TextDeltaChunk], Awaitable[None]]
-ReasoningDeltaHandler = Callable[[ReasoningDeltaChunk], Awaitable[None]]
-CompletionHandler = Callable[[AssistantMessage], Awaitable[None]]
-ToolResultHandler = Callable[[ToolExecutionResultMessage], Awaitable[None]]
+TextDeltaHandler = Callable[[TextDelta], Awaitable[None]]
+ReasoningDeltaHandler = Callable[[ReasoningDelta], Awaitable[None]]
+CompletionHandler = Callable[[CompletionEvent], Awaitable[None]]
 UnknownChunkHandler = Callable[[Any], Awaitable[None]]
 FinishedHandler = Callable[[int], Awaitable[None]]
 ErrorHandler = Callable[[Exception], Awaitable[None]]
@@ -26,45 +23,46 @@ async def stream_agent_run(
     *,
     agent: Any,
     user_content: str,
-    execution_context: Optional[ExecutionContext] = None,
+    execution_context: Any = None,
     on_text_delta: Optional[TextDeltaHandler] = None,
     on_reasoning_delta: Optional[ReasoningDeltaHandler] = None,
     on_completion: Optional[CompletionHandler] = None,
-    on_tool_result: Optional[ToolResultHandler] = None,
+    on_tool_result: Any = None,  # kept for call-site compat; no longer dispatched
     on_unknown: Optional[UnknownChunkHandler] = None,
     on_finished: Optional[FinishedHandler] = None,
     on_error: Optional[ErrorHandler] = None,
     **agent_run_kwargs: Any,
 ) -> int:
-    """Run ``agent.run_stream()`` and dispatch chunks via callbacks."""
-    step_count = 0
-    previous_context = getattr(agent, "execution_context", None)
-    if execution_context is not None and hasattr(agent, "execution_context"):
-        agent.execution_context = execution_context
+    """Run ``agent.run_stream()`` and dispatch events via callbacks.
 
+    Dispatches:
+    - ``TextDelta``        → ``on_text_delta``
+    - ``ReasoningDelta``   → ``on_reasoning_delta``
+    - ``CompletionEvent``  → ``on_completion``
+    - ``StreamDone``       → loop exits; ``on_finished(step_count)`` called
+    - anything else        → ``on_unknown``
+    """
+    step_count = 0
     try:
         async for chunk in agent.run_stream(user_content, **agent_run_kwargs):
-            if isinstance(chunk, TextDeltaChunk):
+            if isinstance(chunk, TextDelta):
                 if on_text_delta is not None:
                     await on_text_delta(chunk)
                 continue
 
-            if isinstance(chunk, ReasoningDeltaChunk):
+            if isinstance(chunk, ReasoningDelta):
                 if on_reasoning_delta is not None:
                     await on_reasoning_delta(chunk)
                 continue
 
-            if isinstance(chunk, CompletionChunk):
+            if isinstance(chunk, CompletionEvent):
                 step_count += 1
                 if on_completion is not None:
-                    await on_completion(chunk.message)
+                    await on_completion(chunk)
                 continue
 
-            if isinstance(chunk, ToolExecutionResultMessage):
-                step_count += 1
-                if on_tool_result is not None:
-                    await on_tool_result(chunk)
-                continue
+            if isinstance(chunk, StreamDone):
+                break
 
             if on_unknown is not None:
                 await on_unknown(chunk)
@@ -78,7 +76,3 @@ async def stream_agent_run(
             raise
         await on_error(exc)
         return step_count
-
-    finally:
-        if hasattr(agent, "execution_context"):
-            agent.execution_context = previous_context

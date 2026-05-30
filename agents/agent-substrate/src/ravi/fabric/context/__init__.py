@@ -8,7 +8,7 @@ This module provides the core abstractions for agent state management:
 
 from .history import HistoryProvider, InMemoryHistoryProvider
 from .compaction import CompactionStrategy, SlidingWindowCompaction
-from .context import AgentContext, DefaultAgentContext
+from .context import AgentContext, AgentContextProtocol, DefaultAgentContext
 
 __all__ = [
     "HistoryProvider",
@@ -16,5 +16,6 @@ __all__ = [
     "CompactionStrategy",
     "SlidingWindowCompaction",
     "AgentContext",
+    "AgentContextProtocol",
     "DefaultAgentContext",
 ]

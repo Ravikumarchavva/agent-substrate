@@ -12,6 +12,7 @@ from ravi.fabric.catalog import CapabilityRegistry, Capability, Namespace
 from ravi.fabric.context import (
     AgentContext,
     CompactionStrategy,
+    DefaultAgentContext,
     HistoryProvider,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
@@ -49,6 +50,7 @@ __all__ = [
     # context
     "AgentContext",
     "CompactionStrategy",
+    "DefaultAgentContext",
     "HistoryProvider",
     "InMemoryHistoryProvider",
     "SlidingWindowCompaction",

@@ -9,7 +9,7 @@ no kwargs soup.  One model, one key — done.
 
 System instructions are NOT passed through this layer.  They travel as an
 explicit ``system_instructions=`` kwarg on every ``generate()`` call (see
-``BaseModelClient.generate``).  The factory only handles connection wiring.
+``LLMClient.generate``).  The factory only handles connection wiring.
 
 Provider / model / cost table lives in ``ravi.kernel.llm.models``.
 """
@@ -18,9 +18,13 @@ from __future__ import annotations
 
 from typing import ClassVar, Optional
 
-from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient
-from ravi.kernel.llm.models import ModelProfile, get_model_profile, list_models
+from ravi.fabric.llm import (
+    LLMClient,
+    BaseEmbeddingClient,
+    ModelProfile,
+    get_model_profile,
+    list_models,
+)
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -164,30 +168,23 @@ class LLMFactory:
 
     def build(
         self,
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        base_url: Optional[str] = None,
-    ) -> BaseModelClient:
-        """Create and return the configured :class:`BaseModelClient`.
+        **kwargs: Any,
+    ) -> LLMClient:
+        """Create and return the configured :class:`LLMClient`.
 
         Args:
-            temperature: Sampling temperature (0 = deterministic).
-            max_tokens:  Maximum output tokens.  ``None`` uses the client
-                         default (typically the model's ``max_output_tokens``).
-            base_url:    Override the provider API endpoint — useful for
-                         OpenAI-compatible local servers (vLLM, Ollama).
+            **kwargs: Extra parameters passed to the client constructor
+                (e.g. max_tokens, stop_sequences).
         """
-        url = base_url or self._BASE_URLS.get(self._provider)
+        base_url = kwargs.get("base_url") or self._BASE_URLS.get(self._provider)
+        kwargs["base_url"] = base_url
 
         if self._provider == "openai":
             from ravi.integrations.llm.openai.openai_client import OpenAIClient
             return OpenAIClient(
                 model=self._bare_model,
                 api_key=self._api_key,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                base_url=url,
+                **kwargs,
             )
 
         if self._provider in ("groq", "openrouter"):
@@ -197,9 +194,7 @@ class LLMFactory:
             return OpenAIChatCompletionClient(
                 model=self._bare_model,
                 api_key=self._api_key,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                base_url=url,
+                **kwargs,
             )
 
         if self._provider == "anthropic":
@@ -207,8 +202,7 @@ class LLMFactory:
             return AnthropicClient(
                 model=self._bare_model,
                 api_key=self._api_key,
-                temperature=temperature,
-                max_tokens=max_tokens,
+                **kwargs,
             )
 
         if self._provider == "gemini":
@@ -216,8 +210,7 @@ class LLMFactory:
             return GeminiClient(
                 model=self._bare_model,
                 api_key=self._api_key,
-                temperature=temperature,
-                max_tokens=max_tokens,
+                **kwargs,
             )
 
         raise ValueError(f"Unsupported provider: {self._provider!r}")
@@ -342,6 +335,17 @@ def resolve_vision_model_for_available_credentials(
     return resolved
 
 
+def build_client(
+    model: str,
+    api_key: Optional[str] = None,
+    temperature: float = 0.7,
+    **kwargs: Any,
+) -> LLMClient:
+    """Convenience: one-liner to build an LLMClient."""
+    factory = LLMFactory(model=model, api_key=api_key or "sk-placeholder")
+    return factory.build(temperature=temperature, **kwargs)
+
+
 def create_model_client(
     model: str,
     *,
@@ -355,7 +359,7 @@ def create_model_client(
     openrouter_site_url: Optional[str] = None,
     openrouter_app_name: Optional[str] = None,
     **_kwargs: object,
-) -> BaseModelClient:
+) -> LLMClient:
     """Server helper: create a client from a multi-provider *api_keys* dict.
 
     Prefer ``LLMFactory(model, api_key).build()`` for direct use.

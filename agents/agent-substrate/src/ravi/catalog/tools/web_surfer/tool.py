@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import ImageBlock, TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import ImageBlock, TextBlock
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright
@@ -41,7 +41,7 @@ class WebSurferTool:
     Maintains browser session for multi-step workflows.
     """
 
-    risk: ClassVar[ToolRisk] = ToolRisk.SENSITIVE  # external network reads
+    risk: str = "sensitive"  # TODO: L4-hitl  # external network reads
 
     def __init__(
         self,
@@ -238,7 +238,7 @@ class WebSurferTool:
             # Close action doesn't need browser initialization
             if action == "close":
                 await self._close_browser()
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text="Browser session closed successfully")],
                     is_error=False,
                 )
@@ -311,7 +311,7 @@ class WebSurferTool:
             # Format result
             if isinstance(result, dict) and "screenshot" in result:
                 # Handle screenshot with image content
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(text=f"Screenshot captured: {result['url']}"),
                         ImageBlock(
@@ -325,13 +325,13 @@ class WebSurferTool:
                 # Handle text results
                 import json
 
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text=json.dumps(result, indent=2))],
                     is_error=False,
                 )
 
         except Exception as e:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Error executing {action}: {str(e)}")],
                 is_error=True,
             )

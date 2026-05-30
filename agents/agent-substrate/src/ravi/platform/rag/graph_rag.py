@@ -28,7 +28,7 @@ from ravi.platform.rag.graph_store import Entity, Relationship
 from ravi.platform.rag.vector_store import SearchResult
 
 if TYPE_CHECKING:
-    from ravi.kernel.llm.base_client import BaseModelClient
+    from ravi.fabric.llm import LLMClient
     from ravi.platform.rag.graph_store import BaseGraphStore
     from ravi.platform.rag.pipeline import RAGPipeline
 
@@ -47,7 +47,7 @@ class GraphRAGPipeline:
         self,
         rag_pipeline: RAGPipeline,
         graph_store: BaseGraphStore,
-        model_client: BaseModelClient,
+        model_client: LLMClient,
     ) -> None:
         self._rag = rag_pipeline
         self._graph = graph_store
@@ -76,19 +76,19 @@ class GraphRAGPipeline:
 
     async def _extract_and_store_graph(self, text: str) -> None:
         """Use an LLM to extract entities and relationships from text."""
-        from ravi.kernel.messages.client_messages import UserMessage
+        from ravi.kernel import ChatMessage, TextBlock
 
         # Truncate very long texts for entity extraction
         extract_text = text[:5000] if len(text) > 5000 else text
 
         messages = [
-            UserMessage(role="user", content=[extract_text]),
+            ChatMessage(role="user", content=[TextBlock(text=extract_text)]),
         ]
 
         try:
-            response = await self._model.generate_text(
+            response = await self._model.generate(
                 messages,
-                system_instructions=(
+                system=(
                     "Extract entities and relationships from the text. "
                     "Return a JSON object with two arrays:\n"
                     '- "entities": [{"label": "Person", "properties": {"name": "Alice"}}]\n'
@@ -97,11 +97,8 @@ class GraphRAGPipeline:
                     "Return ONLY valid JSON."
                 ),
             )
-            text_content = ""
-            if response.content:
-                text_content = "".join(
-                    p for p in response.content if isinstance(p, str)
-                )
+            text_parts = [b.text for b in response if isinstance(b, TextBlock)]
+            text_content = "".join(text_parts)
 
             data = json.loads(text_content.strip())
 

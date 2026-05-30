@@ -130,7 +130,7 @@ class BaseRemoteRuntime(BaseRuntime):
     def _make_correlation_id(
         self, message: object, *, sender: AgentId | None, target: AgentId | TopicId
     ) -> str:
-        from ravi.kernel.messages.content import TextBlock
+        from ravi.kernel.content import TextBlock
 
         # Envelope only needs content for routing; we just need the auto-generated correlation_id
         content = (

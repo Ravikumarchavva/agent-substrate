@@ -41,11 +41,11 @@ import asyncio
 import base64
 import json
 import os
-from typing import Any, ClassVar, Optional
+from typing import Any, Optional
 
-from ravi.kernel.messages import ImageContent, MediaContent
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel import ImageBlock  # was ImageContent, MediaContent
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 from .sandbox_service import CodeInterpreterConfig, CodeInterpreterService
 from .session_store import JsonSessionStore, SessionStore
@@ -55,7 +55,7 @@ logger = setup_logging()
 _DEFAULT_SESSION = "default"
 
 
-class K8sSandboxCodeInterpreterTool(BaseTool):
+class K8sSandboxCodeInterpreterTool:
     """Execute Python in a persistent Kubernetes agent-sandbox pod.
 
     Uses the kubernetes-sigs/agent-sandbox controller. One pod per conversation
@@ -67,7 +67,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
                     Set this to the active thread/session ID before calling execute().
     """
 
-    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # executes arbitrary code
+    risk: str = "critical"  # TODO: L4-hitl  # executes arbitrary code
 
     def __init__(
         self,
@@ -153,7 +153,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
         *,
         code: str,
         timeout: int = 60,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute Python code in the session's sandbox pod.
 
         The underlying CodeInterpreterService is synchronous (blocking k8s API
@@ -193,7 +193,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
 
     # ── Response conversion ─────────────────────────────────────────────────────
 
-    def _to_tool_result(self, result: dict[str, Any]) -> ToolResult:
+    def _to_tool_result(self, result: dict[str, Any]) -> ToolExecutionResult:
         """Convert CodeInterpreterService response dict → ToolResult.
 
         The sandbox runtime (/ci/run) returns::
@@ -219,7 +219,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
         output_files: list[dict[str, Any]] = result.get("output_files", [])
 
         text_parts: list[str] = []
-        media: list[MediaContent] = []
+        media: list[ImageBlock] = []
 
         if stdout:
             text_parts.append(stdout.rstrip())
@@ -234,7 +234,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
             if mime.startswith("image/") and content_b64:
                 try:
                     media.append(
-                        ImageContent(
+                        ImageBlock(
                             data=base64.b64decode(content_b64),
                             media_type=mime,
                         )
@@ -262,7 +262,7 @@ class K8sSandboxCodeInterpreterTool(BaseTool):
         if non_image_files:
             response_data["output_files"] = non_image_files
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=json.dumps(response_data))],
             is_error=not success,
             media=media or None,

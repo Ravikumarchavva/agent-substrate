@@ -1,6 +1,6 @@
 """Google Gemini API encoder.
 
-Converts framework ``BaseClientMessage`` instances directly to Gemini's
+Converts framework ``ChatMessage`` instances directly to Gemini's
 Content / Part format without going through an OpenAI intermediate dict.
 
 Public API::
@@ -22,18 +22,18 @@ from google.genai import types as genai_types
 
 from ravi.integrations.llm.encoders._media import pil_to_png_bytes
 
-from ravi.kernel.messages._types import (
-    AudioContent,
-    ImageContent,
-    VideoContent,
-    DocumentContent,
-)
-from ravi.kernel.messages.base_message import BaseClientMessage
-from ravi.kernel.messages.client_messages import (
-    AssistantMessage,
-    SystemMessage,
-    ToolExecutionResultMessage,
-    UserMessage,
+from ravi.kernel import ChatMessage, ContentBlock
+from ravi.kernel.content import (
+    AudioBlock,
+    ImageBlock,
+    VideoBlock,
+    DocumentBlock,
+    TextBlock,
+    ToolUseBlock,
+    ToolResultBlock,
+    ErrorBlock,
+    DataBlock,
+    CodeBlock,
 )
 
 
@@ -51,8 +51,8 @@ def _encode_image(img: Image.Image) -> genai_types.Part:
     )
 
 
-def _encode_image_content(ic: ImageContent) -> genai_types.Part:
-    """ImageContent → Gemini Part."""
+def _encode_image_content(ic: ImageBlock) -> genai_types.Part:
+    """ImageBlock → Gemini Part."""
     if ic.url:
         if ic.url.startswith("data:"):
             parts = ic.url.split(",", 1)
@@ -74,8 +74,8 @@ def _encode_image_content(ic: ImageContent) -> genai_types.Part:
     )
 
 
-def _encode_audio_content(ac: AudioContent) -> genai_types.Part:
-    """AudioContent → Gemini inline_data Part."""
+def _encode_audio_content(ac: AudioBlock) -> genai_types.Part:
+    """AudioBlock → Gemini inline_data Part."""
     if isinstance(ac.data, (str, Path)):
         with open(ac.data, "rb") as f:
             audio_bytes = f.read()
@@ -86,8 +86,8 @@ def _encode_audio_content(ac: AudioContent) -> genai_types.Part:
     )
 
 
-def _encode_video_content(vc: VideoContent) -> genai_types.Part:
-    """VideoContent → Gemini inline_data Part."""
+def _encode_video_content(vc: VideoBlock) -> genai_types.Part:
+    """VideoBlock → Gemini inline_data Part."""
     if isinstance(vc.data, (str, Path)):
         with open(vc.data, "rb") as f:
             video_bytes = f.read()
@@ -101,21 +101,24 @@ def _encode_video_content(vc: VideoContent) -> genai_types.Part:
 def _encode_media_item(
     item: str
     | Image.Image
-    | ImageContent
-    | AudioContent
-    | VideoContent
-    | DocumentContent,
+    | ImageBlock
+    | AudioBlock
+    | VideoBlock
+    | DocumentBlock
+    | TextBlock,
 ) -> genai_types.Part:
-    """Encode a single MediaType item to a Gemini Part."""
+    """Encode a single block item to a Gemini Part."""
+    if isinstance(item, TextBlock):
+        return _encode_text(item.text)
     if isinstance(item, Image.Image):
         return _encode_image(item)
-    if isinstance(item, ImageContent):
+    if isinstance(item, ImageBlock):
         return _encode_image_content(item)
-    if isinstance(item, AudioContent):
+    if isinstance(item, AudioBlock):
         return _encode_audio_content(item)
-    if isinstance(item, VideoContent):
+    if isinstance(item, VideoBlock):
         return _encode_video_content(item)
-    if isinstance(item, DocumentContent):
+    if isinstance(item, DocumentBlock):
         if item.data:
             return genai_types.Part(
                 inline_data=genai_types.Blob(mime_type=item.media_type, data=item.data)
@@ -135,29 +138,30 @@ def _encode_media_item(
 # ── Message-level encoding ───────────────────────────────────────────────────
 
 
-def _encode_user(msg: UserMessage) -> genai_types.Content:
-    """UserMessage → Gemini Content with user role."""
-    parts = [_encode_media_item(item) for item in msg.content]
+def _encode_user(msg: ChatMessage) -> genai_types.Content:
+    """User ChatMessage → Gemini Content with user role."""
+    parts = []
+    for item in msg.content:
+        if isinstance(item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock, TextBlock)):
+            parts.append(_encode_media_item(item))
     return genai_types.Content(role="user", parts=parts)
 
 
-def _encode_assistant(msg: AssistantMessage) -> genai_types.Content | None:
-    """AssistantMessage → Gemini Content with model role."""
+def _encode_assistant(msg: ChatMessage) -> genai_types.Content | None:
+    """Assistant ChatMessage → Gemini Content with model role."""
     parts: list[genai_types.Part] = []
 
-    if msg.content:
-        for item in msg.content:
-            if isinstance(item, str) and item.strip():
-                parts.append(_encode_text(item))
-
-    if msg.tool_calls:
-        for tc in msg.tool_calls:
-            tc_args = tc.arguments
+    for item in msg.content:
+        if isinstance(item, TextBlock):
+            if item.text.strip():
+                parts.append(_encode_text(item.text))
+        elif isinstance(item, ToolUseBlock):
+            tc_args = item.arguments
             if isinstance(tc_args, str):
                 tc_args = json.loads(tc_args)
             parts.append(
                 genai_types.Part(
-                    function_call=genai_types.FunctionCall(name=tc.name, args=tc_args)
+                    function_call=genai_types.FunctionCall(name=item.tool_name, args=tc_args)
                 )
             )
 
@@ -210,21 +214,31 @@ def _get_block_text(block: Any) -> str:
     return ""
 
 
-def _encode_tool_result(msg: ToolExecutionResultMessage) -> genai_types.Content:
-    """ToolExecutionResultMessage → Gemini function_response Content."""
-    content_str = ""
-    if msg.content:
-        if isinstance(msg.content, list):
-            parts_text = []
-            for block in msg.content:
-                text = _get_block_text(block)
+def _encode_tool_result(block: ToolResultBlock) -> genai_types.Content:
+    """ToolResultBlock → Gemini function_response Content."""
+    parts_text = []
+    media_parts = []
+    
+    if block.content:
+        for item in block.content:
+            if isinstance(item, TextBlock):
+                parts_text.append(item.text)
+            elif isinstance(item, (DataBlock, CodeBlock, ErrorBlock)):
+                text = _get_block_text(item)
                 if text:
                     parts_text.append(text)
-            content_str = "\n".join(parts_text)
-        elif isinstance(msg.content, str):
-            content_str = msg.content
+            elif isinstance(item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock)):
+                try:
+                    media_parts.append(_encode_media_item(item))
+                except Exception as e:
+                    import logging
+                    logging.getLogger("ravi.kernel.messages.encoders.gemini").warning(
+                        "Failed to encode media item for Gemini function response: %s", e
+                    )
 
-    tool_name = msg.name or "unknown_tool"
+    content_str = "\n".join(parts_text)
+    tool_name = block.tool_name or "unknown_tool"
+    
     parts = [
         genai_types.Part(
             function_response=genai_types.FunctionResponse(
@@ -232,18 +246,7 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> genai_types.Content:
             )
         )
     ]
-
-    # Add media items as subsequent Parts in the Content object
-    if msg.media:
-        for item in msg.media:
-            try:
-                parts.append(_encode_media_item(item))
-            except Exception as e:
-                import logging
-
-                logging.getLogger("ravi.kernel.messages.encoders.gemini").warning(
-                    "Failed to encode media item for Gemini function response: %s", e
-                )
+    parts.extend(media_parts)
 
     return genai_types.Content(role="user", parts=parts)
 
@@ -252,7 +255,7 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> genai_types.Content:
 
 
 def encode_messages(
-    messages: list[BaseClientMessage],
+    messages: list[ChatMessage],
 ) -> tuple[str, list[genai_types.Content]]:
     """Encode framework messages to Gemini GenerateContent format.
 
@@ -264,16 +267,18 @@ def encode_messages(
     contents: list[genai_types.Content] = []
 
     for msg in messages:
-        if isinstance(msg, SystemMessage):
-            system_parts.append(msg.content)
-        elif isinstance(msg, UserMessage):
+        if msg.role == "system":
+            system_parts.extend(b.text for b in msg.content if isinstance(b, TextBlock))
+        elif msg.role == "user":
             contents.append(_encode_user(msg))
-        elif isinstance(msg, AssistantMessage):
+        elif msg.role == "assistant":
             encoded = _encode_assistant(msg)
             if encoded:
                 contents.append(encoded)
-        elif isinstance(msg, ToolExecutionResultMessage):
-            contents.append(_encode_tool_result(msg))
+        elif msg.role == "tool":
+            for block in msg.content:
+                if isinstance(block, ToolResultBlock):
+                    contents.append(_encode_tool_result(block))
 
     return "\n".join(system_parts).strip(), contents
 

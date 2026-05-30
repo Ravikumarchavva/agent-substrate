@@ -7,27 +7,35 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional
 
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
-from ravi.fabric.catalog._catalog import AgentCatalog
-from ravi.fabric.agents_base.agent_context import AgentContext
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
-from ravi.kernel.execution.context import ExecutionContext
-from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
-from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.memory.history_provider import HistoryProvider
-from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
-from ravi.kernel.messages.base_message import BaseClientMessage
-from ravi.kernel.messages.client_messages import (
-    AssistantMessage,
-    SystemMessage,
-    ToolCallMessage,
-    ToolExecutionResultMessage,
-    UserMessage,
+from ravi.fabric.context import (
+    AgentContext,
+    HistoryProvider,
+    InMemoryHistoryProvider,
+    SlidingWindowCompaction as SlidingWindowStrategy,
 )
-from ravi.kernel.messages.content import TextBlock
-from ravi.kernel.runtime import AgentRuntime
-from ravi.kernel.tools.base_tool import BaseTool
+from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
+from ravi.fabric.llm import LLMClient as BaseModelClient
+from ravi.kernel import (
+    ChatMessage,
+    TextBlock,
+    ToolUseBlock,
+    ToolResultBlock,
+    AgentRuntime,
+    Tool as BaseTool,
+)
 
 logger = setup_logging()
+
+
+class GuardrailSpec:
+    def __init__(self, input=None, output=None, tool_call=None):
+        self.input = input or []
+        self.output = output or []
+        self.tool_call = tool_call or []
+
+    def is_empty(self) -> bool:
+        return not (self.input or self.output or self.tool_call)
+
 
 PersistedStepLoader = Callable[[], Awaitable[List[Dict[str, Any]]]]
 
@@ -37,9 +45,16 @@ async def rebuild_messages_from_steps(
     system_instructions: str,
     *,
     include_mcp_app_context: bool = False,
-) -> List[BaseClientMessage]:
-    """Rebuild framework messages from persisted step rows."""
-    messages: List[BaseClientMessage] = [SystemMessage(content=system_instructions)]
+) -> List[ChatMessage]:
+    """Rebuild framework messages from persisted step rows using unified ChatMessage."""
+    messages: List[ChatMessage] = []
+    if system_instructions:
+        messages.append(
+            ChatMessage(
+                role="system",
+                content=[TextBlock(text=system_instructions)],
+            )
+        )
 
     for row in step_rows:
         step_type = row["type"]
@@ -49,37 +64,58 @@ async def rebuild_messages_from_steps(
             continue
 
         if step_type == "user_message":
-            messages.append(UserMessage(content=[row.get("input") or ""]))
+            messages.append(
+                ChatMessage(
+                    role="user",
+                    content=[TextBlock(text=row.get("input") or "")],
+                )
+            )
             continue
 
         if step_type == "assistant_message":
+            content_blocks = []
             output_text = row.get("output")
-            content = [output_text] if output_text else None
+            if output_text:
+                content_blocks.append(TextBlock(text=output_text))
 
-            tool_calls = None
             generation = row.get("generation") or {}
             if generation.get("tool_calls"):
-                tool_calls = [
-                    ToolCallMessage(**tool_call)
-                    for tool_call in generation["tool_calls"]
-                ]
+                for tool_call in generation["tool_calls"]:
+                    call_id = tool_call.get("id") or tool_call.get("call_id") or ""
+                    tool_name = tool_call.get("name") or tool_call.get("tool_name") or ""
+                    args = tool_call.get("arguments") or {}
+                    content_blocks.append(
+                        ToolUseBlock(
+                            call_id=call_id,
+                            tool_name=tool_name,
+                            arguments=args,
+                        )
+                    )
 
             messages.append(
-                AssistantMessage(
-                    content=content,
-                    tool_calls=tool_calls,
-                    finish_reason=generation.get("finish_reason", "stop"),
+                ChatMessage(
+                    role="assistant",
+                    content=content_blocks,
                 )
             )
             continue
 
         if step_type == "tool_result":
+            call_id = meta.get("tool_call_id") or ""
+            tool_name = row.get("name") or ""
+            output_text = row.get("output") or ""
+            is_error = row.get("is_error") or False
             messages.append(
-                ToolExecutionResultMessage(
-                    tool_call_id=meta.get("tool_call_id", ""),
-                    name=row.get("name", ""),
-                    content=[TextBlock(text=row.get("output") or "")],
-                    is_error=row.get("is_error") or False,
+                ChatMessage(
+                    role="tool",
+                    content=[
+                        ToolResultBlock(
+                            call_id=call_id,
+                            tool_name=tool_name,
+                            content=[TextBlock(text=output_text)],
+                            is_error=is_error,
+                        )
+                    ],
                 )
             )
             continue
@@ -95,7 +131,12 @@ async def rebuild_messages_from_steps(
                 f"The user interacted with the {tool_name} widget. "
                 f"Current state:\n{context_data}"
             )
-            messages.append(UserMessage(content=[context_msg]))
+            messages.append(
+                ChatMessage(
+                    role="user",
+                    content=[TextBlock(text=context_msg)],
+                )
+            )
 
     return messages
 
@@ -169,7 +210,7 @@ def create_assistant_agent(  # type: ignore[return]
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
     agent_key: str = "default",
-    execution_context: Optional[ExecutionContext] = None,
+    execution_context: Optional[Any] = None,
     enable_capability_search: bool = True,
 ):
     """Create a configured ``AssistantAgent`` for the actor-model runtime.
@@ -180,10 +221,7 @@ def create_assistant_agent(  # type: ignore[return]
     The caller must ``await agent.start()`` before sending messages to it.
     """
     from ravi.reasoning.agents.assistant.agent import AssistantAgent
-    from ravi.kernel.guardrails.spec import GuardrailSpec
     from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
-
-    from ravi.fabric.agents_base.agent_context import AgentContext
 
     kwargs: Dict[str, Any] = dict(
         name="ChatBot",

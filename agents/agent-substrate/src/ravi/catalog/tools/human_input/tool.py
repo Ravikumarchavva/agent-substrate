@@ -48,13 +48,13 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, ClassVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
 
@@ -310,8 +310,8 @@ class AskHumanTool:
         )
     """
 
-    risk: ClassVar[ToolRisk] = (
-        ToolRisk.SAFE
+    risk: str = (
+        "safe"
     )  # ask_human IS the human — never needs separate approval
 
     def __init__(
@@ -376,7 +376,7 @@ class AskHumanTool:
 
         # Guard: limit requests per run
         if self._request_count >= self._max_requests:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(
@@ -405,7 +405,7 @@ class AskHumanTool:
                 )
 
         if len(options) < 2:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(
@@ -433,7 +433,7 @@ class AskHumanTool:
             logger.error(
                 "AskHumanTool.handler is None — tool was not wired to a bridge"
             )
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(
@@ -451,7 +451,7 @@ class AskHumanTool:
             response = await self.handler.request_input(request)
         except Exception as e:
             logger.error(f"Human input handler error: {e}")
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(
@@ -478,7 +478,7 @@ class AskHumanTool:
         self._history.append(record)
 
         if response.timed_out:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(
@@ -505,7 +505,7 @@ class AskHumanTool:
             else None,
         }
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=json.dumps(result_data))],
             is_error=False,
         )

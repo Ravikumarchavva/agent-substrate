@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ravi.catalog._data_ref import DataRef, DataRefStore
-from ravi.kernel.tools.base_tool import BaseTool
+from ravi.kernel.tools import Tool as BaseTool
 
 logger = setup_logging()
 

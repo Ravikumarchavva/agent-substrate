@@ -24,10 +24,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional, List
 
 from ravi.fabric.actors.actor import ActorAgent, StreamEnvelope, StreamChannel
-from ravi.kernel.messages.content import ContentBlock
-from ravi.kernel.runtime._contracts import MessageContext
-from ravi.kernel.runtime._identity import AgentId, TopicId
-from ravi.kernel.runtime._protocol import AgentRuntime
+from ravi.kernel import ContentBlock, MessageContext, AgentId, TopicId, AgentRuntime
 
 
 class UserProxyAgent(ActorAgent):

@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 from pydantic import BaseModel
-from ravi.kernel.messages.content import JsonObject, TextBlock
+from ravi.kernel.content import JsonObject, TextBlock
 
 from ravi.fabric.actors.actor import ActorAgent
 from ravi.kernel.plugin import register_agent
@@ -44,9 +44,9 @@ from ravi.fabric.agents_base.agent_result import AgentRunResult
 from ravi.fabric.agents_base.agent_context import AgentContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
-from ravi.kernel.memory.history_provider import HistoryProvider
-from ravi.kernel.memory.memory_scope import MemoryScope
-from ravi.kernel.llm.base_client import BaseModelClient
+from ravi.fabric.context import HistoryProvider
+from ravi.reasoning.agents.assistant._legacy_stubs import MemoryScope
+from ravi.fabric.llm import LLMClient as BaseModelClient
 from ravi.shared.observability import logger
 from ravi.fabric.resilience.policies import RetryPolicy
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
@@ -295,7 +295,7 @@ class OrchestratorAgent(AssistantAgent):
                 "pass runtime=LocalRuntime() or the server's app.state.runtime"
             )
         from ravi.fabric.memory.in_memory import InMemoryHistoryProvider as _IMP
-        from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
+        from ravi.legacy.reasoning.context.sliding_window import SlidingWindowStrategy
 
         resolved_history = memory or _IMP()
         if model_context is None:

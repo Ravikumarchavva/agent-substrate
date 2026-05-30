@@ -15,11 +15,11 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 import contextvars
-from typing import Any, Awaitable, Callable, ClassVar, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
+from ravi.kernel.tools import ToolExecutionResult
 from ravi.shared.tasks.store import GlobalTaskStore, Task, TaskStore
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
 
@@ -52,7 +52,7 @@ class TaskManagerTool:
     2. start_task  → do the work → complete_task  (repeat per step)
     """
 
-    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # writes task state, fires SSE events
+    risk: str = "critical"  # TODO: L4-hitl  # writes task state, fires SSE events
 
     def __init__(self, event_emitter: Optional[EventEmitter] = None) -> None:
         super().__init__(
@@ -368,14 +368,14 @@ class TaskManagerTool:
 
 
 def _ok(message: str) -> ToolExecutionResult:
-    return ToolResult(
+    return ToolExecutionResult(
         content=[TextBlock(text=message)],
         is_error=False,
     )
 
 
 def _err(message: str) -> ToolExecutionResult:
-    return ToolResult(
+    return ToolExecutionResult(
         content=[TextBlock(text=message)],
         is_error=True,
     )

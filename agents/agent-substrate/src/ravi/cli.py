@@ -245,13 +245,14 @@ def cmd_chat(args: argparse.Namespace) -> None:
     """Launch an interactive CLI chat session with a ReAct agent."""
     # Late imports so the CLI stays fast for server commands
     from ravi.console import Console
-    from ravi.fabric.catalog._catalog import AgentCatalog
     from ravi.reasoning.agents.assistant.agent import AssistantAgent
     from ravi.fabric.runtime.local import LocalRuntime
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
-    from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
-    from ravi.reasoning.memory.context.unbounded import UnboundedStrategy
-    from ravi.fabric.agents_base.agent_context import AgentContext
+    from ravi.fabric.context import (
+        AgentContext,
+        InMemoryHistoryProvider,
+        SlidingWindowCompaction,
+    )
 
     # Build tools
     tools = []
@@ -268,10 +269,6 @@ def cmd_chat(args: argparse.Namespace) -> None:
             mcp_tools = _load_mcp_tools(args.mcp)
             tools.extend(mcp_tools)
 
-    catalog = AgentCatalog()
-    for tool in tools:
-        catalog.register_tool(tool)
-
     async def _run_chat() -> None:
         async with LocalRuntime() as rt:
             agent = AssistantAgent(
@@ -280,9 +277,9 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 model=OpenAIClient(model=args.model),
                 context=AgentContext(
                     history=InMemoryHistoryProvider(),
-                    compaction_strategies=[UnboundedStrategy()]
+                    compaction_strategies=[SlidingWindowCompaction(max_messages=1000)]
                 ),
-                catalog=catalog,
+                tools=tools,
                 max_iterations=args.max_iterations,
                 verbose=args.verbose,
             )

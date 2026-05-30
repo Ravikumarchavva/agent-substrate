@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Optional
 
-from ravi.kernel.execution.context import ExecutionContext
-from ravi.kernel.messages import CompletionChunk, ReasoningDeltaChunk, TextDeltaChunk
-from ravi.kernel.messages.client_messages import (
+from ravi.reasoning.agents.assistant._legacy_stubs import (
+    ExecutionContext,
+    CompletionChunk,
+    ReasoningDeltaChunk,
+    TextDeltaChunk,
     AssistantMessage,
     ToolExecutionResultMessage,
 )

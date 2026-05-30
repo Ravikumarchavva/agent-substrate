@@ -13,17 +13,16 @@ from ravi.logger import setup_logging
 import json
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
-from ravi.kernel.llm.base_client import GenerateResult, ModelStreamEvent
-from ravi.kernel.messages._types import ImageContent, MediaType
-from ravi.kernel.messages.base_message import BaseClientMessage, UsageStats
-from ravi.kernel.messages.client_messages import (
-    AssistantMessage,
-    SystemMessage,
-    ToolCallMessage,
-    ToolExecutionResultMessage,
-    UserMessage,
+from ravi.kernel import ChatMessage, ContentBlock
+from ravi.kernel.content import (
+    TextBlock,
+    ImageBlock,
+    DataBlock,
+    ToolUseBlock,
+    ToolResultBlock,
 )
-from ravi.kernel.messages.encoders.openai import ensure_strict_tool_schema
+from ravi.kernel.stream import TextDelta, CompletionEvent
+from ravi.integrations.llm.encoders.openai import ensure_strict_tool_schema
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 if TYPE_CHECKING:
@@ -125,20 +124,21 @@ class OpenAIChatCompletionClient(OpenAIClient):
 
     @staticmethod
     def _serialize_messages_chat(
-        messages: list[BaseClientMessage],
+        messages: list[ChatMessage],
     ) -> list[dict[str, Any]]:
         """Convert framework messages to Chat Completions ``messages`` list."""
         result: list[dict[str, Any]] = []
         for msg in messages:
-            if isinstance(msg, SystemMessage):
-                result.append({"role": "system", "content": msg.content})
+            if msg.role == "system":
+                content = "".join(b.text for b in msg.content if isinstance(b, TextBlock))
+                result.append({"role": "system", "content": content})
 
-            elif isinstance(msg, UserMessage):
+            elif msg.role == "user":
                 parts: list[Any] = []
                 for item in msg.content:
-                    if isinstance(item, str):
-                        parts.append({"type": "text", "text": item})
-                    elif isinstance(item, ImageContent):
+                    if isinstance(item, TextBlock):
+                        parts.append({"type": "text", "text": item.text})
+                    elif isinstance(item, ImageBlock):
                         url = item.url
                         if not url and item.data:
                             import base64 as _b64
@@ -149,29 +149,27 @@ class OpenAIChatCompletionClient(OpenAIClient):
                             parts.append(
                                 {"type": "image_url", "image_url": {"url": url}}
                             )
-                    else:
-                        parts.append({"type": "text", "text": str(item)})
                 if len(parts) == 1 and parts[0].get("type") == "text":
                     result.append({"role": "user", "content": parts[0]["text"]})
                 else:
                     result.append({"role": "user", "content": parts})
 
-            elif isinstance(msg, AssistantMessage):
+            elif msg.role == "assistant":
                 entry: dict[str, Any] = {"role": "assistant"}
-                if msg.content:
-                    text_parts = [
-                        c if isinstance(c, str) else str(c) for c in msg.content
-                    ]
+                text_parts = [b.text for b in msg.content if isinstance(b, TextBlock)]
+                if text_parts:
                     entry["content"] = "".join(text_parts)
                 else:
                     entry["content"] = None
-                if msg.tool_calls:
+                
+                tool_calls = [b for b in msg.content if isinstance(b, ToolUseBlock)]
+                if tool_calls:
                     entry["tool_calls"] = [
                         {
-                            "id": tc.tool_call_id,
+                            "id": tc.call_id,
                             "type": "function",
                             "function": {
-                                "name": tc.name,
+                                "name": tc.tool_name,
                                 "arguments": (
                                     json.dumps(tc.arguments)
                                     if isinstance(tc.arguments, dict)
@@ -179,53 +177,34 @@ class OpenAIChatCompletionClient(OpenAIClient):
                                 ),
                             },
                         }
-                        for tc in msg.tool_calls
+                        for tc in tool_calls
                     ]
                 result.append(entry)
 
-            elif isinstance(msg, ToolExecutionResultMessage):
-                content_str = ""
-                if isinstance(msg.content, list):
-                    parts = []
-                    for b in msg.content:
-                        if isinstance(b, dict):
-                            if b.get("type") == "text" and "text" in b:
-                                parts.append(b["text"])
-                        elif hasattr(b, "text"):
-                            parts.append(getattr(b, "text"))
-                    content_str = "\n".join(parts)
-                elif isinstance(msg.content, str):
-                    content_str = msg.content
-                result.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": msg.tool_call_id,
-                        "content": content_str,
-                    }
-                )
-
-            elif isinstance(msg, ToolCallMessage):
-                result.append(
-                    {
-                        "role": "assistant",
-                        "content": None,
-                        "tool_calls": [
+            elif msg.role == "tool":
+                for block in msg.content:
+                    if isinstance(block, ToolResultBlock):
+                        content_str = ""
+                        if isinstance(block.content, list):
+                            parts = []
+                            for b in block.content:
+                                if isinstance(b, dict):
+                                    if b.get("type") == "text" and "text" in b:
+                                        parts.append(b["text"])
+                                elif hasattr(b, "text"):
+                                    parts.append(getattr(b, "text"))
+                                elif isinstance(b, TextBlock):
+                                    parts.append(b.text)
+                            content_str = "\n".join(parts)
+                        elif isinstance(block.content, str):
+                            content_str = block.content
+                        result.append(
                             {
-                                "id": msg.tool_call_id,
-                                "type": "function",
-                                "function": {
-                                    "name": msg.name,
-                                    "arguments": (
-                                        json.dumps(msg.arguments)
-                                        if isinstance(msg.arguments, dict)
-                                        else msg.arguments
-                                    ),
-                                },
+                                "role": "tool",
+                                "tool_call_id": block.call_id,
+                                "content": content_str,
                             }
-                        ],
-                    }
-                )
-        return result
+                        )
 
     def _serialize_tools_chat(
         self,
@@ -297,14 +276,14 @@ class OpenAIChatCompletionClient(OpenAIClient):
 
     async def generate(
         self,
-        messages: list[BaseClientMessage],
+        messages: list[ChatMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
         system_instructions: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         **kwargs: Any,
-    ) -> GenerateResult:
+    ) -> list[ContentBlock]:
         """Generate a response via Chat Completions API."""
         chat_messages = self._serialize_messages_chat(messages)
         if system_instructions:
@@ -337,79 +316,57 @@ class OpenAIChatCompletionClient(OpenAIClient):
             recovered = self._try_recover_tool_use_failed(exc)
             if recovered is not None:
                 tc_dict, _ = recovered
-                tool_calls_obj = [
-                    ToolCallMessage(
-                        id=tc_data["id"],
-                        name=tc_data["name"],
-                        arguments=(
-                            json.loads(tc_data["arguments"])
-                            if tc_data["arguments"]
-                            else {}
-                        ),
+                final_blocks: list[ContentBlock] = []
+                for _, tc_data in sorted(tc_dict.items()):
+                    final_blocks.append(
+                        ToolUseBlock(
+                            call_id=tc_data["id"],
+                            tool_name=tc_data["name"],
+                            arguments=(
+                                json.loads(tc_data["arguments"])
+                                if tc_data["arguments"]
+                                else {}
+                            ),
+                        )
                     )
-                    for _, tc_data in sorted(tc_dict.items())
-                ]
-                return AssistantMessage(
-                    role="assistant",
-                    content=None,
-                    tool_calls=tool_calls_obj,
-                    finish_reason="tool_calls",
-                )
+                return final_blocks
             detail = self._format_provider_error(exc)
             logger.exception("Chat completions request failed: %s", detail)
             raise RuntimeError(detail) from exc
         choice = response.choices[0]
         msg = choice.message
 
-        final_content: Optional[list[MediaType]] = (
-            [msg.content] if msg.content else None
-        )
+        final_blocks: list[ContentBlock] = []
+        if msg.content:
+            final_blocks.append(TextBlock(text=msg.content))
 
-        tool_calls_obj = None
+        has_tool_calls = False
         if msg.tool_calls:
-            tool_calls_obj = [
-                ToolCallMessage(
-                    id=tc.id or "",
-                    name=tc.function.name,
-                    arguments=(
-                        json.loads(tc.function.arguments)
-                        if isinstance(tc.function.arguments, str)
-                        else tc.function.arguments
-                    ),
+            for tc in msg.tool_calls:
+                has_tool_calls = True
+                final_blocks.append(
+                    ToolUseBlock(
+                        call_id=tc.id or "",
+                        tool_name=tc.function.name,
+                        arguments=(
+                            json.loads(tc.function.arguments)
+                            if isinstance(tc.function.arguments, str)
+                            else tc.function.arguments
+                        ),
+                    )
                 )
-                for tc in msg.tool_calls
-            ]
 
-        usage_dict = None
-        if response.usage:
-            usage_dict = UsageStats(
-                prompt_tokens=response.usage.prompt_tokens,
-                completion_tokens=response.usage.completion_tokens,
-                total_tokens=response.usage.total_tokens,
-            )
-
-        finish_reason = choice.finish_reason or "stop"
-        if tool_calls_obj:
-            finish_reason = "tool_calls"
-
-        result = AssistantMessage(
-            role="assistant",
-            content=final_content,
-            tool_calls=tool_calls_obj,
-            usage=usage_dict,
-            finish_reason=finish_reason,
-        )
-
-        if response_format is not None and msg.content and not tool_calls_obj:
+        if response_format is not None and msg.content and not has_tool_calls:
             try:
-                result.parsed = response_format.model_validate_json(msg.content)
+                parsed_obj = response_format.model_validate_json(msg.content)
+                final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
             except Exception:
                 logger.debug(
                     "Chat completions: failed to parse structured output: %s",
                     msg.content[:200],
                 )
 
-        return result
+        return final_blocks
 
     # ------------------------------------------------------------------
     # generate_stream
@@ -417,16 +374,15 @@ class OpenAIChatCompletionClient(OpenAIClient):
 
     async def generate_stream(
         self,
-        messages: list[BaseClientMessage],
+        messages: list[ChatMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         *,
         system_instructions: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[ModelStreamEvent]:
+    ) -> AsyncIterator[TextDelta | CompletionEvent]:
         """Stream a response via Chat Completions API."""
-        from ravi.kernel.messages._types import CompletionChunk, TextDeltaChunk
 
         chat_messages = self._serialize_messages_chat(messages)
         if system_instructions:
@@ -457,7 +413,6 @@ class OpenAIChatCompletionClient(OpenAIClient):
         collected_content = ""
         collected_tool_calls: dict[int, dict[str, Any]] = {}
         finish_reason = "stop"
-        usage_stats: Optional[UsageStats] = None
 
         try:
             stream = await self.client.chat.completions.create(**params)
@@ -469,11 +424,6 @@ class OpenAIChatCompletionClient(OpenAIClient):
             async for chunk in stream:
                 # Usage-only chunk (arrives after all content when stream_options is set)
                 if not chunk.choices and hasattr(chunk, "usage") and chunk.usage:
-                    usage_stats = UsageStats(
-                        prompt_tokens=chunk.usage.prompt_tokens,
-                        completion_tokens=chunk.usage.completion_tokens,
-                        total_tokens=chunk.usage.total_tokens,
-                    )
                     continue
 
                 if not chunk.choices:
@@ -484,7 +434,7 @@ class OpenAIChatCompletionClient(OpenAIClient):
 
                 if delta.content:
                     collected_content += delta.content
-                    yield TextDeltaChunk(text=delta.content)
+                    yield TextDelta(text=delta.content)
 
                 if delta.tool_calls:
                     for tc_delta in delta.tool_calls:
@@ -518,42 +468,32 @@ class OpenAIChatCompletionClient(OpenAIClient):
                 logger.exception("Stream chat completions iteration failed: %s", detail)
                 raise RuntimeError(detail) from exc
 
-        # Build final AssistantMessage
-        tool_calls_obj = None
+        final_blocks: list[ContentBlock] = []
+        if collected_content:
+            final_blocks.append(TextBlock(text=collected_content))
+
+        has_tool_calls = False
         if collected_tool_calls:
-            tool_calls_obj = [
-                ToolCallMessage(
-                    id=tc_data["id"],
-                    name=tc_data["name"],
-                    arguments=(
-                        json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
-                    ),
+            has_tool_calls = True
+            for _, tc_data in sorted(collected_tool_calls.items()):
+                final_blocks.append(
+                    ToolUseBlock(
+                        call_id=tc_data["id"],
+                        tool_name=tc_data["name"],
+                        arguments=(
+                            json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
+                        ),
+                    )
                 )
-                for _, tc_data in sorted(collected_tool_calls.items())
-            ]
-            finish_reason = "tool_calls"
 
-        final_content: Optional[list[MediaType]] = (
-            [collected_content] if collected_content else None
-        )
-
-        final_message = AssistantMessage(
-            role="assistant",
-            content=final_content,
-            tool_calls=tool_calls_obj,
-            usage=usage_stats,
-            finish_reason=finish_reason,
-        )
-
-        if response_format is not None and collected_content and not tool_calls_obj:
+        if response_format is not None and collected_content and not has_tool_calls:
             try:
-                final_message.parsed = response_format.model_validate_json(
-                    collected_content
-                )
+                parsed_obj = response_format.model_validate_json(collected_content)
+                final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
             except Exception:
                 logger.debug(
                     "Stream chat completions: failed to parse structured output: %s",
                     collected_content[:200],
                 )
 
-        yield CompletionChunk(message=final_message)
+        yield CompletionEvent(content=final_blocks)

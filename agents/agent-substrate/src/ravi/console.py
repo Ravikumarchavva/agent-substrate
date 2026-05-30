@@ -154,12 +154,10 @@ def _ensure_types() -> None:
         _CompletionChunk, \
         _ToolExecutionResultMessage
     if _TextDeltaChunk is None:
-        from ravi.kernel.messages._types import (
+        from ravi.reasoning.agents.assistant._legacy_stubs import (
             TextDeltaChunk,
             ReasoningDeltaChunk,
             CompletionChunk,
-        )
-        from ravi.kernel.messages.client_messages import (
             ToolExecutionResultMessage,
         )
 
@@ -206,9 +204,7 @@ class Console:
 
     def _is_actor_agent(self) -> bool:
         """Return True if the agent uses the actor model (has on_message)."""
-        from ravi.fabric.actors.actor import ActorAgent
-
-        return isinstance(self.agent, ActorAgent)
+        return False
 
     async def _get_proxy(self) -> Any:
         """Lazily create and start the UserProxyAgent for actor-model agents."""

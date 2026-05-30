@@ -9,13 +9,8 @@ from ravi.logger import setup_logging
 
 import re
 
-from ravi.kernel.tools.base_tool import (
-    Tool,
-    HitlMode,
-    ToolResult,
-    ToolRisk,
-)
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
 
@@ -67,8 +62,6 @@ class EmailSenderTool:
                 "required": ["to", "subject", "body"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.CRITICAL,
-            hitl_mode=HitlMode.BLOCKING,
             category="communication",
             tags=["email", "send", "message", "notify", "smtp", "mail"],
             aliases=["send_email", "mail"],
@@ -84,13 +77,13 @@ class EmailSenderTool:
     ) -> ToolExecutionResult:
         # Validate email format
         if not _EMAIL_RE.match(to):
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Invalid email address: {to!r}")],
                 is_error=True,
             )
 
         if not self._smtp_host:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text="Email sender not configured (no SMTP host).")],
                 is_error=True,
             )
@@ -118,12 +111,12 @@ class EmailSenderTool:
             )
         except Exception as exc:
             logger.error("Email send failed: %s", exc)
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Failed to send email: {exc}")],
                 is_error=True,
             )
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=f'Email sent to {to}: "{subject}"')],
             app_data={"to": to, "subject": subject},
         )

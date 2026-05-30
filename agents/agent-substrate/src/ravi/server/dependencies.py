@@ -12,11 +12,11 @@ from typing import Any, Optional
 
 from fastapi import Request
 
-from ravi.kernel.memory.history_provider import HistoryProvider
-from ravi.kernel.runtime import AgentRuntime
+from ravi.fabric.context import HistoryProvider
+from ravi.kernel import AgentRuntime
 from ravi.kernel.storage.base import FileStore
 from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.kernel.llm.base_client import BaseModelClient
+from ravi.fabric.llm import LLMClient
 from ravi.server.sse.bridge import BridgeRegistry
 
 
@@ -24,7 +24,7 @@ from ravi.server.sse.bridge import BridgeRegistry
 class ServerDependencies:
     """All shared dependencies available to route handlers."""
 
-    model_client: BaseModelClient
+    model_client: LLMClient
     history: HistoryProvider
     tools: AgentCatalogRegistry
     bridge_registry: BridgeRegistry

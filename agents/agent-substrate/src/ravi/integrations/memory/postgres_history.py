@@ -41,12 +41,12 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from ravi.kernel.memory.history_provider import PersistentHistoryProvider
-from ravi.kernel.memory.message_serializer import (
+from ravi.reasoning.agents.assistant._legacy_stubs import PersistentHistoryProvider
+from ravi.integrations.llm.encoders.storage import (
     deserialize_message,
     serialize_message,
 )
-from ravi.kernel.messages.base_message import BaseClientMessage
+from ravi.kernel import ChatMessage
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -187,7 +187,7 @@ class PostgresHistoryProvider(PersistentHistoryProvider):
     # -- HistoryProvider contract ---------------------------------------------
 
     async def save_messages(
-        self, session_id: str, messages: List[BaseClientMessage]
+        self, session_id: str, messages: List[ChatMessage]
     ) -> int:
         """Append messages to a session, auto-creating the session row.
 
@@ -235,7 +235,7 @@ class PostgresHistoryProvider(PersistentHistoryProvider):
 
     async def load_messages(
         self, session_id: str, *, limit: Optional[int] = None
-    ) -> List[BaseClientMessage]:
+    ) -> List[ChatMessage]:
         """Load a session's messages ordered by sequence (last *limit* if given)."""
         _validate_session_id(session_id)
         factory = self._get_session()

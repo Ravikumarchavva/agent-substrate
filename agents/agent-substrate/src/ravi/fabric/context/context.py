@@ -29,3 +29,37 @@ class AgentContext(Protocol):
         Returns the message sequence ready for the LLM encoder.
         """
         ...
+
+
+class DefaultAgentContext:
+    """Concrete AgentContext for in-process use.
+
+    Wire up by passing an AgentId, a HistoryProvider, and a CompactionStrategy.
+    The ``get_prompt_window`` method fetches raw history and applies compaction.
+    """
+
+    def __init__(
+        self,
+        agent_id: AgentId,
+        history: HistoryProvider,
+        compaction: CompactionStrategy,
+    ) -> None:
+        self._agent_id = agent_id
+        self._history = history
+        self._compaction = compaction
+
+    @property
+    def agent_id(self) -> AgentId:
+        return self._agent_id
+
+    @property
+    def history(self) -> HistoryProvider:
+        return self._history
+
+    @property
+    def compaction(self) -> CompactionStrategy:
+        return self._compaction
+
+    async def get_prompt_window(self) -> list[Message]:
+        raw = await self._history.get_messages(self._agent_id)
+        return await self._compaction.compact(raw)

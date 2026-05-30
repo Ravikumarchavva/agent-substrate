@@ -18,12 +18,8 @@ from urllib.parse import urlparse
 
 import redis.asyncio as aioredis
 
-from ravi.kernel.memory.history_provider import CachedHistoryProvider
-from ravi.kernel.memory.message_serializer import (
-    deserialize_message,
-    serialize_message,
-)
-from ravi.kernel.messages.base_message import BaseClientMessage
+from ravi.kernel import ChatMessage
+from ravi.integrations.llm.encoders.storage import serialize_message, deserialize_message
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -38,8 +34,8 @@ def _validate_session_id(session_id: str) -> None:
         )
 
 
-class RedisHistoryProvider(CachedHistoryProvider):
-    """Redis-backed :class:`CachedHistoryProvider`.
+class RedisHistoryProvider:
+    """Redis-backed :class:`HistoryProvider`.
 
     Parameters
     ----------
@@ -61,7 +57,8 @@ class RedisHistoryProvider(CachedHistoryProvider):
         max_messages: int = 200,
         key_prefix: str = "agent_session",
     ) -> None:
-        super().__init__(ttl=ttl, max_messages=max_messages)
+        self._ttl = ttl
+        self._max_messages = max_messages
         self._redis_url = redis_url
         self._key_prefix = key_prefix
         self._client: Optional[aioredis.Redis] = None
@@ -100,7 +97,7 @@ class RedisHistoryProvider(CachedHistoryProvider):
     # ── HistoryProvider contract ──────────────────────────────────────────────
 
     async def save_messages(
-        self, session_id: str, messages: List[BaseClientMessage]
+        self, session_id: str, messages: List[ChatMessage]
     ) -> int:
         _validate_session_id(session_id)
         if not messages:
@@ -121,7 +118,7 @@ class RedisHistoryProvider(CachedHistoryProvider):
 
     async def load_messages(
         self, session_id: str, *, limit: Optional[int] = None
-    ) -> List[BaseClientMessage]:
+    ) -> List[ChatMessage]:
         _validate_session_id(session_id)
         client = self._require_client()
         key = self._msg_key(session_id)

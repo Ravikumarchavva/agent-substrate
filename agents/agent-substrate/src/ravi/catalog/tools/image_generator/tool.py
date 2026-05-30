@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import ImageBlock, TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import ImageBlock, TextBlock
 
 
 class ImageGeneratorTool:
@@ -43,7 +43,6 @@ class ImageGeneratorTool:
                 "required": ["prompt"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SENSITIVE,
             category="creative",
             tags=["image", "picture", "dall-e", "art", "draw", "generate", "visual"],
             aliases=["dall_e", "create_image", "generate_image"],
@@ -57,7 +56,7 @@ class ImageGeneratorTool:
         quality: str = "standard",
     ) -> ToolExecutionResult:
         if not prompt.strip():
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(text="Please provide a prompt describing the image.")
                 ],
@@ -70,7 +69,7 @@ class ImageGeneratorTool:
 
             api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text="Image generator not configured (no OpenAI API key)."
@@ -101,7 +100,7 @@ class ImageGeneratorTool:
                 data = response.json()
         except httpx.HTTPStatusError as exc:
             error_body = exc.response.text[:500]
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=f"DALL-E API error ({exc.response.status_code}): {error_body}"
@@ -110,14 +109,14 @@ class ImageGeneratorTool:
                 is_error=True,
             )
         except httpx.HTTPError as exc:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"HTTP error calling DALL-E: {exc}")],
                 is_error=True,
             )
 
         images = data.get("data", [])
         if not images:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text="No image returned from DALL-E API.")],
                 is_error=True,
             )
@@ -125,7 +124,7 @@ class ImageGeneratorTool:
         image_url = images[0].get("url", "")
         revised_prompt = images[0].get("revised_prompt", prompt)
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[
                 TextBlock(text=f"Generated image for: {revised_prompt}"),
                 ImageBlock(data=image_url, media_type="image/png"),

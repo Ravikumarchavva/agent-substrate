@@ -1,33 +1,16 @@
-"""Token-bucket rate limiter middleware.
-
-Limits the rate of LLM calls or tool executions per agent to prevent
-runaway loops and excessive API costs.
-"""
-
 from __future__ import annotations
 
 import asyncio
 import time
 from typing import Any
 
-from ravi.kernel.middleware.base import BaseMiddleware, MiddlewareContext
+from ravi.reasoning.middleware._contracts import MiddlewareContext
 
 
-class RateLimiterMiddleware(BaseMiddleware):
-    """Token-bucket rate limiter.
+class RateLimiterMiddleware:
+    """Token-bucket rate limiter. Defaults to 60 requests per minute."""
 
-    Defaults to 60 requests per minute.  ``before()`` blocks until a
-    token is available.
-    """
-
-    def __init__(
-        self,
-        *,
-        name: str = "rate_limiter",
-        max_rate: float = 60.0,
-        per_seconds: float = 60.0,
-    ) -> None:
-        super().__init__(name)
+    def __init__(self, *, max_rate: float = 60.0, per_seconds: float = 60.0) -> None:
         self._max_tokens = max_rate
         self._refill_rate = max_rate / per_seconds
         self._tokens = max_rate
@@ -39,16 +22,12 @@ class RateLimiterMiddleware(BaseMiddleware):
             async with self._lock:
                 now = time.monotonic()
                 elapsed = now - self._last_refill
-                self._tokens = min(
-                    self._max_tokens,
-                    self._tokens + elapsed * self._refill_rate,
-                )
+                self._tokens = min(self._max_tokens, self._tokens + elapsed * self._refill_rate)
                 self._last_refill = now
                 if self._tokens >= 1.0:
                     self._tokens -= 1.0
                     return ctx
                 wait = (1.0 - self._tokens) / self._refill_rate
-            # Sleep outside the lock so other waiters can refill and check
             await asyncio.sleep(wait)
 
     async def after(self, ctx: MiddlewareContext, result: Any) -> Any:

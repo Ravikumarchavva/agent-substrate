@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 
 class PipelineManagerTool:
@@ -54,7 +54,6 @@ class PipelineManagerTool:
                 "required": ["action"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SENSITIVE,
             category="development/execution",
             tags=["pipeline", "workflow", "chain", "automate", "sequence"],
             aliases=["manage_pipeline", "run_pipeline"],
@@ -78,26 +77,26 @@ class PipelineManagerTool:
             return await self._delete(name)
         if action == "validate":
             return await self._validate(name)
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=f"Unknown action: {action!r}")],
             is_error=True,
         )
 
     async def _run(self, name: str) -> ToolExecutionResult:
         if not name:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text="Pipeline name required for 'run'")],
                 is_error=True,
             )
         pipeline = await self._store.load(name)
         if pipeline is None:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Pipeline '{name}' not found")],
                 is_error=True,
             )
         result = await self._engine.execute(pipeline)
         if not result.success:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Pipeline failed: {result.error}")],
                 is_error=True,
             )
@@ -106,13 +105,13 @@ class PipelineManagerTool:
             parts.append(
                 f"  Step {i} ({sr['adapter']}): {'error' if sr['is_error'] else 'ok'}"
             )
-        return ToolResult(content=[TextBlock(text="\n".join(parts))])
+        return ToolExecutionResult(content=[TextBlock(text="\n".join(parts))])
 
     async def _save(
         self, name: str, definition: Optional[dict[str, Any]]
     ) -> ToolExecutionResult:
         if not name or not definition:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(text="Both 'name' and 'definition' required for save")
                 ],
@@ -123,7 +122,7 @@ class PipelineManagerTool:
         definition["name"] = name
         pipeline = PipelineDef.from_dict(definition)
         await self._store.save(pipeline)
-        return ToolResult(
+        return ToolExecutionResult(
             content=[
                 TextBlock(text=f"Pipeline '{name}' saved ({len(pipeline.steps)} steps)")
             ],
@@ -132,7 +131,7 @@ class PipelineManagerTool:
     async def _list(self) -> ToolExecutionResult:
         pipelines = await self._store.list_all()
         if not pipelines:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text="No saved pipelines")],
             )
         lines = [f"Saved pipelines ({len(pipelines)}):"]
@@ -140,39 +139,39 @@ class PipelineManagerTool:
             lines.append(
                 f"  - {p.name}: {p.description or '(no description)'} ({len(p.steps)} steps)"
             )
-        return ToolResult(content=[TextBlock(text="\n".join(lines))])
+        return ToolExecutionResult(content=[TextBlock(text="\n".join(lines))])
 
     async def _delete(self, name: str) -> ToolExecutionResult:
         if not name:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text="Pipeline name required for 'delete'")],
                 is_error=True,
             )
         deleted = await self._store.delete(name)
         if deleted:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Pipeline '{name}' deleted")],
             )
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=f"Pipeline '{name}' not found")],
             is_error=True,
         )
 
     async def _validate(self, name: str) -> ToolExecutionResult:
         if not name:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text="Pipeline name required for 'validate'")],
                 is_error=True,
             )
         pipeline = await self._store.load(name)
         if pipeline is None:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Pipeline '{name}' not found")],
                 is_error=True,
             )
         errors = self._engine.validate(pipeline)
         if errors:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text="Validation errors:\n"
@@ -181,7 +180,7 @@ class PipelineManagerTool:
                 ],
                 is_error=True,
             )
-        return ToolResult(
+        return ToolExecutionResult(
             content=[
                 TextBlock(
                     text=f"Pipeline '{name}' is valid ({len(pipeline.steps)} steps)"

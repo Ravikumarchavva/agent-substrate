@@ -37,14 +37,10 @@ from ravi.kernel import (
 )
 from ravi.kernel.message import Message
 from ravi.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
-from ravi.agents.context import (
-    AgentContext,
-    HistoryProvider,
-    InMemoryHistoryProvider,
-    SlidingWindowCompaction,
-)
+from ravi.agents.context import AgentContext, HistoryProvider
 from ravi.agents.context.context import DefaultAgentContext
-from ravi.kernel.llm.client import LLMClient
+from ravi.agents.skills import Skill
+from ravi.kernel.llm import LLMClient
 from ravi.agents.hooks.manager import HookEvent, HookManager
 from ravi.agents.assistant._guardrail_runner import (
     check_input_guardrails,
@@ -114,7 +110,10 @@ class AssistantAgent:
     Usage::
 
         from ravi.adapters.llm.openai import OpenAIClient
-        from ravi.fabric.runtime.local import LocalRuntime
+        from ravi.agents.runtime import LocalRuntime
+        from ravi.agents.context import AgentContext, SlidingWindowCompaction
+        from ravi.adapters.memory import RedisHistoryProvider
+        from ravi.agents.skills import Skill
 
         runtime = LocalRuntime()
         await runtime.start()
@@ -123,6 +122,12 @@ class AssistantAgent:
             "researcher", runtime,
             model=OpenAIClient(model="gpt-4o"),
             tools=[calc_tool],
+            skills=[Skill(name="math", instructions="Show your working step by step.")],
+            system_instructions="You are a helpful AI assistant.",
+            context=AgentContext(
+                RedisHistoryProvider(session_id="sess-123"),
+                [SlidingWindowCompaction(max_messages=60)],
+            ),
         )
         result = await agent.run("What is 42 * 17?")
         print(result.output)
@@ -140,11 +145,10 @@ class AssistantAgent:
         *,
         model: LLMClient,
         tools: list[Tool] | None = None,
-        system: str | None = None,
+        skills: list[Skill] | None = None,
+        system_instructions: str | None = None,
         max_iterations: int = 20,
         tool_timeout: float | None = 30.0,
-        history: HistoryProvider | None = None,
-        compaction: SlidingWindowCompaction | None = None,
         context: AgentContext | None = None,
         guardrails: list[object] | None = None,
         approval_handler: ApprovalHandler | None = None,
@@ -156,7 +160,8 @@ class AssistantAgent:
         self.id = AgentId(type="assistant", key=name)
         self.model = model
         self._tools: dict[str, Tool] = {t.name: t for t in (tools or [])}
-        self._system = system or self._DEFAULT_SYSTEM
+        self._skills: list[Skill] = list(skills or [])
+        self._base_system = system_instructions or self._DEFAULT_SYSTEM
         self.max_iterations = max_iterations
         self.tool_timeout = tool_timeout
         self._guardrails: list[object] = list(guardrails or [])
@@ -164,13 +169,18 @@ class AssistantAgent:
         self._approval_required_risk = approval_required_risk
         self.hooks = hooks or HookManager()
 
-        if context is not None:
-            _hist = context.history
-            _comp = context.compaction
-        else:
-            _hist = history or InMemoryHistoryProvider()
-            _comp = compaction or SlidingWindowCompaction(max_messages=40)
-        self._ctx = DefaultAgentContext(self.id, _hist, _comp)
+        _ctx = context if context is not None else AgentContext.default()
+        self._ctx = DefaultAgentContext(self.id, _ctx.history, _ctx.compaction)
+
+    @property
+    def _system(self) -> str:
+        """Effective system prompt: base instructions + all skills' instructions."""
+        if not self._skills:
+            return self._base_system
+        skill_blocks = "\n\n".join(
+            f"## Skill: {s.name}\n{s.instructions}" for s in self._skills
+        )
+        return f"{self._base_system}\n\n{skill_blocks}"
 
     @property
     def history(self) -> HistoryProvider:

@@ -13,11 +13,15 @@ class AgentContext:
 
     Usage::
 
+        # Explicit
         context = AgentContext(
             InMemoryHistoryProvider(),
             [SlidingWindowCompaction(max_messages=40)],
         )
         agent = AssistantAgent("bot", runtime, model=client, context=context)
+
+        # Default (in-memory, sliding-window 100)
+        context = AgentContext.default()
 
     When ``compaction_strategies`` is a list the first strategy is used.
     """
@@ -38,6 +42,13 @@ class AgentContext:
             self.compaction = compaction_strategies
         else:
             self.compaction = SlidingWindowCompaction()
+
+    @classmethod
+    def default(cls) -> AgentContext:
+        """Return an in-memory context with default sliding-window compaction."""
+        from ravi.agents.context.history import InMemoryHistoryProvider
+
+        return cls(InMemoryHistoryProvider())
 
 
 class DefaultAgentContext:

@@ -35,7 +35,7 @@ from ravi.agents.tools.builtin_tools import (
     GetCurrentTimeTool,
     GetBitcoinPriceTool,
 )
-from ravi.agents.catalog import AgentCatalogRegistry
+
 from ravi.adapters.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_embedding_client,
@@ -92,7 +92,7 @@ class Infrastructure:
 class ToolRegistryResult:
     """Objects returned by :func:`init_tool_registry`."""
 
-    catalog: AgentCatalogRegistry
+    catalog: Any
     task_tool: TaskManagerTool
     ask_tool: AskHumanTool
     ci_client: Optional[CodeInterpreterClient]
@@ -237,7 +237,7 @@ async def init_tool_registry(
     bridge_registry: BridgeRegistry,
     redis_client: Any = None,
 ) -> ToolRegistryResult:
-    """Create all tools, register them in an :class:`AgentCatalogRegistry`."""
+    """Create all tools and return a tool registry."""
 
     # TaskManagerTool — emitter wired via dynamic closure through bridge_registry
     async def _task_event_emitter(event: dict) -> None:
@@ -285,7 +285,7 @@ async def init_tool_registry(
     )
 
     # ── Capability Registry ──────────────────────────────────────────────
-    catalog = AgentCatalogRegistry()
+    catalog: list[Any] = []
     catalog.register_tool(
         ask_tool,
         category="communication",
@@ -401,7 +401,7 @@ async def init_tool_registry(
 async def init_runtime_services(
     settings: Settings,
     *,
-    catalog: AgentCatalogRegistry,
+    catalog: Any,
     data_store: Any,
     session_factory: Any,
     runtime: LocalRuntime,

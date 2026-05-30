@@ -16,7 +16,7 @@ Provider / model / cost table lives in ``ravi.kernel.llm.models``.
 
 from __future__ import annotations
 
-from typing import ClassVar, Optional
+from typing import ClassVar, Optional, Any
 
 from ravi.fabric.llm import (
     EmbeddingClient,

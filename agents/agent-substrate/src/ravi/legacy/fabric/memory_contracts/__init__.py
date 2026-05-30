@@ -3,7 +3,7 @@
 The ``InMemoryHistoryProvider`` reference implementation lives in
 :mod:`ravi.fabric.memory.in_memory` (L1), as does the ``TieredHistoryProvider``
 composition. Context strategies live in :mod:`ravi.reasoning.memory`. Concrete
-backends (Redis, Postgres) live in :mod:`ravi.integrations.memory`.
+backends (Redis, Postgres) live in :mod:`ravi.adapters.memory`.
 """
 
 from ravi.kernel.memory.history_provider import (

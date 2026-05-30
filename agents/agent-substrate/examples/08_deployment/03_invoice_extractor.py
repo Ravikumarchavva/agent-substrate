@@ -21,9 +21,9 @@ import tempfile
 from pathlib import Path
 
 from ravi.catalog.tools.invoice_extractor.tool import InvoiceExtractorTool
-from ravi.configs.settings import settings
+from ravi.config import settings
 from ravi.reasoning.agents.assistant import AssistantAgent
-from ravi.integrations.llm.factory import create_model_client
+from ravi.adapters.llm.factory import create_model_client
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.fabric.memory.unbounded import UnboundedMemory
 

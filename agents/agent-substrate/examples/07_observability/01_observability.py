@@ -13,15 +13,15 @@ In production, set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT to ship spans to Grafana T
 import asyncio
 import os
 
-from ravi.configs.settings import settings
+from ravi.config import settings
 from ravi.reasoning.agents.assistant import AssistantAgent
-from ravi.platform.observability import (
+from ravi.adapters.observability import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
     InMemoryReplayGate,
 )
 from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.integrations.llm.factory import create_model_client
+from ravi.adapters.llm.factory import create_model_client
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.observability import (
@@ -33,7 +33,7 @@ from ravi.kernel.observability import (
     ReplayRequest,
     SpanStatus,
 )
-from ravi.shared.observability import configure_opentelemetry
+from ravi.serving.shared.observability import configure_opentelemetry
 
 # Infrastructure: none required — all sections use in-memory implementations.
 #   For OTLP export to Grafana Tempo or Jaeger, set:

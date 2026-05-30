@@ -58,8 +58,8 @@
 # ### Build an agent
 # ```python
 # from ravi.reasoning.agents.assistant import AssistantAgent
-# from ravi.configs.settings import settings
-# from ravi.integrations.llm.factory import create_model_client
+# from ravi.config import settings
+# from ravi.adapters.llm.factory import create_model_client
 # from ravi.kernel.agent_catalog import AgentCatalog
 # from ravi.fabric.memory.unbounded import UnboundedMemory
 # from ravi.reasoning.memory.context.unbounded import UnboundedContext
@@ -97,7 +97,7 @@
 #
 # ### Persist memory in Redis
 # ```python
-# from ravi.integrations.memory.redis_memory import RedisMemory  # ← integrations, not core!
+# from ravi.adapters.memory.redis_memory import RedisMemory  # ← integrations, not core!
 #
 # mem = RedisMemory(session_id="my-chat", redis_url="redis://localhost:6379/0")
 # await mem.connect()
@@ -108,7 +108,7 @@
 #
 # ### Connect to an MCP server
 # ```python
-# from ravi.integrations.mcp import MCPClient
+# from ravi.adapters.mcp import MCPClient
 #
 # client = MCPClient(url="http://localhost:9000/sse")
 # tools = await client.discover_tools()   # returns list[MCPTool]

@@ -21,7 +21,7 @@ from ravi.reasoning.agents.assistant._legacy_stubs import (
     ParsedToolCall,
     ToolExecutionResultMessage,
 )
-from ravi.shared.observability import global_metrics, logger
+from ravi.serving.shared.observability import global_metrics, logger
 
 # Deleted type stubs
 BaseGuardrail = object

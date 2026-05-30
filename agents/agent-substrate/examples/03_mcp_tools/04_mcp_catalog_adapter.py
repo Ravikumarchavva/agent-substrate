@@ -12,12 +12,12 @@ Prerequisites:
 
 import asyncio
 
-from ravi.configs.settings import settings
+from ravi.config import settings
 from ravi.reasoning.agents.assistant import AssistantAgent
 from ravi.fabric.tools.builtin_tools import CalculatorTool
-from ravi.integrations.llm.factory import create_model_client
-from ravi.integrations.mcp.adapter import MCPCatalogAdapter
-from ravi.integrations.mcp.client import MCPClient
+from ravi.adapters.llm.factory import create_model_client
+from ravi.adapters.mcp.adapter import MCPCatalogAdapter
+from ravi.adapters.mcp.client import MCPClient
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.fabric.memory.unbounded import UnboundedMemory
 

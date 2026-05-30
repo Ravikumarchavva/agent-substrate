@@ -19,7 +19,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
 
 from ravi.kernel import (
@@ -32,6 +32,7 @@ from ravi.kernel import (
     TextBlock,
     Tool,
     ToolResultBlock,
+    ToolRisk,
     ToolUseBlock,
 )
 from ravi.kernel.message import Message
@@ -45,8 +46,17 @@ from ravi.fabric.context import (
 from ravi.fabric.context.context import DefaultAgentContext
 from ravi.fabric.llm.client import LLMClient
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
+from ravi.reasoning.agents.assistant._guardrail_runner import (
+    check_input_guardrails,
+    check_output_guardrails,
+    check_tool_call_guardrails,
+)
+from ravi.exceptions import GuardrailTripwireError
 
 logger = logging.getLogger(__name__)
+
+# Signature: (tool_name, arguments) → True=approved, False=denied
+ApprovalHandler = Callable[[str, dict[str, Any]], Awaitable[bool]]
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +113,7 @@ class AssistantAgent:
 
     Usage::
 
-        from ravi.integrations.llm.openai import OpenAIClient
+        from ravi.adapters.llm.openai import OpenAIClient
         from ravi.fabric.runtime.local import LocalRuntime
 
         runtime = LocalRuntime()
@@ -136,6 +146,9 @@ class AssistantAgent:
         history: HistoryProvider | None = None,
         compaction: SlidingWindowCompaction | None = None,
         context: AgentContext | None = None,
+        guardrails: list[object] | None = None,
+        approval_handler: ApprovalHandler | None = None,
+        approval_required_risk: ToolRisk = ToolRisk.HIGH,
         hooks: HookManager | None = None,
     ) -> None:
         self.name = name
@@ -146,6 +159,9 @@ class AssistantAgent:
         self._system = system or self._DEFAULT_SYSTEM
         self.max_iterations = max_iterations
         self.tool_timeout = tool_timeout
+        self._guardrails: list[object] = list(guardrails or [])
+        self._approval_handler = approval_handler
+        self._approval_required_risk = approval_required_risk
         self.hooks = hooks or HookManager()
 
         if context is not None:
@@ -211,6 +227,15 @@ class AssistantAgent:
         await self._append(ChatMessage(role="user", content=[TextBlock(text=input_text)]))
 
         try:
+            # -- input guardrails ------------------------------------------------
+            if self._guardrails:
+                await check_input_guardrails(
+                    guardrails=self._guardrails,
+                    agent_name=self.name,
+                    run_id=run_id,
+                    input_text=input_text,
+                )
+
             for step in range(1, self.max_iterations + 1):
                 await self.hooks.dispatch(
                     HookEvent.STEP_START, {"agent": self.name, "step": step}
@@ -233,6 +258,16 @@ class AssistantAgent:
 
                 if not tool_uses:
                     output = _content_to_str(content)
+
+                    # -- output guardrails ---------------------------------------
+                    if self._guardrails:
+                        await check_output_guardrails(
+                            guardrails=self._guardrails,
+                            agent_name=self.name,
+                            run_id=run_id,
+                            output_text=output,
+                        )
+
                     logger.info("[%s] done at step %d", self.name, step)
                     await self.hooks.dispatch(
                         HookEvent.STEP_END,
@@ -257,6 +292,14 @@ class AssistantAgent:
                 )
                 result_blocks: list[ContentBlock] = []
                 for tu in tool_uses:
+                    # -- tool-call guardrails ------------------------------------
+                    if self._guardrails:
+                        await check_tool_call_guardrails(
+                            guardrails=self._guardrails,
+                            agent_name=self.name,
+                            run_id=run_id,
+                            tool_use=tu,
+                        )
                     record, block = await self._execute_tool(tu)
                     tool_calls.append(record)
                     result_blocks.append(block)
@@ -278,6 +321,20 @@ class AssistantAgent:
                 status="max_iterations",
                 tool_calls=tool_calls,
                 run_id=run_id,
+            )
+
+        except GuardrailTripwireError as exc:
+            logger.warning("[%s] guardrail tripped: %s", self.name, exc.message)
+            await self.hooks.dispatch(
+                HookEvent.RUN_END,
+                {"agent": self.name, "run_id": run_id, "status": "guardrail_tripped"},
+            )
+            return AgentRunResult(
+                output=f"Request blocked: {exc.message}",
+                status="guardrail_tripped",
+                tool_calls=tool_calls,
+                run_id=run_id,
+                error=exc.message,
             )
 
         except Exception as exc:
@@ -316,6 +373,15 @@ class AssistantAgent:
         )
 
         try:
+            # -- input guardrails ------------------------------------------------
+            if self._guardrails:
+                await check_input_guardrails(
+                    guardrails=self._guardrails,
+                    agent_name=self.name,
+                    run_id=run_id,
+                    input_text=input_text,
+                )
+
             for step in range(1, self.max_iterations + 1):
                 messages = await self._prompt_window()
                 content: list[ContentBlock] = []
@@ -335,6 +401,17 @@ class AssistantAgent:
                 await self._append(ChatMessage(role="assistant", content=content))
 
                 if not tool_uses:
+                    output = _content_to_str(content)
+
+                    # -- output guardrails ---------------------------------------
+                    if self._guardrails:
+                        await check_output_guardrails(
+                            guardrails=self._guardrails,
+                            agent_name=self.name,
+                            run_id=run_id,
+                            output_text=output,
+                        )
+
                     yield CompletionEvent(content=content)
                     await self.hooks.dispatch(
                         HookEvent.RUN_END,
@@ -350,6 +427,14 @@ class AssistantAgent:
                 )
                 result_blocks: list[ContentBlock] = []
                 for tu in tool_uses:
+                    # -- tool-call guardrails ------------------------------------
+                    if self._guardrails:
+                        await check_tool_call_guardrails(
+                            guardrails=self._guardrails,
+                            agent_name=self.name,
+                            run_id=run_id,
+                            tool_use=tu,
+                        )
                     _, block = await self._execute_tool(tu)
                     result_blocks.append(block)
 
@@ -361,6 +446,14 @@ class AssistantAgent:
                     HookEvent.RUN_END,
                     {"agent": self.name, "run_id": run_id, "status": "max_iterations"},
                 )
+
+        except GuardrailTripwireError as exc:
+            logger.warning("[%s] [stream] guardrail tripped: %s", self.name, exc.message)
+            await self.hooks.dispatch(
+                HookEvent.RUN_END,
+                {"agent": self.name, "run_id": run_id, "status": "guardrail_tripped"},
+            )
+            yield TextDelta(text=f"Request blocked: {exc.message}")
 
         except Exception as exc:
             logger.exception("[%s] stream run failed: %s", self.name, exc)
@@ -419,6 +512,35 @@ class AssistantAgent:
                     is_error=True,
                 ),
             )
+
+        # -- HITL approval ------------------------------------------------------
+        tool_risk = ToolRisk(getattr(tool, "risk", ToolRisk.SAFE))
+        _risk_order = {ToolRisk.SAFE: 0, ToolRisk.HIGH: 1, ToolRisk.CRITICAL: 2}
+        needs_approval = (
+            self._approval_handler is not None
+            and _risk_order[tool_risk] >= _risk_order[self._approval_required_risk]
+        )
+        if needs_approval:
+            approved = await self._approval_handler(tu.tool_name, dict(tu.arguments))  # type: ignore[misc]
+            if not approved:
+                duration = (time.monotonic() - t0) * 1000
+                err = f"Tool '{tu.tool_name}' denied by approval handler"
+                logger.info("[%s] HITL denied: %s", self.name, tu.tool_name)
+                return (
+                    ToolCallRecord(
+                        name=tu.tool_name,
+                        call_id=tu.call_id,
+                        arguments=dict(tu.arguments),
+                        result=err,
+                        is_error=True,
+                        duration_ms=duration,
+                    ),
+                    ToolResultBlock(
+                        call_id=tu.call_id,
+                        content=[ErrorBlock(error_type="ApprovalDenied", message=err)],
+                        is_error=True,
+                    ),
+                )
 
         await self.hooks.dispatch(
             HookEvent.TOOL_START,

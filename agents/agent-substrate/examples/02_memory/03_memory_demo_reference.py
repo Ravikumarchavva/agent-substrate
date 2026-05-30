@@ -11,8 +11,8 @@ import asyncio
 import os
 from datetime import datetime
 
-from ravi.integrations.memory.redis_memory import RedisMemory
-from ravi.integrations.memory.postgres_memory import PostgresMemory
+from ravi.adapters.memory.redis_memory import RedisMemory
+from ravi.adapters.memory.postgres_memory import PostgresMemory
 from ravi.reasoning.memory.session import SessionManager
 from ravi.kernel.messages.client_messages import (
     SystemMessage,

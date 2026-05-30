@@ -1,0 +1,11 @@
+"""Redis-backed event bus integration.
+
+``RedisPubSubFanout``, ``RedisStreamsDurableLog``, and ``RedisLeaseRegistry``
+depended on ``ravi.kernel.events._fabric`` which was removed during the
+kernel/fabric migration. They are parked until a replacement fabric Protocol
+is defined.
+"""
+
+from ravi.adapters.events.redis_event_bus import EventBus
+
+__all__ = ["EventBus"]

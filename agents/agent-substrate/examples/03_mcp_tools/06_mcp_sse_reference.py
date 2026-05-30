@@ -8,9 +8,9 @@ instead of stdio. This is useful for:
 """
 
 import asyncio
-from ravi.integrations.mcp.client import MCPClient
-from ravi.integrations.mcp.tool import MCPTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.mcp.client import MCPClient
+from ravi.adapters.mcp.tool import MCPTool
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.messages.client_messages import UserMessage, SystemMessage
 
@@ -49,7 +49,7 @@ async def main():
         # Use with agent
         print("🤖 Using MCP tools with agent...\n")
 
-        from ravi.configs.settings import settings
+        from ravi.config import settings
 
         client = OpenAIClient(
             model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY

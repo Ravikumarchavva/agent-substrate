@@ -25,7 +25,7 @@ from typing import Any
 
 import httpx
 
-from ravi.services.code_interpreter.schemas import (
+from ravi.serving.services.code_interpreter.schemas import (
     ExecuteResponse,
     FileReadResponse,
     HealthResponse,

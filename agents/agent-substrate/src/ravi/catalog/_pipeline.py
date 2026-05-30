@@ -272,7 +272,7 @@ class PipelineStore:
 
     async def save(self, pipeline: PipelineDef) -> None:
         """Save or update a pipeline definition."""
-        from ravi.server.models import AdapterPipeline
+        from ravi.serving.monolith.models import AdapterPipeline
 
         async with self._session_factory() as session:
             # Check for existing
@@ -298,7 +298,7 @@ class PipelineStore:
 
     async def load(self, name: str) -> Optional[PipelineDef]:
         """Load a pipeline by name."""
-        from ravi.server.models import AdapterPipeline
+        from ravi.serving.monolith.models import AdapterPipeline
 
         async with self._session_factory() as session:
             from sqlalchemy import select
@@ -312,7 +312,7 @@ class PipelineStore:
 
     async def list_all(self) -> List[PipelineDef]:
         """List all saved pipelines."""
-        from ravi.server.models import AdapterPipeline
+        from ravi.serving.monolith.models import AdapterPipeline
 
         async with self._session_factory() as session:
             from sqlalchemy import select
@@ -326,7 +326,7 @@ class PipelineStore:
 
     async def delete(self, name: str) -> bool:
         """Delete a pipeline by name.  Returns True if found and deleted."""
-        from ravi.server.models import AdapterPipeline
+        from ravi.serving.monolith.models import AdapterPipeline
 
         async with self._session_factory() as session:
             from sqlalchemy import delete as sql_delete

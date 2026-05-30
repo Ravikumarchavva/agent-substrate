@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from ravi.kernel.agent_catalog._catalog import AgentCatalog
 from ravi.reasoning.agents.assistant import AssistantAgent
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.catalog.tools.human_input.tool import AskHumanTool, HumanInputResponse
 
@@ -38,7 +38,7 @@ async def main():
     )
 
     # 3. Set up the agent with HITL support
-    from ravi.configs.settings import settings
+    from ravi.config import settings
 
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]

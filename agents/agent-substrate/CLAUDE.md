@@ -68,119 +68,66 @@ ravi/                            ← repo root
 
 ```
 src/ravi/
-├── kernel/                    ← FROZEN. Contracts (ABCs, Protocols, dataclasses, enums) + minimal reference impls.
-│   ├── agents/                ← BaseAgent ABC + AgentRunResult dataclasses (concrete agents in extensions/)
-│   ├── memory/                ← BaseMemory ABC + UnboundedMemory reference (SessionManager in extensions/)
-│   ├── tools/                 ← BaseTool ABC + ResettableTool protocol + @tool decorator (builtins in extensions/)
-│   ├── context/               ← ModelContext ABC only (concrete strategies in extensions/)
-│   ├── messages/              ← SystemMessage / UserMessage / AssistantMessage / ToolCallMessage / encoders
-│   ├── guardrails/            ← BaseGuardrail ABC only (PII, ContentFilter, etc. in extensions/)
-│   ├── middleware/            ← BaseMiddleware ABC + MiddlewarePipeline (builtins in extensions/)
-│   ├── pipelines/             ← Pipeline schema dataclasses only (runner in extensions/)
-│   ├── storage/               ← FileStore ABC + LocalFileStore + Document + TenantContext
-│   ├── structured/            ← StructuredOutputResult + schemas (parse/judge/router in extensions/)
-│   ├── llm/                   ← BaseModelClient ABC + ProviderConfig + model registry
-│   ├── runtime/               ← AgentRuntime protocol + LocalRuntime reference + LocalRuntime internals
-│   ├── agent_catalog/         ← AgentCatalog (FQN registry) + SkillManagerProtocol
-│   ├── plugin/                ← Decorator registry: @register_agent, @register_guardrail, etc.
-│   ├── execution/             ← ExecutionContext + ExecutionMiddlewarePipeline
-│   └── batch/                 ← BatchConfig / BatchItem / BatchResult (BatchProcessor in extensions/)
+│   ── COGNITIVE STACK (import-linter enforced, 4 layers, imports flow downward) ──
+├── kernel/         L0  ← FROZEN. Pure contracts: types, Protocols, dataclasses. No I/O, imports nothing.
+│   ├── content.py        ← ContentBlock, TextBlock, ImageBlock, ToolUseBlock, ToolResultBlock
+│   ├── message.py        ← Message envelope + ChatMessage (role + list[ContentBlock])
+│   ├── tools.py          ← Tool Protocol, ToolExecutionResult, ToolRisk (SAFE/HIGH/CRITICAL)
+│   ├── stream.py         ← TextDelta, ReasoningDelta, CompletionEvent, StreamDone
+│   ├── protocol.py       ← AgentRuntime, MessageHandler, StreamPublisher Protocols
+│   ├── identity.py       ← AgentId
+│   └── errors.py
 │
-├── extensions/                ← Built-in feature implementations over kernel contracts.
-│   ├── agents/                ← ReActAgent, OrchestratorAgent, Agent, FlowAgent, GraphAgent, RuntimeAgent
-│   ├── guardrails/            ← PIIDetectionGuardrail, ContentFilterGuardrail, PromptInjection, MaxToken, LLMJudge, ToolCallValidation, run_guardrails()
-│   ├── middleware/            ← AuditLogger, Cache, Retry, RateLimiter, GuardrailsMiddleware, HistoryTruncator, …
-│   ├── memory/                ← SessionManager + SessionState orchestration
-│   ├── context/               ← SlidingWindowContext, RedisModelContext, HybridContext, TokenBudgetContext, SummarizingContext
-│   ├── llm/                   ← CachedModelClient, FallbackClient, ModelRouter, SemanticCache
-│   ├── structured/            ← parse(), LLMJudge, StructuredRouter
-│   ├── extraction/            ← Extractor + Invoice/Receipt/Contract schemas
-│   ├── rag/                   ← VectorStore, GraphStore, chunkers, loaders, RAG pipeline, reranker
-│   ├── pipelines/             ← PipelineRunner, WhilePipelineRunner, workflow middleware, codegen
-│   ├── batch/                 ← BatchProcessor
-│   ├── storage/               ← EncryptedFileStore, factory, key providers
-│   ├── tools/                 ← Built-in CalculatorTool, WebSearchTool, GetBitcoinPriceTool, GetCurrentTimeTool
-│   └── resilience/            ← Retry / timeout / circuit-breaker policies
+├── fabric/         L1  ← runtime substrate
+│   ├── runtime/          ← LocalRuntime (message dispatch)
+│   ├── context/          ← AgentContext, HistoryProvider, InMemoryHistoryProvider, compaction strategies
+│   ├── llm/              ← LLMClient/EmbeddingClient Protocols + model registry + resilience
+│   │                       decorators (SemanticCache, CachedModelClient, FallbackClient, ModelRouter)
+│   ├── middleware/       ← Interceptor + MiddlewarePipeline (Message-level interceptors)
+│   ├── catalog/          ← registry + namespace (the registration machinery)
+│   ├── supervision/ lifecycle/ resources/
 │
-├── integrations/              ← External/SDK-backed adapters
-│   ├── llm/
-│   │   └── openai/            ← OpenAIClient — text, vision, STT, TTS, Realtime S2S, image gen
-│   ├── mcp/                   ← MCPClient, MCPTool wrappers, MCP App tools, app_tool_base
-│   ├── memory/                ← Concrete memory backends
-│   │   ├── redis_memory.py    ← RedisMemory (uses redis.asyncio)
-│   │   └── postgres_memory.py ← PostgresMemory (uses sqlalchemy + asyncpg)
-│   ├── skills/                ← Backward-compat re-exports (SkillManager, SkillLoader now in catalog/)
-│   ├── spotify/               ← SpotifyService, SpotifyAuthService
-│   └── storage/               ← S3FileStore (S3-compatible backend, uses aiobotocore)
+├── reasoning/      L2  ← the cognitive layer
+│   ├── agents/assistant/ ← AssistantAgent (ReAct loop, tools, HITL approval, guardrail injection)
+│   ├── guardrails/       ← GuardrailType (INPUT/OUTPUT/TOOL_CALL), run_guardrails, ContentFilter, PromptInjection
+│   ├── middleware/       ← LLM/tool-call middleware (rate_limiter, retry, cache, validators)
+│   └── hooks/
 │
-├── catalog/                   ← Unified capability system (tools, skills, connectors, pipelines)
-│   ├── tools/                 ← BaseTool implementations (human_input, task_manager, web_surfer, …)
-│   │   ├── human_input/       ← AskHumanTool, HITL handlers
-│   │   ├── task_manager/      ← TaskManagerTool (Kanban board)
-│   │   ├── web_surfer/        ← WebSurferTool (web browsing)
-│   │   ├── code_interpreter/  ← CodeInterpreterTool (Firecracker VM HTTP client)
-│   │   └── …                  ← capability_search, file_manager, email_sender, etc.
-│   ├── skills/                ← SKILL.md prompt-skill packages (debugging, code_review, …)
-│   ├── connectors/            ← External service connectors (email, postgres_query, …)
-│   ├── _chain_runtime.py      ← ChainRuntime + AdapterProxy (Proxy pattern)
-│   ├── _scanner.py            ← Convention discovery scanner (anchors on last ravi in path)
-│   ├── _data_ref.py           ← DataRef / DataRefStore
-│   ├── _pipeline.py           ← PipelineDef, PipelineEngine, PipelineStore
-│   ├── _skill_loader.py       ← SkillLoader (filesystem scanner + YAML parser)
-│   ├── _skill_manager.py      ← SkillManager (discovery + system-prompt injection)
-│   ├── _skill_models.py       ← SkillMetadata, Skill (pure data classes)
-│   ├── _temporal/             ← Temporal.io workflow integration (activities, worker, workflows)
-│   └── _triggers/             ← Trigger system (conditions, scheduler, webhooks)
+├── orchestration/  L3  ← multi-agent composition
+│   └── agents/           ← orchestrator, flow, proxy
 │
-├── server/                    ← Monolith FastAPI server
-│   ├── app.py                 ← Factory + lifespan; DI via app.state.*
-│   ├── _lifespan.py           ← Extracted init functions (init_llm_clients, init_infrastructure, init_tool_registry, init_runtime_services)
-│   ├── routes/                ← 18 route files (chat, tasks, hitl, threads, mcp_apps, workflows, triggers, …)
-│   ├── security/              ← Thin wrappers delegating to shared/auth/ (binds settings)
-│   ├── services/              ← Business logic (thread_service.py, agent_service.py, …)
-│   ├── sse/                   ← SSE event bus + HITL bridge (monolith only)
-│   │   ├── bridge.py          ← WebHITLBridge, BridgeRegistry
-│   │   └── events.py          ← EventBus + typed SSE event dataclasses
-│   ├── models.py              ← SQLAlchemy ORM models
-│   ├── database.py            ← Async session factory
-│   └── schemas.py             ← Pydantic request/response models
+│   ── ORTHOGONAL (adapters & the agent's capabilities; not in the layer contract) ──
+├── adapters/       ← concrete I/O ports implementing fabric/kernel contracts
+│   ├── llm/              ← OpenAIClient, Anthropic, Gemini, encoders, factory
+│   ├── memory/          ← redis_history, postgres_history, lineage backends
+│   ├── mcp/             ← MCPClient, MCPTool wrappers
+│   ├── vector/ graph/ storage/ events/ identity/ observability/ spotify/ runtime/
 │
-├── services/                  ← Microservices (one FastAPI app per folder)
-│   ├── base.py                ← Shared ServiceBase class
-│   ├── admin/                 ← User management, system stats
-│   ├── agent_runtime/         ← Runs the ReAct agent loop; dispatched by job_controller
-│   ├── conversation/          ← Thread + message CRUD
-│   ├── file_store/            ← File artifact upload/download (S3-compatible)
-│   ├── gateway/               ← BFF proxy — single external ingress point
-│   ├── human_gate/            ← HITL: ask_human + tool_approval flows
-│   ├── identity/              ← JWT auth, OAuth, user identity
-│   ├── job_controller/        ← Job lifecycle: create/start/complete/fail/cancel (JobRun ORM model)
-│   ├── live_stream/           ← SSE projector — fans out events to connected clients
-│   ├── policy/                ← RBAC authorization checks
-│   ├── tool_executor/         ← Executes individual tools in isolated contexts
-│   └── code_interpreter/      ← Firecracker VM sandbox for code execution
+├── catalog/        ← the agent's "hands" — anything an LLM can use dynamically
+│   ├── tools/           ← tool implementations (human_input, task_manager, web_surfer, …)
+│   ├── skills/          ← SKILL.md prompt-skill packages
+│   ├── connectors/      ← external service connectors
+│   ├── rag/             ← VectorStore, GraphStore, chunkers, loaders, RAG pipeline, reranker
+│   ├── _pipeline.py _chain_runtime.py _scanner.py _skill_*.py _triggers/
 │
-├── shared/                    ← Cross-service infrastructure and contracts
-│   ├── contracts/             ← Pydantic DTOs per service domain
-│   │   ├── admin.py           ← AdminStats, UserSummary
-│   │   ├── auth.py            ← TokenPayload, LoginRequest
-│   │   ├── conversation.py    ← ConversationCreate, MessageCreate
-│   │   ├── file_store.py      ← FileUploadResponse, FileMetadata
-│   │   ├── human_gate.py      ← HITLRequest, HITLResponse
-│   │   ├── job_controller.py  ← JobRunRequest, JobRunResponse
-│   │   └── tool.py            ← ToolCallRequest, ToolCallResponse
-│   ├── events/
-│   │   ├── bus.py             ← EventBus (Redis pub/sub): connect/disconnect/publish/subscribe
-│   │   └── types.py           ← Event factories: workflow_started, workflow_completed, …
-│   ├── auth/                  ← Canonical JWT + auth middleware (AuthClaims, verify_token, get_current_user)
-│   ├── database/              ← Shared session factory + get_db_session dependency
-│   ├── observability/         ← OpenTelemetry setup + telemetry (logger instance re-exported here; setup_logging() lives in ravi/logger.py)
-│   └── tasks/                 ← In-memory TaskStore singleton
+│   ── SERVING (deployment shells) ──
+├── serving/
+│   ├── monolith/        ← Monolith FastAPI server (app.py, routes/, sse/, security/, services/)
+│   ├── services/        ← 12 microservices (one FastAPI app per folder)
+│   └── shared/          ← cross-service infra: auth, events, database, tasks, contracts, observability
 │
-├── configs/settings.py        ← Pydantic Settings (reads from .env)
-├── evals/                     ← Evaluation framework (runner, judge, criteria, models)
-└── cli.py                     ← CLI entry: `agent-framework start/stop`
+│   ── TOP-LEVEL ──
+├── evals/          ← LLM-as-judge eval framework (judge, criteria, models)
+├── config.py       ← Pydantic Settings (reads .env)
+├── cli.py  console.py  logger.py  exceptions.py
+└── legacy/         ← archived pre-migration code (BaseAgent, old kernel runtime, dead subsystems)
 ```
+
+> **Note:** sections below this directory map predate the actor-model + layered
+> migration and may reference deleted modules (`extensions/`, `kernel/messages`,
+> `BaseAgent`, `BaseModelClient`, `ReActAgent`). Trust the tree above and the
+> import-linter contract in `pyproject.toml` over the stale examples below until
+> they are rewritten.
 
 ---
 
@@ -223,7 +170,9 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 **Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
 
 ```
-server | services  ←  catalog  ←  integrations  ←  extensions  ←  kernel
+orchestration  ←  reasoning  ←  fabric  ←  kernel        (the 4-layer cognitive stack)
+
+adapters, catalog, evals, serving  =  orthogonal (may import down into the stack)
 ```
 
 **Adding capability:**

@@ -12,9 +12,9 @@ Prerequisites:
 import asyncio
 import json
 
-from ravi.configs.settings import settings
-from ravi.integrations.llm.factory import create_model_client
-from ravi.integrations.mcp.client import MCPClient
+from ravi.config import settings
+from ravi.adapters.llm.factory import create_model_client
+from ravi.adapters.mcp.client import MCPClient
 from ravi.kernel.messages.client_messages import (
     SystemMessage,
     ToolExecutionResultMessage,

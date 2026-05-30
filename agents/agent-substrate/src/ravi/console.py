@@ -154,17 +154,28 @@ def _ensure_types() -> None:
         _CompletionChunk, \
         _ToolExecutionResultMessage
     if _TextDeltaChunk is None:
-        from ravi.reasoning.agents.assistant._legacy_stubs import (
-            TextDeltaChunk,
-            ReasoningDeltaChunk,
-            CompletionChunk,
-            ToolExecutionResultMessage,
-        )
+        try:
+            # Try importing modern migrated types first
+            from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+            from ravi.kernel.tools import ToolExecutionResult
+            
+            _TextDeltaChunk = TextDelta
+            _ReasoningDeltaChunk = ReasoningDelta
+            _CompletionChunk = CompletionEvent
+            _ToolExecutionResultMessage = ToolExecutionResult
+        except ImportError:
+            # Fallback to legacy stubs
+            from ravi.reasoning.agents.assistant._legacy_stubs import (
+                TextDeltaChunk,
+                ReasoningDeltaChunk,
+                CompletionChunk,
+                ToolExecutionResultMessage,
+            )
 
-        _TextDeltaChunk = TextDeltaChunk
-        _ReasoningDeltaChunk = ReasoningDeltaChunk
-        _CompletionChunk = CompletionChunk
-        _ToolExecutionResultMessage = ToolExecutionResultMessage
+            _TextDeltaChunk = TextDeltaChunk
+            _ReasoningDeltaChunk = ReasoningDeltaChunk
+            _CompletionChunk = CompletionChunk
+            _ToolExecutionResultMessage = ToolExecutionResultMessage
 
 
 # ---------------------------------------------------------------------------
@@ -298,8 +309,11 @@ class Console:
                 current_text = "".join(text_buffer)
                 if current_text != last_text:
                     live_obj.update(
-                        _build_accent_layout(
-                            agent_name, Markdown(current_text), status="generating..."
+                        Panel(
+                            Markdown(current_text),
+                            title=f"[agent]🤖 {agent_name}[/agent]",
+                            border_style="cyan",
+                            padding=(1, 2),
                         )
                     )
                     live_obj.refresh()
@@ -317,8 +331,11 @@ class Console:
                 current_reasoning = "".join(reasoning_buffer)
                 if current_reasoning != last_reasoning:
                     live_obj.update(
-                        _build_thinking_layout(
-                            agent_name, current_reasoning, status="thinking..."
+                        Panel(
+                            current_reasoning,
+                            title=f"[thinking]💭 {agent_name} thinking...[/thinking]",
+                            border_style="dim",
+                            padding=(1, 2),
                         )
                     )
                     live_obj.refresh()
@@ -335,7 +352,12 @@ class Console:
                             await refresh_task
                         final_reasoning = "".join(reasoning_buffer)
                         live.update(
-                            _build_thinking_layout(self.agent.name, final_reasoning)
+                            Panel(
+                                final_reasoning,
+                                title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                border_style="dim",
+                                padding=(1, 2),
+                            )
                         )
                         live.stop()
                         live = None
@@ -344,8 +366,11 @@ class Console:
                     # Start text streaming if not already started
                     if not live:
                         live = Live(
-                            _build_accent_layout(
-                                self.agent.name, Markdown(""), status="generating..."
+                            Panel(
+                                Markdown(""),
+                                title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                border_style="cyan",
+                                padding=(1, 2),
                             ),
                             console=self.console,
                             auto_refresh=False,
@@ -369,7 +394,12 @@ class Console:
                             await refresh_task
                         final_text = "".join(text_buffer)
                         live.update(
-                            _build_accent_layout(self.agent.name, Markdown(final_text))
+                            Panel(
+                                Markdown(final_text),
+                                title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                border_style="cyan",
+                                padding=(1, 2),
+                            )
                         )
                         live.stop()
                         live = None
@@ -378,8 +408,11 @@ class Console:
                     # Start reasoning streaming if not already started
                     if not live:
                         live = Live(
-                            _build_thinking_layout(
-                                self.agent.name, "", status="thinking..."
+                            Panel(
+                                "",
+                                title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                border_style="dim",
+                                padding=(1, 2),
                             ),
                             console=self.console,
                             auto_refresh=False,
@@ -395,7 +428,11 @@ class Console:
                     reasoning_updated.set()
 
                 elif isinstance(chunk, completion_cls):
-                    final_message = chunk.message
+                    if hasattr(chunk, "content"):
+                        from ravi.kernel.content import content_blocks_to_str
+                        final_message = content_blocks_to_str(chunk.content)
+                    else:
+                        final_message = getattr(chunk, "message", None)
                     if live:
                         if text_stream_active:
                             text_stream_active = False
@@ -404,8 +441,11 @@ class Console:
                                 await refresh_task
                             final_text = "".join(text_buffer)
                             live.update(
-                                _build_accent_layout(
-                                    self.agent.name, Markdown(final_text)
+                                Panel(
+                                    Markdown(final_text),
+                                    title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                    border_style="cyan",
+                                    padding=(1, 2),
                                 )
                             )
                         elif reasoning_stream_active:
@@ -415,7 +455,12 @@ class Console:
                                 await refresh_task
                             final_reasoning = "".join(reasoning_buffer)
                             live.update(
-                                _build_thinking_layout(self.agent.name, final_reasoning)
+                                Panel(
+                                    final_reasoning,
+                                    title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                    border_style="dim",
+                                    padding=(1, 2),
+                                )
                             )
                         live.stop()
                         live = None
@@ -430,8 +475,11 @@ class Console:
                                 await refresh_task
                             final_text = "".join(text_buffer)
                             live.update(
-                                _build_accent_layout(
-                                    self.agent.name, Markdown(final_text)
+                                Panel(
+                                    Markdown(final_text),
+                                    title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                    border_style="cyan",
+                                    padding=(1, 2),
                                 )
                             )
                         elif reasoning_stream_active:
@@ -441,7 +489,12 @@ class Console:
                                 await refresh_task
                             final_reasoning = "".join(reasoning_buffer)
                             live.update(
-                                _build_thinking_layout(self.agent.name, final_reasoning)
+                                Panel(
+                                    final_reasoning,
+                                    title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                    border_style="dim",
+                                    padding=(1, 2),
+                                )
                             )
                         live.stop()
                         live = None
@@ -466,12 +519,22 @@ class Console:
                     if text_buffer:
                         final_text = "".join(text_buffer)
                         live.update(
-                            _build_accent_layout(self.agent.name, Markdown(final_text))
+                            Panel(
+                                Markdown(final_text),
+                                title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                border_style="cyan",
+                                padding=(1, 2),
+                            )
                         )
                     elif reasoning_buffer:
                         final_reasoning = "".join(reasoning_buffer)
                         live.update(
-                            _build_thinking_layout(self.agent.name, final_reasoning)
+                            Panel(
+                                final_reasoning,
+                                title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                border_style="dim",
+                                padding=(1, 2),
+                            )
                         )
                 except Exception:
                     pass
@@ -552,12 +615,20 @@ class Console:
         Type ``/tools`` to list available tools.
         """
         name = getattr(self.agent, "name", "Agent")
-        tool_count = len(getattr(self.agent, "tools", []))
+        
+        # Robust tool extraction for modern and legacy agents
+        tools = getattr(self.agent, "tools", [])
+        if not tools and hasattr(self.agent, "list_tools"):
+            tools = self.agent.list_tools()
+        elif not tools and hasattr(self.agent, "_tools"):
+            _t = getattr(self.agent, "_tools")
+            tools = list(_t.values()) if isinstance(_t, dict) else _t
+        tool_count = len(tools)
 
         if greeting is None:
             greeting = (
-                f"[agent]{name}[/agent] ready "
-                f"({tool_count} tools). Type [bold]/help[/bold] for commands."
+                f"[agent]{name}[/agent] ready · [bold]{tool_count} tools loaded[/bold]\n"
+                f"  Commands: [bold]/reset[/bold] · [bold]/tools[/bold] · [bold]/help[/bold] · [bold]exit[/bold]"
             )
 
         self.console.print(Panel(greeting, border_style="cyan", padding=(0, 1)))
@@ -614,21 +685,55 @@ class Console:
 
     def _print_result(self, result: Any, elapsed: float) -> None:
         """Pretty-print an AgentRunResult."""
-        # Output text
-        output_text = getattr(result, "output_text", str(result))
+        # Output text (supporting both new 'output' and old 'output_text' fields)
+        output_text = getattr(result, "output", "")
+        if not output_text:
+            output_text = getattr(result, "output_text", "")
+        if not output_text and isinstance(result, str):
+            output_text = result
+        if not output_text and hasattr(result, "__dict__"):
+            output_text = str(result)
+
         if output_text:
             self.console.print()
             self.console.print(
-                _build_accent_layout(result.agent_name, Markdown(output_text))
+                Panel(
+                    Markdown(output_text),
+                    title=f"[agent]🤖 {getattr(self.agent, 'name', 'Agent')}[/agent]",
+                    border_style="cyan",
+                    padding=(1, 2),
+                )
             )
 
         # Footer
         steps = getattr(result, "steps_used", "?")
+        if steps == "?":
+            if hasattr(result, "tool_calls"):
+                steps = len(result.tool_calls) + 1
+            else:
+                steps = 1
+
         tokens = getattr(result, "usage", None)
-        token_str = f"{tokens.total_tokens} tokens" if tokens else ""
-        tools = getattr(result, "tool_calls_total", 0)
-        status = getattr(result, "status", None)
-        status_str = status.value if status else ""
+        token_str = ""
+        if tokens:
+            if hasattr(tokens, "total_tokens"):
+                token_str = f"{tokens.total_tokens} tokens"
+            elif hasattr(tokens, "total") and isinstance(tokens.total, int):
+                token_str = f"{tokens.total} tokens"
+
+        tools = 0
+        if hasattr(result, "tool_calls"):
+            tools = len(result.tool_calls)
+        elif hasattr(result, "tool_calls_total"):
+            tools = result.tool_calls_total
+
+        status_str = "completed"
+        if hasattr(result, "status"):
+            status_val = result.status
+            if hasattr(status_val, "value"):
+                status_str = str(status_val.value)
+            else:
+                status_str = str(status_val)
 
         parts = [
             f"{status_str}",
@@ -640,15 +745,23 @@ class Console:
         footer = " · ".join(p for p in parts if p)
         self.console.print(f"  [info]{footer}[/info]")
 
-    def _print_stream_footer(self, elapsed: float, tool_calls: int) -> None:
-        parts = []
-        if tool_calls:
-            parts.append(f"{tool_calls} tool calls")
-        parts.append(f"{elapsed:.1f}s")
+    def _print_stream_footer(self, elapsed: float, tool_calls: int, steps: int = 1, status: str = "completed") -> None:
+        parts = [
+            f"{status}",
+            f"{steps} steps",
+            f"{tool_calls} tool calls" if tool_calls else "0 tool calls",
+            f"{elapsed:.1f}s",
+        ]
         self.console.print(f"\n  [info]{' · '.join(parts)}[/info]")
 
     def _print_tools(self) -> None:
         tools = getattr(self.agent, "tools", [])
+        if not tools and hasattr(self.agent, "list_tools"):
+            tools = self.agent.list_tools()
+        elif not tools and hasattr(self.agent, "_tools"):
+            _t = getattr(self.agent, "_tools")
+            tools = list(_t.values()) if isinstance(_t, dict) else _t
+            
         if not tools:
             self.console.print("  No tools registered.", style="info")
             return

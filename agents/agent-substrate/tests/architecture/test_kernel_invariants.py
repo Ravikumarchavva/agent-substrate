@@ -66,12 +66,12 @@ _FORBIDDEN_PREFIXES = (
     "ravi.orchestration",
     "ravi.guardrails",
     "ravi.platform",
-    "ravi.integrations",
+    "ravi.adapters",
     "ravi.catalog",
-    "ravi.server",
-    "ravi.services",
-    "ravi.shared",
-    "ravi.configs",
+    "ravi.serving.monolith",
+    "ravi.serving.services",
+    "ravi.serving.shared",
+    "ravi.config",
     "ravi.logger",
 )
 

@@ -6,8 +6,8 @@ and MCP tools (like filesystem) together in a single agent.
 
 import asyncio
 from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.integrations.mcp import MCPClient, MCPTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.adapters.mcp import MCPClient, MCPTool
+from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.fabric.memory.unbounded import UnboundedMemory
 from ravi.kernel.messages.client_messages import (
     UserMessage,
@@ -45,7 +45,7 @@ async def main():
         print()
 
         # Use with agent
-        from ravi.configs.settings import settings
+        from ravi.config import settings
 
         client = OpenAIClient(
             model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY

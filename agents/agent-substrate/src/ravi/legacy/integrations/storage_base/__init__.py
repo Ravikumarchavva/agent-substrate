@@ -3,7 +3,7 @@
 Only the ``FileStore`` ABC, document types, and tenant scoping live here.
 The ``LocalFileStore`` reference driver lives in
 :mod:`ravi.fabric.storage.local` (L1). Encryption, the S3 driver, and the
-factory live in :mod:`ravi.integrations.storage`.
+factory live in :mod:`ravi.adapters.storage`.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """In-memory observability and replay reference implementations.
 
-These classes satisfy the kernel Protocols in ``ravi.kernel.observability``
-without external infrastructure. They are intentionally small and deterministic
+These classes satisfy the observability Protocols in
+``ravi.platform.observability`` without external infrastructure. They are intentionally small and deterministic
 so tests and local runtimes can exercise observability, replay gating, and
 operator kill switches without wiring an exporter or control plane service.
 
@@ -20,18 +20,18 @@ import uuid
 from dataclasses import replace
 from datetime import datetime
 
-from ravi.kernel.observability import (
-    EnvelopeSpan,
+from ravi.platform.observability._spans import EnvelopeSpan, SpanQuery, SpanStatus
+from ravi.platform.observability._killswitch import (
     KillSwitchDecision,
     KillSwitchRule,
     KillSwitchScope,
     KillSwitchTarget,
+)
+from ravi.platform.observability._replay import (
     ReplayAdmission,
     ReplayAdmissionStatus,
     ReplayDenyRule,
     ReplayRequest,
-    SpanQuery,
-    SpanStatus,
 )
 
 __all__ = [

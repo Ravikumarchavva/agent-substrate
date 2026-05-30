@@ -31,15 +31,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 from ravi.kernel.messages.content import JsonObject
-
-if TYPE_CHECKING:
-    from ravi.kernel.runtime._lifecycle import CheckpointRef
 
 
 # ---------------------------------------------------------------------------
@@ -192,19 +189,6 @@ class RunCheckpoint(BaseModel):
         if messages is not None:
             self.messages = messages
         self.updated_at = datetime.now(timezone.utc)
-
-    def to_ref(self, *, store_uri: str, byte_size: int = 0) -> "CheckpointRef":
-        """Build a slim :class:`CheckpointRef` pointer to this checkpoint.
-
-        ``CheckpointRef`` is what gets carried inside ``AgentActivationContract``
-        for lease/recovery routing; the full :class:`RunCheckpoint` stays in
-        its ``CheckpointStore`` until loaded.
-        """
-        from ravi.kernel.runtime._lifecycle import CheckpointRef
-
-        return CheckpointRef.from_run_checkpoint(
-            self, store_uri=store_uri, byte_size=byte_size
-        )
 
 
 # Rebuild for self-referential children field

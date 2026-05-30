@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import Protocol, runtime_checkable
 
-from ravi.kernel.runtime._contracts import Envelope
+from ravi.kernel.runtime._message import Envelope
 
 __all__ = [
     "EnvelopeSpan",
@@ -44,7 +44,7 @@ class SpanStatus(Enum):
 class EnvelopeSpan:
     """One observability span for one runtime envelope.
 
-    ``envelope_id`` is the kernel ``Envelope.event_id``. ``correlation_id``
+    ``envelope_id`` is the envelope's ``correlation_id``. ``correlation_id``
     lets operators follow a logical request across multiple envelopes, while
     ``trace_id`` links this neutral representation to external trace systems.
     """
@@ -76,19 +76,23 @@ class EnvelopeSpan:
         parent_span_id: str | None = None,
         attributes: SpanAttributes = (),
     ) -> EnvelopeSpan:
-        """Create a span snapshot from an :class:`Envelope`."""
+        """Create a span snapshot from an :class:`Envelope`.
 
+        Tenancy and actor identity are derived from ``envelope.identity`` when
+        present — the in-process envelope no longer carries denormalised
+        tenant/workspace/actor fields.
+        """
+        identity = envelope.identity
         return cls(
-            envelope_id=envelope.event_id,
+            envelope_id=envelope.correlation_id,
             correlation_id=envelope.correlation_id,
             name=name,
             trace_id=envelope.trace_id,
             causation_id=envelope.causation_id,
             parent_span_id=parent_span_id,
-            tenant_id=envelope.tenant_id,
-            workspace_id=envelope.workspace_id,
-            actor_id=envelope.actor_id,
-            event_type=envelope.event_type,
+            tenant_id=identity.effective_tenant_id if identity is not None else "default",
+            workspace_id=identity.effective_workspace_id if identity is not None else "default",
+            actor_id=identity.principal.fqn if identity is not None else "",
             sender=str(envelope.sender) if envelope.sender is not None else None,
             target=str(envelope.target) if envelope.target is not None else None,
             attributes=attributes,

@@ -95,7 +95,7 @@ async def main() -> None:
 
     from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
-    from ravi.fabric.memory.unbounded import UnboundedMemory
+    from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 
     from ravi.configs.settings import settings
 
@@ -104,7 +104,7 @@ async def main() -> None:
     catalog.register_model(
         "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
     )
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     catalog.register_tool(CalculatorTool())
     catalog.register_tool(GetCurrentTimeTool())
 
@@ -152,5 +152,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-#
-# `ravi.kernel.contracts._tool` provides immutable, typed request/result objects

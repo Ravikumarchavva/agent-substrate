@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from ravi.kernel.agents.agent_result import (
+from ravi.fabric.agents_base.agent_result import (
     AgentRunResult,
     AggregatedUsage,
     RunStatus,

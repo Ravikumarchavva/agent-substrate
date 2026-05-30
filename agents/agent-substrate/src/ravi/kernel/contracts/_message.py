@@ -1,6 +1,6 @@
 """Provider-neutral canonical message types.
 
-The existing ``core/messages/`` module has provider-shaped classes
+The existing ``kernel/messages/`` module has provider-shaped classes
 (SystemMessage, UserMessage, AssistantMessage, …). Provider encoders in
 ``integrations/llm/`` translate those to wire formats.
 

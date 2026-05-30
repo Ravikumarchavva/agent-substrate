@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
-from ravi.kernel.context.base_context import ModelContext
+from ravi.fabric.agents_base.agent_context import AgentContext
 from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.kernel.memory.history_provider import HistoryProvider
@@ -100,7 +100,7 @@ async def load_agent_for_thread(
         cold_store_name="Postgres",
         load_persisted_steps=lambda: load_messages_for_memory(db, thread_id),
     )
-    context = ModelContext(
+    context = AgentContext(
         history=memory,
         compaction_strategies=[SlidingWindowStrategy(max_messages=model_context_window)]
     )

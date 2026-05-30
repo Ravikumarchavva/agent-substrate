@@ -29,7 +29,7 @@ from typing import Any, Generic, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
-from ravi.kernel.batch.config import BatchConfig, BatchResult
+from ravi.fabric.batch.config import BatchConfig, BatchResult
 from ravi.fabric.batch.processor import BatchProcessor
 from ravi.kernel.messages.client_messages import UserMessage
 from ravi.kernel.structured.result import StructuredOutputResult

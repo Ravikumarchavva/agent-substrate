@@ -234,7 +234,7 @@ CONTENT_BLOCK_TYPES: tuple[type, ...] = (
 )
 
 
-def blocks_to_text(blocks: list, *, separator: str = " ") -> str:
+def blocks_to_text(blocks: list[ContentBlock | str | Any], *, separator: str = " ") -> str:
     """Concatenate the ``text`` field of every text-bearing block in *blocks*.
 
     Non-text blocks (images, audio, video, documents, errors, …) are
@@ -242,7 +242,7 @@ def blocks_to_text(blocks: list, *, separator: str = " ") -> str:
     a meaningful string — never a Python ``repr``.
 
     This is the canonical way to lower a multimodal envelope to a string
-    when a caller (e.g. a single-turn ``BaseAgent.run`` adapter) requires
+    when a caller (e.g. a single-turn ``ActorAgent`` adapter) requires
     a flat text input. Always prefer the original ``list[ContentBlock]``
     when the API can accept it.
     """

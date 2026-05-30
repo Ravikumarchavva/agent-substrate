@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Coroutine, Optional, Sequence, TypeVar
 
-from ravi.kernel.batch.config import BatchConfig, BatchItem, BatchResult, BatchStatus
+from ravi.fabric.batch.config import BatchConfig, BatchItem, BatchResult, BatchStatus
 
 logger = setup_logging()
 
@@ -40,7 +40,7 @@ class BatchProcessor:
     Example::
 
         from ravi import Agent
-        from ravi.kernel.batch import BatchProcessor, BatchConfig
+        from ravi.fabric.batch import BatchProcessor, BatchConfig
 
         agent = Agent(name="Summariser", model="gpt-5-mini")
 

@@ -108,8 +108,8 @@ def unregister(category: str, name: str) -> None:
 # ``ActorAgent`` base (which lives in the L1 fabric layer) — the kernel must
 # never import fabric.
 
-from ravi.kernel.agents._protocol import AgentProtocol
-from ravi.kernel.context.base_context import ModelContext
+from ravi.fabric.agents_base._protocol import AgentProtocol
+from ravi.fabric.agents_base.agent_context import AgentContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.memory.history_provider import HistoryProvider
@@ -152,7 +152,7 @@ register_guardrail = _make_decorator("guardrail", base=BaseGuardrail)
 register_middleware = _make_decorator("middleware", base=BaseMiddleware)
 register_provider = _make_decorator("provider", base=BaseModelClient)
 register_memory = _make_decorator("memory", base=HistoryProvider)
-register_context = _make_decorator("context", base=ModelContext)
+register_context = _make_decorator("context", base=AgentContext)
 register_tool = _make_decorator("tool", base=BaseTool)
 # ``rag`` has no canonical base class in kernel yet; use ``object`` and let
 # the first concrete RAG strategy define a base when it lands in extensions.

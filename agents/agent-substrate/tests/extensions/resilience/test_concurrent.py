@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from ravi.kernel.agents.agent_result import RunStatus
+from ravi.fabric.agents_base.agent_result import RunStatus
 from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.fabric.runtime.local import LocalRuntime

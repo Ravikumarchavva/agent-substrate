@@ -10,7 +10,7 @@ from ravi.reasoning.agents.assistant.agent import AssistantAgent as RuntimeAssis
 from ravi.fabric.catalog import AgentCatalogRegistry
 from ravi.fabric.runtime.local import LocalRuntime
 from ravi.kernel.messages.client_messages import AssistantMessage
-from ravi.kernel.agents.agent_result import RunStatus
+from ravi.fabric.agents_base.agent_result import RunStatus
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 

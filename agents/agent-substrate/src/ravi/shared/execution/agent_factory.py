@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.fabric.catalog._catalog import AgentCatalog
-from ravi.kernel.context.base_context import ModelContext
+from ravi.fabric.agents_base.agent_context import AgentContext
 from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 from ravi.kernel.execution.context import ExecutionContext
 from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
@@ -160,7 +160,7 @@ def create_assistant_agent(  # type: ignore[return]
     system_instructions: str,
     memory: HistoryProvider,
     session_id: Optional[str] = None,
-    model_context: Optional[ModelContext] = None,
+    model_context: Optional[AgentContext] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
     verbose: bool = True,
@@ -183,7 +183,7 @@ def create_assistant_agent(  # type: ignore[return]
     from ravi.kernel.guardrails.spec import GuardrailSpec
     from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
 
-    from ravi.kernel.context.base_context import ModelContext
+    from ravi.fabric.agents_base.agent_context import AgentContext
 
     kwargs: Dict[str, Any] = dict(
         name="ChatBot",
@@ -207,14 +207,14 @@ def create_assistant_agent(  # type: ignore[return]
         enable_capability_search=enable_capability_search,
     )
 
-    if isinstance(model_context, ModelContext):
+    if isinstance(model_context, AgentContext):
         kwargs["context"] = model_context
     else:
         resolved_compaction = model_context or SlidingWindowStrategy(
             max_messages=model_context_window
         )
         strategies = resolved_compaction if isinstance(resolved_compaction, list) else [resolved_compaction]
-        kwargs["context"] = ModelContext(history=memory, compaction_strategies=strategies)
+        kwargs["context"] = AgentContext(history=memory, compaction_strategies=strategies)
     if tool_approval_handler is not None:
         kwargs["tool_approval_handler"] = tool_approval_handler
     if tools_requiring_approval is not None:

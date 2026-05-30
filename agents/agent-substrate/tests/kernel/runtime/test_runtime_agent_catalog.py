@@ -13,7 +13,7 @@ from ravi.kernel.runtime._contracts import MessageContext
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.messages.client_messages import AssistantMessage
 from ravi.kernel.messages.content import ContentBlock
-from ravi.kernel.agents.agent_result import RunStatus
+from ravi.fabric.agents_base.agent_result import RunStatus
 from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 
 
@@ -106,7 +106,7 @@ async def test_runtime_assistant_agent_catalog_schemas():
     cat = AgentCatalogRegistry()
     cat.register_tool(DummyCatalogTool())
 
-    from ravi.kernel.context.base_context import ModelContext
+    from ravi.fabric.agents_base.agent_context import AgentContext
     from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 
     # Instantiate RuntimeAssistantAgent with explicit catalog and context param
@@ -114,7 +114,7 @@ async def test_runtime_assistant_agent_catalog_schemas():
         name="assistant",
         runtime=runtime,
         model=client,
-        context=ModelContext(history=InMemoryHistoryProvider(), compaction_strategies=[strategy]),
+        context=AgentContext(history=InMemoryHistoryProvider(), compaction_strategies=[strategy]),
         catalog=cat,
         verbose=False,
         enable_capability_search=False,

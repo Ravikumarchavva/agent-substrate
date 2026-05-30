@@ -1,7 +1,7 @@
 """AssistantAgent — full cognitive actor replacing ReActAgent.
 
 Every agent is an actor registered with a runtime.  AssistantAgent merges the
-complete ReAct loop (streaming, guardrails, HITL, checkpointing, MutationPolicy,
+complete ReAct loop (streaming, guardrails, HITL, checkpointing,
 lineage, observability) into the actor model.
 
 Entry point is always ``on_message()``, never ``run()`` directly.
@@ -25,9 +25,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, AsyncIterator, Dict, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
-    from ravi.kernel.safeguards._mutation import MutationPolicy
     from ravi.kernel.llm.base_client import BaseModelClient
-    from ravi.kernel.context.compaction import CompactionStrategy
+    from ravi.fabric.agents_base.compaction import CompactionStrategy
 from uuid import uuid4
 
 from ravi.kernel.messages.content import JsonObject
@@ -35,7 +34,7 @@ from ravi.kernel.messages._types import StreamChunk
 
 from ravi.fabric.actors.actor import ActorAgent, StreamEnvelope, StreamChannel
 from ravi.kernel.messages.content import ContentBlock
-from ravi.kernel.runtime._contracts import MessageContext
+from ravi.kernel.runtime._message import MessageContext
 from ravi.kernel.plugin import register_agent
 from ravi.reasoning.agents.assistant._react_loop import (
     build_persisted_user_message,
@@ -46,7 +45,7 @@ from ravi.reasoning.agents.assistant._react_loop import (
 )
 from ravi.kernel.execution.context import ExecutionContext
 from ravi.kernel.runtime import AgentRuntime, StreamPublisher, TopicId
-from ravi.kernel.agents.agent_result import (
+from ravi.fabric.agents_base.agent_result import (
     AgentRunResult,
     AggregatedUsage,
     RunStatus,
@@ -106,7 +105,7 @@ from ravi.fabric.resilience.policies import (
     TOOL_RETRY_POLICY,
     _calculate_delay,
 )
-from ravi.kernel.context.base_context import ModelContext
+from ravi.fabric.agents_base.agent_context import AgentContext
 from ravi.kernel.tools import BaseTool
 from ravi.kernel.guardrails.spec import GuardrailSpec
 from ravi.fabric.catalog import AgentCatalogRegistry
@@ -170,7 +169,7 @@ class AssistantAgent(ActorAgent):
         *,
         # Cognitive resources — explicit, no more catalog lookups
         model: Optional["BaseModelClient"] = None,
-        context: Optional[ModelContext] = None,
+        context: Optional[AgentContext] = None,
         checkpoint_store: Optional[CheckpointStore] = None,
         # Tools and skills — via catalog or list
         catalog: Optional[AgentCatalogRegistry] = None,
@@ -197,7 +196,6 @@ class AssistantAgent(ActorAgent):
         execution_context: Optional[ExecutionContext] = None,
         enable_capability_search: bool = True,
         checkpoint_every: int = 0,
-        mutation_policy: Optional["MutationPolicy"] = None,
         subscriptions: Optional[List[TopicId]] = None,
     ):
         # Resolve cognitive resources
@@ -205,7 +203,7 @@ class AssistantAgent(ActorAgent):
             from ravi.fabric.memory.in_memory import InMemoryHistoryProvider as _IMP
             from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 
-            context = ModelContext(
+            context = AgentContext(
                 history=_IMP(),
                 compaction_strategies=[SlidingWindowStrategy(max_messages=40)]
             )
@@ -273,11 +271,8 @@ class AssistantAgent(ActorAgent):
         self._max_active_tools = self.DEFAULT_MAX_ACTIVE_TOOLS
 
         # Fault recovery
-        self.checkpoint_store: Optional[CheckpointStore] = _ctx.checkpoint_store
+        self.checkpoint_store: Optional[CheckpointStore] = checkpoint_store
         self.checkpoint_every: int = checkpoint_every
-
-        # Self-evolution safeguard
-        self._mutation_policy: Optional["MutationPolicy"] = mutation_policy
 
         # Per-run state
         self._current_run_id: str = ""
@@ -332,45 +327,15 @@ class AssistantAgent(ActorAgent):
         text = _extract_text(content) if content else ""
         return await self._run_impl(text)
 
-    # -- Mutation gates ------------------------------------------------------
+    # -- Dynamic reconfiguration --------------------------------------------
 
     async def add_tool(self, tool: object) -> bool:
-        """Dynamically register a tool — gated by mutation_policy."""
-        if self._mutation_policy is not None:
-            from ravi.kernel.safeguards._mutation import MutationKind, MutationRequest
-
-            request = MutationRequest(
-                request_id=uuid4().hex,
-                principal_fqn=self.name,
-                target_agent_fqn=self.name,
-                kind=MutationKind.TOOL_ADD,
-                family_depth=0,
-                payload_summary=getattr(tool, "name", repr(tool))[:100],
-                requested_at=datetime.now(timezone.utc).isoformat(),
-            )
-            permission = await self._mutation_policy.evaluate(request)
-            if not permission.granted:
-                return False
+        """Dynamically register a tool on this agent's catalog."""
         self._catalog.register_tool(tool)  # type: ignore[arg-type]
         return True
 
     async def rewrite_system_prompt(self, new_instructions: str) -> bool:
-        """Rewrite system instructions — gated by mutation_policy."""
-        if self._mutation_policy is not None:
-            from ravi.kernel.safeguards._mutation import MutationKind, MutationRequest
-
-            request = MutationRequest(
-                request_id=uuid4().hex,
-                principal_fqn=self.name,
-                target_agent_fqn=self.name,
-                kind=MutationKind.PROMPT_REWRITE,
-                family_depth=0,
-                payload_summary=new_instructions[:100],
-                requested_at=datetime.now(timezone.utc).isoformat(),
-            )
-            permission = await self._mutation_policy.evaluate(request)
-            if not permission.granted:
-                return False
+        """Rewrite this agent's system instructions."""
         self._update_system_instructions(new_instructions)
         return True
 

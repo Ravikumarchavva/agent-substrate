@@ -1,133 +1,40 @@
+"""Runtime contracts — the message protocols agents talk over.
+
+A thin, in-process core. Agent↔agent is synchronous full request/response;
+the only chunked path is the user-facing visibility stream (:mod:`._stream`).
+:class:`AgentRuntime` is the seam a future distributed backend implements.
+"""
+
 from __future__ import annotations
 
-# Identity value-objects
-from ravi.kernel.runtime._identity import (
-    AgentId,
-    DelegationToken,
-    IdentityContext,
-    PrincipalId,
-    PrincipalKind,
-    TopicId,
-)
-
-# Protocol
-from ravi.kernel.runtime._protocol import AgentRuntime
-
-# Contracts (typed data structures)
-from ravi.kernel.runtime._contracts import (
-    CancellationToken,
+from ravi.kernel.runtime._identity import AgentId, TopicId
+from ravi.kernel.runtime._message import (
     Envelope,
     MessageContext,
     MessageHandler,
-    RestartPolicy,
     RuntimeRef,
-    StreamDone,
     Subscription,
 )
-
-# Errors (single source of truth)
-from ravi.kernel.runtime._errors import (
-    AgentNotFoundError,
-    CheckpointCorruptedError,
-    DeadlockDetectedError,
-    EnvelopeExpiredError,
-    HandlerError,
-    LeaseAcquisitionFailed,
-    MailboxFullError,
-    ResourceConflictError,
-    SagaFailedError,
-    SupervisorEscalation,
-)
-
-# Backpressure
-from ravi.kernel.runtime._backpressure import (
-    BackpressureAction,
-    BackpressurePolicy,
-    BackpressureSignal,
-)
-
-# Lease coordination
-from ravi.kernel.runtime._lease import (
-    DEFAULT_LEASE_TTL_SECONDS,
-    InMemoryLeaseRegistry,
-    LeaseAcquisitionResult,
-    LeaseRegistry,
-)
-
-# Routing middleware
-from ravi.kernel.runtime._middleware import (
-    DropEnvelope,
-    RoutingMiddleware,
-    RoutingMiddlewareRejection,
-)
-
-# Streaming
-from ravi.kernel.runtime._stream import StreamPublisher
-
-# Dormant agent lifecycle contracts
-from ravi.kernel.runtime._lifecycle import (
-    ActivationAware,
-    ActivationTrigger,
-    AgentActivationContract,
-    AgentLifecycleState,
-    Checkpointable,
-    CheckpointRef,
-    ExecutionLease,
-)
+from ravi.kernel.runtime._protocol import AgentRuntime
+from ravi.kernel.runtime._errors import AgentNotFoundError, HandlerError
+from ravi.kernel.runtime._stream import StreamDone, StreamPublisher
 
 __all__ = [
-    # Identity
+    # Routing keys
     "AgentId",
     "TopicId",
-    "PrincipalId",
-    "PrincipalKind",
-    "DelegationToken",
-    "IdentityContext",
     # Protocol
     "AgentRuntime",
-    # Contracts
-    "CancellationToken",
+    # Message contracts
     "Envelope",
     "MessageContext",
     "MessageHandler",
     "RuntimeRef",
     "Subscription",
-    # Streaming
+    # Errors
+    "AgentNotFoundError",
+    "HandlerError",
+    # Visibility stream
     "StreamDone",
     "StreamPublisher",
-    # Supervisor / Dispatcher
-    "RestartPolicy",
-    "AgentNotFoundError",
-    # Backpressure
-    "BackpressureAction",
-    "BackpressurePolicy",
-    "BackpressureSignal",
-    # Lease coordination
-    "DEFAULT_LEASE_TTL_SECONDS",
-    "InMemoryLeaseRegistry",
-    "LeaseAcquisitionFailed",
-    "LeaseAcquisitionResult",
-    "LeaseRegistry",
-    # Routing middleware
-    "DropEnvelope",
-    "RoutingMiddleware",
-    "RoutingMiddlewareRejection",
-    # Errors
-    "HandlerError",
-    "EnvelopeExpiredError",
-    "CheckpointCorruptedError",
-    "DeadlockDetectedError",
-    "LeaseAcquisitionFailed",
-    "MailboxFullError",
-    "ResourceConflictError",
-    "SagaFailedError",
-    "SupervisorEscalation",
-    # Dormant agent lifecycle contracts
-    "AgentLifecycleState",
-    "ActivationTrigger",
-    "ExecutionLease",
-    "CheckpointRef",
-    "AgentActivationContract",
-    "Checkpointable",
-    "ActivationAware",
 ]

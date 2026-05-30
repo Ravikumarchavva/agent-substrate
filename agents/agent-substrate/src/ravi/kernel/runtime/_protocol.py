@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from ravi.kernel.runtime._identity import AgentId, TopicId
-from ravi.kernel.runtime._contracts import MessageHandler
+from ravi.kernel.runtime._message import MessageHandler
 
 
 # ---------------------------------------------------------------------------

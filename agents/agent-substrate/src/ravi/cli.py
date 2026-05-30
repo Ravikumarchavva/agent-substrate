@@ -251,7 +251,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
     from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
     from ravi.reasoning.memory.context.unbounded import UnboundedStrategy
-    from ravi.kernel.context.base_context import ModelContext
+    from ravi.fabric.agents_base.agent_context import AgentContext
 
     # Build tools
     tools = []
@@ -278,7 +278,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 args.name,
                 rt,
                 model=OpenAIClient(model=args.model),
-                context=ModelContext(
+                context=AgentContext(
                     history=InMemoryHistoryProvider(),
                     compaction_strategies=[UnboundedStrategy()]
                 ),

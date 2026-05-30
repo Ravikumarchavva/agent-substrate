@@ -2,7 +2,7 @@
 
 All messages are fully serializable Pydantic models.  Provider-specific
 encoding (OpenAI, Anthropic, Gemini wire formats) lives in
-``core.messages.encoders.<provider>`` — messages themselves are
+``integrations.llm.encoders.<provider>`` — messages themselves are
 provider-agnostic data containers.
 
 Serialization: ``msg.model_dump(mode="json")`` for storage / wire.
@@ -12,7 +12,7 @@ Deserialization: ``SystemMessage.model_validate(data)`` etc.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, List, Literal, Optional
+from typing import List, Literal, Optional
 from uuid import uuid4
 
 from pydantic import (
@@ -35,6 +35,7 @@ from ravi.kernel.messages.content import (
     TextBlock,
     ImageBlock,
     content_block_from_dict,
+    CONTENT_BLOCK_TYPES,
 )
 
 
@@ -131,7 +132,7 @@ class AssistantMessage(BaseClientMessage[Optional[List[MessageContent]]]):
     """Assistant message with optional tool calls.
 
     Provider-specific serialization is handled by the encoder modules
-    in ``core.messages.encoders``.
+    in ``integrations/llm/encoders/``.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -213,7 +214,7 @@ class ToolExecutionResultMessage(BaseClientMessage[List[ContentBlock]]):
         if isinstance(v, list):
             result: list[ContentBlock] = []
             for item in v:
-                if isinstance(item, (TextBlock, ImageBlock)):
+                if isinstance(item, CONTENT_BLOCK_TYPES):
                     result.append(item)
                 elif isinstance(item, dict):
                     result.append(content_block_from_dict(item))
@@ -252,50 +253,3 @@ class ToolExecutionResultMessage(BaseClientMessage[List[ContentBlock]]):
             return result
         raise ValueError("media must be a list or None")
 
-    @classmethod
-    def from_tool_result(
-        cls,
-        tool_result: "ToolResult",
-        tool_call_id: str,
-        tool_name: Optional[str] = None,
-    ) -> "ToolExecutionResultMessage":
-        """Create ToolExecutionResultMessage from ToolResult.
-
-        Content blocks (TextBlock, ImageBlock, …) pass through to the LLM
-        as-is via the encoder.  Rich media (ImageContent, AudioContent, …)
-        passes through ``media`` so encoders can attach it as a separate
-        context item without duplicating it in the content list.
-
-        DocumentBlock entries in content are promoted to DocumentContent in
-        media so encoders can attach the binary document without embedding
-        raw base64 in the text content list.
-        """
-        import base64
-        from ravi.kernel.messages.content import DocumentBlock
-
-        media: List[MediaContent] = list(tool_result.media) if tool_result.media else []
-        clean_content: List = []
-        for block in tool_result.content:
-            if isinstance(block, DocumentBlock):
-                media.append(
-                    DocumentContent(
-                        data=base64.b64decode(block.data),
-                        media_type=block.media_type,
-                        filename=block.filename,
-                    )
-                )
-            else:
-                clean_content.append(block)
-
-        return cls(
-            tool_call_id=tool_call_id,
-            name=tool_name,
-            content=clean_content or tool_result.content,
-            is_error=tool_result.is_error,
-            app_data=tool_result.app_data,
-            media=media if media else None,
-        )
-
-
-if TYPE_CHECKING:
-    from ravi.kernel.tools.base_tool import ToolResult

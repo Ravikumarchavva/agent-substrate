@@ -19,7 +19,7 @@ from typing import runtime_checkable, Protocol
 
 from ravi.kernel.messages.content import ContentBlock
 from ravi.kernel.runtime._identity import AgentId, TopicId
-from ravi.kernel.runtime._contracts import MessageContext
+from ravi.kernel.runtime._message import MessageContext
 from ravi.kernel.runtime._protocol import AgentRuntime
 from ravi.kernel.tools.base_tool import BaseTool
 from ravi.fabric.catalog import AgentCatalogRegistry

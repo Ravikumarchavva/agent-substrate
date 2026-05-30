@@ -1,9 +1,21 @@
-"""ravi.fabric.batch — Concurrent BatchProcessor implementation.
+"""ravi.fabric.batch — batch config value types + concurrent BatchProcessor.
 
-Generic fan-out infrastructure (concurrency + retries) over a dataset. The
-batch config value types live in :mod:`ravi.kernel.batch`.
+Generic fan-out infrastructure (concurrency + retries) over a dataset, plus the
+config/result dataclasses that describe a batch run.
 """
 
+from ravi.fabric.batch.config import (
+    BatchConfig,
+    BatchItem,
+    BatchResult,
+    BatchStatus,
+)
 from ravi.fabric.batch.processor import BatchProcessor
 
-__all__ = ["BatchProcessor"]
+__all__ = [
+    "BatchConfig",
+    "BatchItem",
+    "BatchResult",
+    "BatchStatus",
+    "BatchProcessor",
+]

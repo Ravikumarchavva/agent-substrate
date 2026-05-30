@@ -33,12 +33,34 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 
-from ravi.kernel.runtime._errors import (
-    DeadlockDetectedError,
-    ResourceConflictError,
-)
-
 logger = logging.getLogger(__name__)
+
+
+class ResourceConflictError(Exception):
+    """Raised when an agent cannot acquire a lock on a shared resource.
+
+    Carries the resource URI and the agent that currently holds the lock.
+    """
+
+    def __init__(
+        self, resource_uri: str, holder_agent_id: str, message: str = ""
+    ) -> None:
+        self.resource_uri = resource_uri
+        self.holder_agent_id = holder_agent_id
+        super().__init__(
+            message or f"resource {resource_uri!r} locked by {holder_agent_id}"
+        )
+
+
+class DeadlockDetectedError(Exception):
+    """Raised when the lock manager detects a wait-for cycle.
+
+    Carries the list of agent IDs forming the deadlock cycle.
+    """
+
+    def __init__(self, cycle: list[str], message: str = "") -> None:
+        self.cycle = cycle
+        super().__init__(message or f"deadlock detected: {' → '.join(cycle)}")
 
 
 # ---------------------------------------------------------------------------

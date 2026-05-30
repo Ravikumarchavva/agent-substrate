@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
-from ravi.kernel.context.base_context import ModelContext
+from ravi.fabric.agents_base.agent_context import AgentContext
 from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.kernel.messages.client_messages import (
     AssistantMessage,
@@ -27,8 +27,8 @@ def _asst(text: str) -> AssistantMessage:
 
 
 def _build(strategy: SlidingWindowStrategy, msgs):
-    """Helper: wrap the strategy in a ModelContext and call build()."""
-    ctx = ModelContext(history=InMemoryHistoryProvider(), compaction_strategies=[strategy])
+    """Helper: wrap the strategy in an AgentContext and call build()."""
+    ctx = AgentContext(history=InMemoryHistoryProvider(), compaction_strategies=[strategy])
     return ctx.build(
         session_id="test",
         current_input="",

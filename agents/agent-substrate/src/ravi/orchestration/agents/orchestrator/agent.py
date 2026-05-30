@@ -40,8 +40,8 @@ from ravi.kernel.messages.content import JsonObject, TextBlock
 from ravi.fabric.actors.actor import ActorAgent
 from ravi.kernel.plugin import register_agent
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
-from ravi.kernel.agents.agent_result import AgentRunResult
-from ravi.kernel.context.base_context import ModelContext
+from ravi.fabric.agents_base.agent_result import AgentRunResult
+from ravi.fabric.agents_base.agent_context import AgentContext
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
 from ravi.kernel.memory.history_provider import HistoryProvider
@@ -200,7 +200,7 @@ class OrchestratorAgent(AssistantAgent):
                               roster of sub-agents is appended automatically.
         memory:               Orchestrator's own memory instance.
         memory_scope:         Memory scope for the orchestrator itself.
-        model_context:        ModelContext strategy for the orchestrator.
+        model_context:        AgentContext strategy for the orchestrator.
         max_iterations:       Max orchestrator ReAct iterations.
         handoff_guardrails:   Guardrails applied specifically to handoff calls.
         hooks:                HookManager — will receive ``HANDOFF`` events.
@@ -228,7 +228,7 @@ class OrchestratorAgent(AssistantAgent):
         system_instructions: Optional[str] = None,
         memory: Optional[HistoryProvider] = None,
         memory_scope: MemoryScope = MemoryScope.ISOLATED,
-        model_context: Optional[ModelContext] = None,
+        model_context: Optional[AgentContext] = None,
         max_iterations: int = 50,
         handoff_guardrails: Optional[List[BaseGuardrail]] = None,
         hooks: Optional[HookManager] = None,
@@ -305,7 +305,7 @@ class OrchestratorAgent(AssistantAgent):
         else:
             strategies = [model_context]
 
-        model_context_mgr = ModelContext(history=resolved_history, compaction_strategies=strategies)
+        model_context_mgr = AgentContext(history=resolved_history, compaction_strategies=strategies)
 
         super().__init__(
             name,
@@ -372,48 +372,4 @@ class OrchestratorAgent(AssistantAgent):
 
         self.hooks.dispatch = _patched_dispatch  # type: ignore[method-assign]
 
-    # -- Graph support --------------------------------------------------------
 
-    def to_graph(self) -> "FlowGraph":  # type: ignore[name-defined]  # noqa: F821
-        from ravi.orchestration.agents.graph.agent import FlowGraph, FlowEdge, FlowNode
-
-        graph = FlowGraph(name=self.name)
-        graph.add_node(FlowNode(id="__input__", label="start", node_type="input"))
-        orch_id = self.name
-        graph.add_node(
-            FlowNode(
-                id=orch_id,
-                label=f"🎯 {self.name}",
-                node_type="agent",
-                metadata={"role": "orchestrator"},
-            )
-        )
-        graph.add_edge(FlowEdge(source="__input__", target=orch_id))
-
-        for agent in self.sub_agents:
-            graph.add_node(
-                FlowNode(
-                    id=agent.name,
-                    label=agent.name,
-                    node_type="agent",
-                    metadata={"role": "specialist"},
-                )
-            )
-            graph.add_edge(
-                FlowEdge(
-                    source=orch_id,
-                    target=agent.name,
-                    label="handoff",
-                )
-            )
-            graph.add_edge(
-                FlowEdge(
-                    source=agent.name,
-                    target=orch_id,
-                    label="result",
-                )
-            )
-
-        graph.add_node(FlowNode(id="__output__", label="end", node_type="output"))
-        graph.add_edge(FlowEdge(source=orch_id, target="__output__"))
-        return graph

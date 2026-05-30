@@ -1,22 +1,12 @@
-"""Generic typed event envelope — canonical domain event contract.
+"""Generic typed event envelope — canonical cross-service wire format.
 
-``EventEnvelope[T]`` is the **single canonical wire format** for every
-event leaving a runtime process: cross-service streams, durable logs,
-realtime fanout, and replay all use the same shape. The in-runtime
-``Envelope`` (``ravi.kernel.runtime._contracts``) carries the same rich
-fabric metadata and bridges to this wire format losslessly via
-:meth:`Envelope.to_event_envelope` and :meth:`EventEnvelope.to_runtime_envelope`.
+``EventEnvelope[T]`` is the single canonical wire format for every event
+leaving a runtime process: durable logs, realtime fanout, and replay all
+use the same shape.
 
-Both envelopes carry the full hyperscale context:
-
-- **Identity / trust / provenance** — who is acting, how trusted, with what lineage
-- **Activation contract**           — lifecycle state, lease, depth limits
-- **Placement contract**            — region / shard / data-gravity hints
-- **Temporal semantics**            — event time, delivery window, replay flag
-- **Locality hint**                 — fast routing hint distinct from full placement
-
-Any field a worker sets on the runtime ``Envelope`` survives the trip to the
-wire and back — there is no second-tier envelope that strips fabric context.
+The in-process ``Envelope`` (``ravi.kernel.runtime._message``) is
+deliberately leaner — it keeps only what in-process routing needs.
+:meth:`to_runtime_envelope` projects this wire event onto that lean shape.
 """
 
 from __future__ import annotations
@@ -26,30 +16,20 @@ from typing import TYPE_CHECKING, Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
-from ravi.kernel.contracts._coordination import (
-    LocalityHint,
-    PlacementContract,
-    TemporalSemantics,
-    TrustContext,
-)
-from ravi.kernel.contracts._trust import ProvenanceChain
-from ravi.kernel.runtime._identity import IdentityContext
-from ravi.kernel.runtime._lifecycle import AgentActivationContract
-
 if TYPE_CHECKING:
-    from ravi.kernel.runtime._contracts import Envelope
+    from ravi.kernel.runtime._message import Envelope
 
 T = TypeVar("T")
 
 
 class EventEnvelope(BaseModel, Generic[T]):
-    """Typed domain event envelope — the canonical wire format.
+    """Typed domain event envelope — the canonical cross-service wire format.
 
-    ``T`` is the payload type. Use ``dict[str, Any]`` for unstructured
-    events; use a specific Pydantic model for fully-typed domain events.
+    ``T`` is the payload type.  Use ``dict[str, Any]`` for unstructured events;
+    use a specific Pydantic model for fully-typed domain events.
 
-    All inter-service async events are wrapped in this envelope before
-    being published to the durable log or realtime fanout.
+    All inter-service async events are wrapped in this envelope before being
+    published to the durable log or realtime fanout.
     """
 
     # Core identity
@@ -68,17 +48,6 @@ class EventEnvelope(BaseModel, Generic[T]):
     trace_id: Optional[str] = None
     trace_context: Dict[str, str] = Field(default_factory=dict)
 
-    # Coordination
-    temporal: TemporalSemantics = Field(default_factory=TemporalSemantics)
-    locality: LocalityHint = Field(default_factory=LocalityHint)
-
-    # Fabric metadata (carried losslessly across process boundaries)
-    identity: Optional[IdentityContext] = None
-    trust: Optional[TrustContext] = None
-    provenance: Optional[ProvenanceChain] = None
-    activation: Optional[AgentActivationContract] = None
-    placement: Optional[PlacementContract] = None
-
     # QoS
     priority: int = 0
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -93,13 +62,12 @@ class EventEnvelope(BaseModel, Generic[T]):
         return f"events:{self.event_type}"
 
     def to_runtime_envelope(self) -> "Envelope":
-        """Convert this wire envelope into an in-runtime ``Envelope``.
+        """Project this wire event onto the lean in-process ``Envelope``.
 
         Requires ``payload`` to be a ``list[ContentBlock]``; raises ``TypeError``
-        otherwise. The payload of a non-content wire event has no in-process
-        routing equivalent — keep it as a typed event.
+        otherwise.
         """
-        from ravi.kernel.runtime._contracts import Envelope
+        from ravi.kernel.runtime._message import Envelope
 
         if not isinstance(self.payload, list):
             raise TypeError(
@@ -109,25 +77,14 @@ class EventEnvelope(BaseModel, Generic[T]):
 
         return Envelope(
             sender=None,
-            target=None,  # caller must set target before dispatch
+            target=None,
             content=self.payload,
-            event_id=self.event_id,
-            event_type=self.event_type,
-            event_version=self.event_version,
-            tenant_id=self.tenant_id,
-            workspace_id=self.workspace_id,
-            actor_id=self.actor_id,
             correlation_id=self.correlation_id,
             causation_id=self.causation_id,
             trace_id=self.trace_id,
             trace_context=dict(self.trace_context),
-            temporal=self.temporal,
-            locality=self.locality,
-            identity=self.identity,
-            trust=self.trust,
-            provenance=self.provenance,
-            activation=self.activation,
-            placement=self.placement,
-            priority=self.priority,
             metadata=dict(self.metadata),
         )
+
+
+__all__ = ["EventEnvelope"]

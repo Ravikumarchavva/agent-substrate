@@ -1,13 +1,8 @@
-"""Core message types — public API.
-
-Re-exports all message types and content models from their defining modules.
-"""
+"""ravi.kernel.messages — LLM message types and content blocks."""
 
 from ravi.kernel.messages.base_message import (
     BaseClientMessage,
-    BaseAgentMessage,
-    BaseAgentEvent,
-    SOURCE_ROLES,
+    CLIENT_ROLES,
     UsageStats,
 )
 from ravi.kernel.messages.client_messages import (
@@ -18,7 +13,6 @@ from ravi.kernel.messages.client_messages import (
     ToolExecutionResultMessage,
 )
 from ravi.kernel.messages.content import (
-    # Content blocks (tool results)
     TextBlock,
     ImageBlock,
     AudioBlock,
@@ -29,45 +23,35 @@ from ravi.kernel.messages.content import (
     ErrorBlock,
     ResourceBlock,
     ContentBlock,
-    # Media content (message attachments)
     ImageContent,
     AudioContent,
     VideoContent,
     MediaContent,
     MessageContent,
-    # JSON types
     JsonPrimitive,
     JsonValue,
     JsonObject,
-    # Helpers
     content_block_from_dict,
     content_blocks_to_str,
+    CONTENT_BLOCK_TYPES,
 )
 from ravi.kernel.messages._types import (
-    # Backward compat
     MediaType,
-    # Stream chunks
     StreamChunk,
     TextDeltaChunk,
     ReasoningDeltaChunk,
     CompletionChunk,
-    StructuredOutputChunk,
 )
 
 __all__ = [
-    # Base messages
     "BaseClientMessage",
-    "BaseAgentMessage",
-    "BaseAgentEvent",
-    "SOURCE_ROLES",
+    "CLIENT_ROLES",
     "UsageStats",
-    # Client messages
     "SystemMessage",
     "UserMessage",
     "AssistantMessage",
     "ToolCallMessage",
     "ToolExecutionResultMessage",
-    # Content types
     "TextBlock",
     "ImageBlock",
     "AudioBlock",
@@ -88,12 +72,10 @@ __all__ = [
     "JsonObject",
     "content_block_from_dict",
     "content_blocks_to_str",
-    # Backward compat
+    "CONTENT_BLOCK_TYPES",
     "MediaType",
-    # Stream chunks
     "StreamChunk",
     "TextDeltaChunk",
     "ReasoningDeltaChunk",
     "CompletionChunk",
-    "StructuredOutputChunk",
 ]

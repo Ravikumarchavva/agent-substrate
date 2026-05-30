@@ -1,12 +1,32 @@
-"""ravi.platform.observability — concrete recorders, gates, and kill switches.
+"""ravi.platform.observability — observability contracts + concrete impls.
 
-The contracts (Protocols + value objects: ``EnvelopeSpan``, ``ReplayGate``,
-``OperatorKillSwitch``, …) live in :mod:`ravi.kernel.observability`. This
-package holds only the concrete implementations.
+Spans, replay admission, and operator kill switches: vendor-neutral Protocols
+plus immutable value objects, alongside their in-memory and integration-backed
+implementations. Operator-facing infrastructure, orthogonal to what agents do.
 """
 
 from __future__ import annotations
 
+from ravi.platform.observability._killswitch import (
+    KillSwitchDecision,
+    KillSwitchRule,
+    KillSwitchScope,
+    KillSwitchTarget,
+    OperatorKillSwitch,
+)
+from ravi.platform.observability._replay import (
+    ReplayAdmission,
+    ReplayAdmissionStatus,
+    ReplayDenyRule,
+    ReplayGate,
+    ReplayRequest,
+)
+from ravi.platform.observability._spans import (
+    EnvelopeSpan,
+    EnvelopeSpanRecorder,
+    SpanQuery,
+    SpanStatus,
+)
 from ravi.integrations.observability import OtelEnvelopeSpanRecorder
 from ravi.platform.observability._in_memory import (
     InMemoryEnvelopeSpanRecorder,
@@ -15,6 +35,22 @@ from ravi.platform.observability._in_memory import (
 )
 
 __all__ = [
+    # Contracts
+    "EnvelopeSpan",
+    "EnvelopeSpanRecorder",
+    "SpanQuery",
+    "SpanStatus",
+    "KillSwitchDecision",
+    "KillSwitchRule",
+    "KillSwitchScope",
+    "KillSwitchTarget",
+    "OperatorKillSwitch",
+    "ReplayAdmission",
+    "ReplayAdmissionStatus",
+    "ReplayDenyRule",
+    "ReplayGate",
+    "ReplayRequest",
+    # Impls
     "InMemoryEnvelopeSpanRecorder",
     "InMemoryOperatorKillSwitch",
     "InMemoryReplayGate",

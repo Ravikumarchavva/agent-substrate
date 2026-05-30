@@ -12,7 +12,7 @@ from ravi.configs.settings import settings
 from ravi.console import Console
 from ravi.fabric.runtime import LocalRuntime
 from ravi.reasoning.agents.assistant import AssistantAgent
-from ravi.fabric.catalog import AgentCatalogRegistry
+from ravi.fabric.agents_base import AgentContext
 from ravi.integrations.llm.factory import LLMFactory
 from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
 from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
@@ -22,17 +22,15 @@ from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 
 
 def _build_agent(model: str, api_key: str, runtime: LocalRuntime) -> AssistantAgent:
-    llm = LLMFactory(model, api_key).build()
-    catalog = AgentCatalogRegistry()
-    catalog.register_model("primary", llm)
-    catalog.register_memory("memory", InMemoryHistoryProvider())
-    for tool in [CalculatorTool(), GetCurrentTimeTool()]:
-        catalog.register_tool(tool)
 
     return AssistantAgent(
         name="DemoBot",
         description="A helpful assistant for demonstration.",
-        catalog=catalog,
+        tools=[CalculatorTool(), GetCurrentTimeTool()],
+        context=AgentContext(
+            history=InMemoryHistoryProvider()
+        ),
+        model=LLMFactory(model, api_key).build(),
         max_iterations=5,
         runtime=runtime,
         verbose=False,

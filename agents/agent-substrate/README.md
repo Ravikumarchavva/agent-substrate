@@ -1,6 +1,6 @@
-<center><h1>Agent Framework</h1></center>
+<center><h1>Ravi Agent Framework</h1></center>
 
-**A production-ready Python framework for building autonomous AI agents with tool calling, memory management, and observability.**
+**A production-ready, protocol-oriented Python framework for building robust, observable, and composable autonomous AI agents and multi-agent workflows.**
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -9,31 +9,25 @@
 
 ## 🚀 Features
 
-- **🤖 Multiple Agent Types**: ReAct, Conversational, Planner (coming soon)
-- **🔧 Tool Calling**: OpenAI-compatible function calling with JSON Schema validation
-- **🔌 MCP Support**: Connect to external tools via Model Context Protocol
-- **💾 Memory Management**: Multiple strategies (unbounded, sliding window, token-limited)
-- **🎯 Multi-Provider**: OpenAI, Anthropic, Gemini, Ollama (expanding)
-- **📊 Observability**: Built-in logging, tracing, and metrics
-- **⚡ Async-First**: Efficient I/O with full async/await support
-- **🔒 Type-Safe**: Pydantic models throughout with comprehensive type hints
-- **🎨 Extensible**: Protocol-oriented design for easy customization
+*   **🤖 Protocol-Oriented Actor Mesh**: Uniform Erlang-style message passing (`send`/`publish`) using `AgentId` routing coordinates.
+*   **🔧 Safe Tool Execution**: Pydantic schema validation, granular timeout handlers, human-in-the-loop (HITL) gates, and Saga compensation transactions.
+*   **💾 Context & Memory Management**: Advanced prompt-compaction strategies (sliding windows, token budgetary constraints, dynamic summarizers) to fit LLM context ceilings.
+*   **🎯 Multi-Provider Support**: Seamless support for OpenAI, Anthropic, Gemini, Ollama, and more.
+*   **📊 Enterprise-Grade Guardrails**: Real-time evaluation of inputs, outputs, and tool calls in parallel using async tripwires and mutation policies.
+*   **🕷️ Composable Flows**: Linear, parallel, and conditional multi-agent pipelines that nest recursively.
+*   **📊 Observability**: Fully integrated lifecycle hooks, structured logging, and OTel spans for tracing.
 
-![Architecture Diagram](docs/public/diagrams/architecture.drawio.png)
-
-![Kubernetes-Architecture Diagram](docs/public/diagrams/production-system.drawio.png)
+---
 
 ## 📋 Table of Contents
 
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Core Concepts](#core-concepts)
-- [Examples](#examples)
-- [Documentation](#documentation)
-- [Architecture](#architecture)
-- [Multi-Agent Architectures](#multi-agent-architectures)
-- [Contributing](#contributing)
-- [License](#license)
+*   [Quick Start](#-quick-start)
+*   [Core Architecture (L0-L5)](#-core-architecture-l0-l5)
+*   [Core Primitives & Concepts](#-core-primitives--concepts)
+*   [Multi-Agent Workflows](#-multi-agent-workflows)
+*   [Installation & Setup](#-installation--setup)
+*   [Testing](#-testing)
+*   [Roadmap](#-roadmap)
 
 ---
 
@@ -44,380 +38,233 @@
 ```bash
 # Clone the repository
 git clone https://github.com/Ravikumarchavva/ravi.git
-cd ravi
+cd ravi/ravi-engine
 
-# Install with uv
+# Sync dependencies using uv
 uv sync
 
-# Optional: install notebook support for examples/*.ipynb
-uv sync --group notebooks
-
-# Optional: install browser automation and file parsing extras
-uv sync --group browser --group files
-
-# Optional: install S3-compatible object storage support
-uv sync --group storage
-
-# Optional: install example-only service clients and demo tooling
-uv sync --group examples
-
-# Or with pip
-pip install -e .
-
-# Set your API key
-export OPENAI_API_KEY="sk-your-key-here"
+# Optional: install notebooks, browser automation, or S3 support
+uv sync --group notebooks --group browser --group storage
 ```
 
-### Your First Agent (60 seconds)
+### Your First Assistant Agent
+
+Ravi utilizes `AssistantAgent` to execute the **ReAct (Reasoning and Action)** loop inside an asynchronous `LocalRuntime`:
 
 ```python
 import asyncio
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.core.memory.unbounded_memory import UnboundedMemory
-from ravi.core.messages.agent_messages import UserMessage, SystemMessage
+from ravi.fabric.runtime.local import LocalRuntime
+from ravi.reasoning.agents.assistant.agent import AssistantAgent
 
 async def main():
-    # Initialize components
-    client = OpenAIClient(model="gpt-4o")
-    memory = UnboundedMemory()
-    
-    # Add system instructions
-    memory.add_message(SystemMessage(
-        content="You are a helpful Python programming assistant."
-    ))
-    
-    # Add user message
-    memory.add_message(UserMessage(
-        content="How do I read a CSV file in pandas?"
-    ))
-    
-    # Get response
-    response = await client.generate(messages=memory.get_messages())
-    print(f"Assistant: {response.content}")
+    # 1. Initialize and start the Local Runtime fabric
+    runtime = LocalRuntime()
+    await runtime.start()
 
-asyncio.run(main())
+    # 2. Instantiate the Assistant Agent
+    agent = AssistantAgent(
+        name="coder",
+        runtime=runtime,
+        model=OpenAIClient(model="gpt-4o"),
+        system="You are a helpful Python programming assistant."
+    )
+    
+    # 3. Run a user request through the ReAct loop
+    result = await agent.run("Write a python function to compute Fibonacci numbers.")
+    print(f"Assistant: {result.output}")
+
+    await runtime.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ### Agent with Tools
 
+You can register custom tools matching the `Tool` Protocol. Here's a complete mathematical expert agent:
+
 ```python
 import asyncio
-import json
-from ravi.model_clients.openai_client import OpenAIClient
-from ravi.memory.unbounded_memory import UnboundedMemory
-from ravi.messages.agent_messages import UserMessage, ToolMessage
-from ravi.tools.builtin_tools import CalculatorTool
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.fabric.runtime.local import LocalRuntime
+from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel.content import TextBlock
+
+# Create a custom tool satisfying the Tool Protocol
+class CalculatorTool:
+    name: str = "calculator"
+    description: str = "Performs mathematical calculations. Supports arithmetic operators."
+    input_schema: dict = {
+        "type": "object",
+        "properties": {
+            "expression": {
+                "type": "string",
+                "description": "Expression to evaluate (e.g. '1234 * 5678')"
+            }
+        },
+        "required": ["expression"]
+    }
+
+    async def execute(self, expression: str) -> ToolExecutionResult:
+        try:
+            # Safe evaluation
+            res = eval(expression, {"__builtins__": {}}, {})
+            return ToolExecutionResult(
+                content=[TextBlock(text=str(res))],
+                is_error=False
+            )
+        except Exception as e:
+            return ToolExecutionResult(
+                content=[TextBlock(text=f"Error: {e}")],
+                is_error=True
+            )
 
 async def main():
-    client = OpenAIClient(model="gpt-4o")
-    memory = UnboundedMemory()
-    tools = [CalculatorTool()]
-    
-    memory.add_message(UserMessage(content="What's 1234 * 5678?"))
-    
-    # Tool calling loop
-    for _ in range(5):
-        response = await client.generate(
-            messages=memory.get_messages(),
-            tools=[t.get_schema() for t in tools]
-        )
-        
-        if not response.tool_calls:
-            print(f"Final answer: {response.content}")
-            break
-        
-        memory.add_message(response)
-        
-        # Execute tools
-        for tool_call in response.tool_calls:
-            tool = next(t for t in tools if t.name == tool_call.function["name"])
-            result = await tool.execute(
-                **json.loads(tool_call.function["arguments"])
-            )
-            memory.add_message(ToolMessage(
-                content=result,
-                tool_call_id=tool_call.id,
-                name=tool.name
-            ))
+    runtime = LocalRuntime()
+    await runtime.start()
 
-asyncio.run(main())
+    # Instantiate the agent with the calculator tool registered
+    agent = AssistantAgent(
+        name="math_expert",
+        runtime=runtime,
+        model=OpenAIClient(model="gpt-4o"),
+        tools=[CalculatorTool()],
+        system="Always use your calculator tool to solve math problems."
+    )
+
+    result = await agent.run("Calculate 1234 * 5678 and tell me the answer.")
+    print(f"Final output:\n{result.output}\n")
+    
+    # Trace the tools used during execution
+    print("Tool trace:")
+    for record in result.tool_calls:
+        print(f" - Called {record.name}({record.arguments}) -> {record.result} ({record.duration_ms:.2f}ms)")
+
+    await runtime.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ---
 
-## 🏗️ Core Concepts
+## 🏛️ Core Architecture (L0-L5)
 
-### Messages
+Ravi's codebase is partitioned into **six strict dependency layers**. Layer imports flow strictly downward; a lower layer never depends on or imports from a higher layer:
 
-Structured communication between agents, users, and tools:
+```
+[L5] platform     ← Scheduling (Temporal.io), Evals, RAG Pipelines, Metrics, Spans
+  [L4] guardrails ← Mutation Policies, Economic Budgets, Collusion & Killswitches
+    [L3] orchestr.← Hub-Spoke (Orchestrator), Linear/Parallel Flow Pipelines
+      [L2] reasoning  ← ReAct loop (AssistantAgent), Compaction Contexts, Hooks
+        [L1] fabric     ← Local/Distributed Runtimes, Actor Queues, Sagas, Locks
+          [L0] kernel     ← Protocols, ContentBlock types, Identity (AgentId), Plugin Registry
+```
 
+### High-Level Layer Guides
+We have compiled extensive architectural guides for each of our key layers. Read them here:
+*   [🔵 **L0 · Kernel Overview**](docs/overview/kernel.md) — Protocols, pure value structures, and dynamic plugin registries.
+*   [🟢 **L1 · Fabric Overview**](docs/overview/fabric.md) — Actor queue mailboxes, message routing, sequence diagrams, and agent lifecycles.
+*   [🟡 **L2 · Reasoning Overview**](docs/overview/reasoning.md) — Single-agent cognitive ReAct loops, context strategies, parallel guardrails, and interceptors.
+*   [📖 **Layered Architecture Reference**](docs/framework/layered-architecture.md) — Complete migration history, LOC ceilings, and dependency enforcement bounds.
+
+---
+
+## 🏗️ Core Primitives & Concepts
+
+### 1. Identity & Routing Keys
+All actors in the mesh are addressed using decoupled value identifiers:
 ```python
-from ravi.messages.agent_messages import (
-    SystemMessage,    # System instructions
-    UserMessage,      # User inputs
-    AssistantMessage, # Agent responses
-    ToolMessage      # Tool results
+from ravi.kernel import AgentId, TopicId
+
+# Address a specific actor instance
+target_agent = AgentId(type="assistant", key="math_expert")
+
+# Address a pub/sub broadcast channel
+audit_topic = TopicId(source="security", key="pii_alerts")
+```
+
+### 2. Envelope Messaging
+Under the hood, all routed data is wrapped in a transport `Message` payload:
+```python
+from ravi.kernel.message import Message
+
+message = Message(
+    target=target_agent,
+    payload=TextBlock(text="Check calculations"),
+    sender=AgentId(type="user", key="system")
 )
 ```
 
-### Model Clients
-
-Abstraction layer for different LLM providers:
-
+### 3. Modular Memory & Compaction
+Avoid context overflow using active compaction. Register memory contexts to automatically prune prompts:
 ```python
-from ravi.model_clients.openai_client import OpenAIClient
+from ravi.fabric.context import SlidingWindowCompaction
 
-client = OpenAIClient(
-    model="gpt-4o",
-    temperature=0.7,
-    max_tokens=2000
-)
-```
-
-### Tools
-
-Function calling with JSON Schema validation:
-
-```python
-from ravi.tools.base_tool import BaseTool
-
-class MyTool(BaseTool):
-    async def execute(self, **kwargs):
-        # Your logic here
-        return json.dumps(result)
-    
-    def get_schema(self):
-        # OpenAI function calling format
-        return {...}
-```
-
-### Memory
-
-Conversation history management:
-
-```python
-from ravi.memory.unbounded_memory import UnboundedMemory
-
-memory = UnboundedMemory()
-memory.add_message(message)
-messages = memory.get_messages()
-```
-
-### MCP Tools
-
-Connect to external tools via Model Context Protocol:
-
-```python
-from ravi.tools import MCPClient, MCPTool
-
-# Connect to MCP server
-mcp_client = MCPClient()
-await mcp_client.connect(
-    command="npx",
-    args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
-)
-
-# Auto-discover and create tools
-tools = await MCPTool.from_mcp_client(mcp_client)
-
-# Use with your agent
-agent = ReActAgent(tools=tools, ...)
+# Keeps only the last 20 messages in active prompting
+compactor = SlidingWindowCompaction(max_messages=20)
 ```
 
 ---
 
-## 📚 Examples
+## 🕸️ Multi-Agent Workflows
 
-Check the `examples/` directory for complete examples:
-
-- **[simple_agent.py](examples/simple_agent.py)** - Basic conversational agent
-- **[agent_with_tools.py](examples/agent_with_tools.py)** - Tool-calling agent
-- **[streaming_agent.py](examples/streaming_agent.py)** - Streaming responses
-- **[custom_tools.py](examples/custom_tools.py)** - Creating custom tools
-- **More coming soon...**
-
----
-
-## 📖 Documentation
-
-### Core Documentation
-
-- **[Getting Started Guide](docs/GETTING_STARTED.md)** - 10-minute quickstart
-- **[Architecture](docs/ARCHITECTURE.md)** - System design and principles
-- **[Architecture Diagrams](docs/ARCHITECTURE_DIAGRAMS.md)** - System maps and request flow diagrams
-- **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
-- **[Component Specifications](docs/COMPONENT_SPECS.md)** - Detailed specs
-- **[Operations Guide](docs/OPERATIONS.md)** - Kind cluster deploy and debugging workflows
-- **[Roadmap](docs/ROADMAP.md)** - Future plans and features
-
-### Component Guides
-
-- **Messages** - Structured communication
-- **Model Clients** - LLM provider integration
-- **Tools** - Function calling system
-- **Memory** - Conversation management
-- **Agents** - Autonomous orchestration
-- **Observability** - Monitoring and debugging
-
----
-
-## 🏛️ Architecture
-
-> **Full details, extension guides, and data-flow diagrams:**
-> [`ARCHITECTURE.md`](ARCHITECTURE.md)
-
-### Codebase layers
-
-The codebase is structured as five dependency layers.  Dependencies flow strictly
-downward — lower layers never import from higher ones:
-
-```
-server        ← FastAPI routes, DB models, DI wiring
-  runtime     ← HITL bridge, tasks, credentials, telemetry
-    extensions← tools, MCP, skills, guardrails (plug-ins)
-      providers← LLM clients, audio clients, third-party API adapters
-        core  ← agents, base classes, pure logic (no I/O)
-```
-
-**Import paths** (files are physically in these locations):
-
-```python
-# Core — agents, base classes, memory
-from ravi.core.agents.react_agent import ReActAgent
-from ravi.core.agents.orchestrator_agent import OrchestratorAgent
-from ravi.core.memory.unbounded_memory import UnboundedMemory
-from ravi.core.memory.session_manager import SessionManager
-from ravi.core.guardrails.base_guardrail import BaseGuardrail
-
-# Integrations — LLM clients, audio, MCP, skills, third-party APIs
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.integrations.audio import BaseAudioClient
-from ravi.integrations.spotify.client import SpotifyService
-from ravi.integrations.mcp import MCPClient
-from ravi.integrations.skills import SkillManager
-
-# Tools — built-in tool implementations
-from ravi.tools.human_input import AskHumanTool
-from ravi.tools.web_surfer import WebSurferTool
-from ravi.tools.file_manager_tool import FileManagerTool
-
-# Server SSE — event bus, HITL bridge
-from ravi.server.sse.bridge import WebHITLBridge
-from ravi.server.sse.events import EventBus
-
-# Shared — cross-service infra
-from ravi.shared.tasks.store import TaskStore
-from ravi.shared.observability import configure_opentelemetry
-```
-
-### Common extension tasks — quick reference
-
-| Task | Guide in ARCHITECTURE.md |
-|---|---|
-| Add a new tool | [→ How to add a new tool](ARCHITECTURE.md#how-to-add-a-new-tool) |
-| Add a new LLM provider | [→ How to add a new LLM provider](ARCHITECTURE.md#how-to-add-a-new-llm-provider) |
-| Add a new agent type | [→ How to add a new agent type](ARCHITECTURE.md#how-to-add-a-new-agent-type) |
-| Add a new guardrail | [→ How to add a new guardrail](ARCHITECTURE.md#how-to-add-a-new-guardrail) |
-| Add a new skill | [→ How to add a new skill](ARCHITECTURE.md#how-to-add-a-new-skill) |
-| Add a new API route | [→ How to add a new API route](ARCHITECTURE.md#how-to-add-a-new-api-route) |
-| Emit a real-time SSE event | [→ How to emit a real-time event](ARCHITECTURE.md#how-to-emit-a-real-time-event-to-the-frontend) |
-| Add an MCP App UI widget | [→ How to add a new MCP App](ARCHITECTURE.md#how-to-add-a-new-mcp-app-ui-widget) |
-
-### Single-Agent Architecture
-
-![Single-Agent Architecture](docs/public/diagrams/single-agent.svg)
-
-Editable source: [agent-architectures.drawio](docs/public/diagrams/agent-architectures.drawio) (page: "Single Agent")
-
-**Key Design Principles:**
-
-1. **Protocol-Oriented** - Abstract interfaces, swappable implementations
-2. **Type-Safe** - Pydantic models with full type hints
-3. **Async-First** - Efficient I/O operations
-4. **Production-Ready** - Error handling, observability, testing
-5. **Extensible** - Easy to add providers, tools, agents
-
----
-
-## 🕸️ Multi-Agent Architectures
-
-The framework supports four first-class multi-agent composition patterns.
-Each pattern is a first-class Python class — compose them freely and nest arbitrarily.
-
-Editable source for all diagrams: [agent-architectures.drawio](docs/public/diagrams/agent-architectures.drawio)
+Ravi supports powerful linear, parallel, and routing compositions. Since flows inherit from `BaseFlow`, they can be arbitrarily nested inside one another.
 
 ### OrchestratorAgent — Hub & Spoke
-
-An `OrchestratorAgent` routes tasks to specialised sub-agents and aggregates their results.
-Ideal for workflows that require multiple domain experts working under a single coordinator.
-
-![OrchestratorAgent Architecture](docs/public/diagrams/multi-agent-orchestrator.svg)
+An `OrchestratorAgent` registers sub-specialists as individual handoff tools. It analyzes user requests and routes tasks dynamically, synthesizing their results back to the caller.
 
 ```python
-from ravi import OrchestratorAgent, ReActAgent
+from ravi.orchestration.agents.orchestrator.agent import OrchestratorAgent
 
 orchestrator = OrchestratorAgent(
     name="coordinator",
-    model_client=client,
-    model_context=UnboundedContext(),
-    sub_agents=[researcher, writer, reviewer],
+    runtime=runtime,
+    model=openai_client,
+    sub_agents=[researcher, writer, review_agent],
+    description="Routes complex queries to specialized content assistants."
 )
 ```
 
----
-
 ### SequentialFlow — Linear Pipeline
-
-Agents execute one after another; each agent receives the output of the previous step.
-Perfect for ETL pipelines, report generation, and multi-stage transformation workflows.
-
-![SequentialFlow Architecture](docs/public/diagrams/multi-agent-sequential.svg)
+Steps execute sequentially in pipeline order. Each step receives the accumulated transcript of previous runs.
 
 ```python
-from ravi import SequentialFlow
+from ravi.orchestration.agents.flow import SequentialFlow
 
 pipeline = SequentialFlow(
     name="etl_pipeline",
-    steps=[extractor, transformer, formatter],
+    steps=[document_fetcher, json_converter, formatter_agent]
 )
+result = await pipeline.run("Load invoice dataset.")
 ```
-
----
 
 ### ParallelFlow — Concurrent Execution
-
-All branch agents run simultaneously; results are merged according to a configurable strategy.
-Ideal for independent analyses, multi-perspective reviews, and latency-critical workflows.
-
-![ParallelFlow Architecture](docs/public/diagrams/multi-agent-parallel.svg)
+Runs all branch agents in parallel concurrently and merges their outputs using standard (`concat`, `vote`) or custom callables.
 
 ```python
-from ravi import ParallelFlow
+from ravi.orchestration.agents.flow import ParallelFlow
 
-reviewer = ParallelFlow(
-    name="code_review",
-    branches=[code_reviewer, security_auditor, perf_analyzer],
-    merge_strategy="concat",   # or "vote" or custom callable
+evaluator = ParallelFlow(
+    name="peer_review",
+    branches=[security_auditor, legal_checker, grammar_advisor],
+    merge="concat"  # Combines all review results separating with double newlines
 )
 ```
 
----
-
-### ConditionalFlow — Decision Routing
-
-A predicate function inspects the input and routes execution to either `if_true` or `if_false`.
-Branches can themselves be any agent or flow, enabling arbitrarily deep decision trees.
-
-![ConditionalFlow Architecture](docs/public/diagrams/multi-agent-conditional.svg)
+### ConditionalFlow — Router Branching
+Evaluates a synchronous predicate function at runtime, dynamically branching execution to either `if_true` or `if_false` nodes.
 
 ```python
-from ravi import ConditionalFlow
+from ravi.orchestration.agents.flow import ConditionalFlow
 
-router = ConditionalFlow(
-    name="smart_router",
-    predicate=lambda ctx: "code" in ctx.last_message.lower(),
-    if_true=code_gen_agent,
-    if_false=ParallelFlow(branches=[qa_agent, creative_agent]),
+smart_router = ConditionalFlow(
+    name="inbound_gate",
+    predicate=lambda text: "bug" in text.lower(),
+    if_true=bug_tracker_agent,
+    if_false=general_inbox_agent
 )
 ```
 
@@ -425,31 +272,11 @@ router = ConditionalFlow(
 
 ## 🔧 Installation & Setup
 
-### Requirements
-
-- Python 3.13+
-- OpenAI API key (or other LLM provider)
-
-### Install Dependencies
-
-```bash
-# Using uv (recommended)
-uv sync
-
-# Using pip
-pip install -e .
-
-# Development dependencies
-uv sync --group dev
-```
-
 ### Environment Variables
-
-Create a `.env` file:
-
+Setup your API keys in a `.env` file inside the root directory:
 ```bash
-OPENAI_API_KEY=sk-your-key-here
-ANTHROPIC_API_KEY=sk-ant-your-key
+OPENAI_API_KEY=sk-proj-...
+ANTHROPIC_API_KEY=sk-ant-...
 LOG_LEVEL=INFO
 ```
 
@@ -457,81 +284,25 @@ LOG_LEVEL=INFO
 
 ## 🧪 Testing
 
+Ravi utilizes `pytest` to run automated test suites. We assert architecture import bounds,LOC constraints, and ReAct loop convergence:
+
 ```bash
-# Run tests
+# Execute standard test suite
 pytest
 
-# With coverage
-pytest --cov=ravi
-
-# Run specific test
-pytest tests/test_messages.py
+# Execute architecture linter checks
+uv run lint-imports
 ```
 
 ---
 
 ## 🛣️ Roadmap
 
-### ✅ Phase 1: Foundation (Current)
-- Core message types
-- OpenAI client
-- Tool system
-- Basic memory
-- Documentation
-
-### 🚧 Phase 2: Core Agents (Next)
-- ReAct agent implementation
-- Advanced memory strategies
-- Error handling
-- Configuration system
-
-### 📋 Phase 3: Production (Future)
-- Multi-provider support
-- Observability (tracing, metrics)
-- More built-in tools
-- State persistence
-
-### 🚀 Phase 4: Advanced (Future)
-- Multi-agent systems
-- Planning agents
-- Human-in-the-loop
-- Web interface
-
-See [ROADMAP.md](docs/ROADMAP.md) for details.
+*   **Phase 1: Foundation (Stable)** — Protocols, LocalRuntime messaging fabric, and ReAct loops.
+*   **Phase 2: Enterprise Sagas (In Progress)** — Saga coordinators, distributed locking, and persistent snapshots.
+*   **Phase 3: Scale (Planned)** — DistributedRuntime with Redis & gRPC backplanes, Temporal scheduler activities.
+*   **Phase 4: Optimization (Planned)** — Fine-tuning evals, multimodal vector caches, and interactive web dashboard.
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Priority Areas
-- Additional model providers (Anthropic, Gemini, Ollama)
-- More built-in tools
-- Memory strategies
-- Example agents
-- Documentation improvements
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-## 🙏 Acknowledgments
-
-Inspired by:
-- [LangChain](https://github.com/langchain-ai/langchain)
-- [AutoGen](https://github.com/microsoft/autogen)
-
----
-
-## ⭐ Star History
-
-If you find this project useful, please consider giving it a star!
-
----
-
-**Built with ❤️ for the AI agent community**
+**Built with ❤️ for the AI agent engineering community**

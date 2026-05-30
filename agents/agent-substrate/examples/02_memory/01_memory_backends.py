@@ -1,7 +1,7 @@
 """Example 2-1: Memory Backends — raw memory operations across all three storage tiers."""
 
 import os
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.agents.memory.unbounded import UnboundedMemory
 from ravi.adapters.memory.redis_memory import RedisMemory
 from ravi.adapters.memory.postgres_memory import PostgresMemory
 from ravi.reasoning.memory.context import RedisModelContext

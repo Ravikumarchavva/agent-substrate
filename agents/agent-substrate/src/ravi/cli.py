@@ -245,10 +245,10 @@ def cmd_chat(args: argparse.Namespace) -> None:
     """Launch an interactive CLI chat session with a ReAct agent."""
     # Late imports so the CLI stays fast for server commands
     from ravi.console import Console
-    from ravi.reasoning.agents.assistant.agent import AssistantAgent
-    from ravi.fabric.runtime.local import LocalRuntime
+    from ravi.agents.assistant import AssistantAgent
+    from ravi.agents.runtime.local import LocalRuntime
     from ravi.adapters.llm.openai.openai_client import OpenAIClient
-    from ravi.fabric.context import (
+    from ravi.agents.context import (
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
     )

@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 
 
-from ravi.fabric.events import (
+from ravi.agents.events import (
     InMemoryDurableLog,
     InMemoryEventFabric,
     InMemoryRealtimeFanout,

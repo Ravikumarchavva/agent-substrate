@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.catalog._chain_runtime import (
+from ravi.capabilities._chain_runtime import (
     AdapterProxy,
     ChainRuntime,
     _AdapterNamespace,
 )
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.fabric.catalog import AgentCatalogRegistry
+from ravi.agents.catalog import AgentCatalogRegistry
 
 
 class _AddTool(BaseTool):

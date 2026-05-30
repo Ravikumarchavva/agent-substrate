@@ -29,7 +29,7 @@ def _to_md(extract_result: list) -> str:
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
 from ravi.kernel.agent_catalog import AgentCatalog
 from ravi.kernel.messages.content import TextBlock
-from ravi.reasoning.guardrails.pii import _PII_PATTERNS
+from ravi.agents.reasoning.guardrails.pii import _PII_PATTERNS
 from ravi.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")

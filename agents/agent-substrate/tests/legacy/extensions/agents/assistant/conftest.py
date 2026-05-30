@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
-from ravi.fabric.runtime.local import LocalRuntime
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.agents.memory.in_memory import InMemoryHistoryProvider
+from ravi.agents.runtime.local import LocalRuntime
+from ravi.agents.reasoning.agents.assistant.agent import AssistantAgent
 
 from tests.fixtures.mock_llm import MockLLMClient, Turn
 from tests.fixtures.fake_tools import EchoTool, AddTool, FailTool, SlowTool, CounterTool

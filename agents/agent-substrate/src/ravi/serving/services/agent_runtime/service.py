@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
-from ravi.fabric.context import (
+from ravi.agents.assistant import AssistantAgent
+from ravi.agents.context import (
     HistoryProvider,
     SlidingWindowCompaction as SlidingWindowStrategy,
 )
@@ -18,7 +18,7 @@ from ravi.kernel import (
     Tool as BaseTool,
 )
 from ravi.kernel.stream import CompletionEvent
-from ravi.fabric.llm import LLMClient as BaseModelClient
+from ravi.kernel.llm import LLMClient
 from ravi.adapters.events import EventBus
 from ravi.serving.shared.events.envelope import EventEnvelope
 from ravi.serving.shared.execution import (
@@ -65,7 +65,7 @@ async def load_memory_for_thread(
 def create_agent(
     *,
     runtime: Any,
-    model_client: BaseModelClient,
+    model_client: LLMClient,
     tools: List[BaseTool],
     system_instructions: str,
     memory: HistoryProvider,

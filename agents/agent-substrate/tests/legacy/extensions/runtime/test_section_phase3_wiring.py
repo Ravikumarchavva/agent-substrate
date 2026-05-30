@@ -17,13 +17,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ravi.fabric.events import InMemoryEventFabric
+from ravi.agents.events import InMemoryEventFabric
 from ravi.guardrails.governance._in_memory import InMemoryQuarantineActuator
 from ravi.platform.observability._in_memory import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
 )
-from ravi.fabric.runtime import DistributedRuntime
+from ravi.agents.runtime import DistributedRuntime
 from ravi.guardrails.mutation._in_memory import InMemoryCircuitBreaker
 from ravi.kernel.observability import (
     KillSwitchRule,

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from anthropic import AsyncAnthropic
 
-from ravi.fabric.llm.client import LLMClient
+from ravi.kernel.llm.client import LLMClient
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,

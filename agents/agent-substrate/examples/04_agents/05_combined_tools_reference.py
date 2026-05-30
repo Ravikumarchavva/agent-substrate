@@ -5,10 +5,10 @@ and MCP tools (like filesystem) together in a single agent.
 """
 
 import asyncio
-from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.adapters.mcp import MCPClient, MCPTool
 from ravi.adapters.llm.openai.openai_client import OpenAIClient
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.agents.memory.unbounded import UnboundedMemory
 from ravi.kernel.messages.client_messages import (
     UserMessage,
     SystemMessage,

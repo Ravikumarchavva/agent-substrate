@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock, MagicMock
 from typing import AsyncIterator
 import pytest
 
-from ravi.reasoning.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.reasoning.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel.messages.client_messages import AssistantMessage
-from ravi.fabric.agents_base.agent_result import RunStatus
+from ravi.agents.agents_base.agent_result import RunStatus
 from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
 
@@ -133,7 +133,7 @@ class TestRuntimeAssistantAgent:
         mock_model_context: MagicMock,
     ) -> None:
         # Define a guardrail that raises an exception
-        from ravi.reasoning.middleware.guardrails import GuardrailsMiddleware
+        from ravi.agents.reasoning.middleware.guardrails import GuardrailsMiddleware
         from ravi.kernel.guardrails.base_guardrail import GuardrailType, GuardrailResult
 
         guardrail = MagicMock(spec=BaseGuardrail)

@@ -10,7 +10,7 @@ import asyncio
 from ravi.adapters.mcp.client import MCPClient
 from ravi.adapters.mcp.tool import MCPTool
 from ravi.adapters.llm.openai.openai_client import OpenAIClient
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.agents.memory.unbounded import UnboundedMemory
 from ravi.kernel.messages.client_messages import UserMessage, SystemMessage
 
 

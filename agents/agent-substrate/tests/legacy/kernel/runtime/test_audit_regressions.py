@@ -21,11 +21,11 @@ from typing import Any
 from unittest.mock import MagicMock
 
 
-from ravi.fabric.catalog import AgentCatalog
-from ravi.fabric.actors.actor import ActorAgent
+from ravi.agents.catalog import AgentCatalog
+from ravi.agents.actors.actor import ActorAgent
 from ravi.kernel.messages.content import ImageBlock, TextBlock, blocks_to_text
 from ravi.kernel.runtime import AgentId, MessageContext, TopicId
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.runtime.local import LocalRuntime
 
 
 # ---------------------------------------------------------------------------

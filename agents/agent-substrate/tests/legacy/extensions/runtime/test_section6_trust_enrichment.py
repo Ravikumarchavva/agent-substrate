@@ -24,7 +24,7 @@ from typing import Any
 
 import pytest
 
-from ravi.fabric.runtime import (
+from ravi.agents.runtime import (
     IdentityRequiredMiddleware,
     TrustDecayMiddleware,
     TrustEnrichmentMiddleware,
@@ -44,7 +44,7 @@ from ravi.kernel.runtime import (
     PrincipalId,
     PrincipalKind
 )
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.runtime.local import LocalRuntime
 
 
 UTC = timezone.utc

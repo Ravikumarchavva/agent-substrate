@@ -11,9 +11,9 @@ import asyncio
 from typing import Any
 import pytest
 
-from ravi.fabric.events import InMemoryEventFabric
+from ravi.agents.events import InMemoryEventFabric
 from ravi.platform.scheduling import InMemoryFairShareScheduler
-from ravi.fabric.runtime import DistributedRuntime
+from ravi.agents.runtime import DistributedRuntime
 from ravi.kernel.runtime import (
     AgentId,
     InMemoryLeaseRegistry,

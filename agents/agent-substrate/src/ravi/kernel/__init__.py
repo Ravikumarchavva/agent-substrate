@@ -34,6 +34,10 @@ from ravi.kernel.message import (
 )
 from ravi.kernel.protocol import AgentRuntime
 from ravi.kernel.tools import ToolRisk, ToolCallRequest, ToolExecutionResult, Tool
+from ravi.kernel.llm import LLMClient, EmbeddingClient
+from ravi.kernel.history import HistoryProvider
+from ravi.kernel.context import CompactionStrategy, AgentContextProtocol
+from ravi.kernel.middleware import Interceptor
 from ravi.kernel.errors import AgentNotFoundError, HandlerError
 from ravi.kernel.stream import (
     TextDelta,
@@ -78,6 +82,16 @@ __all__ = [
     "ToolCallRequest",
     "ToolExecutionResult",
     "Tool",
+    # LLM
+    "LLMClient",
+    "EmbeddingClient",
+    # History
+    "HistoryProvider",
+    # Context
+    "CompactionStrategy",
+    "AgentContextProtocol",
+    # Middleware
+    "Interceptor",
     # Errors
     "AgentNotFoundError",
     "HandlerError",

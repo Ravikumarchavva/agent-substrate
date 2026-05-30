@@ -14,16 +14,16 @@ import asyncio
 import os
 
 from ravi.config import settings
-from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.agents.reasoning.agents.assistant import AssistantAgent
 from ravi.adapters.observability import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
     InMemoryReplayGate,
 )
-from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.adapters.llm.factory import create_model_client
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.agents.memory.unbounded import UnboundedMemory
 from ravi.kernel.observability import (
     EnvelopeSpan,
     KillSwitchRule,

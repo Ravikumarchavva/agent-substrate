@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
-from ravi.fabric.agents_base.agent_context import AgentContext
-from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+from ravi.agents.agents_base.agent_context import AgentContext
+from ravi.agents.memory.in_memory import InMemoryHistoryProvider
 from ravi.kernel.messages.client_messages import (
     AssistantMessage,
     SystemMessage,

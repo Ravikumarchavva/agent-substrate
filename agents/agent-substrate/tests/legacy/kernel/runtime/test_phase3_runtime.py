@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ravi.fabric.catalog import AgentCatalog
+from ravi.agents.catalog import AgentCatalog
 from ravi.kernel.runtime import (
     AgentId,
     MessageContext,
@@ -17,10 +17,10 @@ from ravi.kernel.runtime import (
     StreamPublisher,
     TopicId
 )
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel.tools.base_tool import BaseTool, HitlMode, ToolResult, ToolRisk
-from ravi.catalog.tools._tool_executor import ToolExecutorHandler
-from ravi.catalog.tools.human_input.tool import (
+from ravi.capabilities.tools._tool_executor import ToolExecutorHandler
+from ravi.capabilities.tools.human_input.tool import (
     ToolApprovalAction,
     ToolApprovalHandler,
     ToolApprovalResponse,

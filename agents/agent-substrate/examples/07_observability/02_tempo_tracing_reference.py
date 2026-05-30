@@ -1,10 +1,10 @@
 import asyncio
 import os
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.reasoning.agents.assistant import AssistantAgent
-from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.agents.reasoning.agents.assistant import AssistantAgent
+from ravi.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.adapters.llm.openai.openai_client import OpenAIClient
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.agents.memory.unbounded import UnboundedMemory
 from ravi.adapters.observability.telemetry import configure_opentelemetry
 from ravi.config import settings
 

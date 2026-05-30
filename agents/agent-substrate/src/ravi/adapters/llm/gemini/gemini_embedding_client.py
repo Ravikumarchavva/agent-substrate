@@ -19,7 +19,7 @@ from typing import Any, Optional
 
 from google import genai
 
-from ravi.fabric.llm import BaseEmbeddingClient, EmbeddingResult
+from ravi.kernel.llm import BaseEmbeddingClient, EmbeddingResult
 
 logger = setup_logging()
 

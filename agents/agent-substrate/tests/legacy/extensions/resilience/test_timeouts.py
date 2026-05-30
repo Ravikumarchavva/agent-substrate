@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import pytest
 
-from ravi.fabric.agents_base.agent_result import RunStatus
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.agents_base.agent_result import RunStatus
+from ravi.agents.runtime.local import LocalRuntime
 
 from tests.fixtures.mock_llm import tool_turn, text_turn
 from tests.fixtures.fake_tools import SlowTool

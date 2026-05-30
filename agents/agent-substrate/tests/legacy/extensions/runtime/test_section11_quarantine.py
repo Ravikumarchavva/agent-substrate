@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from ravi.guardrails.governance._in_memory import InMemoryQuarantineActuator
-from ravi.fabric.runtime._middleware import QuarantineCheckMiddleware
+from ravi.agents.runtime._middleware import QuarantineCheckMiddleware
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.runtime import (
     AgentId,

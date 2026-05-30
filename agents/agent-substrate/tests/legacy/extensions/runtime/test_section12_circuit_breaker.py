@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from ravi.guardrails.mutation._in_memory import InMemoryCircuitBreaker
-from ravi.fabric.runtime._middleware import CircuitBreakerMiddleware
+from ravi.agents.runtime._middleware import CircuitBreakerMiddleware
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.runtime import (
     AgentId,

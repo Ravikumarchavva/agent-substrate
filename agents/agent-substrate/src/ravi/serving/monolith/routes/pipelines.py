@@ -39,7 +39,7 @@ async def save_pipeline(request: Request) -> dict[str, str]:
     if not name:
         raise HTTPException(status_code=400, detail="Pipeline 'name' is required")
 
-    from ravi.catalog._pipeline import PipelineDef
+    from ravi.capabilities._pipeline import PipelineDef
 
     pipeline = PipelineDef.from_dict(body)
     store = request.app.state.pipeline_store

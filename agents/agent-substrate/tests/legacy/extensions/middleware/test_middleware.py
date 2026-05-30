@@ -14,12 +14,12 @@ from ravi.kernel.middleware.base import (
     MiddlewareStage,
 )
 from ravi.kernel.middleware.runner import MiddlewarePipeline
-from ravi.reasoning.middleware.schema_validator import SchemaValidatorMiddleware
-from ravi.reasoning.middleware.file_validator import FileValidatorMiddleware
-from ravi.reasoning.middleware.content_truncator import ContentTruncatorMiddleware
-from ravi.reasoning.middleware.cache import CacheMiddleware
-from ravi.reasoning.middleware.audit_logger import AuditLoggerMiddleware
-from ravi.reasoning.middleware.rate_limiter import RateLimiterMiddleware
+from ravi.agents.reasoning.middleware.schema_validator import SchemaValidatorMiddleware
+from ravi.agents.reasoning.middleware.file_validator import FileValidatorMiddleware
+from ravi.agents.reasoning.middleware.content_truncator import ContentTruncatorMiddleware
+from ravi.agents.reasoning.middleware.cache import CacheMiddleware
+from ravi.agents.reasoning.middleware.audit_logger import AuditLoggerMiddleware
+from ravi.agents.reasoning.middleware.rate_limiter import RateLimiterMiddleware
 
 
 # ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@ from ravi.kernel.storage.document import (
     create_document,
     store_document,
 )
-from ravi.fabric.storage.local import LocalFileStore
+from ravi.agents.storage.local import LocalFileStore
 from ravi.kernel.storage.tenant import FileScope, TenantContext
 
 
@@ -331,7 +331,7 @@ class TestLocalFileStore:
 
 class TestEncryptedFileStore:
     async def _make(self, tmp_path):
-        from ravi.fabric.storage.encrypted import (
+        from ravi.agents.storage.encrypted import (
             EncryptedFileStore,
             LocalKeyProvider,
         )
@@ -437,7 +437,7 @@ class TestFactory:
     def test_create_local_store(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from ravi.fabric.storage.factory import create_file_store
+        from ravi.agents.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"
@@ -451,8 +451,8 @@ class TestFactory:
     def test_create_encrypted_local_store(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from ravi.fabric.storage.encrypted import EncryptedFileStore
-        from ravi.fabric.storage.factory import create_file_store
+        from ravi.agents.storage.encrypted import EncryptedFileStore
+        from ravi.agents.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"
@@ -467,7 +467,7 @@ class TestFactory:
     def test_unknown_backend_raises(self):
         from unittest.mock import MagicMock
 
-        from ravi.fabric.storage.factory import create_file_store
+        from ravi.agents.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "unknown"
@@ -479,7 +479,7 @@ class TestFactory:
     def test_envelope_without_kek_raises(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from ravi.fabric.storage.factory import create_file_store
+        from ravi.agents.storage.factory import create_file_store
 
         settings = MagicMock()
         settings.FILE_STORE_BACKEND = "local"

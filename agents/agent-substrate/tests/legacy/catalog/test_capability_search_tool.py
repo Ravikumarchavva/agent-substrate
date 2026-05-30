@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.catalog.tools.capability_search.tool import CapabilitySearchTool
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.capabilities.tools.capability_search.tool import CapabilitySearchTool
 
 
 # ---------------------------------------------------------------------------

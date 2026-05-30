@@ -21,10 +21,10 @@ from __future__ import annotations
 import asyncio
 
 from ravi.kernel.runtime import AgentId
-from ravi.fabric.runtime import LocalRuntime
+from ravi.agents.runtime import LocalRuntime
 from ravi.kernel.runtime._contracts import MessageContext
 from ravi.kernel.messages.content import ContentBlock
-from ravi.fabric.actors.actor import ActorAgent
+from ravi.agents.actors.actor import ActorAgent
 
 # ---
 # What GrpcRuntime adds over LocalRuntime:
@@ -48,7 +48,7 @@ from ravi.fabric.actors.actor import ActorAgent
 def show_hierarchy() -> None:
     print("=== Runtime inheritance hierarchy ===")
 
-    from ravi.fabric.runtime import BaseRuntime, LocalRuntime as LR
+    from ravi.agents.runtime import BaseRuntime, LocalRuntime as LR
     from ravi.adapters.runtime import BaseRemoteRuntime
 
     print(f"  LocalRuntime -> BaseRuntime:      {issubclass(LR, BaseRuntime)}")

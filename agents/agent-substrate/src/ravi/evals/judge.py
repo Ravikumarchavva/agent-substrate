@@ -22,7 +22,7 @@ from typing import List, Optional
 
 from ravi.evals.criteria import EvalCriterion
 from ravi.evals.models import EvalScore
-from ravi.fabric.llm import LLMClient
+from ravi.kernel.llm import LLMClient
 from ravi.kernel import ChatMessage, ContentBlock
 
 logger = setup_logging()

@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from ravi.fabric.control_plane import (
+from ravi.agents.control_plane import (
     InMemoryHotCache,
     InMemoryRegionRegistry,
     LowestLatencyFallbackPolicy,

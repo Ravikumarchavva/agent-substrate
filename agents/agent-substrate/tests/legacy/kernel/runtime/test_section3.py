@@ -52,8 +52,8 @@ from ravi.kernel.runtime import (
     MessageContext,
     TopicId
 )
-from ravi.fabric.runtime.mailbox import Mailbox
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.runtime.mailbox import Mailbox
+from ravi.agents.runtime.local import LocalRuntime
 
 
 # ---------------------------------------------------------------------------

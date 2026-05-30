@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.catalog._pipeline import (
+from ravi.capabilities._pipeline import (
     PipelineDef,
     PipelineEngine,
     PipelineStep,
 )
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.fabric.catalog import AgentCatalogRegistry
+from ravi.agents.catalog import AgentCatalogRegistry
 from typing import Any
 
 

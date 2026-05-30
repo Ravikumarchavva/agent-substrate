@@ -14,28 +14,28 @@ from typing import Any, Optional
 
 import redis.asyncio as aioredis
 
-from ravi.catalog.tools.code_interpreter import K8sSandboxCodeInterpreterTool
-from ravi.catalog.tools.code_interpreter.http_client import (
+from ravi.capabilities.tools.code_interpreter import K8sSandboxCodeInterpreterTool
+from ravi.capabilities.tools.code_interpreter.http_client import (
     CodeInterpreterClient,
 )
-from ravi.catalog.tools.file_manager.tool import FileManagerTool
-from ravi.catalog.tools.human_input.tool import AskHumanTool
-from ravi.catalog.tools.task_manager.tool import (
+from ravi.capabilities.tools.file_manager.tool import FileManagerTool
+from ravi.capabilities.tools.human_input.tool import AskHumanTool
+from ravi.capabilities.tools.task_manager.tool import (
     TaskManagerTool,
     current_thread_id as _task_thread_id,
 )
 from ravi.config import Settings
-from ravi.fabric.llm import LLMClient, BaseEmbeddingClient
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.kernel.llm import LLMClient, EmbeddingClient as BaseEmbeddingClient
+from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel.storage.base import FileStore
-from ravi.fabric.storage.factory import create_file_store
+from ravi.agents.storage.factory import create_file_store
 from ravi.kernel.tools.base_tool import BaseTool, ToolRisk
-from ravi.fabric.tools.builtin_tools import (
+from ravi.agents.tools.builtin_tools import (
     CalculatorTool,
     GetCurrentTimeTool,
     GetBitcoinPriceTool,
 )
-from ravi.fabric.catalog import AgentCatalogRegistry
+from ravi.agents.catalog import AgentCatalogRegistry
 from ravi.adapters.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_embedding_client,
@@ -196,7 +196,7 @@ async def init_infrastructure(
 
     # Vector store + RAG pipeline (pgvector-backed)
     from ravi.adapters.vector.pgvector_store import PgVectorStore
-    from ravi.catalog.rag.pipeline import RAGPipeline
+    from ravi.capabilities.knowledge.pipeline import RAGPipeline
 
     vector_store = PgVectorStore(
         session_factory=session_factory,
@@ -208,7 +208,7 @@ async def init_infrastructure(
     )
 
     # DataRefStore — zero-context-bloat data exchange (Redis + optional S3)
-    from ravi.catalog._data_ref import DataRefStore
+    from ravi.capabilities.internal.data_ref import DataRefStore
 
     data_store = DataRefStore(redis_url=settings.REDIS_URL)
     await data_store.connect()
@@ -275,7 +275,7 @@ async def init_tool_registry(
             "Failed to initialize K8sSandboxCodeInterpreterTool: %s. Falling back to CodeInterpreterTool.",
             e,
         )
-        from ravi.catalog.tools.code_interpreter.tool import CodeInterpreterTool
+        from ravi.capabilities.tools.code_interpreter.tool import CodeInterpreterTool
 
         code_interpreter_tool = CodeInterpreterTool()
 
@@ -410,13 +410,13 @@ async def init_runtime_services(
 ) -> RuntimeServices:
     """Create chain runtime, pipeline engine, workflow client, and triggers."""
 
-    from ravi.catalog._chain_runtime import ChainRuntime
-    from ravi.catalog._pipeline import PipelineEngine, PipelineStore
-    from ravi.catalog._triggers.conditions import ConditionMonitor
-    from ravi.catalog._triggers.scheduler import TriggerScheduler
-    from ravi.catalog._triggers.webhooks import WebhookRegistry
-    from ravi.catalog.tools.chain_executor.tool import ChainExecutorTool
-    from ravi.catalog.tools.pipeline_manager.tool import PipelineManagerTool
+    from ravi.capabilities.internal.chain_runtime import ChainRuntime
+    from ravi.capabilities.internal.pipeline import PipelineEngine, PipelineStore
+    from ravi.capabilities.triggers.conditions import ConditionMonitor
+    from ravi.capabilities.triggers.scheduler import TriggerScheduler
+    from ravi.capabilities.triggers.webhooks import WebhookRegistry
+    from ravi.capabilities.tools.chain_executor.tool import ChainExecutorTool
+    from ravi.capabilities.tools.pipeline_manager.tool import PipelineManagerTool
 
     # ChainRuntime — LLM-written code-based adapter chaining
     chain_runtime = ChainRuntime(catalog=catalog, data_store=data_store)
@@ -478,7 +478,7 @@ async def init_runtime_services(
     )
 
     # ToolExecutorHandler — registered on runtime for distributed dispatch
-    from ravi.catalog.tools._tool_executor import ToolExecutorHandler
+    from ravi.capabilities.tools._tool_executor import ToolExecutorHandler
 
     tool_executor_handler = ToolExecutorHandler(
         tools={t.name: t for t in catalog.all_tools()},

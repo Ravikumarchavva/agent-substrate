@@ -4,16 +4,16 @@ import pytest
 from typing import Any, Optional
 
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.actors.actor import ActorAgent
-from ravi.reasoning.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.agents.actors.actor import ActorAgent
+from ravi.agents.reasoning.agents.assistant.agent import AssistantAgent as RuntimeAssistantAgent
 from ravi.kernel.runtime._protocol import AgentRuntime
 from ravi.kernel.runtime._identity import TopicId, AgentId
 from ravi.kernel.runtime._contracts import MessageContext
 from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.kernel.messages.client_messages import AssistantMessage
 from ravi.kernel.messages.content import ContentBlock
-from ravi.fabric.agents_base.agent_result import RunStatus
+from ravi.agents.agents_base.agent_result import RunStatus
 from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
 
 
@@ -106,8 +106,8 @@ async def test_runtime_assistant_agent_catalog_schemas():
     cat = AgentCatalogRegistry()
     cat.register_tool(DummyCatalogTool())
 
-    from ravi.fabric.agents_base.agent_context import AgentContext
-    from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+    from ravi.agents.agents_base.agent_context import AgentContext
+    from ravi.agents.memory.in_memory import InMemoryHistoryProvider
 
     # Instantiate RuntimeAssistantAgent with explicit catalog and context param
     assistant = RuntimeAssistantAgent(

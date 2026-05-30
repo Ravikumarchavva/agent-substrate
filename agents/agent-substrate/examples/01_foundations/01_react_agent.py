@@ -16,11 +16,11 @@ import asyncio
 import datetime
 
 from ravi.config import settings
-from ravi.fabric.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.runtime.local import LocalRuntime
 from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel import TextBlock, ToolExecutionResult
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from ravi.agents.assistant import AssistantAgent
 
 
 # ---------------------------------------------------------------------------

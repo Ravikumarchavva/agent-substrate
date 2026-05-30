@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional
 
 from ravi.reasoning.memory.context._helpers import estimate_tokens, split_system
-from ravi.kernel.context.compaction import CompactionStrategy, Trigger
+from ravi.fabric.agents_base.compaction import CompactionStrategy, Trigger
 from ravi.kernel.messages.base_message import BaseClientMessage
 from ravi.kernel.messages.client_messages import SystemMessage
 from ravi.logger import setup_logging

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional
 
-from ravi.kernel.context.compaction import CompactionStrategy, Trigger
+from ravi.fabric.agents_base.compaction import CompactionStrategy, Trigger
 from ravi.kernel.messages.base_message import BaseClientMessage
 
 if TYPE_CHECKING:

@@ -241,12 +241,7 @@ def create_app() -> FastAPI:
     app.include_router(rag_router)
     app.include_router(replay_router)
 
-    # Visual Builder — only mounted when ENABLE_BUILDER=true (zero prod footprint)
-    if settings.ENABLE_BUILDER:
-        from ravi.server.routes.builder import router as builder_router
 
-        app.include_router(builder_router)
-        setup_logging().info("Builder API mounted at /builder")
 
     # Health check
     @app.get("/health", tags=["infra"])

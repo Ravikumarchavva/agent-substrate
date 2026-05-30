@@ -15,7 +15,7 @@ from typing import Any, Callable, List, Optional, Tuple
 
 from opentelemetry.trace import Status, StatusCode
 
-from ravi.kernel.agents.agent_result import ToolCallRecord
+from ravi.fabric.agents_base.agent_result import ToolCallRecord
 from ravi.kernel.execution.context import ExecutionContext
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
 from ravi.kernel.messages.client_messages import (

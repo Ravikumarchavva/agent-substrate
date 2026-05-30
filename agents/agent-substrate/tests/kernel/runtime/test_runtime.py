@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ravi.kernel.contracts import TemporalSemantics
-from ravi.kernel.agents.agent_result import AgentRunResult, RunStatus
+from ravi.fabric.agents_base.agent_result import AgentRunResult, RunStatus
 from ravi.fabric.actors.actor import ActorAgent
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.runtime import (

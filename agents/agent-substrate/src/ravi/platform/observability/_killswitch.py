@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import Protocol, runtime_checkable
 
-from ravi.kernel.runtime._contracts import Envelope
+from ravi.kernel.runtime._message import Envelope
 
 __all__ = [
     "KillSwitchDecision",
@@ -60,17 +60,22 @@ class KillSwitchTarget:
 
     @classmethod
     def from_envelope(cls, envelope: Envelope) -> KillSwitchTarget:
-        """Create a kill-switch target snapshot from an :class:`Envelope`."""
+        """Create a kill-switch target snapshot from an :class:`Envelope`.
 
+        Tenancy and actor identity are derived from ``envelope.identity`` when
+        present — the in-process envelope no longer carries denormalised
+        tenant/workspace/actor fields.
+        """
+        identity = envelope.identity
         return cls(
-            envelope_id=envelope.event_id,
+            envelope_id=envelope.correlation_id,
             correlation_id=envelope.correlation_id,
-            tenant_id=envelope.tenant_id,
-            workspace_id=envelope.workspace_id,
-            actor_id=envelope.actor_id,
+            tenant_id=identity.effective_tenant_id if identity is not None else None,
+            workspace_id=identity.effective_workspace_id if identity is not None else None,
+            actor_id=identity.principal.fqn if identity is not None else None,
             sender=str(envelope.sender) if envelope.sender is not None else None,
             target=str(envelope.target) if envelope.target is not None else None,
-            event_type=envelope.event_type,
+            event_type=None,
         )
 
 

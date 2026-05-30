@@ -30,7 +30,7 @@ import uuid
 from collections import defaultdict
 from typing import Any, AsyncIterator
 
-from ravi.kernel.events._fabric import (
+from ravi.fabric.events._protocols import (
     AckRequest,
     ConsumeRequest,
     DurableEventLog,

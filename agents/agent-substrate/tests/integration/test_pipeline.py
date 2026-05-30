@@ -10,7 +10,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.kernel.agents.agent_result import RunStatus
+from ravi.fabric.agents_base.agent_result import RunStatus
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
 from ravi.kernel.guardrails import GuardrailType
 from ravi.reasoning.guardrails import ContentFilterGuardrail, PIIDetectionGuardrail

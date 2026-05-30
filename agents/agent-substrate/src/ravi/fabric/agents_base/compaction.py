@@ -22,9 +22,11 @@ if TYPE_CHECKING:
 class Trigger(str, Enum):
     """When a compaction strategy fires in the agent loop."""
 
-    BEFORE_LLM_CALL = "before_llm_call"  # applied every time context is built
-    AFTER_RUN = "after_run"              # applied when the agent finishes a run
-    ON_MAX_CONTEXT = "on_max_context"    # applied when context budget is exceeded
+    BEFORE_LLM_CALL = "before_llm_call"     # applied every time context is built
+    AFTER_LLM_CALL = "after_llm_call"       # applied after the LLM call
+    BEFORE_AGENT_RUN = "before_agent_run"   # applied before the agent starts a run
+    AFTER_AGENT_RUN = "after_agent_run"     # applied when the agent finishes a run
+    ON_MAX_CONTEXT = "on_max_context"       # applied when context budget is exceeded
 
 
 class CompactionStrategy(ABC):

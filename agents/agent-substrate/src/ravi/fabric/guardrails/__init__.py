@@ -1,17 +1,25 @@
-"""ravi.kernel.guardrails — Guardrail contracts only.
+"""ravi.fabric.guardrails — guardrail contracts + trust/provenance types.
 
-Only the base ABC, context, result, type enum, and spec live here. Concrete
-guardrails (``PIIDetectionGuardrail``, ``ContentFilterGuardrail``, …)
-and the parallel runner live in :mod:`ravi.reasoning.guardrails`.
+Base ABC, context, result, type enum, and spec. Concrete guardrails
+(``PIIDetectionGuardrail``, ``ContentFilterGuardrail``, …)
+and the parallel runner live in :mod:`ravi.guardrails`.
 """
 
-from ravi.kernel.guardrails.base_guardrail import (
+from ravi.fabric.guardrails.base_guardrail import (
     BaseGuardrail,
     GuardrailContext,
     GuardrailResult,
     GuardrailType,
 )
-from ravi.kernel.guardrails.spec import GuardrailSpec
+from ravi.fabric.guardrails.spec import GuardrailSpec
+from ravi.fabric.guardrails._trust_contracts import (
+    DelegationProof,
+    PrincipalTrustContext,
+    ProvenanceChain,
+    ProvenanceLink,
+    TrustGraph,
+    TrustScore,
+)
 
 __all__ = [
     "BaseGuardrail",
@@ -19,4 +27,10 @@ __all__ = [
     "GuardrailResult",
     "GuardrailType",
     "GuardrailSpec",
+    "DelegationProof",
+    "PrincipalTrustContext",
+    "ProvenanceChain",
+    "ProvenanceLink",
+    "TrustGraph",
+    "TrustScore",
 ]

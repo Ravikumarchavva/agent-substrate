@@ -16,7 +16,7 @@ from typing import Any
 
 from PIL import Image
 
-from ravi.kernel.messages.encoders._media import bytes_to_base64, pil_to_base64_png
+from ravi.integrations.llm.encoders._media import bytes_to_base64, pil_to_base64_png
 
 from ravi.kernel.messages._types import (
     AudioContent,

@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Any, List, Optional, Dict, Union
 from pydantic import BaseModel, Field, computed_field
 
-from ravi.kernel.structured.result import StructuredOutputResult
+from ravi.fabric.structured.result import StructuredOutputResult
 from datetime import datetime, timezone
 from uuid import uuid4
 

@@ -1,23 +1,15 @@
-"""Stream chunk types and backward-compatible re-exports.
+"""Stream chunk types and content re-exports.
 
-This module re-exports all content types from ``content.py`` and defines
-the streaming chunk hierarchy used by ``generate_stream()``.
-
-Stream chunks are Pydantic models with a ``chunk_type`` discriminator so
-they serialize cleanly over SSE / WebSocket boundaries.
-
-.. note::
-    ``MediaType`` is kept as a backward-compatible alias for
-    ``MessageContent``.  New code should use ``MessageContent`` directly.
+Re-exports all content types from ``content.py`` as the single source of truth,
+and defines the streaming chunk hierarchy for user-facing visibility streams.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# Re-export all content types — single source of truth is content.py
 from ravi.kernel.messages.content import (
     AudioBlock,
     AudioContent,
@@ -41,25 +33,13 @@ from ravi.kernel.messages.content import (
     content_block_from_dict,
     content_blocks_to_str,
 )
-
 from ravi.kernel.messages.client_messages import AssistantMessage
 
-if TYPE_CHECKING:
-    from ravi.kernel.structured.result import StructuredOutputResult
-
-# Backward-compatible alias — new code should use MessageContent
-MediaType = MessageContent
-
-
-# ── Stream chunk hierarchy (Pydantic, typed, serializable) ───────────────
+MediaType = MessageContent  # backward-compatible alias
 
 
 class StreamChunk(BaseModel):
-    """Base class for streaming chunks from LLM/Agent.
-
-    Every chunk carries a ``chunk_type`` discriminator so consumers can
-    pattern-match without ``isinstance`` when working with serialized data.
-    """
+    """Base class for streaming chunks from LLM/Agent."""
 
     chunk_type: str
     metadata: JsonObject = Field(default_factory=dict)
@@ -73,40 +53,22 @@ class TextDeltaChunk(StreamChunk):
 
 
 class ReasoningDeltaChunk(StreamChunk):
-    """Incremental reasoning/thinking content (for o1/o3 models)."""
+    """Incremental reasoning/thinking content."""
 
     chunk_type: Literal["reasoning_delta"] = "reasoning_delta"  # type: ignore[assignment]
     text: str
 
 
 class CompletionChunk(StreamChunk):
-    """Final completion event with full response.
-
-    ``message`` is always an ``AssistantMessage`` instance.
-    """
+    """Final completion event with full response."""
 
     chunk_type: Literal["completion"] = "completion"  # type: ignore[assignment]
-    message: "AssistantMessage"
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class StructuredOutputChunk(StreamChunk):
-    """Yielded at the end of a streaming run when ``response_schema`` is set.
-
-    Contains the validated result alongside the raw JSON text.
-    Consumers can check ``chunk.result.ok`` before accessing
-    ``chunk.result.parsed``.
-    """
-
-    chunk_type: Literal["structured_output"] = "structured_output"  # type: ignore[assignment]
-    result: "StructuredOutputResult"  # type: ignore[type-arg]
+    message: AssistantMessage
 
     model_config = {"arbitrary_types_allowed": True}
 
 
 __all__ = [
-    # Content types (from content.py)
     "TextBlock",
     "ImageBlock",
     "AudioBlock",
@@ -128,12 +90,9 @@ __all__ = [
     "JsonObject",
     "content_block_from_dict",
     "content_blocks_to_str",
-    # Backward compat
     "MediaType",
-    # Stream chunks
     "StreamChunk",
     "TextDeltaChunk",
     "ReasoningDeltaChunk",
     "CompletionChunk",
-    "StructuredOutputChunk",
 ]

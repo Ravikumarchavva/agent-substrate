@@ -33,13 +33,12 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Callable, List, Optional, Union
 from uuid import uuid4
 
-from ravi.kernel.agents.agent_result import (
+from ravi.fabric.agents_base.agent_result import (
     AgentRunResult,
     AggregatedUsage,
     RunStatus,
 )
 from ravi.fabric.actors.actor import ActorAgent
-from ravi.orchestration.agents.graph.agent import FlowEdge, FlowGraph, FlowNode
 from ravi.kernel.memory.memory_scope import MemoryScope
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
 from ravi.shared.observability import logger
@@ -97,11 +96,6 @@ class BaseFlow(ABC):
     @abstractmethod
     def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
         """Execute the flow, yielding chunks tagged with ``agent_id``."""
-        ...
-
-    @abstractmethod
-    def to_graph(self) -> FlowGraph:
-        """Return a ``FlowGraph`` describing this flow's topology."""
         ...
 
     def __repr__(self) -> str:
@@ -286,21 +280,7 @@ class SequentialFlow(BaseFlow):
             },
         )
 
-    def to_graph(self) -> FlowGraph:
-        graph = FlowGraph(name=self.name)
-        graph.add_node(FlowNode(id="__input__", label="start", node_type="input"))
 
-        prev_id = "__input__"
-        for i, step in enumerate(self.steps):
-            node_id = step.name if hasattr(step, "name") else f"step_{i}"
-            node_type: Any = "flow" if isinstance(step, BaseFlow) else "agent"
-            graph.add_node(FlowNode(id=node_id, label=node_id, node_type=node_type))
-            graph.add_edge(FlowEdge(source=prev_id, target=node_id))
-            prev_id = node_id
-
-        graph.add_node(FlowNode(id="__output__", label="end", node_type="output"))
-        graph.add_edge(FlowEdge(source=prev_id, target="__output__"))
-        return graph
 
 
 # ---------------------------------------------------------------------------
@@ -455,19 +435,7 @@ class ParallelFlow(BaseFlow):
             },
         )
 
-    def to_graph(self) -> FlowGraph:
-        graph = FlowGraph(name=self.name)
-        graph.add_node(FlowNode(id="__input__", label="start", node_type="input"))
-        graph.add_node(FlowNode(id="__output__", label="end", node_type="output"))
 
-        for i, step in enumerate(self.branches):
-            node_id = step.name if hasattr(step, "name") else f"branch_{i}"
-            node_type: Any = "flow" if isinstance(step, BaseFlow) else "agent"
-            graph.add_node(FlowNode(id=node_id, label=node_id, node_type=node_type))
-            graph.add_edge(FlowEdge(source="__input__", target=node_id))
-            graph.add_edge(FlowEdge(source=node_id, target="__output__"))
-
-        return graph
 
 
 # ---------------------------------------------------------------------------
@@ -589,27 +557,4 @@ class ConditionalFlow(BaseFlow):
             },
         )
 
-    def to_graph(self) -> FlowGraph:
-        graph = FlowGraph(name=self.name)
-        graph.add_node(FlowNode(id="__input__", label="start", node_type="input"))
 
-        cond_id = f"{self.name}__condition"
-        graph.add_node(FlowNode(id=cond_id, label="predicate?", node_type="condition"))
-        graph.add_edge(FlowEdge(source="__input__", target=cond_id))
-
-        true_id = self.if_true.name if hasattr(self.if_true, "name") else "if_true"
-        false_id = self.if_false.name if hasattr(self.if_false, "name") else "if_false"
-
-        true_type: Any = "flow" if isinstance(self.if_true, BaseFlow) else "agent"
-        false_type: Any = "flow" if isinstance(self.if_false, BaseFlow) else "agent"
-
-        graph.add_node(FlowNode(id=true_id, label=true_id, node_type=true_type))
-        graph.add_node(FlowNode(id=false_id, label=false_id, node_type=false_type))
-        graph.add_edge(FlowEdge(source=cond_id, target=true_id, label="yes"))
-        graph.add_edge(FlowEdge(source=cond_id, target=false_id, label="no"))
-
-        graph.add_node(FlowNode(id="__output__", label="end", node_type="output"))
-        graph.add_edge(FlowEdge(source=true_id, target="__output__"))
-        graph.add_edge(FlowEdge(source=false_id, target="__output__"))
-
-        return graph

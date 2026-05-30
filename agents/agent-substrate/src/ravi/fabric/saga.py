@@ -51,9 +51,28 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 from pydantic import BaseModel, Field
 
 from ravi.kernel.messages.content import JsonObject
-from ravi.kernel.runtime._errors import SagaFailedError
 
 logger = logging.getLogger(__name__)
+
+
+class SagaFailedError(Exception):
+    """Raised when a saga cannot complete and compensating actions are needed.
+
+    ``completed_steps`` lists step IDs that succeeded before the failure;
+    ``failed_step`` is the step that caused the saga to abort.
+    """
+
+    def __init__(
+        self,
+        saga_id: str,
+        failed_step: str,
+        completed_steps: list[str] | None = None,
+        message: str = "",
+    ) -> None:
+        self.saga_id = saga_id
+        self.failed_step = failed_step
+        self.completed_steps = completed_steps or []
+        super().__init__(message or f"saga {saga_id!r} failed at step {failed_step!r}")
 
 
 # ---------------------------------------------------------------------------

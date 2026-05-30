@@ -30,7 +30,7 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from ravi.logger import setup_logging
-from ravi.kernel.runtime._types import MessageContext
+from ravi.kernel.runtime import MessageContext
 from ravi.kernel.tools.approval import tool_needs_approval
 from ravi.kernel.tools.parsing import find_tool, parse_runtime_tool_payload
 from ravi.kernel.tools.base_tool import BaseTool, HitlMode, ToolResult

@@ -1,7 +1,7 @@
-"""Canonical tool execution contracts.
+"""Tool execution contracts.
 
-These are the minimal kernel-level types: what the agent asks to run,
-and what comes back. Execution policy (risk, timeout, HITL) is a
+Minimal kernel-level types: what an agent requests to run, and what comes back.
+Execution policy (risk rating, timeout, human-in-the-loop approval) is a
 fabric/guardrail concern and lives above this layer.
 """
 
@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from ravi.kernel.messages.content import ContentBlock, JsonObject, TextBlock
+from ravi.kernel.content import ContentBlock, JsonObject, content_blocks_to_str
 
 
 class ToolCallRequest(BaseModel):
@@ -37,4 +37,8 @@ class ToolExecutionResult(BaseModel):
 
     @property
     def text(self) -> str:
-        return " ".join(b.text for b in self.content if isinstance(b, TextBlock))
+        """Human-readable lowering of all content blocks."""
+        return content_blocks_to_str(self.content)
+
+
+__all__ = ["ToolCallRequest", "ToolExecutionResult"]

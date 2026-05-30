@@ -11,7 +11,7 @@ from ravi.logger import setup_logging
 import math
 from typing import List, Optional, Tuple
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 logger = setup_logging()
@@ -26,7 +26,7 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-class KnowledgeSearchTool(BaseTool):
+class KnowledgeSearchTool:
     """Search over indexed documents using embedding similarity."""
 
     def __init__(self, api_key: Optional[str] = None) -> None:
@@ -126,7 +126,7 @@ class KnowledgeSearchTool(BaseTool):
         text: str = "",
         doc_id: str = "",
         limit: int = 5,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         limit = max(1, min(limit, 20))
 
         if action == "status":

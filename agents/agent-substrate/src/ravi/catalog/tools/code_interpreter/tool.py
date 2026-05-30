@@ -1,4 +1,4 @@
-"""CodeInterpreterTool — session-aware BaseTool using HTTP client.
+"""CodeInterpreterTool — session-aware Tool using HTTP client.
 
 Each agent session (conversation thread) gets its own persistent
 Firecracker microVM on the code-interpreter service pod.  Variables,
@@ -38,7 +38,7 @@ import os
 from typing import Any, ClassVar, Optional
 
 from ravi.kernel.messages import ImageContent
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 logger = setup_logging()
@@ -46,7 +46,7 @@ logger = setup_logging()
 _DEFAULT_SESSION = "default"
 
 
-class CodeInterpreterTool(BaseTool):
+class CodeInterpreterTool:
     """Execute Python / bash in a persistent Firecracker microVM session.
 
     Supports two modes:
@@ -162,7 +162,7 @@ class CodeInterpreterTool(BaseTool):
         code: str,
         exec_type: str = "python",
         timeout: int = 30,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute code in the current session's VM."""
         timeout = max(1, min(timeout, 300))
 
@@ -200,7 +200,7 @@ class CodeInterpreterTool(BaseTool):
 
     async def _execute_http(
         self, code: str, exec_type: str, timeout: int
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute via the code-interpreter HTTP service."""
         try:
             http_client = self._require_http_client()
@@ -345,7 +345,7 @@ class CodeInterpreterTool(BaseTool):
 
         return self._response_to_tool_result(resp)
 
-    def _response_to_tool_result(self, resp) -> ToolResult:
+    def _response_to_tool_result(self, resp) -> ToolExecutionResult:
         """Convert ExecuteResponse → ToolResult with multimodal content."""
         # Build text summary for the LLM
         text_parts = []
@@ -400,7 +400,7 @@ class CodeInterpreterTool(BaseTool):
 
     async def _execute_direct(
         self, code: str, exec_type: str, timeout: int
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute via local SessionManager (testing / local dev)."""
         if self._session_manager is None:
             await self.start()
@@ -432,7 +432,7 @@ class CodeInterpreterTool(BaseTool):
 
         return self._build_direct_result(result, exec_type)
 
-    def _build_direct_result(self, result: dict, exec_type: str) -> ToolResult:
+    def _build_direct_result(self, result: dict, exec_type: str) -> ToolExecutionResult:
         """Convert raw guest-agent dict → ToolResult (direct mode)."""
         success = result.get("success", False)
 

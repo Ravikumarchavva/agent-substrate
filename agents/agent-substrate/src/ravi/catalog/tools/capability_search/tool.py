@@ -14,11 +14,11 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 
-class CapabilitySearchTool(BaseTool):
+class CapabilitySearchTool:
     """Meta-tool for discovering tools and skills in the capability catalogue."""
 
     def __init__(self, catalog: Any) -> None:
@@ -102,7 +102,7 @@ class CapabilitySearchTool(BaseTool):
         category_path: str = "",
         kind: Optional[str] = None,
         limit: int = 8,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         """Execute the capability search action."""
         limit = max(1, min(limit, 20))
 
@@ -128,7 +128,7 @@ class CapabilitySearchTool(BaseTool):
         *,
         kind: Optional[str] = None,
         limit: int = 8,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         if not query.strip():
             return ToolResult(
                 content=[
@@ -191,7 +191,7 @@ class CapabilitySearchTool(BaseTool):
             },
         )
 
-    def _do_browse(self, category_path: str, *, limit: int = 8) -> ToolResult:
+    def _do_browse(self, category_path: str, *, limit: int = 8) -> ToolExecutionResult:
         if not category_path.strip():
             return ToolResult(
                 content=[
@@ -247,7 +247,7 @@ class CapabilitySearchTool(BaseTool):
             },
         )
 
-    def _do_list_categories(self) -> ToolResult:
+    def _do_list_categories(self) -> ToolExecutionResult:
         top_cats = self._catalog.list_categories()
         lines: List[str] = ["Available capability categories:\n"]
 

@@ -17,7 +17,7 @@ import contextvars
 import uuid
 from typing import Any, ClassVar, Optional
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 logger = setup_logging()
@@ -30,7 +30,7 @@ current_thread_id: contextvars.ContextVar[str] = contextvars.ContextVar(
 
 def _text_result(
     text: str, *, is_error: bool = False, app_data: Optional[dict[str, Any]] = None
-) -> ToolResult:
+) -> ToolExecutionResult:
     return ToolResult(
         content=[TextBlock(text=text)],
         is_error=is_error,
@@ -38,7 +38,7 @@ def _text_result(
     )
 
 
-class FileManagerTool(BaseTool):
+class FileManagerTool:
     """Agent-facing tool for file operations within a conversation thread.
 
     Delegates to ``FileStore`` for I/O and ``FileMetadata`` for DB tracking.
@@ -104,7 +104,7 @@ class FileManagerTool(BaseTool):
         filename: str = "",
         content: str = "",
         content_type: str = "text/plain",
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         thread_id_str = current_thread_id.get("")
         if not thread_id_str:
             return _text_result("Error: no active thread context", is_error=True)
@@ -133,7 +133,7 @@ class FileManagerTool(BaseTool):
             logger.exception("FileManagerTool error: %s", exc)
             return _text_result(f"Error: {exc}", is_error=True)
 
-    async def _list_files(self, thread_id: uuid.UUID) -> ToolResult:
+    async def _list_files(self, thread_id: uuid.UUID) -> ToolExecutionResult:
         from ravi.server.services.file_service import list_files
 
         async with self._session_factory() as db:
@@ -150,7 +150,7 @@ class FileManagerTool(BaseTool):
 
             return _text_result("\n".join(lines), app_data={"file_count": len(files)})
 
-    async def _read_file(self, thread_id: uuid.UUID, file_id_str: str) -> ToolResult:
+    async def _read_file(self, thread_id: uuid.UUID, file_id_str: str) -> ToolExecutionResult:
         from ravi.server.services.file_service import extract_text, get_file
 
         if not file_id_str:
@@ -193,7 +193,7 @@ class FileManagerTool(BaseTool):
         filename: str,
         content: str,
         content_type: str,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         from ravi.server.services.file_service import save_file
         from ravi.kernel.storage.tenant import FileScope
 
@@ -228,7 +228,7 @@ class FileManagerTool(BaseTool):
                 },
             )
 
-    async def _get_url(self, thread_id: uuid.UUID, file_id_str: str) -> ToolResult:
+    async def _get_url(self, thread_id: uuid.UUID, file_id_str: str) -> ToolExecutionResult:
         from ravi.server.services.file_service import get_file, get_file_url
 
         if not file_id_str:
@@ -253,7 +253,7 @@ class FileManagerTool(BaseTool):
                     app_data={"file_id": str(meta.id)},
                 )
 
-    async def _delete_file(self, thread_id: uuid.UUID, file_id_str: str) -> ToolResult:
+    async def _delete_file(self, thread_id: uuid.UUID, file_id_str: str) -> ToolExecutionResult:
         from ravi.server.services.file_service import delete_file
 
         if not file_id_str:

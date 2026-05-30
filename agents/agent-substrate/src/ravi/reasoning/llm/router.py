@@ -17,9 +17,9 @@ from ravi.logger import setup_logging
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
-from ravi.kernel.llm.models import ModelProfile, list_models
+from ravi.fabric.llm.models import ModelProfile, list_models
 
 logger = setup_logging()
 
@@ -48,8 +48,8 @@ class RouteConstraints:
     require_vision: bool = False
     require_tools: bool = True
     require_thinking: bool = False
-    max_input_cost_per_mtok: Optional[float] = None
-    preferred_providers: Optional[list[str]] = None
+    max_input_cost_per_mtok: float | None = None
+    preferred_providers: list[str] | None = None
     min_context_length: int = 0
 
 
@@ -88,7 +88,7 @@ class ModelRouter:
 
     def __init__(
         self,
-        tiers: Optional[dict[ComplexityTier, list[str]]] = None,
+        tiers: dict[ComplexityTier, list[str]] | None = None,
     ) -> None:
         self._tiers = tiers or _DEFAULT_TIERS
 
@@ -96,8 +96,8 @@ class ModelRouter:
         self,
         messages: list[Any],
         *,
-        tools: Optional[list[Any]] = None,
-        hint: Optional[ComplexityTier] = None,
+        tools: list[Any] | None = None,
+        hint: ComplexityTier | None = None,
     ) -> ComplexityTier:
         """Estimate query complexity from context signals.
 
@@ -132,9 +132,9 @@ class ModelRouter:
         self,
         messages: list[Any],
         *,
-        tools: Optional[list[Any]] = None,
-        constraints: Optional[RouteConstraints] = None,
-        hint: Optional[ComplexityTier] = None,
+        tools: list[Any] | None = None,
+        constraints: RouteConstraints | None = None,
+        hint: ComplexityTier | None = None,
     ) -> str:
         """Select the best model for the given query.
 

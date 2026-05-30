@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from typing import Protocol
+
 from pydantic import BaseModel, Field
 
 from ravi.kernel.content import ContentBlock, JsonObject, content_blocks_to_str
@@ -41,4 +43,14 @@ class ToolExecutionResult(BaseModel):
         return content_blocks_to_str(self.content)
 
 
-__all__ = ["ToolCallRequest", "ToolExecutionResult"]
+class Tool(Protocol):
+    """Contract every catalog tool must satisfy."""
+    name: str
+    description: str
+    input_schema: dict[str, object]
+
+    async def execute(self, **kwargs: object) -> ToolExecutionResult:
+        ...
+
+
+__all__ = ["ToolCallRequest", "ToolExecutionResult", "Tool"]

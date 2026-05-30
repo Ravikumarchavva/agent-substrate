@@ -17,7 +17,7 @@ from ravi.logger import setup_logging
 import contextvars
 from typing import Any, Awaitable, Callable, ClassVar, Dict, Optional
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.shared.tasks.store import GlobalTaskStore, Task, TaskStore
 from ravi.kernel.messages.content import TextBlock
 
@@ -33,7 +33,7 @@ current_thread_id: contextvars.ContextVar[str] = contextvars.ContextVar(
 )
 
 
-class TaskManagerTool(BaseTool):
+class TaskManagerTool:
     """
     Manage a visible Kanban task list during complex agent runs.
 
@@ -128,7 +128,7 @@ class TaskManagerTool(BaseTool):
         task_id: Optional[str] = None,
         title: Optional[str] = None,
         thread_id: Optional[str] = None,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
 
         store = GlobalTaskStore.get()
         # Prefer thread_id from ContextVar (set by chat route per-request),
@@ -367,14 +367,14 @@ class TaskManagerTool(BaseTool):
 # ---------------------------------------------------------------------------
 
 
-def _ok(message: str) -> ToolResult:
+def _ok(message: str) -> ToolExecutionResult:
     return ToolResult(
         content=[TextBlock(text=message)],
         is_error=False,
     )
 
 
-def _err(message: str) -> ToolResult:
+def _err(message: str) -> ToolExecutionResult:
     return ToolResult(
         content=[TextBlock(text=message)],
         is_error=True,

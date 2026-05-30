@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 
@@ -20,7 +20,7 @@ _DEFAULT_ALLOWED_DOMAINS: List[str] = [
 ]
 
 
-class HttpRequestTool(BaseTool):
+class HttpRequestTool:
     """Make HTTP GET/POST/PUT/DELETE requests with domain allowlisting."""
 
     def __init__(
@@ -76,7 +76,7 @@ class HttpRequestTool(BaseTool):
         method: str = "GET",
         headers: Optional[Dict[str, str]] = None,
         body: str = "",
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         if not self._is_allowed(url):
             parsed = urlparse(url)
             return ToolResult(

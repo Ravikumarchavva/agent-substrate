@@ -20,7 +20,7 @@ from ravi.logger import setup_logging
 from pathlib import Path
 from typing import Any
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.kernel.messages.content import TextBlock
 
 logger = setup_logging()
@@ -29,7 +29,7 @@ _IMAGE_SUFFIXES = {".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 _PDF_SUFFIXES = {".pdf"}
 
 
-class InvoiceExtractorTool(BaseTool):
+class InvoiceExtractorTool:
     """Extract text and tables from invoice PDFs or scanned image files."""
 
     def __init__(self) -> None:
@@ -90,7 +90,7 @@ class InvoiceExtractorTool(BaseTool):
         file_path: str,
         pages: list[int] | None = None,
         extract_tables: bool = True,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         path = Path(file_path)
         if not path.exists():
             return ToolResult(
@@ -122,7 +122,7 @@ class InvoiceExtractorTool(BaseTool):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _extract_image(path: Path, pages: list[int] | None) -> ToolResult:
+    def _extract_image(path: Path, pages: list[int] | None) -> ToolExecutionResult:
         try:
             from PIL import Image
         except ImportError:
@@ -221,7 +221,7 @@ class InvoiceExtractorTool(BaseTool):
     @staticmethod
     def _extract_pdf(
         path: Path, pages: list[int] | None, extract_tables: bool
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         try:
             import pdfplumber  # type: ignore[import-unresolved]
         except ImportError:
@@ -251,7 +251,7 @@ class InvoiceExtractorTool(BaseTool):
         path: Path,
         pages: list[int] | None,
         extract_tables: bool,
-    ) -> ToolResult:
+    ) -> ToolExecutionResult:
         page_texts: list[str] = []
         all_tables: list[dict[str, Any]] = []
 

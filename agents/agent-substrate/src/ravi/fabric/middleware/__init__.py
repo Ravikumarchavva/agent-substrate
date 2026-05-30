@@ -1,12 +1,18 @@
-"""Agent middleware pipeline — composable interceptors for pre/post processing."""
+"""Middleware and Interceptor Pipeline.
 
-from __future__ import annotations
+Provides the ability to wrap the execution lifecycle of agents with orthogonal
+concerns like Guardrails (PII redaction, Prompt Injection), Audit Logging,
+and Semantic Caching, without polluting agent business logic.
+"""
 
-from ravi.kernel.middleware.base import BaseMiddleware, MiddlewareContext
-from ravi.kernel.middleware.runner import MiddlewarePipeline
+from .pipeline import Interceptor, MiddlewarePipeline
+from .guardrails import PIIRedactionGuardrail, PromptInjectionGuardrail
+from .audit import AuditLoggerMiddleware
 
 __all__ = [
-    "BaseMiddleware",
-    "MiddlewareContext",
+    "Interceptor",
     "MiddlewarePipeline",
+    "PIIRedactionGuardrail",
+    "PromptInjectionGuardrail",
+    "AuditLoggerMiddleware",
 ]

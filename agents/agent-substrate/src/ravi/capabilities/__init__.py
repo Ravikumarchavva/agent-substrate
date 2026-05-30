@@ -1,13 +1,14 @@
-"""Catalog — unified capability system for tools, skills, connectors, and pipelines.
+"""capabilities — unified capability system for tools, skills, connectors, and pipelines.
 
 Directory layout::
 
-    catalog/
-    ├── tools/        ← BaseTool implementations (capability_search, web_surfer, …)
+    capabilities/
+    ├── tools/        ← Tool implementations (human_input, web_surfer, task_manager, …)
     ├── skills/       ← SKILL.md prompt-skill packages (debugging, code_review, …)
     ├── connectors/   ← External service connectors (email, postgres_query, …)
     ├── triggers/     ← Trigger monitors (scheduled, webhooks, events)
-    └── internal/     ← Internal catalog implementations (scanners, managers, runtime)
+    ├── knowledge/    ← RAG pipeline, vector store, chunkers, loaders, reranker
+    └── internal/     ← Scanners, skill loader/manager, pipeline engine, chain runtime
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from ravi.capabilities.internal.pipeline import (
 from ravi.capabilities.internal.scanner import CatalogPackage, CatalogScanner
 from ravi.capabilities.internal.skill_manager import SkillManager
 from ravi.capabilities.internal.skill_loader import SkillLoader
-from ravi.capabilities.internal.skill_models import Skill, SkillMetadata
+from ravi.capabilities.internal.skill_models import SkillPackage, SkillMetadata
 
 __all__ = [
     "CatalogPackage",
@@ -33,7 +34,7 @@ __all__ = [
     "PipelineDef",
     "PipelineEngine",
     "PipelineStore",
-    "Skill",
+    "SkillPackage",
     "SkillLoader",
     "SkillManager",
     "SkillMetadata",

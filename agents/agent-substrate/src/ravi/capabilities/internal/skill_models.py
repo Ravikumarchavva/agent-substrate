@@ -73,9 +73,9 @@ class SkillMetadata:
 
 
 @dataclass
-class Skill:
+class SkillPackage:
     """
-    Fully loaded skill – activated when the model decides to use it.
+    Fully loaded skill package – activated when the model decides to use it.
     Contains the full SKILL.md body + paths to auxiliary files.
     """
 

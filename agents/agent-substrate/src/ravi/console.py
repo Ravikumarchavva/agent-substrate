@@ -39,6 +39,8 @@ from rich.table import Table
 from rich.theme import Theme
 from rich.segment import Segment
 
+from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.kernel.tools import ToolExecutionResult
 from ravi.logger import setup_logging
 
 
@@ -140,42 +142,6 @@ _THEME = Theme(
     }
 )
 
-# Lazy imports — avoid circular deps at module level
-_TextDeltaChunk = None
-_ReasoningDeltaChunk = None
-_CompletionChunk = None
-_ToolExecutionResultMessage = None
-
-
-def _ensure_types() -> None:
-    global \
-        _TextDeltaChunk, \
-        _ReasoningDeltaChunk, \
-        _CompletionChunk, \
-        _ToolExecutionResultMessage
-    if _TextDeltaChunk is None:
-        try:
-            # Try importing modern migrated types first
-            from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
-            from ravi.kernel.tools import ToolExecutionResult
-            
-            _TextDeltaChunk = TextDelta
-            _ReasoningDeltaChunk = ReasoningDelta
-            _CompletionChunk = CompletionEvent
-            _ToolExecutionResultMessage = ToolExecutionResult
-        except ImportError:
-            # Fallback to legacy stubs
-            from ravi.agents.assistant._legacy_stubs import (
-                TextDeltaChunk,
-                ReasoningDeltaChunk,
-                CompletionChunk,
-                ToolExecutionResultMessage,
-            )
-
-            _TextDeltaChunk = TextDeltaChunk
-            _ReasoningDeltaChunk = ReasoningDeltaChunk
-            _CompletionChunk = CompletionChunk
-            _ToolExecutionResultMessage = ToolExecutionResultMessage
 
 
 # ---------------------------------------------------------------------------
@@ -262,15 +228,6 @@ class Console:
 
         Returns the final ``CompletionChunk.message`` (or *None*).
         """
-        _ensure_types()
-        text_delta_cls = _TextDeltaChunk
-        reasoning_delta_cls = _ReasoningDeltaChunk
-        completion_cls = _CompletionChunk
-        tool_result_cls = _ToolExecutionResultMessage
-        assert text_delta_cls is not None
-        assert reasoning_delta_cls is not None
-        assert completion_cls is not None
-        assert tool_result_cls is not None
 
         if _echo:
             self._print_user(task)
@@ -343,7 +300,7 @@ class Console:
 
         try:
             async for chunk in chunk_iter:
-                if isinstance(chunk, text_delta_cls):
+                if isinstance(chunk, TextDelta):
                     # Finish reasoning loop if it was active
                     if live and reasoning_stream_active:
                         reasoning_stream_active = False
@@ -385,7 +342,7 @@ class Console:
                     text_buffer.append(chunk.text)
                     text_updated.set()
 
-                elif isinstance(chunk, reasoning_delta_cls):
+                elif isinstance(chunk, ReasoningDelta):
                     # Finish text loop if it was active (unlikely, but safe)
                     if live and text_stream_active:
                         text_stream_active = False
@@ -427,7 +384,7 @@ class Console:
                     reasoning_buffer.append(chunk.text)
                     reasoning_updated.set()
 
-                elif isinstance(chunk, completion_cls):
+                elif isinstance(chunk, CompletionEvent):
                     if hasattr(chunk, "content"):
                         from ravi.kernel.content import content_blocks_to_str
                         final_message = content_blocks_to_str(chunk.content)
@@ -466,7 +423,7 @@ class Console:
                         live = None
                         refresh_task = None
 
-                elif isinstance(chunk, tool_result_cls):
+                elif isinstance(chunk, ToolExecutionResult):
                     if live:
                         if text_stream_active:
                             text_stream_active = False
@@ -564,36 +521,27 @@ class Console:
             async for chunk in Console.stream(agent.run_stream("hi")):
                 pass  # chunks are still yielded for downstream processing
         """
-        _ensure_types()
-        text_delta_cls = _TextDeltaChunk
-        reasoning_delta_cls = _ReasoningDeltaChunk
-        completion_cls = _CompletionChunk
-        tool_result_cls = _ToolExecutionResultMessage
-        assert text_delta_cls is not None
-        assert reasoning_delta_cls is not None
-        assert completion_cls is not None
-        assert tool_result_cls is not None
 
         con = output or RichConsole(theme=_THEME, highlight=False)
         partial_text = ""
 
         async for chunk in iterator:
-            if isinstance(chunk, text_delta_cls):
+            if isinstance(chunk, TextDelta):
                 partial_text += chunk.text
                 con.print(chunk.text, end="", style="")
                 if hasattr(con.file, "flush"):
                     con.file.flush()
                 await asyncio.sleep(0)
-            elif isinstance(chunk, reasoning_delta_cls):
+            elif isinstance(chunk, ReasoningDelta):
                 con.print(chunk.text, end="", style="thinking")
                 if hasattr(con.file, "flush"):
                     con.file.flush()
                 await asyncio.sleep(0)
-            elif isinstance(chunk, completion_cls):
+            elif isinstance(chunk, CompletionEvent):
                 if partial_text:
                     con.print()  # newline
                     partial_text = ""
-            elif isinstance(chunk, tool_result_cls):
+            elif isinstance(chunk, ToolExecutionResult):
                 con.print()
                 _print_tool_result_static(con, chunk)
             yield chunk

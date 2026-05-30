@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import ClassVar, Optional, Any
 
-from ravi.kernel.llm import (
+from ravi.agents.llm import (
     EmbeddingClient,
     LLMClient,
     ModelProfile,

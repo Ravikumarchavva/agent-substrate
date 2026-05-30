@@ -1,7 +1,6 @@
 """PostgresHistoryProvider — PostgreSQL-backed durable conversation history.
 
-The default :class:`PersistentHistoryProvider`.  Durable, queryable persistence
-for session messages using SQLAlchemy 2.0 async ORM.
+Durable, queryable persistence for session messages using SQLAlchemy 2.0 async ORM.
 
 Tables (created automatically):
   ``memory_sessions``  — one row per session (timestamps, message count).
@@ -41,7 +40,6 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from ravi.agents.assistant._legacy_stubs import PersistentHistoryProvider
 from ravi.adapters.llm.encoders.storage import (
     deserialize_message,
     serialize_message,
@@ -134,8 +132,8 @@ class MemoryMessage(MemoryBase):
 # ---------------------------------------------------------------------------
 
 
-class PostgresHistoryProvider(PersistentHistoryProvider):
-    """Async PostgreSQL-backed :class:`PersistentHistoryProvider`.
+class PostgresHistoryProvider:
+    """Async PostgreSQL-backed history provider.
 
     Parameters:
         database_url: PostgreSQL connection string

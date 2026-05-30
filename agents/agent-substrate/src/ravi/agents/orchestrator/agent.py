@@ -52,8 +52,9 @@ class _HandoffTool:
         {"input": "<instruction>", "reason": "<why delegating>"}
     """
 
-    def __init__(self, agent: AssistantAgent) -> None:
+    def __init__(self, agent: AssistantAgent, hooks: HookManager) -> None:
         self._agent = agent
+        self._hooks = hooks
         self.name = f"handoff_{agent.name}"
         self.description = (
             f"Delegate the current task to the '{agent.name}' specialist agent. "
@@ -83,6 +84,15 @@ class _HandoffTool:
             self._agent.name,
             reason,
             input,
+        )
+        await self._hooks.dispatch(
+            HookEvent.HANDOFF,
+            HandoffEventPayload(
+                from_agent="orchestrator",
+                to_agent=self._agent.name,
+                input=input,
+                reason=reason,
+            ).model_dump(mode="json"),
         )
         result: AgentRunResult = await self._agent.run(input)
         output = result.output or "(no output)"
@@ -151,11 +161,6 @@ class OrchestratorAgent(AssistantAgent):
         self.description = description
         self.sub_agents = sub_agents
 
-        # Build handoff tools
-        handoff_tools: list[_HandoffTool] = [_HandoffTool(a) for a in sub_agents]
-        all_tools: list[Tool] = [*handoff_tools, *(extra_tools or [])]
-
-        # Default system prompt lists the available specialists
         roster = "\n".join(
             f"  - {a.name}: {getattr(a, 'description', '')}" for a in sub_agents
         )
@@ -168,41 +173,16 @@ class OrchestratorAgent(AssistantAgent):
         )
 
         _hooks = hooks or HookManager()
+        handoff_tools = [_HandoffTool(a, _hooks) for a in sub_agents]
+        all_tools: list[Tool] = [*handoff_tools, *(extra_tools or [])]
+
         super().__init__(
             name,
             runtime,
             model=model,
             tools=all_tools,
-            system=system or default_system,
+            system_instructions=system or default_system,
             max_iterations=max_iterations,
             tool_timeout=tool_timeout,
             hooks=_hooks,
         )
-
-        # Patch hooks to emit HANDOFF events on each delegation
-        self._patch_handoff_hooks()
-
-    # -- Hook patching -------------------------------------------------------
-
-    def _patch_handoff_hooks(self) -> None:
-        """Wrap the hook dispatcher to emit HANDOFF events on tool calls."""
-        original_dispatch = self.hooks.dispatch
-
-        async def _patched(event: HookEvent, payload: dict[str, Any]) -> None:
-            if event == HookEvent.TOOL_START:
-                tool_name = payload.get("tool", "")
-                if isinstance(tool_name, str) and tool_name.startswith("handoff_"):
-                    agent_name = tool_name[len("handoff_"):]
-                    args = payload.get("args") or {}
-                    await original_dispatch(
-                        HookEvent.HANDOFF,
-                        HandoffEventPayload(
-                            from_agent=self.name,
-                            to_agent=agent_name,
-                            input=str(args.get("input", "")),
-                            reason=str(args.get("reason", "")),
-                        ).model_dump(mode="json"),
-                    )
-            await original_dispatch(event, payload)
-
-        self.hooks.dispatch = _patched  # type: ignore[method-assign]

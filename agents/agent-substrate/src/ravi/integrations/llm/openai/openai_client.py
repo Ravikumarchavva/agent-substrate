@@ -417,83 +417,83 @@ class OpenAIClient(LLMClient):
             return final_blocks
 
         # ── Structured-only path (no tools) ──────────────────────────────
-        if response_format is not None:
-            import openai
-            from ravi.kernel.structured.result import (
-                StructuredOutputError,
-                StructuredOutputResult,
-            )
+        # if response_format is not None:
+        #     import openai
+        #     # from ravi.kernel.structured.result import (
+        #     #     StructuredOutputError,
+        #     #     StructuredOutputResult,
+        #     # )
 
-            structured_params: dict[str, Any] = {
-                "model": kwargs.get("model", self.model),
-                "input": conversation_input,
-            }
-            if instructions:
-                structured_params["instructions"] = instructions
-            if self.max_tokens:
-                structured_params["max_output_tokens"] = kwargs.get(
-                    "max_tokens", self.max_tokens
-                )
+        #     structured_params: dict[str, Any] = {
+        #         "model": kwargs.get("model", self.model),
+        #         "input": conversation_input,
+        #     }
+        #     if instructions:
+        #         structured_params["instructions"] = instructions
+        #     if self.max_tokens:
+        #         structured_params["max_output_tokens"] = kwargs.get(
+        #             "max_tokens", self.max_tokens
+        #         )
 
-            # Forward provider-specific structured-output kwargs, but avoid
-            # duplicating keys we already set above.
-            structured_params.update(
-                {
-                    k: v
-                    for k, v in kwargs.items()
-                    if k
-                    not in {
-                        "model",
-                        "input",
-                        "instructions",
-                        "max_output_tokens",
-                        "max_tokens",
-                        "temperature",
-                    }
-                }
-            )
+        #     # Forward provider-specific structured-output kwargs, but avoid
+        #     # duplicating keys we already set above.
+        #     structured_params.update(
+        #         {
+        #             k: v
+        #             for k, v in kwargs.items()
+        #             if k
+        #             not in {
+        #                 "model",
+        #                 "input",
+        #                 "instructions",
+        #                 "max_output_tokens",
+        #                 "max_tokens",
+        #                 "temperature",
+        #             }
+        #         }
+        #     )
 
-            try:
-                response = await self.client.responses.parse(
-                    text_format=response_format,
-                    **structured_params,
-                )
-            except openai.APIError as exc:
-                raise StructuredOutputError(
-                    f"OpenAI API error during structured parse: {exc}"
-                ) from exc
-            except Exception as exc:
-                raise StructuredOutputError(
-                    f"Unexpected error during structured parse: {exc}"
-                ) from exc
+        #     try:
+        #         response = await self.client.responses.parse(
+        #             text_format=response_format,
+        #             **structured_params,
+        #         )
+        #     except openai.APIError as exc:
+        #         raise StructuredOutputError(
+        #             f"OpenAI API error during structured parse: {exc}"
+        #         ) from exc
+        #     except Exception as exc:
+        #         raise StructuredOutputError(
+        #             f"Unexpected error during structured parse: {exc}"
+        #         ) from exc
 
-            refusal: Optional[str] = None
-            parsed = getattr(response, "output_parsed", None)
-            raw_text = getattr(response, "output_text", "") or ""
+        #     refusal: Optional[str] = None
+        #     parsed = getattr(response, "output_parsed", None)
+        #     raw_text = getattr(response, "output_text", "") or ""
 
-            if response.output:
-                for item in response.output:
-                    item_refusal = getattr(item, "refusal", None)
-                    if item_refusal:
-                        refusal = item_refusal
-                        parsed = None
-                        break
-                    for block in getattr(item, "content", None) or []:
-                        if getattr(block, "type", None) == "refusal":
-                            refusal = getattr(block, "refusal", str(block))
-                            parsed = None
-                            break
+        #     if response.output:
+        #         for item in response.output:
+        #             item_refusal = getattr(item, "refusal", None)
+        #             if item_refusal:
+        #                 refusal = item_refusal
+        #                 parsed = None
+        #                 break
+        #             for block in getattr(item, "content", None) or []:
+        #                 if getattr(block, "type", None) == "refusal":
+        #                     refusal = getattr(block, "refusal", str(block))
+        #                     parsed = None
+        #                     break
             
-            final_blocks: list[ContentBlock] = []
-            if raw_text:
-                final_blocks.append(TextBlock(text=raw_text))
+        #     final_blocks: list[ContentBlock] = []
+        #     if raw_text:
+        #         final_blocks.append(TextBlock(text=raw_text))
             
-            if refusal:
-                final_blocks.append(ErrorBlock(error_type="Refusal", message=refusal))
-            elif parsed:
-                final_blocks.append(DataBlock(data=parsed.model_dump(mode="json") if hasattr(parsed, "model_dump") else parsed))
+        #     if refusal:
+        #         final_blocks.append(ErrorBlock(error_type="Refusal", message=refusal))
+        #     elif parsed:
+        #         final_blocks.append(DataBlock(data=parsed.model_dump(mode="json") if hasattr(parsed, "model_dump") else parsed))
 
-            return final_blocks
+        #     return final_blocks
 
         params: dict[str, Any] = {
             "model": self.model,

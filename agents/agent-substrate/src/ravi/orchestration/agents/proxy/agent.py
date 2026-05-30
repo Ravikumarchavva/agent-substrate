@@ -1,49 +1,45 @@
-"""UserProxyAgent — bridges external callers into the actor fabric.
+"""UserProxyAgent — bridges external callers into the actor runtime.
 
-Every multi-agent interaction starts here.  Instead of calling agent.run()
-directly, external callers (HTTP routes, CLI, tests) create a UserProxyAgent,
-register it with the runtime, and use ask() / ask_stream() to enter the fabric.
+Every multi-agent interaction starts here.  External callers (HTTP routes,
+CLI, tests) create a UserProxyAgent and use ``ask()`` to send tasks into
+the runtime, where a registered agent (typically AssistantAgent) handles them.
 
-    async with LocalRuntime() as runtime:
-        assistant = AssistantAgent("assistant", runtime, catalog=catalog)
-        await assistant.start()
+    runtime = LocalRuntime()
+    await runtime.start()
 
-        proxy = UserProxyAgent("proxy", runtime)
-        await proxy.start()
+    agent = AssistantAgent("assistant", runtime, model=llm)
+    await runtime.register("assistant", agent.on_message)
 
-        # One-shot:
-        result = await proxy.ask("What is 2+2?", recipient=assistant.id)
-
-        # Streaming — caller provides a StreamChannel (e.g. a translating adapter):
-        channel = MyStreamChannel()
-        await proxy.ask_stream("Tell me a story", recipient=assistant.id, channel=channel)
+    proxy = UserProxyAgent("proxy", runtime)
+    result = await proxy.ask("What is 2+2?", recipient=agent.id)
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, List
+import logging
+from typing import Any, AsyncIterator, Callable, Optional
 
-from ravi.fabric.actors.actor import ActorAgent, StreamEnvelope, StreamChannel
-from ravi.kernel import ContentBlock, MessageContext, AgentId, TopicId, AgentRuntime
+from ravi.kernel import AgentId, AgentRuntime, MessageContext, TextBlock
+from ravi.kernel.stream import CompletionEvent, StreamDone
+
+logger = logging.getLogger(__name__)
 
 
-class UserProxyAgent(ActorAgent):
-    """External-caller proxy in the actor fabric.
+class UserProxyAgent:
+    """Routes external requests to registered agents via the runtime.
 
     Parameters
     ----------
     name:
         Agent type name.
     runtime:
-        The runtime this proxy registers with.
+        The runtime this proxy dispatches through.
     key:
-        Instance key. Use unique keys when creating per-request proxies.
+        Instance key — use unique keys for per-request proxies.
     hitl_callback:
         Optional async callable invoked when a reverse message arrives
-        (e.g. an AssistantAgent asking the human for input).
-        Signature: ``async (ctx, content) -> object``.
-    subscriptions:
-        Topics to subscribe to on start.
+        (e.g. an AssistantAgent requesting human input).
+        Signature: ``async (ctx: MessageContext, payload: object) -> object``.
     """
 
     def __init__(
@@ -52,87 +48,52 @@ class UserProxyAgent(ActorAgent):
         runtime: AgentRuntime,
         *,
         key: str = "default",
-        hitl_callback: Optional[Callable[[MessageContext, list[ContentBlock]], Any]] = None,
-        subscriptions: Optional[List[TopicId]] = None,
+        hitl_callback: Optional[Callable[[MessageContext, object], Any]] = None,
     ) -> None:
-        super().__init__(
-            name=name,
-            runtime=runtime,
-            key=key,
-            description="User proxy agent",
-            subscriptions=subscriptions,
-        )
+        self.name = name
+        self.runtime = runtime
+        self.id = AgentId(type="proxy", key=key)
         self._hitl_callback = hitl_callback
 
     # -- One-shot ask --------------------------------------------------------
 
     async def ask(self, text: str, *, recipient: AgentId) -> object:
-        """Send a task and await the complete response.
+        """Send *text* to *recipient* and return the complete response.
 
-        Parameters
-        ----------
-        text:
-            The task / prompt to send.
-        recipient:
-            ``AgentId`` of the target agent.
-
-        Returns
-        -------
-        object
-            Whatever the recipient's ``on_message()`` returns (typically an
-            ``AgentRunResult`` or a plain string).
+        Returns whatever the recipient's ``on_message()`` returns — typically
+        an ``AgentRunResult`` or a plain string.
         """
-        return await self.send(text, recipient=recipient)
+        return await self.runtime.send_message(text, recipient=recipient)
 
     # -- Streaming ask -------------------------------------------------------
 
     async def ask_stream(
-        self,
-        text: str,
-        *,
-        recipient: AgentId,
-        channel: StreamChannel,
-    ) -> None:
-        """Send a task and stream the response through ``channel``.
+        self, text: str, *, recipient: AgentId
+    ) -> AsyncIterator[CompletionEvent | StreamDone]:
+        """Send *text* to *recipient* and yield a streaming response.
 
-        The method returns immediately; the agent runs in a background task
-        and emits chunks to ``channel``.  The caller iterates the channel to
-        consume events.
-
-        Parameters
-        ----------
-        text:
-            The task / prompt.
-        recipient:
-            Target agent's ``AgentId``.
-        channel:
-            A ``StreamChannel`` implementation (e.g. the server layer's
-            translating adapter wrapping an ``EventBus``).  The agent will
-            call ``channel.emit(chunk)`` for each streaming chunk and
-            ``channel.close()`` when done.
-
-        Example::
-
-            channel = MyTranslatingChannel(EventBus())
-            asyncio.ensure_future(
-                proxy.ask_stream("tell me a story", recipient=agent.id, channel=channel)
-            )
-            async for event in channel.bus:
-                yield f"data: {event.to_sse()}\\n\\n"
+        Calls ``ask()`` and wraps the result in a single ``CompletionEvent``
+        followed by ``StreamDone``.  Full topic-based streaming requires a
+        ``LocalRuntime`` with pub/sub support (Pass 6).  # TODO(pass-6-runtime)
         """
-        envelope = StreamEnvelope(task=text, channel=channel)
-        await self.send(envelope, recipient=recipient)
+        result = await self.ask(text, recipient=recipient)
+        output = ""
+        if hasattr(result, "output"):
+            output = str(result.output)
+        elif isinstance(result, str):
+            output = result
+        elif result is not None:
+            output = str(result)
+        yield CompletionEvent(content=[TextBlock(text=output)])
+        yield StreamDone()
 
     # -- Reverse message handling (HITL) ------------------------------------
 
-    async def on_message(
-        self, ctx: MessageContext, content: list[ContentBlock]
-    ) -> object:
+    async def on_message(self, ctx: MessageContext, payload: object) -> object:
         """Handle messages sent TO this proxy (e.g. HITL clarification requests).
 
-        If a ``hitl_callback`` was provided, it is invoked.
-        Otherwise returns None silently.
+        If a ``hitl_callback`` was provided it is invoked; otherwise returns None.
         """
         if self._hitl_callback is not None:
-            return await self._hitl_callback(ctx, content)
+            return await self._hitl_callback(ctx, payload)
         return None

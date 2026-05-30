@@ -1,59 +1,50 @@
 """Multi-agent flows — composable, deterministic execution pipelines.
 
-Flows wrap one or more agents (or nested flows) and coordinate how they
-execute relative to each other.  Every flow exposes the same ``run`` /
-``run_stream`` surface as a regular agent so flows can be nested or
-substituted wherever an agent is expected.
+Flows wrap one or more agents (or nested flows) and coordinate execution.
+Every flow exposes the same ``run`` / ``run_stream`` surface as
+``AssistantAgent`` so flows can be nested or substituted wherever an agent is
+expected.
 
 Built-in flow types
 -------------------
-BaseFlow
-    Abstract base.  Defines the ``run`` / ``run_stream`` / ``to_graph`` interface.
-
 SequentialFlow
-    Executes steps one after another.  The output of step N is appended to
-    the input of step N+1.  Optionally shares memory across all steps.
+    Executes steps in order; each step receives the accumulated output of all
+    previous steps appended to the original input.
 
 ParallelFlow
-    Runs all branches concurrently with ``asyncio.gather``.  Results are
-    merged according to a configurable strategy (concat / vote / custom).
+    Runs all branches concurrently with ``asyncio.gather``; outputs merged
+    via a configurable strategy (concat / vote / custom callable).
 
 ConditionalFlow
     Evaluates a predicate against the current input and routes to one of two
     sub-flows (``if_true`` / ``if_false``).
-
-All streaming variants tag every yielded chunk with an ``agent_id`` field so
-the frontend can colour-code chunks per agent in the chat UI.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Callable, List, Optional, Union
 from uuid import uuid4
 
-from ravi.reasoning.agents.assistant._legacy_stubs import (
-    AgentRunResult,
-    AggregatedUsage,
-    RunStatus,
-    MemoryScope,
-)
-from ravi.fabric.actors.actor import ActorAgent
+from ravi.kernel.stream import TextDelta
+from ravi.reasoning.agents.assistant.agent import AgentRunResult, AssistantAgent
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
-from ravi.shared.observability import logger
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
 # Type aliases
 # ---------------------------------------------------------------------------
 
-# A "step" in a flow is either a concrete actor-model agent or a nested flow.
-FlowStep = Union[ActorAgent, "BaseFlow"]
+# A "step" is either a concrete AssistantAgent or a nested flow.
+FlowStep = Union[AssistantAgent, "BaseFlow"]
 
 MergeStrategy = Union[
     str,  # "concat" | "vote"
-    Callable[[List[str]], str],  # custom merge function
+    Callable[[List[str]], str],
 ]
 
 
@@ -65,14 +56,11 @@ MergeStrategy = Union[
 class BaseFlow(ABC):
     """Abstract base for all multi-agent flows.
 
-    Flows mirror the ``BaseAgent`` interface for composability — you can
-    pass a ``BaseFlow`` wherever a ``BaseAgent`` is accepted.
-
-    Args:
-        name:         Unique identifier used in graphs and SSE events.
-        description:  Human-readable purpose description.
-        hooks:        Optional ``HookManager`` to receive FLOW_START / FLOW_END
-                      events on this flow's lifecycle.
+    Parameters
+    ----------
+    name:        Unique identifier used in graphs and SSE events.
+    description: Human-readable purpose.
+    hooks:       Optional HookManager to receive FLOW_START / FLOW_END events.
     """
 
     def __init__(
@@ -86,16 +74,14 @@ class BaseFlow(ABC):
         self.description = description
         self.hooks = hooks or HookManager()
 
-    # -- Core interface -------------------------------------------------------
-
     @abstractmethod
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
         """Execute the flow to completion."""
         ...
 
     @abstractmethod
-    def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
-        """Execute the flow, yielding chunks tagged with ``agent_id``."""
+    async def run_stream(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
+        """Execute the flow, yielding stream events tagged with ``agent_id``."""
         ...
 
     def __repr__(self) -> str:
@@ -108,26 +94,14 @@ class BaseFlow(ABC):
 
 
 class SequentialFlow(BaseFlow):
-    """Execute steps one after another, piping output → input.
+    """Execute steps in order, piping accumulated output → next step input.
 
-    Behaviour
-    ---------
-    * Each step receives the *combined* input: the original user message
-      plus the outputs of all previous steps (separated by ``\\n\\n``).
-    * When ``shared_memory_scope`` is ``MemoryScope.SHARED``, all agents that
-      have ``memory_scope == MemoryScope.SHARED`` are given the *same*
-      ``HistoryProvider`` instance from the first SHARED agent encountered.
-      Agents with ``ISOLATED`` or ``READ_ONLY_SHARED`` keep their own memory.
-    * Streaming chunks are tagged with ``{"agent_id": agent.name}``.
-
-    Args:
-        steps:               Ordered list of agents / nested flows.
-        name:                Flow identifier.
-        description:         Human-readable purpose.
-        shared_memory_scope: When ``SHARED``, agents with that scope share
-                             one memory instance.  Defaults to ``ISOLATED``
-                             (each agent keeps its own memory — safest).
-        hooks:               Optional hook manager for FLOW_* events.
+    Parameters
+    ----------
+    steps:       Ordered list of agents / nested flows.
+    name:        Flow identifier.
+    description: Human-readable purpose.
+    hooks:       Optional hook manager for FLOW_* events.
     """
 
     def __init__(
@@ -136,151 +110,68 @@ class SequentialFlow(BaseFlow):
         name: str = "sequential_flow",
         description: str = "Sequential multi-agent pipeline",
         *,
-        shared_memory_scope: MemoryScope = MemoryScope.ISOLATED,
         hooks: Optional[HookManager] = None,
     ) -> None:
         super().__init__(name=name, description=description, hooks=hooks)
         if not steps:
             raise ValueError("SequentialFlow requires at least one step")
         self.steps = steps
-        self.shared_memory_scope = shared_memory_scope
-        self._bind_shared_memory()
 
-    def _bind_shared_memory(self) -> None:
-        """If shared scope is requested, wire agents to a single memory."""
-        if self.shared_memory_scope != MemoryScope.SHARED:
-            return
-        shared_mem = None
-        for step in self.steps:
-            if isinstance(step, ActorAgent) and getattr(step, "memory_scope", None) == MemoryScope.SHARED:
-                if shared_mem is None:
-                    shared_mem = step.history  # first SHARED agent owns the history
-                else:
-                    step.history = shared_mem  # subsequent ones borrow it
-
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
         run_id = str(uuid4())
         await self.hooks.dispatch(
             HookEvent.FLOW_START,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-                "step_count": len(self.steps),
-            },
+            {"flow": self.name, "run_id": run_id, "steps": len(self.steps)},
         )
 
-        accumulated_output = input_text
-        last_result: Optional[AgentRunResult] = None
-        combined_usage = AggregatedUsage()
+        accumulated = input_text
+        last_result: AgentRunResult | None = None
 
         for step in self.steps:
-            step_input = accumulated_output
-            if isinstance(step, ActorAgent):
-                result = await step.run(step_input, **kwargs)
-            else:  # nested BaseFlow
-                result = await step.run(step_input, **kwargs)
-
-            last_result = result
-            combined_usage.add(result.usage)
-
-            # Extract text output to pass to next step
-            step_output = result.output
-            if isinstance(step_output, list):
-                step_output = "\n".join(
-                    str(p) for p in step_output if isinstance(p, str)
-                )
-            accumulated_output = (
-                f"{accumulated_output}\n\n{step_output}"
-                if step_output
-                else accumulated_output
-            )
+            last_result = await step.run(accumulated, **kwargs)
+            if last_result.output:
+                accumulated = f"{accumulated}\n\n{last_result.output}"
 
         await self.hooks.dispatch(
             HookEvent.FLOW_END,
             {
-                "flow_name": self.name,
+                "flow": self.name,
                 "run_id": run_id,
-                "status": last_result.status.value if last_result else "unknown",
+                "status": last_result.status if last_result else "error",
             },
         )
 
         if last_result is None:
-            return AgentRunResult(
-                run_id=run_id,
-                agent_name=self.name,
-                output=[],
-                status=RunStatus.ERROR,
-                usage=combined_usage,
-            )
-
-        # Return the last result but annotate it with this flow's identity
+            return AgentRunResult(output="", status="error", run_id=run_id)
         return AgentRunResult(
-            run_id=run_id,
-            agent_name=self.name,
             output=last_result.output,
             status=last_result.status,
-            steps=last_result.steps,
-            usage=combined_usage,
-            tool_calls_total=last_result.tool_calls_total,
-            tool_calls_by_name=last_result.tool_calls_by_name,
-            start_time=last_result.start_time,
-            end_time=last_result.end_time,
-            duration_seconds=last_result.duration_seconds,
-            max_iterations=last_result.max_iterations,
+            tool_calls=last_result.tool_calls,
+            run_id=run_id,
         )
 
-    async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
+    async def run_stream(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
         run_id = str(uuid4())
         await self.hooks.dispatch(
-            HookEvent.FLOW_START,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-            },
+            HookEvent.FLOW_START, {"flow": self.name, "run_id": run_id}
         )
 
-        accumulated_output = input_text
-
+        accumulated = input_text
         for step in self.steps:
-            agent_id = (
-                step.name if isinstance(step, (ActorAgent, BaseFlow)) else "unknown"
-            )
-            step_input = accumulated_output
-            partial_chunks: List[str] = []
-
-            if isinstance(step, ActorAgent):
-                stream = step.run_stream(step_input, **kwargs)
-            else:
-                stream = step.run_stream(step_input, **kwargs)
-
-            async for chunk in stream:
-                # Tag every chunk with the producing agent's id
+            agent_id = step.name
+            partial: list[str] = []
+            async for chunk in step.run_stream(accumulated, **kwargs):
                 if hasattr(chunk, "__dict__"):
-                    chunk_dict = vars(chunk).copy()
-                    chunk_dict["agent_id"] = agent_id
-                    vars(chunk).update(chunk_dict)
+                    vars(chunk)["agent_id"] = agent_id
                 yield chunk
-
-                # Accumulate text for next step's input
-                from ravi.reasoning.agents.assistant._legacy_stubs import TextDeltaChunk
-
-                if isinstance(chunk, TextDeltaChunk):
-                    partial_chunks.append(chunk.text)
-
-            if partial_chunks:
-                accumulated_output = (
-                    f"{accumulated_output}\n\n{''.join(partial_chunks)}"
-                )
+                if isinstance(chunk, TextDelta):
+                    partial.append(chunk.text)
+            if partial:
+                accumulated = f"{accumulated}\n\n{''.join(partial)}"
 
         await self.hooks.dispatch(
-            HookEvent.FLOW_END,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-            },
+            HookEvent.FLOW_END, {"flow": self.name, "run_id": run_id}
         )
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -289,27 +180,21 @@ class SequentialFlow(BaseFlow):
 
 
 class ParallelFlow(BaseFlow):
-    """Run all branches concurrently and merge their outputs.
+    """Run all branches concurrently and merge outputs.
 
     Merge strategies
     ----------------
-    ``"concat"`` (default)
-        Join all outputs with ``\\n\\n`` in branch order.
+    ``"concat"`` (default)  — join outputs with ``\\n\\n`` in branch order.
+    ``"vote"``              — majority vote; ties broken by branch order.
+    ``Callable``            — custom ``(outputs: list[str]) -> str``.
 
-    ``"vote"``
-        Return the output that appears most frequently (majority vote).
-        Ties are broken by branch order.
-
-    ``Callable[[List[str]], str]``
-        Custom merge function — receives ordered list of branch outputs,
-        returns a single string.
-
-    Args:
-        branches:        List of agents / flows to run in parallel.
-        name:            Flow identifier.
-        description:     Human-readable purpose.
-        merge:           Merge strategy.  Defaults to ``"concat"``.
-        hooks:           Optional hook manager.
+    Parameters
+    ----------
+    branches:    List of agents / flows to run in parallel.
+    name:        Flow identifier.
+    description: Human-readable purpose.
+    merge:       Merge strategy (default ``"concat"``).
+    hooks:       Optional hook manager.
     """
 
     def __init__(
@@ -332,110 +217,62 @@ class ParallelFlow(BaseFlow):
             return self.merge(outputs)
         if self.merge == "vote":
             from collections import Counter
-
-            counts = Counter(outputs)
-            return counts.most_common(1)[0][0]
-        # Default: concat
+            return Counter(outputs).most_common(1)[0][0]
         return "\n\n".join(outputs)
 
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
         run_id = str(uuid4())
         await self.hooks.dispatch(
             HookEvent.FLOW_START,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-                "branch_count": len(self.branches),
-            },
+            {"flow": self.name, "run_id": run_id, "branches": len(self.branches)},
         )
 
-        tasks = [
-            (
-                step.run(input_text, **kwargs)
-                if isinstance(step, ActorAgent)
-                else step.run(input_text, **kwargs)
-            )
-            for step in self.branches
-        ]
-        results: List[AgentRunResult] = await asyncio.gather(*tasks)
+        results: list[AgentRunResult] = await asyncio.gather(
+            *[step.run(input_text, **kwargs) for step in self.branches]
+        )
 
-        combined_usage = AggregatedUsage()
-        branch_outputs: List[str] = []
-        for r in results:
-            combined_usage.add(r.usage)
-            out = r.output
-            if isinstance(out, list):
-                out = "\n".join(str(p) for p in out if isinstance(p, str))
-            branch_outputs.append(out or "")
-
-        merged = self._merge_outputs(branch_outputs)
+        merged = self._merge_outputs([r.output for r in results])
+        all_tool_calls = [tc for r in results for tc in r.tool_calls]
+        status = "success" if all(r.status == "success" for r in results) else "error"
 
         await self.hooks.dispatch(
-            HookEvent.FLOW_END,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-            },
+            HookEvent.FLOW_END, {"flow": self.name, "run_id": run_id}
         )
-
         return AgentRunResult(
-            run_id=run_id,
-            agent_name=self.name,
-            output=[merged],
-            status=RunStatus.COMPLETED,
-            usage=combined_usage,
+            output=merged, status=status, tool_calls=all_tool_calls, run_id=run_id
         )
 
-    async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
+    async def run_stream(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
         run_id = str(uuid4())
         await self.hooks.dispatch(
-            HookEvent.FLOW_START,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-            },
+            HookEvent.FLOW_START, {"flow": self.name, "run_id": run_id}
         )
 
-        # Collect all branch streams concurrently using async queues
-        async def _drain(step: FlowStep, q: asyncio.Queue) -> None:
-            agent_id = step.name if hasattr(step, "name") else "branch"
+        queue: asyncio.Queue[Any | None] = asyncio.Queue()
+
+        async def _drain(step: FlowStep) -> None:
+            agent_id = step.name
             try:
-                stream = (
-                    step.run_stream(input_text, **kwargs)
-                    if isinstance(step, ActorAgent)
-                    else step.run_stream(input_text, **kwargs)
-                )
-                async for chunk in stream:
+                async for chunk in step.run_stream(input_text, **kwargs):
                     if hasattr(chunk, "__dict__"):
                         vars(chunk)["agent_id"] = agent_id
-                    await q.put(chunk)
+                    await queue.put(chunk)
             finally:
-                await q.put(None)  # sentinel
+                await queue.put(None)
 
-        queue: asyncio.Queue = asyncio.Queue()
-        drain_tasks = [
-            asyncio.create_task(_drain(step, queue)) for step in self.branches
-        ]
-        done_count = 0
-        total = len(self.branches)
-
-        while done_count < total:
+        tasks = [asyncio.create_task(_drain(s)) for s in self.branches]
+        done = 0
+        while done < len(self.branches):
             item = await queue.get()
             if item is None:
-                done_count += 1
+                done += 1
             else:
                 yield item
 
-        await asyncio.gather(*drain_tasks, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
         await self.hooks.dispatch(
-            HookEvent.FLOW_END,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-            },
+            HookEvent.FLOW_END, {"flow": self.name, "run_id": run_id}
         )
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -444,29 +281,16 @@ class ParallelFlow(BaseFlow):
 
 
 class ConditionalFlow(BaseFlow):
-    """Route execution to one of two sub-flows based on a predicate.
+    """Route to one of two sub-flows based on a predicate.
 
-    The ``predicate`` callable receives the current input string and returns
-    ``True`` to take the ``if_true`` branch or ``False`` for ``if_false``.
-
-    Args:
-        predicate:   ``(input_text: str) -> bool`` — called at runtime.
-        if_true:     Agent or flow to run when predicate is truthy.
-        if_false:    Agent or flow to run when predicate is falsy.
-        name:        Flow identifier.
-        description: Human-readable purpose.
-        hooks:       Optional hook manager.
-
-    Example::
-
-        is_code_question = lambda text: any(
-            kw in text.lower() for kw in ("code", "python", "function", "debug")
-        )
-        flow = ConditionalFlow(
-            predicate=is_code_question,
-            if_true=code_agent,
-            if_false=general_agent,
-        )
+    Parameters
+    ----------
+    predicate:   ``(input_text: str) -> bool`` — called at runtime.
+    if_true:     Branch taken when predicate is truthy.
+    if_false:    Branch taken when predicate is falsy.
+    name:        Flow identifier.
+    description: Human-readable purpose.
+    hooks:       Optional hook manager.
     """
 
     def __init__(
@@ -484,77 +308,39 @@ class ConditionalFlow(BaseFlow):
         self.if_true = if_true
         self.if_false = if_false
 
-    def _select_branch(self, input_text: str) -> FlowStep:
+    def _select(self, input_text: str) -> FlowStep:
         try:
-            result = self.predicate(input_text)
+            return self.if_true if self.predicate(input_text) else self.if_false
         except Exception as exc:
-            logger.warning(
-                "[%s] Predicate raised %s — defaulting to if_false branch",
-                self.name,
-                exc,
-            )
-            result = False
-        return self.if_true if result else self.if_false
+            logger.warning("[%s] predicate raised %s — taking if_false", self.name, exc)
+            return self.if_false
 
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
         run_id = str(uuid4())
+        branch = self._select(input_text)
         await self.hooks.dispatch(
             HookEvent.FLOW_START,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-            },
+            {"flow": self.name, "run_id": run_id, "branch": branch.name},
         )
-
-        branch = self._select_branch(input_text)
-        branch_name = branch.name if hasattr(branch, "name") else str(branch)
-        logger.debug("[%s] routing to branch: %s", self.name, branch_name)
-
-        if isinstance(branch, ActorAgent):
-            result = await branch.run(input_text, **kwargs)
-        else:
-            result = await branch.run(input_text, **kwargs)
-
+        result = await branch.run(input_text, **kwargs)
         await self.hooks.dispatch(
             HookEvent.FLOW_END,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-                "branch_taken": branch_name,
-            },
+            {"flow": self.name, "run_id": run_id, "branch": branch.name},
         )
         return result
 
-    async def run_stream(self, input_text: str, **kwargs) -> AsyncIterator[Any]:
+    async def run_stream(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
         run_id = str(uuid4())
+        branch = self._select(input_text)
         await self.hooks.dispatch(
             HookEvent.FLOW_START,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-            },
+            {"flow": self.name, "run_id": run_id, "branch": branch.name},
         )
-
-        branch = self._select_branch(input_text)
-        agent_id = branch.name if hasattr(branch, "name") else "branch"
-
-        stream = (
-            branch.run_stream(input_text, **kwargs)
-            if isinstance(branch, ActorAgent)
-            else branch.run_stream(input_text, **kwargs)
-        )
-        async for chunk in stream:
+        async for chunk in branch.run_stream(input_text, **kwargs):
             if hasattr(chunk, "__dict__"):
-                vars(chunk)["agent_id"] = agent_id
+                vars(chunk)["agent_id"] = branch.name
             yield chunk
-
         await self.hooks.dispatch(
             HookEvent.FLOW_END,
-            {
-                "flow_name": self.name,
-                "run_id": run_id,
-                "branch_taken": agent_id,
-            },
+            {"flow": self.name, "run_id": run_id, "branch": branch.name},
         )
-
-

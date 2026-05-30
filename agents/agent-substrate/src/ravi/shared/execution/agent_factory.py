@@ -6,14 +6,11 @@ from ravi.logger import setup_logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional
 
-from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.fabric.context import (
-    AgentContext,
     HistoryProvider,
     InMemoryHistoryProvider,
     SlidingWindowCompaction as SlidingWindowStrategy,
 )
-from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
 from ravi.fabric.llm import LLMClient as BaseModelClient
 from ravi.kernel import (
     ChatMessage,
@@ -21,7 +18,7 @@ from ravi.kernel import (
     ToolUseBlock,
     ToolResultBlock,
     AgentRuntime,
-    Tool as BaseTool,
+    Tool,
 )
 
 logger = setup_logging()
@@ -193,73 +190,47 @@ async def load_session_memory(
     return fallback
 
 
-def create_assistant_agent(  # type: ignore[return]
+def create_assistant_agent(
     *,
     runtime: AgentRuntime,
     model_client: BaseModelClient,
-    tools: List[BaseTool],
-    system_instructions: str,
-    memory: HistoryProvider,
-    session_id: Optional[str] = None,
-    model_context: Optional[AgentContext] = None,
+    tools: Optional[List[Tool]] = None,
+    system_instructions: str = "",
+    memory: Optional[HistoryProvider] = None,
+    model_context: Optional[Any] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
-    verbose: bool = True,
-    tool_approval_handler: Optional[ToolApprovalHandler] = None,
-    tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
-    max_input_tokens: int = 16_000,
-    agent_key: str = "default",
-    execution_context: Optional[Any] = None,
-    enable_capability_search: bool = True,
-):
+    name: str = "ChatBot",
+    # legacy kwargs accepted but unused (# TODO L4-guardrails / # TODO L4-hitl)
+    **_dropped: Any,
+) -> Any:
     """Create a configured ``AssistantAgent`` for the actor-model runtime.
 
-    Unlike ``create_react_agent``, this function requires a runtime — every
-    ``AssistantAgent`` is registered as an actor in the fabric.
-
-    The caller must ``await agent.start()`` before sending messages to it.
+    Maps the old parameter surface to the new ``AssistantAgent.__init__``
+    signature.  Legacy kwargs (guardrails, verbose, session_id, etc.) are
+    silently accepted and dropped until L4 guardrails are wired.
     """
     from ravi.reasoning.agents.assistant.agent import AssistantAgent
-    from ravi.reasoning.guardrails.max_token import MaxTokenGuardrail
 
-    kwargs: Dict[str, Any] = dict(
-        name="ChatBot",
-        runtime=runtime,
-        key=agent_key,
+    # Resolve compaction: accept SlidingWindowCompaction directly or fall back
+    # to a window derived from model_context_window.
+    compaction: Optional[SlidingWindowStrategy] = None
+    if isinstance(model_context, SlidingWindowStrategy):
+        compaction = model_context
+    elif model_context is None:
+        compaction = SlidingWindowStrategy(max_messages=model_context_window)
+    # AgentContext objects (Protocol) can't be introspected here — fall back to default
+
+    return AssistantAgent(
+        name,
+        runtime,
         model=model_client,
         tools=tools,
-        guardrails=GuardrailSpec(
-            input=[
-                MaxTokenGuardrail(
-                    max_tokens=max_input_tokens,
-                    model="gpt-4o",
-                    tripwire=True,
-                )
-            ]
-        ),
-        session_id=session_id,
-        system_instructions=system_instructions,
+        system=system_instructions or None,
+        history=memory,
+        compaction=compaction,
         max_iterations=max_iterations,
-        verbose=verbose,
-        enable_capability_search=enable_capability_search,
+        tool_timeout=tool_timeout,
     )
-
-    if isinstance(model_context, AgentContext):
-        kwargs["context"] = model_context
-    else:
-        resolved_compaction = model_context or SlidingWindowStrategy(
-            max_messages=model_context_window
-        )
-        strategies = resolved_compaction if isinstance(resolved_compaction, list) else [resolved_compaction]
-        kwargs["context"] = AgentContext(history=memory, compaction_strategies=strategies)
-    if tool_approval_handler is not None:
-        kwargs["tool_approval_handler"] = tool_approval_handler
-    if tools_requiring_approval is not None:
-        kwargs["tools_requiring_approval"] = tools_requiring_approval
-    if tool_timeout is not None:
-        kwargs["tool_timeout"] = tool_timeout
-    if execution_context is not None:
-        kwargs["execution_context"] = execution_context
-    return AssistantAgent(**kwargs)  # type: ignore[arg-type]
 

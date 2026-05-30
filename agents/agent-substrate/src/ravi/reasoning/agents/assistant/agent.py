@@ -37,6 +37,7 @@ from ravi.kernel import (
 from ravi.kernel.message import Message
 from ravi.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 from ravi.fabric.context import (
+    AgentContext,
     HistoryProvider,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
@@ -134,6 +135,7 @@ class AssistantAgent:
         tool_timeout: float | None = 30.0,
         history: HistoryProvider | None = None,
         compaction: SlidingWindowCompaction | None = None,
+        context: AgentContext | None = None,
         hooks: HookManager | None = None,
     ) -> None:
         self.name = name
@@ -146,8 +148,12 @@ class AssistantAgent:
         self.tool_timeout = tool_timeout
         self.hooks = hooks or HookManager()
 
-        _hist = history or InMemoryHistoryProvider()
-        _comp = compaction or SlidingWindowCompaction(max_messages=40)
+        if context is not None:
+            _hist = context.history
+            _comp = context.compaction
+        else:
+            _hist = history or InMemoryHistoryProvider()
+            _comp = compaction or SlidingWindowCompaction(max_messages=40)
         self._ctx = DefaultAgentContext(self.id, _hist, _comp)
 
     @property
@@ -164,6 +170,19 @@ class AssistantAgent:
 
     def list_tools(self) -> list[Tool]:
         return list(self._tools.values())
+
+    def _tool_schemas(self) -> list[dict[str, object]] | None:
+        """Convert registered tools to the dict format expected by LLMClient."""
+        if not self._tools:
+            return None
+        return [
+            {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.input_schema,
+            }
+            for t in self._tools.values()
+        ]
 
     # -- Actor entry point ---------------------------------------------------
 
@@ -202,7 +221,9 @@ class AssistantAgent:
                     HookEvent.LLM_START,
                     {"agent": self.name, "step": step, "message_count": len(messages)},
                 )
-                content = await self.model.generate(messages, system=self._system)
+                content = await self.model.generate(
+                    messages, tools=self._tool_schemas(), system=self._system
+                )
                 await self.hooks.dispatch(
                     HookEvent.LLM_END, {"agent": self.name, "step": step}
                 )
@@ -240,7 +261,7 @@ class AssistantAgent:
                     tool_calls.append(record)
                     result_blocks.append(block)
 
-                await self._append(ChatMessage(role="user", content=result_blocks))
+                await self._append(ChatMessage(role="tool", content=result_blocks))
                 await self.hooks.dispatch(
                     HookEvent.STEP_END,
                     {"agent": self.name, "step": step, "has_tool_calls": True},
@@ -299,7 +320,9 @@ class AssistantAgent:
                 messages = await self._prompt_window()
                 content: list[ContentBlock] = []
 
-                async for event in _stream_generate(self.model, messages, self._system):
+                async for event in _stream_generate(
+                    self.model, messages, self._system, self._tool_schemas()
+                ):
                     if isinstance(event, (TextDelta, ReasoningDelta)):
                         yield event
                     elif isinstance(event, CompletionEvent):
@@ -330,7 +353,7 @@ class AssistantAgent:
                     _, block = await self._execute_tool(tu)
                     result_blocks.append(block)
 
-                await self._append(ChatMessage(role="user", content=result_blocks))
+                await self._append(ChatMessage(role="tool", content=result_blocks))
 
             else:
                 logger.warning("[%s] [stream] hit max_iterations", self.name)
@@ -497,6 +520,7 @@ async def _stream_generate(
     model: LLMClient,
     messages: list[ChatMessage],
     system: str,
+    tools: list[dict[str, object]] | None = None,
 ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
     """Normalize generate_stream to an async generator.
 
@@ -505,7 +529,7 @@ async def _stream_generate(
     """
     import inspect
 
-    result = model.generate_stream(messages, system=system)
+    result = model.generate_stream(messages, tools=tools, system_instructions=system)
     if inspect.isawaitable(result):
         result = await result
     async for event in result:

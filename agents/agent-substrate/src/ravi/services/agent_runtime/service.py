@@ -13,12 +13,11 @@ from ravi.fabric.context import (
     SlidingWindowCompaction as SlidingWindowStrategy,
 )
 from ravi.kernel import (
-    ChatMessage,
     TextBlock,
     ToolUseBlock,
-    ToolResultBlock,
     Tool as BaseTool,
 )
+from ravi.kernel.stream import CompletionEvent
 from ravi.fabric.llm import LLMClient as BaseModelClient
 from ravi.integrations.events import EventBus
 from ravi.shared.events.envelope import EventEnvelope
@@ -65,6 +64,7 @@ async def load_memory_for_thread(
 
 def create_agent(
     *,
+    runtime: Any,
     model_client: BaseModelClient,
     tools: List[BaseTool],
     system_instructions: str,
@@ -75,26 +75,23 @@ def create_agent(
 ) -> AssistantAgent:
     """Create the agent used by the runtime service."""
     return create_assistant_agent(
+        runtime=runtime,
         model_client=model_client,
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
-        session_id=session_id,
         model_context=SlidingWindowStrategy(max_messages=model_context_window),
         max_iterations=max_iterations,
-        verbose=True,
     )
 
 
-def _serialize_completion_content(message: ChatMessage) -> list[str] | None:
-    if not message.content:
+def _serialize_completion_content(evt: CompletionEvent) -> list[str] | None:
+    if not evt.content:
         return None
     texts = []
-    for item in message.content:
+    for item in evt.content:
         if isinstance(item, TextBlock):
             texts.append(item.text)
-        elif isinstance(item, str):
-            texts.append(item)
     return ["\n".join(texts)] if texts else None
 
 
@@ -113,7 +110,7 @@ async def execute_agent_run(
         await event_bus.publish(
             EventEnvelope(
                 event_type="agent.text_delta",
-                correlation_id=run_id,
+
                 payload={
                     "type": "text_delta",
                     "run_id": run_id,
@@ -128,7 +125,7 @@ async def execute_agent_run(
         await event_bus.publish(
             EventEnvelope(
                 event_type="agent.reasoning_delta",
-                correlation_id=run_id,
+
                 payload={
                     "type": "reasoning_delta",
                     "run_id": run_id,
@@ -139,9 +136,9 @@ async def execute_agent_run(
             )
         )
 
-    async def _publish_completion(message: ChatMessage) -> None:
+    async def _publish_completion(evt: CompletionEvent) -> None:
         tool_calls = []
-        for block in message.content:
+        for block in evt.content:
             if isinstance(block, ToolUseBlock):
                 tool_calls.append({
                     "id": block.call_id,
@@ -152,53 +149,16 @@ async def execute_agent_run(
         await event_bus.publish(
             EventEnvelope(
                 event_type="agent.completion",
-                correlation_id=run_id,
                 payload={
                     "type": "completion",
                     "run_id": run_id,
                     "thread_id": thread_id,
-                    "content": _serialize_completion_content(message),
+                    "content": _serialize_completion_content(evt),
                     "tool_calls": tool_calls or None,
                     "finish_reason": "stop",
                     "has_tool_calls": bool(tool_calls),
                     "partial": False,
                     "complete": True,
-                },
-            )
-        )
-
-    async def _publish_tool_result(chunk: ChatMessage) -> None:
-        content_text = ""
-        tool_name = "unknown"
-        call_id = ""
-        is_error = False
-
-        for block in chunk.content:
-            if isinstance(block, ToolResultBlock):
-                tool_name = block.tool_name
-                call_id = block.call_id
-                is_error = block.is_error
-                if block.content:
-                    parts = [
-                        sub_block.text
-                        for sub_block in block.content
-                        if isinstance(sub_block, TextBlock)
-                    ]
-                    content_text = "\n".join(parts)
-
-        await event_bus.publish(
-            EventEnvelope(
-                event_type="agent.tool_result",
-                correlation_id=run_id,
-                payload={
-                    "type": "tool_result",
-                    "run_id": run_id,
-                    "thread_id": thread_id,
-                    "tool_name": tool_name,
-                    "tool_call_id": call_id,
-                    "content": content_text,
-                    "is_error": is_error,
-                    "partial": False,
                 },
             )
         )
@@ -210,7 +170,7 @@ async def execute_agent_run(
         await event_bus.publish(
             EventEnvelope(
                 event_type="agent.run_failed",
-                correlation_id=run_id,
+
                 payload={
                     "type": "agent.run_failed",
                     "run_id": run_id,
@@ -232,7 +192,7 @@ async def execute_agent_run(
         on_text_delta=_publish_text_delta,
         on_reasoning_delta=_publish_reasoning_delta,
         on_completion=_publish_completion,
-        on_tool_result=_publish_tool_result,
+
         on_error=_publish_failure,
     )
 

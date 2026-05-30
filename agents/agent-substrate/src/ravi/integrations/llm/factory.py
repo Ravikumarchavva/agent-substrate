@@ -19,8 +19,8 @@ from __future__ import annotations
 from typing import ClassVar, Optional
 
 from ravi.fabric.llm import (
+    EmbeddingClient,
     LLMClient,
-    BaseEmbeddingClient,
     ModelProfile,
     get_model_profile,
     list_models,
@@ -419,7 +419,7 @@ def create_embedding_client(
     api_keys: Optional[dict[str, str]] = None,
     dimensions: Optional[int] = None,
     base_url: Optional[str] = None,
-) -> BaseEmbeddingClient:
+) -> EmbeddingClient:
     """Create an embedding client.
 
     Pass either ``api_key`` (direct) or ``api_keys`` dict (server multi-provider path).

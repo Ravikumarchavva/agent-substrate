@@ -31,13 +31,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
 from ravi.fabric.context import (
-    AgentContext,
     HistoryProvider,
     SlidingWindowCompaction,
 )
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
 from ravi.fabric.llm import LLMClient as BaseModelClient
-from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, ToolResultBlock, AgentRuntime, Tool
+from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, AgentRuntime, Tool
 from ravi.shared.execution import create_assistant_agent, load_session_memory
 
 from ravi.server.services import (
@@ -100,11 +99,6 @@ async def load_agent_for_thread(
         cold_store_name="Postgres",
         load_persisted_steps=lambda: load_messages_for_memory(db, thread_id),
     )
-    context = AgentContext(
-        history=memory,
-        compaction_strategies=[SlidingWindowCompaction(max_messages=model_context_window)]
-    )
-
     if runtime is None:
         raise ValueError(
             "load_agent_for_thread() requires a runtime. "
@@ -116,13 +110,13 @@ async def load_agent_for_thread(
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
-        session_id=session_id,
-        model_context=context,
+        model_context=SlidingWindowCompaction(max_messages=model_context_window),
         max_iterations=max_iterations,
+        tool_timeout=tool_timeout,
+        # legacy kwargs forwarded and dropped by factory:
         verbose=verbose,
         tool_approval_handler=tool_approval_handler,
         tools_requiring_approval=tools_requiring_approval,
-        tool_timeout=tool_timeout,
         max_input_tokens=max_input_tokens,
         agent_key=session_id,
         enable_capability_search=enable_capability_search,

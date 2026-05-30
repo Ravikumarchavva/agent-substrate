@@ -29,7 +29,7 @@ from ravi.kernel import (
     Tool,
     ToolExecutionResult,
 )
-from ravi.kernel.llm.client import LLMClient
+from ravi.kernel.llm import LLMClient
 from ravi.agents.assistant.agent import (
     AgentRunResult,
     AssistantAgent,

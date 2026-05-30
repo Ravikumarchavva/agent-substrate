@@ -85,32 +85,28 @@ exclude = ["notebooks/", "examples/", ".venv"]
 [tool.importlinter]
 root_packages = ["ravi"]
 
-# The four-layer cognitive stack. Higher layers may import lower ones; never
-# the reverse. import-linter's "layers" contract lists layers high → low.
+# Cognitive stack: agents (L1-L3 merged) imports down into kernel (L0).
+# NOTE: L1/L2/L3 are currently co-located under ravi.agents (orchestration,
+# reasoning, and fabric were merged by a prior refactor). The intra-agents
+# layer ordering is enforced by code review until they are re-separated into
+# top-level packages.
 [[tool.importlinter.contracts]]
 name = "agent stack layers"
 type = "layers"
 layers = [
-    "ravi.orchestration",  # L3 — orchestrator, flow, proxy, multi-agent workflows
-    "ravi.reasoning",      # L2 — AssistantAgent, ReAct loop, guardrails, middleware
-    "ravi.fabric",         # L1 — runtime, context, llm client, middleware, catalog registry
-    "ravi.kernel",         # L0 — pure contracts: types, Protocols, dataclasses
+    "ravi.agents",   # L1-L3 combined — context, llm, guardrails, orchestration
+    "ravi.kernel",   # L0 — pure contracts: types, Protocols, dataclasses
 ]
 
-# The kernel (L0) is the frozen leaf. It must not import any other ravi package
-# — neither the layers above (covered by the layers contract too, but listed
-# explicitly so a kernel violation names the real culprit) nor the orthogonal
-# application modules.
+# The kernel (L0) is the frozen leaf. It must not import any other ravi package.
 [[tool.importlinter.contracts]]
 name = "kernel is independent"
 type = "forbidden"
 source_modules = ["ravi.kernel"]
 forbidden_modules = [
-    "ravi.fabric",
-    "ravi.reasoning",
-    "ravi.orchestration",
+    "ravi.agents",
     "ravi.adapters",
-    "ravi.catalog",
+    "ravi.capabilities",
     "ravi.evals",
     "ravi.serving",
     "ravi.config",

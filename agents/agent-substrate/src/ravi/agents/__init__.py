@@ -1,14 +1,12 @@
-"""ravi.fabric — runtime services layer.
+"""ravi.agents — runtime services layer.
 
-Provides the infrastructure agents run on top of: capability discovery
-(catalog), context and history management, agent lifecycle (spawning,
-continuation), message middleware, resource budgets / secrets / tracing,
-and supervision trees.
+Provides the infrastructure agents run on top of: context and history
+management, agent lifecycle (spawning, continuation), message middleware,
+resource budgets / secrets / tracing, and supervision trees.
 """
 
 from __future__ import annotations
 
-from ravi.agents.catalog import CapabilityRegistry, Capability, Namespace
 from ravi.agents.context import (
     AgentContext,
     CompactionStrategy,
@@ -17,8 +15,9 @@ from ravi.agents.context import (
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
+from ravi.agents.skills import Skill
 from ravi.agents.lifecycle import Continuation, Spawner
-from ravi.kernel.llm import (
+from ravi.agents.llm import (
     EmbeddingClient,
     LLMClient,
     MODEL_REGISTRY,
@@ -43,10 +42,6 @@ from ravi.agents.resources import (
 from ravi.agents.supervision import FailurePolicy, RetryPolicy, Supervisor
 
 __all__ = [
-    # catalog
-    "CapabilityRegistry",
-    "Capability",
-    "Namespace",
     # context
     "AgentContext",
     "CompactionStrategy",
@@ -80,4 +75,6 @@ __all__ = [
     "FailurePolicy",
     "RetryPolicy",
     "Supervisor",
+    # skills
+    "Skill",
 ]

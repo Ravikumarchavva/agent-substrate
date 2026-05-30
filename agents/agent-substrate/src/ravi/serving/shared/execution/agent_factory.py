@@ -222,14 +222,22 @@ def create_assistant_agent(
         compaction = SlidingWindowStrategy(max_messages=model_context_window)
     # AgentContext objects (Protocol) can't be introspected here — fall back to default
 
+    from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
+
+    if memory is not None:
+        ctx = AgentContext(memory, compaction or SlidingWindowCompaction(max_messages=model_context_window))
+    elif compaction is not None:
+        ctx = AgentContext(InMemoryHistoryProvider(), compaction)
+    else:
+        ctx = AgentContext(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=model_context_window))
+
     return AssistantAgent(
         name,
         runtime,
         model=model_client,
         tools=tools,
-        system=system_instructions or None,
-        history=memory,
-        compaction=compaction,
+        system_instructions=system_instructions or None,
+        context=ctx,
         max_iterations=max_iterations,
         tool_timeout=tool_timeout,
     )

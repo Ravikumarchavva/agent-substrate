@@ -17,7 +17,7 @@ class ChainExecutorTool:
     """Execute a Python script that chains multiple adapters together."""
 
     def __init__(self, chain_runtime: Any) -> None:
-        from ravi.capabilities._chain_runtime import ChainRuntime
+        from ravi.capabilities.internal.chain_runtime import ChainRuntime
 
         if not isinstance(chain_runtime, ChainRuntime):
             raise TypeError(
@@ -69,7 +69,7 @@ class ChainExecutorTool:
         timeout: int = 120,
     ) -> ToolExecutionResult:
         """Execute the chain script via ChainRuntime."""
-        from ravi.capabilities._chain_runtime import ChainResult
+        from ravi.capabilities.internal.chain_runtime import ChainResult
 
         result: ChainResult = await self._runtime.execute_script(code, timeout=timeout)
 

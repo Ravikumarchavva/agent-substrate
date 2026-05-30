@@ -117,7 +117,7 @@ class PipelineManagerTool:
                 ],
                 is_error=True,
             )
-        from ravi.capabilities._pipeline import PipelineDef
+        from ravi.capabilities.internal.pipeline import PipelineDef
 
         definition["name"] = name
         pipeline = PipelineDef.from_dict(definition)

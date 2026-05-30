@@ -8,7 +8,8 @@ Usage::
     provider = RedisHistoryProvider(redis_url="redis://localhost:6379/0")
     await provider.connect()
 
-    agent = AssistantAgent("bot", runtime, model=client, history=provider)
+    from ravi.agents.context import AgentContext
+    agent = AssistantAgent("bot", runtime, model=client, context=AgentContext(provider))
     ...
     await provider.disconnect()
 """

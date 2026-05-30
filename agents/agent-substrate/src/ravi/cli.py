@@ -248,10 +248,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from ravi.agents.assistant import AssistantAgent
     from ravi.agents.runtime.local import LocalRuntime
     from ravi.adapters.llm.openai.openai_client import OpenAIClient
-    from ravi.agents.context import (
-        InMemoryHistoryProvider,
-        SlidingWindowCompaction,
-    )
+    from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
 
     # Build tools
     tools = []
@@ -267,8 +264,10 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 args.name,
                 rt,
                 model=OpenAIClient(model=args.model),
-                history=InMemoryHistoryProvider(),
-                compaction=SlidingWindowCompaction(max_messages=1000),
+                context=AgentContext(
+                    InMemoryHistoryProvider(),
+                    SlidingWindowCompaction(max_messages=1000),
+                ),
                 tools=tools or None,
                 max_iterations=args.max_iterations,
             )

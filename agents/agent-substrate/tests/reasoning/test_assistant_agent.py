@@ -115,8 +115,10 @@ def make_agent(
         guardrails=guardrails,
         approval_handler=approval_handler,
         approval_required_risk=approval_required_risk,
-        history=InMemoryHistoryProvider(),
-        compaction=SlidingWindowCompaction(max_messages=20),
+        context=AgentContext(
+            InMemoryHistoryProvider(),
+            SlidingWindowCompaction(max_messages=20),
+        ),
         max_iterations=5,
     )
 

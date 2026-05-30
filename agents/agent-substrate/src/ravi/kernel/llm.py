@@ -1,38 +1,43 @@
-"""LLM client contracts and abstractions."""
+"""LLM client contracts — Protocol definitions only."""
+
 from __future__ import annotations
 
-import os
+from typing import AsyncIterator, Protocol
 
-# Treat this module file as a package so it doesn't shadow the directory
-__path__ = [os.path.join(os.path.dirname(__file__), "llm")]
+from ravi.kernel.content import ChatMessage, ContentBlock
+from ravi.kernel.stream import CompletionEvent, ReasoningDelta, TextDelta
+from ravi.kernel.tools import Tool
 
-from ravi.kernel.llm.client import LLMClient, EmbeddingClient, BaseEmbeddingClient, EmbeddingResult
-from ravi.kernel.llm.models import (
-    ModelProfile,
-    MODEL_REGISTRY,
-    get_model_profile,
-    estimate_cost,
-    list_models,
-)
-from ravi.kernel.llm.cache import SemanticCache
-from ravi.kernel.llm.cached_client import CachedModelClient
-from ravi.kernel.llm.fallback import FallbackClient
-from ravi.kernel.llm.router import ComplexityTier, ModelRouter, RouteConstraints
 
-__all__ = [
-    "LLMClient",
-    "EmbeddingClient",
-    "BaseEmbeddingClient",
-    "EmbeddingResult",
-    "ModelProfile",
-    "MODEL_REGISTRY",
-    "get_model_profile",
-    "estimate_cost",
-    "list_models",
-    "SemanticCache",
-    "CachedModelClient",
-    "FallbackClient",
-    "ComplexityTier",
-    "ModelRouter",
-    "RouteConstraints",
-]
+class LLMClient(Protocol):
+    """Contract every LLM provider adapter must satisfy."""
+
+    model: str
+
+    async def generate(
+        self,
+        messages: list[ChatMessage],
+        *,
+        tools: list[Tool] | None = None,
+        system: str = "",
+        **kwargs: object,
+    ) -> list[ContentBlock]: ...
+
+    async def generate_stream(
+        self,
+        messages: list[ChatMessage],
+        **kwargs: object,
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]: ...
+
+    async def count_tokens(self, messages: list[ChatMessage]) -> int: ...
+
+
+class EmbeddingClient(Protocol):
+    """Contract every embedding provider adapter must satisfy."""
+
+    async def embed_single(self, text: str) -> list[float]: ...
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]: ...
+
+
+__all__ = ["LLMClient", "EmbeddingClient"]

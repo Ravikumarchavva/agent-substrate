@@ -1,3 +1,3 @@
-from ravi.agents.assistant.agent import AssistantAgent
+from ravi.agents.assistant.agent import AssistantAgent, AgentRunResult
 
-__all__ = ["AssistantAgent"]
+__all__ = ["AssistantAgent", "AgentRunResult"]

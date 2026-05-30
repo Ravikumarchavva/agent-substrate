@@ -125,9 +125,8 @@ class ChainRuntime:
         catalog: Any,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
-        from ravi.agents.catalog import AgentCatalogRegistry
 
-        self._catalog: AgentCatalogRegistry = catalog
+        self._catalog: Any = catalog
         self._data_store = data_store
 
     def build_namespace(self) -> _AdapterNamespace:

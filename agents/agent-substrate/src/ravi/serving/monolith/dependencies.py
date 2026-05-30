@@ -14,7 +14,6 @@ from fastapi import Request
 
 from ravi.agents.context import HistoryProvider
 from ravi.kernel import AgentRuntime
-from ravi.agents.catalog import AgentCatalogRegistry
 from ravi.kernel.llm import LLMClient
 from ravi.serving.monolith.sse.bridge import BridgeRegistry
 from ravi.adapters.storage import FileStore
@@ -26,7 +25,7 @@ class ServerDependencies:
 
     model_client: LLMClient
     history: HistoryProvider
-    tools: AgentCatalogRegistry
+    tools: Any
     bridge_registry: BridgeRegistry
     tools_requiring_approval: list[str]
     system_instructions: str

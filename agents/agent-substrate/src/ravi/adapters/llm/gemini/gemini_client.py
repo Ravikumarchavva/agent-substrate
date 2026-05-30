@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types as genai_types
 
 import uuid
-from ravi.kernel.llm.client import LLMClient
+from ravi.kernel.llm import LLMClient
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,

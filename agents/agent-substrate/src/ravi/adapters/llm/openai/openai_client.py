@@ -16,7 +16,7 @@ from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
 
-from ravi.kernel.llm.client import LLMClient
+from ravi.kernel.llm import LLMClient
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,

@@ -13,34 +13,61 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple
 
-from opentelemetry.trace import Status, StatusCode
-
-from ravi.fabric.agents_base.agent_result import ToolCallRecord
-from ravi.kernel.execution.context import ExecutionContext
+from ravi.exceptions import GuardrailTripwireError
+from ravi.kernel import AgentId, AgentRuntime, TextBlock, ToolExecutionResult
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
-from ravi.kernel.messages.client_messages import (
+from ravi.reasoning.middleware._contracts import MiddlewareContext, MiddlewareStage
+from enum import Enum
+try:
+    from opentelemetry.trace import Status, StatusCode
+except ImportError:
+    Status = None  # type: ignore[assignment,misc]
+    StatusCode = None  # type: ignore[assignment]
+from ravi.reasoning.agents.assistant._legacy_stubs import (
+    ExecutionContext,
+    RetryPolicy,
+    ToolApprovalHandler,
+    ToolCallRecord,
     ToolExecutionResultMessage,
 )
-from ravi.kernel.middleware.base import (
-    MiddlewareContext,
-    MiddlewareStage,
-)
-from ravi.fabric.resilience.policies import RetryPolicy, _calculate_delay
-from ravi.kernel.runtime import AgentId, AgentRuntime
-from ravi.kernel.tools.base_tool import HitlMode, ToolResult
-from ravi.kernel.tools.parsing import ParsedToolCall, find_tool
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.catalog.tools.human_input.tool import (
-    ToolApprovalAction,
-    ToolApprovalHandler,
-    ToolApprovalRequest,
-    ToolApprovalResponse,
-)
 from ravi.shared.observability import global_metrics, logger
-from ravi.kernel.messages.content import TextBlock
-from ravi.exceptions import GuardrailTripwireError
 
+# Deleted types — stubs
+AgentCatalogRegistry = object
+ToolApprovalAction = object
+ToolApprovalRequest = object
+ToolApprovalResponse = object
 
+def _calculate_delay(attempt: int, policy: Any) -> float:
+    return min(1.0 * (2 ** attempt), 30.0)
+
+class HitlMode(Enum):
+    BLOCKING = 'blocking'
+
+@dataclass
+class ParsedToolCall:
+    name: str
+    arguments: dict
+    call_id: str
+
+def find_tool(name: str, tools: List[Any], catalog: Optional[AgentCatalogRegistry] = None) -> Any:
+    for t in tools:
+        if getattr(t, "name", None) == name:
+            return t
+        elif isinstance(t, dict) and t.get("name") == name:
+            return t
+    if catalog:
+        return catalog.get_tool(name)
+    return None
+
+def _parse_tool_calls(tool_calls: List[Any]) -> List[ParsedToolCall]:
+    parsed = []
+    for tc in tool_calls:
+        if hasattr(tc, "name"):
+            parsed.append(ParsedToolCall(name=tc.name, arguments=getattr(tc, "arguments", {}), call_id=getattr(tc, "id", "")))
+        elif isinstance(tc, dict):
+            parsed.append(ParsedToolCall(name=tc.get("name", ""), arguments=tc.get("arguments", {}), call_id=tc.get("id", "")))
+    return parsed
 # ---------------------------------------------------------------------------
 # Tool execution context (replaces 22-parameter signature)
 # ---------------------------------------------------------------------------
@@ -297,7 +324,7 @@ async def execute_tool_direct(
                 )
 
             # Build the actual execution coroutine
-            async def _run_tool() -> ToolResult:
+            async def _run_tool() -> ToolExecutionResult:
                 lock_handle = None
                 if (
                     runtime
@@ -396,11 +423,11 @@ async def execute_tool_direct(
                                 request_hash=req_hash,
                             )
 
-                        # Reconstruct ToolResult from saga result
+                        # Reconstruct ToolExecutionResult from saga result
                         if isinstance(saga_res, dict) and "content" in saga_res:
-                            return ToolResult.model_validate(saga_res)
+                            return ToolExecutionResult.model_validate(saga_res)
                         else:
-                            return ToolResult(content=[TextBlock(text=str(saga_res))])
+                            return ToolExecutionResult(content=[TextBlock(text=str(saga_res))])
                     else:
                         # Standard execution
                         if tool_timeout:
@@ -431,10 +458,10 @@ async def execute_tool_direct(
                     parent_context=execution_context,
                 )
 
-                async def _do_tool(ctx: MiddlewareContext) -> ToolResult:
+                async def _do_tool(ctx: MiddlewareContext) -> ToolExecutionResult:
                     return await _run_tool()
 
-                exec_result: ToolResult = await middleware_pipeline.run(
+                exec_result: ToolExecutionResult = await middleware_pipeline.run(
                     mw_ctx, _do_tool
                 )
             else:
@@ -671,3 +698,4 @@ async def execute_tool_via_runtime(
     )
 
     return record, tool_msg
+

@@ -33,7 +33,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 
 from ravi.configs.settings import settings
-from ravi.kernel.llm import BaseModelClient
+from ravi.fabric.llm import LLMClient
 from ravi.integrations.llm.factory import (
     create_model_client,
     detect_provider,
@@ -66,14 +66,14 @@ def _resolve_model_client(
     app_state: Any,
     requested_model: str | None,
     fallback_model: str,
-) -> tuple[BaseModelClient, str, str]:
+) -> tuple[LLMClient, str, str]:
     """Resolve the correct provider client for an incoming audio request."""
     effective_model = (
         requested_model.strip()
         if requested_model and requested_model.strip()
         else fallback_model
     )
-    default_client: BaseModelClient = app_state.model_client
+    default_client: LLMClient = app_state.model_client
     effective_provider = detect_provider(effective_model)
     bare_model = strip_provider_prefix(effective_model)
 

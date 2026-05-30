@@ -22,11 +22,8 @@ from typing import List, Optional
 
 from ravi.platform.evals.criteria import EvalCriterion
 from ravi.platform.evals.models import EvalScore
-from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.messages.client_messages import (
-    UserMessage,
-    AssistantMessage,
-)
+from ravi.fabric.llm import LLMClient
+from ravi.kernel import ChatMessage
 
 logger = setup_logging()
 
@@ -130,16 +127,17 @@ class LLMJudge:
         # Call judge LLM with retries
         for attempt in range(self.max_retries + 1):
             try:
-                response = await self.model_client.generate_text(
+                from ravi.kernel import TextBlock
+                response = await self.model_client.generate(
                     messages=[
-                        UserMessage(content=[prompt]),
+                        UserMessage(role="user", content=[TextBlock(text=prompt)]),
                     ],
-                    system_instructions="You are a precise evaluation judge. Always respond with valid JSON only.",
-                    tools=None,
+                    system="You are a precise evaluation judge. Always respond with valid JSON only.",
                 )
 
                 # Parse response
-                response_text = self._extract_text(response)
+                text_parts = [b.text for b in response if isinstance(b, TextBlock)]
+                response_text = "".join(text_parts)
                 parsed = self._parse_judge_response(response_text)
 
                 raw_score = parsed["score"]

@@ -11,8 +11,8 @@ from ravi.logger import setup_logging
 import math
 from typing import List, Optional, Tuple
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
 
@@ -67,7 +67,6 @@ class KnowledgeSearchTool:
                 "required": ["action"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SAFE,
             category="data/management",
             tags=[
                 "knowledge",
@@ -130,7 +129,7 @@ class KnowledgeSearchTool:
         limit = max(1, min(limit, 20))
 
         if action == "status":
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=f"Knowledge index: {len(self._index)} chunks indexed."
@@ -140,7 +139,7 @@ class KnowledgeSearchTool:
 
         if action == "index":
             if not text.strip():
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text="'text' is required for indexing.")],
                     is_error=True,
                 )
@@ -153,13 +152,13 @@ class KnowledgeSearchTool:
                     self._index.append((doc_label, chunk, embedding))
                     indexed += 1
             if indexed == 0:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(text="Could not generate embeddings. Check API key.")
                     ],
                     is_error=True,
                 )
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=f"Indexed {indexed} chunks from '{doc_label}'. Total: {len(self._index)} chunks."
@@ -169,12 +168,12 @@ class KnowledgeSearchTool:
 
         if action == "search":
             if not text.strip():
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text="'text' query is required for search.")],
                     is_error=True,
                 )
             if not self._index:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(
                             text="No documents indexed yet. Use action='index' first."
@@ -184,7 +183,7 @@ class KnowledgeSearchTool:
 
             query_embedding = await self._embed(text)
             if query_embedding is None:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(
                             text="Could not generate query embedding. Check API key."
@@ -205,11 +204,11 @@ class KnowledgeSearchTool:
                 preview = chunk[:200].replace("\n", " ")
                 lines.append(f"\n{i}. [{doc_label}] (score: {sim:.3f})\n   {preview}")
 
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text="\n".join(lines))],
             )
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=f"Unknown action: {action!r}")],
             is_error=True,
         )

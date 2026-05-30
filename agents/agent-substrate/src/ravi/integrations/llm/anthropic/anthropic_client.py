@@ -8,18 +8,15 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from anthropic import AsyncAnthropic
 
-from ravi.kernel.llm.base_client import (
-    BaseModelClient,
-    GenerateResult,
-    ModelStreamEvent,
+from ravi.fabric.llm.client import LLMClient
+from ravi.kernel import ChatMessage, ContentBlock
+from ravi.kernel.content import (
+    TextBlock,
+    ToolUseBlock,
+    DataBlock,
 )
-from ravi.kernel.messages.base_message import BaseClientMessage, UsageStats
-from ravi.kernel.messages._types import MediaType
-from ravi.kernel.messages.client_messages import (
-    AssistantMessage,
-    ToolCallMessage,
-)
-from ravi.kernel.messages.encoders.anthropic import (
+from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.integrations.llm.encoders.anthropic import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
 )
@@ -30,7 +27,7 @@ if TYPE_CHECKING:
 logger = setup_logging()
 
 
-class AnthropicClient(BaseModelClient):
+class AnthropicClient(LLMClient):
     """Anthropic Claude API client — text and vision.
 
     Uses the ``anthropic`` SDK (``AsyncAnthropic``) for all operations:
@@ -48,14 +45,16 @@ class AnthropicClient(BaseModelClient):
         max_tokens: Optional[int] = None,
         **kwargs: Any,
     ):
-        super().__init__(model, temperature, max_tokens, **kwargs)
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
         self.api_key = api_key
         self.client = AsyncAnthropic(api_key=api_key)
 
     # ── Private helpers — delegates to ``core.messages.encoders.anthropic`` ──
 
     def _serialize_messages(
-        self, messages: list[BaseClientMessage]
+        self, messages: list[ChatMessage]
     ) -> tuple[str, list[dict[str, Any]]]:
         """Serialise framework messages into (system_prompt, messages).
 
@@ -118,14 +117,14 @@ class AnthropicClient(BaseModelClient):
 
     async def generate(
         self,
-        messages: list[BaseClientMessage],
+        messages: list[ChatMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
         system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> GenerateResult:
+    ) -> list[ContentBlock]:
         """Generate a single response from Anthropic using Messages API."""
         _, conversation = self._serialize_messages(messages)
         system = system_instructions
@@ -166,103 +165,55 @@ class AnthropicClient(BaseModelClient):
 
         response = await self.client.messages.create(**params)
 
-        # Extract content blocks
-        text_parts: list[str] = []
-        thinking_parts: list[str] = []
-        tool_calls_obj: Optional[list[ToolCallMessage]] = None
+        final_blocks: list[ContentBlock] = []
 
+        has_tool_calls = False
         for block in response.content:
             if block.type == "thinking":
                 thinking_text = getattr(block, "thinking", "")
-                if thinking_text:
-                    thinking_parts.append(thinking_text)
             elif block.type == "text":
-                text_parts.append(block.text)
+                final_blocks.append(TextBlock(text=block.text))
             elif block.type == "tool_use":
-                if tool_calls_obj is None:
-                    tool_calls_obj = []
-                tool_calls_obj.append(
-                    ToolCallMessage(
-                        id=block.id,
-                        name=block.name,
-                        arguments=block.input
-                        if isinstance(block.input, dict)
-                        else json.loads(block.input),
+                has_tool_calls = True
+                final_blocks.append(
+                    ToolUseBlock(
+                        call_id=block.id,
+                        tool_name=block.name,
+                        arguments=(
+                            block.input
+                            if isinstance(block.input, dict)
+                            else json.loads(block.input)
+                        ),
                     )
                 )
 
-        final_text = "\n".join(text_parts) if text_parts else ""
-        final_content: Optional[list[MediaType]] = [final_text] if final_text else None
-
-        # Usage (includes cache stats)
-        usage_dict = None
-        if response.usage:
-            input_toks = response.usage.input_tokens
-            output_toks = response.usage.output_tokens
-            usage_dict = UsageStats(
-                prompt_tokens=input_toks,
-                completion_tokens=output_toks,
-                total_tokens=input_toks + output_toks,
-            )
-            # Store cache metrics on the usage object
-            cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
-            cache_create = getattr(response.usage, "cache_creation_input_tokens", 0)
-            if cache_read or cache_create:
-                usage_dict.extra = {
-                    "cache_read_input_tokens": cache_read or 0,
-                    "cache_creation_input_tokens": cache_create or 0,
-                }
-
-        # Finish reason mapping
-        finish_reason = "stop"
-        if tool_calls_obj:
-            finish_reason = "tool_calls"
-        elif response.stop_reason == "end_turn":
-            finish_reason = "stop"
-        elif response.stop_reason == "max_tokens":
-            finish_reason = "length"
-
-        msg = AssistantMessage(
-            role="assistant",
-            content=final_content,
-            tool_calls=tool_calls_obj,
-            usage=usage_dict,
-            finish_reason=finish_reason,
-            cached=bool(getattr(response.usage, "cache_read_input_tokens", 0)),
-            reasoning="\n".join(thinking_parts) if thinking_parts else None,
-        )
-
         # Structured output parsing
-        if response_format is not None and final_text and not tool_calls_obj:
-            try:
-                msg.parsed = response_format.model_validate_json(final_text)
-            except Exception:
-                logger.debug(
-                    "Failed to parse structured output from Claude: %s",
-                    final_text[:200],
-                )
+        if response_format is not None and not has_tool_calls:
+            text_blocks = [b.text for b in final_blocks if isinstance(b, TextBlock)]
+            final_text = "".join(text_blocks)
+            if final_text:
+                try:
+                    parsed_obj = response_format.model_validate_json(final_text)
+                    final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
+                except Exception:
+                    logger.debug(
+                        "Failed to parse structured output from Claude: %s",
+                        final_text[:200],
+                    )
 
-        return msg
+        return final_blocks
 
     async def generate_stream(
         self,
-        messages: list[BaseClientMessage],
+        messages: list[ChatMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
         system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[ModelStreamEvent]:
-        """Generate a streaming response from Anthropic using Messages API.
-
-        Yields TextDeltaChunk objects, then a final CompletionChunk.
-        """
-        from ravi.kernel.messages._types import (
-            CompletionChunk,
-            ReasoningDeltaChunk,
-            TextDeltaChunk,
-        )
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
+        """Generate a streaming response from Anthropic using Messages API."""
 
         _, conversation = self._serialize_messages(messages)
         system = system_instructions
@@ -303,8 +254,7 @@ class AnthropicClient(BaseModelClient):
 
         # Accumulate for final message
         text_parts: list[str] = []
-        thinking_parts: list[str] = []
-        tool_calls_obj: Optional[list[ToolCallMessage]] = None
+        collected_tool_calls: list[ToolUseBlock] = []
         current_tool_id: Optional[str] = None
         current_tool_name: Optional[str] = None
         current_tool_json: str = ""
@@ -337,19 +287,16 @@ class AnthropicClient(BaseModelClient):
                     if delta.type == "thinking_delta":
                         thinking_text = getattr(delta, "thinking", "")
                         if thinking_text:
-                            thinking_parts.append(thinking_text)
-                            yield ReasoningDeltaChunk(text=thinking_text)
+                            yield ReasoningDelta(text=thinking_text)
                     elif delta.type == "text_delta":
                         text_parts.append(delta.text)
-                        yield TextDeltaChunk(text=delta.text)
+                        yield TextDelta(text=delta.text)
                     elif delta.type == "input_json_delta":
                         current_tool_json += delta.partial_json
                     # signature_delta is intentionally ignored (opaque)
 
                 elif event_type == "content_block_stop":
                     if current_tool_id and current_tool_name:
-                        if tool_calls_obj is None:
-                            tool_calls_obj = []
                         try:
                             args = (
                                 json.loads(current_tool_json)
@@ -358,10 +305,10 @@ class AnthropicClient(BaseModelClient):
                             )
                         except json.JSONDecodeError:
                             args = {}
-                        tool_calls_obj.append(
-                            ToolCallMessage(
-                                id=current_tool_id,
-                                name=current_tool_name,
+                        collected_tool_calls.append(
+                            ToolUseBlock(
+                                call_id=current_tool_id,
+                                tool_name=current_tool_name,
                                 arguments=args,
                             )
                         )
@@ -381,42 +328,30 @@ class AnthropicClient(BaseModelClient):
 
         # Build final message
         final_text = "".join(text_parts) if text_parts else ""
-        final_content: Optional[list[MediaType]] = [final_text] if final_text else None
+        final_blocks: list[ContentBlock] = []
 
-        finish_reason = "stop"
-        if tool_calls_obj:
-            finish_reason = "tool_calls"
-        elif stop_reason == "max_tokens":
-            finish_reason = "length"
-
-        usage_dict = UsageStats(
-            prompt_tokens=input_tokens,
-            completion_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
-        )
-
-        final_message = AssistantMessage(
-            role="assistant",
-            content=final_content,
-            tool_calls=tool_calls_obj,
-            usage=usage_dict,
-            finish_reason=finish_reason,
-            reasoning="".join(thinking_parts) if thinking_parts else None,
-        )
+        if final_text:
+            final_blocks.append(TextBlock(text=final_text))
+            
+        has_tool_calls = False
+        if collected_tool_calls:
+            has_tool_calls = True
+            final_blocks.extend(collected_tool_calls)
 
         # Structured output parsing
-        if response_format is not None and final_text and not tool_calls_obj:
+        if response_format is not None and final_text and not has_tool_calls:
             try:
-                final_message.parsed = response_format.model_validate_json(final_text)
+                parsed_obj = response_format.model_validate_json(final_text)
+                final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
             except Exception:
                 logger.debug(
                     "Stream: failed to parse structured output from Claude: %s",
                     final_text[:200],
                 )
 
-        yield CompletionChunk(message=final_message)
+        yield CompletionEvent(content=final_blocks)
 
-    async def count_tokens(self, messages: list[BaseClientMessage]) -> int:
+    async def count_tokens(self, messages: list[ChatMessage]) -> int:
         """Count tokens using Anthropic's token counting API."""
         _, conversation = self._serialize_messages(messages)
         try:

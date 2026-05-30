@@ -15,10 +15,10 @@ from ravi.logger import setup_logging
 
 import contextvars
 import uuid
-from typing import Any, ClassVar, Optional
+from typing import Any, Optional
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
 
@@ -31,7 +31,7 @@ current_thread_id: contextvars.ContextVar[str] = contextvars.ContextVar(
 def _text_result(
     text: str, *, is_error: bool = False, app_data: Optional[dict[str, Any]] = None
 ) -> ToolExecutionResult:
-    return ToolResult(
+    return ToolExecutionResult(
         content=[TextBlock(text=text)],
         is_error=is_error,
         app_data=app_data,
@@ -46,7 +46,7 @@ class FileManagerTool:
     ``ServerDependencies``.
     """
 
-    risk: ClassVar[ToolRisk] = ToolRisk.SAFE
+    risk: str = "safe"
 
     def __init__(
         self,

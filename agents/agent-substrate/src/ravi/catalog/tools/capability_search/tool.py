@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 
 class CapabilitySearchTool:
@@ -79,7 +79,6 @@ class CapabilitySearchTool:
                 "required": ["action"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SAFE,
             category="system",
             tags=[
                 "discovery",
@@ -113,7 +112,7 @@ class CapabilitySearchTool:
         if action == "list_categories":
             return self._do_list_categories()
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[
                 TextBlock(
                     text=f"Unknown action: {action!r}. Use 'search', 'browse', or 'list_categories'."
@@ -130,7 +129,7 @@ class CapabilitySearchTool:
         limit: int = 8,
     ) -> ToolExecutionResult:
         if not query.strip():
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(text="Please provide a 'query' for the search action.")
                 ],
@@ -151,7 +150,7 @@ class CapabilitySearchTool:
         )
 
         if not matches:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(text=f"No matching capabilities found for: {query!r}")
                 ],
@@ -183,7 +182,7 @@ class CapabilitySearchTool:
 
         text = f"Found {len(matches)} capabilities for '{query}':\n" + "\n".join(lines)
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=text)],
             app_data={
                 "matched_tool_names": matched_tool_names,
@@ -193,7 +192,7 @@ class CapabilitySearchTool:
 
     def _do_browse(self, category_path: str, *, limit: int = 8) -> ToolExecutionResult:
         if not category_path.strip():
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text="Please provide a 'category_path' for the browse action."
@@ -206,7 +205,7 @@ class CapabilitySearchTool:
         if cat_node is None:
             # Suggest valid categories
             all_cats = [c.path for c in self._catalog.list_categories()]
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=f"Category '{category_path}' not found. Top-level categories: {', '.join(all_cats)}"
@@ -239,7 +238,7 @@ class CapabilitySearchTool:
                 else:
                     matched_skill_names.append(entry.name)
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text="\n".join(lines))],
             app_data={
                 "matched_tool_names": matched_tool_names,
@@ -264,6 +263,6 @@ class CapabilitySearchTool:
             "or action='search' with a query to find specific capabilities."
         )
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text="\n".join(lines))],
         )

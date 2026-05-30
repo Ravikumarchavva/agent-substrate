@@ -35,11 +35,11 @@ from ravi.logger import setup_logging
 import base64
 import json
 import os
-from typing import Any, ClassVar, Optional
+from typing import Any, Optional
 
-from ravi.kernel.messages import ImageContent
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel import ImageBlock  # was ImageContent
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
 
@@ -54,7 +54,7 @@ class CodeInterpreterTool:
       - **Direct mode**: uses a local SessionManager (testing only)
     """
 
-    risk: ClassVar[ToolRisk] = ToolRisk.CRITICAL  # executes arbitrary code
+    risk: str = "critical"  # TODO: L4-hitl  # executes arbitrary code
 
     def __init__(
         self,
@@ -179,7 +179,7 @@ class CodeInterpreterTool:
         elif self._mode == "direct":
             return await self._execute_direct(code, exec_type, timeout)
         else:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(
@@ -275,10 +275,10 @@ class CodeInterpreterTool:
                         buf.seek(0)
                         img_data = buf.getvalue()
 
-                        from ravi.kernel.messages import ImageContent
+                        from ravi.kernel import ImageBlock  # was ImageContent
 
                         media.append(
-                            ImageContent(data=img_data, media_type="image/png")
+                            ImageBlock(data=img_data, media_type="image/png")
                         )
                         plt.close(fig)
                 except Exception as e:
@@ -292,7 +292,7 @@ class CodeInterpreterTool:
                 stderr_text = redirected_error.getvalue()
 
                 if not success:
-                    return ToolResult(
+                    return ToolExecutionResult(
                         content=[
                             TextBlock(
                                 text=json.dumps(
@@ -318,7 +318,7 @@ class CodeInterpreterTool:
                     "exec_type": "python",
                 }
 
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text=json.dumps(response_data))],
                     is_error=False,
                     media=media or None,
@@ -329,7 +329,7 @@ class CodeInterpreterTool:
                     fallback_exc,
                     exc_info=True,
                 )
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(
                             text=json.dumps(
@@ -361,7 +361,7 @@ class CodeInterpreterTool:
             elif output.type.value == "image":
                 try:
                     media.append(
-                        ImageContent(
+                        ImageBlock(
                             data=base64.b64decode(output.content),
                             media_type=f"image/{output.format or 'png'}",
                         )
@@ -390,7 +390,7 @@ class CodeInterpreterTool:
         if resp.error:
             response_data["error"] = resp.error
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=json.dumps(response_data))],
             is_error=not resp.success,
             media=media or None,
@@ -416,7 +416,7 @@ class CodeInterpreterTool:
             result = await session_manager.execute(self.session_id, request)
         except Exception as exc:
             logger.error("code_interpreter direct error: %s", exc, exc_info=True)
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(
@@ -451,7 +451,7 @@ class CodeInterpreterTool:
                 elif otype == "image":
                     try:
                         media.append(
-                            ImageContent(
+                            ImageBlock(
                                 data=base64.b64decode(o["content"]),
                                 media_type=f"image/{o.get('format', 'png')}",
                             )
@@ -473,7 +473,7 @@ class CodeInterpreterTool:
             if result.get("error"):
                 data["error"] = result["error"]
 
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=json.dumps(data))],
                 is_error=not success,
                 media=media or None,
@@ -488,7 +488,7 @@ class CodeInterpreterTool:
                 parts.append(f"[stderr]\n{result['stderr'].rstrip()}")
             text = "\n".join(parts) if parts else "(no output)"
 
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(
@@ -505,7 +505,7 @@ class CodeInterpreterTool:
                 is_error=False,
             )
         else:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=json.dumps(

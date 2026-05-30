@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from ravi.platform.rag.vector_store import SearchResult
 
 if TYPE_CHECKING:
-    from ravi.kernel.llm.base_client import BaseModelClient
+    from ravi.fabric.llm import LLMClient
 
 logger = setup_logging()
 
@@ -32,7 +32,7 @@ class LLMReranker:
     each document's relevance to the query, return top-K by relevance.
     """
 
-    def __init__(self, model_client: BaseModelClient) -> None:
+    def __init__(self, model_client: LLMClient) -> None:
         self._client = model_client
 
     async def rerank(
@@ -55,33 +55,30 @@ class LLMReranker:
         if len(results) <= top_k:
             return results
 
-        from ravi.kernel.messages.client_messages import UserMessage
+        from ravi.kernel import ChatMessage, TextBlock
 
         # Build scoring prompt
         docs_block = "\n".join(f"[{i}] {r.text[:500]}" for i, r in enumerate(results))
 
         messages = [
-            UserMessage(
+            ChatMessage(
                 role="user",
-                content=[f"Query: {query}\n\nDocuments:\n{docs_block}"],
+                content=[TextBlock(text=f"Query: {query}\n\nDocuments:\n{docs_block}")],
             ),
         ]
 
         try:
-            response = await self._client.generate_text(
+            response = await self._client.generate(
                 messages,
-                system_instructions=(
+                system=(
                     "You are a relevance judge. Given a query and numbered documents, "
                     "return a JSON array of document indices sorted by relevance to "
                     "the query (most relevant first). Return ONLY the JSON array of "
                     "integer indices, e.g. [2, 0, 4, 1, 3]."
                 ),
             )
-            text = ""
-            if response.content:
-                text = "".join(
-                    part for part in response.content if isinstance(part, str)
-                )
+            text_parts = [b.text for b in response if isinstance(b, TextBlock)]
+            text = "".join(text_parts)
 
             # Parse the JSON array of indices
             indices = json.loads(text.strip())

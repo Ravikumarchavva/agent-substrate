@@ -1,15 +1,12 @@
-"""MCP tool adapter that wraps MCP server tools as BaseTool instances."""
+from pydantic import BaseModel
+from typing import Literal, Optional, Any
 
-from __future__ import annotations
-
-from typing import Any
-
-from ravi.kernel.messages.content import ImageBlock, ResourceBlock, TextBlock
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult
+from ravi.kernel.content import ImageBlock, TextBlock
+from ravi.kernel import Tool, ToolResultBlock
 from ravi.integrations.mcp.client import MCPClient
 
 
-class MCPTool(BaseTool):
+class MCPTool(Tool):
     """Adapter that wraps an MCP server tool as a BaseTool.
 
     This class bridges MCP (Model Context Protocol) tools with the agent
@@ -66,14 +63,14 @@ class MCPTool(BaseTool):
         super().__init__(name=name, description=description, input_schema=input_schema)
         self.client = client
 
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs) -> ToolResultBlock:
         """Execute the MCP tool with given parameters.
 
         Args:
             **kwargs: Tool parameters matching the input schema
 
         Returns:
-            ToolResult with structured content
+            ToolResultBlock with structured content
 
         Raises:
             RuntimeError: If MCP client is not connected
@@ -139,14 +136,14 @@ class MCPTool(BaseTool):
                         content.append(TextBlock(text=str(item)))
 
                 is_error: bool = getattr(result, "isError", False)
-                return ToolResult(content=content, is_error=is_error)
+                return ToolResultBlock(content=content, is_error=is_error)
             else:
                 # Legacy: result is a raw string/object
                 content = [TextBlock(text=str(result))]
-                return ToolResult(content=content, is_error=False)
+                return ToolResultBlock(content=content, is_error=False)
 
         except Exception as e:
-            return ToolResult(
+            return ToolResultBlock(
                 content=[TextBlock(text=f"Tool execution failed: {e}")],
                 is_error=True,
             )

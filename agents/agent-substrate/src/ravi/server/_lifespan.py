@@ -25,8 +25,7 @@ from ravi.catalog.tools.task_manager.tool import (
     current_thread_id as _task_thread_id,
 )
 from ravi.configs.settings import Settings
-from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient
+from ravi.fabric.llm import LLMClient, BaseEmbeddingClient
 from ravi.fabric.runtime.local import LocalRuntime
 from ravi.kernel.storage.base import FileStore
 from ravi.fabric.storage.factory import create_file_store
@@ -69,7 +68,7 @@ class LLMClients:
 
     api_keys: dict[str, str]
     model_client_kwargs: dict[str, Any]
-    model_client: BaseModelClient
+    model_client: LLMClient
     chat_model: str
     embedding_client: BaseEmbeddingClient
 

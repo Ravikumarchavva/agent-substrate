@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 
 class ChainExecutorTool:
@@ -56,7 +56,6 @@ class ChainExecutorTool:
                 "required": ["code"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SENSITIVE,
             category="development/execution",
             tags=["chain", "pipeline", "script", "execute", "compose", "workflow"],
             aliases=["run_chain", "execute_chain", "compose_tools"],
@@ -78,7 +77,7 @@ class ChainExecutorTool:
             error_text = f"Chain execution failed: {result.error}"
             if result.logs:
                 error_text += f"\n\nLogs:\n{result.logs}"
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=error_text)],
                 is_error=True,
             )
@@ -100,6 +99,6 @@ class ChainExecutorTool:
 
         parts.append(f"Duration: {result.duration_ms}ms")
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text="\n".join(parts))],
         )

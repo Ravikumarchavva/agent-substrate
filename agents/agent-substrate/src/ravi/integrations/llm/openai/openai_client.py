@@ -17,20 +17,21 @@ from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
 
-from ravi.kernel.messages.client_messages import (
-    AssistantMessage,
-    ToolCallMessage,
-    ToolExecutionResultMessage,
+from ravi.fabric.llm.client import LLMClient
+from ravi.kernel import ChatMessage, ContentBlock
+from ravi.kernel.content import (
+    TextBlock,
+    ImageBlock,
+    AudioBlock,
+    VideoBlock,
+    DocumentBlock,
+    ToolUseBlock,
+    DataBlock,
+    ToolResultBlock,
+    ErrorBlock,
 )
-
-from ravi.kernel.llm.base_client import (
-    BaseModelClient,
-    GenerateResult,
-    ModelStreamEvent,
-)
-from ravi.kernel.messages.base_message import BaseClientMessage
-from ravi.kernel.messages._types import ImageContent, MediaType
-from ravi.kernel.messages.encoders.openai import (
+from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.integrations.llm.encoders.openai import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
 )
@@ -112,7 +113,7 @@ def _build_openai_text_format(response_format: type["BaseModel"]) -> dict[str, A
     }
 
 
-class OpenAIClient(BaseModelClient):
+class OpenAIClient(LLMClient):
     """OpenAI API client — text, vision, and audio in one place.
 
     A single ``AsyncOpenAI`` instance is used for all operations:
@@ -142,7 +143,9 @@ class OpenAIClient(BaseModelClient):
         realtime_model: str = "gpt-4o-realtime-preview-2024-12-17",
         **kwargs,
     ):
-        super().__init__(model, temperature, max_tokens, **kwargs)
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
         self.api_key = api_key  # stored so WorkflowRunner can build sibling clients
         self.base_url = base_url
 
@@ -189,7 +192,7 @@ class OpenAIClient(BaseModelClient):
         return self._encoding
 
     def _messages_to_openai_format(
-        self, messages: list[BaseClientMessage]
+        self, messages: list[ChatMessage]
     ) -> list[dict]:
         """Convert framework messages to OpenAI API format.
 
@@ -244,48 +247,46 @@ class OpenAIClient(BaseModelClient):
 
     async def _materialize_tool_result_media(
         self,
-        messages: list[BaseClientMessage],
-    ) -> list[BaseClientMessage]:
-        prepared: list[BaseClientMessage] = []
+        messages: list[ChatMessage],
+    ) -> list[ChatMessage]:
+        prepared: list[ChatMessage] = []
         for msg in messages:
-            if not isinstance(msg, ToolExecutionResultMessage) or not msg.media:
+            if msg.role not in ("user", "tool"):
                 prepared.append(msg)
                 continue
 
-            uploaded_media: list[MediaType] = []
             changed = False
-            for item in msg.media:
-                if isinstance(item, Image.Image):
-                    buf = io.BytesIO()
-                    item.save(buf, format="PNG")
-                    file_id = await self._upload_image_input(
-                        image_bytes=buf.getvalue(),
-                        media_type="image/png",
-                        filename="tool-artifact.png",
-                    )
-                    uploaded_media.append(ImageContent(file_id=file_id))
-                    changed = True
-                elif isinstance(item, ImageContent) and item.data is not None:
-                    media_type = item.media_type or "image/png"
-                    file_id = await self._upload_image_input(
-                        image_bytes=item.data,
-                        media_type=media_type,
-                        filename=(f"tool-artifact.{self._image_extension(media_type)}"),
-                    )
-                    uploaded_media.append(
-                        ImageContent(file_id=file_id, detail=item.detail)
-                    )
-                    changed = True
+            new_content = []
+            for block in msg.content:
+                if isinstance(block, ToolResultBlock) and block.content:
+                    new_tool_content = []
+                    for item in block.content:
+                        if isinstance(item, ImageBlock) and item.data is not None:
+                            media_type = item.media_type or "image/png"
+                            file_id = await self._upload_image_input(
+                                image_bytes=item.data,
+                                media_type=media_type,
+                                filename=(f"tool-artifact.{self._image_extension(media_type)}"),
+                            )
+                            new_tool_content.append(ImageBlock(file_id=file_id, detail=item.detail))
+                            changed = True
+                        else:
+                            new_tool_content.append(item)
+                    if changed:
+                        new_content.append(block.model_copy(update={"content": new_tool_content}))
+                    else:
+                        new_content.append(block)
                 else:
-                    uploaded_media.append(item)
+                    new_content.append(block)
 
-            prepared.append(
-                msg.model_copy(update={"media": uploaded_media}) if changed else msg
-            )
+            if changed:
+                prepared.append(msg.model_copy(update={"content": new_content}))
+            else:
+                prepared.append(msg)
         return prepared
 
     async def _serialize_messages(
-        self, messages: list[BaseClientMessage]
+        self, messages: list[ChatMessage]
     ) -> tuple[str, list[dict[str, Any]]]:
         """Serialise framework messages into (instructions, conversation_input).
 
@@ -319,17 +320,17 @@ class OpenAIClient(BaseModelClient):
 
     async def generate(
         self,
-        messages: list[BaseClientMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
+        messages: list[ChatMessage],
         *,
-        system_instructions: str = "",
+        tools: Optional[list[dict[str, Any]]] = None,
+        system: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         **kwargs: Any,
-    ) -> GenerateResult:
+    ) -> list[ContentBlock]:
         """Generate a single response from OpenAI using Responses API."""
         _, conversation_input = await self._serialize_messages(messages)
-        instructions = system_instructions
+        instructions = system
 
         # ── Unified path: tools + response_format together ────────────────
         # OpenAI Responses API supports both `tools` and `text.format`
@@ -384,65 +385,36 @@ class OpenAIClient(BaseModelClient):
 
             response = await self.client.responses.create(**params)
 
-            # Extract tool calls
-            tool_calls_obj = None
+            final_blocks: list[ContentBlock] = []
+            final_content_text = getattr(response, "output_text", "") or ""
+            if final_content_text:
+                final_blocks.append(TextBlock(text=final_content_text))
+                
+            has_tool_calls = False
             if response.output:
                 for item in response.output:
                     if item.type == "function_call":
-                        if tool_calls_obj is None:
-                            tool_calls_obj = []
-                        tool_calls_obj.append(
-                            ToolCallMessage(
-                                id=getattr(item, "call_id", "")
-                                or getattr(item, "id", ""),
-                                name=item.name,
-                                arguments=json.loads(item.arguments)
-                                if isinstance(item.arguments, str)
-                                else item.arguments,
+                        has_tool_calls = True
+                        args = json.loads(item.arguments) if isinstance(item.arguments, str) else item.arguments
+                        final_blocks.append(
+                            ToolUseBlock(
+                                call_id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                                tool_name=item.name,
+                                arguments=args,
                             )
                         )
 
-            # Extract text content
-            final_content_text = getattr(response, "output_text", "") or ""
-            final_content_list: Optional[list[MediaType]] = (
-                [final_content_text] if final_content_text else None
-            )
-
-            # Try to parse structured output from text (only on final text answer)
-            parsed_obj = None
-            if final_content_text and not tool_calls_obj:
+            if final_content_text and not has_tool_calls and response_format:
                 try:
                     parsed_obj = response_format.model_validate_json(final_content_text)
+                    final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
                 except Exception:
                     logger.debug(
                         f"Failed to parse structured output from text: "
                         f"{final_content_text[:200]}"
                     )
 
-            usage_dict = None
-            if getattr(response, "usage", None):
-                from ravi.kernel.messages.base_message import UsageStats
-
-                usage_dict = UsageStats(
-                    prompt_tokens=response.usage.input_tokens,
-                    completion_tokens=response.usage.output_tokens,
-                    total_tokens=response.usage.total_tokens,
-                )
-
-            finish_reason = "stop"
-            if tool_calls_obj:
-                finish_reason = "tool_calls"
-            elif getattr(response, "finish_reason", None):
-                finish_reason = getattr(response, "finish_reason", "stop")
-
-            return AssistantMessage(
-                role="assistant",
-                content=final_content_list,
-                tool_calls=tool_calls_obj,
-                usage=usage_dict,
-                finish_reason=finish_reason,
-                parsed=parsed_obj,
-            )
+            return final_blocks
 
         # ── Structured-only path (no tools) ──────────────────────────────
         if response_format is not None:
@@ -511,13 +483,17 @@ class OpenAIClient(BaseModelClient):
                             refusal = getattr(block, "refusal", str(block))
                             parsed = None
                             break
+            
+            final_blocks: list[ContentBlock] = []
+            if raw_text:
+                final_blocks.append(TextBlock(text=raw_text))
+            
+            if refusal:
+                final_blocks.append(ErrorBlock(error_type="Refusal", message=refusal))
+            elif parsed:
+                final_blocks.append(DataBlock(data=parsed.model_dump(mode="json") if hasattr(parsed, "model_dump") else parsed))
 
-            return StructuredOutputResult(
-                parsed=parsed,
-                raw_text=raw_text,
-                refusal=refusal,
-                model=self.model,
-            )
+            return final_blocks
 
         params: dict[str, Any] = {
             "model": self.model,
@@ -548,72 +524,38 @@ class OpenAIClient(BaseModelClient):
         response = await self.client.responses.create(**params)
 
         final_content_text = getattr(response, "output_text", "") or ""
-        final_content_main: Optional[list[MediaType]] = (
-            [final_content_text] if final_content_text else None
-        )
+        final_blocks: list[ContentBlock] = []
+        if final_content_text:
+            final_blocks.append(TextBlock(text=final_content_text))
 
-        tool_calls_obj = None
         if response.output:
             for item in response.output:
                 if item.type == "function_call":
-                    if tool_calls_obj is None:
-                        tool_calls_obj = []
-                    tool_calls_obj.append(
-                        ToolCallMessage(
-                            id=getattr(item, "call_id", "") or getattr(item, "id", ""),
-                            name=item.name,
-                            arguments=json.loads(item.arguments)
-                            if isinstance(item.arguments, str)
-                            else item.arguments,
+                    args = json.loads(item.arguments) if isinstance(item.arguments, str) else item.arguments
+                    final_blocks.append(
+                        ToolUseBlock(
+                            call_id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                            tool_name=item.name,
+                            arguments=args,
                         )
                     )
 
-        usage_dict = None
-        if getattr(response, "usage", None):
-            from ravi.kernel.messages.base_message import UsageStats
-
-            usage_dict = UsageStats(
-                prompt_tokens=response.usage.input_tokens,
-                completion_tokens=response.usage.output_tokens,
-                total_tokens=response.usage.total_tokens,
-            )
-
-        finish_reason = "stop"
-        if tool_calls_obj:
-            finish_reason = "tool_calls"
-        elif getattr(response, "finish_reason", None):
-            finish_reason = getattr(response, "finish_reason", "stop")
-
-        return AssistantMessage(
-            role="assistant",
-            content=final_content_main,
-            tool_calls=tool_calls_obj,
-            usage=usage_dict,
-            finish_reason=finish_reason,
-        )
+        return final_blocks
 
     async def generate_stream(
         self,
-        messages: list[BaseClientMessage],
+        messages: list[ChatMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         *,
         system_instructions: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[ModelStreamEvent]:
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
         """Generate a streaming response from OpenAI using Responses API.
 
-        Yields StreamChunk objects:
-        - TextDeltaChunk: Incremental text content
-        - ReasoningDeltaChunk: Incremental reasoning (o1/o3 models)
-        - CompletionChunk: Final response with complete AssistantMessage (includes tool calls)
+        Yields TextDelta, ReasoningDelta, and finally a CompletionEvent.
         """
-        from ravi.kernel.messages._types import (
-            TextDeltaChunk,
-            ReasoningDeltaChunk,
-            CompletionChunk,
-        )
 
         _, conversation_input = await self._serialize_messages(messages)
         instructions = system_instructions
@@ -658,13 +600,13 @@ class OpenAIClient(BaseModelClient):
             if isinstance(event, ResponseTextDeltaEvent):
                 text = event.delta if hasattr(event, "delta") else ""
                 if text:
-                    yield TextDeltaChunk(text=text)
+                    yield TextDelta(text=text)
 
             # Yield incremental reasoning deltas (o1/o3 models)
             elif isinstance(event, ResponseReasoningSummaryTextDeltaEvent):
                 reasoning = event.delta if hasattr(event, "delta") else ""
                 if reasoning:
-                    yield ReasoningDeltaChunk(text=reasoning)
+                    yield ReasoningDelta(text=reasoning)
 
             # Capture final Response object
             elif isinstance(event, ResponseCompletedEvent):
@@ -684,63 +626,32 @@ class OpenAIClient(BaseModelClient):
                 f"a completion. The provider may not support the OpenAI "
                 f"Responses API. Check server logs for details."
             )
-        # Extract content text
         final_content_text = (
             final_response.output_text if hasattr(final_response, "output_text") else ""
         )
-        final_content: Optional[list[MediaType]] = (
-            [final_content_text] if final_content_text else None
-        )
+        final_blocks: list[ContentBlock] = []
+        if final_content_text:
+            final_blocks.append(TextBlock(text=final_content_text))
 
-        # Extract tool calls from output
-        tool_calls_obj = None
+        has_tool_calls = False
         if final_response.output:
             for item in final_response.output:
                 if item.type == "function_call":
-                    if tool_calls_obj is None:
-                        tool_calls_obj = []
-                    tool_calls_obj.append(
-                        ToolCallMessage(
-                            id=getattr(item, "call_id", "") or getattr(item, "id", ""),
-                            name=item.name,
-                            arguments=json.loads(item.arguments)
-                            if isinstance(item.arguments, str)
-                            else item.arguments,
+                    has_tool_calls = True
+                    args = json.loads(item.arguments) if isinstance(item.arguments, str) else item.arguments
+                    final_blocks.append(
+                        ToolUseBlock(
+                            call_id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                            tool_name=item.name,
+                            arguments=args,
                         )
                     )
 
-        # Extract usage
-        usage_dict = None
-        if hasattr(final_response, "usage") and final_response.usage:
-            from ravi.kernel.messages.base_message import UsageStats
-
-            usage_dict = UsageStats(
-                prompt_tokens=final_response.usage.input_tokens,
-                completion_tokens=final_response.usage.output_tokens,
-                total_tokens=final_response.usage.total_tokens,
-            )
-
-        # Determine finish reason
-        finish_reason = "stop"
-        if tool_calls_obj:
-            finish_reason = "tool_calls"
-        elif getattr(final_response, "finish_reason", None):
-            finish_reason = getattr(final_response, "finish_reason", "stop")
-
-        final_message = AssistantMessage(
-            role="assistant",
-            content=final_content,
-            tool_calls=tool_calls_obj,
-            usage=usage_dict,
-            finish_reason=finish_reason,
-        )
-
         # Parse structured output from final text when schema is set
-        if response_format is not None and final_content_text and not tool_calls_obj:
+        if response_format is not None and final_content_text and not has_tool_calls:
             try:
-                final_message.parsed = response_format.model_validate_json(
-                    final_content_text
-                )
+                parsed_obj = response_format.model_validate_json(final_content_text)
+                final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
             except Exception:
                 logger.debug(
                     f"Stream: failed to parse structured output: "
@@ -748,9 +659,9 @@ class OpenAIClient(BaseModelClient):
                 )
 
         # Yield final completion
-        yield CompletionChunk(message=final_message)
+        yield CompletionEvent(content=final_blocks)
 
-    async def count_tokens(self, messages: list[BaseClientMessage]) -> int:
+    async def count_tokens(self, messages: list[ChatMessage]) -> int:
         """Count tokens using tiktoken."""
         encoding = self._get_encoding()
         num_tokens = 0
@@ -763,8 +674,8 @@ class OpenAIClient(BaseModelClient):
             for key, value in msg_dict.items():
                 if isinstance(value, str):
                     num_tokens += len(encoding.encode(value))
-                elif key == "tool_calls" and value:
-                    # Approximate tool calls
+                elif key == "content" and isinstance(value, list):
+                    # We need to serialize blocks to string, or just use json dump
                     num_tokens += len(encoding.encode(json.dumps(value)))
 
         num_tokens += 2  # Every reply is primed with <im_start>assistant

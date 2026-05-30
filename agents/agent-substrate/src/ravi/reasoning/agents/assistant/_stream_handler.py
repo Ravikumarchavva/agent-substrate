@@ -8,24 +8,29 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator, Dict, List, Optional, cast
 
+from ravi.exceptions import GuardrailTripwireError
+from ravi.kernel import CompletionEvent, TextDelta
+from ravi.fabric.llm.client import LLMClient
 from ravi.reasoning.agents.assistant._guardrail_runner import (
+    build_tool_blocked_message,
     check_output_guardrails,
     check_tool_call_guardrails,
-    build_tool_blocked_message,
 )
-from ravi.kernel.tools.parsing import parse_tool_call
-from ravi.exceptions import GuardrailTripwireError
-from ravi.kernel.guardrails.base_guardrail import BaseGuardrail
-from ravi.kernel.messages.client_messages import (
+from ravi.reasoning.agents.assistant._legacy_stubs import (
     AssistantMessage,
+    ParsedToolCall,
     ToolExecutionResultMessage,
 )
-from ravi.kernel.messages._types import (
-    CompletionChunk,
-    TextDeltaChunk,
-)
-from ravi.kernel.llm.base_client import BaseModelClient
 from ravi.shared.observability import global_metrics, logger
+
+# Deleted type stubs
+BaseGuardrail = object
+BaseModelClient = LLMClient  # alias
+CompletionChunk = CompletionEvent  # alias
+TextDeltaChunk = TextDelta  # alias
+
+def parse_tool_call(*args: Any, **kwargs: Any) -> ParsedToolCall:  # type: ignore[return]
+    raise NotImplementedError("parse_tool_call: TODO(agent-migration)")
 
 
 # ---------------------------------------------------------------------------
@@ -151,11 +156,11 @@ async def handle_stream_final_response(
 
     # Structured output extraction
     if response_schema is not None:
-        from ravi.kernel.messages._types import StructuredOutputChunk
+        from ravi.reasoning.agents.assistant._legacy_stubs import StructuredOutputChunk
 
         _parsed = getattr(response, "parsed", None)
         if _parsed is not None:
-            from ravi.kernel.structured.result import StructuredOutputResult
+            from ravi.reasoning.agents.assistant._legacy_stubs import StructuredOutputResult
 
             raw_text = extract_text_fn(response)
             yield StructuredOutputChunk(
@@ -176,7 +181,7 @@ async def handle_stream_final_response(
                 context_messages,
                 response_format=response_schema,
             )
-            from ravi.kernel.structured.result import StructuredOutputResult as _SOR
+            from ravi.reasoning.agents.assistant._legacy_stubs import StructuredOutputResult as _SOR
 
             yield StructuredOutputChunk(result=cast(_SOR[Any], structured_result))
 
@@ -232,8 +237,8 @@ async def process_stream_tool_calls(
                 try:
                     _, tool_msg = await asyncio.wait_for(coro, timeout=tool_timeout)
                 except asyncio.TimeoutError:
-                    from ravi.kernel.messages.content import TextBlock
-                    from ravi.kernel.messages.client_messages import (
+                    from ravi.kernel.content import TextBlock
+                    from ravi.reasoning.agents.assistant._legacy_stubs import (
                         ToolExecutionResultMessage,
                     )
 

@@ -8,18 +8,16 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional, 
 from google import genai
 from google.genai import types as genai_types
 
-from ravi.kernel.llm.base_client import (
-    BaseModelClient,
-    GenerateResult,
-    ModelStreamEvent,
+import uuid
+from ravi.fabric.llm.client import LLMClient
+from ravi.kernel import ChatMessage, ContentBlock
+from ravi.kernel.content import (
+    TextBlock,
+    ToolUseBlock,
+    DataBlock,
 )
-from ravi.kernel.messages.base_message import BaseClientMessage, UsageStats
-from ravi.kernel.messages._types import MediaType
-from ravi.kernel.messages.client_messages import (
-    AssistantMessage,
-    ToolCallMessage,
-)
-from ravi.kernel.messages.encoders.gemini import (
+from ravi.kernel.stream import TextDelta, CompletionEvent
+from ravi.integrations.llm.encoders.gemini import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
 )
@@ -30,7 +28,7 @@ if TYPE_CHECKING:
 logger = setup_logging()
 
 
-class GeminiClient(BaseModelClient):
+class GeminiClient(LLMClient):
     """Google Gemini API client — text and vision.
 
     Uses the ``google-genai`` SDK for all operations:
@@ -49,7 +47,9 @@ class GeminiClient(BaseModelClient):
         max_tokens: Optional[int] = None,
         **kwargs: Any,
     ):
-        super().__init__(model, temperature, max_tokens, **kwargs)
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
 
@@ -62,7 +62,7 @@ class GeminiClient(BaseModelClient):
     # ── Private helpers — delegates to ``core.messages.encoders.gemini`` ─────
 
     def _serialize_messages(
-        self, messages: list[BaseClientMessage]
+        self, messages: list[ChatMessage]
     ) -> tuple[str, list[genai_types.Content]]:
         """Serialise framework messages into (system_instruction, contents).
 
@@ -166,14 +166,14 @@ class GeminiClient(BaseModelClient):
 
     async def generate(
         self,
-        messages: list[BaseClientMessage],
+        messages: list[ChatMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
         system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> GenerateResult:
+    ) -> list[ContentBlock]:
         """Generate a single response from Gemini using GenerateContent API."""
         _, contents = self._serialize_messages(messages)
         system_instruction = system_instructions
@@ -210,78 +210,53 @@ class GeminiClient(BaseModelClient):
         )
 
         # Extract text and tool calls
-        text_parts: list[str] = []
-        tool_calls_obj: Optional[list[ToolCallMessage]] = None
+        final_blocks: list[ContentBlock] = []
+        has_tool_calls = False
 
         if response.candidates:
             candidate = response.candidates[0]
             if candidate.content and candidate.content.parts:
                 for part in candidate.content.parts:
                     if part.text:
-                        text_parts.append(part.text)
+                        final_blocks.append(TextBlock(text=part.text))
                     elif part.function_call:
-                        if tool_calls_obj is None:
-                            tool_calls_obj = []
+                        has_tool_calls = True
                         fc = part.function_call
-                        tool_calls_obj.append(
-                            ToolCallMessage(
-                                name=fc.name or "gemini_tool",
+                        final_blocks.append(
+                            ToolUseBlock(
+                                call_id=str(uuid.uuid4()),
+                                tool_name=fc.name or "gemini_tool",
                                 arguments=dict(fc.args) if fc.args else {},
                             )
                         )
 
-        final_text = "\n".join(text_parts) if text_parts else ""
-        final_content: Optional[list[MediaType]] = [final_text] if final_text else None
-
-        # Usage
-        usage_dict = None
-        if response.usage_metadata:
-            um = response.usage_metadata
-            usage_dict = UsageStats(
-                prompt_tokens=um.prompt_token_count or 0,
-                completion_tokens=um.candidates_token_count or 0,
-                total_tokens=um.total_token_count or 0,
-            )
-
-        finish_reason = "stop"
-        if tool_calls_obj:
-            finish_reason = "tool_calls"
-
-        msg = AssistantMessage(
-            role="assistant",
-            content=final_content,
-            tool_calls=tool_calls_obj,
-            usage=usage_dict,
-            finish_reason=finish_reason,
-        )
-
         # Structured output parsing
-        if response_format is not None and final_text and not tool_calls_obj:
-            try:
-                msg.parsed = response_format.model_validate_json(final_text)
-            except Exception:
-                logger.debug(
-                    "Failed to parse structured output from Gemini: %s",
-                    final_text[:200],
-                )
+        if response_format is not None and not has_tool_calls:
+            text_blocks = [b.text for b in final_blocks if isinstance(b, TextBlock)]
+            final_text = "".join(text_blocks)
+            if final_text:
+                try:
+                    parsed_obj = response_format.model_validate_json(final_text)
+                    final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
+                except Exception:
+                    logger.debug(
+                        "Failed to parse structured output from Gemini: %s",
+                        final_text[:200],
+                    )
 
-        return msg
+        return final_blocks
 
     async def generate_stream(
         self,
-        messages: list[BaseClientMessage],
+        messages: list[ChatMessage],
         tools: Optional[list[dict[str, Any]]] = None,
         *,
         system_instructions: str = "",
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[ModelStreamEvent]:
-        """Generate a streaming response from Gemini.
-
-        Yields TextDeltaChunk objects, then a final CompletionChunk.
-        """
-        from ravi.kernel.messages._types import TextDeltaChunk, CompletionChunk
+    ) -> AsyncIterator[TextDelta | CompletionEvent]:
+        """Generate a streaming response from Gemini."""
 
         _, contents = self._serialize_messages(messages)
         system_instruction = system_instructions
@@ -309,10 +284,7 @@ class GeminiClient(BaseModelClient):
 
         # Accumulate for final message
         text_parts: list[str] = []
-        tool_calls_obj: Optional[list[ToolCallMessage]] = None
-        prompt_tokens = 0
-        completion_tokens = 0
-        total_tokens = 0
+        collected_tool_calls: list[ToolUseBlock] = []
 
         async for chunk in await self.client.aio.models.generate_content_stream(
             model=kwargs.get("model", self.model),
@@ -325,59 +297,43 @@ class GeminiClient(BaseModelClient):
                     for part in candidate.content.parts:
                         if part.text:
                             text_parts.append(part.text)
-                            yield TextDeltaChunk(text=part.text)
+                            yield TextDelta(text=part.text)
                         elif part.function_call:
-                            if tool_calls_obj is None:
-                                tool_calls_obj = []
                             fc = part.function_call
-                            tool_calls_obj.append(
-                                ToolCallMessage(
-                                    name=fc.name or "gemini_tool",
+                            collected_tool_calls.append(
+                                ToolUseBlock(
+                                    call_id=str(uuid.uuid4()),
+                                    tool_name=fc.name or "gemini_tool",
                                     arguments=dict(fc.args) if fc.args else {},
                                 )
                             )
 
-            if chunk.usage_metadata:
-                um = chunk.usage_metadata
-                prompt_tokens = um.prompt_token_count or 0
-                completion_tokens = um.candidates_token_count or 0
-                total_tokens = um.total_token_count or 0
-
         # Build final message
         final_text = "".join(text_parts) if text_parts else ""
-        final_content: Optional[list[MediaType]] = [final_text] if final_text else None
+        final_blocks: list[ContentBlock] = []
 
-        finish_reason = "stop"
-        if tool_calls_obj:
-            finish_reason = "tool_calls"
-
-        usage_dict = UsageStats(
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-        )
-
-        final_message = AssistantMessage(
-            role="assistant",
-            content=final_content,
-            tool_calls=tool_calls_obj,
-            usage=usage_dict,
-            finish_reason=finish_reason,
-        )
+        if final_text:
+            final_blocks.append(TextBlock(text=final_text))
+            
+        has_tool_calls = False
+        if collected_tool_calls:
+            has_tool_calls = True
+            final_blocks.extend(collected_tool_calls)
 
         # Structured output parsing
-        if response_format is not None and final_text and not tool_calls_obj:
+        if response_format is not None and final_text and not has_tool_calls:
             try:
-                final_message.parsed = response_format.model_validate_json(final_text)
+                parsed_obj = response_format.model_validate_json(final_text)
+                final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
             except Exception:
                 logger.debug(
                     "Stream: failed to parse structured output from Gemini: %s",
                     final_text[:200],
                 )
 
-        yield CompletionChunk(message=final_message)
+        yield CompletionEvent(content=final_blocks)
 
-    async def count_tokens(self, messages: list[BaseClientMessage]) -> int:
+    async def count_tokens(self, messages: list[ChatMessage]) -> int:
         """Count tokens using Gemini's CountTokens API."""
         _, contents = self._serialize_messages(messages)
         try:

@@ -10,8 +10,8 @@ from ravi.logger import setup_logging
 from pathlib import Path
 from typing import Any
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
 
@@ -50,7 +50,6 @@ class DocumentAnalyzerTool:
                 "required": ["file_path", "action"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SAFE,
             category="data/exploration",
             tags=[
                 "document",
@@ -73,7 +72,7 @@ class DocumentAnalyzerTool:
     ) -> ToolExecutionResult:
         path = Path(file_path)
         if not path.exists():
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"File not found: {file_path}")],
                 is_error=True,
             )
@@ -82,7 +81,7 @@ class DocumentAnalyzerTool:
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
         except Exception as exc:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Error reading file: {exc}")],
                 is_error=True,
             )
@@ -95,7 +94,7 @@ class DocumentAnalyzerTool:
             display_content += f"\n\n... [truncated, total {len(content)} chars]"
 
         if action == "extract":
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=display_content)],
                 app_data={
                     "file": str(path),
@@ -106,7 +105,7 @@ class DocumentAnalyzerTool:
 
         if action in ("summarize", "question"):
             if self._model_client is None:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(
                             text=f"LLM not configured for {action}. Here is the raw content:\n\n{display_content}"
@@ -119,7 +118,7 @@ class DocumentAnalyzerTool:
                 user_msg = display_content
             else:
                 if not question.strip():
-                    return ToolResult(
+                    return ToolExecutionResult(
                         content=[
                             TextBlock(
                                 text="Please provide a 'question' for the question action."
@@ -130,24 +129,22 @@ class DocumentAnalyzerTool:
                 system = "Answer the user's question based on the document content."
                 user_msg = f"Document:\n{display_content}\n\nQuestion: {question}"
 
-            from ravi.kernel.messages.client_messages import (
-                UserMessage,
-            )
+            from ravi.kernel import ChatMessage, TextBlock as _TB
 
-            messages = [UserMessage(content=[user_msg])]
-            response = await self._model_client.generate_text(
+            messages = [ChatMessage(role="user", content=[_TB(text=user_msg)])]
+            response = await self._model_client.generate(
                 messages,
-                system_instructions=system,
+                system=system,
             )
             answer = ""
-            if response.content:
-                answer = " ".join(str(c) for c in response.content if c)
-            return ToolResult(
+            if response:
+                answer = " ".join(getattr(b, "text", "") for b in response if hasattr(b, "text"))
+            return ToolExecutionResult(
                 content=[TextBlock(text=answer or "No response generated.")],
                 app_data={"file": str(path), "action": action},
             )
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=f"Unknown action: {action!r}")],
             is_error=True,
         )

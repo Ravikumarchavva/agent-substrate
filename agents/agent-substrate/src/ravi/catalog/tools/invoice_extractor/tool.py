@@ -20,8 +20,8 @@ from ravi.logger import setup_logging
 from pathlib import Path
 from typing import Any
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
 
@@ -69,7 +69,6 @@ class InvoiceExtractorTool:
                 "required": ["file_path"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SAFE,
             category="data/extraction",
             tags=[
                 "invoice",
@@ -93,7 +92,7 @@ class InvoiceExtractorTool:
     ) -> ToolExecutionResult:
         path = Path(file_path)
         if not path.exists():
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"File not found: {file_path}")],
                 is_error=True,
             )
@@ -105,7 +104,7 @@ class InvoiceExtractorTool:
         if suffix in _PDF_SUFFIXES:
             return self._extract_pdf(path, pages, extract_tables)
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[
                 TextBlock(
                     text=(
@@ -126,7 +125,7 @@ class InvoiceExtractorTool:
         try:
             from PIL import Image
         except ImportError:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(text="Pillow is not installed. Run: uv sync --group optional")
                 ],
@@ -135,7 +134,7 @@ class InvoiceExtractorTool:
         try:
             import pytesseract  # type: ignore[import-unresolved]
         except ImportError:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=(
@@ -150,7 +149,7 @@ class InvoiceExtractorTool:
         try:
             img = Image.open(path)
         except Exception as exc:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Cannot open image: {exc}")],
                 is_error=True,
             )
@@ -171,7 +170,7 @@ class InvoiceExtractorTool:
         if pages is not None:
             selected = [frames[i] for i in pages if 0 <= i < len(frames)]
             if not selected:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(
                             text=(
@@ -203,7 +202,7 @@ class InvoiceExtractorTool:
                 + f"\n\n... [truncated, total {len(full_text)} chars]"
             )
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=full_text)],
             app_data={
                 "file": str(path),
@@ -225,7 +224,7 @@ class InvoiceExtractorTool:
         try:
             import pdfplumber  # type: ignore[import-unresolved]
         except ImportError:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text="pdfplumber is not installed. Run: uv sync --group optional"
@@ -240,7 +239,7 @@ class InvoiceExtractorTool:
             )
         except Exception as exc:
             logger.exception("PDF extraction failed for %s", path)
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"PDF extraction error: {exc}")],
                 is_error=True,
             )
@@ -264,7 +263,7 @@ class InvoiceExtractorTool:
             )
 
             if not target_pages:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(
                             text=(
@@ -307,7 +306,7 @@ class InvoiceExtractorTool:
                     )
             output_parts.append("\n".join(table_lines))
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text="\n".join(output_parts))],
             app_data={
                 "file": str(path),

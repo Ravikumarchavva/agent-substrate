@@ -1,29 +1,15 @@
-"""Schema validation middleware.
-
-Validates the LLM's output against a Pydantic model.  If validation
-fails, it can optionally retry (by re-raising to trigger the
-``RetryMiddleware`` or by flagging the result for upstream handling).
-"""
-
 from __future__ import annotations
-from ravi.logger import setup_logging
 
 from typing import Any
 
-from ravi.kernel.middleware.base import BaseMiddleware, MiddlewareContext
+from ravi.logger import setup_logging
+from ravi.reasoning.middleware._contracts import MiddlewareContext
 
 logger = setup_logging()
 
 
-class SchemaValidatorMiddleware(BaseMiddleware):
-    """Validates LLM output against ``ctx.response_schema``.
-
-    Placed in ``after()`` — checks whether the result text conforms to the
-    expected Pydantic schema and attaches ``ctx.metadata["schema_valid"]``.
-    """
-
-    def __init__(self, *, name: str = "schema_validator") -> None:
-        super().__init__(name)
+class SchemaValidatorMiddleware:
+    """Validates LLM output against a Pydantic schema stored in ctx.response_schema."""
 
     async def before(self, ctx: MiddlewareContext) -> MiddlewareContext:
         return ctx
@@ -32,14 +18,10 @@ class SchemaValidatorMiddleware(BaseMiddleware):
         schema = ctx.response_schema
         if schema is None:
             return result
-
-        # Try to validate from the parsed field on AssistantMessage
         parsed = getattr(result, "parsed", None)
         if parsed is not None:
             ctx.metadata["schema_valid"] = True
             return result
-
-        # Try to validate from the text content
         content = getattr(result, "content", None)
         if content and isinstance(content, list) and len(content) > 0:
             text = content[0] if isinstance(content[0], str) else ""
@@ -50,7 +32,6 @@ class SchemaValidatorMiddleware(BaseMiddleware):
                     ctx.metadata["schema_valid"] = True
                     return result
                 except Exception as exc:
-                    logger.warning(f"SchemaValidator: validation failed: {exc}")
+                    logger.warning("SchemaValidator: validation failed: %s", exc)
                     ctx.metadata["schema_valid"] = False
-
         return result

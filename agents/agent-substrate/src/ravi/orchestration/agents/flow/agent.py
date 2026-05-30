@@ -33,13 +33,13 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Callable, List, Optional, Union
 from uuid import uuid4
 
-from ravi.fabric.agents_base.agent_result import (
+from ravi.reasoning.agents.assistant._legacy_stubs import (
     AgentRunResult,
     AggregatedUsage,
     RunStatus,
+    MemoryScope,
 )
 from ravi.fabric.actors.actor import ActorAgent
-from ravi.kernel.memory.memory_scope import MemoryScope
 from ravi.reasoning.hooks.manager import HookEvent, HookManager
 from ravi.shared.observability import logger
 
@@ -262,7 +262,7 @@ class SequentialFlow(BaseFlow):
                 yield chunk
 
                 # Accumulate text for next step's input
-                from ravi.kernel.messages._types import TextDeltaChunk
+                from ravi.reasoning.agents.assistant._legacy_stubs import TextDeltaChunk
 
                 if isinstance(chunk, TextDeltaChunk):
                     partial_chunks.append(chunk.text)

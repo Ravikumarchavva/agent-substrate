@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Protocol, AsyncIterator
+from typing import AsyncIterator, Protocol
 
-from ravi.kernel import ContentBlock, Tool, ChatMessage
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.kernel import ChatMessage, ContentBlock, Tool
+from ravi.kernel.stream import CompletionEvent, ReasoningDelta, TextDelta
 
 
 class LLMClient(Protocol):

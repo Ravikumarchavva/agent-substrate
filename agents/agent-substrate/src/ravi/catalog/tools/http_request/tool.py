@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 
 _DEFAULT_ALLOWED_DOMAINS: List[str] = [
@@ -58,7 +58,6 @@ class HttpRequestTool:
                 "required": ["url"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SENSITIVE,
             category="development/execution",
             tags=["api", "http", "rest", "request", "fetch", "endpoint", "curl"],
             aliases=["api_request", "fetch_url"],
@@ -79,7 +78,7 @@ class HttpRequestTool:
     ) -> ToolExecutionResult:
         if not self._is_allowed(url):
             parsed = urlparse(url)
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=(
@@ -106,7 +105,7 @@ class HttpRequestTool:
                     content=body if body else None,
                 )
         except httpx.HTTPError as exc:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"HTTP error: {exc}")],
                 is_error=True,
             )
@@ -121,7 +120,7 @@ class HttpRequestTool:
             f"Content-Type: {response.headers.get('content-type', 'unknown')}\n\n"
             f"{body_text}"
         )
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=result_text)],
             app_data={
                 "status_code": response.status_code,

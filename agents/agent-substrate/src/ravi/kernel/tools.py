@@ -29,8 +29,8 @@ class ToolCallRequest(BaseModel):
 class ToolExecutionResult(BaseModel):
     """Result from a single tool execution."""
 
-    call_id: str
-    name: str
+    call_id: str = ""
+    name: str = ""
     content: list[ContentBlock] = Field(default_factory=list)
     is_error: bool = False
     metadata: JsonObject = Field(default_factory=dict)

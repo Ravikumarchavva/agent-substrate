@@ -9,9 +9,15 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
-from ravi.kernel.messages.client_messages import ToolCallMessage, UserMessage, AssistantMessage
-from ravi.kernel.messages.base_message import BaseClientMessage
-from ravi.kernel.messages._types import MediaType
+from ravi.reasoning.agents.assistant._legacy_stubs import (
+    AssistantMessage,
+    UserMessage,
+)
+
+# Deleted types — kept as Any for body compatibility
+BaseClientMessage = object
+ToolCallMessage = object
+MediaType = object
 
 
 # ---------------------------------------------------------------------------

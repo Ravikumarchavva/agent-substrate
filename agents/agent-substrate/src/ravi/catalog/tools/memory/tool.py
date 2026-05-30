@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.kernel.messages.content import TextBlock
+from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel import TextBlock
 
 
 class MemoryTool:
@@ -43,7 +43,6 @@ class MemoryTool:
                 "required": ["action"],
                 "additionalProperties": False,
             },
-            risk=ToolRisk.SAFE,
             category="productivity",
             tags=["memory", "note", "remember", "store", "recall", "persist"],
             aliases=["notes", "remember"],
@@ -57,7 +56,7 @@ class MemoryTool:
         value: str = "",
     ) -> ToolExecutionResult:
         if self._redis is None:
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(text="Memory tool is not configured (no Redis client).")
                 ],
@@ -68,30 +67,30 @@ class MemoryTool:
 
         if action == "save":
             if not key.strip() or not value.strip():
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[
                         TextBlock(text="Both 'key' and 'value' are required for save.")
                     ],
                     is_error=True,
                 )
             await self._redis.set(f"{prefix}{key}", value)
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Saved note '{key}'.")],
             )
 
         if action == "recall":
             if not key.strip():
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text="'key' is required for recall.")],
                     is_error=True,
                 )
             stored = await self._redis.get(f"{prefix}{key}")
             if stored is None:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text=f"No note found for key '{key}'.")],
                 )
             text = stored.decode() if isinstance(stored, bytes) else str(stored)
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"{key}: {text}")],
             )
 
@@ -101,10 +100,10 @@ class MemoryTool:
                 name = k.decode() if isinstance(k, bytes) else str(k)
                 keys.append(name.removeprefix(prefix))
             if not keys:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text="No notes stored.")],
                 )
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[
                     TextBlock(
                         text=f"Stored notes ({len(keys)}): {', '.join(sorted(keys))}"
@@ -114,20 +113,20 @@ class MemoryTool:
 
         if action == "delete":
             if not key.strip():
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text="'key' is required for delete.")],
                     is_error=True,
                 )
             deleted = await self._redis.delete(f"{prefix}{key}")
             if deleted:
-                return ToolResult(
+                return ToolExecutionResult(
                     content=[TextBlock(text=f"Deleted note '{key}'.")],
                 )
-            return ToolResult(
+            return ToolExecutionResult(
                 content=[TextBlock(text=f"Note '{key}' not found.")],
             )
 
-        return ToolResult(
+        return ToolExecutionResult(
             content=[TextBlock(text=f"Unknown action: {action!r}")],
             is_error=True,
         )

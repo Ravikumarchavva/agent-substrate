@@ -24,8 +24,7 @@ from ravi.platform.rag.chunking import get_chunker
 from ravi.platform.rag.vector_store import BaseVectorStore, Document, SearchResult
 
 if TYPE_CHECKING:
-    from ravi.kernel.llm.base_client import BaseModelClient
-    from ravi.kernel.llm.base_embedding_client import BaseEmbeddingClient
+    from ravi.fabric.llm import LLMClient, BaseEmbeddingClient
 
 logger = setup_logging()
 
@@ -157,7 +156,7 @@ class RAGPipeline:
         question: str,
         *,
         collection: str = "default",
-        model_client: BaseModelClient,
+        model_client: LLMClient,
         limit: int = 5,
         system: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
@@ -175,7 +174,7 @@ class RAGPipeline:
         Returns:
             The generated answer string.
         """
-        from ravi.kernel.messages.client_messages import UserMessage
+        from ravi.kernel import ChatMessage, TextBlock
 
         results = await self.query(
             question,
@@ -197,15 +196,14 @@ class RAGPipeline:
         )
 
         messages = [
-            UserMessage(role="user", content=[question]),
+            ChatMessage(role="user", content=[TextBlock(text=question)]),
         ]
 
-        response = await model_client.generate_text(
+        response = await model_client.generate(
             messages,
-            system_instructions=f"{system_prompt}\n\nContext:\n{context_block}",
+            system=f"{system_prompt}\n\nContext:\n{context_block}",
         )
 
-        # Extract text from AssistantMessage
-        if response.content:
-            return "".join(part for part in response.content if isinstance(part, str))
-        return ""
+        # Extract text from response blocks
+        text_parts = [b.text for b in response if isinstance(b, TextBlock)]
+        return "".join(text_parts)

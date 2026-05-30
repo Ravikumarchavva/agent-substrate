@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from ravi.kernel.memory._lineage import (
+from ravi.reasoning.agents.assistant._legacy_stubs import (
     LineageNotFoundError,
     LineageRecord,
     LineageStore,

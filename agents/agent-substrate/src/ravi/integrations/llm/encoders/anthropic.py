@@ -1,6 +1,6 @@
 """Anthropic Messages API encoder.
 
-Converts framework ``BaseClientMessage`` instances directly to Anthropic's
+Converts framework ``ChatMessage`` instances directly to Anthropic's
 Messages API format without going through an OpenAI intermediate dict.
 
 Public API::
@@ -18,18 +18,18 @@ from PIL import Image
 
 from ravi.integrations.llm.encoders._media import bytes_to_base64, pil_to_base64_png
 
-from ravi.kernel.messages._types import (
-    AudioContent,
-    ImageContent,
-    VideoContent,
-    DocumentContent,
-)
-from ravi.kernel.messages.base_message import BaseClientMessage
-from ravi.kernel.messages.client_messages import (
-    AssistantMessage,
-    SystemMessage,
-    ToolExecutionResultMessage,
-    UserMessage,
+from ravi.kernel import ChatMessage, ContentBlock
+from ravi.kernel.content import (
+    AudioBlock,
+    ImageBlock,
+    VideoBlock,
+    DocumentBlock,
+    TextBlock,
+    ToolUseBlock,
+    ToolResultBlock,
+    ErrorBlock,
+    DataBlock,
+    CodeBlock,
 )
 
 
@@ -48,8 +48,8 @@ def _encode_image(img: Image.Image) -> dict[str, Any]:
     }
 
 
-def _encode_image_content(ic: ImageContent) -> dict[str, Any]:
-    """ImageContent → Anthropic image block."""
+def _encode_image_content(ic: ImageBlock) -> dict[str, Any]:
+    """ImageBlock → Anthropic image block."""
     if ic.url:
         return {"type": "image", "source": {"type": "url", "url": ic.url}}
     if ic.file_id:
@@ -65,23 +65,26 @@ def _encode_image_content(ic: ImageContent) -> dict[str, Any]:
 def _encode_media_item(
     item: str
     | Image.Image
-    | ImageContent
-    | AudioContent
-    | VideoContent
-    | DocumentContent,
+    | ImageBlock
+    | AudioBlock
+    | VideoBlock
+    | DocumentBlock
+    | TextBlock,
 ) -> dict[str, Any]:
-    """Encode a single MediaType item to Anthropic content block."""
+    """Encode a single block to Anthropic content block."""
+    if isinstance(item, TextBlock):
+        return _encode_text(item.text)
     if isinstance(item, Image.Image):
         return _encode_image(item)
-    if isinstance(item, ImageContent):
+    if isinstance(item, ImageBlock):
         return _encode_image_content(item)
-    if isinstance(item, AudioContent):
+    if isinstance(item, AudioBlock):
         # Anthropic doesn't support audio natively — text fallback
         return _encode_text("[Audio content]")
-    if isinstance(item, VideoContent):
+    if isinstance(item, VideoBlock):
         # Anthropic doesn't support video natively — text fallback
         return _encode_text("[Video content]")
-    if isinstance(item, DocumentContent):
+    if isinstance(item, DocumentBlock):
         # Anthropic supports PDF documents natively!
         if item.media_type == "application/pdf" and item.data:
             return {
@@ -102,31 +105,32 @@ def _encode_media_item(
 # ── Message-level encoding ───────────────────────────────────────────────────
 
 
-def _encode_user(msg: UserMessage) -> dict[str, Any]:
-    """UserMessage → Anthropic user message."""
-    content = [_encode_media_item(item) for item in msg.content]
+def _encode_user(msg: ChatMessage) -> dict[str, Any]:
+    """User ChatMessage → Anthropic user message."""
+    content = []
+    for item in msg.content:
+        if isinstance(item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock, TextBlock)):
+            content.append(_encode_media_item(item))
     return {"role": "user", "content": content}
 
 
-def _encode_assistant(msg: AssistantMessage) -> dict[str, Any] | None:
-    """AssistantMessage → Anthropic assistant message with tool_use blocks."""
+def _encode_assistant(msg: ChatMessage) -> dict[str, Any] | None:
+    """Assistant ChatMessage → Anthropic assistant message with tool_use blocks."""
     blocks: list[dict[str, Any]] = []
 
-    if msg.content:
-        for item in msg.content:
-            if isinstance(item, str) and item.strip():
-                blocks.append(_encode_text(item))
-
-    if msg.tool_calls:
-        for tc in msg.tool_calls:
-            tc_args = tc.arguments
+    for item in msg.content:
+        if isinstance(item, TextBlock):
+            if item.text.strip():
+                blocks.append(_encode_text(item.text))
+        elif isinstance(item, ToolUseBlock):
+            tc_args = item.arguments
             if isinstance(tc_args, str):
                 tc_args = json.loads(tc_args)
             blocks.append(
                 {
                     "type": "tool_use",
-                    "id": tc.tool_call_id,
-                    "name": tc.name,
+                    "id": item.call_id,
+                    "name": item.tool_name,
                     "input": tc_args,
                 }
             )
@@ -180,33 +184,29 @@ def _get_block_text(block: Any) -> str:
     return ""
 
 
-def _encode_tool_result(msg: ToolExecutionResultMessage) -> dict[str, Any]:
-    """ToolExecutionResultMessage → Anthropic tool_result in user message."""
+def _encode_tool_result(block: ToolResultBlock) -> dict[str, Any]:
+    """ToolResultBlock → Anthropic tool_result in user message."""
     content_blocks: list[dict[str, Any]] = []
 
-    # 1. Add text content from content blocks
-    if msg.content:
-        if isinstance(msg.content, list):
-            for block in msg.content:
-                text = _get_block_text(block)
+    # Add text and media content from content blocks
+    if block.content:
+        for item in block.content:
+            if isinstance(item, TextBlock):
+                content_blocks.append(_encode_text(item.text))
+            elif isinstance(item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock)):
+                try:
+                    content_blocks.append(_encode_media_item(item))
+                except Exception as e:
+                    import logging
+                    logging.getLogger("ravi.kernel.messages.encoders.anthropic").warning(
+                        "Failed to encode media item for Anthropic tool result: %s", e
+                    )
+            elif isinstance(item, (DataBlock, CodeBlock, ErrorBlock)):
+                text = _get_block_text(item)
                 if text:
                     content_blocks.append(_encode_text(text))
-        elif isinstance(msg.content, str):
-            content_blocks.append(_encode_text(msg.content))
 
-    # 2. Add media content from msg.media
-    if msg.media:
-        for item in msg.media:
-            try:
-                content_blocks.append(_encode_media_item(item))
-            except Exception as e:
-                import logging
-
-                logging.getLogger("ravi.kernel.messages.encoders.anthropic").warning(
-                    "Failed to encode media item for Anthropic tool result: %s", e
-                )
-
-    # 3. Fallback to empty string if no content blocks were generated
+    # Fallback to empty string if no content blocks were generated
     if not content_blocks:
         content_blocks.append(_encode_text(""))
 
@@ -215,7 +215,7 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> dict[str, Any]:
         "content": [
             {
                 "type": "tool_result",
-                "tool_use_id": msg.tool_call_id,
+                "tool_use_id": block.call_id,
                 "content": content_blocks,
             }
         ],
@@ -226,7 +226,7 @@ def _encode_tool_result(msg: ToolExecutionResultMessage) -> dict[str, Any]:
 
 
 def encode_messages(
-    messages: list[BaseClientMessage],
+    messages: list[ChatMessage],
 ) -> tuple[str, list[dict[str, Any]]]:
     """Encode framework messages to Anthropic Messages API format.
 
@@ -238,16 +238,18 @@ def encode_messages(
     conversation: list[dict[str, Any]] = []
 
     for msg in messages:
-        if isinstance(msg, SystemMessage):
-            system_parts.append(msg.content)
-        elif isinstance(msg, UserMessage):
+        if msg.role == "system":
+            system_parts.extend(b.text for b in msg.content if isinstance(b, TextBlock))
+        elif msg.role == "user":
             conversation.append(_encode_user(msg))
-        elif isinstance(msg, AssistantMessage):
+        elif msg.role == "assistant":
             encoded = _encode_assistant(msg)
             if encoded:
                 conversation.append(encoded)
-        elif isinstance(msg, ToolExecutionResultMessage):
-            conversation.append(_encode_tool_result(msg))
+        elif msg.role == "tool":
+            for block in msg.content:
+                if isinstance(block, ToolResultBlock):
+                    conversation.append(_encode_tool_result(block))
 
     return "\n".join(system_parts).strip(), conversation
 

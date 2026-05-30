@@ -30,14 +30,14 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.reasoning.agents.assistant.agent import AssistantAgent
-from ravi.fabric.agents_base.agent_context import AgentContext
-from ravi.reasoning.memory.context.sliding_window import SlidingWindowStrategy
+from ravi.fabric.context import (
+    AgentContext,
+    HistoryProvider,
+    SlidingWindowCompaction,
+)
 from ravi.catalog.tools.human_input.tool import ToolApprovalHandler
-from ravi.kernel.memory.history_provider import HistoryProvider
-from ravi.kernel.messages.client_messages import AssistantMessage
-from ravi.kernel.llm.base_client import BaseModelClient
-from ravi.kernel.runtime import AgentRuntime
-from ravi.kernel.tools.base_tool import BaseTool
+from ravi.fabric.llm import LLMClient as BaseModelClient
+from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, ToolResultBlock, AgentRuntime, Tool
 from ravi.shared.execution import create_assistant_agent, load_session_memory
 
 from ravi.server.services import (
@@ -53,7 +53,7 @@ async def load_agent_for_thread(
     thread_id: uuid.UUID,
     *,
     model_client: BaseModelClient,
-    tools: List[BaseTool],
+    tools: List[Tool],
     system_instructions: str,
     history: Optional[HistoryProvider] = None,
     model_context_window: int = 40,
@@ -102,7 +102,7 @@ async def load_agent_for_thread(
     )
     context = AgentContext(
         history=memory,
-        compaction_strategies=[SlidingWindowStrategy(max_messages=model_context_window)]
+        compaction_strategies=[SlidingWindowCompaction(max_messages=model_context_window)]
     )
 
     if runtime is None:
@@ -152,7 +152,7 @@ async def persist_user_message(
 async def persist_assistant_message(
     db: AsyncSession,
     thread_id: uuid.UUID,
-    message: AssistantMessage,
+    message: ChatMessage | Any,
     *,
     parent_id: Optional[uuid.UUID] = None,
     tool_meta_map: Optional[Dict[str, Dict]] = None,
@@ -167,21 +167,30 @@ async def persist_assistant_message(
     """
     # Serialize tool calls for storage
     generation: Dict[str, Any] = {
-        "finish_reason": message.finish_reason,
+        "finish_reason": getattr(message, "finish_reason", "stop"),
     }
-    if message.usage:
+    usage = getattr(message, "usage", None)
+    if usage:
         generation["usage"] = {
-            "prompt_tokens": message.usage.prompt_tokens,
-            "completion_tokens": message.usage.completion_tokens,
-            "total_tokens": message.usage.total_tokens,
+            "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+            "completion_tokens": getattr(usage, "completion_tokens", 0),
+            "total_tokens": getattr(usage, "total_tokens", 0),
         }
-    if message.tool_calls:
+
+    tool_calls = getattr(message, "tool_calls", None)
+    if not tool_calls and hasattr(message, "content") and isinstance(message.content, list):
+        tool_calls = [
+            block for block in message.content if isinstance(block, ToolUseBlock)
+        ]
+
+    if tool_calls:
         serialized_tcs = []
-        for tc in message.tool_calls:
-            tc_data = tc.model_dump(mode="json")
+        for tc in tool_calls:
+            tc_name = getattr(tc, "name", getattr(tc, "tool_name", "unknown"))
+            tc_data = tc.model_dump(mode="json") if hasattr(tc, "model_dump") else {}
             # Enrich with _meta UI info for MCP App restoration
-            if tool_meta_map and tc.name in tool_meta_map:
-                meta = tool_meta_map[tc.name]
+            if tool_meta_map and tc_name in tool_meta_map:
+                meta = tool_meta_map[tc_name]
                 ui_info = meta.get("ui", {})
                 resource_uri = ui_info.get("resourceUri", "")
                 if resource_uri:
@@ -198,9 +207,14 @@ async def persist_assistant_message(
         generation["tool_calls"] = serialized_tcs
 
     output_text = None
-    if message.content:
-        # Extract text from multimodal content list
-        texts = [c for c in message.content if isinstance(c, str)]
+    if hasattr(message, "content") and message.content:
+        # Extract text from multimodal content list or blocks
+        texts = []
+        for c in message.content:
+            if isinstance(c, TextBlock):
+                texts.append(c.text)
+            elif isinstance(c, str):
+                texts.append(c)
         output_text = "\n".join(texts) if texts else None
 
     step = await create_step(

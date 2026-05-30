@@ -2,29 +2,22 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
-from ravi.kernel.guardrails.base_guardrail import (
-    BaseGuardrail,
+from ravi.reasoning.guardrails._contracts import (
     GuardrailContext,
     GuardrailResult,
     GuardrailType,
+    _fail,
+    _pass,
 )
-from ravi.kernel.plugin import register_guardrail
 
 
-@register_guardrail("llm_judge")
-class LLMJudgeGuardrail(BaseGuardrail):
+class LLMJudgeGuardrail:
     """Use a secondary LLM to judge content safety or policy compliance.
 
     The judge prompt must instruct the model to respond with JSON:
     ``{"safe": bool, "reason": str}``
-
-    Args:
-        model_client: A BaseModelClient instance for the judge model.
-        judge_prompt: System prompt for the judge.
-        guardrail_type: INPUT or OUTPUT.
-        tripwire: Hard stop when the judge says unsafe.
     """
 
     name = "llm_judge"
@@ -41,7 +34,7 @@ class LLMJudgeGuardrail(BaseGuardrail):
         self,
         *,
         model_client: Any,
-        judge_prompt: Optional[str] = None,
+        judge_prompt: str | None = None,
         guardrail_type: GuardrailType = GuardrailType.INPUT,
         tripwire: bool = True,
     ):
@@ -52,73 +45,64 @@ class LLMJudgeGuardrail(BaseGuardrail):
 
     async def check(self, ctx: GuardrailContext) -> GuardrailResult:
         text = (
-            ctx.input_text
-            if self.guardrail_type == GuardrailType.INPUT
-            else ctx.output_text
+            ctx.input_text if self.guardrail_type == GuardrailType.INPUT else ctx.output_text
         )
         if not text:
-            return self._pass("No text to judge")
+            return _pass(self.name, self.guardrail_type, "No text to judge")
 
         try:
-            from ravi.kernel.messages.client_messages import UserMessage
+            from ravi.kernel import ChatMessage, TextBlock
 
-            messages = [
-                UserMessage(content=[text]),
-            ]
-            response = await self._model_client.generate_text(
+            messages = [ChatMessage(role="user", content=[TextBlock(text=text)])]
+            response = await self._model_client.generate(
                 messages,
-                system_instructions=self._judge_prompt,
+                system=self._judge_prompt,
             )
-
-            response_text = ""
-            if response.content:
-                response_text = " ".join(
-                    str(c) for c in response.content if isinstance(c, str)
-                )
-
+            response_text = " ".join(
+                b.text for b in response if hasattr(b, "text")
+            )
             judgment = self._parse_judgment(response_text)
 
             if not judgment.get("safe", True):
-                return self._fail(
+                return _fail(
+                    self.name,
+                    self.guardrail_type,
                     f"LLM judge flagged as unsafe: {judgment.get('reason', 'no reason')}",
                     tripwire=self.tripwire,
                     judge_response=judgment,
                 )
-
-            return self._pass(
+            return _pass(
+                self.name,
+                self.guardrail_type,
                 f"LLM judge passed: {judgment.get('reason', 'content is safe')}",
                 judge_response=judgment,
             )
-
         except Exception as e:
-            # Guardrails never raise — fail open on judge errors
-            return self._pass(
-                f"LLM judge error (failing open): {str(e)}",
+            return _pass(
+                self.name,
+                self.guardrail_type,
+                f"LLM judge error (failing open): {e}",
                 error=str(e),
             )
 
     @staticmethod
-    def _parse_judgment(text: str) -> Dict[str, Any]:
-        """Extract JSON from potentially markdown-wrapped LLM response."""
+    def _parse_judgment(text: str) -> dict[str, Any]:
         try:
             return json.loads(text.strip())
         except (json.JSONDecodeError, ValueError):
             pass
-
         json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if json_match:
             try:
                 return json.loads(json_match.group(1))
             except (json.JSONDecodeError, ValueError):
                 pass
-
         json_match = re.search(r"\{[^{}]*\"safe\"[^{}]*\}", text, re.DOTALL)
         if json_match:
             try:
                 return json.loads(json_match.group())
             except (json.JSONDecodeError, ValueError):
                 pass
-
         lower = text.lower()
         if "unsafe" in lower or "not safe" in lower or '"safe": false' in lower:
             return {"safe": False, "reason": text[:200]}

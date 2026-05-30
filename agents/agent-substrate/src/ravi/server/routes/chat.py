@@ -27,14 +27,12 @@ from ravi.integrations.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
-from ravi.kernel.messages import (
+from ravi.reasoning.agents.assistant._legacy_stubs import (
     ImageContent,
     MediaType,
     ReasoningDeltaChunk,
     TextDeltaChunk,
-)
-from ravi.kernel.execution.context import ExecutionContext
-from ravi.kernel.messages.client_messages import (
+    ExecutionContext,
     AssistantMessage,
     ToolExecutionResultMessage,
 )

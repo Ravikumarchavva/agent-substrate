@@ -1,43 +1,30 @@
-"""Audit logging middleware.
-
-Logs every middleware step for debugging and compliance.
-Captures timing, inputs, outputs, and errors.
-"""
-
 from __future__ import annotations
+
 import logging
-from ravi.logger import setup_logging
-
 import time
-from typing import Any, Optional
+from typing import Any
 
-from ravi.kernel.middleware.base import BaseMiddleware, MiddlewareContext
+from ravi.logger import setup_logging
+from ravi.reasoning.middleware._contracts import MiddlewareContext
 
 logger = setup_logging()
 
 
-class AuditLoggerMiddleware(BaseMiddleware):
-    """Logs pre/post execution context for auditing.
+class AuditLoggerMiddleware:
+    """Logs pre/post execution context for auditing."""
 
-    By default logs at DEBUG level.  Set ``log_level`` to ``logging.INFO``
-    for production audit trails.
-    """
-
-    def __init__(
-        self,
-        *,
-        name: str = "audit_logger",
-        log_level: int = logging.DEBUG,
-    ) -> None:
-        super().__init__(name)
+    def __init__(self, *, log_level: int = logging.DEBUG) -> None:
         self.log_level = log_level
 
     async def before(self, ctx: MiddlewareContext) -> MiddlewareContext:
         ctx.metadata["_audit_t0"] = time.monotonic()
         logger.log(
             self.log_level,
-            f"[audit] {ctx.stage.value} START agent={ctx.agent_name!r} "
-            f"tool={ctx.tool_name} input_len={len(ctx.input_text)}",
+            "[audit] %s START agent=%r tool=%s input_len=%d",
+            ctx.stage.value,
+            ctx.agent_name,
+            ctx.tool_name,
+            len(ctx.input_text),
         )
         return ctx
 
@@ -46,18 +33,24 @@ class AuditLoggerMiddleware(BaseMiddleware):
         elapsed_ms = (time.monotonic() - t0) * 1000
         logger.log(
             self.log_level,
-            f"[audit] {ctx.stage.value} END agent={ctx.agent_name!r} "
-            f"tool={ctx.tool_name} elapsed={elapsed_ms:.1f}ms",
+            "[audit] %s END agent=%r tool=%s elapsed=%.1fms",
+            ctx.stage.value,
+            ctx.agent_name,
+            ctx.tool_name,
+            elapsed_ms,
         )
         return result
 
-    async def on_error(self, ctx: MiddlewareContext, error: Exception) -> Optional[Any]:
+    async def on_error(self, ctx: MiddlewareContext, error: Exception) -> None:
         t0 = ctx.metadata.get("_audit_t0", time.monotonic())
         elapsed_ms = (time.monotonic() - t0) * 1000
         logger.log(
             self.log_level,
-            f"[audit] {ctx.stage.value} ERROR agent={ctx.agent_name!r} "
-            f"tool={ctx.tool_name} elapsed={elapsed_ms:.1f}ms "
-            f"error={type(error).__name__}: {error}",
+            "[audit] %s ERROR agent=%r tool=%s elapsed=%.1fms error=%s: %s",
+            ctx.stage.value,
+            ctx.agent_name,
+            ctx.tool_name,
+            elapsed_ms,
+            type(error).__name__,
+            error,
         )
-        return None

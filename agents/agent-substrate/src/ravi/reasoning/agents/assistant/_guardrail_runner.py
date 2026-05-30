@@ -10,27 +10,24 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from ravi.fabric.agents_base.agent_result import (
-    AgentRunResult,
-    AggregatedUsage,
-    RunStatus,
-    StepResult,
-    ToolCallRecord,
-)
-from ravi.kernel.tools.parsing import ParsedToolCall
 from ravi.exceptions import GuardrailTripwireError
-from ravi.kernel.guardrails.base_guardrail import (
-    BaseGuardrail,
+from ravi.kernel import TextBlock
+from ravi.reasoning.guardrails._contracts import (
     GuardrailContext,
     GuardrailResult,
     GuardrailType,
 )
 from ravi.reasoning.guardrails.runner import run_guardrails
-from ravi.kernel.messages.client_messages import (
+from ravi.reasoning.agents.assistant._legacy_stubs import (
+    AgentRunResult,
+    AggregatedUsage,
     AssistantMessage,
+    ParsedToolCall,
+    RunStatus,
+    StepResult,
+    ToolCallRecord,
     ToolExecutionResultMessage,
 )
-from ravi.kernel.messages.content import TextBlock
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +37,7 @@ from ravi.kernel.messages.content import TextBlock
 
 async def check_input_guardrails(
     *,
-    guardrails: List[BaseGuardrail],
+    guardrails: list[object],
     agent_name: str,
     run_id: str,
     input_text: str,
@@ -96,7 +93,7 @@ def build_guardrail_tripped_result(
 
 async def check_output_guardrails(
     *,
-    guardrails: List[BaseGuardrail],
+    guardrails: list[object],
     agent_name: str,
     run_id: str,
     output_text: Optional[str],
@@ -123,8 +120,8 @@ async def check_output_guardrails(
 
 async def check_tool_call_guardrails(
     *,
-    input_guardrails: List[BaseGuardrail],
-    output_guardrails: List[BaseGuardrail],
+    input_guardrails: list[object],
+    output_guardrails: list[object],
     agent_name: str,
     run_id: str,
     parsed: ParsedToolCall,

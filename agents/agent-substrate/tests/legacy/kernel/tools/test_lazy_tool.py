@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.catalog import LazyTool
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.agents.catalog import LazyTool
 
 
 class HeavyDummyTool(BaseTool):

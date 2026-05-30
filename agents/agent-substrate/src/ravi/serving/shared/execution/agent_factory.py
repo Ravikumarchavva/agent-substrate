@@ -6,12 +6,12 @@ from ravi.logger import setup_logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional
 
-from ravi.fabric.context import (
+from ravi.agents.context import (
     HistoryProvider,
     InMemoryHistoryProvider,
     SlidingWindowCompaction as SlidingWindowStrategy,
 )
-from ravi.fabric.llm import LLMClient as BaseModelClient
+from ravi.kernel.llm import LLMClient as BaseModelClient
 from ravi.kernel import (
     ChatMessage,
     TextBlock,
@@ -211,7 +211,7 @@ def create_assistant_agent(
     signature.  Legacy kwargs (guardrails, verbose, session_id, etc.) are
     silently accepted and dropped until L4 guardrails are wired.
     """
-    from ravi.reasoning.agents.assistant.agent import AssistantAgent
+    from ravi.agents.assistant import AssistantAgent
 
     # Resolve compaction: accept SlidingWindowCompaction directly or fall back
     # to a window derived from model_context_window.

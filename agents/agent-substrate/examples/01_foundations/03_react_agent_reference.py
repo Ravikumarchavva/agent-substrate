@@ -20,14 +20,14 @@ import datetime
 import math
 
 from ravi.config import settings
-from ravi.fabric.context import InMemoryHistoryProvider, SlidingWindowCompaction
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.context import InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.runtime.local import LocalRuntime
 from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel import TextBlock, ToolExecutionResult
 from ravi.kernel.stream import CompletionEvent, StreamDone, TextDelta
-from ravi.orchestration.agents.orchestrator.agent import OrchestratorAgent
-from ravi.orchestration.agents.proxy.agent import UserProxyAgent
-from ravi.reasoning.agents.assistant.agent import AgentRunResult, AssistantAgent
+from ravi.agents.orchestration.agents.orchestrator.agent import OrchestratorAgent
+from ravi.agents.orchestration.agents.proxy.agent import UserProxyAgent
+from ravi.agents.reasoning.agents.assistant.agent import AgentRunResult, AssistantAgent
 
 
 # ---------------------------------------------------------------------------

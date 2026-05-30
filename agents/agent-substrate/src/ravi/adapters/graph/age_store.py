@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from ravi.catalog.rag.graph_store import (
+from ravi.capabilities.rag.graph_store import (
     BaseGraphStore,
     Entity,
     Relationship,

@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from ravi.fabric.context import (
+from ravi.agents.context import (
     AgentContext,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel import (
     ChatMessage,
     ContentBlock,
@@ -24,10 +24,10 @@ from ravi.kernel import (
     ToolUseBlock,
 )
 from ravi.kernel.stream import CompletionEvent, StreamDone, TextDelta
-from ravi.reasoning.agents.assistant.agent import AgentRunResult, AssistantAgent
-from ravi.reasoning.guardrails.content_filter import ContentFilterGuardrail
-from ravi.reasoning.guardrails.prompt_injection import PromptInjectionGuardrail
-from ravi.reasoning.guardrails._contracts import GuardrailType
+from ravi.agents.assistant import AgentRunResult, AssistantAgent
+from ravi.agents.guardrails.content_filter import ContentFilterGuardrail
+from ravi.agents.guardrails.prompt_injection import PromptInjectionGuardrail
+from ravi.agents.guardrails._contracts import GuardrailType
 
 
 # ---------------------------------------------------------------------------

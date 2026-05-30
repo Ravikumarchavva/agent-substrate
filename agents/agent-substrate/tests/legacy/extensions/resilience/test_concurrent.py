@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 
-from ravi.fabric.agents_base.agent_result import RunStatus
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
-from ravi.fabric.runtime.local import LocalRuntime
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from ravi.agents.agents_base.agent_result import RunStatus
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.agents.memory.in_memory import InMemoryHistoryProvider
+from ravi.agents.runtime.local import LocalRuntime
+from ravi.agents.reasoning.agents.assistant.agent import AssistantAgent
 
 from tests.fixtures.mock_llm import MockLLMClient, text_turn, tool_turn
 from tests.fixtures.fake_tools import CounterTool

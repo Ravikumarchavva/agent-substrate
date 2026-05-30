@@ -7,7 +7,7 @@ from ravi.kernel.guardrails import (
     GuardrailResult,
     GuardrailType,
 )
-from ravi.reasoning.guardrails import (
+from ravi.agents.reasoning.guardrails import (
     run_guardrails,
     ContentFilterGuardrail,
     PIIDetectionGuardrail,

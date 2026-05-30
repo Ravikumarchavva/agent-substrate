@@ -7,7 +7,7 @@ import os
 import pytest
 import redis as _redis_sync
 
-from ravi.catalog._data_ref import DataRef, DataRefStore
+from ravi.capabilities._data_ref import DataRef, DataRefStore
 
 
 def _redis_available() -> bool:

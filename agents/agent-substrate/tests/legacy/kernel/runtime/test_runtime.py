@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ravi.kernel.contracts import TemporalSemantics
-from ravi.fabric.agents_base.agent_result import AgentRunResult, RunStatus
-from ravi.fabric.actors.actor import ActorAgent
+from ravi.agents.agents_base.agent_result import AgentRunResult, RunStatus
+from ravi.agents.actors.actor import ActorAgent
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.runtime import (
     AgentId,
@@ -24,10 +24,10 @@ from ravi.kernel.runtime import (
     SupervisorEscalation,
     TopicId
 )
-from ravi.fabric.runtime.supervisor import Supervisor
-from ravi.fabric.runtime.dispatcher import Dispatcher
-from ravi.fabric.runtime.mailbox import Mailbox
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.runtime.supervisor import Supervisor
+from ravi.agents.runtime.dispatcher import Dispatcher
+from ravi.agents.runtime.mailbox import Mailbox
+from ravi.agents.runtime.local import LocalRuntime
 
 
 # ===================================================================
@@ -493,7 +493,7 @@ class _StubAgent(ActorAgent):
         **kwargs: Any,
     ):
         from unittest.mock import MagicMock
-        from ravi.fabric.catalog import AgentCatalog
+        from ravi.agents.catalog import AgentCatalog
 
         catalog = AgentCatalog()
         catalog.register_model("primary", MagicMock())
@@ -598,7 +598,7 @@ class TestHandoffToolDualMode:
 
     async def test_fallback_without_runtime(self) -> None:
         """Without runtime, _HandoffTool calls agent.run() directly."""
-        from ravi.orchestration.agents.orchestrator.agent import _HandoffTool
+        from ravi.agents.orchestration.agents.orchestrator.agent import _HandoffTool
 
         agent = _StubAgent(output="direct-result")
         tool = _HandoffTool(agent, runtime=None)
@@ -607,7 +607,7 @@ class TestHandoffToolDualMode:
 
     async def test_dispatch_via_runtime(self) -> None:
         """With runtime + agent.id, _HandoffTool uses runtime.send_message()."""
-        from ravi.orchestration.agents.orchestrator.agent import _HandoffTool
+        from ravi.agents.orchestration.agents.orchestrator.agent import _HandoffTool
 
         agent = _StubAgent(
             name="sub",
@@ -645,7 +645,7 @@ class TestOrchestratorRuntimeIntegration:
 
         # We can't instantiate OrchestratorAgent without a real LLM call,
         # but we can verify the _HandoffTool it creates works correctly.
-        from ravi.orchestration.agents.orchestrator.agent import _HandoffTool
+        from ravi.agents.orchestration.agents.orchestrator.agent import _HandoffTool
 
         tool = _HandoffTool(sub, runtime=rt)
         result = await tool.execute(input="solve this")
@@ -654,7 +654,7 @@ class TestOrchestratorRuntimeIntegration:
 
     async def test_orchestrator_stores_runtime(self) -> None:
         """OrchestratorAgent passes runtime to super and handoff tools."""
-        from ravi.orchestration.agents.orchestrator.agent import OrchestratorAgent
+        from ravi.agents.orchestration.agents.orchestrator.agent import OrchestratorAgent
 
         rt = MagicMock()
         sub = _StubAgent(name="worker", output="ok")

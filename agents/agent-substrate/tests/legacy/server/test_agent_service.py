@@ -281,7 +281,7 @@ async def test_load_agent_cold_path_seeds_provider_with_all_messages():
 async def test_load_agent_no_history_uses_in_memory_provider():
     """When history=None, the agent falls back to an InMemoryHistoryProvider."""
     from ravi.server.services.agent_service import load_agent_for_thread
-    from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+    from ravi.agents.memory.in_memory import InMemoryHistoryProvider
 
     captured_memory = {}
 

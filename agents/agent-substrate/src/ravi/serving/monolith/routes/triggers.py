@@ -58,7 +58,7 @@ async def list_cron_triggers(request: Request) -> list[dict[str, Any]]:
 async def create_cron_trigger(
     body: CreateCronTrigger, request: Request
 ) -> dict[str, str]:
-    from ravi.catalog._triggers.scheduler import TriggerDef
+    from ravi.capabilities.triggers.scheduler import TriggerDef
 
     scheduler = _get_scheduler(request)
     trigger = TriggerDef(
@@ -139,7 +139,7 @@ async def list_conditions(request: Request) -> list[dict[str, Any]]:
 
 @router.post("/conditions")
 async def create_condition(body: CreateCondition, request: Request) -> dict[str, str]:
-    from ravi.catalog._triggers.conditions import ConditionDef
+    from ravi.capabilities.triggers.conditions import ConditionDef
 
     monitor = _get_condition_monitor(request)
     condition = ConditionDef(

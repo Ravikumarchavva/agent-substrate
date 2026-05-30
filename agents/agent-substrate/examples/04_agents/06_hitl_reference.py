@@ -14,10 +14,10 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from ravi.kernel.agent_catalog._catalog import AgentCatalog
-from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.agents.reasoning.agents.assistant import AssistantAgent
 from ravi.adapters.llm.openai.openai_client import OpenAIClient
-from ravi.fabric.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.catalog.tools.human_input.tool import AskHumanTool, HumanInputResponse
+from ravi.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from ravi.capabilities.tools.human_input.tool import AskHumanTool, HumanInputResponse
 
 
 async def main():

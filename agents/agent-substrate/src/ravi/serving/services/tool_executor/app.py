@@ -24,14 +24,14 @@ def _load_default_tools(ci_http_client=None) -> list:
     tools = []
 
     try:
-        from ravi.catalog.tools.web_surfer.tool import WebSurferTool
+        from ravi.capabilities.tools.web_surfer.tool import WebSurferTool
 
         tools.append(WebSurferTool())
     except Exception:
         logger.debug("WebSurferTool not available")
 
     try:
-        from ravi.catalog.tools.task_manager.tool import TaskManagerTool
+        from ravi.capabilities.tools.task_manager.tool import TaskManagerTool
 
         tools.append(TaskManagerTool())
     except Exception:
@@ -39,7 +39,7 @@ def _load_default_tools(ci_http_client=None) -> list:
 
     if ci_http_client is not None:
         try:
-            from ravi.catalog.tools.code_interpreter.tool import (
+            from ravi.capabilities.tools.code_interpreter.tool import (
                 CodeInterpreterTool,
             )
 
@@ -76,7 +76,7 @@ async def lifespan(app):
     ci_client = None
     if ci_url:
         try:
-            from ravi.catalog.tools.code_interpreter.http_client import (
+            from ravi.capabilities.tools.code_interpreter.http_client import (
                 CodeInterpreterClient,
             )
 

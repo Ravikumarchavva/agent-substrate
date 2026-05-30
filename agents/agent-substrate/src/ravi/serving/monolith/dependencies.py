@@ -12,12 +12,12 @@ from typing import Any, Optional
 
 from fastapi import Request
 
-from ravi.fabric.context import HistoryProvider
+from ravi.agents.context import HistoryProvider
 from ravi.kernel import AgentRuntime
-from ravi.kernel.storage.base import FileStore
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.llm import LLMClient
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.kernel.llm import LLMClient
 from ravi.serving.monolith.sse.bridge import BridgeRegistry
+from ravi.adapters.storage import FileStore
 
 
 @dataclass

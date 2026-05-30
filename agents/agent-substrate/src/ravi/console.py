@@ -165,7 +165,7 @@ def _ensure_types() -> None:
             _ToolExecutionResultMessage = ToolExecutionResult
         except ImportError:
             # Fallback to legacy stubs
-            from ravi.reasoning.agents.assistant._legacy_stubs import (
+            from ravi.agents.assistant._legacy_stubs import (
                 TextDeltaChunk,
                 ReasoningDeltaChunk,
                 CompletionChunk,
@@ -220,7 +220,7 @@ class Console:
     async def _get_proxy(self) -> Any:
         """Lazily create and start the UserProxyAgent for actor-model agents."""
         if self._proxy is None:
-            from ravi.orchestration.agents.proxy.agent import UserProxyAgent
+            from ravi.agents.proxy import UserProxyAgent
 
             self._proxy = UserProxyAgent(
                 "console-proxy",

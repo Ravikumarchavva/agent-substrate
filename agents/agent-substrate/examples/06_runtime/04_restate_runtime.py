@@ -25,9 +25,9 @@ from ravi.config import settings
 from ravi.kernel.runtime import (
     RestartPolicy,
 )
-from ravi.fabric.runtime import LocalRuntime
-from ravi.fabric.actors.actor import ActorAgent
-from ravi.fabric import (
+from ravi.agents.runtime import LocalRuntime
+from ravi.agents.actors.actor import ActorAgent
+from ravi.agents import (
     CheckpointStatus,
     InMemoryCheckpointStore,
     RunCheckpoint,

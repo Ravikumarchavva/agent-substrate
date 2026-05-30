@@ -1,7 +1,7 @@
 """Example demonstrating WebSurferTool for agentic web browsing."""
 
 import asyncio
-from ravi.catalog.tools.web_surfer.tool import WebSurferTool
+from ravi.capabilities.tools.web_surfer.tool import WebSurferTool
 import time
 
 

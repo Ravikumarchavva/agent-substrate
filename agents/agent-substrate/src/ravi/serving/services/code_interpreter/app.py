@@ -23,10 +23,10 @@ from ravi.logger import setup_logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ravi.catalog.tools.code_interpreter.config import (
+from ravi.capabilities.tools.code_interpreter.config import (
     CodeInterpreterConfig,
 )
-from ravi.catalog.tools.code_interpreter.session_manager import (
+from ravi.capabilities.tools.code_interpreter.session_manager import (
     SessionManager,
 )
 

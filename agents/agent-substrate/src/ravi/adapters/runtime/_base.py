@@ -24,7 +24,7 @@ from ravi.kernel.runtime import (
     MessageHandler,
     TopicId
 )
-from ravi.fabric.runtime.base import BaseRuntime
+from ravi.agents.runtime.base import BaseRuntime
 
 logger = setup_logging()
 

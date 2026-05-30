@@ -26,7 +26,7 @@ import asyncio
 import json
 import os
 
-from ravi.catalog.tools.code_interpreter.tool import CodeInterpreterTool
+from ravi.capabilities.tools.code_interpreter.tool import CodeInterpreterTool
 
 # Infrastructure:
 #   Local fallback (sections 2–5): no infra needed. Set CODE_INTERPRETER_URL

@@ -27,7 +27,7 @@ from ravi.adapters.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
-from ravi.reasoning.agents.assistant._legacy_stubs import (
+from ravi.agents.assistant._legacy_stubs import (
     ImageContent,
     MediaType,
     ReasoningDeltaChunk,
@@ -54,12 +54,12 @@ from ravi.serving.monolith.services.file_service import (
     get_files_by_ids,
 )
 from ravi.serving.monolith.routes.mcp_apps import resolve_ui_uri
-from ravi.catalog.tools.task_manager.tool import current_thread_id
-from ravi.catalog.tools.file_manager.tool import (
+from ravi.capabilities.tools.task_manager.tool import current_thread_id
+from ravi.capabilities.tools.file_manager.tool import (
     current_thread_id as file_thread_id,
 )
-from ravi.catalog.tools.web_surfer.tool import WebSurferTool
-from ravi.catalog.tools.human_input.tool import AskHumanTool
+from ravi.capabilities.tools.web_surfer.tool import WebSurferTool
+from ravi.capabilities.tools.human_input.tool import AskHumanTool
 from ravi.serving.monolith.security.deps import get_current_user
 from ravi.serving.monolith.sse.bridge import BRIDGE_DONE, BridgeRegistry, WebHITLBridge
 from ravi.serving.monolith.sse.events import (

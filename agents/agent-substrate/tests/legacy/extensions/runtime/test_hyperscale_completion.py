@@ -17,13 +17,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ravi.fabric.events import InMemoryEventFabric
+from ravi.agents.events import InMemoryEventFabric
 from ravi.guardrails.governance._in_memory import (
     InMemoryGovernancePolicy,
     InMemoryCoalitionDetector,
     InMemoryQuarantineActuator,
 )
-from ravi.fabric.runtime import DistributedRuntime
+from ravi.agents.runtime import DistributedRuntime
 from ravi.guardrails.semantic._in_memory import (
     DeterministicSemanticInvariantChecker,
     InMemorySemanticDivergenceDetector,

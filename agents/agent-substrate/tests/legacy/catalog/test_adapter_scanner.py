@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ravi.catalog._scanner import CatalogScanner
+from ravi.capabilities._scanner import CatalogScanner
 
 
 class TestCatalogScanner:

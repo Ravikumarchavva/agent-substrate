@@ -10,7 +10,7 @@ No LLM API key required — all guardrails in this file use pattern matching.
 import asyncio
 
 from ravi.exceptions import GuardrailTripwireError
-from ravi.reasoning.guardrails import (
+from ravi.agents.reasoning.guardrails import (
     ContentFilterGuardrail,
     MaxTokenGuardrail,
     PIIDetectionGuardrail,

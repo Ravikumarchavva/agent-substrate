@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+from ravi.agents.memory.in_memory import InMemoryHistoryProvider
 from ravi.kernel.messages.client_messages import UserMessage, AssistantMessage
 
 SID = "session-1"

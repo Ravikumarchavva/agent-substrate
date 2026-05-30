@@ -21,7 +21,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.fabric.actors.actor import ActorAgent
+from ravi.agents.actors.actor import ActorAgent
 
 logger = setup_logging()
 

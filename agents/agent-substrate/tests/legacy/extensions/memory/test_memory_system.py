@@ -275,7 +275,7 @@ async def test_postgres_history():
 async def test_tiered_provider():
     from ravi.adapters.memory.redis_history import RedisHistoryProvider
     from ravi.adapters.memory.postgres_history import PostgresHistoryProvider
-    from ravi.fabric.memory.tiered import TieredHistoryProvider
+    from ravi.agents.memory.tiered import TieredHistoryProvider
 
     print("=" * 60)
     print("4. TIERED PROVIDER TESTS")

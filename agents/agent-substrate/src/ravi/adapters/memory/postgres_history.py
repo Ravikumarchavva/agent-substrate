@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from ravi.reasoning.agents.assistant._legacy_stubs import PersistentHistoryProvider
+from ravi.agents.assistant._legacy_stubs import PersistentHistoryProvider
 from ravi.adapters.llm.encoders.storage import (
     deserialize_message,
     serialize_message,

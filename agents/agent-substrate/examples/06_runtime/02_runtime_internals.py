@@ -29,10 +29,10 @@ from ravi.kernel.runtime import (
     RestartPolicy,
     TopicId,
 )
-from ravi.fabric.runtime import LocalRuntime, Mailbox
+from ravi.agents.runtime import LocalRuntime, Mailbox
 from ravi.kernel.runtime._contracts import MessageContext
 from ravi.kernel.messages.content import ContentBlock, TextBlock
-from ravi.fabric.actors.actor import ActorAgent
+from ravi.agents.actors.actor import ActorAgent
 
 # ---
 # How the runtime works — conceptual map

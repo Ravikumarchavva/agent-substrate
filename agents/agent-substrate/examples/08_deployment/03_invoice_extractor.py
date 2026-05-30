@@ -20,12 +20,12 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from ravi.catalog.tools.invoice_extractor.tool import InvoiceExtractorTool
+from ravi.capabilities.tools.invoice_extractor.tool import InvoiceExtractorTool
 from ravi.config import settings
-from ravi.reasoning.agents.assistant import AssistantAgent
+from ravi.agents.reasoning.agents.assistant import AssistantAgent
 from ravi.adapters.llm.factory import create_model_client
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.fabric.memory.unbounded import UnboundedMemory
+from ravi.agents.memory.unbounded import UnboundedMemory
 
 # Infrastructure: none required for direct tool calls.
 #   For the agent sections, set OPENAI_API_KEY (or another provider key).

@@ -14,10 +14,10 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock
 
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from ravi.agents.reasoning.agents.assistant.agent import AssistantAgent
 from ravi.guardrails.mutation._in_memory import InMemoryMutationPolicy
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.agents.memory.in_memory import InMemoryHistoryProvider
 from ravi.kernel.messages.client_messages import SystemMessage
 from ravi.kernel.safeguards._mutation import MutationKind
 

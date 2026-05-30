@@ -23,7 +23,7 @@ import pytest
 
 from ravi.kernel.contracts._event import EventEnvelope as KernelEventEnvelope
 from ravi.kernel.messages.content import CONTENT_BLOCK_TYPES, TextBlock
-from ravi.fabric.checkpoint import RunCheckpoint
+from ravi.agents.checkpoint import RunCheckpoint
 from ravi.kernel.runtime._contracts import Envelope
 from ravi.kernel.runtime._identity import (
     AgentId,
@@ -32,7 +32,7 @@ from ravi.kernel.runtime._identity import (
     PrincipalKind,
 )
 from ravi.kernel.runtime._lifecycle import CheckpointRef
-from ravi.fabric.runtime.local import LocalRuntime
+from ravi.agents.runtime.local import LocalRuntime
 from ravi.shared.events.envelope import EventEnvelope as SharedEventEnvelope
 
 

@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.agents_base.agent_result import RunStatus
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from ravi.agents.catalog import AgentCatalogRegistry
+from ravi.agents.agents_base.agent_result import RunStatus
+from ravi.agents.reasoning.agents.assistant.agent import AssistantAgent
 from ravi.kernel.guardrails import GuardrailType
-from ravi.reasoning.guardrails import ContentFilterGuardrail, PIIDetectionGuardrail
-from ravi.fabric.memory.in_memory import InMemoryHistoryProvider
+from ravi.agents.reasoning.guardrails import ContentFilterGuardrail, PIIDetectionGuardrail
+from ravi.agents.memory.in_memory import InMemoryHistoryProvider
 
 from tests.fixtures.fake_tools import AddTool, CounterTool, EchoTool
 from tests.fixtures.mock_llm import MockLLMClient, text_turn, tool_turn
@@ -28,7 +28,7 @@ def _all_tool_calls(result):
 
 
 def _build_agent(script, tools=(), guardrails=()):
-    from ravi.reasoning.middleware.guardrails import GuardrailsMiddleware
+    from ravi.agents.reasoning.middleware.guardrails import GuardrailsMiddleware
 
     catalog = AgentCatalogRegistry()
     catalog.register_model("primary", MockLLMClient(script=list(script)))

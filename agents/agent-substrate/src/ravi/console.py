@@ -3,8 +3,8 @@
 Inspired by AutoGen's ``Console`` — provides a rich, formatted view of agent
 execution including streaming text, tool calls, reasoning traces, and results.
 
-Supports both actor-model agents (``ActorAgent`` subclasses) and legacy callable
-agents.  For actor-model agents, a ``UserProxyAgent`` is created transparently.
+Shows discovered skills at startup, tracks which skills are active, and
+lists activated skills in the session footer.
 
 Usage (single task)::
 
@@ -12,9 +12,11 @@ Usage (single task)::
 
     result = await Console(agent).run("What is 2+2?")
 
-Usage (interactive REPL)::
+Usage (interactive REPL with skills)::
 
-    await Console(agent).interactive()
+    from ravi.capabilities.internal.skill_manager import SkillManager
+    manager = SkillManager()
+    await Console(agent, skill_manager=manager).interactive(stream=True)
 
 Usage (stream watcher — attach to any ``run_stream`` iterator)::
 
@@ -29,7 +31,7 @@ import logging
 from io import UnsupportedOperation
 import json
 import time
-from typing import Any, AsyncIterator, Optional, List
+from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, List
 
 from rich.console import Console as RichConsole, Group, ConsoleOptions, RenderResult
 from rich.live import Live
@@ -42,6 +44,9 @@ from rich.segment import Segment
 from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.kernel.tools import ToolExecutionResult
 from ravi.logger import setup_logging
+
+if TYPE_CHECKING:
+    from ravi.capabilities.internal.skill_manager import SkillManager
 
 
 class GutterAccent:
@@ -137,6 +142,9 @@ _THEME = Theme(
         "tool_ok": "green",
         "tool_err": "red",
         "thinking": "dim italic",
+        "skill": "bold magenta",
+        "skill_active": "magenta",
+        "skill_dim": "dim magenta",
         "info": "dim",
         "error": "bold red",
     }
@@ -171,10 +179,14 @@ class Console:
         agent: Any,
         *,
         output: Optional[RichConsole] = None,
+        skill_manager: Optional["SkillManager"] = None,
     ) -> None:
         self.agent = agent
         self.console = output or RichConsole(theme=_THEME, highlight=False)
         self._proxy: Optional[Any] = None
+        self._skill_manager = skill_manager
+        # Snapshot of active skills at session start (to detect newly activated ones)
+        self._session_skills_used: set[str] = set()
 
         # Configure logging for interactive use (once per process)
         setup_logging(mode="pretty", level=logging.WARNING)
@@ -561,22 +573,32 @@ class Console:
         Type ``exit``, ``quit``, or press Ctrl-C to leave.
         Type ``/reset`` to clear agent memory.
         Type ``/tools`` to list available tools.
+        Type ``/skills`` to list discovered skills and active ones.
         """
         name = getattr(self.agent, "name", "Agent")
-        
-        # Robust tool extraction for modern and legacy agents
-        tools = getattr(self.agent, "tools", [])
-        if not tools and hasattr(self.agent, "list_tools"):
-            tools = self.agent.list_tools()
-        elif not tools and hasattr(self.agent, "_tools"):
-            _t = getattr(self.agent, "_tools")
-            tools = list(_t.values()) if isinstance(_t, dict) else _t
+
+        tools = self._get_tools()
         tool_count = len(tools)
+
+        agent_skills = self._get_agent_skills()
+        skill_count = (
+            len(self._skill_manager.available_names) if self._skill_manager else len(agent_skills)
+        )
+        active_count = len(self._skill_manager._active) if self._skill_manager else len(agent_skills)
+
+        skill_summary = (
+            f"[bold]{skill_count} skills available[/bold]"
+            if skill_count
+            else "no skills"
+        )
+        if active_count:
+            skill_summary += f" ([skill]{active_count} active[/skill])"
 
         if greeting is None:
             greeting = (
-                f"[agent]{name}[/agent] ready · [bold]{tool_count} tools loaded[/bold]\n"
-                f"  Commands: [bold]/reset[/bold] · [bold]/tools[/bold] · [bold]/help[/bold] · [bold]exit[/bold]"
+                f"[agent]{name}[/agent] ready · "
+                f"[bold]{tool_count} tools[/bold] · {skill_summary}\n"
+                f"  [dim]/tools · /skills · /reset · /help · exit[/dim]"
             )
 
         self.console.print(Panel(greeting, border_style="cyan", padding=(0, 1)))
@@ -601,9 +623,15 @@ class Console:
             if stripped.lower() == "/tools":
                 self._print_tools()
                 continue
+            if stripped.lower() == "/skills":
+                self._print_skills()
+                continue
             if stripped.lower() == "/help":
                 self._print_help()
                 continue
+
+            # Snapshot active skills before run to detect newly activated ones
+            before = set(self._skill_manager._active.keys()) if self._skill_manager else set()
 
             try:
                 if stream:
@@ -612,6 +640,16 @@ class Console:
                     await self.run(stripped, _echo=False)
             except Exception as exc:
                 self.console.print(f"[error]Error: {exc}[/error]")
+
+            # Report newly activated skills after this turn
+            after = set(self._skill_manager._active.keys()) if self._skill_manager else set()
+            newly_activated = after - before
+            if newly_activated:
+                self._session_skills_used.update(newly_activated)
+                names = ", ".join(sorted(newly_activated))
+                self.console.print(
+                    f"  [skill]⚡ Skill activated: {names}[/skill]", style="bold"
+                )
 
     # ------------------------------------------------------------------
     # Internal rendering helpers
@@ -702,33 +740,87 @@ class Console:
         ]
         self.console.print(f"\n  [info]{' · '.join(parts)}[/info]")
 
-    def _print_tools(self) -> None:
+    # ------------------------------------------------------------------
+    # Internal: tool / skill accessors
+    # ------------------------------------------------------------------
+
+    def _get_tools(self) -> list[Any]:
+        """Return tool list from agent (supports multiple agent shapes)."""
         tools = getattr(self.agent, "tools", [])
         if not tools and hasattr(self.agent, "list_tools"):
             tools = self.agent.list_tools()
-        elif not tools and hasattr(self.agent, "_tools"):
+        if not tools and hasattr(self.agent, "_tools"):
             _t = getattr(self.agent, "_tools")
-            tools = list(_t.values()) if isinstance(_t, dict) else _t
-            
+            tools = list(_t.values()) if isinstance(_t, dict) else list(_t)
+        return tools or []
+
+    def _get_agent_skills(self) -> list[Any]:
+        """Return skills that are already injected into the agent."""
+        return list(getattr(self.agent, "_skills", []))
+
+    def _print_tools(self) -> None:
+        tools = self._get_tools()
         if not tools:
             self.console.print("  No tools registered.", style="info")
             return
         table = Table(title="Available Tools", show_lines=False, padding=(0, 1))
         table.add_column("Name", style="tool_name")
-        table.add_column("Description", style="")
+        table.add_column("Risk", style="dim")
+        table.add_column("Description")
         for t in tools:
             name = getattr(t, "name", "?")
+            risk = str(getattr(t, "risk", "safe")).split(".")[-1].lower()
             desc = getattr(t, "description", "")
-            # Truncate long descriptions
-            if len(desc) > 80:
-                desc = desc[:77] + "..."
-            table.add_row(name, desc)
+            if len(desc) > 70:
+                desc = desc[:67] + "..."
+            table.add_row(name, risk, desc)
         self.console.print(table)
+
+    def _print_skills(self) -> None:
+        """Print all discovered skills (from SkillManager) and agent-injected skills."""
+        # Discovered skills from SkillManager
+        if self._skill_manager:
+            all_meta = self._skill_manager._loader.all_metadata()
+            active_names = set(self._skill_manager._active.keys())
+
+            if not all_meta:
+                self.console.print("  No skills discovered.", style="info")
+            else:
+                table = Table(title="Skills", show_lines=False, padding=(0, 1))
+                table.add_column("Name", style="skill")
+                table.add_column("Status", style="dim")
+                table.add_column("Description")
+                for meta in sorted(all_meta, key=lambda m: m.name):
+                    status = "[skill_active]● active[/skill_active]" if meta.name in active_names else "[dim]○ available[/dim]"
+                    desc = meta.description
+                    if len(desc) > 65:
+                        desc = desc[:62] + "..."
+                    table.add_row(meta.name, status, desc)
+                self.console.print(table)
+
+            if self._session_skills_used:
+                names = ", ".join(sorted(self._session_skills_used))
+                self.console.print(f"  [skill]Session activated: {names}[/skill]")
+        else:
+            # Fall back to agent-injected skills
+            agent_skills = self._get_agent_skills()
+            if not agent_skills:
+                self.console.print("  No skills loaded.", style="info")
+                return
+            table = Table(title="Active Skills", show_lines=False, padding=(0, 1))
+            table.add_column("Name", style="skill")
+            table.add_column("Tools", style="dim")
+            for s in agent_skills:
+                name = getattr(s, "name", "?")
+                allowed = ", ".join(getattr(s, "allowed_tools", [])) or "—"
+                table.add_row(name, allowed)
+            self.console.print(table)
 
     def _print_help(self) -> None:
         help_text = (
             "[bold]Commands:[/bold]\n"
             "  /tools  — List available tools\n"
+            "  /skills — List discovered skills and active ones\n"
             "  /reset  — Clear agent memory\n"
             "  /help   — Show this message\n"
             "  exit    — Quit the session"

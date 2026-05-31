@@ -8,7 +8,7 @@ available, otherwise in a restricted local exec() as fallback.
 
 Usage::
 
-    runtime = ChainRuntime(catalog=catalog, data_store=store)
+    runtime = ChainRuntime(registry=registry, data_store=store)
     result = await runtime.execute_script("result = await adapters.calculator(expression='2+2')")
 """
 
@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ravi.capabilities.internal.data_ref import DataRef, DataRefStore
-from ravi.kernel.tools import Tool as BaseTool
+from ravi.kernel.tools import Tool as BaseTool, ToolRegistry
 
 logger = setup_logging()
 
@@ -62,29 +62,21 @@ class AdapterProxy:
 
         Large results (> threshold) are stored as DataRef pointers.
         """
-        result = await self._tool.run(**kwargs)
+        result = await self._tool.execute(**kwargs)
 
-        # If already a DataRef, return as-is
-        if result.data_ref is not None:
-            return result.data_ref
+        text = result.text
 
-        # Check if result content is large
-        content_str = str(result.content)
+        # Store large results as DataRefs to avoid bloating context
         if (
             self._data_store is not None
-            and len(content_str.encode("utf-8")) > _LARGE_RESULT_THRESHOLD
+            and len(text.encode("utf-8")) > _LARGE_RESULT_THRESHOLD
         ):
-            ref = await self._data_store.store(
-                content_str,
-                content_type="application/json",
-            )
-            result.data_ref = ref
+            ref = await self._data_store.store(text, content_type="text/plain")
             return ref
 
-        # Small result — return content directly
         if result.is_error:
-            raise RuntimeError(f"Tool {self._tool.name} failed: {result.content}")
-        return result.content
+            raise RuntimeError(f"Tool {self._tool.name} failed: {text}")
+        return text
 
 
 class _AdapterNamespace:
@@ -122,17 +114,17 @@ class ChainRuntime:
 
     def __init__(
         self,
-        catalog: Any,
+        registry: ToolRegistry,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
 
-        self._catalog: Any = catalog
+        self._registry = registry
         self._data_store = data_store
 
     def build_namespace(self) -> _AdapterNamespace:
         """Build the ``adapters`` namespace with proxies for all registered tools."""
         ns = _AdapterNamespace()
-        for tool in self._catalog.all_tools():
+        for tool in self._registry.all_tools():
             proxy = AdapterProxy(tool, data_store=self._data_store)
             ns.register(proxy)
         return ns

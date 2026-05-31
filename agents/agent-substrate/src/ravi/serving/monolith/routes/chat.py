@@ -40,16 +40,8 @@ from ravi.serving.monolith.services.agent_service import (
     persist_assistant_message,
     persist_user_message,
 )
-from ravi.serving.monolith.services.file_service import (
-    extract_text,
-    get_file_content,
-    get_files_by_ids,
-)
 from ravi.serving.monolith.routes.mcp_apps import resolve_ui_uri
 from ravi.capabilities.tools.task_manager.tool import current_thread_id
-from ravi.capabilities.tools.file_manager.tool import (
-    current_thread_id as file_thread_id,
-)
 from ravi.capabilities.tools.web_surfer.tool import WebSurferTool
 from ravi.capabilities.tools.human_input.tool import AskHumanTool
 from ravi.serving.monolith.security.deps import get_current_user
@@ -362,93 +354,8 @@ async def _build_file_context(
     request: Request,
     ctx: ServerDependencies,
 ) -> tuple[str, list[_ImagePayload], list[dict[str, Any]]]:
-    """Load file IDs from the request, extract text and push to CI VM.
-
-    Returns:
-        (file_context_block, image_inputs, attachments) where
-        - file_context_block is a formatted string to prepend to the user
-          message (empty string when no files were requested), and
-        - image_inputs is a list of multimodal image payloads for the LLM, and
-        - attachments contains JSON-safe file metadata for UI rendering.
-    """
-    if not body.file_ids:
-        return "", [], []
-
-    store = ctx.file_store
-    if store is None:
-        raise RuntimeError("File store is not configured")
-
-    files = await get_files_by_ids(db, body.file_ids, body.thread_id)
-    if not files:
-        return "", [], []
-
-    text_parts: list[str] = []
-    image_inputs: list[_ImagePayload] = []
-    attachments = [_serialize_attached_file(meta) for meta in files]
-
-    for meta in files:
-        extracted = await extract_text(store, meta)
-        if extracted is not None:
-            text_parts.append(f"### File: {meta.original_name}\n```\n{extracted}\n```")
-        elif (meta.content_type or "").startswith("image/"):
-            image_inputs.append(
-                _ImagePayload(
-                    data=await get_file_content(store, meta),
-                    media_type=meta.content_type or "image/png",
-                )
-            )
-        else:
-            # Unknown binary — just note it exists in the CI VM
-            text_parts.append(
-                f"### File: {meta.original_name} ({meta.content_type or 'binary'})\n"
-                f"(Binary file — available at /data/{meta.original_name} in the code interpreter)"
-            )
-
-    # Push every file to the code-interpreter VM so the agent can
-    # use pandas, PIL, etc. to work with them programmatically.
-    ci_client = ctx.ci_client
-    if ci_client:
-        import base64 as _b64
-
-        session_id = str(body.thread_id)
-        for meta in files:
-            try:
-                raw = await get_file_content(store, meta)
-                b64 = _b64.b64encode(raw).decode()
-                await ci_client.write_file(
-                    session_id,
-                    path=f"/data/{meta.original_name}",
-                    content=b64,
-                    encoding="base64",
-                )
-                logger.info(
-                    "Pushed file %s (%d bytes) to CI session %s",
-                    meta.original_name,
-                    meta.size_bytes,
-                    session_id,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to push %s to CI VM: %s", meta.original_name, exc
-                )
-
-    if not text_parts:
-        if image_inputs:
-            names = ", ".join(m.original_name for m in files)
-            block = (
-                f"The user attached {len(image_inputs)} image file(s): {names}. "
-                "Use the attached image content directly when answering."
-            )
-            return block, image_inputs, attachments
-        return "", image_inputs, attachments
-
-    names = ", ".join(m.original_name for m in files)
-    sections = "\n\n".join(text_parts)
-    block = (
-        f"The user has attached {len(files)} file(s): {names}.\n"
-        f"File contents:\n\n{sections}"
-    )
-    return block, image_inputs, attachments
+    """File attachment context — parked until file store is re-integrated."""
+    return "", [], []
 
 
 @router.post("/chat")
@@ -772,7 +679,6 @@ async def chat(
 
         # Bind ContextVars so tools route events to this thread
         current_thread_id.set(str(body.thread_id))
-        file_thread_id.set(str(body.thread_id))
 
         agent_task = asyncio.create_task(agent_worker())
         hitl_task = asyncio.create_task(hitl_worker())

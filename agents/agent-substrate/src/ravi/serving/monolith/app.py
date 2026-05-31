@@ -34,10 +34,8 @@ from ravi.serving.monolith.routes.chat import router as chat_router
 from ravi.serving.monolith.routes.code_interpreter import (
     router as code_interpreter_router,
 )
-from ravi.serving.monolith.routes.elements import router as elements_router
 from ravi.serving.monolith.routes.feedback import router as feedback_router
 from ravi.serving.monolith.routes.audio import router as audio_router
-from ravi.serving.monolith.routes.files import router as files_router
 from ravi.serving.monolith.routes.hitl import router as hitl_router
 from ravi.serving.monolith.routes.mcp_apps import router as mcp_apps_router
 from ravi.serving.monolith.routes.spotify_oauth import router as spotify_oauth_router
@@ -85,12 +83,12 @@ async def lifespan(app: FastAPI):
     app.state.history = infra.history
     app.state.redis_client = infra.redis_client
     app.state.runtime = infra.runtime
-    app.state.file_store = infra.file_store
     app.state.session_factory = infra.session_factory
     app.state.vector_store = infra.vector_store
     app.state.rag_pipeline = infra.rag_pipeline
     app.state.data_store = infra.data_store
     app.state.bridge_registry = infra.bridge_registry
+    app.state.skill_manager = infra.skill_manager
 
     # JWT secret for shared auth middleware
     app.state.jwt_secret = settings.JWT_SECRET
@@ -98,12 +96,11 @@ async def lifespan(app: FastAPI):
     # Tool registry
     tools = await init_tool_registry(
         settings,
-        file_store=infra.file_store,
         session_factory=infra.session_factory,
         bridge_registry=infra.bridge_registry,
         redis_client=infra.redis_client,
     )
-    app.state.tools = tools.catalog
+    app.state.tools = tools.registry
     app.state.task_tool = tools.task_tool
     app.state.ci_client = tools.ci_client
     app.state.tools_requiring_approval = tools.tools_requiring_approval
@@ -126,7 +123,7 @@ async def lifespan(app: FastAPI):
     # Runtime services (chains, pipelines, workflows, triggers)
     rt = await init_runtime_services(
         settings,
-        catalog=tools.catalog,
+        registry=tools.registry,
         data_store=infra.data_store,
         session_factory=infra.session_factory,
         runtime=infra.runtime,
@@ -157,7 +154,6 @@ async def lifespan(app: FastAPI):
         mcp_servers=app.state.mcp_servers,
         session_factory=app.state.session_factory,
         ci_client=app.state.ci_client,
-        file_store=app.state.file_store,
     )
 
     # Quiet noisy loggers
@@ -177,8 +173,6 @@ async def lifespan(app: FastAPI):
         await app.state.condition_monitor.stop()
     if getattr(app.state, "data_store", None):
         await app.state.data_store.disconnect()
-    if getattr(app.state, "file_store", None):
-        await app.state.file_store.shutdown()
     if getattr(app.state, "ci_client", None):
         await app.state.ci_client.close()  # type: ignore[union-attr]
     if getattr(app.state, "history", None):
@@ -223,10 +217,8 @@ def create_app() -> FastAPI:
     app.include_router(cancel_router)
     app.include_router(code_interpreter_router)
     app.include_router(hitl_router)
-    app.include_router(elements_router)
     app.include_router(feedback_router)
     app.include_router(audio_router)
-    app.include_router(files_router)
     app.include_router(mcp_apps_router)
     app.include_router(spotify_oauth_router)
     app.include_router(workspace_oauth_router)

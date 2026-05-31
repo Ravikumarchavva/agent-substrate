@@ -30,7 +30,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ravi.capabilities.internal.data_ref import DataRef, DataRefStore
+from ravi.capabilities.internal.data_ref import DataRefStore
+from ravi.kernel.tools import ToolRegistry
 
 logger = setup_logging()
 
@@ -105,29 +106,20 @@ class PipelineResult:
     pipeline_name: str
     success: bool = True
     step_results: List[Dict[str, Any]] = field(default_factory=list)
-    data_refs: List[DataRef] = field(default_factory=list)
     error: Optional[str] = None
     duration_ms: int = 0
 
 
 class PipelineEngine:
-    """Execute pipelines as a sequence of adapter steps.
-
-    Parameters
-    ----------
-    catalog
-        AgentCatalogRegistry to look up adapters.
-    data_store
-        DataRefStore for passing data between steps.
-    """
+    """Execute pipelines as a sequence of adapter steps."""
 
     def __init__(
         self,
-        catalog: Any,
+        registry: ToolRegistry,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
 
-        self._catalog: Any = catalog
+        self._registry = registry
         self._data_store = data_store
 
     async def execute(self, pipeline: PipelineDef) -> PipelineResult:
@@ -135,10 +127,9 @@ class PipelineEngine:
         start = time.monotonic()
         context: Dict[str, Any] = {}
         step_results: List[Dict[str, Any]] = []
-        data_refs: List[DataRef] = []
 
         for i, step in enumerate(pipeline.steps):
-            tool = self._catalog.get_tool(step.adapter_name)
+            tool = self._registry.get_tool(step.adapter_name)
             if tool is None:
                 duration = int((time.monotonic() - start) * 1000)
                 return PipelineResult(
@@ -153,7 +144,7 @@ class PipelineEngine:
             resolved_inputs = self._resolve_inputs(step.input_mapping, context)
 
             try:
-                result = await tool.run(**resolved_inputs)
+                result = await tool.execute(**resolved_inputs)
             except Exception as exc:
                 duration = int((time.monotonic() - start) * 1000)
                 return PipelineResult(
@@ -164,18 +155,12 @@ class PipelineEngine:
                     duration_ms=duration,
                 )
 
-            # Store result in context
             output_key = step.output_key or f"step_{i}"
             step_output = {
                 "adapter": step.adapter_name,
-                "content": result.content,
+                "content": result.text,
                 "is_error": result.is_error,
             }
-
-            if result.data_ref is not None:
-                step_output["data_ref"] = result.data_ref.to_dict()
-                data_refs.append(result.data_ref)
-
             context[output_key] = step_output
             context["prev"] = step_output
             step_results.append(step_output)
@@ -186,7 +171,6 @@ class PipelineEngine:
                     pipeline_name=pipeline.name,
                     success=False,
                     step_results=step_results,
-                    data_refs=data_refs,
                     error=f"Step {i} ({step.adapter_name}) returned error",
                     duration_ms=duration,
                 )
@@ -196,7 +180,6 @@ class PipelineEngine:
             pipeline_name=pipeline.name,
             success=True,
             step_results=step_results,
-            data_refs=data_refs,
             duration_ms=duration,
         )
 
@@ -206,9 +189,9 @@ class PipelineEngine:
         for i, step in enumerate(pipeline.steps):
             if not step.adapter_name:
                 errors.append(f"Step {i}: missing adapter_name")
-            elif self._catalog.get_tool(step.adapter_name) is None:
+            elif self._registry.get_tool(step.adapter_name) is None:
                 errors.append(
-                    f"Step {i}: adapter '{step.adapter_name}' not found in catalog"
+                    f"Step {i}: adapter '{step.adapter_name}' not found in registry"
                 )
         return errors
 

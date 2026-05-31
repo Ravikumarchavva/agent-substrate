@@ -33,52 +33,6 @@ class KnowledgeSearchTool:
         self._api_key = api_key
         # In-memory document store: list of (id, text_chunk, embedding)
         self._index: List[Tuple[str, str, List[float]]] = []
-        super().__init__(
-            name="knowledge_search",
-            description=(
-                "Index documents and search over them using semantic similarity. "
-                "Use action='index' to add text, then action='search' to query."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["index", "search", "status"],
-                        "description": (
-                            "Action: index (add document text), "
-                            "search (query indexed docs), "
-                            "status (show index stats)"
-                        ),
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "Text to index (for action='index') or query (for action='search')",
-                    },
-                    "doc_id": {
-                        "type": "string",
-                        "description": "Document identifier (for action='index')",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max results to return (default: 5)",
-                    },
-                },
-                "required": ["action"],
-                "additionalProperties": False,
-            },
-            category="data/management",
-            tags=[
-                "knowledge",
-                "rag",
-                "search",
-                "embed",
-                "retrieve",
-                "semantic",
-                "vector",
-            ],
-            aliases=["rag_search", "doc_search"],
-        )
 
     async def _embed(self, text: str) -> Optional[List[float]]:
         """Get embedding vector from OpenAI."""

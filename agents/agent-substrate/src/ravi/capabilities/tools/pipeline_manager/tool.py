@@ -11,6 +11,36 @@ from ravi.kernel import TextBlock
 class PipelineManagerTool:
     """Manage and execute saved adapter pipelines."""
 
+    name: str = "pipeline_manager"
+    description: str = (
+        "Manage saved adapter pipelines: run, save, list, or delete "
+        "reusable chains of adapter steps."
+    )
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["run", "save", "list", "delete", "validate"],
+                "description": "Action to perform on pipelines",
+            },
+            "name": {
+                "type": "string",
+                "description": "Pipeline name (for run/save/delete)",
+            },
+            "definition": {
+                "type": "object",
+                "description": (
+                    "Pipeline definition for save action: "
+                    '{"description": "...", "steps": [{"adapter_name": "...", '
+                    '"input_mapping": {...}}]}'
+                ),
+            },
+        },
+        "required": ["action"],
+        "additionalProperties": False,
+    }
+
     def __init__(
         self,
         pipeline_engine: Any,
@@ -18,46 +48,6 @@ class PipelineManagerTool:
     ) -> None:
         self._engine = pipeline_engine
         self._store = pipeline_store
-        super().__init__(
-            name="pipeline_manager",
-            description=(
-                "Manage saved adapter pipelines: run, save, list, or delete "
-                "reusable chains of adapter steps."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": [
-                            "run",
-                            "save",
-                            "list",
-                            "delete",
-                            "validate",
-                        ],
-                        "description": "Action to perform on pipelines",
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Pipeline name (for run/save/delete)",
-                    },
-                    "definition": {
-                        "type": "object",
-                        "description": (
-                            "Pipeline definition for save action: "
-                            '{"description": "...", "steps": [{"adapter_name": "...", '
-                            '"input_mapping": {...}}]}'
-                        ),
-                    },
-                },
-                "required": ["action"],
-                "additionalProperties": False,
-            },
-            category="development/execution",
-            tags=["pipeline", "workflow", "chain", "automate", "sequence"],
-            aliases=["manage_pipeline", "run_pipeline"],
-        )
 
     async def execute(  # type: ignore[override]
         self,

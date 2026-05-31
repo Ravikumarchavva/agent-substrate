@@ -65,8 +65,8 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 
     # CORS — comma-separated list of allowed origins.
-    # In production set this to your exact frontend domain(s), e.g.:
-    # CORS_ALLOWED_ORIGINS=https://app.example.com,https://www.example.com
+    # Portfolio frontend on Vercel + local dev defaults:
+    # CORS_ALLOWED_ORIGINS=https://your-portfolio.vercel.app,https://localhost:3000
     CORS_ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -86,6 +86,10 @@ class Settings(BaseSettings):
 
     # Disable high-risk tool approvals in local dev
     DISABLE_TOOL_APPROVALS: bool = False
+
+    # Portfolio chatbot — public endpoint rate limit (requests per minute per IP).
+    # Cached responses do NOT count against this limit (no LLM cost).
+    PORTFOLIO_RATE_LIMIT_RPM: int = 10
 
     # Kubernetes Sandbox Code Interpreter Settings
     CODE_INTERPRETER_URL: str = ""

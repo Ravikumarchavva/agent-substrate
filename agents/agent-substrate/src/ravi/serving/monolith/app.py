@@ -228,8 +228,6 @@ def create_app() -> FastAPI:
     app.include_router(triggers_router)
     app.include_router(rag_router)
 
-
-
     # Health check
     @app.get("/health", tags=["infra"])
     async def health():

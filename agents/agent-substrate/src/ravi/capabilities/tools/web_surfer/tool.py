@@ -41,6 +41,53 @@ class WebSurferTool:
     Maintains browser session for multi-step workflows.
     """
 
+    name: str = "web_surfer"
+    description: str = (
+        "Advanced web browsing tool for agents. Supports navigation, content extraction, "
+        "screenshots, element interaction, and form filling. Maintains browser session "
+        "across multiple actions."
+    )
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": [
+                    "navigate", "extract_text", "extract_markdown", "get_html",
+                    "screenshot", "click", "fill", "scroll", "execute_js",
+                    "get_metadata", "go_back", "go_forward", "close",
+                ],
+                "description": (
+                    "Action to perform:\n"
+                    "- navigate: Go to URL\n"
+                    "- extract_text: Get visible text content\n"
+                    "- extract_markdown: Get content as markdown\n"
+                    "- get_html: Get page HTML source\n"
+                    "- screenshot: Take page screenshot\n"
+                    "- click: Click element by selector\n"
+                    "- fill: Fill input field\n"
+                    "- scroll: Scroll page\n"
+                    "- execute_js: Run JavaScript code\n"
+                    "- get_metadata: Get page title, URL, metadata\n"
+                    "- go_back: Navigate back\n"
+                    "- go_forward: Navigate forward\n"
+                    "- close: Close browser session"
+                ),
+            },
+            "url": {"type": "string", "description": "URL to navigate to (for 'navigate' action)"},
+            "selector": {"type": "string", "description": "CSS selector for element (for 'click', 'fill' actions)"},
+            "text": {"type": "string", "description": "Text to enter (for 'fill' action)"},
+            "javascript": {"type": "string", "description": "JavaScript code to execute (for 'execute_js' action)"},
+            "scroll_direction": {
+                "type": "string",
+                "enum": ["up", "down", "top", "bottom"],
+                "description": "Direction to scroll (for 'scroll' action)",
+            },
+            "full_page": {"type": "boolean", "description": "Take full page screenshot (default: true for 'screenshot' action)"},
+            "timeout": {"type": "number", "description": "Timeout in milliseconds (default: 30000)"},
+        },
+        "required": ["action"],
+    }
     risk: str = "sensitive"  # TODO: L4-hitl  # external network reads
 
     def __init__(
@@ -65,92 +112,6 @@ class WebSurferTool:
         self._playwright: Optional[Playwright] = None
         self._browser: Optional[Browser] = None
         self._page: Optional[Page] = None
-
-        super().__init__(
-            name="web_surfer",
-            description=(
-                "Advanced web browsing tool for agents. Supports navigation, content extraction, "
-                "screenshots, element interaction, and form filling. Maintains browser session "
-                "across multiple actions."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": [
-                            "navigate",
-                            "extract_text",
-                            "extract_markdown",
-                            "get_html",
-                            "screenshot",
-                            "click",
-                            "fill",
-                            "scroll",
-                            "execute_js",
-                            "get_metadata",
-                            "go_back",
-                            "go_forward",
-                            "close",
-                        ],
-                        "description": (
-                            "Action to perform:\n"
-                            "- navigate: Go to URL\n"
-                            "- extract_text: Get visible text content\n"
-                            "- extract_markdown: Get content as markdown\n"
-                            "- get_html: Get page HTML source\n"
-                            "- screenshot: Take page screenshot\n"
-                            "- click: Click element by selector\n"
-                            "- fill: Fill input field\n"
-                            "- scroll: Scroll page\n"
-                            "- execute_js: Run JavaScript code\n"
-                            "- get_metadata: Get page title, URL, metadata\n"
-                            "- go_back: Navigate back\n"
-                            "- go_forward: Navigate forward\n"
-                            "- close: Close browser session"
-                        ),
-                    },
-                    "url": {
-                        "type": "string",
-                        "description": "URL to navigate to (for 'navigate' action)",
-                    },
-                    "selector": {
-                        "type": "string",
-                        "description": "CSS selector for element (for 'click', 'fill' actions)",
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "Text to enter (for 'fill' action)",
-                    },
-                    "javascript": {
-                        "type": "string",
-                        "description": "JavaScript code to execute (for 'execute_js' action)",
-                    },
-                    "scroll_direction": {
-                        "type": "string",
-                        "enum": ["up", "down", "top", "bottom"],
-                        "description": "Direction to scroll (for 'scroll' action)",
-                    },
-                    "full_page": {
-                        "type": "boolean",
-                        "description": "Take full page screenshot (default: true for 'screenshot' action)",
-                    },
-                    "timeout": {
-                        "type": "number",
-                        "description": "Timeout in milliseconds (default: 30000)",
-                    },
-                },
-                "required": ["action"],
-            },
-            annotations={
-                "readOnlyHint": True,
-                "destructiveHint": False,
-                "idempotentHint": False,
-                "openWorldHint": True,
-                "title": "Web Surfer",
-            },
-            risk=self.risk,
-        )
 
     async def _ensure_browser(self) -> None:
         """Ensure browser is initialized and ready."""

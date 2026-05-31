@@ -463,7 +463,8 @@ class AssistantAgent:
                 HookEvent.RUN_END,
                 {"agent": self.name, "run_id": run_id, "status": "guardrail_tripped"},
             )
-            yield TextDelta(text=f"Request blocked: {exc.message}")
+            yield StreamDone(reason="guardrail_tripped")
+            return
 
         except Exception as exc:
             logger.exception("[%s] stream run failed: %s", self.name, exc)
@@ -661,7 +662,7 @@ async def _stream_generate(
     """
     import inspect
 
-    result = model.generate_stream(messages, tools=tools, system_instructions=system)
+    result = model.generate_stream(messages, tools=tools, system=system)
     if inspect.isawaitable(result):
         result = await result
     async for event in result:

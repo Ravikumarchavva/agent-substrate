@@ -1,15 +1,92 @@
 """ravi — async AI-agent framework.
 
-Layer structure (dependencies flow downward only):
-    kernel  — contracts, routing primitives, content blocks
-    fabric  — runtime services: catalog, context, lifecycle, middleware,
-              resources, supervision
-    integrations — LLM clients, MCP, external adapters
-    server  — FastAPI monolith
-    services — FastAPI microservices
+Quick-start for client apps::
+
+    from ravi import AssistantAgent, LocalRuntime, create_model_client
+    from ravi import LLMJudgeGuardrail, GuardrailType
+    from ravi import TextDelta, CompletionEvent, StreamDone
+    from ravi.exceptions import GuardrailTripwireError
+
+All symbols are loaded lazily so importing this package does not trigger
+any logging configuration or heavy module initialisation as a side effect.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ravi.agents.assistant.agent import AgentRunResult, AssistantAgent
+    from ravi.agents.guardrails import (
+        ContentFilterGuardrail,
+        GuardrailType,
+        LLMJudgeGuardrail,
+        MaxTokenGuardrail,
+        PIIDetectionGuardrail,
+        PromptInjectionGuardrail,
+        ToolCallValidationGuardrail,
+    )
+    from ravi.agents.runtime import LocalRuntime
+    from ravi.agents.skills import Skill
+    from ravi.adapters.llm.factory import LLMFactory, create_model_client
+    from ravi.exceptions import GuardrailTripwireError
+    from ravi.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+
+__all__ = [
+    # agents
+    "AssistantAgent",
+    "AgentRunResult",
+    "LocalRuntime",
+    "Skill",
+    # guardrails
+    "ContentFilterGuardrail",
+    "GuardrailType",
+    "LLMJudgeGuardrail",
+    "MaxTokenGuardrail",
+    "PIIDetectionGuardrail",
+    "PromptInjectionGuardrail",
+    "ToolCallValidationGuardrail",
+    "GuardrailTripwireError",
+    # llm
+    "create_model_client",
+    "LLMFactory",
+    # stream
+    "TextDelta",
+    "ReasoningDelta",
+    "CompletionEvent",
+    "StreamDone",
+]
+
+_LAZY: dict[str, tuple[str, str]] = {
+    "AssistantAgent":            ("ravi.agents.assistant.agent",  "AssistantAgent"),
+    "AgentRunResult":            ("ravi.agents.assistant.agent",  "AgentRunResult"),
+    "LocalRuntime":              ("ravi.agents.runtime",          "LocalRuntime"),
+    "Skill":                     ("ravi.agents.skills",           "Skill"),
+    "ContentFilterGuardrail":    ("ravi.agents.guardrails",       "ContentFilterGuardrail"),
+    "GuardrailType":             ("ravi.agents.guardrails",       "GuardrailType"),
+    "LLMJudgeGuardrail":         ("ravi.agents.guardrails",       "LLMJudgeGuardrail"),
+    "MaxTokenGuardrail":         ("ravi.agents.guardrails",       "MaxTokenGuardrail"),
+    "PIIDetectionGuardrail":     ("ravi.agents.guardrails",       "PIIDetectionGuardrail"),
+    "PromptInjectionGuardrail":  ("ravi.agents.guardrails",       "PromptInjectionGuardrail"),
+    "ToolCallValidationGuardrail": ("ravi.agents.guardrails",     "ToolCallValidationGuardrail"),
+    "GuardrailTripwireError":    ("ravi.exceptions",              "GuardrailTripwireError"),
+    "create_model_client":       ("ravi.adapters.llm.factory",    "create_model_client"),
+    "LLMFactory":                ("ravi.adapters.llm.factory",    "LLMFactory"),
+    "TextDelta":                 ("ravi.kernel.stream",           "TextDelta"),
+    "ReasoningDelta":            ("ravi.kernel.stream",           "ReasoningDelta"),
+    "CompletionEvent":           ("ravi.kernel.stream",           "CompletionEvent"),
+    "StreamDone":                ("ravi.kernel.stream",           "StreamDone"),
+}
+
+
+def __getattr__(name: str) -> object:
+    if name in _LAZY:
+        import importlib
+        module_path, attr = _LAZY[name]
+        obj = getattr(importlib.import_module(module_path), attr)
+        globals()[name] = obj  # cache — subsequent access is a plain dict lookup
+        return obj
+    raise AttributeError(f"module 'ravi' has no attribute {name!r}")
 
 
 def main() -> None:

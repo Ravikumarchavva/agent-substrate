@@ -33,55 +33,7 @@ class InvoiceExtractorTool:
     """Extract text and tables from invoice PDFs or scanned image files."""
 
     def __init__(self) -> None:
-        super().__init__(
-            name="invoice_extractor",
-            description=(
-                "Extract text from invoice files. Supports PDFs (via pdfplumber) "
-                "and scanned images such as TIF/PNG/JPEG (via pytesseract OCR). "
-                "Returns page-by-page text and, for PDFs, optionally any tables found."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": (
-                            "Path to the invoice file. PDF, TIF, TIFF, PNG, JPG, "
-                            "and JPEG are supported."
-                        ),
-                    },
-                    "pages": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": (
-                            "Specific page numbers to extract (0-indexed). "
-                            "If omitted, all pages are processed. "
-                            "Applies to multi-page PDFs and multi-frame TIFFs."
-                        ),
-                    },
-                    "extract_tables": {
-                        "type": "boolean",
-                        "description": (
-                            "Extract tables separately (PDF only). Defaults to true."
-                        ),
-                    },
-                },
-                "required": ["file_path"],
-                "additionalProperties": False,
-            },
-            category="data/extraction",
-            tags=[
-                "invoice",
-                "pdf",
-                "tif",
-                "ocr",
-                "extract",
-                "table",
-                "document",
-                "image",
-            ],
-            aliases=["pdf_extractor", "extract_invoice", "image_extractor"],
-        )
+        pass
 
     async def execute(  # type: ignore[override]
         self,

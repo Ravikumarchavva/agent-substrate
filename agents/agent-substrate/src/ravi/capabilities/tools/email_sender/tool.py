@@ -33,41 +33,7 @@ class EmailSenderTool:
         self._smtp_user = smtp_user
         self._smtp_password = smtp_password
         self._from_address = from_address
-        super().__init__(
-            name="email_sender",
-            description=(
-                "Send an email to a recipient. Requires human approval before "
-                "every send.  Supports plain-text and HTML body."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "to": {
-                        "type": "string",
-                        "description": "Recipient email address",
-                    },
-                    "subject": {
-                        "type": "string",
-                        "description": "Email subject line",
-                    },
-                    "body": {
-                        "type": "string",
-                        "description": "Email body (plain text or HTML)",
-                    },
-                    "html": {
-                        "type": "boolean",
-                        "description": "Whether body is HTML (default: false)",
-                    },
-                },
-                "required": ["to", "subject", "body"],
-                "additionalProperties": False,
-            },
-            category="communication",
-            tags=["email", "send", "message", "notify", "smtp", "mail"],
-            aliases=["send_email", "mail"],
-        )
-
-    async def execute(  # type: ignore[override]
+async def execute(  # type: ignore[override]
         self,
         *,
         to: str,

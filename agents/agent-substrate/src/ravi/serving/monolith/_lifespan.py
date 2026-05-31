@@ -106,7 +106,7 @@ def init_llm_clients(settings: Settings) -> LLMClients:
         "openai": settings.OPENAI_API_KEY,
         "groq": settings.GROQ_API_KEY,
         "anthropic": settings.ANTHROPIC_API_KEY,
-        "google": settings.GOOGLE_API_KEY,
+        "google": settings.GEMINI_API_KEY,
         "openrouter": settings.OPENROUTER_API_KEY,
     }
     model_client_kwargs = {
@@ -349,16 +349,6 @@ async def init_runtime_services(
         pipeline_store=pipeline_store,
     )
     registry.register(pipeline_manager_tool)
-
-    # ToolExecutorHandler — registered on runtime for distributed dispatch
-    from ravi.capabilities.tools._tool_executor import ToolExecutorHandler
-
-    tool_executor_handler = ToolExecutorHandler(
-        tools={t.name: t for t in registry.all_tools()},
-        tool_timeout=tool_timeout,
-        tools_requiring_approval=tools_requiring_approval,
-    )
-    await runtime.register("tool_executor", tool_executor_handler)
 
     return RuntimeServices(
         chain_runtime=chain_runtime,

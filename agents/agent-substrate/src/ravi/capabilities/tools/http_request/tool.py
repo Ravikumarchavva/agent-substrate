@@ -28,40 +28,6 @@ class HttpRequestTool:
         allowed_domains: Optional[List[str]] = None,
     ) -> None:
         self._allowed_domains = set(allowed_domains or _DEFAULT_ALLOWED_DOMAINS)
-        super().__init__(
-            name="http_request",
-            description=(
-                "Make an HTTP request to a URL. Supports GET, POST, PUT, and DELETE methods. "
-                "Only pre-approved domains are reachable for security."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "Full URL to request (must be an allowed domain)",
-                    },
-                    "method": {
-                        "type": "string",
-                        "enum": ["GET", "POST", "PUT", "DELETE"],
-                        "description": "HTTP method (default: GET)",
-                    },
-                    "headers": {
-                        "type": "object",
-                        "description": "Request headers as key-value pairs",
-                    },
-                    "body": {
-                        "type": "string",
-                        "description": "Request body (for POST/PUT)",
-                    },
-                },
-                "required": ["url"],
-                "additionalProperties": False,
-            },
-            category="development/execution",
-            tags=["api", "http", "rest", "request", "fetch", "endpoint", "curl"],
-            aliases=["api_request", "fetch_url"],
-        )
 
     def _is_allowed(self, url: str) -> bool:
         parsed = urlparse(url)

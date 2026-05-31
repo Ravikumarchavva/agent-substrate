@@ -54,6 +54,42 @@ class CodeInterpreterTool:
       - **Direct mode**: uses a local SessionManager (testing only)
     """
 
+    name: str = "code_interpreter"
+    description: str = (
+        "Execute Python or bash code in a secure, isolated microVM. "
+        "Python state persists between calls: variables you define in "
+        "one call are available in the next. "
+        "Use exec_type='bash' for shell commands (ls, cat, curl, etc.). "
+        "Available packages: numpy, pandas, matplotlib, scipy, sympy, requests. "
+        "Matplotlib figures are auto-captured and returned as images. "
+        "Print results via print() or return them from expressions."
+    )
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "code": {
+                "type": "string",
+                "description": (
+                    "Python code to execute (exec_type='python') "
+                    "or a bash command (exec_type='bash'). "
+                    "Use print() to show output."
+                ),
+            },
+            "exec_type": {
+                "type": "string",
+                "enum": ["python", "bash"],
+                "description": "'python' (default) or 'bash'",
+                "default": "python",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Max execution time in seconds (default 30, max 300)",
+                "default": 30,
+            },
+        },
+        "required": ["code"],
+        "additionalProperties": False,
+    }
     risk: str = "critical"  # TODO: L4-hitl  # executes arbitrary code
 
     def __init__(
@@ -63,46 +99,7 @@ class CodeInterpreterTool:
         # Legacy compat
         config: Optional[Any] = None,
         pool: Optional[Any] = None,
-    ):
-        super().__init__(
-            name="code_interpreter",
-            description=(
-                "Execute Python or bash code in a secure, isolated microVM. "
-                "Python state persists between calls: variables you define in "
-                "one call are available in the next. "
-                "Use exec_type='bash' for shell commands (ls, cat, curl, etc.). "
-                "Available packages: numpy, pandas, matplotlib, scipy, sympy, requests. "
-                "Matplotlib figures are auto-captured and returned as images. "
-                "Print results via print() or return them from expressions."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": (
-                            "Python code to execute (exec_type='python') "
-                            "or a bash command (exec_type='bash'). "
-                            "Use print() to show output."
-                        ),
-                    },
-                    "exec_type": {
-                        "type": "string",
-                        "enum": ["python", "bash"],
-                        "description": "'python' (default) or 'bash'",
-                        "default": "python",
-                    },
-                    "timeout": {
-                        "type": "integer",
-                        "description": "Max execution time in seconds (default 30, max 300)",
-                        "default": 30,
-                    },
-                },
-                "required": ["code"],
-                "additionalProperties": False,
-            },
-        )
-
+    ) -> None:
         self._http_client = http_client
         self._session_manager = session_manager
         self._mode: str = "none"

@@ -98,7 +98,7 @@ class LLMFactory:
 
     Example::
 
-        factory = LLMFactory("gemini-2.5-flash", os.environ["GOOGLE_API_KEY"])
+        factory = LLMFactory("gemini-2.5-flash", os.environ["GEMINI_API_KEY"])
         client  = factory.build(temperature=0.3)
 
         # Cost estimation before calling

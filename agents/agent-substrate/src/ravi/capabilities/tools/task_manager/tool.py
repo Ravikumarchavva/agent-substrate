@@ -54,59 +54,56 @@ class TaskManagerTool:
 
     risk: str = "critical"  # TODO: L4-hitl  # writes task state, fires SSE events
 
-    def __init__(self, event_emitter: Optional[EventEmitter] = None) -> None:
-        super().__init__(
-            name="manage_tasks",
-            description=(
-                "Create and update a visible task-board for complex, multi-step work. "
-                "ALWAYS call action=create_list FIRST with all planned steps. "
-                "Then call start_task before each step and complete_task after. "
-                "The user sees live Kanban updates: Todo → In Progress → Done."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": [
-                            "create_list",
-                            "start_task",
-                            "complete_task",
-                            "fail_task",
-                            "add_task",
-                            "delete_task",
-                            "update_title",
-                        ],
-                        "description": "Action to perform on the task list.",
-                    },
-                    "tasks": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "Task titles. Required for create_list and add_task."
-                        ),
-                    },
-                    "task_id": {
-                        "type": "string",
-                        "description": (
-                            "ID of the task to update. "
-                            "If omitted for start_task / complete_task, "
-                            "the first matching task is used automatically."
-                        ),
-                    },
-                    "title": {
-                        "type": "string",
-                        "description": "New title for update_title action.",
-                    },
-                    "thread_id": {
-                        "type": "string",
-                        "description": "Conversation / thread ID (injected by the framework).",
-                    },
-                },
-                "required": ["action"],
-                "additionalProperties": False,
+    name: str = "manage_tasks"
+    description: str = (
+        "Create and update a visible task-board for complex, multi-step work. "
+        "ALWAYS call action=create_list FIRST with all planned steps. "
+        "Then call start_task before each step and complete_task after. "
+        "The user sees live Kanban updates: Todo → In Progress → Done."
+    )
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": [
+                    "create_list",
+                    "start_task",
+                    "complete_task",
+                    "fail_task",
+                    "add_task",
+                    "delete_task",
+                    "update_title",
+                ],
+                "description": "Action to perform on the task list.",
             },
-        )
+            "tasks": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Task titles. Required for create_list and add_task.",
+            },
+            "task_id": {
+                "type": "string",
+                "description": (
+                    "ID of the task to update. "
+                    "If omitted for start_task / complete_task, "
+                    "the first matching task is used automatically."
+                ),
+            },
+            "title": {
+                "type": "string",
+                "description": "New title for update_title action.",
+            },
+            "thread_id": {
+                "type": "string",
+                "description": "Conversation / thread ID (injected by the framework).",
+            },
+        },
+        "required": ["action"],
+        "additionalProperties": False,
+    }
+
+    def __init__(self, event_emitter: Optional[EventEmitter] = None) -> None:
         self._emit: Optional[EventEmitter] = event_emitter
         # task_list_id per conversation thread (supports concurrent requests)
         self._task_lists: Dict[str, Optional[str]] = {}  # thread_id -> task_list_id

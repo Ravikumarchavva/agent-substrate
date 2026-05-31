@@ -184,7 +184,7 @@ class CatalogScanner:
     # ------------------------------------------------------------------
 
     def _load_tool_class(self, pkg_dir: Path, tool_py: Path) -> Optional[Type[Any]]:
-        """Import tool.py and return the first ``BaseTool`` subclass found."""
+        """Import tool.py and return the first class satisfying the Tool protocol."""
         module_path = self._to_module_path(tool_py)
         if module_path is None:
             return None
@@ -194,12 +194,15 @@ class CatalogScanner:
             logger.exception("Failed to import tool module: %s", module_path)
             return None
 
-        from ravi.kernel.tools.base_tool import BaseTool
-
+        _TOOL_ATTRS = {"name", "description", "input_schema", "execute"}
         for _attr_name, obj in inspect.getmembers(mod, inspect.isclass):
-            if issubclass(obj, BaseTool) and obj is not BaseTool:
+            if (
+                not inspect.isabstract(obj)
+                and obj.__module__ == mod.__name__
+                and _TOOL_ATTRS.issubset(dir(obj))
+            ):
                 return obj
-        logger.warning("No BaseTool subclass found in %s", tool_py)
+        logger.warning("No Tool-protocol class found in %s", tool_py)
         return None
 
     def _load_connector_class(

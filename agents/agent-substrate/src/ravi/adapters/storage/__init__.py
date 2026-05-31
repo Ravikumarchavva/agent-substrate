@@ -1,5 +1,3 @@
-"""ravi.adapters.storage — Concrete storage backends (S3)."""
+"""ravi.adapters.storage — Concrete storage backends."""
 
-from ravi.adapters.storage.s3 import S3FileStore
-
-__all__ = ["S3FileStore"]
+__all__: list[str] = []

@@ -398,6 +398,9 @@ class OpenAIClient(LLMClient):
                                 arguments=args,
                             )
                         )
+                    # tool_search_call / tool_search_output are metadata items
+                    # produced by OpenAI hosted tool search (gpt-5.4+) — skip them;
+                    # the actual function_call follows in the same output list.
 
             if final_content_text and not has_tool_calls and response_format:
                 try:
@@ -534,6 +537,7 @@ class OpenAIClient(LLMClient):
                             arguments=args,
                         )
                     )
+                # tool_search_call / tool_search_output — skip hosted-search metadata
 
         return final_blocks
 
@@ -641,6 +645,7 @@ class OpenAIClient(LLMClient):
                             arguments=args,
                         )
                     )
+                # tool_search_call / tool_search_output — skip hosted-search metadata
 
         # Parse structured output from final text when schema is set
         if response_format is not None and final_content_text and not has_tool_calls:

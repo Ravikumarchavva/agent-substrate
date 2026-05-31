@@ -16,7 +16,6 @@ from ravi.agents.context import HistoryProvider
 from ravi.kernel import AgentRuntime
 from ravi.kernel.llm import LLMClient
 from ravi.serving.monolith.sse.bridge import BridgeRegistry
-from ravi.adapters.storage import FileStore
 
 
 @dataclass
@@ -38,7 +37,7 @@ class ServerDependencies:
     mcp_servers: dict[str, dict] = field(default_factory=dict)
     session_factory: Any = None
     ci_client: Optional[Any] = None
-    file_store: Optional[FileStore] = None
+    file_store: Optional[Any] = None
 
 
 def get_ctx(request: Request) -> ServerDependencies:

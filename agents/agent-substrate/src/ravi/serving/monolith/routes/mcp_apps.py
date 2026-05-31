@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 from pydantic import BaseModel
-from ravi.kernel.tools.base_tool import BaseTool
+from ravi.kernel.tools import Tool
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -281,7 +281,7 @@ async def get_manifest(request: Request) -> List[Dict[str, Any]]:
     The frontend can use this to know which tools have interactive UIs
     and pre-fetch their HTML resources.
     """
-    tools: list[BaseTool] = getattr(request.app.state, "tools", [])
+    tools: list[Tool] = getattr(request.app.state, "tools", [])
     manifest: List[Dict[str, Any]] = []
 
     for tool in tools:

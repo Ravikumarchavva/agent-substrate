@@ -34,7 +34,6 @@ from ravi.serving.monolith.services import (
     list_threads,
     update_thread,
 )
-from ravi.serving.monolith.services.file_service import purge_thread_files
 
 router = APIRouter(
     prefix="/threads",
@@ -132,19 +131,6 @@ async def delete_thread_endpoint(
     thread = await get_thread(db, thread_id)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
-
-    if ctx.file_store is not None:
-        try:
-            await purge_thread_files(db, ctx.file_store, thread_id)
-        except Exception as exc:
-            # Best effort: keep thread deletion available even if object storage lags.
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "Failed to purge stored files for thread %s: %s",
-                thread_id,
-                exc,
-            )
 
     deleted = await delete_thread(db, thread_id)
     if not deleted:

@@ -40,10 +40,10 @@ logger = setup_logging()
 
 
 def _default_skill_dirs() -> List[Path]:
-    """Return built-in catalog/skills plus the user's local skill directory."""
+    """Return built-in skills plus the user's local skill directory."""
     package_root = Path(__file__).resolve().parents[2]
     return [
-        package_root / "catalog" / "skills",
+        package_root / "capabilities" / "skills",
         Path("~/.claude/skills").expanduser(),
     ]
 

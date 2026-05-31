@@ -18,8 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ravi.serving.monolith.database import get_db
 from ravi.serving.monolith.models import Step, Thread
 from ravi.serving.monolith.security.deps import TokenPayload, get_current_user
-from ravi.serving.monolith.services.file_service import purge_thread_files
-
 logger = setup_logging()
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -151,14 +149,6 @@ async def delete_thread(
 
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
-
-    ctx = getattr(request.app.state, "ctx", None)
-    file_store = getattr(ctx, "file_store", None)
-    if file_store is not None:
-        try:
-            await purge_thread_files(db, file_store, tid)
-        except Exception as exc:
-            logger.warning("Failed to purge stored files for thread %s: %s", tid, exc)
 
     await db.delete(thread)
     await db.commit()

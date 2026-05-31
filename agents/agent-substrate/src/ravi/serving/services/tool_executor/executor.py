@@ -13,7 +13,7 @@ from ravi.logger import setup_logging
 import asyncio
 from typing import Any, Dict, List, Optional
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult
+from ravi.kernel.tools import Tool, ToolExecutionResult
 from ravi.adapters.events import EventBus
 from ravi.serving.shared.events.envelope import EventEnvelope
 
@@ -24,18 +24,18 @@ class ToolRegistry:
     """Registry of available tools, indexed by name."""
 
     def __init__(self):
-        self._tools: Dict[str, BaseTool] = {}
+        self._tools: Dict[str, Tool] = {}
 
-    def register(self, tool: BaseTool) -> None:
+    def register(self, tool: Tool) -> None:
         schema = tool.get_schema()
         self._tools[schema.name] = tool
         logger.debug("Registered tool: %s", schema.name)
 
-    def register_many(self, tools: List[BaseTool]) -> None:
+    def register_many(self, tools: List[Tool]) -> None:
         for tool in tools:
             self.register(tool)
 
-    def get(self, name: str) -> Optional[BaseTool]:
+    def get(self, name: str) -> Optional[Tool]:
         return self._tools.get(name)
 
     def list_tools(self) -> List[Dict[str, Any]]:
@@ -88,16 +88,16 @@ async def execute_tool(
         }
 
     try:
-        result: ToolResult = await asyncio.wait_for(
+        result: ToolExecutionResult = await asyncio.wait_for(
             tool.execute(**arguments),
             timeout=timeout,
         )
         return {
             "tool_name": tool_name,
             "tool_call_id": tool_call_id,
-            "content": result.content if hasattr(result, "content") else str(result),
+            "content": result.text if hasattr(result, "text") else str(result),
             "is_error": result.is_error if hasattr(result, "is_error") else False,
-            "metadata": result.app_data if hasattr(result, "app_data") else {},
+            "metadata": result.metadata if hasattr(result, "metadata") else {},
         }
 
     except asyncio.TimeoutError:

@@ -16,6 +16,38 @@ from ravi.kernel import TextBlock
 class ChainExecutorTool:
     """Execute a Python script that chains multiple adapters together."""
 
+    name: str = "chain_executor"
+    description: str = (
+        "Execute a Python script that chains multiple adapters/tools together. "
+        "The script has access to 'adapters' namespace — call any tool via "
+        "'result = await adapters.tool_name(param=value)'. "
+        "Use 'results.append(value)' to collect outputs. "
+        "Large data flows automatically via DataRef pointers."
+    )
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "code": {
+                "type": "string",
+                "description": (
+                    "Python script to execute. Use 'await adapters.tool_name(...)' "
+                    "to call tools. Use 'results.append(...)' to return data. "
+                    "Use 'print(...)' for logging."
+                ),
+            },
+            "description": {
+                "type": "string",
+                "description": "Brief description of what this chain does",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Max execution time in seconds (default: 120)",
+            },
+        },
+        "required": ["code"],
+        "additionalProperties": False,
+    }
+
     def __init__(self, chain_runtime: Any) -> None:
         from ravi.capabilities.internal.chain_runtime import ChainRuntime
 
@@ -24,42 +56,6 @@ class ChainExecutorTool:
                 f"Expected ChainRuntime, got {type(chain_runtime).__name__}"
             )
         self._runtime: ChainRuntime = chain_runtime
-        super().__init__(
-            name="chain_executor",
-            description=(
-                "Execute a Python script that chains multiple adapters/tools together. "
-                "The script has access to 'adapters' namespace — call any tool via "
-                "'result = await adapters.tool_name(param=value)'. "
-                "Use 'results.append(value)' to collect outputs. "
-                "Large data flows automatically via DataRef pointers."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": (
-                            "Python script to execute. Use 'await adapters.tool_name(...)' "
-                            "to call tools. Use 'results.append(...)' to return data. "
-                            "Use 'print(...)' for logging."
-                        ),
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Brief description of what this chain does",
-                    },
-                    "timeout": {
-                        "type": "integer",
-                        "description": "Max execution time in seconds (default: 120)",
-                    },
-                },
-                "required": ["code"],
-                "additionalProperties": False,
-            },
-            category="development/execution",
-            tags=["chain", "pipeline", "script", "execute", "compose", "workflow"],
-            aliases=["run_chain", "execute_chain", "compose_tools"],
-        )
 
     async def execute(  # type: ignore[override]
         self,

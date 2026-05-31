@@ -16,39 +16,7 @@ class ImageGeneratorTool:
 
     def __init__(self, api_key: Optional[str] = None) -> None:
         self._api_key = api_key
-        super().__init__(
-            name="image_generator",
-            description=(
-                "Generate an image from a text description. "
-                "Returns a URL to the generated image."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "Text description of the image to generate",
-                    },
-                    "size": {
-                        "type": "string",
-                        "enum": ["1024x1024", "1024x1792", "1792x1024"],
-                        "description": "Image dimensions (default: 1024x1024)",
-                    },
-                    "quality": {
-                        "type": "string",
-                        "enum": ["standard", "hd"],
-                        "description": "Image quality: standard or hd (default: standard)",
-                    },
-                },
-                "required": ["prompt"],
-                "additionalProperties": False,
-            },
-            category="creative",
-            tags=["image", "picture", "dall-e", "art", "draw", "generate", "visual"],
-            aliases=["dall_e", "create_image", "generate_image"],
-        )
-
-    async def execute(  # type: ignore[override]
+async def execute(  # type: ignore[override]
         self,
         *,
         prompt: str,

@@ -17,38 +17,7 @@ class MemoryTool:
 
     def __init__(self, redis_client: Any = None) -> None:
         self._redis = redis_client
-        super().__init__(
-            name="memory_tool",
-            description=(
-                "Store, retrieve, list, or delete persistent notes. "
-                "Notes are key-value pairs that survive across conversations."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["save", "recall", "list", "delete"],
-                        "description": "Action: save a note, recall by key, list all, or delete a key",
-                    },
-                    "key": {
-                        "type": "string",
-                        "description": "Note key / identifier (required for save, recall, delete)",
-                    },
-                    "value": {
-                        "type": "string",
-                        "description": "Content to store (required for save action)",
-                    },
-                },
-                "required": ["action"],
-                "additionalProperties": False,
-            },
-            category="productivity",
-            tags=["memory", "note", "remember", "store", "recall", "persist"],
-            aliases=["notes", "remember"],
-        )
-
-    async def execute(  # type: ignore[override]
+async def execute(  # type: ignore[override]
         self,
         *,
         action: str,

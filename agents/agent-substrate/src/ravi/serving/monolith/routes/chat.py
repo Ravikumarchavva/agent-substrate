@@ -435,7 +435,7 @@ async def chat(
                     "No LLM provider credentials are configured for chat. "
                     "Set GROQ_API_KEY or GROK_API_KEY, "
                     "OPENROUTER_API_KEY, "
-                    "GOOGLE_API_KEY or GEMINI_API_KEY, OPENAI_API_KEY, "
+                    "GEMINI_API_KEY or GEMINI_API_KEY, OPENAI_API_KEY, "
                     "or ANTHROPIC_API_KEY."
                 ),
             )
@@ -444,7 +444,7 @@ async def chat(
                 status_code=503,
                 detail=(
                     "Image uploads require a vision-capable chat model. "
-                    "Configure GOOGLE_API_KEY or GEMINI_API_KEY, OPENAI_API_KEY, "
+                    "Configure GEMINI_API_KEY or GEMINI_API_KEY, OPENAI_API_KEY, "
                     "ANTHROPIC_API_KEY, or OPENROUTER_API_KEY."
                 ),
             )

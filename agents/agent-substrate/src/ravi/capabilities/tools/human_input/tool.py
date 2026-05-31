@@ -314,54 +314,52 @@ class AskHumanTool:
         "safe"
     )  # ask_human IS the human — never needs separate approval
 
+    description: str = (
+        "Ask the user a question when you need their input, preference, "
+        "or confirmation. Present 2-3 clear options plus an open-ended "
+        "option for the user to type their own answer. Use this when you "
+        "are unsure about the user's intent, need to choose between "
+        "approaches, or want confirmation before taking an action."
+    )
+    input_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "The question to ask the user",
+            },
+            "context": {
+                "type": "string",
+                "description": "Brief context explaining why you need input",
+            },
+            "option_1": {
+                "type": "string",
+                "description": "First option (required)",
+            },
+            "option_2": {
+                "type": "string",
+                "description": "Second option (required)",
+            },
+            "option_3": {
+                "type": "string",
+                "description": "Third option (optional, leave empty to skip)",
+            },
+        },
+        "required": ["question", "context", "option_1", "option_2"],
+    }
+
     def __init__(
         self,
         handler: HumanInputHandler,
         *,
         name: str = "ask_human",
         max_requests_per_run: int = 3,
-    ):
+    ) -> None:
+        self.name = name
         self.handler = handler
         self._request_count = 0
         self._max_requests = max_requests_per_run
         self._history: List[Dict[str, Any]] = []
-
-        super().__init__(
-            name=name,
-            description=(
-                "Ask the user a question when you need their input, preference, "
-                "or confirmation. Present 2-3 clear options plus an open-ended "
-                "option for the user to type their own answer. Use this when you "
-                "are unsure about the user's intent, need to choose between "
-                "approaches, or want confirmation before taking an action."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "The question to ask the user",
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": "Brief context explaining why you need input",
-                    },
-                    "option_1": {
-                        "type": "string",
-                        "description": "First option (required)",
-                    },
-                    "option_2": {
-                        "type": "string",
-                        "description": "Second option (required)",
-                    },
-                    "option_3": {
-                        "type": "string",
-                        "description": "Third option (optional, leave empty to skip)",
-                    },
-                },
-                "required": ["question", "context", "option_1", "option_2"],
-            },
-        )
 
     async def execute(  # type: ignore[override]
         self,

@@ -21,49 +21,7 @@ class DocumentAnalyzerTool:
 
     def __init__(self, model_client: Any = None) -> None:
         self._model_client = model_client
-        super().__init__(
-            name="document_analyzer",
-            description=(
-                "Analyze a document: extract full text, produce a summary, "
-                "or answer questions about the content."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Path to the document file to analyze",
-                    },
-                    "action": {
-                        "type": "string",
-                        "enum": ["extract", "summarize", "question"],
-                        "description": (
-                            "Action: extract (full text), summarize, or "
-                            "question (answer a question about the doc)"
-                        ),
-                    },
-                    "question": {
-                        "type": "string",
-                        "description": "Question to answer about the document (for action='question')",
-                    },
-                },
-                "required": ["file_path", "action"],
-                "additionalProperties": False,
-            },
-            category="data/exploration",
-            tags=[
-                "document",
-                "pdf",
-                "analyze",
-                "extract",
-                "summarize",
-                "parse",
-                "text",
-            ],
-            aliases=["doc_reader", "parse_document"],
-        )
-
-    async def execute(  # type: ignore[override]
+async def execute(  # type: ignore[override]
         self,
         *,
         file_path: str,

@@ -547,7 +547,7 @@ class OpenAIClient(LLMClient):
         tools: Optional[list[dict[str, Any]]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         *,
-        system_instructions: str = "",
+        system: str = "",
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
@@ -557,7 +557,7 @@ class OpenAIClient(LLMClient):
         """
 
         _, conversation_input = await self._serialize_messages(messages)
-        instructions = system_instructions
+        instructions = system
 
         params: dict[str, Any] = {
             "model": self.model,
@@ -575,7 +575,7 @@ class OpenAIClient(LLMClient):
         if instructions:
             params["instructions"] = instructions
         if self.max_tokens:
-            params["max_tokens"] = kwargs.get("max_tokens", self.max_tokens)
+            params["max_output_tokens"] = kwargs.get("max_tokens", self.max_tokens)
         transformed_tools = self._serialize_tools(tools)
         normalized_tool_choice = self._normalize_tool_choice(tool_choice)
         if transformed_tools:

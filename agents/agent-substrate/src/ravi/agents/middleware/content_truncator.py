@@ -12,7 +12,9 @@ logger = setup_logging()
 class ContentTruncatorMiddleware:
     """Truncates long tool results to fit the LLM context window."""
 
-    def __init__(self, *, max_chars: int = 50_000, suffix: str = "\n\n[...truncated...]") -> None:
+    def __init__(
+        self, *, max_chars: int = 50_000, suffix: str = "\n\n[...truncated...]"
+    ) -> None:
         self.max_chars = max_chars
         self.suffix = suffix
 
@@ -31,5 +33,7 @@ class ContentTruncatorMiddleware:
                 content[i] = TextBlock(text=block.text[: self.max_chars] + self.suffix)
                 truncated = True
         if truncated:
-            logger.debug("ContentTruncator: truncated tool result to %d chars", self.max_chars)
+            logger.debug(
+                "ContentTruncator: truncated tool result to %d chars", self.max_chars
+            )
         return result

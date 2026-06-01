@@ -6,6 +6,9 @@ kernel/fabric migration. They are parked until a replacement fabric Protocol
 is defined.
 """
 
+from __future__ import annotations
+
+
 from ravi.adapters.events.redis_event_bus import EventBus
 
 __all__ = ["EventBus"]

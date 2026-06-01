@@ -1,5 +1,3 @@
-"""Job Controller Service — Wave 2.
+"""ravi.serving.services.job_controller — async job execution controller."""
 
-Owns: durable run state, agent invocation lifecycle, cancellation, retry.
-Does not own: threads, steps (delegates to Conversation Service), tool execution (delegates to Agent Runtime).
-"""
+from __future__ import annotations

@@ -1,4 +1,6 @@
-"""shared.observability - OpenTelemetry setup."""
+"""ravi.serving.shared.observability — telemetry and distributed tracing."""
+
+from __future__ import annotations
 
 from ravi.serving.shared.observability.telemetry import (
     configure_opentelemetry,

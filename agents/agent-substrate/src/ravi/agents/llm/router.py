@@ -128,17 +128,28 @@ class ModelRouter:
                 and profile.input_cost_per_mtok > constraints.max_input_cost_per_mtok
             ):
                 continue
-            if constraints.preferred_providers and profile.provider not in constraints.preferred_providers:
+            if (
+                constraints.preferred_providers
+                and profile.provider not in constraints.preferred_providers
+            ):
                 continue
             if profile.context_length < constraints.min_context_length:
                 continue
             valid.append((model_name, profile))
 
         if not valid:
-            logger.warning("No model satisfies constraints for %s tier, using first candidate", complexity.value)
+            logger.warning(
+                "No model satisfies constraints for %s tier, using first candidate",
+                complexity.value,
+            )
             return candidates[0] if candidates else "gpt-4.1-mini"
 
         valid.sort(key=lambda x: x[1].input_cost_per_mtok)
         selected = valid[0][0]
-        logger.debug("Routed to %s (complexity=%s, %d candidates)", selected, complexity.value, len(valid))
+        logger.debug(
+            "Routed to %s (complexity=%s, %d candidates)",
+            selected,
+            complexity.value,
+            len(valid),
+        )
         return selected

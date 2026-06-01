@@ -116,7 +116,10 @@ def ensure_strict_tool_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 def _encode_image(img: Image.Image) -> dict[str, Any]:
     """PIL Image → OpenAI Responses API ``input_image`` block."""
-    return {"type": "input_image", "image_url": f"data:image/png;base64,{pil_to_base64_png(img)}"}
+    return {
+        "type": "input_image",
+        "image_url": f"data:image/png;base64,{pil_to_base64_png(img)}",
+    }
 
 
 def _encode_image_content(ic: ImageBlock) -> dict[str, Any]:
@@ -127,7 +130,9 @@ def _encode_image_content(ic: ImageBlock) -> dict[str, Any]:
     elif ic.file_id:
         block["file_id"] = ic.file_id
     else:
-        block["image_url"] = f"data:{ic.media_type};base64,{bytes_to_base64(ic.data or b'')}"
+        block["image_url"] = (
+            f"data:{ic.media_type};base64,{bytes_to_base64(ic.data or b'')}"
+        )
     if ic.detail != "auto":
         block["detail"] = ic.detail
     return block
@@ -172,12 +177,7 @@ def _encode_video_content(vc: VideoBlock, role: str) -> dict[str, Any]:
 
 
 def _encode_media_item(
-    item: str
-    | Image.Image
-    | ImageBlock
-    | AudioBlock
-    | VideoBlock
-    | DocumentBlock,
+    item: str | Image.Image | ImageBlock | AudioBlock | VideoBlock | DocumentBlock,
     role: str,
 ) -> dict[str, Any]:
     """Encode a single media block to OpenAI Responses API format."""
@@ -232,12 +232,14 @@ def _encode_assistant(msg: ChatMessage, items: list[dict[str, Any]]) -> None:
             tc_args = block.arguments
             if isinstance(tc_args, dict):
                 tc_args = json.dumps(tc_args)
-            items.append({
-                "type": "function_call",
-                "call_id": block.call_id,
-                "name": block.tool_name,
-                "arguments": tc_args,
-            })
+            items.append(
+                {
+                    "type": "function_call",
+                    "call_id": block.call_id,
+                    "name": block.tool_name,
+                    "arguments": tc_args,
+                }
+            )
     if content:
         items.append({"type": "message", "role": "assistant", "content": content})
 
@@ -292,7 +294,11 @@ def _encode_tool_result(block: ToolResultBlock) -> list[dict[str, Any]]:
         }
     ]
     # Handle media attached to tool results if they exist (requires inspecting contents)
-    media_blocks = [b for b in block.content if isinstance(b, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock))]
+    media_blocks = [
+        b
+        for b in block.content
+        if isinstance(b, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock))
+    ]
     if media_blocks:
         media_content = [
             {
@@ -398,7 +404,9 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
                 _flatten_tool(
                     tool_name=tool["name"],
                     description=tool.get("description", ""),
-                    parameters=tool.get("parameters", {"type": "object", "properties": {}}),
+                    parameters=tool.get(
+                        "parameters", {"type": "object", "properties": {}}
+                    ),
                     defer_loading=defer,
                 )
             )
@@ -419,7 +427,9 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
                 _flatten_tool(
                     tool_name=fn.get("name", ""),
                     description=fn.get("description", ""),
-                    parameters=fn.get("parameters", {"type": "object", "properties": {}}),
+                    parameters=fn.get(
+                        "parameters", {"type": "object", "properties": {}}
+                    ),
                     defer_loading=defer,
                 )
             )

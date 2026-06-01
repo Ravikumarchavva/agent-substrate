@@ -1,5 +1,3 @@
-"""Gateway BFF Service — Wave 1.
+"""ravi.serving.services.gateway — API gateway and BFF microservice."""
 
-Owns: edge API contracts, client request validation, API composition, stream fan-out.
-Does not own: business workflow state, tool execution, authorization policy rules.
-"""
+from __future__ import annotations

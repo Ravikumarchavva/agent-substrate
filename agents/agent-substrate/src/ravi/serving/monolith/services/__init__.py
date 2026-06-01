@@ -1,4 +1,6 @@
-"""Service layer — re-exports from thread_service for backward compatibility."""
+"""ravi.serving.monolith.services — monolith service layers."""
+
+from __future__ import annotations
 
 from ravi.serving.monolith.services.thread_service import (  # noqa: F401
     create_feedback,

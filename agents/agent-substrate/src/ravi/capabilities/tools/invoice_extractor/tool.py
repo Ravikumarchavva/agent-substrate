@@ -79,7 +79,9 @@ class InvoiceExtractorTool:
         except ImportError:
             return ToolExecutionResult(
                 content=[
-                    TextBlock(text="Pillow is not installed. Run: uv sync --group optional")
+                    TextBlock(
+                        text="Pillow is not installed. Run: uv sync --group optional"
+                    )
                 ],
                 is_error=True,
             )

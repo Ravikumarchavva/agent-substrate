@@ -66,8 +66,8 @@ class Message:
     (e.g. ``{"priority": "high"}``).  Use ``payload`` for structured content.
     """
 
-    target: AgentId | TopicId       # required — routing destination
-    payload: object                  # the actual message content
+    target: AgentId | TopicId  # required — routing destination
+    payload: object  # the actual message content
     sender: AgentId | None = None
     correlation_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     causation_id: str | None = None
@@ -91,7 +91,7 @@ class MessageContext:
     runtime: RuntimeRef
     sender: AgentId | None
     correlation_id: str
-    agent_id: AgentId       # identity of the receiving agent
+    agent_id: AgentId  # identity of the receiving agent
 
 
 # ---------------------------------------------------------------------------

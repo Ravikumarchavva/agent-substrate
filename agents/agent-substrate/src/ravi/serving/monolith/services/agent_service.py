@@ -172,7 +172,11 @@ async def persist_assistant_message(
         }
 
     tool_calls = getattr(message, "tool_calls", None)
-    if not tool_calls and hasattr(message, "content") and isinstance(message.content, list):
+    if (
+        not tool_calls
+        and hasattr(message, "content")
+        and isinstance(message.content, list)
+    ):
         tool_calls = [
             block for block in message.content if isinstance(block, ToolUseBlock)
         ]

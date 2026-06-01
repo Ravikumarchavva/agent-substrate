@@ -53,9 +53,19 @@ class WebSurferTool:
             "action": {
                 "type": "string",
                 "enum": [
-                    "navigate", "extract_text", "extract_markdown", "get_html",
-                    "screenshot", "click", "fill", "scroll", "execute_js",
-                    "get_metadata", "go_back", "go_forward", "close",
+                    "navigate",
+                    "extract_text",
+                    "extract_markdown",
+                    "get_html",
+                    "screenshot",
+                    "click",
+                    "fill",
+                    "scroll",
+                    "execute_js",
+                    "get_metadata",
+                    "go_back",
+                    "go_forward",
+                    "close",
                 ],
                 "description": (
                     "Action to perform:\n"
@@ -74,17 +84,35 @@ class WebSurferTool:
                     "- close: Close browser session"
                 ),
             },
-            "url": {"type": "string", "description": "URL to navigate to (for 'navigate' action)"},
-            "selector": {"type": "string", "description": "CSS selector for element (for 'click', 'fill' actions)"},
-            "text": {"type": "string", "description": "Text to enter (for 'fill' action)"},
-            "javascript": {"type": "string", "description": "JavaScript code to execute (for 'execute_js' action)"},
+            "url": {
+                "type": "string",
+                "description": "URL to navigate to (for 'navigate' action)",
+            },
+            "selector": {
+                "type": "string",
+                "description": "CSS selector for element (for 'click', 'fill' actions)",
+            },
+            "text": {
+                "type": "string",
+                "description": "Text to enter (for 'fill' action)",
+            },
+            "javascript": {
+                "type": "string",
+                "description": "JavaScript code to execute (for 'execute_js' action)",
+            },
             "scroll_direction": {
                 "type": "string",
                 "enum": ["up", "down", "top", "bottom"],
                 "description": "Direction to scroll (for 'scroll' action)",
             },
-            "full_page": {"type": "boolean", "description": "Take full page screenshot (default: true for 'screenshot' action)"},
-            "timeout": {"type": "number", "description": "Timeout in milliseconds (default: 30000)"},
+            "full_page": {
+                "type": "boolean",
+                "description": "Take full page screenshot (default: true for 'screenshot' action)",
+            },
+            "timeout": {
+                "type": "number",
+                "description": "Timeout in milliseconds (default: 30000)",
+            },
         },
         "required": ["action"],
     }

@@ -1,4 +1,5 @@
 """Guardrail runner — executes guardrails in parallel."""
+
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +23,8 @@ async def run_guardrails(
 ) -> list[GuardrailResult]:
     """Execute matching guardrails in parallel; raise on tripwire."""
     to_run = [
-        g for g in guardrails
+        g
+        for g in guardrails
         if guardrail_type is None
         or getattr(g, "guardrail_type", None) == guardrail_type
     ]
@@ -45,7 +47,9 @@ async def run_guardrails(
                 )
             return result
         except Exception as exc:
-            logger.error("[Guardrail:%s] Unexpected error: %s", name, exc, exc_info=True)
+            logger.error(
+                "[Guardrail:%s] Unexpected error: %s", name, exc, exc_info=True
+            )
             return GuardrailResult(
                 guardrail_name=name,
                 guardrail_type=gtype,

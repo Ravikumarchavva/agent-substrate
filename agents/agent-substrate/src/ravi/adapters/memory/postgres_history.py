@@ -184,9 +184,7 @@ class PostgresHistoryProvider:
 
     # -- HistoryProvider contract ---------------------------------------------
 
-    async def save_messages(
-        self, session_id: str, messages: List[ChatMessage]
-    ) -> int:
+    async def save_messages(self, session_id: str, messages: List[ChatMessage]) -> int:
         """Append messages to a session, auto-creating the session row.
 
         Messages are assigned sequential IDs after the current max.  The
@@ -199,9 +197,7 @@ class PostgresHistoryProvider:
 
         factory = self._get_session()
         async with factory() as db:
-            session_obj = await db.get(
-                MemorySession, session_id, with_for_update=True
-            )
+            session_obj = await db.get(MemorySession, session_id, with_for_update=True)
             if session_obj is None:
                 session_obj = MemorySession(id=session_id, message_count=0)
                 db.add(session_obj)
@@ -226,9 +222,7 @@ class PostgresHistoryProvider:
 
             session_obj.message_count = max_seq + len(messages)
             await db.commit()
-            logger.debug(
-                "Saved %d messages for session %s", len(messages), session_id
-            )
+            logger.debug("Saved %d messages for session %s", len(messages), session_id)
             return len(messages)
 
     async def load_messages(

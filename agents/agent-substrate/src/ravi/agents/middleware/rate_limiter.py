@@ -22,7 +22,9 @@ class RateLimiterMiddleware:
             async with self._lock:
                 now = time.monotonic()
                 elapsed = now - self._last_refill
-                self._tokens = min(self._max_tokens, self._tokens + elapsed * self._refill_rate)
+                self._tokens = min(
+                    self._max_tokens, self._tokens + elapsed * self._refill_rate
+                )
                 self._last_refill = now
                 if self._tokens >= 1.0:
                     self._tokens -= 1.0

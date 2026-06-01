@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 from ravi.kernel.content import DocumentBlock, ImageBlock, TextBlock
@@ -59,7 +61,9 @@ class MCPTool(Tool):
             description: Tool description from MCP server
             input_schema: JSON Schema for tool parameters from MCP server
         """
-        super().__init__(name=name, description=description, input_schema=input_schema)
+        self.name = name
+        self.description = description
+        self.input_schema = input_schema
         self.client = client
 
     async def execute(self, **kwargs) -> ToolResultBlock:
@@ -77,6 +81,7 @@ class MCPTool(Tool):
         if not self.client.is_connected:
             raise RuntimeError(f"MCP client not connected for tool '{self.name}'")
 
+        call_id = str(kwargs.pop("call_id", ""))
         try:
             result = await self.client.call_tool(self.name, kwargs)
 
@@ -135,14 +140,17 @@ class MCPTool(Tool):
                         content.append(TextBlock(text=str(item)))
 
                 is_error: bool = getattr(result, "isError", False)
-                return ToolResultBlock(content=content, is_error=is_error)
+                return ToolResultBlock(
+                    call_id=call_id, content=content, is_error=is_error
+                )
             else:
                 # Legacy: result is a raw string/object
                 content = [TextBlock(text=str(result))]
-                return ToolResultBlock(content=content, is_error=False)
+                return ToolResultBlock(call_id=call_id, content=content, is_error=False)
 
         except Exception as e:
             return ToolResultBlock(
+                call_id=call_id,
                 content=[TextBlock(text=f"Tool execution failed: {e}")],
                 is_error=True,
             )

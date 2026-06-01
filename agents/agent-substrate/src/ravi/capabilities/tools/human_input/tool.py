@@ -310,9 +310,7 @@ class AskHumanTool:
         )
     """
 
-    risk: str = (
-        "safe"
-    )  # ask_human IS the human — never needs separate approval
+    risk: str = "safe"  # ask_human IS the human — never needs separate approval
 
     description: str = (
         "Ask the user a question when you need their input, preference, "

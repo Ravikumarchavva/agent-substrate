@@ -1,7 +1,3 @@
-"""Agent Runtime Service — Wave 3.
+"""ravi.serving.services.agent_runtime — agent runtime microservice."""
 
-Owns: agent instantiation, ReAct loop execution, memory management.
-Does not own: thread/step persistence (delegates to Conversation),
-workflow lifecycle (takes commands from Workflow Orchestrator),
-tool execution (delegates to Tool Executor).
-"""
+from __future__ import annotations

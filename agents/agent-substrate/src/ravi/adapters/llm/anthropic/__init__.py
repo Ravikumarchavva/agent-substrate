@@ -1,1 +1,3 @@
-"""integrations.llm.anthropic — Anthropic Claude model client."""
+"""ravi.adapters.llm.anthropic — Anthropic LLM adapter."""
+
+from __future__ import annotations

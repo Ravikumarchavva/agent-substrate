@@ -1,4 +1,4 @@
-"""Code interpreter tools for AI agents.
+"""CodeInterpreter — executes code in sandboxed Firecracker VM environment.
 
 Two deployment targets:
 
@@ -10,6 +10,8 @@ Two deployment targets:
   One pod-per-session via CRD; no privileged pods required.  Preferred for
   Kind / EKS / GKE cluster deployments.
 """
+
+from __future__ import annotations
 
 from .tool import CodeInterpreterTool
 from .http_client import CodeInterpreterClient

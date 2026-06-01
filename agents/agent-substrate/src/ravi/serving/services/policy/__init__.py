@@ -1,5 +1,3 @@
-"""Policy Authorization Service — Wave 1.
+"""ravi.serving.services.policy — RBAC authorization policy microservice."""
 
-Owns: role policy, tenant/workspace authorization checks, action-level access decisions.
-Does not own: authentication and session lifecycle.
-"""
+from __future__ import annotations

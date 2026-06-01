@@ -86,7 +86,8 @@ class ToolSearchTool:
             # Return full schemas — used as tool_search_output payload in
             # client-executed OpenAI tool search.
             schemas = [
-                s for name in [t.name for t in matches]
+                s
+                for name in [t.name for t in matches]
                 if (s := self._registry.schema_for(name)) is not None
             ]
             if not schemas:
@@ -96,7 +97,11 @@ class ToolSearchTool:
         else:
             # Human-readable text mode (works with any model)
             if not matches:
-                text = f"No tools found matching '{query}'." if q else "No tools registered."
+                text = (
+                    f"No tools found matching '{query}'."
+                    if q
+                    else "No tools registered."
+                )
             else:
                 header = "Available tools:" if not q else f"Tools matching '{query}':"
                 lines = [f"- **{t.name}**: {t.description}" for t in matches]

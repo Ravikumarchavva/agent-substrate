@@ -36,7 +36,9 @@ class HistoryTruncatorMiddleware:
         ctx.metadata["_original_message_count"] = len(messages)
         ctx.metadata["_pruned_message_count"] = len(pruned)
         logger.debug(
-            "HistoryTruncator: pruned messages from %d to %d", len(messages), len(pruned)
+            "HistoryTruncator: pruned messages from %d to %d",
+            len(messages),
+            len(pruned),
         )
         return ctx
 

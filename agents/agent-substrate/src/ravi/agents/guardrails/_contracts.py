@@ -1,4 +1,5 @@
 """Local guardrail contracts — replaces deleted kernel.guardrails.base_guardrail."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -37,7 +38,9 @@ class GuardrailResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def _pass(name: str, guardrail_type: GuardrailType, message: str = "", **meta: Any) -> GuardrailResult:
+def _pass(
+    name: str, guardrail_type: GuardrailType, message: str = "", **meta: Any
+) -> GuardrailResult:
     return GuardrailResult(
         guardrail_name=name,
         guardrail_type=guardrail_type,

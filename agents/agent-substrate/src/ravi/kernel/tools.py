@@ -97,8 +97,7 @@ class ToolRegistry:
 
     def by_risk(self, risk: ToolRisk) -> list[Tool]:
         return [
-            t for t in self._tools.values()
-            if getattr(t, "risk", ToolRisk.SAFE) == risk
+            t for t in self._tools.values() if getattr(t, "risk", ToolRisk.SAFE) == risk
         ]
 
     def names(self) -> list[str]:
@@ -120,7 +119,9 @@ class ToolRegistry:
             "parameters": t.input_schema,
         }
 
-    def to_deferred_schemas(self, *, include_tool_search: bool = True) -> list[dict[str, object]]:
+    def to_deferred_schemas(
+        self, *, include_tool_search: bool = True
+    ) -> list[dict[str, object]]:
         """Return tool schemas for OpenAI hosted tool search (gpt-5.4+).
 
         All tools are marked ``defer_loading: true`` so only their name and

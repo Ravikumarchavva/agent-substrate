@@ -1,30 +1,3 @@
-"""server.sse - SSE event bus and HITL bridge for the monolith server."""
+"""ravi.serving.monolith.sse — SSE real-time event streaming."""
 
-from ravi.serving.monolith.sse.bridge import BridgeRegistry, WebHITLBridge
-from ravi.serving.monolith.sse.events import (
-    CompletionEvent,
-    ErrorEvent,
-    EventBus,
-    HumanInputRequestEvent,
-    RawDictEvent,
-    ReasoningDeltaEvent,
-    TextDeltaEvent,
-    ToolApprovalRequestEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
-
-__all__ = [
-    "BridgeRegistry",
-    "WebHITLBridge",
-    "CompletionEvent",
-    "ErrorEvent",
-    "EventBus",
-    "HumanInputRequestEvent",
-    "RawDictEvent",
-    "ReasoningDeltaEvent",
-    "TextDeltaEvent",
-    "ToolApprovalRequestEvent",
-    "ToolCallEvent",
-    "ToolResultEvent",
-]
+from __future__ import annotations

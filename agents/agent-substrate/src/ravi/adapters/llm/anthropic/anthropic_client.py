@@ -194,7 +194,9 @@ class AnthropicClient(LLMClient):
             if final_text:
                 try:
                     parsed_obj = response_format.model_validate_json(final_text)
-                    final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
+                    final_blocks.append(
+                        DataBlock(data=parsed_obj.model_dump(mode="json"))
+                    )
                 except Exception:
                     logger.debug(
                         "Failed to parse structured output from Claude: %s",
@@ -332,7 +334,7 @@ class AnthropicClient(LLMClient):
 
         if final_text:
             final_blocks.append(TextBlock(text=final_text))
-            
+
         has_tool_calls = False
         if collected_tool_calls:
             has_tool_calls = True

@@ -79,7 +79,9 @@ async def rebuild_messages_from_steps(
             if generation.get("tool_calls"):
                 for tool_call in generation["tool_calls"]:
                     call_id = tool_call.get("id") or tool_call.get("call_id") or ""
-                    tool_name = tool_call.get("name") or tool_call.get("tool_name") or ""
+                    tool_name = (
+                        tool_call.get("name") or tool_call.get("tool_name") or ""
+                    )
                     args = tool_call.get("arguments") or {}
                     content_blocks.append(
                         ToolUseBlock(
@@ -222,14 +224,24 @@ def create_assistant_agent(
         compaction = SlidingWindowStrategy(max_messages=model_context_window)
     # AgentContext objects (Protocol) can't be introspected here — fall back to default
 
-    from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
+    from ravi.agents.context import (
+        AgentContext,
+        InMemoryHistoryProvider,
+        SlidingWindowCompaction,
+    )
 
     if memory is not None:
-        ctx = AgentContext(memory, compaction or SlidingWindowCompaction(max_messages=model_context_window))
+        ctx = AgentContext(
+            memory,
+            compaction or SlidingWindowCompaction(max_messages=model_context_window),
+        )
     elif compaction is not None:
         ctx = AgentContext(InMemoryHistoryProvider(), compaction)
     else:
-        ctx = AgentContext(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=model_context_window))
+        ctx = AgentContext(
+            InMemoryHistoryProvider(),
+            SlidingWindowCompaction(max_messages=model_context_window),
+        )
 
     return AssistantAgent(
         name,
@@ -241,4 +253,3 @@ def create_assistant_agent(
         max_iterations=max_iterations,
         tool_timeout=tool_timeout,
     )
-

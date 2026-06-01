@@ -74,6 +74,7 @@ class DataBlock(BaseModel):
 
     def to_text_repr(self) -> str:
         import json as _json
+
         return _json.dumps(self.data)
 
 
@@ -85,7 +86,7 @@ class ErrorBlock(BaseModel):
     """
 
     type: Literal["error"] = "error"
-    error_type: str       # e.g. "ValueError", "TimeoutError"
+    error_type: str  # e.g. "ValueError", "TimeoutError"
     message: str
     details: Optional[JsonObject] = None
     recoverable: bool = True
@@ -279,15 +280,18 @@ class ThinkingBlock(BaseModel):
 # ChatMessage — the role-tagged conversation turn
 # ---------------------------------------------------------------------------
 
+
 class ChatMessage(BaseModel):
     """A role-tagged conversation turn containing multimodal blocks.
-    
+
     This is the concrete element type passed to LLM generation.
     """
+
     role: str
     content: list[ContentBlock] = Field(default_factory=list)
 
     model_config = {"frozen": True}
+
 
 # ---------------------------------------------------------------------------
 # ContentBlock — the discriminated union

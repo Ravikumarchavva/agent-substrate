@@ -1,4 +1,6 @@
-"""Shared auth utilities for service-to-service and user authentication."""
+"""ravi.serving.shared.auth — shared auth utilities."""
+
+from __future__ import annotations
 
 from ravi.serving.shared.auth.claims import AuthClaims
 from ravi.serving.shared.auth.jwt import (

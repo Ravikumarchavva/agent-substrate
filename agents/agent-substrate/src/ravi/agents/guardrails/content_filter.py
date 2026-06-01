@@ -37,7 +37,9 @@ class ContentFilterGuardrail:
 
     async def check(self, ctx: GuardrailContext) -> GuardrailResult:
         text = (
-            ctx.input_text if self.guardrail_type == GuardrailType.INPUT else ctx.output_text
+            ctx.input_text
+            if self.guardrail_type == GuardrailType.INPUT
+            else ctx.output_text
         )
         if not text:
             return _pass(self.name, self.guardrail_type, "No text to check")

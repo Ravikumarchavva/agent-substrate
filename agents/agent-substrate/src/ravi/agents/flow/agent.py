@@ -217,6 +217,7 @@ class ParallelFlow(BaseFlow):
             return self.merge(outputs)
         if self.merge == "vote":
             from collections import Counter
+
             return Counter(outputs).most_common(1)[0][0]
         return "\n\n".join(outputs)
 

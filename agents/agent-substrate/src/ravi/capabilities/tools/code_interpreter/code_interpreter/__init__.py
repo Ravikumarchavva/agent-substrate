@@ -1,3 +1,7 @@
+"""CodeInterpreter — executes code in sandboxed Firecracker VM environment."""
+
+from __future__ import annotations
+
 from .agent_sandbox_tools import (
     AgentSandboxTools,
     CodeInterpreter,

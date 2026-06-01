@@ -42,4 +42,3 @@ TTS_VOICE = Literal[
 TTS_FORMAT = Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
 
 __all__ = ["STT_MODEL", "TTS_FORMAT", "TTS_VOICE"]
-

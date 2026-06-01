@@ -1,1 +1,3 @@
-"""Shared contracts, events, and utilities for the microservice platform."""
+"""ravi.serving.shared — shared infrastructure services and contracts."""
+
+from __future__ import annotations

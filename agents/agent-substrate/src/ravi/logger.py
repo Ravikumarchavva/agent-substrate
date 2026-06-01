@@ -57,8 +57,8 @@ class TextFormatter(logging.Formatter):
     """
 
     LEVEL_TAGS = {
-        logging.WARNING: "\033[33m⚠\033[0m ",      # yellow
-        logging.ERROR: "\033[31m✖\033[0m ",        # red
+        logging.WARNING: "\033[33m⚠\033[0m ",  # yellow
+        logging.ERROR: "\033[31m✖\033[0m ",  # red
         logging.CRITICAL: "\033[1;31m✖✖\033[0m ",  # bold red
     }
 
@@ -73,6 +73,7 @@ class TextFormatter(logging.Formatter):
 # ---------------------------------------------------------------------------
 # Global mode flag — allows Console to flip _before_ first import of agent code
 # ---------------------------------------------------------------------------
+
 
 def _resolve_logger_name(name: str | None) -> str:
     """Resolve logger name for module-level usage.
@@ -119,7 +120,9 @@ def _build_handler(
     if mode == "pretty":
         handler.setFormatter(TextFormatter())
     else:
-        handler.setFormatter(JsonFormatter("%(timestamp)s %(level)s %(name)s %(message)s"))
+        handler.setFormatter(
+            JsonFormatter("%(timestamp)s %(level)s %(name)s %(message)s")
+        )
     setattr(handler, "_ravi_managed", True)
     return handler
 
@@ -169,7 +172,9 @@ def setup_logging(
         if not _CONFIGURED:
             # Replace only handlers we own; keep foreign handlers untouched.
             namespace_logger.handlers = [
-                h for h in namespace_logger.handlers if not getattr(h, "_ravi_managed", False)
+                h
+                for h in namespace_logger.handlers
+                if not getattr(h, "_ravi_managed", False)
             ]
             namespace_logger.addHandler(
                 _build_handler(

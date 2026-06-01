@@ -21,7 +21,11 @@ from ravi.logger import setup_logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from ravi.capabilities.knowledge.chunking import get_chunker
-from ravi.capabilities.knowledge.vector_store import BaseVectorStore, Document, SearchResult
+from ravi.capabilities.knowledge.vector_store import (
+    BaseVectorStore,
+    Document,
+    SearchResult,
+)
 
 if TYPE_CHECKING:
     from ravi.kernel.llm import LLMClient, EmbeddingClient as BaseEmbeddingClient

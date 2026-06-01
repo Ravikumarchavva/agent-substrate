@@ -1,5 +1,3 @@
-"""Live Stream Service — Wave 4.
+"""ravi.serving.services.live_stream — server-sent events broadcasting microservice."""
 
-Owns: SSE stream composition, event fan-out to clients, per-thread stream state.
-Does not own: agent execution, HITL approval, conversation persistence.
-"""
+from __future__ import annotations

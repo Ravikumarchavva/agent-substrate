@@ -44,7 +44,11 @@ def _encode_image(img: Image.Image) -> dict[str, Any]:
     """PIL Image → Anthropic base64 image block."""
     return {
         "type": "image",
-        "source": {"type": "base64", "media_type": "image/png", "data": pil_to_base64_png(img)},
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": pil_to_base64_png(img),
+        },
     }
 
 
@@ -58,7 +62,11 @@ def _encode_image_content(ic: ImageBlock) -> dict[str, Any]:
     # Raw bytes
     return {
         "type": "image",
-        "source": {"type": "base64", "media_type": ic.media_type, "data": bytes_to_base64(ic.data or b"")},
+        "source": {
+            "type": "base64",
+            "media_type": ic.media_type,
+            "data": bytes_to_base64(ic.data or b""),
+        },
     }
 
 
@@ -109,7 +117,9 @@ def _encode_user(msg: ChatMessage) -> dict[str, Any]:
     """User ChatMessage → Anthropic user message."""
     content = []
     for item in msg.content:
-        if isinstance(item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock, TextBlock)):
+        if isinstance(
+            item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock, TextBlock)
+        ):
             content.append(_encode_media_item(item))
     return {"role": "user", "content": content}
 
@@ -198,7 +208,10 @@ def _encode_tool_result(block: ToolResultBlock) -> dict[str, Any]:
                     content_blocks.append(_encode_media_item(item))
                 except Exception as e:
                     import logging
-                    logging.getLogger("ravi.kernel.messages.encoders.anthropic").warning(
+
+                    logging.getLogger(
+                        "ravi.kernel.messages.encoders.anthropic"
+                    ).warning(
                         "Failed to encode media item for Anthropic tool result: %s", e
                     )
             elif isinstance(item, (DataBlock, CodeBlock, ErrorBlock)):

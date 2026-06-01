@@ -31,7 +31,9 @@ class FileValidatorMiddleware:
                 continue
             p = Path(value)
             if not p.exists():
-                raise FileNotFoundError(f"FileValidator: {key}={value!r} does not exist")
+                raise FileNotFoundError(
+                    f"FileValidator: {key}={value!r} does not exist"
+                )
             if p.is_file():
                 if self.allowed_extensions is not None:
                     ext = p.suffix.lower()

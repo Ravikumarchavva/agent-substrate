@@ -82,4 +82,6 @@ class ToolCallValidationGuardrail:
                             argument_name=arg_name,
                             matched_pattern=pattern.pattern,
                         )
-        return _pass(self.name, self.guardrail_type, f"Tool call '{tool_name}' validated")
+        return _pass(
+            self.name, self.guardrail_type, f"Tool call '{tool_name}' validated"
+        )

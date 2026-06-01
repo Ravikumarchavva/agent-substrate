@@ -1,10 +1,6 @@
-"""Context and Memory Management Engine.
+"""ravi.agents.context — agent context management and history providers."""
 
-This module provides the core abstractions for agent state management:
-- HistoryProvider: Durable storage for raw messages.
-- CompactionStrategy: Policies for converting raw history into an LLM context window.
-- AgentContext: The runtime environment that bridges history, tools, and budget for an agent.
-"""
+from __future__ import annotations
 
 from .history import HistoryProvider, InMemoryHistoryProvider
 from .compaction import CompactionStrategy, SlidingWindowCompaction

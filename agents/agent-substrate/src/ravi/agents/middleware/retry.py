@@ -11,7 +11,7 @@ logger = setup_logging()
 
 
 def _backoff(attempt: int, base: float, max_delay: float, jitter: float) -> float:
-    delay = min(base * (2 ** attempt), max_delay)
+    delay = min(base * (2**attempt), max_delay)
     return delay + random.uniform(0, jitter)
 
 
@@ -46,7 +46,9 @@ class RetryMiddleware:
             return
         attempt = ctx.metadata.get("_retry_attempt", 0)
         if attempt >= self.max_retries:
-            logger.warning("RetryMiddleware: max retries (%d) exhausted", self.max_retries)
+            logger.warning(
+                "RetryMiddleware: max retries (%d) exhausted", self.max_retries
+            )
             return
         delay = _backoff(attempt, self.base_delay, self.max_delay, self.jitter)
         logger.info(

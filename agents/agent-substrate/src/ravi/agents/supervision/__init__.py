@@ -1,4 +1,6 @@
-"""Supervision — retry policies for fault-tolerant agent execution."""
+"""ravi.agents.supervision — retries, budget tracking, and supervision policies."""
+
+from __future__ import annotations
 
 from .policies import RetryPolicy
 

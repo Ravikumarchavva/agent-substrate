@@ -37,7 +37,11 @@ from sqlalchemy.orm import DeclarativeBase
 
 from pgvector.sqlalchemy import Vector
 
-from ravi.capabilities.knowledge.vector_store import BaseVectorStore, Document, SearchResult
+from ravi.capabilities.knowledge.vector_store import (
+    BaseVectorStore,
+    Document,
+    SearchResult,
+)
 
 logger = setup_logging()
 

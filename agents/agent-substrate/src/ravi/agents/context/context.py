@@ -29,7 +29,9 @@ class AgentContext:
     def __init__(
         self,
         history: HistoryProvider,
-        compaction_strategies: list[CompactionStrategy] | CompactionStrategy | None = None,
+        compaction_strategies: list[CompactionStrategy]
+        | CompactionStrategy
+        | None = None,
     ) -> None:
         self.history = history
         if isinstance(compaction_strategies, list):

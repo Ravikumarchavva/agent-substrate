@@ -234,7 +234,9 @@ class AssistantAgent:
         )
         logger.info("[%s] run start: %.80s", self.name, input_text)
 
-        await self._append(ChatMessage(role="user", content=[TextBlock(text=input_text)]))
+        await self._append(
+            ChatMessage(role="user", content=[TextBlock(text=input_text)])
+        )
 
         try:
             # -- input guardrails ------------------------------------------------
@@ -320,7 +322,9 @@ class AssistantAgent:
                     {"agent": self.name, "step": step, "has_tool_calls": True},
                 )
 
-            logger.warning("[%s] hit max_iterations (%d)", self.name, self.max_iterations)
+            logger.warning(
+                "[%s] hit max_iterations (%d)", self.name, self.max_iterations
+            )
             last_output = await self._last_assistant_text()
             await self.hooks.dispatch(
                 HookEvent.RUN_END,
@@ -351,7 +355,12 @@ class AssistantAgent:
             logger.exception("[%s] run failed: %s", self.name, exc)
             await self.hooks.dispatch(
                 HookEvent.RUN_END,
-                {"agent": self.name, "run_id": run_id, "status": "error", "error": str(exc)},
+                {
+                    "agent": self.name,
+                    "run_id": run_id,
+                    "status": "error",
+                    "error": str(exc),
+                },
             )
             return AgentRunResult(
                 output="",
@@ -375,7 +384,9 @@ class AssistantAgent:
         run_id = uuid4().hex
         logger.info("[%s] stream start: %.80s", self.name, input_text)
 
-        await self._append(ChatMessage(role="user", content=[TextBlock(text=input_text)]))
+        await self._append(
+            ChatMessage(role="user", content=[TextBlock(text=input_text)])
+        )
 
         await self.hooks.dispatch(
             HookEvent.RUN_START,
@@ -458,7 +469,9 @@ class AssistantAgent:
                 )
 
         except GuardrailTripwireError as exc:
-            logger.warning("[%s] [stream] guardrail tripped: %s", self.name, exc.message)
+            logger.warning(
+                "[%s] [stream] guardrail tripped: %s", self.name, exc.message
+            )
             await self.hooks.dispatch(
                 HookEvent.RUN_END,
                 {"agent": self.name, "run_id": run_id, "status": "guardrail_tripped"},
@@ -470,7 +483,12 @@ class AssistantAgent:
             logger.exception("[%s] stream run failed: %s", self.name, exc)
             await self.hooks.dispatch(
                 HookEvent.RUN_END,
-                {"agent": self.name, "run_id": run_id, "status": "error", "error": str(exc)},
+                {
+                    "agent": self.name,
+                    "run_id": run_id,
+                    "status": "error",
+                    "error": str(exc),
+                },
             )
 
         yield StreamDone()
@@ -485,11 +503,7 @@ class AssistantAgent:
     async def _prompt_window(self) -> list[ChatMessage]:
         """Return the compacted history as ChatMessages for the LLM."""
         window = await self._ctx.get_prompt_window()
-        return [
-            m.payload
-            for m in window
-            if isinstance(m.payload, ChatMessage)
-        ]
+        return [m.payload for m in window if isinstance(m.payload, ChatMessage)]
 
     async def _last_assistant_text(self) -> str:
         window = await self._ctx.get_prompt_window()
@@ -633,7 +647,9 @@ class AssistantAgent:
                 ),
                 ToolResultBlock(
                     call_id=tu.call_id,
-                    content=[ErrorBlock(error_type=type(exc).__name__, message=str(exc))],
+                    content=[
+                        ErrorBlock(error_type=type(exc).__name__, message=str(exc))
+                    ],
                     is_error=True,
                 ),
             )

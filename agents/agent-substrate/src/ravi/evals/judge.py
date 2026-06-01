@@ -128,6 +128,7 @@ class LLMJudge:
         for attempt in range(self.max_retries + 1):
             try:
                 from ravi.kernel import TextBlock
+
                 response = await self.model_client.generate(
                     messages=[
                         ChatMessage(role="user", content=[TextBlock(text=prompt)]),

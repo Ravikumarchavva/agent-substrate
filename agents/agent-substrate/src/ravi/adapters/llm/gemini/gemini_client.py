@@ -237,7 +237,9 @@ class GeminiClient(LLMClient):
             if final_text:
                 try:
                     parsed_obj = response_format.model_validate_json(final_text)
-                    final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
+                    final_blocks.append(
+                        DataBlock(data=parsed_obj.model_dump(mode="json"))
+                    )
                 except Exception:
                     logger.debug(
                         "Failed to parse structured output from Gemini: %s",
@@ -246,13 +248,19 @@ class GeminiClient(LLMClient):
 
         if response.usage_metadata:
             from ravi.agents.llm.models import estimate_cost
+
             u = response.usage_metadata
-            in_tok  = u.prompt_token_count or 0
+            in_tok = u.prompt_token_count or 0
             out_tok = u.candidates_token_count or 0
-            cost_usd = estimate_cost(self.model, input_tokens=in_tok, output_tokens=out_tok)
+            cost_usd = estimate_cost(
+                self.model, input_tokens=in_tok, output_tokens=out_tok
+            )
             logger.info(
                 "[%s] tokens in=%d out=%d  cost=$%.6f",
-                self.model, in_tok, out_tok, cost_usd,
+                self.model,
+                in_tok,
+                out_tok,
+                cost_usd,
             )
 
         return final_blocks
@@ -325,7 +333,7 @@ class GeminiClient(LLMClient):
 
         if final_text:
             final_blocks.append(TextBlock(text=final_text))
-            
+
         has_tool_calls = False
         if collected_tool_calls:
             has_tool_calls = True

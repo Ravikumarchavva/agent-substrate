@@ -1,1 +1,3 @@
-"""shared.tasks - in-memory Kanban TaskStore."""
+"""ravi.serving.shared.tasks — background tasks management."""
+
+from __future__ import annotations

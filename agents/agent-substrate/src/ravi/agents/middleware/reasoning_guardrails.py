@@ -1,4 +1,5 @@
 """GuardrailsMiddleware — runs reasoning-layer guardrails at LLM and tool stages."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -32,11 +33,13 @@ class GuardrailsMiddleware:
                     if g not in self.tool_call_guardrails:
                         self.tool_call_guardrails.append(g)
         self.input_guardrails = [
-            g for g in self.input_guardrails
+            g
+            for g in self.input_guardrails
             if getattr(g, "guardrail_type", None) != GuardrailType.TOOL_CALL
         ]
         self.output_guardrails = [
-            g for g in self.output_guardrails
+            g
+            for g in self.output_guardrails
             if getattr(g, "guardrail_type", None) != GuardrailType.TOOL_CALL
         ]
 
@@ -80,6 +83,7 @@ class GuardrailsMiddleware:
             return result
 
         from ravi.kernel import content_blocks_to_str
+
         output_text = content_blocks_to_str(result)
         gctx = GuardrailContext(
             agent_name=ctx.agent_name,

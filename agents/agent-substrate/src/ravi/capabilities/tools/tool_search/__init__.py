@@ -1,5 +1,3 @@
-"""ToolSearchTool — search the active tool registry by keyword."""
+"""ToolSearch — searches and discovers available tools within catalog."""
 
-from ravi.capabilities.tools.tool_search.tool import ToolSearchTool
-
-__all__ = ["ToolSearchTool"]
+from __future__ import annotations

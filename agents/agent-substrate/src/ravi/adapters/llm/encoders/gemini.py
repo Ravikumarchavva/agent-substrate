@@ -142,7 +142,9 @@ def _encode_user(msg: ChatMessage) -> genai_types.Content:
     """User ChatMessage → Gemini Content with user role."""
     parts = []
     for item in msg.content:
-        if isinstance(item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock, TextBlock)):
+        if isinstance(
+            item, (ImageBlock, AudioBlock, VideoBlock, DocumentBlock, TextBlock)
+        ):
             parts.append(_encode_media_item(item))
     return genai_types.Content(role="user", parts=parts)
 
@@ -161,7 +163,9 @@ def _encode_assistant(msg: ChatMessage) -> genai_types.Content | None:
                 tc_args = json.loads(tc_args)
             parts.append(
                 genai_types.Part(
-                    function_call=genai_types.FunctionCall(name=item.tool_name, args=tc_args)
+                    function_call=genai_types.FunctionCall(
+                        name=item.tool_name, args=tc_args
+                    )
                 )
             )
 
@@ -218,7 +222,7 @@ def _encode_tool_result(block: ToolResultBlock) -> genai_types.Content:
     """ToolResultBlock → Gemini function_response Content."""
     parts_text = []
     media_parts = []
-    
+
     if block.content:
         for item in block.content:
             if isinstance(item, TextBlock):
@@ -232,13 +236,15 @@ def _encode_tool_result(block: ToolResultBlock) -> genai_types.Content:
                     media_parts.append(_encode_media_item(item))
                 except Exception as e:
                     import logging
+
                     logging.getLogger("ravi.kernel.messages.encoders.gemini").warning(
-                        "Failed to encode media item for Gemini function response: %s", e
+                        "Failed to encode media item for Gemini function response: %s",
+                        e,
                     )
 
     content_str = "\n".join(parts_text)
     tool_name = block.tool_name or "unknown_tool"
-    
+
     parts = [
         genai_types.Part(
             function_response=genai_types.FunctionResponse(

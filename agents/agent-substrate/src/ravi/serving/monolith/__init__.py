@@ -1,9 +1,3 @@
-"""Agent Framework Chat Server.
+"""ravi.serving.monolith — FastAPI monolithic application."""
 
-Production-grade FastAPI server with:
-- Session management (threads)
-- Message persistence (PostgreSQL)
-- Per-session agent memory
-- Lifecycle hooks (on_chat_start, on_message, on_chat_end, on_chat_resume)
-- SSE streaming with typed chunks
-"""
+from __future__ import annotations

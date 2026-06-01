@@ -1,5 +1,3 @@
-"""Human Gate Service — Wave 4.
+"""ravi.serving.services.human_gate — human-in-the-loop gate microservice."""
 
-Owns: approval lifecycle, pending request state, HITL event routing.
-Does not own: agent execution, conversation persistence.
-"""
+from __future__ import annotations

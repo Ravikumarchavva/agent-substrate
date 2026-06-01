@@ -1,5 +1,3 @@
-"""Identity Auth Service — Wave 1.
+"""ravi.serving.services.identity — JWT authentication and identity microservice."""
 
-Owns: user authentication, token/session lifecycle, service account identity.
-Does not own: authorization policy decisions.
-"""
+from __future__ import annotations

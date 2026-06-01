@@ -186,9 +186,7 @@ class OpenAIClient(LLMClient):
                 self._encoding = tiktoken.get_encoding("cl100k_base")
         return self._encoding
 
-    def _messages_to_openai_format(
-        self, messages: list[ChatMessage]
-    ) -> list[dict]:
+    def _messages_to_openai_format(self, messages: list[ChatMessage]) -> list[dict]:
         """Convert framework messages to OpenAI API format.
 
         .. deprecated:: Use ``_serialize_messages`` instead.
@@ -261,14 +259,20 @@ class OpenAIClient(LLMClient):
                             file_id = await self._upload_image_input(
                                 image_bytes=item.data,
                                 media_type=media_type,
-                                filename=(f"tool-artifact.{self._image_extension(media_type)}"),
+                                filename=(
+                                    f"tool-artifact.{self._image_extension(media_type)}"
+                                ),
                             )
-                            new_tool_content.append(ImageBlock(file_id=file_id, detail=item.detail))
+                            new_tool_content.append(
+                                ImageBlock(file_id=file_id, detail=item.detail)
+                            )
                             changed = True
                         else:
                             new_tool_content.append(item)
                     if changed:
-                        new_content.append(block.model_copy(update={"content": new_tool_content}))
+                        new_content.append(
+                            block.model_copy(update={"content": new_tool_content})
+                        )
                     else:
                         new_content.append(block)
                 else:
@@ -384,16 +388,21 @@ class OpenAIClient(LLMClient):
             final_content_text = getattr(response, "output_text", "") or ""
             if final_content_text:
                 final_blocks.append(TextBlock(text=final_content_text))
-                
+
             has_tool_calls = False
             if response.output:
                 for item in response.output:
                     if item.type == "function_call":
                         has_tool_calls = True
-                        args = json.loads(item.arguments) if isinstance(item.arguments, str) else item.arguments
+                        args = (
+                            json.loads(item.arguments)
+                            if isinstance(item.arguments, str)
+                            else item.arguments
+                        )
                         final_blocks.append(
                             ToolUseBlock(
-                                call_id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                                call_id=getattr(item, "call_id", "")
+                                or getattr(item, "id", ""),
                                 tool_name=item.name,
                                 arguments=args,
                             )
@@ -405,7 +414,9 @@ class OpenAIClient(LLMClient):
             if final_content_text and not has_tool_calls and response_format:
                 try:
                     parsed_obj = response_format.model_validate_json(final_content_text)
-                    final_blocks.append(DataBlock(data=parsed_obj.model_dump(mode="json")))
+                    final_blocks.append(
+                        DataBlock(data=parsed_obj.model_dump(mode="json"))
+                    )
                 except Exception:
                     logger.debug(
                         f"Failed to parse structured output from text: "
@@ -481,11 +492,11 @@ class OpenAIClient(LLMClient):
         #                     refusal = getattr(block, "refusal", str(block))
         #                     parsed = None
         #                     break
-            
+
         #     final_blocks: list[ContentBlock] = []
         #     if raw_text:
         #         final_blocks.append(TextBlock(text=raw_text))
-            
+
         #     if refusal:
         #         final_blocks.append(ErrorBlock(error_type="Refusal", message=refusal))
         #     elif parsed:
@@ -529,10 +540,15 @@ class OpenAIClient(LLMClient):
         if response.output:
             for item in response.output:
                 if item.type == "function_call":
-                    args = json.loads(item.arguments) if isinstance(item.arguments, str) else item.arguments
+                    args = (
+                        json.loads(item.arguments)
+                        if isinstance(item.arguments, str)
+                        else item.arguments
+                    )
                     final_blocks.append(
                         ToolUseBlock(
-                            call_id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                            call_id=getattr(item, "call_id", "")
+                            or getattr(item, "id", ""),
                             tool_name=item.name,
                             arguments=args,
                         )
@@ -637,10 +653,15 @@ class OpenAIClient(LLMClient):
             for item in final_response.output:
                 if item.type == "function_call":
                     has_tool_calls = True
-                    args = json.loads(item.arguments) if isinstance(item.arguments, str) else item.arguments
+                    args = (
+                        json.loads(item.arguments)
+                        if isinstance(item.arguments, str)
+                        else item.arguments
+                    )
                     final_blocks.append(
                         ToolUseBlock(
-                            call_id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                            call_id=getattr(item, "call_id", "")
+                            or getattr(item, "id", ""),
                             tool_name=item.name,
                             arguments=args,
                         )

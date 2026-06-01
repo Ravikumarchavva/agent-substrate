@@ -35,6 +35,7 @@ class MaxTokenGuardrail:
         self._encoding = None
         try:
             import tiktoken
+
             try:
                 self._encoding = tiktoken.encoding_for_model(model)
             except KeyError:

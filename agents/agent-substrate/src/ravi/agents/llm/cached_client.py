@@ -62,7 +62,9 @@ class CachedModelClient:
                 if cached is not None:
                     return [TextBlock(text=cached)]
 
-        result = await self._inner.generate(messages, tools=tools, system=system, **kwargs)
+        result = await self._inner.generate(
+            messages, tools=tools, system=system, **kwargs
+        )
 
         if cacheable and result:
             query_text = self._extract_query(messages)

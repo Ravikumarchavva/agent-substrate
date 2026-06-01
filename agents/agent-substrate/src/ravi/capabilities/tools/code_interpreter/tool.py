@@ -274,9 +274,7 @@ class CodeInterpreterTool:
 
                         from ravi.kernel import ImageBlock  # was ImageContent
 
-                        media.append(
-                            ImageBlock(data=img_data, media_type="image/png")
-                        )
+                        media.append(ImageBlock(data=img_data, media_type="image/png"))
                         plt.close(fig)
                 except Exception as e:
                     success = False

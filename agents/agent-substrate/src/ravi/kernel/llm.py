@@ -57,7 +57,9 @@ class BaseEmbeddingClient:
     are derived from it, satisfying the ``EmbeddingClient`` Protocol.
     """
 
-    def __init__(self, model: str, dimensions: int | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, model: str, dimensions: int | None = None, **kwargs: Any
+    ) -> None:
         self.model = model
         self.dimensions = dimensions
 

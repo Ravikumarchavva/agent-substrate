@@ -78,7 +78,9 @@ class _HandoffTool:
             "additionalProperties": False,
         }
 
-    async def execute(self, *, input: str, reason: str = "", **_kw: Any) -> ToolExecutionResult:  # noqa: A002
+    async def execute(
+        self, *, input: str, reason: str = "", **_kw: Any
+    ) -> ToolExecutionResult:  # noqa: A002
         logger.debug(
             "Handoff → %s | reason: %s | input: %.80s",
             self._agent.name,

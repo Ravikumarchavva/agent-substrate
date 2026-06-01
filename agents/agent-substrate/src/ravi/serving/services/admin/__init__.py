@@ -1,5 +1,3 @@
-"""Admin Control Plane Service — Wave 5.
+"""ravi.serving.services.admin — admin microservice."""
 
-Owns: platform stats, tenant management, audit log, user management.
-Does not own: business workflow, conversation data (reads from other services).
-"""
+from __future__ import annotations

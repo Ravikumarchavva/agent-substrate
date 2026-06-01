@@ -151,7 +151,6 @@ _THEME = Theme(
 )
 
 
-
 # ---------------------------------------------------------------------------
 # Console
 # ---------------------------------------------------------------------------
@@ -399,6 +398,7 @@ class Console:
                 elif isinstance(chunk, CompletionEvent):
                     if hasattr(chunk, "content"):
                         from ravi.kernel.content import content_blocks_to_str
+
                         final_message = content_blocks_to_str(chunk.content)
                     else:
                         final_message = getattr(chunk, "message", None)
@@ -582,9 +582,15 @@ class Console:
 
         agent_skills = self._get_agent_skills()
         skill_count = (
-            len(self._skill_manager.available_names) if self._skill_manager else len(agent_skills)
+            len(self._skill_manager.available_names)
+            if self._skill_manager
+            else len(agent_skills)
         )
-        active_count = len(self._skill_manager._active) if self._skill_manager else len(agent_skills)
+        active_count = (
+            len(self._skill_manager._active)
+            if self._skill_manager
+            else len(agent_skills)
+        )
 
         skill_summary = (
             f"[bold]{skill_count} skills available[/bold]"
@@ -631,7 +637,11 @@ class Console:
                 continue
 
             # Snapshot active skills before run to detect newly activated ones
-            before = set(self._skill_manager._active.keys()) if self._skill_manager else set()
+            before = (
+                set(self._skill_manager._active.keys())
+                if self._skill_manager
+                else set()
+            )
 
             try:
                 if stream:
@@ -642,7 +652,11 @@ class Console:
                 self.console.print(f"[error]Error: {exc}[/error]")
 
             # Report newly activated skills after this turn
-            after = set(self._skill_manager._active.keys()) if self._skill_manager else set()
+            after = (
+                set(self._skill_manager._active.keys())
+                if self._skill_manager
+                else set()
+            )
             newly_activated = after - before
             if newly_activated:
                 self._session_skills_used.update(newly_activated)
@@ -731,7 +745,9 @@ class Console:
         footer = " · ".join(p for p in parts if p)
         self.console.print(f"  [info]{footer}[/info]")
 
-    def _print_stream_footer(self, elapsed: float, tool_calls: int, steps: int = 1, status: str = "completed") -> None:
+    def _print_stream_footer(
+        self, elapsed: float, tool_calls: int, steps: int = 1, status: str = "completed"
+    ) -> None:
         parts = [
             f"{status}",
             f"{steps} steps",
@@ -791,7 +807,11 @@ class Console:
                 table.add_column("Status", style="dim")
                 table.add_column("Description")
                 for meta in sorted(all_meta, key=lambda m: m.name):
-                    status = "[skill_active]● active[/skill_active]" if meta.name in active_names else "[dim]○ available[/dim]"
+                    status = (
+                        "[skill_active]● active[/skill_active]"
+                        if meta.name in active_names
+                        else "[dim]○ available[/dim]"
+                    )
                     desc = meta.description
                     if len(desc) > 65:
                         desc = desc[:62] + "..."

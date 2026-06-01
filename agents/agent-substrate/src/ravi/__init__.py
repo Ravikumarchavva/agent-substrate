@@ -16,7 +16,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ravi.adapters.llm.factory import LLMFactory, create_model_client
     from ravi.agents.assistant.agent import AgentRunResult, AssistantAgent
+    from ravi.agents.context import (
+        AgentContext,
+        InMemoryHistoryProvider,
+        SlidingWindowCompaction,
+    )
     from ravi.agents.guardrails import (
         ContentFilterGuardrail,
         GuardrailType,
@@ -28,9 +34,14 @@ if TYPE_CHECKING:
     )
     from ravi.agents.runtime import LocalRuntime
     from ravi.agents.skills import Skill
-    from ravi.adapters.llm.factory import LLMFactory, create_model_client
     from ravi.exceptions import GuardrailTripwireError
-    from ravi.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+    from ravi.kernel import ChatMessage, TextBlock, ToolExecutionResult
+    from ravi.kernel.stream import (
+        CompletionEvent,
+        ReasoningDelta,
+        StreamDone,
+        TextDelta,
+    )
 
 __all__ = [
     # agents
@@ -38,6 +49,9 @@ __all__ = [
     "AgentRunResult",
     "LocalRuntime",
     "Skill",
+    "InMemoryHistoryProvider",
+    "AgentContext",
+    "SlidingWindowCompaction",
     # guardrails
     "ContentFilterGuardrail",
     "GuardrailType",
@@ -55,33 +69,47 @@ __all__ = [
     "ReasoningDelta",
     "CompletionEvent",
     "StreamDone",
+    # kernel types
+    "ChatMessage",
+    "TextBlock",
+    "ToolExecutionResult",
 ]
 
 _LAZY: dict[str, tuple[str, str]] = {
-    "AssistantAgent":            ("ravi.agents.assistant.agent",  "AssistantAgent"),
-    "AgentRunResult":            ("ravi.agents.assistant.agent",  "AgentRunResult"),
-    "LocalRuntime":              ("ravi.agents.runtime",          "LocalRuntime"),
-    "Skill":                     ("ravi.agents.skills",           "Skill"),
-    "ContentFilterGuardrail":    ("ravi.agents.guardrails",       "ContentFilterGuardrail"),
-    "GuardrailType":             ("ravi.agents.guardrails",       "GuardrailType"),
-    "LLMJudgeGuardrail":         ("ravi.agents.guardrails",       "LLMJudgeGuardrail"),
-    "MaxTokenGuardrail":         ("ravi.agents.guardrails",       "MaxTokenGuardrail"),
-    "PIIDetectionGuardrail":     ("ravi.agents.guardrails",       "PIIDetectionGuardrail"),
-    "PromptInjectionGuardrail":  ("ravi.agents.guardrails",       "PromptInjectionGuardrail"),
-    "ToolCallValidationGuardrail": ("ravi.agents.guardrails",     "ToolCallValidationGuardrail"),
-    "GuardrailTripwireError":    ("ravi.exceptions",              "GuardrailTripwireError"),
-    "create_model_client":       ("ravi.adapters.llm.factory",    "create_model_client"),
-    "LLMFactory":                ("ravi.adapters.llm.factory",    "LLMFactory"),
-    "TextDelta":                 ("ravi.kernel.stream",           "TextDelta"),
-    "ReasoningDelta":            ("ravi.kernel.stream",           "ReasoningDelta"),
-    "CompletionEvent":           ("ravi.kernel.stream",           "CompletionEvent"),
-    "StreamDone":                ("ravi.kernel.stream",           "StreamDone"),
+    "AssistantAgent": ("ravi.agents.assistant.agent", "AssistantAgent"),
+    "AgentRunResult": ("ravi.agents.assistant.agent", "AgentRunResult"),
+    "LocalRuntime": ("ravi.agents.runtime", "LocalRuntime"),
+    "Skill": ("ravi.agents.skills", "Skill"),
+    "InMemoryHistoryProvider": ("ravi.agents.context", "InMemoryHistoryProvider"),
+    "AgentContext": ("ravi.agents.context", "AgentContext"),
+    "SlidingWindowCompaction": ("ravi.agents.context", "SlidingWindowCompaction"),
+    "ContentFilterGuardrail": ("ravi.agents.guardrails", "ContentFilterGuardrail"),
+    "GuardrailType": ("ravi.agents.guardrails", "GuardrailType"),
+    "LLMJudgeGuardrail": ("ravi.agents.guardrails", "LLMJudgeGuardrail"),
+    "MaxTokenGuardrail": ("ravi.agents.guardrails", "MaxTokenGuardrail"),
+    "PIIDetectionGuardrail": ("ravi.agents.guardrails", "PIIDetectionGuardrail"),
+    "PromptInjectionGuardrail": ("ravi.agents.guardrails", "PromptInjectionGuardrail"),
+    "ToolCallValidationGuardrail": (
+        "ravi.agents.guardrails",
+        "ToolCallValidationGuardrail",
+    ),
+    "GuardrailTripwireError": ("ravi.exceptions", "GuardrailTripwireError"),
+    "create_model_client": ("ravi.adapters.llm.factory", "create_model_client"),
+    "LLMFactory": ("ravi.adapters.llm.factory", "LLMFactory"),
+    "TextDelta": ("ravi.kernel.stream", "TextDelta"),
+    "ReasoningDelta": ("ravi.kernel.stream", "ReasoningDelta"),
+    "CompletionEvent": ("ravi.kernel.stream", "CompletionEvent"),
+    "StreamDone": ("ravi.kernel.stream", "StreamDone"),
+    "ChatMessage": ("ravi.kernel.content", "ChatMessage"),
+    "TextBlock": ("ravi.kernel.content", "TextBlock"),
+    "ToolExecutionResult": ("ravi.kernel.tools", "ToolExecutionResult"),
 }
 
 
 def __getattr__(name: str) -> object:
     if name in _LAZY:
         import importlib
+
         module_path, attr = _LAZY[name]
         obj = getattr(importlib.import_module(module_path), attr)
         globals()[name] = obj  # cache — subsequent access is a plain dict lookup

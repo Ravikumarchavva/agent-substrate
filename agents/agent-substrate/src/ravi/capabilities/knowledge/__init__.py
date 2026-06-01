@@ -1,5 +1,8 @@
 """ravi.capabilities.knowledge — Retrieval-Augmented Generation primitives."""
 
+from __future__ import annotations
+
+
 from ravi.capabilities.knowledge.graph_store import (
     BaseGraphStore,
     Entity,
@@ -13,7 +16,12 @@ from ravi.capabilities.knowledge.vector_store import (
 )
 from ravi.capabilities.knowledge.pipeline import RAGPipeline
 from ravi.capabilities.knowledge.graph_rag import GraphRAGPipeline
-from ravi.capabilities.knowledge.chunking import TextChunker, SentenceChunker, PageChunker, get_chunker
+from ravi.capabilities.knowledge.chunking import (
+    TextChunker,
+    SentenceChunker,
+    PageChunker,
+    get_chunker,
+)
 from ravi.capabilities.knowledge.reranker import LLMReranker
 
 __all__ = [

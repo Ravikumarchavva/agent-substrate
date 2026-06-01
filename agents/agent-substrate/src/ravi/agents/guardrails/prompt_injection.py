@@ -11,7 +11,10 @@ from ravi.agents.guardrails._contracts import (
 )
 
 _INJECTION_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)", re.I),
+    re.compile(
+        r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)",
+        re.I,
+    ),
     re.compile(r"disregard\s+(all\s+)?(previous|prior|above)", re.I),
     re.compile(r"forget\s+(all\s+)?(previous|prior|above|everything)", re.I),
     re.compile(r"you\s+are\s+now\s+(?:a|an|the)\s+", re.I),

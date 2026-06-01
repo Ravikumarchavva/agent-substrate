@@ -48,7 +48,9 @@ class LLMJudgeGuardrail:
 
     async def check(self, ctx: GuardrailContext) -> GuardrailResult:
         text = (
-            ctx.input_text if self.guardrail_type == GuardrailType.INPUT else ctx.output_text
+            ctx.input_text
+            if self.guardrail_type == GuardrailType.INPUT
+            else ctx.output_text
         )
         if not text:
             return _pass(self.name, self.guardrail_type, "No text to judge")
@@ -60,14 +62,14 @@ class LLMJudgeGuardrail:
 
             # Wrap as a classification request so the model classifies rather than answers.
             classify_request = f'Classify this message:\n"""\n{text}\n"""'
-            messages = [ChatMessage(role="user", content=[TextBlock(text=classify_request)])]
+            messages = [
+                ChatMessage(role="user", content=[TextBlock(text=classify_request)])
+            ]
             response = await self._model_client.generate(
                 messages,
                 system=self._judge_prompt,
             )
-            response_text = " ".join(
-                b.text for b in response if hasattr(b, "text")
-            )
+            response_text = " ".join(b.text for b in response if hasattr(b, "text"))
             logger.debug("[LLMJudge] raw response: %r", response_text[:200])
             judgment = self._parse_judgment(response_text)
             safe = judgment.get("safe", True)

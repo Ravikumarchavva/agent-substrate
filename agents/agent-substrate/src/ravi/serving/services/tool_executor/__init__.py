@@ -1,5 +1,3 @@
-"""Tool Executor Service — Wave 3.
+"""ravi.serving.services.tool_executor — tool execution runner microservice."""
 
-Owns: tool dispatch, MCP tool registry, tool sandboxing/timeout.
-Does not own: agent reasoning loop, conversation state.
-"""
+from __future__ import annotations

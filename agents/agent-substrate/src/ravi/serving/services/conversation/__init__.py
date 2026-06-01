@@ -1,5 +1,3 @@
-"""Conversation Service — Wave 2.
+"""ravi.serving.services.conversation — thread/message chat microservice."""
 
-Owns: threads, steps (messages), feedback.
-Does not own: workflow state, agent execution, tool results directly.
-"""
+from __future__ import annotations

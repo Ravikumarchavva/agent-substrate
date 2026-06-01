@@ -58,13 +58,23 @@ class FallbackClient:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
-                return await client.generate(messages, tools=tools, system=system, **kwargs)
+                return await client.generate(
+                    messages, tools=tools, system=system, **kwargs
+                )
             except Exception as exc:
                 last_exc = exc
                 next_msg = (
-                    f"Trying client {i + 1}..." if i + 1 < len(self._clients) else "No more clients."
+                    f"Trying client {i + 1}..."
+                    if i + 1 < len(self._clients)
+                    else "No more clients."
                 )
-                logger.warning("FallbackClient: client %d (%s) failed: %s. %s", i, client.model, exc, next_msg)
+                logger.warning(
+                    "FallbackClient: client %d (%s) failed: %s. %s",
+                    i,
+                    client.model,
+                    exc,
+                    next_msg,
+                )
         raise last_exc  # type: ignore[misc]
 
     async def generate_stream(
@@ -80,7 +90,12 @@ class FallbackClient:
                 return
             except Exception as exc:
                 last_exc = exc
-                logger.warning("FallbackClient: stream from client %d (%s) failed: %s", i, client.model, exc)
+                logger.warning(
+                    "FallbackClient: stream from client %d (%s) failed: %s",
+                    i,
+                    client.model,
+                    exc,
+                )
         if last_exc:
             raise last_exc
 

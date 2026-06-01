@@ -27,6 +27,9 @@ Quick start::
     print(report.summary())
 """
 
+from __future__ import annotations
+
+
 from ravi.evals.models import (
     EvalCase,
     EvalDataset,

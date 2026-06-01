@@ -1,1 +1,3 @@
-"""Microservice packages for the agent-framework platform."""
+"""ravi.serving.services — independent microservices orchestrator."""
+
+from __future__ import annotations

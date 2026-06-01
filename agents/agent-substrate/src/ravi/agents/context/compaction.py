@@ -15,7 +15,7 @@ class SlidingWindowCompaction:
     async def compact(self, raw_history: list[Message]) -> list[Message]:
         if len(raw_history) <= self.max_messages:
             return raw_history
-        return raw_history[-self.max_messages:]
+        return raw_history[-self.max_messages :]
 
 
 __all__ = ["CompactionStrategy", "SlidingWindowCompaction"]

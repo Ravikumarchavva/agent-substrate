@@ -110,7 +110,6 @@ async def execute_agent_run(
         await event_bus.publish(
             EventEnvelope(
                 event_type="agent.text_delta",
-
                 payload={
                     "type": "text_delta",
                     "run_id": run_id,
@@ -125,7 +124,6 @@ async def execute_agent_run(
         await event_bus.publish(
             EventEnvelope(
                 event_type="agent.reasoning_delta",
-
                 payload={
                     "type": "reasoning_delta",
                     "run_id": run_id,
@@ -140,11 +138,13 @@ async def execute_agent_run(
         tool_calls = []
         for block in evt.content:
             if isinstance(block, ToolUseBlock):
-                tool_calls.append({
-                    "id": block.call_id,
-                    "name": block.tool_name,
-                    "arguments": block.arguments,
-                })
+                tool_calls.append(
+                    {
+                        "id": block.call_id,
+                        "name": block.tool_name,
+                        "arguments": block.arguments,
+                    }
+                )
 
         await event_bus.publish(
             EventEnvelope(
@@ -170,7 +170,6 @@ async def execute_agent_run(
         await event_bus.publish(
             EventEnvelope(
                 event_type="agent.run_failed",
-
                 payload={
                     "type": "agent.run_failed",
                     "run_id": run_id,
@@ -192,7 +191,6 @@ async def execute_agent_run(
         on_text_delta=_publish_text_delta,
         on_reasoning_delta=_publish_reasoning_delta,
         on_completion=_publish_completion,
-
         on_error=_publish_failure,
     )
 

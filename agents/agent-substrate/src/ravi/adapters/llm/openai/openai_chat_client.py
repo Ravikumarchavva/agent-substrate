@@ -130,7 +130,9 @@ class OpenAIChatCompletionClient(OpenAIClient):
         result: list[dict[str, Any]] = []
         for msg in messages:
             if msg.role == "system":
-                content = "".join(b.text for b in msg.content if isinstance(b, TextBlock))
+                content = "".join(
+                    b.text for b in msg.content if isinstance(b, TextBlock)
+                )
                 result.append({"role": "system", "content": content})
 
             elif msg.role == "user":
@@ -161,7 +163,7 @@ class OpenAIChatCompletionClient(OpenAIClient):
                     entry["content"] = "".join(text_parts)
                 else:
                     entry["content"] = None
-                
+
                 tool_calls = [b for b in msg.content if isinstance(b, ToolUseBlock)]
                 if tool_calls:
                     entry["tool_calls"] = [
@@ -481,7 +483,9 @@ class OpenAIChatCompletionClient(OpenAIClient):
                         call_id=tc_data["id"],
                         tool_name=tc_data["name"],
                         arguments=(
-                            json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
+                            json.loads(tc_data["arguments"])
+                            if tc_data["arguments"]
+                            else {}
                         ),
                     )
                 )

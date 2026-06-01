@@ -68,59 +68,62 @@ ravi/                            ← repo root
 
 ```
 src/ravi/
-│   ── COGNITIVE STACK (import-linter enforced, 4 layers, imports flow downward) ──
-├── kernel/         L0  ← FROZEN. Pure contracts: types, Protocols, dataclasses. No I/O, imports nothing.
-│   ├── content.py        ← ContentBlock, TextBlock, ImageBlock, ToolUseBlock, ToolResultBlock
-│   ├── message.py        ← Message envelope + ChatMessage (role + list[ContentBlock])
-│   ├── tools.py          ← Tool Protocol, ToolExecutionResult, ToolRisk (SAFE/HIGH/CRITICAL)
-│   ├── stream.py         ← TextDelta, ReasoningDelta, CompletionEvent, StreamDone
-│   ├── protocol.py       ← AgentRuntime, MessageHandler, StreamPublisher Protocols
-│   ├── identity.py       ← AgentId
+├── kernel/       L0 — FROZEN. Pure contracts: types, Protocols, dataclasses. No I/O.
+│   ├── content.py        ContentBlock, TextBlock, ChatMessage, ToolUseBlock, …
+│   ├── message.py        Message, MessageContext, MessageHandler, Subscription
+│   ├── tools.py          Tool Protocol, ToolExecutionResult, ToolRisk, ToolCallRequest
+│   ├── llm.py            LLMClient, EmbeddingClient Protocols
+│   ├── history.py        HistoryProvider Protocol
+│   ├── context.py        CompactionStrategy, AgentContextProtocol
+│   ├── middleware.py     Interceptor Protocol
+│   ├── stream.py         TextDelta, ReasoningDelta, CompletionEvent, StreamDone
+│   ├── protocol.py       AgentRuntime Protocol
+│   ├── identity.py       AgentId, TopicId
 │   └── errors.py
 │
-├── fabric/         L1  ← runtime substrate
-│   ├── runtime/          ← LocalRuntime (message dispatch)
-│   ├── context/          ← AgentContext, HistoryProvider, InMemoryHistoryProvider, compaction strategies
-│   ├── llm/              ← LLMClient/EmbeddingClient Protocols + model registry + resilience
-│   │                       decorators (SemanticCache, CachedModelClient, FallbackClient, ModelRouter)
-│   ├── middleware/       ← Interceptor + MiddlewarePipeline (Message-level interceptors)
-│   ├── catalog/          ← registry + namespace (the registration machinery)
-│   ├── supervision/ lifecycle/ resources/
+├── agents/       L1-L3 combined — context, LLM clients, guardrails, middleware, agent types
+│   ├── assistant/        AssistantAgent (ReAct loop, tools, HITL, guardrail injection)
+│   ├── context/          AgentContext, InMemoryHistoryProvider, compaction strategies
+│   ├── llm/              LLMClient (concrete), EmbeddingClient, model registry, cache/fallback/router
+│   ├── guardrails/       GuardrailType, run_guardrails, ContentFilter, LLMJudge, MaxToken, PII, PromptInjection
+│   ├── middleware/       Interceptor, MiddlewarePipeline, AuditLogger
+│   ├── flow/             FlowAgent (multi-step graph execution)
+│   ├── orchestrator/     OrchestratorAgent
+│   ├── proxy/            UserProxyAgent
+│   ├── runtime/          LocalRuntime (message dispatch)
+│   ├── hooks/            lifecycle hooks
+│   ├── resources/        ExecutionBudget, agent_span
+│   └── supervision/      RetryPolicy
 │
-├── reasoning/      L2  ← the cognitive layer
-│   ├── agents/assistant/ ← AssistantAgent (ReAct loop, tools, HITL approval, guardrail injection)
-│   ├── guardrails/       ← GuardrailType (INPUT/OUTPUT/TOOL_CALL), run_guardrails, ContentFilter, PromptInjection
-│   ├── middleware/       ← LLM/tool-call middleware (rate_limiter, retry, cache, validators)
-│   └── hooks/
+├── adapters/     concrete I/O ports implementing kernel/agents contracts
+│   ├── llm/              openai/, anthropic/, gemini/, encoders/, factory.py
+│   ├── memory/           redis_history.py, postgres_history.py
+│   ├── mcp/              MCPClient, MCPTool, apps/
+│   ├── vector/           vector store adapters
+│   ├── graph/            graph store adapters
+│   ├── storage/          file storage adapters
+│   ├── events/           EventBus (Redis pub/sub)
+│   └── spotify/          Spotify API adapter
 │
-├── orchestration/  L3  ← multi-agent composition
-│   └── agents/           ← orchestrator, flow, proxy
+├── capabilities/ the agent's runtime capabilities
+│   ├── tools/            tool implementations (human_input, task_manager, web_surfer, …)
+│   ├── skills/           SKILL.md prompt-skill packages
+│   ├── knowledge/        RAG pipeline, loaders, graph_rag
+│   ├── connectors/       external service connectors (email, calendar, minio, postgres)
+│   ├── triggers/         event-based trigger definitions
+│   └── internal/         scanner, pipeline engine, skill loader, chain runtime
 │
-│   ── ORTHOGONAL (adapters & the agent's capabilities; not in the layer contract) ──
-├── adapters/       ← concrete I/O ports implementing fabric/kernel contracts
-│   ├── llm/              ← OpenAIClient, Anthropic, Gemini, encoders, factory
-│   ├── memory/          ← redis_history, postgres_history, lineage backends
-│   ├── mcp/             ← MCPClient, MCPTool wrappers
-│   ├── vector/ graph/ storage/ events/ identity/ observability/ spotify/ runtime/
+├── serving/      deployment shells
+│   ├── monolith/         single FastAPI app (app.py, routes/, sse/, security/, services/)
+│   ├── services/         12 independent microservices (one FastAPI app per folder)
+│   └── shared/           cross-service: auth, database, events, observability, tasks
 │
-├── catalog/        ← the agent's "hands" — anything an LLM can use dynamically
-│   ├── tools/           ← tool implementations (human_input, task_manager, web_surfer, …)
-│   ├── skills/          ← SKILL.md prompt-skill packages
-│   ├── connectors/      ← external service connectors
-│   ├── rag/             ← VectorStore, GraphStore, chunkers, loaders, RAG pipeline, reranker
-│   ├── _pipeline.py _chain_runtime.py _scanner.py _skill_*.py _triggers/
-│
-│   ── SERVING (deployment shells) ──
-├── serving/
-│   ├── monolith/        ← Monolith FastAPI server (app.py, routes/, sse/, security/, services/)
-│   ├── services/        ← 12 microservices (one FastAPI app per folder)
-│   └── shared/          ← cross-service infra: auth, events, database, tasks, contracts, observability
-│
-│   ── TOP-LEVEL ──
-├── evals/          ← LLM-as-judge eval framework (judge, criteria, models)
-├── config.py       ← Pydantic Settings (reads .env)
-├── cli.py  console.py  logger.py  exceptions.py
-└── legacy/         ← archived pre-migration code (BaseAgent, old kernel runtime, dead subsystems)
+├── evals/        LLM-as-judge eval framework (judge, criteria, runner, models)
+├── config.py     Pydantic Settings (reads .env)
+├── exceptions.py public exceptions (GuardrailTripwireError, …)
+├── logger.py     setup_logging()
+├── cli.py        CLI entry point
+└── console.py    interactive console
 ```
 
 > **Note:** sections below this directory map predate the actor-model + layered
@@ -165,7 +168,7 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 
 ## Frozen kernel — `ravi.kernel` is stable forever
 
-`ravi/kernel/` is the contract layer. Once built, it is **never edited to add capability**. New features live in `ravi/extensions/`.
+`ravi/kernel/` is the contract layer. Once built, it is **never edited to add capability**.
 
 **Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
 
@@ -177,83 +180,71 @@ adapters, catalog, evals, serving  =  orthogonal (may import down into the stack
 
 **Adding capability:**
 
-| You want to add… | Write it in… | How |
-|---|---|---|
-| A new agent type | `extensions/agents/<name>/agent.py` | `@register_agent("<name>")` decorator |
-| A new guardrail | `extensions/guardrails/<name>.py` | `@register_guardrail("<name>")` |
-| A new middleware | `extensions/middleware/<name>.py` | `@register_middleware("<name>")` |
-| A new LLM provider | `integrations/llm/<provider>/` | Subclass `BaseModelClient`, register via factory |
-| A new memory backend | `integrations/memory/<backend>.py` | Subclass `BaseMemory`, wire in lifespan |
-| A new context strategy | `extensions/context/<name>.py` | `@register_context("<name>")` |
-| A new tool | `catalog/tools/<name>/tool.py` | Convention-scanned (no decorator needed) |
+| You want to add… | Write it in… |
+|---|---|
+| A new agent type | `agents/<name>/agent.py` — subclass `AssistantAgent` or follow its pattern |
+| A new guardrail | `agents/guardrails/<name>.py` — implement `run(ctx) -> GuardrailResult` |
+| A new LLM provider | `adapters/llm/<provider>/` — implement `LLMClient` Protocol from `kernel/llm.py` |
+| A new memory backend | `adapters/memory/<name>.py` — implement `HistoryProvider` Protocol from `kernel/history.py` |
+| A new tool | `capabilities/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned) |
+| A new skill | `capabilities/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
 
 **Enforcement** (CI fails if violated):
 
-1. `tool.importlinter` contract `kernel is independent` — `ravi.kernel` may not import from `ravi.{extensions, integrations, catalog, server, services, shared, configs, logger}`.
+1. `tool.importlinter` contract `kernel is independent` — `ravi.kernel` may not import from any other ravi package.
 2. `tests/architecture/test_kernel_invariants.py` — LOC ceiling (15k), file-count ceiling (110), no concrete agents/guardrails/middleware in kernel.
-
-To add a new plugin category, extend `kernel/plugin/registry.py` with one `_make_decorator(...)` line. Everything else is downward.
 
 ---
 
 ## Key Patterns
 
-### Tool Creation — always subclass `BaseTool`
+### Tool Creation
 
 ```python
-from ravi.core.tools.base_tool import BaseTool, ToolResult
+from ravi.kernel.tools import ToolExecutionResult, Tool
+from ravi.kernel.content import TextBlock
 
-class MyTool(BaseTool):
-    def __init__(self):
-        super().__init__(
-            name="my_tool",
-            description="What it does",
-            input_schema={...}  # JSON Schema object
-        )
+class MyTool:
+    name = "my_tool"
+    description = "What it does"
+    input_schema = {"type": "object", "properties": {...}, "required": [...]}
 
-    async def execute(self, **kwargs) -> ToolResult:
-        return ToolResult(content="result", metadata={})
+    async def execute(self, *, param: str) -> ToolExecutionResult:  # type: ignore[override]
+        return ToolExecutionResult(content=[TextBlock(text="result")])
 ```
 
-Register in `server/app.py` lifespan under `app.state.tools`.
+Tools are auto-discovered by `capabilities/internal/scanner.py` when placed in `capabilities/tools/<name>/tool.py`. No registration decorator needed.
 
-### LLM Client — exact import path
+### LLM Client
 
 ```python
-# ✅ Correct
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-
-# Abstract base is now in core:
-from ravi.core.llm.base_client import BaseModelClient
+from ravi.adapters.llm.factory import create_model_client
+client = create_model_client("gpt-4o", api_keys={"openai": "..."})
 ```
 
 ### MCP Tools — load at runtime via MCPClient
 
 ```python
-from ravi.integrations.mcp import MCPClient
+from ravi.adapters.mcp import MCPClient
 
 client = MCPClient(url="http://localhost:9000/sse")
 tools = await client.discover_tools()   # returns list[MCPTool]
 ```
 
-There is **no** `integrations.mcp.loader` module. Do not import from it.
-
 ### Shared Event Bus — always use factory functions
 
 ```python
-from ravi.shared.events.bus import EventBus
-from ravi.shared.events.types import workflow_started, workflow_failed
+from ravi.serving.shared.events.bus import EventBus
+from ravi.serving.shared.events.types import workflow_started, workflow_failed
 
 bus: EventBus = app.state.bus
 await bus.publish(workflow_started(job_id=job.id, run_id=run.id))
 ```
 
-Never construct event dicts manually — always use the factory functions from `shared/events/types.py`.
-
 ### SSE Event Bus (monolith only)
 
 ```python
-from ravi.server.sse.bridge import WebHITLBridge
+from ravi.serving.monolith.sse.bridge import WebHITLBridge
 
 bridge: WebHITLBridge = request.app.state.bridge
 await bridge.put_event({"type": "my_event", "data": {...}})
@@ -261,31 +252,28 @@ await bridge.put_event({"type": "my_event", "data": {...}})
 
 ### New Route (monolith)
 
-1. Create `server/routes/my_feature.py` with `router = APIRouter(prefix="/my-feature")`
-2. Mount in `server/app.py → create_app()` via `app.include_router(...)`
+1. Create `serving/monolith/routes/my_feature.py` with `router = APIRouter(prefix="/my-feature")`
+2. Mount in `serving/monolith/app.py → create_app()` via `app.include_router(...)`
 
 ---
 
-## Memory — `RedisMemory`
+## Memory / History
 
 ```python
-from ravi.core.memory import RedisMemory
+# In-memory (default, for testing)
+from ravi.agents.context import InMemoryHistoryProvider
 
-mem = RedisMemory(session_id="conv-abc-123", redis_url=REDIS_URL)
-await mem.connect()
-await mem.restore()          # reloads full history from Redis
-await mem.add_message(msg)   # async — always await
-msgs = await mem.get_messages()
-await mem.disconnect()       # ← correct method name
+# Redis-backed
+from ravi.adapters.memory.redis_history import RedisHistoryProvider
+
+# Postgres-backed
+from ravi.adapters.memory.postgres_history import PostgresHistoryProvider
 ```
 
 ### Memory Architecture — CRITICAL
 
-- All `Memory` methods are `async def`. **Always `await` them.**
-- **Never** add `add_message_sync()` / `add_message_async()` pairs.
-- Lifecycle: `connect()` → use → `disconnect()`. **There is no `close()` method.**
-- One Redis class: `RedisMemory`. Do **not** create a `RedisBackedMemory` wrapper.
-- `RedisModelContext.build()` reads via `await memory.get_messages()` — ignores per-instance RAM.
+- All `HistoryProvider` methods are `async def`. **Always `await` them.**
+- Lifecycle: append messages → get messages → clear.
 
 ---
 
@@ -355,7 +343,6 @@ SESSION_AUTO_CHECKPOINT=50
 SPOTIFY_CLIENT_ID=...
 SPOTIFY_CLIENT_SECRET=...
 CODE_INTERPRETER_URL=...
-SYSTEM_INSTRUCTIONS=...     # per-agent system prompt override for agent_runtime service
 ```
 
 **Rule:** Never add inline comments after integer values.
@@ -526,8 +513,8 @@ Tests pod health, endpoints, chat flow, and observability stack.
 
 | Area | Issue | Notes |
 |---|---|---|
-| `server/routes/spotify_oauth.py` | `session_id = "default_user"` hardcoded in 5 places | Should use real user identity from auth context (XSS/CSRF issues fixed in Phase 3) |
-| `shared/tasks/store.py` | `TaskStore` is in-memory only | Should be backed by Postgres for persistence across restarts |
-| `core/agents/react_agent.py` | `_run_inner()` is ~200 lines | Needs guardrail checks extracted into helper methods |
+| `serving/monolith/routes/spotify_oauth.py` | `session_id = "default_user"` hardcoded in 5 places | Should use real user identity from auth context (XSS/CSRF issues fixed in Phase 3) |
+| `serving/shared/tasks/store.py` | `TaskStore` is in-memory only | Should be backed by Postgres for persistence across restarts |
+| `agents/assistant/agent.py` | `_run_inner()` is ~200 lines | Needs guardrail checks extracted into helper methods |
 | Test coverage | No tests for agents, context, skills, evals, HITL, most microservices | Major gap — only storage, structured, pipelines, event_bus are tested |
 

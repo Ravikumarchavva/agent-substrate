@@ -1,4 +1,6 @@
-"""Flow-based agent — sequential / parallel / conditional composition."""
+"""ravi.agents.flow — flow-based agent execution and graphs."""
+
+from __future__ import annotations
 
 from ravi.agents.flow.agent import (
     BaseFlow,

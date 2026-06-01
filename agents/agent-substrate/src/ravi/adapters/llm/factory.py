@@ -32,17 +32,17 @@ logger = setup_logging()
 
 # ── Provider detection ────────────────────────────────────────────────────────
 
-_OPENAI_PREFIXES  = ("gpt-", "o1-", "o3-", "o4-", "dall-e", "whisper", "tts-")
+_OPENAI_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "dall-e", "whisper", "tts-")
 _ANTHROPIC_PREFIXES = ("claude-",)
-_GEMINI_PREFIXES  = ("gemini-",)
+_GEMINI_PREFIXES = ("gemini-",)
 
 _PROVIDER_PREFIXES: dict[str, str] = {
-    "openai":      "openai",
-    "groq":        "groq",
-    "anthropic":   "anthropic",
-    "gemini":      "gemini",
-    "google":      "gemini",
-    "openrouter":  "openrouter",
+    "openai": "openai",
+    "groq": "groq",
+    "anthropic": "anthropic",
+    "gemini": "gemini",
+    "google": "gemini",
+    "openrouter": "openrouter",
 }
 
 
@@ -112,7 +112,7 @@ class LLMFactory:
 
     # Base URLs for providers that deviate from their SDK default.
     _BASE_URLS: ClassVar[dict[str, str]] = {
-        "groq":       "https://api.groq.com/openai/v1",
+        "groq": "https://api.groq.com/openai/v1",
         "openrouter": "https://openrouter.ai/api/v1",
     }
 
@@ -181,6 +181,7 @@ class LLMFactory:
 
         if self._provider == "openai":
             from ravi.adapters.llm.openai.openai_client import OpenAIClient
+
             return OpenAIClient(
                 model=self._bare_model,
                 api_key=self._api_key,
@@ -191,6 +192,7 @@ class LLMFactory:
             from ravi.adapters.llm.openai.openai_chat_client import (
                 OpenAIChatCompletionClient,
             )
+
             return OpenAIChatCompletionClient(
                 model=self._bare_model,
                 api_key=self._api_key,
@@ -199,6 +201,7 @@ class LLMFactory:
 
         if self._provider == "anthropic":
             from ravi.adapters.llm.anthropic.anthropic_client import AnthropicClient
+
             return AnthropicClient(
                 model=self._bare_model,
                 api_key=self._api_key,
@@ -207,6 +210,7 @@ class LLMFactory:
 
         if self._provider == "gemini":
             from ravi.adapters.llm.gemini.gemini_client import GeminiClient
+
             return GeminiClient(
                 model=self._bare_model,
                 api_key=self._api_key,
@@ -322,7 +326,12 @@ def resolve_vision_model_for_available_credentials(
 
     candidates: list[str] = []
     seen: set[str] = set()
-    for candidate in (resolved, model, *(fallback_models or ()), *VISION_MODEL_FALLBACKS):
+    for candidate in (
+        resolved,
+        model,
+        *(fallback_models or ()),
+        *VISION_MODEL_FALLBACKS,
+    ):
         n = candidate.strip()
         if n and n not in seen:
             candidates.append(n)
@@ -381,6 +390,7 @@ def create_model_client(
         from ravi.adapters.llm.openai.openai_chat_client import (
             OpenAIChatCompletionClient,
         )
+
         bare = strip_provider_prefix(model)
         extra_headers = {
             k: v
@@ -412,6 +422,7 @@ def create_model_client(
 
 # ── Embedding factory (kept separate — different key, different client) ────────
 
+
 def create_embedding_client(
     model: str = "text-embedding-3-small",
     *,
@@ -432,6 +443,7 @@ def create_embedding_client(
         from ravi.adapters.llm.openai.openai_embedding_client import (
             OpenAIEmbeddingClient,
         )
+
         return OpenAIEmbeddingClient(
             model=bare,
             api_key=resolved_key,
@@ -443,6 +455,7 @@ def create_embedding_client(
         from ravi.adapters.llm.gemini.gemini_embedding_client import (
             GeminiEmbeddingClient,
         )
+
         return GeminiEmbeddingClient(
             model=bare,
             api_key=resolved_key,
@@ -454,6 +467,7 @@ def create_embedding_client(
 
 # ── Embedding provider detection ──────────────────────────────────────────────
 
+
 def detect_embedding_provider(model: str) -> str:
     """Detect the embedding provider — ``"openai"`` or ``"gemini"``."""
     m = model.lower().strip()
@@ -464,7 +478,9 @@ def detect_embedding_provider(model: str) -> str:
             return "openai"
         if prefix in ("gemini", "google"):
             return "gemini"
-        logger.warning("Unknown embedding provider prefix %r — defaulting to openai", prefix)
+        logger.warning(
+            "Unknown embedding provider prefix %r — defaulting to openai", prefix
+        )
         return "openai"
 
     if m == "text-embedding-004":
@@ -474,11 +490,14 @@ def detect_embedding_provider(model: str) -> str:
     if m.startswith("embedding-"):
         return "gemini"
 
-    logger.warning("Cannot detect embedding provider for %r — defaulting to openai", model)
+    logger.warning(
+        "Cannot detect embedding provider for %r — defaulting to openai", model
+    )
     return "openai"
 
 
 # ── Convenience helpers (used by server/lifespan wiring) ─────────────────────
+
 
 def model_supports_vision(model: str) -> bool:
     """Return ``True`` when the model is known to accept image inputs."""

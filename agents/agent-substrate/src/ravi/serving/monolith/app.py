@@ -39,7 +39,9 @@ from ravi.serving.monolith.routes.audio import router as audio_router
 from ravi.serving.monolith.routes.hitl import router as hitl_router
 from ravi.serving.monolith.routes.mcp_apps import router as mcp_apps_router
 from ravi.serving.monolith.routes.spotify_oauth import router as spotify_oauth_router
-from ravi.serving.monolith.routes.workspace_oauth import router as workspace_oauth_router
+from ravi.serving.monolith.routes.workspace_oauth import (
+    router as workspace_oauth_router,
+)
 from ravi.serving.monolith.routes.pipelines import router as pipelines_router
 from ravi.serving.monolith.routes.tasks import router as tasks_router
 from ravi.serving.monolith.routes.threads import router as threads_router
@@ -114,7 +116,6 @@ async def lifespan(app: FastAPI):
     # Cancel registry: maps thread_id → asyncio.Event so running streams can
     # be aborted from the POST /chat/{thread_id}/cancel endpoint.
     app.state.cancel_registry = {}  # dict[str, asyncio.Event]
-
 
     # MCP server registry: maps server_id → RegistryMcpServer dict.
     # Populated at runtime via POST /builder/mcp-servers (in-memory, not persisted).

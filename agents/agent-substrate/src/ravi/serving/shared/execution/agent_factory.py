@@ -207,13 +207,13 @@ def create_assistant_agent(
     # legacy kwargs accepted but unused (# TODO L4-guardrails / # TODO L4-hitl)
     **_dropped: Any,
 ) -> Any:
-    """Create a configured ``AssistantAgent`` for the actor-model runtime.
+    """Create a configured ``ReActAgent`` for the actor-model runtime.
 
-    Maps the old parameter surface to the new ``AssistantAgent.__init__``
+    Maps the old parameter surface to the new ``ReActAgent.__init__``
     signature.  Legacy kwargs (guardrails, verbose, session_id, etc.) are
     silently accepted and dropped until L4 guardrails are wired.
     """
-    from ravi.agents.assistant import AssistantAgent
+    from ravi.agents.core import ReActAgent
 
     # Resolve compaction: accept SlidingWindowCompaction directly or fall back
     # to a window derived from model_context_window.
@@ -243,7 +243,7 @@ def create_assistant_agent(
             SlidingWindowCompaction(max_messages=model_context_window),
         )
 
-    return AssistantAgent(
+    return ReActAgent(
         name,
         runtime,
         model=model_client,

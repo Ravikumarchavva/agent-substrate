@@ -182,7 +182,50 @@ class PostgresHistoryProvider:
             )
         return self._session_factory
 
-    # -- HistoryProvider contract ---------------------------------------------
+    # -- HistoryProvider protocol (kernel contract) ---------------------------
+
+    def _session_key(self, agent_id: "AgentId", session_id: str) -> str:  # noqa: F821
+        """Derive the internal storage key for a (agent_id, session_id) pair."""
+        return f"{agent_id.type}:{agent_id.key}:{session_id}"
+
+    async def append(
+        self, agent_id: "AgentId", message: "Message", *, session_id: str  # noqa: F821
+    ) -> None:
+        storage_key = self._session_key(agent_id, session_id)
+        payload = message.payload
+        if hasattr(payload, "model_dump"):
+            msgs: list[ChatMessage] = [payload]  # type: ignore[list-item]
+        else:
+            return
+        await self.save_messages(storage_key, msgs)
+
+    async def get_messages(
+        self,
+        agent_id: "AgentId",  # noqa: F821
+        *,
+        session_id: str,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> "list[Message]":  # noqa: F821
+        from ravi.kernel.message import Message as _Message
+        storage_key = self._session_key(agent_id, session_id)
+        chat_msgs = await self.load_messages(storage_key, limit=limit)
+        if offset:
+            chat_msgs = chat_msgs[offset:]
+        results: list[_Message] = []
+        for cm in chat_msgs:
+            results.append(
+                _Message(target=agent_id, payload=cm, sender=agent_id)
+            )
+        return results
+
+    async def clear(
+        self, agent_id: "AgentId", *, session_id: str  # noqa: F821
+    ) -> None:
+        storage_key = self._session_key(agent_id, session_id)
+        await self.clear_session(storage_key)
+
+    # -- Session-based API (legacy / internal) --------------------------------
 
     async def save_messages(self, session_id: str, messages: List[ChatMessage]) -> int:
         """Append messages to a session, auto-creating the session row.

@@ -24,9 +24,9 @@ from ravi.capabilities.tools.task_manager.tool import (
     current_thread_id as _task_thread_id,
 )
 from ravi.config import Settings
-from ravi.kernel.llm import LLMClient, EmbeddingClient as BaseEmbeddingClient
+from ravi.kernel.llm import LLMClient, EmbeddingClient
 from ravi.agents.runtime.local import LocalRuntime
-from ravi.kernel.tools import Tool, ToolRegistry, ToolRisk
+from ravi.kernel.tools import Tool, Toolbox, ToolRisk
 from ravi.capabilities.internal.skill_manager import SkillManager
 
 from ravi.adapters.llm.factory import (
@@ -53,7 +53,7 @@ class LLMClients:
     model_client_kwargs: dict[str, Any]
     model_client: LLMClient
     chat_model: str
-    embedding_client: BaseEmbeddingClient
+    embedding_client: EmbeddingClient
 
 
 @dataclass
@@ -72,10 +72,10 @@ class Infrastructure:
 
 
 @dataclass
-class ToolRegistryResult:
+class ToolboxResult:
     """Objects returned by :func:`init_tool_registry`."""
 
-    registry: ToolRegistry
+    registry: Toolbox
     task_tool: TaskManagerTool
     ask_tool: AskHumanTool
     ci_client: Optional[CodeInterpreterClient]
@@ -151,7 +151,7 @@ def init_llm_clients(settings: Settings) -> LLMClients:
 
 async def init_infrastructure(
     settings: Settings,
-    embedding_client: BaseEmbeddingClient,
+    embedding_client: EmbeddingClient,
 ) -> Infrastructure:
     """Create Redis, runtime, file store, vector store, RAG, and bridge registry."""
 
@@ -217,7 +217,7 @@ async def init_tool_registry(
     session_factory: Any,
     bridge_registry: BridgeRegistry,
     redis_client: Any = None,
-) -> ToolRegistryResult:
+) -> ToolboxResult:
     """Create all tools and return a tool registry."""
 
     # TaskManagerTool — emitter wired via dynamic closure through bridge_registry
@@ -253,16 +253,16 @@ async def init_tool_registry(
         code_interpreter_tool = CodeInterpreterTool()
 
     # ── Tool Registry ────────────────────────────────────────────────────
-    registry = ToolRegistry()
-    registry.register(ask_tool)
-    registry.register(task_tool)
+    registry = Toolbox()
+    registry.add(ask_tool)
+    registry.add(task_tool)
     if code_interpreter_tool:
-        registry.register(code_interpreter_tool)
+        registry.add(code_interpreter_tool)
 
     # ToolSearchTool — lets the agent discover other tools dynamically
     from ravi.capabilities.tools.tool_search import ToolSearchTool
 
-    registry.register(ToolSearchTool(registry))
+    registry.add(ToolSearchTool(registry))
 
     # Derive tools requiring approval from risk level
     tools_requiring_approval = [
@@ -271,7 +271,7 @@ async def init_tool_registry(
     if settings.DISABLE_TOOL_APPROVALS:
         tools_requiring_approval = []
 
-    return ToolRegistryResult(
+    return ToolboxResult(
         registry=registry,
         task_tool=task_tool,
         ask_tool=ask_tool,
@@ -284,7 +284,7 @@ async def init_tool_registry(
 async def init_runtime_services(
     settings: Settings,
     *,
-    registry: ToolRegistry,
+    registry: Toolbox,
     data_store: Any,
     session_factory: Any,
     runtime: LocalRuntime,
@@ -343,12 +343,12 @@ async def init_runtime_services(
 
     # Register chain/pipeline tools with their real dependencies
     chain_executor_tool = ChainExecutorTool(chain_runtime=chain_runtime)
-    registry.register(chain_executor_tool)
+    registry.add(chain_executor_tool)
     pipeline_manager_tool = PipelineManagerTool(
         pipeline_engine=pipeline_engine,
         pipeline_store=pipeline_store,
     )
-    registry.register(pipeline_manager_tool)
+    registry.add(pipeline_manager_tool)
 
     return RuntimeServices(
         chain_runtime=chain_runtime,

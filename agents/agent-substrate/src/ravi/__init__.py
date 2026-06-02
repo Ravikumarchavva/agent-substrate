@@ -2,7 +2,7 @@
 
 Quick-start for client apps::
 
-    from ravi import AssistantAgent, LocalRuntime, create_model_client
+    from ravi import ReActAgent, LocalRuntime, create_model_client
     from ravi import LLMJudgeGuardrail, GuardrailType
     from ravi import TextDelta, CompletionEvent, StreamDone
     from ravi.exceptions import GuardrailTripwireError
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ravi.adapters.llm.factory import LLMFactory, create_model_client
-    from ravi.agents.assistant.agent import AgentRunResult, AssistantAgent
+    from ravi.agents.core.agent import AgentRunResult, ReActAgent
     from ravi.agents.context import (
         AgentContext,
         InMemoryHistoryProvider,
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     # agents
-    "AssistantAgent",
+    "ReActAgent",
     "AgentRunResult",
     "LocalRuntime",
     "Skill",
@@ -76,8 +76,8 @@ __all__ = [
 ]
 
 _LAZY: dict[str, tuple[str, str]] = {
-    "AssistantAgent": ("ravi.agents.assistant.agent", "AssistantAgent"),
-    "AgentRunResult": ("ravi.agents.assistant.agent", "AgentRunResult"),
+    "ReActAgent": ("ravi.agents.core.agent", "ReActAgent"),
+    "AgentRunResult": ("ravi.agents.core.agent", "AgentRunResult"),
     "LocalRuntime": ("ravi.agents.runtime", "LocalRuntime"),
     "Skill": ("ravi.agents.skills", "Skill"),
     "InMemoryHistoryProvider": ("ravi.agents.context", "InMemoryHistoryProvider"),

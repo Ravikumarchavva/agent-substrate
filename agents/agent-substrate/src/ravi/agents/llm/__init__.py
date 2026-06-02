@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-from ravi.agents.llm.client import (
-    LLMClient,
-    EmbeddingClient,
-    EmbeddingResult,
-    BaseEmbeddingClient,
-)
+from ravi.agents.llm.client import LLMClient, EmbeddingClient
 from ravi.agents.llm.models import (
     ModelProfile,
     MODEL_REGISTRY,
@@ -21,8 +16,6 @@ from ravi.agents.llm.router import ComplexityTier, ModelRouter, RouteConstraints
 __all__ = [
     "LLMClient",
     "EmbeddingClient",
-    "EmbeddingResult",
-    "BaseEmbeddingClient",
     "ModelProfile",
     "MODEL_REGISTRY",
     "get_model_profile",

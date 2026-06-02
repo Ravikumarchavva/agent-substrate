@@ -180,7 +180,7 @@ async def lifespan(app: FastAPI):
         await app.state.history.disconnect()
     if getattr(app.state, "redis_client", None):
         await app.state.redis_client.aclose()
-    for tool in app.state.tools.all_tools():
+    for tool in app.state.tools.all():
         if hasattr(tool, "stop"):
             try:
                 await tool.stop()  # type: ignore[union-attr]

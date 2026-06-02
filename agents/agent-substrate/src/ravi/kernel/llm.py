@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, Protocol
+from typing import AsyncIterator, Protocol
 
 from ravi.kernel.content import ChatMessage, ContentBlock
 from ravi.kernel.stream import CompletionEvent, ReasoningDelta, TextDelta
@@ -41,44 +40,4 @@ class EmbeddingClient(Protocol):
     async def embed_batch(self, texts: list[str]) -> list[list[float]]: ...
 
 
-@dataclass
-class EmbeddingResult:
-    """Batch embedding results and token usage metadata."""
-
-    embeddings: list[list[float]]
-    model: str
-    usage_tokens: int = 0
-
-
-class BaseEmbeddingClient:
-    """Convenience base for concrete embedding provider adapters.
-
-    Subclasses implement ``embed()``; ``embed_single`` and ``embed_batch``
-    are derived from it, satisfying the ``EmbeddingClient`` Protocol.
-    """
-
-    def __init__(
-        self, model: str, dimensions: int | None = None, **kwargs: Any
-    ) -> None:
-        self.model = model
-        self.dimensions = dimensions
-
-    async def embed(
-        self,
-        texts: list[str],
-        *,
-        model: str | None = None,
-        dimensions: int | None = None,
-    ) -> EmbeddingResult:
-        raise NotImplementedError
-
-    async def embed_single(self, text: str) -> list[float]:
-        res = await self.embed([text])
-        return res.embeddings[0]
-
-    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        res = await self.embed(texts)
-        return res.embeddings
-
-
-__all__ = ["LLMClient", "EmbeddingClient", "EmbeddingResult", "BaseEmbeddingClient"]
+__all__ = ["LLMClient", "EmbeddingClient"]

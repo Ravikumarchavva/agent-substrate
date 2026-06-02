@@ -9,7 +9,7 @@ Usage::
     await provider.connect()
 
     from ravi.agents.context import AgentContext
-    agent = AssistantAgent("bot", runtime, model=client, context=AgentContext(provider))
+    agent = ReActAgent("bot", runtime, model=client, context=AgentContext(provider))
     ...
     await provider.disconnect()
 """
@@ -151,14 +151,14 @@ class RedisHistoryProvider:
             )
         return self._client
 
-    def _key(self, agent_id: AgentId) -> str:
-        return f"{self._key_prefix}:{agent_id.type}:{agent_id.key}"
+    def _key(self, agent_id: AgentId, session_id: str) -> str:
+        return f"{self._key_prefix}:{agent_id.type}:{agent_id.key}:{session_id}"
 
     # -- HistoryProvider protocol ---------------------------------------------
 
-    async def append(self, agent_id: AgentId, message: Message) -> None:
+    async def append(self, agent_id: AgentId, message: Message, *, session_id: str) -> None:
         client = self._require_client()
-        key = self._key(agent_id)
+        key = self._key(agent_id, session_id)
         pipe = client.pipeline(transaction=True)
         pipe.rpush(key, _serialize(message))
         if self._max_messages > 0:
@@ -170,29 +170,31 @@ class RedisHistoryProvider:
     async def get_messages(
         self,
         agent_id: AgentId,
+        *,
+        session_id: str,
         limit: int | None = None,
         offset: int | None = None,
     ) -> list[Message]:
         client = self._require_client()
-        key = self._key(agent_id)
+        key = self._key(agent_id, session_id)
         start = offset if offset is not None else 0
         end = (start + limit - 1) if limit is not None else -1
         raw_items: list[str] = await client.lrange(key, start, end)  # type: ignore[misc]
         return [_deserialize(r) for r in raw_items]
 
-    async def clear(self, agent_id: AgentId) -> None:
+    async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
         client = self._require_client()
-        await client.delete(self._key(agent_id))
+        await client.delete(self._key(agent_id, session_id))
 
-    async def count_messages(self, agent_id: AgentId) -> int:
+    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
         client = self._require_client()
-        return await client.llen(self._key(agent_id))  # type: ignore[misc]
+        return await client.llen(self._key(agent_id, session_id))  # type: ignore[misc]
 
-    async def refresh_ttl(self, agent_id: AgentId) -> None:
+    async def refresh_ttl(self, agent_id: AgentId, *, session_id: str) -> None:
         if self._ttl <= 0:
             return
         client = self._require_client()
-        await client.expire(self._key(agent_id), self._ttl)
+        await client.expire(self._key(agent_id, session_id), self._ttl)
 
     def __repr__(self) -> str:
         return (

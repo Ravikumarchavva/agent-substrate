@@ -1,4 +1,4 @@
-"""AssistantAgent — ReAct loop built on the new kernel/fabric model.
+"""ReActAgent — ReAct loop built on the kernel/fabric model.
 
 The loop:
   build list[ChatMessage]
@@ -11,6 +11,25 @@ Entry points:
   run_stream(input_text)   → AsyncIterator[TextDelta | ReasoningDelta |
                                            CompletionEvent | StreamDone]
   on_message(ctx, payload) → actor entry point (delegates to run)
+
+Two ids govern scope:
+  session_id — the conversation thread (long-lived; many runs).
+               History is always keyed by session_id.
+               Precedence: explicit arg → supervision.session_id → self.id.key
+  run_id     — this execution tree (short-lived; one run() call).
+               Scopes budget, supervision, resume, and the progress topic.
+               Precedence: explicit arg → supervision.run_id → fresh uuid
+
+Resumability:
+  run(input_text, resume=True, run_id=<existing_run_id>, session_id=<thread_id>)
+  — reload history for (agent_id, session_id) and continue from the last
+  committed step. The persisted history IS the checkpoint. The loop position
+  is inferred from the tail of the history.
+
+Priority / pausing:
+  If self.spawn_budget is set and is_paused(self.id) is True before an LLM
+  call, the agent stops cleanly and returns status="paused". The orchestrator
+  can resume it later via run(..., resume=True).
 """
 
 from __future__ import annotations
@@ -29,20 +48,23 @@ from ravi.kernel import (
     ContentBlock,
     ErrorBlock,
     MessageContext,
+    Supervision,
     TextBlock,
     Tool,
     ToolResultBlock,
     ToolRisk,
     ToolUseBlock,
+    AgentCrashError,
 )
 from ravi.kernel.message import Message
-from ravi.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+from ravi.kernel.stream import AgentProgress, AgentStep, CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 from ravi.agents.context import AgentContext, HistoryProvider
 from ravi.agents.context.context import DefaultAgentContext
 from ravi.agents.skills import Skill
 from ravi.kernel.llm import LLMClient
 from ravi.agents.hooks.manager import HookEvent, HookManager
-from ravi.agents.assistant._guardrail_runner import (
+from ravi.agents.resources.budget import BudgetExceededError, ExecutionBudget
+from ravi.agents.core._guardrail_runner import (
     check_input_guardrails,
     check_output_guardrails,
     check_tool_call_guardrails,
@@ -71,11 +93,16 @@ class ToolCallRecord:
 
 
 @dataclass
+class _Finished:
+    result: 'AgentRunResult'
+
+
+@dataclass
 class AgentRunResult:
     """Result of a completed agent run."""
 
     output: str
-    status: str  # "success" | "error" | "max_iterations" | "guardrail_tripped"
+    status: str  # "success" | "error" | "max_iterations" | "guardrail_tripped" | "paused"
     tool_calls: list[ToolCallRecord] = field(default_factory=list)
     run_id: str = ""
     error: str | None = None
@@ -100,11 +127,11 @@ class AgentRunResult:
 
 
 # ---------------------------------------------------------------------------
-# AssistantAgent
+# ReActAgent
 # ---------------------------------------------------------------------------
 
 
-class AssistantAgent:
+class ReActAgent:
     """Full ReAct agent on the kernel/fabric model.
 
     Usage::
@@ -118,7 +145,7 @@ class AssistantAgent:
         runtime = LocalRuntime()
         await runtime.start()
 
-        agent = AssistantAgent(
+        agent = ReActAgent(
             "researcher", runtime,
             model=OpenAIClient(model="gpt-4o"),
             tools=[calc_tool],
@@ -154,10 +181,13 @@ class AssistantAgent:
         approval_handler: ApprovalHandler | None = None,
         approval_required_risk: ToolRisk = ToolRisk.HIGH,
         hooks: HookManager | None = None,
+        supervision: Supervision | None = None,
+        execution_budget: ExecutionBudget | None = None,
     ) -> None:
         self.name = name
         self.runtime = runtime
         self.id = AgentId(type="assistant", key=name)
+        self.supervision: Supervision | None = supervision
         self.model = model
         self._tools: dict[str, Tool] = {t.name: t for t in (tools or [])}
         self._skills: list[Skill] = list(skills or [])
@@ -168,6 +198,11 @@ class AssistantAgent:
         self._approval_handler = approval_handler
         self._approval_required_risk = approval_required_risk
         self.hooks = hooks or HookManager()
+        self.execution_budget: ExecutionBudget | None = execution_budget
+
+        # Set by the orchestrator when this agent is a subagent in a supervised tree.
+        # Checked before each LLM call; if True, agent pauses cooperatively.
+        self.spawn_budget: Any | None = None  # SpawnBudget | None
 
         _ctx = context if context is not None else AgentContext.default()
         self._ctx = DefaultAgentContext(self.id, _ctx.history, _ctx.compaction)
@@ -223,50 +258,130 @@ class AssistantAgent:
 
     # -- Non-streaming run ---------------------------------------------------
 
-    async def run(self, input_text: str) -> AgentRunResult:
-        """Execute the ReAct loop to completion."""
-        run_id = uuid4().hex
+    async def _react(
+        self,
+        input_text: str,
+        *,
+        session_id: str | None = None,
+        resume: bool = False,
+        run_id: str | None = None,
+        stream: bool = False,
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent | _Finished]:
+        # -- History scope (the conversation thread) ---------------------------
+        if session_id is not None:
+            sid = session_id
+        elif self.supervision is not None:
+            sid = self.supervision.session_id
+        else:
+            sid = self.id.key   # stable standalone thread
+
+        # -- Execution scope (this turn) ---------------------------------------
+        if run_id is not None:
+            rid = run_id
+        elif self.supervision is not None:
+            rid = self.supervision.run_id
+        else:
+            rid = uuid4().hex
+
         tool_calls: list[ToolCallRecord] = []
 
         await self.hooks.dispatch(
             HookEvent.RUN_START,
-            {"agent": self.name, "run_id": run_id, "input": input_text[:80]},
+            {"agent": self.name, "run_id": rid, "session_id": sid, "input": input_text[:80]},
         )
-        logger.info("[%s] run start: %.80s", self.name, input_text)
+        await self._emit_progress(AgentStep.STARTED, input_text[:120], rid)
+        logger.info("[%s] run start (resume=%s, stream=%s, session=%s): %.80s", self.name, resume, stream, sid, input_text)
 
-        await self._append(
-            ChatMessage(role="user", content=[TextBlock(text=input_text)])
-        )
+        if not resume:
+            await self._append(
+                ChatMessage(role="user", content=[TextBlock(text=input_text)]),
+                sid,
+                rid,
+            )
 
         try:
             # -- input guardrails ------------------------------------------------
-            if self._guardrails:
+            if self._guardrails and not resume:
                 await check_input_guardrails(
                     guardrails=self._guardrails,
                     agent_name=self.name,
-                    run_id=run_id,
+                    run_id=rid,
                     input_text=input_text,
                 )
 
             for step in range(1, self.max_iterations + 1):
+                # -- cooperative pause check ------------------------------------
+                if self.spawn_budget is not None and self.spawn_budget.is_paused(self.id):
+                    logger.info("[%s] paused by priority preemption at step %d", self.name, step)
+                    await self._emit_progress(AgentStep.PAUSED, "paused by priority preemption", rid)
+                    await self.hooks.dispatch(
+                        HookEvent.RUN_END,
+                        {"agent": self.name, "run_id": rid, "status": "paused"},
+                    )
+                    last_output = await self._last_assistant_text(sid)
+                    yield _Finished(AgentRunResult(
+                        output=last_output,
+                        status="paused",
+                        tool_calls=tool_calls,
+                        run_id=rid,
+                    ))
+                    return
+
                 await self.hooks.dispatch(
                     HookEvent.STEP_START, {"agent": self.name, "step": step}
                 )
-                messages = await self._prompt_window()
+                messages = await self._prompt_window(sid)
 
                 await self.hooks.dispatch(
                     HookEvent.LLM_START,
                     {"agent": self.name, "step": step, "message_count": len(messages)},
                 )
-                content = await self.model.generate(
-                    messages, tools=self._tool_schemas(), system=self._system
+                await self._emit_progress(
+                    AgentStep.THINKING, f"step {step}", rid
                 )
+
+                # -- ExecutionBudget: count prompt tokens for cost estimation --
+                if self.execution_budget is not None:
+                    try:
+                        prompt_tokens = await self.model.count_tokens(messages)
+                    except Exception:
+                        prompt_tokens = 0
+
+                content: list[ContentBlock] = []
+                if stream:
+                    async for event in _stream_generate(
+                        self.model, messages, self._system, self._tool_schemas()
+                    ):
+                        if isinstance(event, (TextDelta, ReasoningDelta)):
+                            yield event
+                        elif isinstance(event, CompletionEvent):
+                            content = event.content
+                else:
+                    content = await self.model.generate(
+                        messages, tools=self._tool_schemas(), system=self._system
+                    )
+
+                # -- ExecutionBudget: record this turn's usage -----------------
+                if self.execution_budget is not None:
+                    try:
+                        out_tokens = await self.model.count_tokens(
+                            [ChatMessage(role="assistant", content=content)]
+                        )
+                    except Exception:
+                        out_tokens = 0
+                    self.execution_budget.consume(
+                        tokens=prompt_tokens + out_tokens, turns=1
+                    )
+
                 await self.hooks.dispatch(
                     HookEvent.LLM_END, {"agent": self.name, "step": step}
                 )
 
+                if not content:
+                    break
+
                 tool_uses = [b for b in content if isinstance(b, ToolUseBlock)]
-                await self._append(ChatMessage(role="assistant", content=content))
+                await self._append(ChatMessage(role="assistant", content=content), sid, rid)
 
                 if not tool_uses:
                     output = _content_to_str(content)
@@ -276,7 +391,7 @@ class AssistantAgent:
                         await check_output_guardrails(
                             guardrails=self._guardrails,
                             agent_name=self.name,
-                            run_id=run_id,
+                            run_id=rid,
                             output_text=output,
                         )
 
@@ -287,14 +402,21 @@ class AssistantAgent:
                     )
                     await self.hooks.dispatch(
                         HookEvent.RUN_END,
-                        {"agent": self.name, "run_id": run_id, "status": "success"},
+                        {"agent": self.name, "run_id": rid, "status": "success"},
                     )
-                    return AgentRunResult(
+                    await self._emit_progress(
+                        AgentStep.DONE, output[:120], rid
+                    )
+                    if stream:
+                        yield CompletionEvent(content=content)
+                    
+                    yield _Finished(AgentRunResult(
                         output=output,
                         status="success",
                         tool_calls=tool_calls,
-                        run_id=run_id,
-                    )
+                        run_id=rid,
+                    ))
+                    return
 
                 logger.info(
                     "[%s] step %d: tools → %s",
@@ -304,19 +426,31 @@ class AssistantAgent:
                 )
                 result_blocks: list[ContentBlock] = []
                 for tu in tool_uses:
+                    await self._emit_progress(
+                        AgentStep.TOOL_CALL,
+                        tu.tool_name,
+                        rid,
+                        call_id=tu.call_id,
+                    )
                     # -- tool-call guardrails ------------------------------------
                     if self._guardrails:
                         await check_tool_call_guardrails(
                             guardrails=self._guardrails,
                             agent_name=self.name,
-                            run_id=run_id,
+                            run_id=rid,
                             tool_use=tu,
                         )
                     record, block = await self._execute_tool(tu)
+                    await self._emit_progress(
+                        AgentStep.TOOL_RESULT,
+                        f"{tu.tool_name}: {'error' if record.is_error else 'ok'}",
+                        rid,
+                        call_id=tu.call_id,
+                    )
                     tool_calls.append(record)
                     result_blocks.append(block)
 
-                await self._append(ChatMessage(role="tool", content=result_blocks))
+                await self._append(ChatMessage(role="tool", content=result_blocks), sid, rid)
                 await self.hooks.dispatch(
                     HookEvent.STEP_END,
                     {"agent": self.name, "step": step, "has_tool_calls": True},
@@ -325,188 +459,188 @@ class AssistantAgent:
             logger.warning(
                 "[%s] hit max_iterations (%d)", self.name, self.max_iterations
             )
-            last_output = await self._last_assistant_text()
+            last_output = await self._last_assistant_text(sid)
             await self.hooks.dispatch(
                 HookEvent.RUN_END,
-                {"agent": self.name, "run_id": run_id, "status": "max_iterations"},
+                {"agent": self.name, "run_id": rid, "status": "max_iterations"},
             )
-            return AgentRunResult(
+            await self._emit_progress(
+                AgentStep.DONE, last_output[:120], rid, status="max_iterations"
+            )
+            yield _Finished(AgentRunResult(
                 output=last_output,
                 status="max_iterations",
                 tool_calls=tool_calls,
-                run_id=run_id,
-            )
+                run_id=rid,
+            ))
+            return
 
         except GuardrailTripwireError as exc:
             logger.warning("[%s] guardrail tripped: %s", self.name, exc.message)
             await self.hooks.dispatch(
                 HookEvent.RUN_END,
-                {"agent": self.name, "run_id": run_id, "status": "guardrail_tripped"},
+                {"agent": self.name, "run_id": rid, "status": "guardrail_tripped"},
             )
-            return AgentRunResult(
+            await self._emit_progress(
+                AgentStep.ERROR, f"guardrail: {exc.message}", rid
+            )
+            yield _Finished(AgentRunResult(
                 output=f"Request blocked: {exc.message}",
                 status="guardrail_tripped",
                 tool_calls=tool_calls,
-                run_id=run_id,
+                run_id=rid,
                 error=exc.message,
-            )
+            ))
+            return
 
-        except Exception as exc:
-            logger.exception("[%s] run failed: %s", self.name, exc)
+        except BudgetExceededError as exc:
+            logger.warning("[%s] budget exceeded: %s", self.name, exc)
+            await self._emit_progress(AgentStep.ERROR, f"budget: {exc}", rid)
             await self.hooks.dispatch(
                 HookEvent.RUN_END,
-                {
-                    "agent": self.name,
-                    "run_id": run_id,
-                    "status": "error",
-                    "error": str(exc),
-                },
+                {"agent": self.name, "run_id": rid, "status": "budget_exceeded"},
             )
-            return AgentRunResult(
+            yield _Finished(AgentRunResult(
                 output="",
                 status="error",
                 tool_calls=tool_calls,
-                run_id=run_id,
+                run_id=rid,
                 error=str(exc),
-            )
-
-    # -- Streaming run -------------------------------------------------------
-
-    async def run_stream(
-        self, input_text: str
-    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent | StreamDone]:
-        """Execute the ReAct loop, yielding progress events.
-
-        Yields ``TextDelta`` / ``ReasoningDelta`` as tokens arrive, then
-        ``CompletionEvent`` with the full assembled content on the final turn,
-        and ``StreamDone`` as the end-of-stream sentinel.
-        """
-        run_id = uuid4().hex
-        logger.info("[%s] stream start: %.80s", self.name, input_text)
-
-        await self._append(
-            ChatMessage(role="user", content=[TextBlock(text=input_text)])
-        )
-
-        await self.hooks.dispatch(
-            HookEvent.RUN_START,
-            {"agent": self.name, "run_id": run_id, "input": input_text[:80]},
-        )
-
-        try:
-            # -- input guardrails ------------------------------------------------
-            if self._guardrails:
-                await check_input_guardrails(
-                    guardrails=self._guardrails,
-                    agent_name=self.name,
-                    run_id=run_id,
-                    input_text=input_text,
-                )
-
-            for step in range(1, self.max_iterations + 1):
-                messages = await self._prompt_window()
-                content: list[ContentBlock] = []
-
-                async for event in _stream_generate(
-                    self.model, messages, self._system, self._tool_schemas()
-                ):
-                    if isinstance(event, (TextDelta, ReasoningDelta)):
-                        yield event
-                    elif isinstance(event, CompletionEvent):
-                        content = event.content
-
-                if not content:
-                    break
-
-                tool_uses = [b for b in content if isinstance(b, ToolUseBlock)]
-                await self._append(ChatMessage(role="assistant", content=content))
-
-                if not tool_uses:
-                    output = _content_to_str(content)
-
-                    # -- output guardrails ---------------------------------------
-                    if self._guardrails:
-                        await check_output_guardrails(
-                            guardrails=self._guardrails,
-                            agent_name=self.name,
-                            run_id=run_id,
-                            output_text=output,
-                        )
-
-                    yield CompletionEvent(content=content)
-                    await self.hooks.dispatch(
-                        HookEvent.RUN_END,
-                        {"agent": self.name, "run_id": run_id, "status": "success"},
-                    )
-                    break
-
-                logger.info(
-                    "[%s] [stream] step %d: tools → %s",
-                    self.name,
-                    step,
-                    [b.tool_name for b in tool_uses],
-                )
-                result_blocks: list[ContentBlock] = []
-                for tu in tool_uses:
-                    # -- tool-call guardrails ------------------------------------
-                    if self._guardrails:
-                        await check_tool_call_guardrails(
-                            guardrails=self._guardrails,
-                            agent_name=self.name,
-                            run_id=run_id,
-                            tool_use=tu,
-                        )
-                    _, block = await self._execute_tool(tu)
-                    result_blocks.append(block)
-
-                await self._append(ChatMessage(role="tool", content=result_blocks))
-
-            else:
-                logger.warning("[%s] [stream] hit max_iterations", self.name)
-                await self.hooks.dispatch(
-                    HookEvent.RUN_END,
-                    {"agent": self.name, "run_id": run_id, "status": "max_iterations"},
-                )
-
-        except GuardrailTripwireError as exc:
-            logger.warning(
-                "[%s] [stream] guardrail tripped: %s", self.name, exc.message
-            )
-            await self.hooks.dispatch(
-                HookEvent.RUN_END,
-                {"agent": self.name, "run_id": run_id, "status": "guardrail_tripped"},
-            )
-            yield StreamDone(reason="guardrail_tripped")
+            ))
             return
 
         except Exception as exc:
-            logger.exception("[%s] stream run failed: %s", self.name, exc)
+            logger.exception("[%s] run crashed: %s", self.name, exc)
             await self.hooks.dispatch(
                 HookEvent.RUN_END,
                 {
                     "agent": self.name,
-                    "run_id": run_id,
+                    "run_id": rid,
                     "status": "error",
                     "error": str(exc),
                 },
             )
+            await self._emit_progress(
+                AgentStep.ERROR, f"crash: {type(exc).__name__}: {exc}", rid
+            )
+            raise AgentCrashError(
+                f"Agent '{self.name}' crashed: {exc}",
+                run_id=rid,
+                agent_id=self.id,
+            ) from exc
 
-        yield StreamDone()
+    async def run(
+        self,
+        input_text: str,
+        *,
+        session_id: str | None = None,
+        resume: bool = False,
+        run_id: str | None = None,
+    ) -> AgentRunResult:
+        """Execute the ReAct loop to completion."""
+        async for event in self._react(
+            input_text,
+            session_id=session_id,
+            resume=resume,
+            run_id=run_id,
+            stream=False,
+        ):
+            if isinstance(event, _Finished):
+                return event.result
+        return AgentRunResult(output="", status="error", error="Stream ended without result")
+
+    async def run_stream(
+        self,
+        input_text: str,
+        *,
+        session_id: str | None = None,
+        resume: bool = False,
+        run_id: str | None = None,
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent | StreamDone]:
+        """Execute the ReAct loop, yielding progress events."""
+        try:
+            async for event in self._react(
+                input_text,
+                session_id=session_id,
+                resume=resume,
+                run_id=run_id,
+                stream=True,
+            ):
+                if isinstance(event, _Finished):
+                    yield StreamDone(
+                        reason="success" if event.result.status == "success" else event.result.status
+                    )
+                    return
+                yield event
+        except AgentCrashError:
+            yield StreamDone(reason="error")
+            raise  # propagate crash up
+        except Exception:
+            yield StreamDone(reason="error")
+            raise
+
+    # -- Progress reporting --------------------------------------------------
+
+    async def _emit_progress(
+
+        self, step: str, content: str, run_id: str, **meta: str
+    ) -> None:
+        """Publish an ``AgentProgress`` event to the run's shared progress topic.
+
+        All agents in one execution publish to ``TopicId("agent.progress", run_id)``.
+        The UI subscribes to that single topic and reconstructs the tree from
+        ``agent_id``, ``parent_id``, and ``depth``.
+
+        Root agents (no supervision) fall back to their own id key as the topic
+        source so progress is still observable even for standalone agents.
+
+        Failures are silently swallowed — progress reporting must never crash
+        the agent itself.
+        """
+        from ravi.kernel.identity import TopicId
+        sv = self.supervision
+        topic_source = run_id if run_id else self.id.key
+        event = AgentProgress(
+            agent_id=self.id,
+            step=step,
+            content=content,
+            run_id=run_id,
+            parent_id=sv.parent_id if sv is not None else None,
+            depth=sv.depth if sv is not None else 0,
+            metadata=dict(meta),
+        )
+        try:
+            await self.runtime.publish_message(
+                event,
+                sender=self.id,
+                topic=TopicId("agent.progress", topic_source),
+            )
+        except Exception:
+            pass  # progress reporting must not crash the agent
 
     # -- Internal helpers ----------------------------------------------------
 
-    async def _append(self, chat_msg: ChatMessage) -> None:
-        """Wrap a ChatMessage in a Message envelope and append to history."""
-        envelope = Message(target=self.id, payload=chat_msg, sender=self.id)
-        await self._ctx.history.append(self.id, envelope)
+    async def _append(self, chat_msg: ChatMessage, session_id: str, run_id: str) -> None:
+        """Wrap a ChatMessage in a Message envelope and append to history.
 
-    async def _prompt_window(self) -> list[ChatMessage]:
+        History is keyed by ``session_id`` (the conversation thread).
+        ``run_id`` is tagged into the envelope metadata for audit.
+        """
+        envelope = Message(
+            target=self.id,
+            payload=chat_msg,
+            sender=self.id,
+            metadata={"run_id": run_id},
+        )
+        await self._ctx.history.append(self.id, envelope, session_id=session_id)
+
+    async def _prompt_window(self, session_id: str) -> list[ChatMessage]:
         """Return the compacted history as ChatMessages for the LLM."""
-        window = await self._ctx.get_prompt_window()
+        window = await self._ctx.get_prompt_window(session_id)
         return [m.payload for m in window if isinstance(m.payload, ChatMessage)]
 
-    async def _last_assistant_text(self) -> str:
-        window = await self._ctx.get_prompt_window()
+    async def _last_assistant_text(self, session_id: str) -> str:
+        window = await self._ctx.get_prompt_window(session_id)
         for msg in reversed(window):
             if isinstance(msg.payload, ChatMessage) and msg.payload.role == "assistant":
                 return _content_to_str(msg.payload.content)

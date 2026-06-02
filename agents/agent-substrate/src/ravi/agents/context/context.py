@@ -9,7 +9,7 @@ from .compaction import SlidingWindowCompaction
 
 
 class AgentContext:
-    """User-facing context config — pass to ``AssistantAgent(context=...)``.
+    """User-facing context config — pass to ``ReActAgent(context=...)``.
 
     Usage::
 
@@ -18,7 +18,7 @@ class AgentContext:
             InMemoryHistoryProvider(),
             [SlidingWindowCompaction(max_messages=40)],
         )
-        agent = AssistantAgent("bot", runtime, model=client, context=context)
+        agent = ReActAgent("bot", runtime, model=client, context=context)
 
         # Default (in-memory, sliding-window 100)
         context = AgentContext.default()
@@ -54,7 +54,13 @@ class AgentContext:
 
 
 class DefaultAgentContext:
-    """Concrete AgentContext for in-process use."""
+    """Concrete AgentContext for in-process use.
+
+    ``run_id`` is threaded explicitly through ``get_prompt_window`` so that
+    all history reads and writes are scoped to the current run. A single
+    agent instance can participate in multiple sequential runs without
+    history leaking between them.
+    """
 
     def __init__(
         self,
@@ -78,8 +84,9 @@ class DefaultAgentContext:
     def compaction(self) -> CompactionStrategy:
         return self._compaction
 
-    async def get_prompt_window(self) -> list[Message]:
-        raw = await self._history.get_messages(self._agent_id)
+    async def get_prompt_window(self, session_id: str) -> list[Message]:
+        """Return the compacted history as a prompt window for *session_id*."""
+        raw = await self._history.get_messages(self._agent_id, session_id=session_id)
         return await self._compaction.compact(raw)
 
 

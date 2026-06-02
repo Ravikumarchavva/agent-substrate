@@ -1,4 +1,4 @@
-"""Guardrail checking helpers for AssistantAgent."""
+"""Guardrail checking helpers for ReActAgent."""
 
 from __future__ import annotations
 

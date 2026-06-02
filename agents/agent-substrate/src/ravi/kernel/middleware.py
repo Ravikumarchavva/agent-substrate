@@ -16,8 +16,8 @@ class Interceptor(Protocol):
 
     async def pre_process(self, message: Message) -> Message:
         """Called before the message reaches the agent."""
-        return message
+        ...
 
     async def post_process(self, message: Message) -> Message:
         """Called before the message is sent out by the agent."""
-        return message
+        ...

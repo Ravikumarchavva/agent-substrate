@@ -1,6 +1,6 @@
 """Example 1-1: ReAct Agent with Tools and Skills
-Module: ravi.agents.assistant, ravi.agents.skills, ravi.capabilities.internal.skill_manager,
-        ravi.kernel.tools.ToolRegistry, ravi.capabilities.tools.tool_search
+Module: ravi.agents.core, ravi.kernel.skills, ravi.capabilities.internal.skill_manager,
+        ravi.kernel.tools.Toolbox
 
 Demonstrates:
   • ToolRegistry — register tools once, pass the registry to the agent
@@ -22,13 +22,12 @@ import datetime
 from ravi.config import settings
 from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
 from ravi.agents.runtime.local import LocalRuntime
-from ravi.agents.skills import Skill
+from ravi.agents import Skill
 from ravi.adapters.llm.openai.openai_client import OpenAIClient
 from ravi.kernel import TextBlock, ToolExecutionResult
-from ravi.kernel.tools import ToolRegistry
-from ravi.agents.assistant import AssistantAgent
+from ravi.kernel.tools import Toolbox
+from ravi.agents import ReActAgent
 from ravi.capabilities.internal.skill_manager import SkillManager
-from ravi.capabilities.tools.tool_search import ToolSearchTool
 from ravi.console import Console
 
 
@@ -82,20 +81,17 @@ class GetCurrentTimeTool:
 # ---------------------------------------------------------------------------
 
 
-def build_agent(runtime: LocalRuntime) -> tuple[AssistantAgent, SkillManager]:
-    # 1. Tool registry — central place to register all tools
-    registry = ToolRegistry()
-    registry.register(CalculatorTool())
-    registry.register(GetCurrentTimeTool())
+def build_agent(runtime: LocalRuntime) -> tuple[ReActAgent, SkillManager]:
+    # 1. Toolbox — register all tools
+    toolbox = Toolbox()
+    toolbox.add(CalculatorTool())
+    toolbox.add(GetCurrentTimeTool())
 
-    # 2. ToolSearchTool — wired to the registry so the agent can search tools
-    registry.register(ToolSearchTool(registry))
-
-    # 3. Skills — discover built-in SKILL.md packages
+    # 2. Skills — discover built-in SKILL.md packages
     #    Only inject skills whose allowed_tools are all registered.
     #    Skills referencing missing tools confuse the LLM.
     skill_manager = SkillManager(auto_discover=True)
-    registered_names = set(registry.names())
+    registered_names = set(toolbox.names())
     pre_loaded_skills: list[Skill] = []
     for meta in skill_manager._loader.all_metadata():
         if all(t in registered_names for t in meta.allowed_tools):
@@ -120,11 +116,11 @@ def build_agent(runtime: LocalRuntime) -> tuple[AssistantAgent, SkillManager]:
     )
 
     # 5. Agent — receives the tool list and pre-loaded skills
-    agent = AssistantAgent(
+    agent = ReActAgent(
         "DemoBot",
         runtime,
         model=model,
-        tools=registry.all_tools(),
+        tools=toolbox.all(),
         skills=pre_loaded_skills,
         context=context,
         max_iterations=8,

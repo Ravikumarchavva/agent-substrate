@@ -34,7 +34,7 @@ from ravi.agents.context import (
     HistoryProvider,
     SlidingWindowCompaction,
 )
-from ravi.capabilities.tools.human_input.tool import ToolApprovalHandler
+from ravi.capabilities.tools.human_input import ToolApprovalHandler
 from ravi.kernel.llm import LLMClient as BaseModelClient
 from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, AgentRuntime, Tool
 from ravi.serving.shared.execution import create_assistant_agent, load_session_memory

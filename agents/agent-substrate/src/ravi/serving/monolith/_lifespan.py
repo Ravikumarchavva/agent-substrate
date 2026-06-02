@@ -18,7 +18,7 @@ from ravi.capabilities.tools.code_interpreter import (
     K8sSandboxCodeInterpreterTool,
     CodeInterpreterClient,
 )
-from ravi.capabilities.tools.human_input.tool import AskHumanTool
+from ravi.capabilities.tools.human_input import AskHumanTool
 from ravi.capabilities.tools.task_manager.tool import (
     TaskManagerTool,
     current_thread_id as _task_thread_id,
@@ -298,8 +298,8 @@ async def init_runtime_services(
     from ravi.capabilities.triggers.conditions import ConditionMonitor
     from ravi.capabilities.triggers.scheduler import TriggerScheduler
     from ravi.capabilities.triggers.webhooks import WebhookRegistry
-    from ravi.capabilities.tools.chain_executor.tool import ChainExecutorTool
-    from ravi.capabilities.tools.pipeline_manager.tool import PipelineManagerTool
+    from ravi.capabilities.tools.chain_executor import ChainExecutorTool
+    from ravi.capabilities.tools.pipeline_manager import PipelineManagerTool
 
     # ChainRuntime — LLM-written code-based adapter chaining
     chain_runtime = ChainRuntime(registry=registry, data_store=data_store)

@@ -25,7 +25,7 @@ def _load_tools():
     tools = []
 
     try:
-        from ravi.capabilities.tools.web_surfer.tool import WebSurferTool
+        from ravi.capabilities.tools.web_surfer import WebSurferTool
 
         tools.append(WebSurferTool())
     except Exception:

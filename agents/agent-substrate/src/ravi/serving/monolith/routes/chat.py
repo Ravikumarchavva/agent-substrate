@@ -42,8 +42,8 @@ from ravi.serving.monolith.services.agent_service import (
 )
 from ravi.serving.monolith.routes.mcp_apps import resolve_ui_uri
 from ravi.capabilities.tools.task_manager.tool import current_thread_id
-from ravi.capabilities.tools.web_surfer.tool import WebSurferTool
-from ravi.capabilities.tools.human_input.tool import AskHumanTool
+from ravi.capabilities.tools.web_surfer import WebSurferTool
+from ravi.capabilities.tools.human_input import AskHumanTool
 from ravi.serving.monolith.security.deps import get_current_user
 from ravi.serving.monolith.sse.bridge import BRIDGE_DONE, BridgeRegistry, WebHITLBridge
 from ravi.serving.monolith.sse.events import (

@@ -15,7 +15,7 @@ from ravi.agents.context import (
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
-from ravi.agents.skills import Skill
+from ravi.kernel.skills import Skill
 from ravi.agents.llm import (
     EmbeddingClient,
     LLMClient,
@@ -42,7 +42,8 @@ from ravi.agents.guardrails import (
     ToolCallValidationGuardrail,
     run_guardrails,
 )
-from ravi.agents.core.agent import ReActAgent, AgentRunResult
+from ravi.agents.core.react import ReActAgent, AgentRunResult
+from ravi.agents.core.proxy import UserProxyAgent
 from ravi.agents.runtime import LocalRuntime
 from ravi.agents.resources import (
     BudgetExceededError,
@@ -76,6 +77,7 @@ __all__ = [
     # agents
     "ReActAgent",
     "AgentRunResult",
+    "UserProxyAgent",
     # runtime
     "LocalRuntime",
     # guardrails

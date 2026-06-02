@@ -257,7 +257,7 @@ async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
 
     # Build a fresh AskHumanTool for this request wired to the thread's bridge.
     # Removes the placeholder from ctx.tools so only one instance exists.
-    base_tools = [t for t in ctx.tools.all_tools() if not isinstance(t, AskHumanTool)]
+    base_tools = [t for t in ctx.tools.all() if not isinstance(t, AskHumanTool)]
     ask_tool = AskHumanTool(
         handler=bridge.human_handler,
         max_requests_per_run=5,

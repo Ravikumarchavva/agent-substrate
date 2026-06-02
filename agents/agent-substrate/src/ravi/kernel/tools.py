@@ -1,15 +1,11 @@
-"""Tool execution contracts."""
+"""Tool contracts — the Tool Protocol, ToolRisk, and the Toolbox."""
 
 from __future__ import annotations
 
 from enum import Enum
-from uuid import uuid4
-
 from typing import Protocol
 
-from pydantic import BaseModel, Field
-
-from ravi.kernel.content import ContentBlock, JsonObject, content_blocks_to_str
+from ravi.kernel.message import ToolCallRequest, ToolExecutionResult
 
 
 class ToolRisk(str, Enum):
@@ -26,33 +22,6 @@ class ToolRisk(str, Enum):
     CRITICAL = "critical"
 
 
-class ToolCallRequest(BaseModel):
-    """A request to execute a named tool."""
-
-    name: str
-    arguments: JsonObject = Field(default_factory=dict)
-    call_id: str = Field(default_factory=lambda: str(uuid4()))
-
-    model_config = {"frozen": True}
-
-
-class ToolExecutionResult(BaseModel):
-    """Result from a single tool execution."""
-
-    call_id: str = ""
-    name: str = ""
-    content: list[ContentBlock] = Field(default_factory=list)
-    is_error: bool = False
-    metadata: JsonObject = Field(default_factory=dict)
-
-    model_config = {"arbitrary_types_allowed": True, "frozen": False}
-
-    @property
-    def text(self) -> str:
-        """Human-readable lowering of all content blocks."""
-        return content_blocks_to_str(self.content)
-
-
 class Tool(Protocol):
     """Contract every tool must satisfy.
 
@@ -66,71 +35,67 @@ class Tool(Protocol):
     async def execute(self, **kwargs: object) -> ToolExecutionResult: ...
 
 
-class ToolRegistry:
-    """Simple name-keyed registry for Tool instances.
+class Toolbox:
+    """The agent's toolbox — a name-keyed collection of Tool instances.
 
-    Replaces the old catalog variable. Tags, categories, and aliases
-    passed to register() are silently ignored — keep metadata in the
-    tool itself via ``risk`` and ``description``.
+    Provides lookup, keyword search, and schema generation so the LLM
+    can discover and invoke tools by name or description match.
     """
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
 
-    def register(self, tool: Tool, **_kwargs: object) -> None:
+    def add(self, tool: Tool) -> None:
         """Register a tool under its name."""
         self._tools[tool.name] = tool
 
-    # alias used in lifespan wiring
-    def register_tool(self, tool: Tool, **kwargs: object) -> None:
-        self.register(tool, **kwargs)
-
     def get(self, name: str) -> Tool | None:
+        """Return the tool with *name*, or None if not registered."""
         return self._tools.get(name)
 
-    # alias used in pipeline validation
-    def get_tool(self, name: str) -> Tool | None:
-        return self._tools.get(name)
+    def search(self, query: str) -> list[Tool]:
+        """Keyword search over tool names and descriptions.
 
-    def all_tools(self) -> list[Tool]:
-        return list(self._tools.values())
-
-    def by_risk(self, risk: ToolRisk) -> list[Tool]:
+        Returns every tool whose name or description contains *query*
+        (case-insensitive).  Used by the LLM tool-search flow.
+        """
+        q = query.lower()
         return [
-            t for t in self._tools.values() if getattr(t, "risk", ToolRisk.SAFE) == risk
+            t for t in self._tools.values()
+            if q in t.name.lower() or q in t.description.lower()
         ]
 
+    def all(self) -> list[Tool]:
+        """Return all registered tools."""
+        return list(self._tools.values())
+
     def names(self) -> list[str]:
+        """Return all registered tool names."""
         return list(self._tools.keys())
 
-    def schema_for(self, name: str) -> dict[str, object] | None:
-        """Return the full tool schema dict for ``name``, or None if not found.
+    def schemas(self) -> list[dict[str, object]]:
+        """Full tool schemas for LLM function-calling."""
+        return [
+            {"name": t.name, "description": t.description, "parameters": t.input_schema}
+            for t in self._tools.values()
+        ]
 
-        Used by client-executed tool search: after receiving a tool_search_call
-        the application calls this to get the full schema to return in
-        tool_search_output.
+    def schema_for(self, name: str) -> dict[str, object] | None:
+        """Return the full schema dict for *name*, or None if not found.
+
+        Used after a tool_search_call to inject the full parameter schema.
         """
         t = self._tools.get(name)
         if t is None:
             return None
-        return {
-            "name": t.name,
-            "description": t.description,
-            "parameters": t.input_schema,
-        }
+        return {"name": t.name, "description": t.description, "parameters": t.input_schema}
 
-    def to_deferred_schemas(
-        self, *, include_tool_search: bool = True
-    ) -> list[dict[str, object]]:
-        """Return tool schemas for OpenAI hosted tool search (gpt-5.4+).
+    def deferred_schemas(self, *, include_tool_search: bool = True) -> list[dict[str, object]]:
+        """Deferred schemas for OpenAI hosted tool search (gpt-5.4+).
 
-        All tools are marked ``defer_loading: true`` so only their name and
-        description are loaded into the model context upfront.  The full
-        parameter schema is injected on demand when the model calls
-        ``tool_search``.
-
-        Set ``include_tool_search=False`` to omit the sentinel (e.g. when
-        adding it manually alongside namespace definitions).
+        All tools are marked ``defer_loading: true`` — only name and
+        description are sent upfront; the full schema is injected on
+        demand when the model calls ``tool_search``.
         """
         schemas: list[dict[str, object]] = [
             {
@@ -145,6 +110,10 @@ class ToolRegistry:
             schemas.append({"type": "tool_search"})
         return schemas
 
+    def by_risk(self, risk: ToolRisk) -> list[Tool]:
+        """Return all tools with the given risk level."""
+        return [t for t in self._tools.values() if getattr(t, "risk", ToolRisk.SAFE) == risk]
+
     def __len__(self) -> int:
         return len(self._tools)
 
@@ -152,4 +121,12 @@ class ToolRegistry:
         return name in self._tools
 
 
-__all__ = ["ToolRisk", "ToolCallRequest", "ToolExecutionResult", "Tool", "ToolRegistry"]
+# Re-exported here for import convenience — canonical home is kernel.message.
+__all__ = [
+    "ToolRisk",
+    "Tool",
+    "Toolbox",
+    # message payloads re-exported so tools can do: from ravi.kernel.tools import ToolExecutionResult
+    "ToolCallRequest",
+    "ToolExecutionResult",
+]

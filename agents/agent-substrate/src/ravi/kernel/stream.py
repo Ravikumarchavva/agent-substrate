@@ -1,38 +1,36 @@
 """User-facing visibility stream — progress events emitted by agents.
 
-Agent↔agent communication uses :class:`~ravi.kernel.message.Message` (full
-payloads, synchronous request/response).  Separately, an agent may emit a
-sequence of incremental progress events so a user can *watch* what is
-happening — token-by-token text deltas, reasoning traces, and a final
-completion event.
+Two independent event channels:
 
-Events are published to a :class:`~ravi.kernel.identity.TopicId`; the
-user-boundary transport (console, SSE, WebSocket) subscribes and renders them.
-:class:`StreamDone` is the end-of-stream sentinel.
+1. **Token stream** (``TextDelta``, ``ReasoningDelta``, ``CompletionEvent``,
+   ``StreamDone``) — LLM token-by-token output from the agent currently
+   speaking to the user.
 
-Usage inside an agent::
+2. **Progress stream** (``AgentProgress``) — structured step events emitted
+   by every agent in the supervision tree throughout execution. All agents in
+   one run publish to ``TopicId("agent.progress", run_id)`` — a single topic
+   shared across the whole tree. The UI subscribes once to that topic and
+   reconstructs the hierarchy from ``agent_id``, ``parent_id``, and ``depth``.
 
-    stream = StreamPublisher(runtime, topic=TopicId("output", session_id), sender=self.id)
-    await stream.emit(TextDelta(text="Hello"))
-    await stream.emit(CompletionEvent(content=[TextBlock(text="Hello, world!")]))
-    await stream.close()
+Standard topic convention (enforced by the agents layer, not the kernel):
+
+    token stream  → TopicId("agent.stream",   agent_id.key)
+    progress      → TopicId("agent.progress", run_id)        ← ONE per run
+
+These are pure data types. Transport (SSE, WebSocket, console) lives in the
+serving layer.
 """
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from dataclasses import dataclass, field
 
 from ravi.kernel.content import ContentBlock
-from ravi.kernel.identity import AgentId, TopicId
-from ravi.kernel.message import RuntimeRef
-
-logger = logging.getLogger(__name__)
+from ravi.kernel.identity import AgentId
 
 
 # ---------------------------------------------------------------------------
-# Stream event types
+# Token stream events  (LLM output, token by token)
 # ---------------------------------------------------------------------------
 
 
@@ -52,10 +50,10 @@ class ReasoningDelta:
 
 @dataclass(frozen=True, slots=True)
 class CompletionEvent:
-    """Final event — carries the fully assembled response content.
+    """Final token-stream event — carries the fully assembled response.
 
-    ``content`` is a ``list[ContentBlock]`` rather than a provider message
-    object so the stream layer stays independent of LLM wire formats.
+    ``content`` is ``list[ContentBlock]`` so the stream layer stays
+    independent of LLM wire formats.
     """
 
     content: list[ContentBlock]
@@ -64,79 +62,58 @@ class CompletionEvent:
 
 @dataclass(frozen=True, slots=True)
 class StreamDone:
-    """End-of-stream sentinel.  Subscribers stop consuming on receipt."""
+    """End-of-token-stream sentinel. Consumers stop on receipt."""
 
     reason: str = "complete"
 
 
 # ---------------------------------------------------------------------------
-# StreamPublisher
+# Progress events  (supervision tree, every agent at every step)
 # ---------------------------------------------------------------------------
 
 
-class StreamPublisher:
-    """Publishes progress events to a TopicId through the runtime.
+class AgentStep:
+    """Enumeration of progress step names. Use these string constants."""
 
-    An ``asyncio.Lock`` prevents TOCTOU races between concurrent ``emit()``
-    calls and ``close()``.
+    STARTED = "started"
+    THINKING = "thinking"       # LLM call in flight
+    TOOL_CALL = "tool_call"     # about to execute a tool
+    TOOL_RESULT = "tool_result" # tool returned
+    HANDOFF = "handoff"         # delegating to a child agent
+    PAUSED = "paused"           # agent cooperatively paused by priority preemption
+    DONE = "done"               # agent finished successfully
+    ERROR = "error"             # agent encountered an unrecoverable error
+
+
+@dataclass(frozen=True, slots=True)
+class AgentProgress:
+    """Structured progress event emitted by every agent at every step.
+
+    Every agent MUST emit these at the standard ``AgentStep.*`` points so
+    parents and the UI have full visibility into the supervision tree.
+
+    Published to ``TopicId("agent.progress", run_id)`` — ONE topic per
+    execution run shared by all agents in the tree. The ``agent_id``,
+    ``parent_id``, and ``depth`` fields let the UI reconstruct the hierarchy
+    from a single subscription.
     """
 
-    __slots__ = ("_runtime", "_topic", "_sender", "_closed", "_lock")
-    _runtime: RuntimeRef
-
-    def __init__(
-        self,
-        runtime: RuntimeRef,
-        topic: TopicId,
-        *,
-        sender: AgentId,
-    ) -> None:
-        self._runtime = runtime
-        self._topic = topic
-        self._sender = sender
-        self._closed = False
-        self._lock = asyncio.Lock()
-
-    @property
-    def topic(self) -> TopicId:
-        return self._topic
-
-    async def emit(self, event: object) -> None:
-        """Publish a single progress event to the topic."""
-        async with self._lock:
-            if self._closed:
-                raise RuntimeError("StreamPublisher is already closed")
-            await self._runtime.publish_message(
-                event,
-                sender=self._sender,
-                topic=self._topic,
-            )
-
-    async def close(self, reason: str = "complete") -> None:
-        """Send a StreamDone sentinel and mark the publisher closed."""
-        async with self._lock:
-            if self._closed:
-                return
-            try:
-                await self._runtime.publish_message(
-                    StreamDone(reason=reason),
-                    sender=self._sender,
-                    topic=self._topic,
-                )
-                self._closed = True
-                logger.debug("Stream closed: %s (reason=%s)", self._topic, reason)
-            except Exception:
-                logger.exception(
-                    "Failed to publish StreamDone for %s — caller can retry",
-                    self._topic,
-                )
-                raise
+    agent_id: AgentId
+    step: str                                  # one of AgentStep.*
+    content: str                               # human-readable description
+    run_id: str = ""                           # routes event to the correct SSE stream
+    parent_id: AgentId | None = None           # direct manager; None = root agent
+    depth: int = 0                             # org level (0=root, 1=direct report, …)
+    metadata: dict[str, str] = field(default_factory=dict)
 
 
 __all__ = [
+    # Token stream
     "TextDelta",
     "ReasoningDelta",
     "CompletionEvent",
     "StreamDone",
-    "StreamPublisher",
+    # Progress stream
+    "AgentProgress",
+    "AgentStep",
 ]

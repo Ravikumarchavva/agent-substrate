@@ -5,11 +5,16 @@ dict for handler registration and ``asyncio.gather`` for pub/sub fanout.
 Suitable for single-process use (CLI, tests, notebook demos).
 Production deployments swap this for a gRPC or NATS-backed runtime.
 
+Handlers and subscriptions are keyed by full ``AgentId`` (type + key), not
+just by agent type string.  This allows multiple agents of the same type to
+coexist — e.g. three specialist ``ReActAgent`` instances in one orchestrator
+tree are all addressable independently.
+
 Usage::
 
     async with LocalRuntime() as rt:
-        agent = AssistantAgent("assistant", rt, model=llm)
-        await rt.register(agent.id.type, agent.on_message)
+        agent = ReActAgent("assistant", rt, model=llm)
+        await rt.register(agent.id, agent.on_message)
         result = await rt.send_message("Hello", recipient=agent.id)
 """
 
@@ -20,6 +25,7 @@ import logging
 import uuid
 from typing import Any
 
+from ravi.kernel.errors import AgentNotFoundError
 from ravi.kernel.identity import AgentId, TopicId
 from ravi.kernel.message import MessageContext, MessageHandler
 
@@ -27,10 +33,10 @@ logger = logging.getLogger(__name__)
 
 
 class LocalRuntime:
-    """In-process asyncio runtime — dict registry + asyncio pub/sub fanout."""
+    """In-process asyncio runtime — AgentId-keyed registry + asyncio pub/sub fanout."""
 
     def __init__(self) -> None:
-        self._handlers: dict[str, MessageHandler] = {}
+        self._handlers: dict[AgentId, MessageHandler] = {}
         self._topic_subs: dict[str, list[MessageHandler]] = {}
         self._started = False
 
@@ -55,22 +61,34 @@ class LocalRuntime:
 
     # -- Handler registry ----------------------------------------------------
 
-    async def register(self, agent_type: str, handler: MessageHandler) -> None:
-        self._handlers[agent_type] = handler
+    async def register(self, agent_id: AgentId, handler: MessageHandler) -> None:
+        """Register *handler* for the specific *agent_id* instance."""
+        self._handlers[agent_id] = handler
 
-    async def unregister(self, agent_type: str) -> None:
-        self._handlers.pop(agent_type, None)
+    async def unregister(self, agent_id: AgentId) -> None:
+        """Remove the handler for *agent_id*."""
+        self._handlers.pop(agent_id, None)
 
     # -- Pub/sub subscription -----------------------------------------------
 
-    async def subscribe(self, agent_type: str, topic: TopicId) -> None:
-        handler = self._handlers.get(agent_type)
+    async def subscribe(self, agent_id: AgentId, topic: TopicId) -> None:
+        """Subscribe *agent_id* to *topic* — its handler receives published messages."""
+        handler = self._handlers.get(agent_id)
         if handler is not None:
-            self._topic_subs.setdefault(topic.type, []).append(handler)
+            key = f"{topic.type}/{topic.source}"
+            self._topic_subs.setdefault(key, []).append(handler)
 
-    async def unsubscribe(self, agent_type: str, topic: TopicId) -> None:
-        # Best-effort; exact handler match not tracked here.
-        pass
+    async def unsubscribe(self, agent_id: AgentId, topic: TopicId) -> None:
+        """Remove the *agent_id* subscription from *topic*."""
+        handler = self._handlers.get(agent_id)
+        if handler is None:
+            return
+        key = f"{topic.type}/{topic.source}"
+        subs = self._topic_subs.get(key, [])
+        try:
+            subs.remove(handler)
+        except ValueError:
+            pass
 
     # -- Message delivery ----------------------------------------------------
 
@@ -81,10 +99,12 @@ class LocalRuntime:
         sender: AgentId | None = None,
         recipient: AgentId,
     ) -> object:
-        handler = self._handlers.get(recipient.type)
+        """Point-to-point delivery to a specific agent instance."""
+        handler = self._handlers.get(recipient)
         if handler is None:
-            raise LookupError(
-                f"No handler registered for agent type '{recipient.type}'"
+            raise AgentNotFoundError(
+                f"No handler registered for {recipient} — "
+                "call await runtime.register(agent.id, agent.on_message) first."
             )
         ctx = MessageContext(
             runtime=self,  # type: ignore[arg-type]
@@ -101,7 +121,9 @@ class LocalRuntime:
         sender: AgentId | None = None,
         topic: TopicId,
     ) -> None:
-        handlers = self._topic_subs.get(topic.type, [])
+        """Pub/sub broadcast — all subscribers of *topic* receive *payload*."""
+        key = f"{topic.type}/{topic.source}"
+        handlers = self._topic_subs.get(key, [])
         if not handlers:
             return
         ctx = MessageContext(

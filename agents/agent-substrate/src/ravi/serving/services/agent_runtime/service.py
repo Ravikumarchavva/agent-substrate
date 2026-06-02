@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from ravi.agents.assistant import AssistantAgent
+from ravi.agents.core import ReActAgent
 from ravi.agents.context import (
     HistoryProvider,
     SlidingWindowCompaction as SlidingWindowStrategy,
@@ -72,7 +72,7 @@ def create_agent(
     session_id: Optional[str] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
-) -> AssistantAgent:
+) -> ReActAgent:
     """Create the agent used by the runtime service."""
     return create_assistant_agent(
         runtime=runtime,
@@ -97,7 +97,7 @@ def _serialize_completion_content(evt: CompletionEvent) -> list[str] | None:
 
 async def execute_agent_run(
     *,
-    agent: AssistantAgent,
+    agent: ReActAgent,
     user_content: str,
     run_id: str,
     thread_id: str,

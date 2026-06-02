@@ -2,7 +2,7 @@
 
 Provides the infrastructure agents run on top of: context and history
 management, message middleware, resource budgets, supervision, and the
-concrete agent types (AssistantAgent, OrchestratorAgent, etc.).
+concrete agent types (ReActAgent, OrchestratorAgent, etc.).
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from ravi.agents.guardrails import (
     ToolCallValidationGuardrail,
     run_guardrails,
 )
-from ravi.agents.assistant.agent import AssistantAgent, AgentRunResult
+from ravi.agents.core.agent import ReActAgent, AgentRunResult
 from ravi.agents.runtime import LocalRuntime
 from ravi.agents.resources import (
     BudgetExceededError,
@@ -74,7 +74,7 @@ __all__ = [
     "Interceptor",
     "MiddlewarePipeline",
     # agents
-    "AssistantAgent",
+    "ReActAgent",
     "AgentRunResult",
     # runtime
     "LocalRuntime",

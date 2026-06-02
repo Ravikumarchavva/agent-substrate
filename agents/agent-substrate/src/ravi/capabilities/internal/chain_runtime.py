@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ravi.capabilities.internal.data_ref import DataRef, DataRefStore
-from ravi.kernel.tools import Tool as BaseTool, ToolRegistry
+from ravi.kernel.tools import Tool, Toolbox
 
 logger = setup_logging()
 
@@ -41,7 +41,7 @@ class ChainResult:
 
 
 class AdapterProxy:
-    """Wraps a ``BaseTool`` as a simple async callable for script namespaces.
+    """Wraps a ``Tool`` as a simple async callable for script namespaces.
 
     ``await adapters.calculator(expression="2+2")`` calls
     ``tool.run(expression="2+2")`` under the hood.  Large results are
@@ -50,7 +50,7 @@ class AdapterProxy:
 
     def __init__(
         self,
-        tool: BaseTool,
+        tool: Tool,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
         self._tool = tool
@@ -114,7 +114,7 @@ class ChainRuntime:
 
     def __init__(
         self,
-        registry: ToolRegistry,
+        registry: Toolbox,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
 
@@ -124,7 +124,7 @@ class ChainRuntime:
     def build_namespace(self) -> _AdapterNamespace:
         """Build the ``adapters`` namespace with proxies for all registered tools."""
         ns = _AdapterNamespace()
-        for tool in self._registry.all_tools():
+        for tool in self._registry.all():
             proxy = AdapterProxy(tool, data_store=self._data_store)
             ns.register(proxy)
         return ns

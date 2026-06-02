@@ -12,7 +12,7 @@ Two modes (chosen by the caller):
 
 OpenAI hosted tool search (gpt-5.4+):
     Declare all tools with ``defer_loading: True`` via
-    ``ToolRegistry.to_deferred_schemas()`` and add ``{"type": "tool_search"}``
+    ``Toolbox.deferred_schemas()`` and add ``{"type": "tool_search"}``
     to the tools list.  The API handles search server-side; your app does not
     need to call this tool at all.
 
@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 
 from ravi.kernel.content import TextBlock
-from ravi.kernel.tools import ToolExecutionResult, ToolRegistry, ToolRisk
+from ravi.kernel.tools import ToolExecutionResult, Toolbox, ToolRisk
 
 
 class ToolSearchTool:
@@ -67,14 +67,14 @@ class ToolSearchTool:
     }
     risk = ToolRisk.SAFE
 
-    def __init__(self, registry: ToolRegistry) -> None:
+    def __init__(self, registry: Toolbox) -> None:
         self._registry = registry
 
     async def execute(
         self, *, query: str = "", format: str = "text", **_: object
     ) -> ToolExecutionResult:
         q = query.strip().lower()
-        tools = self._registry.all_tools()
+        tools = self._registry.all()
 
         matches = (
             tools

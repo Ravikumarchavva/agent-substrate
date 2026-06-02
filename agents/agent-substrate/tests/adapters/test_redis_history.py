@@ -17,10 +17,11 @@ async def test_redis_history_provider():
 
     try:
         agent_id = AgentId(type="user", key="123")
-        
+        run_id = "test-session-001"
+
         # Ensure clean state
-        await provider.clear(agent_id)
-        assert await provider.count_messages(agent_id) == 0
+        await provider.clear(agent_id, session_id=run_id)
+        assert await provider.count_messages(agent_id, session_id=run_id) == 0
 
         # Append a message envelope
         msg = Message(
@@ -28,11 +29,11 @@ async def test_redis_history_provider():
             sender=None,
             payload=ChatMessage(role="user", content=[TextBlock(text="redis message")]),
         )
-        await provider.append(agent_id, msg)
-        
+        await provider.append(agent_id, msg, session_id=run_id)
+
         # Assertions
-        assert await provider.count_messages(agent_id) == 1
-        msgs = await provider.get_messages(agent_id)
+        assert await provider.count_messages(agent_id, session_id=run_id) == 1
+        msgs = await provider.get_messages(agent_id, session_id=run_id)
         assert len(msgs) == 1
         assert msgs[0].target.type == "user"
         assert msgs[0].target.key == "123"
@@ -40,7 +41,7 @@ async def test_redis_history_provider():
         assert msgs[0].payload.content[0].text == "redis message"
 
         # Cleanup
-        await provider.clear(agent_id)
-        assert await provider.count_messages(agent_id) == 0
+        await provider.clear(agent_id, session_id=run_id)
+        assert await provider.count_messages(agent_id, session_id=run_id) == 0
     finally:
         await provider.disconnect()

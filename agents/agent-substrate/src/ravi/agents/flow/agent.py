@@ -2,7 +2,7 @@
 
 Flows wrap one or more agents (or nested flows) and coordinate execution.
 Every flow exposes the same ``run`` / ``run_stream`` surface as
-``AssistantAgent`` so flows can be nested or substituted wherever an agent is
+``ReActAgent`` so flows can be nested or substituted wherever an agent is
 expected.
 
 Built-in flow types
@@ -29,7 +29,7 @@ from typing import Any, AsyncIterator, Callable, List, Optional, Union
 from uuid import uuid4
 
 from ravi.kernel.stream import TextDelta
-from ravi.agents.assistant.agent import AgentRunResult, AssistantAgent
+from ravi.agents.core.agent import AgentRunResult, ReActAgent
 from ravi.agents.hooks.manager import HookEvent, HookManager
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 # Type aliases
 # ---------------------------------------------------------------------------
 
-# A "step" is either a concrete AssistantAgent or a nested flow.
-FlowStep = Union[AssistantAgent, "BaseFlow"]
+# A "step" is either a concrete ReActAgent or a nested flow.
+FlowStep = Union[ReActAgent, "BaseFlow"]
 
 MergeStrategy = Union[
     str,  # "concat" | "vote"

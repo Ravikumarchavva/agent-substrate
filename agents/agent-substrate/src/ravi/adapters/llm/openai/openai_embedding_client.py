@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 from openai import AsyncOpenAI
 
-from ravi.kernel.llm import BaseEmbeddingClient, EmbeddingResult
+from ravi.adapters.llm.base import BaseEmbeddingClient, EmbeddingResult
 
 logger = setup_logging()
 

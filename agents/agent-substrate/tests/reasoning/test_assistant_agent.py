@@ -1,4 +1,4 @@
-"""Tests for AssistantAgent — uses a mock LLM, no API key needed."""
+"""Tests for ReActAgent — uses a mock LLM, no API key needed."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from ravi.kernel import (
     ToolUseBlock,
 )
 from ravi.kernel.stream import CompletionEvent, StreamDone, TextDelta
-from ravi.agents.assistant import AgentRunResult, AssistantAgent
+from ravi.agents.core import ReActAgent, AgentRunResult
 from ravi.agents.guardrails.content_filter import ContentFilterGuardrail
 from ravi.agents.guardrails.prompt_injection import PromptInjectionGuardrail
 from ravi.agents.guardrails._contracts import GuardrailType
@@ -106,8 +106,8 @@ def make_agent(
     guardrails: list | None = None,
     approval_handler=None,
     approval_required_risk: ToolRisk = ToolRisk.HIGH,
-) -> AssistantAgent:
-    return AssistantAgent(
+) -> ReActAgent:
+    return ReActAgent(
         "TestBot",
         runtime,
         model=MockLLMClient(responses),
@@ -195,7 +195,8 @@ async def test_multi_turn_history():
         assert r2.output == "You said hi earlier."
 
         # history should have 4 messages (user+assistant × 2)
-        msgs = await agent.history.get_messages(agent.id)
+        # Standalone agents use agent.id.key as stable session_id across calls.
+        msgs = await agent.history.get_messages(agent.id, session_id=agent.id.key)
         assert len(msgs) == 4
 
 
@@ -397,7 +398,7 @@ async def test_agent_context_constructor():
             InMemoryHistoryProvider(),
             [SlidingWindowCompaction(max_messages=10)],
         )
-        agent = AssistantAgent(
+        agent = ReActAgent(
             "CtxBot",
             rt,
             model=MockLLMClient([[TextBlock(text="ok")]]),

@@ -1,6 +1,7 @@
-"""ravi.kernel — the agent runtime core.
+"""ravi.kernel — frozen contracts layer.
 
-Everything an agent framework needs
+Everything here is a Protocol, pure dataclass, or value type.
+No I/O, no concrete implementations, no external dependencies beyond pydantic.
 """
 
 from __future__ import annotations
@@ -24,8 +25,16 @@ from ravi.kernel.content import (
     content_block_from_dict,
     content_blocks_to_str,
 )
-from ravi.kernel.identity import AgentId, TopicId
+from ravi.kernel.identity import (
+    AgentId,
+    TopicId,
+    Supervision as Supervision,
+    HistoryRetention as HistoryRetention,
+    Priority as Priority,
+)
 from ravi.kernel.message import (
+    ToolCallRequest,
+    ToolExecutionResult,
     RuntimeRef,
     Message,
     MessageContext,
@@ -33,18 +42,24 @@ from ravi.kernel.message import (
     Subscription,
 )
 from ravi.kernel.protocol import AgentRuntime
-from ravi.kernel.tools import ToolRisk, ToolCallRequest, ToolExecutionResult, Tool
+from ravi.kernel.tools import ToolRisk, Tool, Toolbox
 from ravi.kernel.llm import LLMClient, EmbeddingClient
 from ravi.kernel.history import HistoryProvider
 from ravi.kernel.context import CompactionStrategy, AgentContextProtocol
 from ravi.kernel.middleware import Interceptor
-from ravi.kernel.errors import AgentNotFoundError, HandlerError
+from ravi.kernel.errors import (
+    AgentNotFoundError,
+    HandlerError,
+    AgentCrashError as AgentCrashError,
+    BudgetExhaustedError as BudgetExhaustedError,
+)
 from ravi.kernel.stream import (
     TextDelta,
     ReasoningDelta,
     CompletionEvent,
     StreamDone,
-    StreamPublisher,
+    AgentProgress,
+    AgentStep,
 )
 
 __all__ = [
@@ -66,9 +81,15 @@ __all__ = [
     "CONTENT_BLOCK_TYPES",
     "content_block_from_dict",
     "content_blocks_to_str",
-    # Routing
+    # Routing & supervision
     "AgentId",
     "TopicId",
+    "Supervision",
+    "HistoryRetention",
+    "Priority",
+    # Tool message payloads
+    "ToolCallRequest",
+    "ToolExecutionResult",
     # Communication
     "RuntimeRef",
     "Message",
@@ -79,9 +100,8 @@ __all__ = [
     "AgentRuntime",
     # Tools
     "ToolRisk",
-    "ToolCallRequest",
-    "ToolExecutionResult",
     "Tool",
+    "Toolbox",
     # LLM
     "LLMClient",
     "EmbeddingClient",
@@ -95,10 +115,14 @@ __all__ = [
     # Errors
     "AgentNotFoundError",
     "HandlerError",
-    # Stream
+    "AgentCrashError",
+    "BudgetExhaustedError",
+    # Token stream
     "TextDelta",
     "ReasoningDelta",
     "CompletionEvent",
     "StreamDone",
-    "StreamPublisher",
+    # Progress stream
+    "AgentProgress",
+    "AgentStep",
 ]

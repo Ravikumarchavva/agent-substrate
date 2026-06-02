@@ -5,7 +5,7 @@ from ravi.kernel.tools import (
     ToolCallRequest,
     ToolExecutionResult,
     ToolRisk,
-    ToolRegistry,
+    Toolbox,
 )
 from ravi.kernel.content import TextBlock
 
@@ -54,14 +54,14 @@ def test_tool_execution_result():
 
 
 def test_tool_registry():
-    registry = ToolRegistry()
+    registry = Toolbox()
     tool = MockToolImpl()
     
-    registry.register(tool)
+    registry.add(tool)
     assert len(registry) == 1
     assert "mock_tool" in registry
     assert registry.get("mock_tool") is tool
-    assert registry.get_tool("mock_tool") is tool
+    assert registry.get("mock_tool") is tool
     assert registry.names() == ["mock_tool"]
     
     # Test by_risk
@@ -76,7 +76,7 @@ def test_tool_registry():
     assert schema["parameters"] == tool.input_schema
 
     # Test deferred schemas
-    defs = registry.to_deferred_schemas(include_tool_search=True)
+    defs = registry.deferred_schemas(include_tool_search=True)
     assert len(defs) == 2
     assert defs[0]["name"] == "mock_tool"
     assert defs[0]["defer_loading"] is True

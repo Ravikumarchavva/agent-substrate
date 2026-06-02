@@ -2,13 +2,13 @@
 
 Every multi-agent interaction starts here.  External callers (HTTP routes,
 CLI, tests) create a UserProxyAgent and use ``ask()`` to send tasks into
-the runtime, where a registered agent (typically AssistantAgent) handles them.
+the runtime, where a registered agent (typically ReActAgent) handles them.
 
     runtime = LocalRuntime()
     await runtime.start()
 
-    agent = AssistantAgent("assistant", runtime, model=llm)
-    await runtime.register("assistant", agent.on_message)
+    agent = ReActAgent("assistant", runtime, model=llm)
+    await runtime.register(agent.id, agent.on_message)
 
     proxy = UserProxyAgent("proxy", runtime)
     result = await proxy.ask("What is 2+2?", recipient=agent.id)
@@ -38,7 +38,7 @@ class UserProxyAgent:
         Instance key — use unique keys for per-request proxies.
     hitl_callback:
         Optional async callable invoked when a reverse message arrives
-        (e.g. an AssistantAgent requesting human input).
+        (e.g. an ReActAgent requesting human input).
         Signature: ``async (ctx: MessageContext, payload: object) -> object``.
     """
 

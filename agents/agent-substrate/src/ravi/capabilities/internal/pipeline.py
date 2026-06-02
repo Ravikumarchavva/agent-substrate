@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ravi.capabilities.internal.data_ref import DataRefStore
-from ravi.kernel.tools import ToolRegistry
+from ravi.kernel.tools import Toolbox
 
 logger = setup_logging()
 
@@ -115,7 +115,7 @@ class PipelineEngine:
 
     def __init__(
         self,
-        registry: ToolRegistry,
+        registry: Toolbox,
         data_store: Optional[DataRefStore] = None,
     ) -> None:
 
@@ -129,7 +129,7 @@ class PipelineEngine:
         step_results: List[Dict[str, Any]] = []
 
         for i, step in enumerate(pipeline.steps):
-            tool = self._registry.get_tool(step.adapter_name)
+            tool = self._registry.get(step.adapter_name)
             if tool is None:
                 duration = int((time.monotonic() - start) * 1000)
                 return PipelineResult(
@@ -189,7 +189,7 @@ class PipelineEngine:
         for i, step in enumerate(pipeline.steps):
             if not step.adapter_name:
                 errors.append(f"Step {i}: missing adapter_name")
-            elif self._registry.get_tool(step.adapter_name) is None:
+            elif self._registry.get(step.adapter_name) is None:
                 errors.append(
                     f"Step {i}: adapter '{step.adapter_name}' not found in registry"
                 )

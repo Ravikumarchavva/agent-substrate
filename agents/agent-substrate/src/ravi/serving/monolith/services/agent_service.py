@@ -3,7 +3,7 @@
 Responsibilities:
   1. Ensure the session is populated in the shared ``HistoryProvider``
      (cache hit; on a miss, seed it from the Postgres cold store).
-  2. Create a configured ``AssistantAgent`` per thread, bound to its session_id.
+  2. Create a configured ``ReActAgent`` per thread, bound to its session_id.
   3. Persist new messages to the database (cold store) during streaming.
 
 Stateless agent design
@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.agents.assistant import AssistantAgent
+from ravi.agents.core import ReActAgent
 from ravi.agents.context import (
     HistoryProvider,
     SlidingWindowCompaction,
@@ -64,10 +64,10 @@ async def load_agent_for_thread(
     max_input_tokens: int = 16_000,
     runtime: AgentRuntime,
     enable_capability_search: bool = True,
-) -> AssistantAgent:
+) -> ReActAgent:
     """Load a per-session agent backed by the shared ``HistoryProvider``.
 
-    Stateless design — a fresh ``AssistantAgent`` is created on every request.
+    Stateless design — a fresh ``ReActAgent`` is created on every request.
     The agent shares the multi-session ``HistoryProvider`` from
     ``app.state.history`` and addresses it by ``session_id`` (the thread id).
     Every ``save_messages`` during the run writes through to that provider.
@@ -87,7 +87,7 @@ async def load_agent_for_thread(
         …                     All other kwargs forwarded to the shared agent factory.
 
     Returns:
-        A configured ``AssistantAgent`` ready for ``run_stream()`` (server compat)
+        A configured ``ReActAgent`` ready for ``run_stream()`` (server compat)
         or actor-model dispatch via ``on_message()``.
     """
     session_id = str(thread_id)

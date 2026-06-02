@@ -10,7 +10,7 @@ class Skill:
     """A prompt-skill that extends an agent's behaviour via injected instructions.
 
     Skills are loaded from ``capabilities/skills/<name>/SKILL.md`` or constructed
-    inline.  When attached to an ``AssistantAgent`` their ``instructions`` are
+    inline.  When attached to an ``ReActAgent`` their ``instructions`` are
     appended to the effective system prompt and their ``allowed_tools`` names are
     cross-referenced against the agent's tool registry at runtime.
 
@@ -22,7 +22,7 @@ class Skill:
             name="summarisation",
             instructions="Always end your reply with a one-sentence TL;DR.",
         )
-        agent = AssistantAgent(
+        agent = ReActAgent(
             "bot", runtime, model=client,
             system_instructions="You are a helpful assistant.",
             skills=[summarise],

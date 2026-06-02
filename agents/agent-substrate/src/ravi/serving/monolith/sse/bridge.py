@@ -34,7 +34,7 @@ from ravi.logger import setup_logging
 import asyncio
 from typing import Any, Dict, Optional
 
-from ravi.capabilities.tools.human_input.tool import (
+from ravi.capabilities.tools.human_input import (
     CallbackApprovalHandler,
     CallbackHumanHandler,
     HumanInputRequest,

@@ -24,7 +24,7 @@ def _load_default_tools(ci_http_client=None) -> list:
     tools = []
 
     try:
-        from ravi.capabilities.tools.web_surfer.tool import WebSurferTool
+        from ravi.capabilities.tools.web_surfer import WebSurferTool
 
         tools.append(WebSurferTool())
     except Exception:

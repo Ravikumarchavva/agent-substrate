@@ -41,7 +41,7 @@ from rich.table import Table
 from rich.theme import Theme
 from rich.segment import Segment
 
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent, AgentProgress, AgentStep
 from ravi.kernel.tools import ToolExecutionResult
 from ravi.logger import setup_logging
 
@@ -197,7 +197,7 @@ class Console:
     async def _get_proxy(self) -> Any:
         """Lazily create and start the UserProxyAgent for actor-model agents."""
         if self._proxy is None:
-            from ravi.agents.proxy import UserProxyAgent
+            from ravi.agents.core import UserProxyAgent
 
             self._proxy = UserProxyAgent(
                 "console-proxy",
@@ -435,41 +435,44 @@ class Console:
                         live = None
                         refresh_task = None
 
-                elif isinstance(chunk, ToolExecutionResult):
-                    if live:
-                        if text_stream_active:
-                            text_stream_active = False
-                            text_updated.set()
-                            if refresh_task:
-                                await refresh_task
-                            final_text = "".join(text_buffer)
-                            live.update(
-                                Panel(
-                                    Markdown(final_text),
-                                    title=f"[agent]🤖 {self.agent.name}[/agent]",
-                                    border_style="cyan",
-                                    padding=(1, 2),
+                elif isinstance(chunk, AgentProgress):
+                    if chunk.step == AgentStep.TOOL_CALL:
+                        if live:
+                            if text_stream_active:
+                                text_stream_active = False
+                                text_updated.set()
+                                if refresh_task:
+                                    await refresh_task
+                                final_text = "".join(text_buffer)
+                                live.update(
+                                    Panel(
+                                        Markdown(final_text),
+                                        title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                        border_style="cyan",
+                                        padding=(1, 2),
+                                    )
                                 )
-                            )
-                        elif reasoning_stream_active:
-                            reasoning_stream_active = False
-                            reasoning_updated.set()
-                            if refresh_task:
-                                await refresh_task
-                            final_reasoning = "".join(reasoning_buffer)
-                            live.update(
-                                Panel(
-                                    final_reasoning,
-                                    title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
-                                    border_style="dim",
-                                    padding=(1, 2),
+                            elif reasoning_stream_active:
+                                reasoning_stream_active = False
+                                reasoning_updated.set()
+                                if refresh_task:
+                                    await refresh_task
+                                final_reasoning = "".join(reasoning_buffer)
+                                live.update(
+                                    Panel(
+                                        final_reasoning,
+                                        title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                        border_style="dim",
+                                        padding=(1, 2),
+                                    )
                                 )
-                            )
-                        live.stop()
-                        live = None
-                        refresh_task = None
-                    tool_calls_count += 1
-                    self._print_tool_result(chunk)
+                            live.stop()
+                            live = None
+                            refresh_task = None
+                        tool_calls_count += 1
+                        self._print_tool_call(chunk)
+                    elif chunk.step == AgentStep.TOOL_RESULT:
+                        self._print_tool_result(chunk)
 
         finally:
             # Set active flags to False to shut down background tasks cleanly
@@ -680,8 +683,14 @@ class Console:
     def _print_user(self, text: str) -> None:
         self.console.print(f"\n[user]👤 You →[/user] {text}")
 
-    def _print_tool_result(self, msg: Any) -> None:
-        _print_tool_result_static(self.console, msg)
+    def _print_tool_call(self, chunk: AgentProgress) -> None:
+        self.console.print(f"  [dim]→ tool:[/dim] [tool_name]{chunk.content}[/tool_name]")
+
+    def _print_tool_result(self, chunk: AgentProgress) -> None:
+        is_err = "error" in chunk.content
+        icon = "✖" if is_err else "✔"
+        style = "tool_err" if is_err else "tool_ok"
+        self.console.print(f"  {icon} [{style}]{chunk.content}[/{style}]")
 
     def _print_result(self, result: Any, elapsed: float) -> None:
         """Pretty-print an AgentRunResult."""

@@ -57,7 +57,7 @@ from ravi.kernel.llm import LLMClient
 from ravi.agents.supervision.budget import SpawnBudget
 from ravi.agents.supervision.policies import RetryPolicy
 from ravi.agents.resources.budget import ExecutionBudget
-from ravi.agents.core.agent import (
+from ravi.agents.core.react import (
     AgentRunResult,
     ReActAgent,
 )

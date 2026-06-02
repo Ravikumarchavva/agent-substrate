@@ -60,11 +60,11 @@ from ravi.kernel.message import Message
 from ravi.kernel.stream import AgentProgress, AgentStep, CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 from ravi.agents.context import AgentContext, HistoryProvider
 from ravi.agents.context.context import DefaultAgentContext
-from ravi.agents.skills import Skill
+from ravi.kernel import Skill
 from ravi.kernel.llm import LLMClient
 from ravi.agents.hooks.manager import HookEvent, HookManager
 from ravi.agents.resources.budget import BudgetExceededError, ExecutionBudget
-from ravi.agents.core._guardrail_runner import (
+from ravi.agents.guardrails.runner import (
     check_input_guardrails,
     check_output_guardrails,
     check_tool_call_guardrails,
@@ -140,7 +140,7 @@ class ReActAgent:
         from ravi.agents.runtime import LocalRuntime
         from ravi.agents.context import AgentContext, SlidingWindowCompaction
         from ravi.adapters.memory import RedisHistoryProvider
-        from ravi.agents.skills import Skill
+        from ravi.kernel import Skill
 
         runtime = LocalRuntime()
         await runtime.start()
@@ -426,12 +426,14 @@ class ReActAgent:
                 )
                 result_blocks: list[ContentBlock] = []
                 for tu in tool_uses:
-                    await self._emit_progress(
+                    call_progress = await self._emit_progress(
                         AgentStep.TOOL_CALL,
                         tu.tool_name,
                         rid,
                         call_id=tu.call_id,
                     )
+                    if stream and call_progress is not None:
+                        yield call_progress
                     # -- tool-call guardrails ------------------------------------
                     if self._guardrails:
                         await check_tool_call_guardrails(
@@ -441,12 +443,14 @@ class ReActAgent:
                             tool_use=tu,
                         )
                     record, block = await self._execute_tool(tu)
-                    await self._emit_progress(
+                    result_progress = await self._emit_progress(
                         AgentStep.TOOL_RESULT,
                         f"{tu.tool_name}: {'error' if record.is_error else 'ok'}",
                         rid,
                         call_id=tu.call_id,
                     )
+                    if stream and result_progress is not None:
+                        yield result_progress
                     tool_calls.append(record)
                     result_blocks.append(block)
 
@@ -584,7 +588,7 @@ class ReActAgent:
     async def _emit_progress(
 
         self, step: str, content: str, run_id: str, **meta: str
-    ) -> None:
+    ) -> AgentProgress | None:
         """Publish an ``AgentProgress`` event to the run's shared progress topic.
 
         All agents in one execution publish to ``TopicId("agent.progress", run_id)``.
@@ -594,6 +598,7 @@ class ReActAgent:
         Root agents (no supervision) fall back to their own id key as the topic
         source so progress is still observable even for standalone agents.
 
+        Returns the event so callers can yield it into a stream if needed.
         Failures are silently swallowed — progress reporting must never crash
         the agent itself.
         """
@@ -617,6 +622,7 @@ class ReActAgent:
             )
         except Exception:
             pass  # progress reporting must not crash the agent
+        return event
 
     # -- Internal helpers ----------------------------------------------------
 

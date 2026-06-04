@@ -1,0 +1,759 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RaviProtocol",
+  "x-protocol-version": "1.0.0",
+  "type": "object",
+  "properties": {
+    "WireEvent": {
+      "discriminator": {
+        "mapping": {
+          "agent.handoff": "#/$defs/HandoffEvent",
+          "approval.requested": "#/$defs/ApprovalRequestedEvent",
+          "error": "#/$defs/ErrorEvent",
+          "input.requested": "#/$defs/InputRequestedEvent",
+          "ping": "#/$defs/PingEvent",
+          "protocol.hello": "#/$defs/HelloEvent",
+          "reasoning.delta": "#/$defs/ReasoningDeltaEvent",
+          "run.cancelled": "#/$defs/RunCancelledEvent",
+          "run.completed": "#/$defs/RunCompletedEvent",
+          "run.failed": "#/$defs/RunFailedEvent",
+          "task.added": "#/$defs/TaskAddedEvent",
+          "task.created": "#/$defs/TaskCreatedEvent",
+          "task.deleted": "#/$defs/TaskDeletedEvent",
+          "task.updated": "#/$defs/TaskUpdatedEvent",
+          "text.delta": "#/$defs/TextDeltaEvent",
+          "tool.call": "#/$defs/ToolCallEvent",
+          "tool.result": "#/$defs/ToolResultEvent",
+          "turn.completed": "#/$defs/TurnCompletedEvent"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HelloEvent"
+        },
+        {
+          "$ref": "#/$defs/TextDeltaEvent"
+        },
+        {
+          "$ref": "#/$defs/ReasoningDeltaEvent"
+        },
+        {
+          "$ref": "#/$defs/ToolCallEvent"
+        },
+        {
+          "$ref": "#/$defs/ToolResultEvent"
+        },
+        {
+          "$ref": "#/$defs/HandoffEvent"
+        },
+        {
+          "$ref": "#/$defs/TurnCompletedEvent"
+        },
+        {
+          "$ref": "#/$defs/RunCompletedEvent"
+        },
+        {
+          "$ref": "#/$defs/RunFailedEvent"
+        },
+        {
+          "$ref": "#/$defs/RunCancelledEvent"
+        },
+        {
+          "$ref": "#/$defs/ApprovalRequestedEvent"
+        },
+        {
+          "$ref": "#/$defs/InputRequestedEvent"
+        },
+        {
+          "$ref": "#/$defs/TaskCreatedEvent"
+        },
+        {
+          "$ref": "#/$defs/TaskUpdatedEvent"
+        },
+        {
+          "$ref": "#/$defs/TaskAddedEvent"
+        },
+        {
+          "$ref": "#/$defs/TaskDeletedEvent"
+        },
+        {
+          "$ref": "#/$defs/ErrorEvent"
+        },
+        {
+          "$ref": "#/$defs/PingEvent"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "ApprovalRequestedEvent": {
+      "description": "The agent is waiting for the human to approve a tool call.",
+      "properties": {
+        "type": {
+          "const": "approval.requested",
+          "default": "approval.requested",
+          "title": "Type",
+          "type": "string"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "title": "Tool Name",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        }
+      },
+      "required": [
+        "request_id",
+        "tool_name"
+      ],
+      "title": "ApprovalRequestedEvent",
+      "type": "object"
+    },
+    "Attachment": {
+      "description": "A file produced during the turn (image, document, \u2026).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "thread_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thread Id"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "mime": {
+          "default": "application/octet-stream",
+          "title": "Mime",
+          "type": "string"
+        },
+        "size": {
+          "default": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Attachment",
+      "type": "object"
+    },
+    "ErrorEvent": {
+      "description": "A serving-level error (distinct from ``run.failed`` which is agent-level).",
+      "properties": {
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "ErrorEvent",
+      "type": "object"
+    },
+    "HandoffEvent": {
+      "description": "An orchestrator delegated to a subagent.",
+      "properties": {
+        "type": {
+          "const": "agent.handoff",
+          "default": "agent.handoff",
+          "title": "Type",
+          "type": "string"
+        },
+        "source_agent": {
+          "default": "",
+          "title": "Source Agent",
+          "type": "string"
+        },
+        "target_agent": {
+          "default": "",
+          "title": "Target Agent",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "depth": {
+          "default": 0,
+          "title": "Depth",
+          "type": "integer"
+        }
+      },
+      "title": "HandoffEvent",
+      "type": "object"
+    },
+    "HelloEvent": {
+      "description": "First event on every stream. Carries the protocol version for the client\nto assert against its own generated types.",
+      "properties": {
+        "type": {
+          "const": "protocol.hello",
+          "default": "protocol.hello",
+          "title": "Type",
+          "type": "string"
+        },
+        "version": {
+          "default": "1.0.0",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "title": "HelloEvent",
+      "type": "object"
+    },
+    "InputRequestedEvent": {
+      "description": "The agent is waiting for free-form human input.",
+      "properties": {
+        "type": {
+          "const": "input.requested",
+          "default": "input.requested",
+          "title": "Type",
+          "type": "string"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        }
+      },
+      "required": [
+        "request_id",
+        "prompt"
+      ],
+      "title": "InputRequestedEvent",
+      "type": "object"
+    },
+    "PingEvent": {
+      "description": "Keep-alive heartbeat.",
+      "properties": {
+        "type": {
+          "const": "ping",
+          "default": "ping",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "PingEvent",
+      "type": "object"
+    },
+    "ReasoningDeltaEvent": {
+      "description": "Incremental reasoning / thinking trace.",
+      "properties": {
+        "type": {
+          "const": "reasoning.delta",
+          "default": "reasoning.delta",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "ReasoningDeltaEvent",
+      "type": "object"
+    },
+    "RunCancelledEvent": {
+      "description": "The run was cancelled by the client.",
+      "properties": {
+        "type": {
+          "const": "run.cancelled",
+          "default": "run.cancelled",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "RunCancelledEvent",
+      "type": "object"
+    },
+    "RunCompletedEvent": {
+      "description": "The whole agent run finished successfully.",
+      "properties": {
+        "type": {
+          "const": "run.completed",
+          "default": "run.completed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "RunCompletedEvent",
+      "type": "object"
+    },
+    "RunFailedEvent": {
+      "description": "The run terminated with an unrecoverable error.",
+      "properties": {
+        "type": {
+          "const": "run.failed",
+          "default": "run.failed",
+          "title": "Type",
+          "type": "string"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        }
+      },
+      "title": "RunFailedEvent",
+      "type": "object"
+    },
+    "TaskAddedEvent": {
+      "properties": {
+        "type": {
+          "const": "task.added",
+          "default": "task.added",
+          "title": "Type",
+          "type": "string"
+        },
+        "task": {
+          "additionalProperties": true,
+          "title": "Task",
+          "type": "object"
+        }
+      },
+      "title": "TaskAddedEvent",
+      "type": "object"
+    },
+    "TaskCreatedEvent": {
+      "properties": {
+        "type": {
+          "const": "task.created",
+          "default": "task.created",
+          "title": "Type",
+          "type": "string"
+        },
+        "task_list": {
+          "additionalProperties": true,
+          "title": "Task List",
+          "type": "object"
+        }
+      },
+      "title": "TaskCreatedEvent",
+      "type": "object"
+    },
+    "TaskDeletedEvent": {
+      "properties": {
+        "type": {
+          "const": "task.deleted",
+          "default": "task.deleted",
+          "title": "Type",
+          "type": "string"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "title": "TaskDeletedEvent",
+      "type": "object"
+    },
+    "TaskUpdatedEvent": {
+      "properties": {
+        "type": {
+          "const": "task.updated",
+          "default": "task.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "task": {
+          "additionalProperties": true,
+          "title": "Task",
+          "type": "object"
+        }
+      },
+      "title": "TaskUpdatedEvent",
+      "type": "object"
+    },
+    "TextDeltaEvent": {
+      "description": "Incremental assistant text, token by token.",
+      "properties": {
+        "type": {
+          "const": "text.delta",
+          "default": "text.delta",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TextDeltaEvent",
+      "type": "object"
+    },
+    "ToolCallEvent": {
+      "description": "An agent is about to execute a tool.",
+      "properties": {
+        "type": {
+          "const": "tool.call",
+          "default": "tool.call",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "default": "",
+          "title": "Call Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "title": "Tool Name",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "agent": {
+          "default": "",
+          "title": "Agent",
+          "type": "string"
+        },
+        "depth": {
+          "default": 0,
+          "title": "Depth",
+          "type": "integer"
+        },
+        "risk": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Risk"
+        }
+      },
+      "required": [
+        "tool_name"
+      ],
+      "title": "ToolCallEvent",
+      "type": "object"
+    },
+    "ToolCallSummary": {
+      "description": "A tool call attached to a completed assistant turn (for history rebuild).",
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "risk": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Risk"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolCallSummary",
+      "type": "object"
+    },
+    "ToolResultEvent": {
+      "description": "A tool finished.",
+      "properties": {
+        "type": {
+          "const": "tool.result",
+          "default": "tool.result",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "default": "",
+          "title": "Call Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "title": "Tool Name",
+          "type": "string"
+        },
+        "ok": {
+          "default": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "output": {
+          "default": "",
+          "title": "Output",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "agent": {
+          "default": "",
+          "title": "Agent",
+          "type": "string"
+        },
+        "depth": {
+          "default": 0,
+          "title": "Depth",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tool_name"
+      ],
+      "title": "ToolResultEvent",
+      "type": "object"
+    },
+    "TurnCompletedEvent": {
+      "description": "One assistant turn finished. If ``tool_calls`` is non-empty the agent will\ncontinue after the tools run (another turn follows); otherwise this is the\nfinal assistant message of the run.",
+      "properties": {
+        "type": {
+          "const": "turn.completed",
+          "default": "turn.completed",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "tool_calls": {
+          "items": {
+            "$ref": "#/$defs/ToolCallSummary"
+          },
+          "title": "Tool Calls",
+          "type": "array"
+        },
+        "attachments": {
+          "items": {
+            "$ref": "#/$defs/Attachment"
+          },
+          "title": "Attachments",
+          "type": "array"
+        },
+        "finish_reason": {
+          "default": "stop",
+          "title": "Finish Reason",
+          "type": "string"
+        }
+      },
+      "title": "TurnCompletedEvent",
+      "type": "object"
+    },
+    "ChatRequest": {
+      "description": "Start (or continue) an agent run on a thread.",
+      "properties": {
+        "thread_id": {
+          "title": "Thread Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "file_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "File Ids",
+          "type": "array"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "system_instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Instructions"
+        }
+      },
+      "required": [
+        "thread_id",
+        "message"
+      ],
+      "title": "ChatRequest",
+      "type": "object"
+    },
+    "ApprovalResponse": {
+      "description": "Human's decision on a pending tool-approval request.",
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "approved": {
+          "title": "Approved",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "request_id",
+        "approved"
+      ],
+      "title": "ApprovalResponse",
+      "type": "object"
+    },
+    "InputResponse": {
+      "description": "Human's answer to a pending free-form input request.",
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "value"
+      ],
+      "title": "InputResponse",
+      "type": "object"
+    },
+    "CancelRequest": {
+      "properties": {
+        "thread_id": {
+          "title": "Thread Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "thread_id"
+      ],
+      "title": "CancelRequest",
+      "type": "object"
+    }
+  }
+}

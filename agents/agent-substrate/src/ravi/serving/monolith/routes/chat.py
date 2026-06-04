@@ -27,9 +27,8 @@ from ravi.adapters.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
+from ravi.kernel import ChatMessage
 from ravi.kernel.content import TextBlock, ToolUseBlock
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
-from ravi.serving.shared.execution import stream_agent_run
 from ravi.serving.monolith.dependencies import ServerDependencies, get_ctx
 from ravi.serving.monolith.database import get_db
 from ravi.serving.monolith.hooks import ChatContext, hooks
@@ -38,22 +37,20 @@ from ravi.serving.monolith.services import get_thread
 from ravi.serving.monolith.services.agent_service import (
     load_agent_for_thread,
     persist_assistant_message,
+    persist_tool_result,
     persist_user_message,
 )
-from ravi.serving.monolith.routes.mcp_apps import resolve_ui_uri
 from ravi.capabilities.tools.task_manager.tool import current_thread_id
 from ravi.capabilities.tools.web_surfer import WebSurferTool
 from ravi.capabilities.tools.human_input import AskHumanTool
 from ravi.serving.monolith.security.deps import get_current_user
-from ravi.serving.monolith.sse.bridge import BRIDGE_DONE, BridgeRegistry, WebHITLBridge
-from ravi.serving.monolith.sse.events import (
-    EventBus,
-    BUS_CLOSED,
-    TextDeltaEvent,
-    ReasoningDeltaEvent,
-    ErrorEvent,
-    RawDictEvent,
+from ravi.serving.monolith.sse.bridge import BridgeRegistry, WebHITLBridge
+from ravi.serving.protocol import (
+    PROTOCOL_VERSION,
+    TurnCompletedEvent,
+    ToolResultEvent,
 )
+from ravi.serving.stream import AgentStreamSession
 
 logger = setup_logging()
 
@@ -285,67 +282,87 @@ async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
 
 def _build_tool_meta_map(tools: list) -> dict:
     """Build a mapping of tool_name → { risk, color, ui? } for event enrichment."""
+    from ravi.kernel.tools import ToolRisk
     meta_map: dict = {}
     for tool in tools:
-        try:
-            schema = tool.get_schema()
-            entry: dict = {
-                "risk": schema.risk,
-                "color": getattr(tool, "risk", None) and tool.risk.color or "green",
-            }
-            if schema.meta and schema.meta.get("ui"):
-                entry["ui"] = schema.meta["ui"]
-            meta_map[schema.name] = entry
-        except Exception as e:
-            logger.warning(
-                "Failed to get schema for tool %s: %s",
-                getattr(tool, "name", "unknown"),
-                e,
-            )
+        name = getattr(tool, "name", None)
+        if not name:
+            continue
+        risk = getattr(tool, "risk", ToolRisk.SAFE)
+        color = "red" if risk == ToolRisk.CRITICAL else "yellow" if risk == ToolRisk.HIGH else "green"
+        entry: dict = {"risk": str(risk), "color": color}
+        # MCP App UI metadata (optional, legacy tools only)
+        ui = getattr(tool, "ui", None) or getattr(tool, "_ui", None)
+        if ui:
+            entry["ui"] = ui
+        meta_map[name] = entry
     return meta_map
 
 
-def _build_completion_payload(event: CompletionEvent, tool_meta_map: dict) -> dict:
-    """Build the SSE ``completion`` event payload from a ``CompletionEvent``."""
-    text_parts = [b.text for b in event.content if isinstance(b, TextBlock)]
-    tool_use_blocks = [b for b in event.content if isinstance(b, ToolUseBlock)]
+class _WirePersister:
+    """Persists wire events to Postgres inline as the run streams.
 
-    serialized_tool_calls = None
-    if tool_use_blocks:
-        serialized_tool_calls = []
-        for b in tool_use_blocks:
-            tc_data: dict = {
-                "id": b.call_id,
-                "name": b.tool_name,
-                "arguments": b.arguments,
-            }
-            meta = tool_meta_map.get(b.tool_name)
-            if meta:
-                tc_data["risk"] = meta.get("risk", "safe")
-                tc_data["color"] = meta.get("color", "green")
-                ui_info = meta.get("ui")
-                if ui_info:
-                    resource_uri = ui_info.get("resourceUri", "")
-                    http_url = resolve_ui_uri(resource_uri) if resource_uri else None
-                    tc_data["_meta"] = {
-                        "ui": {
-                            "resourceUri": resource_uri,
-                            "httpUrl": http_url or resource_uri,
-                        }
-                    }
-            serialized_tool_calls.append(tc_data)
+    Implements the ``stream.Persister`` protocol. ``persist_turn`` writes the
+    assistant message (text + tool calls, enriched with MCP-App UI metadata via
+    ``tool_meta_map``); ``persist_tool`` records error tool results so reloads
+    can show failures. Each write opens its own DB session so a slow write never
+    blocks the stream's own transaction.
+    """
 
-    return {
-        "type": "completion",
-        "role": "assistant",
-        "content": "\n".join(text_parts),
-        "tool_calls": serialized_tool_calls,
-        "finish_reason": "stop",
-        "has_tool_calls": bool(tool_use_blocks),
-        "usage": None,
-        "partial": False,
-        "complete": True,
-    }
+    def __init__(
+        self,
+        *,
+        session_factory: Any,
+        thread_id: Any,
+        tool_meta_map: dict,
+        attachments: list | None = None,
+    ) -> None:
+        self._session_factory = session_factory
+        self._thread_id = thread_id
+        self._tool_meta_map = tool_meta_map
+        self._attachments = attachments or []
+
+    async def persist_turn(self, event: TurnCompletedEvent) -> None:
+        content: list[Any] = []
+        if event.text:
+            content.append(TextBlock(text=event.text))
+        for tc in event.tool_calls:
+            content.append(
+                ToolUseBlock(call_id=tc.id, tool_name=tc.name, arguments=tc.args)
+            )
+        if not content:
+            return
+        message = ChatMessage(role="assistant", content=content)
+        metadata = {"attachments": self._attachments} if self._attachments else None
+        try:
+            async with self._session_factory() as db:
+                await persist_assistant_message(
+                    db,
+                    self._thread_id,
+                    message,
+                    tool_meta_map=self._tool_meta_map,
+                    metadata=metadata,
+                )
+                await db.commit()
+        except Exception:
+            logger.exception("Failed to persist assistant turn")
+
+    async def persist_tool(self, event: ToolResultEvent) -> None:
+        if event.ok:
+            return  # successful results are reconstructed from the assistant turn
+        try:
+            async with self._session_factory() as db:
+                await persist_tool_result(
+                    db,
+                    self._thread_id,
+                    event.call_id,
+                    event.tool_name,
+                    event.error or "",
+                    is_error=True,
+                )
+                await db.commit()
+        except Exception:
+            logger.exception("Failed to persist tool result")
 
 
 async def _build_file_context(
@@ -578,204 +595,55 @@ async def chat(
         thread_lock.release()
         ctx.thread_locks.pop(str(body.thread_id), None)
         raise
-
-    # Per-thread HITL bridge (acquired in _get_agent_deps)
+    # Per-thread HITL bridge (acquired in _get_agent_deps).
     bridge: WebHITLBridge = deps["bridge"]
 
+    # Tool risk/UI metadata, built in setup so a failure releases the lock here
+    # (not inside the generator where it could orphan the lock).
+    tool_meta_map = _build_tool_meta_map(agent.tools)
+
+    # Per-request cancel signal — set by POST /chat/{thread_id}/cancel.
+    cancel_event: asyncio.Event = asyncio.Event()
+    ctx.cancel_registry[str(body.thread_id)] = cancel_event
+
+    # Route tool events (task board etc.) to this thread's bridge.
+    current_thread_id.set(str(body.thread_id))
+
+    persister = _WirePersister(
+        session_factory=ctx.session_factory,
+        thread_id=body.thread_id,
+        tool_meta_map=tool_meta_map,
+        attachments=attachments,
+    )
+
+    session = AgentStreamSession(
+        agent=agent,
+        user_input=user_content,
+        bridge=bridge,
+        is_disconnected=request.is_disconnected,
+        cancel_event=cancel_event,
+        persister=persister,
+    )
+
     async def sse_generator() -> AsyncIterator[str]:
-        """Yield SSE events via ``EventBus`` from merged agent + HITL workers.
+        """Serialize the session's WireEvents as SSE `data:` lines.
 
-        Architecture:
-          - ``agent_worker`` runs ``agent.run_stream()``, emits typed events, and
-            persists completion/tool-result messages to Postgres inline before
-            emitting so the DB is always consistent with the SSE output.
-          - ``hitl_worker`` drains HITL events from the bridge and emits them as
-            ``RawDictEvent`` entries; calls ``bus.close()`` when all events are
-            consumed (after agent signals bridge done).
-          - The consumer loop polls the bus with a 200 ms timeout so it can
-            detect browser disconnect or explicit cancel between events.
+        All concurrency (agent run, HITL merge, cancel/disconnect, persistence)
+        lives in `AgentStreamSession`; this only frames events for the transport
+        and guarantees the thread lock is released exactly once.
         """
-        tool_meta_map = _build_tool_meta_map(agent.tools)
-        bus: EventBus = EventBus()
-        bridge_signaled = False
-
-        # Per-request cancel signal — set by POST /chat/{thread_id}/cancel
-        # Key MUST be str to match cancel.py which receives thread_id as a path param.
-        cancel_event: asyncio.Event = asyncio.Event()
-        ctx.cancel_registry[str(body.thread_id)] = cancel_event
-
-        async def agent_worker() -> None:
-            """Run agent; emit typed events and persist inline to Postgres."""
-            nonlocal bridge_signaled
-            generated_files: list[dict] = []
-            try:
-
-                async def _emit_text_delta(chunk: TextDelta) -> None:
-                    await bus.emit(TextDeltaEvent(content=chunk.text, partial=True))
-
-                async def _emit_reasoning_delta(chunk: ReasoningDelta) -> None:
-                    await bus.emit(
-                        ReasoningDeltaEvent(content=chunk.text, partial=True)
-                    )
-
-                async def _emit_completion(event: CompletionEvent) -> None:
-                    payload = _build_completion_payload(event, tool_meta_map)
-                    metadata = None
-                    if generated_files:
-                        metadata = {"attachments": generated_files}
-                        payload["attachments"] = generated_files
-
-                    try:
-                        async with ctx.session_factory() as persist_db:
-                            await persist_assistant_message(
-                                persist_db,
-                                body.thread_id,
-                                event,
-                                tool_meta_map=tool_meta_map,
-                                metadata=metadata,
-                            )
-                            await persist_db.commit()
-                    except Exception:
-                        logger.exception("Failed to persist assistant message")
-                    await bus.emit_dict(payload)
-
-                async def _emit_unknown(chunk: object) -> None:
-                    await bus.emit_dict(
-                        {"type": "unknown", "content": str(chunk), "partial": True}
-                    )
-
-                async def _emit_error(exc: Exception) -> None:
-                    await bus.emit(ErrorEvent(message=str(exc)))
-
-                await stream_agent_run(
-                    agent=agent,
-                    user_content=user_content,
-                    input_content=user_input_content,
-                    tool_choice=initial_tool_choice,
-                    on_text_delta=_emit_text_delta,
-                    on_reasoning_delta=_emit_reasoning_delta,
-                    on_completion=_emit_completion,
-                    on_unknown=_emit_unknown,
-                    on_error=_emit_error,
-                )
-
-            except asyncio.CancelledError:
-                raise
-            finally:
-                # Signal HITL worker to stop; it will close the bus after draining
-                if not bridge_signaled:
-                    bridge_signaled = True
-                    await bridge.signal_done()
-
-        async def hitl_worker() -> None:
-            """Forward HITL events to bus; close bus when the agent is done."""
-            while True:
-                event = await bridge.get_event()
-                if event is BRIDGE_DONE:
-                    break
-                await bus.emit_dict(event)
-            # All HITL events flushed — signal consumer to stop
-            bus.close()
-
-        # Bind ContextVars so tools route events to this thread
-        current_thread_id.set(str(body.thread_id))
-
-        agent_task = asyncio.create_task(agent_worker())
-        hitl_task = asyncio.create_task(hitl_worker())
-
         try:
-            while True:
-                # Timeout-based poll so we can detect disconnect/cancel between events
-                try:
-                    item = await bus.poll(0.2)
-                except asyncio.TimeoutError:
-                    # ── Disconnect detection ─────────────────────────────────
-                    if await request.is_disconnected():
-                        logger.info("Client disconnected for thread %s", body.thread_id)
-                        resolved = bridge.cancel_all_pending("session_disconnected")
-                        if resolved:
-                            logger.info(
-                                "Thread %s: resolved %d pending HITL request(s) "
-                                "with session_disconnected",
-                                body.thread_id,
-                                resolved,
-                            )
-                        if not agent_task.done():
-                            agent_task.cancel()
-                            try:
-                                await asyncio.wait_for(
-                                    asyncio.shield(agent_task), timeout=3.0
-                                )
-                            except (asyncio.CancelledError, asyncio.TimeoutError):
-                                pass
-                        if not bridge_signaled:
-                            bridge_signaled = True
-                            await bridge.signal_done()
-                        break
-
-                    # ── Explicit cancel ──────────────────────────────────────
-                    if cancel_event.is_set():
-                        logger.info(
-                            "Cancellation detected for thread %s", body.thread_id
-                        )
-                        if not agent_task.done():
-                            agent_task.cancel()
-                            try:
-                                await asyncio.wait_for(
-                                    asyncio.shield(agent_task), timeout=3.0
-                                )
-                            except (asyncio.CancelledError, asyncio.TimeoutError):
-                                pass
-                        if not bridge_signaled:
-                            bridge_signaled = True
-                            await bridge.signal_done()
-                        yield f"data: {json.dumps({'type': 'cancelled'})}\n\n"
-                        break
-                    continue
-
-                # ── Bus closed = both workers finished normally ───────────────
-                if item is BUS_CLOSED:
-                    break
-
-                # ── Dispatch event to SSE transport ──────────────────────────
-                if isinstance(item, TextDeltaEvent):
-                    yield bus.to_sse_line(item)
-
-                elif isinstance(item, ReasoningDeltaEvent):
-                    yield bus.to_sse_line(item)
-
-                elif isinstance(item, ErrorEvent):
-                    yield bus.to_sse_line(item)
-
-                elif isinstance(item, RawDictEvent):
-                    yield f"data: {json.dumps(item.data, default=str)}\n\n"
-
-                else:
-                    try:
-                        yield f"data: {json.dumps(item.to_dict(), default=str)}\n\n"
-                    except Exception:
-                        yield (
-                            f"data: {json.dumps({'type': 'unknown', 'content': str(item)})}\n\n"
-                        )
-
-        except Exception as exc:
+            async for event in session.events():
+                yield f"data: {json.dumps(event.model_dump(mode='json'), default=str)}\n\n"
+        except Exception as exc:  # pragma: no cover - defensive
             logger.exception("SSE generator error for thread %s", body.thread_id)
-            yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
-
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
         finally:
             ctx.cancel_registry.pop(str(body.thread_id), None)
             thread_lock.release()
             ctx.thread_locks.pop(str(body.thread_id), None)
-
-            # Cancel and await both worker tasks to prevent orphaned coroutines.
-            for task in (agent_task, hitl_task):
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(agent_task, hitl_task, return_exceptions=True)
-
             await ctx.bridge_registry.release_if_idle(str(body.thread_id))
-
-        yield "data: [DONE]\n\n"
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         content=sse_generator(),
@@ -783,5 +651,6 @@ async def chat(
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
+            "X-Protocol-Version": PROTOCOL_VERSION,
         },
     )

@@ -171,6 +171,7 @@ class ReActAgent:
         runtime: AgentRuntime,
         *,
         model: LLMClient,
+        description: str = "",
         tools: list[Tool] | None = None,
         skills: list[Skill] | None = None,
         system_instructions: str | None = None,
@@ -185,6 +186,7 @@ class ReActAgent:
         execution_budget: ExecutionBudget | None = None,
     ) -> None:
         self.name = name
+        self.description = description
         self.runtime = runtime
         self.id = AgentId(type="assistant", key=name)
         self.supervision: Supervision | None = supervision
@@ -230,6 +232,11 @@ class ReActAgent:
         return self._tools.get(name)
 
     def list_tools(self) -> list[Tool]:
+        return list(self._tools.values())
+
+    @property
+    def tools(self) -> list[Tool]:
+        """Public property — returns all registered tools."""
         return list(self._tools.values())
 
     def _tool_schemas(self) -> list[dict[str, object]] | None:
@@ -425,6 +432,8 @@ class ReActAgent:
                     [b.tool_name for b in tool_uses],
                 )
                 result_blocks: list[ContentBlock] = []
+
+                # Phase 1: emit TOOL_CALL progress + run guardrails (sequential — fast)
                 for tu in tool_uses:
                     call_progress = await self._emit_progress(
                         AgentStep.TOOL_CALL,
@@ -434,7 +443,6 @@ class ReActAgent:
                     )
                     if stream and call_progress is not None:
                         yield call_progress
-                    # -- tool-call guardrails ------------------------------------
                     if self._guardrails:
                         await check_tool_call_guardrails(
                             guardrails=self._guardrails,
@@ -442,15 +450,71 @@ class ReActAgent:
                             run_id=rid,
                             tool_use=tu,
                         )
-                    record, block = await self._execute_tool(tu)
+
+                # Phase 2: run all tools concurrently; yield progress as each event arrives.
+                # progress_q receives subagent AgentProgress events (from _DispatchTool).
+                # done_q receives tool completion tuples.
+                progress_q: asyncio.Queue[AgentProgress] = asyncio.Queue()
+                done_q: asyncio.Queue[
+                    tuple[ToolUseBlock, ToolCallRecord, ContentBlock]
+                ] = asyncio.Queue()
+
+                # Wire progress sink into any tool that supports it (_DispatchTool)
+                for tool in self._tools.values():
+                    if hasattr(tool, "set_progress_sink"):
+                        tool.set_progress_sink(progress_q)
+
+                async def _run(t: ToolUseBlock) -> None:
+                    r, b = await self._execute_tool(t)
+                    await done_q.put((t, r, b))
+
+                tasks = [asyncio.create_task(_run(tu)) for tu in tool_uses]
+
+                results_by_call_id: dict[str, tuple[ToolCallRecord, ContentBlock]] = {}
+                completed = 0
+                while completed < len(tool_uses):
+                    # Drain any buffered subagent progress events (non-blocking)
+                    while not progress_q.empty():
+                        sub_event = progress_q.get_nowait()
+                        if stream:
+                            yield sub_event
+
+                    # Wait up to 50 ms for the next tool completion, then loop back
+                    # to drain progress again so subagent events appear promptly.
+                    try:
+                        tu_done, record, block = await asyncio.wait_for(
+                            done_q.get(), timeout=0.05
+                        )
+                    except asyncio.TimeoutError:
+                        continue
+
+                    results_by_call_id[tu_done.call_id] = (record, block)
                     result_progress = await self._emit_progress(
                         AgentStep.TOOL_RESULT,
-                        f"{tu.tool_name}: {'error' if record.is_error else 'ok'}",
+                        f"{tu_done.tool_name}: {'error' if record.is_error else 'ok'}",
                         rid,
-                        call_id=tu.call_id,
+                        call_id=tu_done.call_id,
                     )
                     if stream and result_progress is not None:
                         yield result_progress
+                    completed += 1
+
+                # Final drain — any events emitted right before task completion
+                while not progress_q.empty():
+                    sub_event = progress_q.get_nowait()
+                    if stream:
+                        yield sub_event
+
+                await asyncio.gather(*tasks)  # ensure all tasks are fully settled
+
+                # Unwire sinks
+                for tool in self._tools.values():
+                    if hasattr(tool, "set_progress_sink"):
+                        tool.set_progress_sink(None)
+
+                # Reconstruct in original call order for the tool message
+                for tu in tool_uses:
+                    record, block = results_by_call_id[tu.call_id]
                     tool_calls.append(record)
                     result_blocks.append(block)
 

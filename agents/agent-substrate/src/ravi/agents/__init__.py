@@ -15,7 +15,6 @@ from ravi.agents.context import (
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
-from ravi.kernel.skills import Skill
 from ravi.agents.llm import (
     EmbeddingClient,
     LLMClient,
@@ -60,8 +59,6 @@ __all__ = [
     "HistoryProvider",
     "InMemoryHistoryProvider",
     "SlidingWindowCompaction",
-    # skills
-    "Skill",
     # llm
     "EmbeddingClient",
     "LLMClient",

@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # LLM models
     # Override these in .env to switch globally, or let the frontend per-request
     # override take precedence (Settings → General → Model).
+    AGENT_MODE: str = "react"  # "react" | "orchestrator"
     CHAT_MODEL: str = "openai/gpt-5.4-mini"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     STT_MODEL: str = "whisper-1"

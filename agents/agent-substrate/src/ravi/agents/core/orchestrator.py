@@ -34,8 +34,9 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel
@@ -51,7 +52,7 @@ from ravi.kernel import (
     Tool,
     ToolExecutionResult,
 )
-from ravi.kernel.stream import AgentProgress, AgentStep
+from ravi.kernel.stream import AgentProgress, AgentStep, StreamDone, TextDelta
 from ravi.kernel.identity import HistoryRetention, HistoryRetention as _HR
 from ravi.kernel.llm import LLMClient
 from ravi.agents.supervision.budget import SpawnBudget
@@ -111,13 +112,12 @@ class SubAgentConfig:
 
 
 class _DispatchTool:
-    """Wraps a subagent as an LLM-callable tool using runtime message-passing.
+    """Wraps a subagent as an LLM-callable tool.
 
-    The LLM still expresses delegation as a tool call (clean, declarative).
-    The actual execution goes through ``runtime.send_message`` so the
-    orchestrator's ReAct loop state is never inside the subagent's call stack
-    — a subagent crash raises ``AgentCrashError`` which the orchestrator can
-    catch and retry via ``run(..., resume=True)``.
+    Runs the subagent via ``run_stream()`` so progress events (tool calls,
+    tool results) flow back to the orchestrator's stream in real time.
+    On crash the retry policy is consulted and the subagent is resumed —
+    other subagents keep running in parallel while the retry is in flight.
 
     Schema exposed to the LLM::
 
@@ -142,6 +142,7 @@ class _DispatchTool:
         self._supervision = supervision
         self._budget = budget
         self._retry_policy = retry_policy
+        self._progress_sink: asyncio.Queue[AgentProgress] | None = None
         self.name = f"handoff_{self._agent.name}"
         self.description = (
             f"Delegate the current task to the '{self._agent.name}' specialist agent. "
@@ -165,6 +166,35 @@ class _DispatchTool:
             "additionalProperties": False,
         }
 
+    def set_progress_sink(self, queue: asyncio.Queue[AgentProgress] | None) -> None:
+        """Wire a queue that receives all subagent AgentProgress events."""
+        self._progress_sink = queue
+
+    async def _stream_run(
+        self, inp: str, *, resume: bool = False, run_id: str | None = None
+    ) -> tuple[str, str, str | None]:
+        """Run the subagent with streaming.
+
+        Returns ``(output_text, status, crash_run_id)`` where
+        ``crash_run_id`` is non-None when the subagent crashed.
+        """
+        text_parts: list[str] = []
+        crash_run_id: str | None = None
+        status = "success"
+        try:
+            async for event in self._agent.run_stream(inp, resume=resume, run_id=run_id):
+                if isinstance(event, AgentProgress):
+                    if self._progress_sink is not None:
+                        await self._progress_sink.put(event)
+                elif isinstance(event, TextDelta):
+                    text_parts.append(event.text)
+                elif isinstance(event, StreamDone):
+                    status = event.reason
+        except AgentCrashError as exc:
+            status = "crash"
+            crash_run_id = exc.run_id
+        return "".join(text_parts), status, crash_run_id
+
     async def execute(
         self, *, input: str, reason: str = "", **_kw: Any
     ) -> ToolExecutionResult:  # noqa: A002
@@ -183,7 +213,6 @@ class _DispatchTool:
                 reason=reason,
             ).model_dump(mode="json"),
         )
-        # Emit HANDOFF on the run-scoped topic
         await self._runtime.publish_message(
             AgentProgress(
                 agent_id=self._orchestrator_id,
@@ -197,53 +226,41 @@ class _DispatchTool:
             topic=self._supervision.progress_topic,
         )
 
-        try:
-            # Delegate via runtime message-passing (not tool call).
-            # AgentCrashError propagates cleanly; orchestrator can retry.
-            result: AgentRunResult = await self._runtime.send_message(
-                input,
-                sender=self._orchestrator_id,
-                recipient=self._agent.id,
-            )  # type: ignore[assignment]
-            output = result.output or "(no output)"
-            return ToolExecutionResult(
-                content=[TextBlock(text=output)],
-                is_error=result.status in ("error", "guardrail_tripped"),
+        output, status, crash_run_id = await self._stream_run(input)
+
+        # Crash recovery — retry while other subagents keep running in parallel
+        attempt = 0
+        while status == "crash" and self._retry_policy.should_retry(self._agent.id):
+            attempt += 1
+            logger.warning(
+                "[orchestrator] retrying %s (attempt %d, run_id=%s)",
+                self._agent.name, attempt, crash_run_id,
+            )
+            # Emit a visible retry event into the stream
+            if self._progress_sink is not None:
+                await self._progress_sink.put(AgentProgress(
+                    agent_id=self._agent.id,
+                    step=AgentStep.TOOL_CALL,
+                    content=f"↻ {self._agent.name}: retrying (attempt {attempt})",
+                    run_id=crash_run_id or "",
+                    depth=(self._supervision.depth or 0) + 1,
+                ))
+            output, status, crash_run_id = await self._stream_run(
+                input, resume=True, run_id=crash_run_id
             )
 
-        except AgentCrashError as exc:
-            # Consult retry policy — resume from persisted history checkpoint.
-            while self._retry_policy.should_retry(self._agent.id):
-                logger.warning(
-                    "[orchestrator] retrying %s after crash (run_id=%s)",
-                    self._agent.name,
-                    exc.run_id,
-                )
-                try:
-                    result = await self._runtime.send_message(
-                        _ResumePayload(
-                            run_id=exc.run_id,
-                            session_id=self._supervision.session_id,
-                            input=input,
-                        ),
-                        sender=self._orchestrator_id,
-                        recipient=self._agent.id,
-                    )  # type: ignore[assignment]
-                    output = result.output or "(no output)"
-                    return ToolExecutionResult(
-                        content=[TextBlock(text=output)],
-                        is_error=result.status in ("error", "guardrail_tripped"),
-                    )
-                except AgentCrashError as retry_exc:
-                    exc = retry_exc
-
-            logger.error(
-                "[orchestrator] %s exhausted retries: %s", self._agent.name, exc
-            )
+        if status == "crash":
+            logger.error("[orchestrator] %s exhausted retries", self._agent.name)
             return ToolExecutionResult(
-                content=[TextBlock(text=f"Agent '{self._agent.name}' failed: {exc}")],
+                content=[TextBlock(text=f"Agent '{self._agent.name}' failed after retries")],
                 is_error=True,
             )
+
+        is_error = status in ("error", "guardrail_tripped")
+        return ToolExecutionResult(
+            content=[TextBlock(text=output or "(no output)")],
+            is_error=is_error,
+        )
 
 
 

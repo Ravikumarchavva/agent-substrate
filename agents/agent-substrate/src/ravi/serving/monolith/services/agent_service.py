@@ -25,19 +25,23 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.agents.core import ReActAgent
 from ravi.agents.context import (
+    AgentContext,
     HistoryProvider,
+    InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
 from ravi.capabilities.tools.human_input import ToolApprovalHandler
+from ravi.kernel import Priority
 from ravi.kernel.llm import LLMClient as BaseModelClient
 from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, AgentRuntime, Tool
 from ravi.serving.shared.execution import create_assistant_agent, load_session_memory
+from ravi.config import settings
 
 from ravi.serving.monolith.services import (
     create_step,
@@ -45,6 +49,64 @@ from ravi.serving.monolith.services import (
 )
 
 logger = setup_logging()
+
+
+def _build_orchestrator(
+    model_client: BaseModelClient,
+    runtime: AgentRuntime,
+    memory: HistoryProvider,
+    model_context_window: int,
+    tool_timeout: float | None,
+    session_id: str,
+) -> Any:
+    """Build an OrchestratorAgent with researcher + calculator + clock specialists."""
+    from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+    from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool, ReadUrlTool
+
+    def _ctx() -> AgentContext:
+        return AgentContext(
+            InMemoryHistoryProvider(),
+            SlidingWindowCompaction(max_messages=20),
+        )
+
+    researcher = ReActAgent(
+        "researcher", runtime, model=model_client,
+        description="Searches the web and reads URLs for current information.",
+        system_instructions="You are a research specialist. Use web_search and read_url to find accurate, up-to-date facts. Return a concise answer.",
+        tools=[WebSearchTool(), ReadUrlTool()],
+        context=_ctx(), max_iterations=5, tool_timeout=tool_timeout,
+    )
+    calculator = ReActAgent(
+        "calculator", runtime, model=model_client,
+        description="Performs precise numerical calculations.",
+        system_instructions="You are a calculation specialist. Use the calculator tool for all arithmetic. Return the result with a brief explanation.",
+        tools=[CalculatorTool()],
+        context=_ctx(), max_iterations=3, tool_timeout=tool_timeout,
+    )
+    clock = ReActAgent(
+        "clock", runtime, model=model_client,
+        description="Reports the current date and time.",
+        system_instructions="You are a time specialist. Use current_time to get the exact date and time. Return it in a clear, human-readable format.",
+        tools=[CurrentTimeTool()],
+        context=_ctx(), max_iterations=2, tool_timeout=tool_timeout,
+    )
+
+    orchestrator_ctx = AgentContext(
+        memory, SlidingWindowCompaction(max_messages=model_context_window)
+    )
+    return OrchestratorAgent(
+        "coordinator", runtime,
+        model=model_client,
+        description="Routes user requests to the right specialist and synthesises results.",
+        sub_agents=[
+            SubAgentConfig(researcher, priority=Priority.HIGH),
+            SubAgentConfig(calculator, priority=Priority.NORMAL),
+            SubAgentConfig(clock, priority=Priority.NORMAL),
+        ],
+        max_iterations=15,
+        tool_timeout=tool_timeout,
+        session_id=session_id,
+    )
 
 
 async def load_agent_for_thread(
@@ -104,23 +166,33 @@ async def load_agent_for_thread(
             "load_agent_for_thread() requires a runtime. "
             "Pass app.state.runtime from the server lifespan."
         )
-    agent = create_assistant_agent(
-        runtime=runtime,
-        model_client=model_client,
-        tools=tools,
-        system_instructions=system_instructions,
-        memory=memory,
-        model_context=SlidingWindowCompaction(max_messages=model_context_window),
-        max_iterations=max_iterations,
-        tool_timeout=tool_timeout,
-        # legacy kwargs forwarded and dropped by factory:
-        verbose=verbose,
-        tool_approval_handler=tool_approval_handler,
-        tools_requiring_approval=tools_requiring_approval,
-        max_input_tokens=max_input_tokens,
-        agent_key=session_id,
-        enable_capability_search=enable_capability_search,
-    )
+    if settings.AGENT_MODE.lower() == "orchestrator":
+        agent = _build_orchestrator(
+            model_client=model_client,
+            runtime=runtime,
+            memory=memory,
+            model_context_window=model_context_window,
+            tool_timeout=tool_timeout,
+            session_id=session_id,
+        )
+    else:
+        agent = create_assistant_agent(
+            runtime=runtime,
+            model_client=model_client,
+            tools=tools,
+            system_instructions=system_instructions,
+            memory=memory,
+            model_context=SlidingWindowCompaction(max_messages=model_context_window),
+            max_iterations=max_iterations,
+            tool_timeout=tool_timeout,
+            # legacy kwargs forwarded and dropped by factory:
+            verbose=verbose,
+            tool_approval_handler=tool_approval_handler,
+            tools_requiring_approval=tools_requiring_approval,
+            max_input_tokens=max_input_tokens,
+            agent_key=session_id,
+            enable_capability_search=enable_capability_search,
+        )
     return agent
 
 

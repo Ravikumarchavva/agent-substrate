@@ -12,6 +12,7 @@ import { AppPanel } from "@/components/AppPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { ModelEffortPicker } from "@/components/ModelEffortPicker";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
@@ -32,6 +33,8 @@ import {
 } from "@/lib/file-utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useThreads } from "@/hooks/useThreads";
+import type { WireEvent } from "@/protocol";
+import { wireEventToLegacy } from "@/lib/stream/legacyAdapter";
 import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAttachments";
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, type LucideIcon } from "lucide-react";
@@ -106,11 +109,7 @@ function ChatPageContent() {
 
   // ── Model selector + thinking level ────────────────────────────────
   const [selectedModel, setSelectedModel] = useState(() => getPreferredChatModel());
-  const [showModelPicker, setShowModelPicker] = useState(false);
   const [thinkingLevel, setThinkingLevel] = useState<string>("medium");
-  const [showThinkingPicker, setShowThinkingPicker] = useState(false);
-  const modelPickerRef = useRef<HTMLDivElement | null>(null);
-  const thinkingPickerRef = useRef<HTMLDivElement | null>(null);
 
   // Reset thinking level if not compatible with the selected model
   useEffect(() => {
@@ -130,20 +129,6 @@ function ChatPageContent() {
     };
     window.addEventListener(MODEL_PREFERENCES_UPDATED_EVENT, handler);
     return () => window.removeEventListener(MODEL_PREFERENCES_UPDATED_EVENT, handler);
-  }, []);
-
-  // Close dropdowns on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
-        setShowModelPicker(false);
-      }
-      if (thinkingPickerRef.current && !thinkingPickerRef.current.contains(e.target as Node)) {
-        setShowThinkingPicker(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   useEffect(() => {
@@ -749,14 +734,17 @@ function ChatPageContent() {
         const toolMarkupPattern = /^\s*<function\/[\s\S]+<\/function>\s*$/;
 
         const rawAttachments = (data.attachments as unknown[]) ?? [];
-        const attachments = rawAttachments.map((a: any) => ({
-          id: a.id,
-          thread_id: a.thread_id,
-          name: a.name,
-          mime: a.mime || "application/octet-stream",
-          size: a.size || 0,
-          url: a.url || `/api/backend/threads/${a.thread_id}/files/${a.id}/content`,
-        }));
+        const attachments = rawAttachments.map((a) => {
+          const fileObj = a as { id: string; thread_id: string; name: string; mime?: string; size?: number; url?: string };
+          return {
+            id: fileObj.id,
+            thread_id: fileObj.thread_id,
+            name: fileObj.name,
+            mime: fileObj.mime || "application/octet-stream",
+            size: fileObj.size || 0,
+            url: fileObj.url || `/api/backend/threads/${fileObj.thread_id}/files/${fileObj.id}/content`,
+          };
+        });
 
         setMessages((m) =>
           m.map((msg) =>
@@ -879,9 +867,10 @@ function ChatPageContent() {
           if (!line.startsWith("data: ")) continue;
           const text = line.slice(6).trim();
           if (text === "[DONE]") { reader.cancel(); break outer; }
-          let parsed: Record<string, unknown>;
-          try { parsed = JSON.parse(text); } catch { continue; }
-          processEvent(parsed);
+          let parsed: WireEvent;
+          try { parsed = JSON.parse(text) as WireEvent; } catch { continue; }
+          // New wire protocol → the UI's existing event shapes (single adapter).
+          for (const legacy of wireEventToLegacy(parsed)) processEvent(legacy);
         }
       }
     } catch (err: unknown) {
@@ -1164,45 +1153,77 @@ function ChatPageContent() {
                       </div>
                     )}
 
-                    <div className="flex items-end gap-2 px-1">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        multiple
-                        className="hidden"
-                        onChange={handleFileSelected}
-                        aria-hidden="true"
-                      />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileSelected}
+                      aria-hidden="true"
+                    />
 
+                    {/* Textarea — full width on top */}
+                    <textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          sendMessage(e);
+                        }
+                      }}
+                      rows={1}
+                      className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-[15px] outline-none placeholder:text-(--muted)"
+                      placeholder="Ask anything"
+                      disabled={loading}
+                    />
+
+                    {/* ── Bottom bar: [+] left · [model][mic][audio/send] right ── */}
+                    <div className="flex items-center gap-1.5 px-1 pb-0.5 pt-0.5">
+                      {/* Attach — left */}
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploadingFile}
-                        className="btn-icon mb-1 flex h-9 w-9 shrink-0 items-center justify-center cursor-pointer self-end rounded-full text-(--muted) transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        className="btn-icon flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-(--muted) transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                         style={{ background: "var(--card-hover)" }}
                         aria-label="Attach file"
                       >
                         {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
                       </button>
 
-                      <textarea
-                        ref={textareaRef}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            sendMessage(e);
-                          }
-                        }}
-                        rows={1}
-                        className="max-h-48 flex-1 resize-none overflow-y-auto bg-transparent py-2.5 pl-1 pr-2 text-[15px] outline-none placeholder:text-(--muted)"
-                        placeholder="Ask anything"
-                        disabled={loading}
-                      />
+                      {/* Right group */}
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <ModelEffortPicker
+                          models={CHAT_MODEL_OPTIONS}
+                          selectedModel={selectedModel}
+                          onSelectModel={(id) => { setSelectedModel(id); writeStoredValue(CHAT_MODEL_STORAGE_KEY, id); }}
+                          thinkingLevel={thinkingLevel}
+                          onSelectThinking={setThinkingLevel}
+                        />
 
-                      <div className="mb-1 flex shrink-0 items-center gap-2 self-end">
-                        {!input.trim() && !loading && (
+                        {input.trim() || loading ? (
+                          loading ? (
+                            <button
+                              type="button"
+                              onClick={handleStop}
+                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-colors"
+                              aria-label="Stop"
+                            >
+                              <StopCircle className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              type="submit"
+                              disabled={!input.trim()}
+                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all disabled:cursor-not-allowed disabled:opacity-10"
+                              aria-label="Send"
+                            >
+                              <ArrowUp className="h-5 w-5" />
+                            </button>
+                          )
+                        ) : (
                           <>
                             <div className="rounded-full" style={{ background: "var(--card-hover)" }}>
                               <VoiceRecorder
@@ -1222,138 +1243,9 @@ function ChatPageContent() {
                             </button>
                           </>
                         )}
-                        {(input.trim() || loading) && (
-                          loading ? (
-                            <button
-                              type="button"
-                              onClick={handleStop}
-                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-colors"
-                              aria-label="Stop"
-                            >
-                              <StopCircle className="h-4 w-4" />
-                            </button>
-                          ) : (
-                            <button
-                              type="submit"
-                              disabled={!input.trim()}
-                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-10 bg-foreground text-background"
-                              aria-label="Send"
-                            >
-                              <ArrowUp className="h-5 w-5" />
-                            </button>
-                          )
-                        )}
                       </div>
-                    </div>
+                    </div>{/* end bottom bar */}
                   </form>
-
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2 px-1">
-                    <div className="relative" ref={modelPickerRef}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowModelPicker((v) => !v);
-                          setShowThinkingPicker(false);
-                        }}
-                        className="btn-icon ravi-press flex cursor-pointer items-center gap-1.5 rounded-xl border border-(--border) bg-(--card)/50 px-3 py-1.5 text-[11px] font-medium text-(--muted) transition-all hover:bg-(--card-hover) hover:text-foreground"
-                      >
-                        <Settings2 className="h-3 w-3" />
-                        <span className="max-w-32 truncate">
-                          {CHAT_MODEL_OPTIONS.find((m) => m.id === selectedModel)?.label ?? selectedModel.split("/").pop()}
-                        </span>
-                        <ChevronDown className="h-3 w-3 opacity-50" />
-                      </button>
-                      {showModelPicker && (
-                        <div
-                          className="ravi-scale-in absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 overflow-hidden rounded-xl p-1 shadow-2xl"
-                          style={{ background: "var(--card)", border: "1px solid var(--border)", transformOrigin: "bottom center" }}
-                        >
-                          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-(--muted)">
-                            Model
-                          </div>
-                          <div className="flex flex-col gap-0.5">
-                            {CHAT_MODEL_OPTIONS.filter(opt => !opt.disabled).map((opt, idx) => {
-                              const active = opt.id === selectedModel;
-                              return (
-                                <button
-                                  key={opt.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedModel(opt.id);
-                                    writeStoredValue(CHAT_MODEL_STORAGE_KEY, opt.id);
-                                    setShowModelPicker(false);
-                                  }}
-                                  className={`ravi-slide-down flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${active ? "bg-(--card-hover) text-foreground ring-1 ring-(--border)" : "text-(--muted) hover:bg-(--card-hover) hover:text-foreground"}`}
-                                  style={{ '--stagger': idx } as React.CSSProperties}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[13.5px] font-medium tracking-tight">{opt.label}</span>
-                                    {(opt.id.includes("5.4") || opt.id.includes("3.3")) && (
-                                      <span className="rounded-md bg-(--badge-bg) px-1.5 py-0.5 text-[9px] font-bold text-(--muted) uppercase">New</span>
-                                    )}
-                                  </div>
-                                  {active && <div className="h-1.5 w-1.5 rounded-full bg-foreground" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="h-3 w-px bg-(--border)" />
-
-                    <div className="relative" ref={thinkingPickerRef}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowThinkingPicker((v) => !v);
-                          setShowModelPicker(false);
-                        }}
-                        className="btn-icon ravi-press flex cursor-pointer items-center gap-1.5 rounded-xl border border-(--border) bg-(--card)/50 px-3 py-1.5 text-[11px] font-medium text-(--muted) transition-all hover:bg-(--card-hover) hover:text-foreground"
-                      >
-                        <span className="text-[10px]">💭</span>
-                        <span>{thinkingLevel === "off" ? "No thinking" : `Thinking: ${thinkingLevel}`}</span>
-                        <ChevronDown className="h-3 w-3 opacity-50" />
-                      </button>
-                      {showThinkingPicker && (
-                        <div
-                          className="ravi-scale-in absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 overflow-hidden rounded-xl p-1 shadow-2xl"
-                          style={{ background: "var(--card)", border: "1px solid var(--border)", transformOrigin: "bottom center" }}
-                        >
-                          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-(--muted)">
-                            Thinking
-                          </div>
-                          <div className="flex flex-col gap-0.5">
-                            {(CHAT_MODEL_OPTIONS.find(m => m.id === selectedModel)?.thinkingLevels || ["off", "low", "medium", "high"]).map((level, idx) => {
-                              const labels: Record<string, string> = {
-                                off: "No thinking",
-                                low: "Fast Reasoning",
-                                medium: "Balanced",
-                                high: "Deep Thought",
-                                xhigh: "Maximum Depth"
-                              };
-                              return (
-                                <button
-                                  key={level}
-                                  type="button"
-                                  onClick={() => {
-                                    setThinkingLevel(level);
-                                    setShowThinkingPicker(false);
-                                  }}
-                                  className={`ravi-slide-down flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${level === thinkingLevel ? "bg-(--card-hover) text-foreground ring-1 ring-(--border)" : "text-(--muted) hover:bg-(--card-hover) hover:text-foreground"}`}
-                                  style={{ '--stagger': idx } as React.CSSProperties}
-                                >
-                                  <span className="text-[13.5px] font-medium tracking-tight">{labels[level] || level}</span>
-                                  {level === thinkingLevel && <div className="h-1.5 w-1.5 rounded-full bg-foreground" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
 
                   <RealtimeVoicePanel isOpen={realtimeOpen} onClose={() => setRealtimeOpen(false)} />
                   <p className="mt-2 text-center text-xs text-(--muted)">

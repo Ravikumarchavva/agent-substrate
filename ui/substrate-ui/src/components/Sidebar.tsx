@@ -608,7 +608,7 @@ function ThreadItem({
       >
         {/* Gradient fade behind the button */}
         <div
-          className={`pointer-events-none absolute right-0 top-0 h-full w-14 bg-linear-to-l to-transparent opacity-0 group-hover:opacity-100 transition-opacity from-(--card-hover)`}
+          className={`pointer-events-none absolute right-0 top-0 h-full w-14 rounded-r-xl bg-linear-to-l to-transparent opacity-0 group-hover:opacity-100 transition-opacity from-(--card-hover)`}
         />
         <button
           type="button"

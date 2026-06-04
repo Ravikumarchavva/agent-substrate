@@ -19,16 +19,13 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        // Same-origin backend proxy for browser fetches and iframe content.
-        source: "/api/backend/:path*",
-        destination: `${BACKEND_URL}/:path*`,
-      },
-      {
         // WebSocket proxy: browser connects to /api/audio/realtime-ws
         // and Next.js rewrites it to the FastAPI WS endpoint.
         source: "/api/audio/realtime-ws",
         destination: `${BACKEND_URL}/audio/realtime`,
       },
+      // /api/backend/* is handled by the catch-all route handler at
+      // src/app/api/backend/[...path]/route.ts which adds the engine JWT.
     ];
   },
 };

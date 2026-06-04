@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { Thread } from "@/types";
 import { api } from "@/lib/api";
 
@@ -14,6 +14,7 @@ export function useThreads(
   { autoSelectFirstThread = true }: UseThreadsOptions = {},
 ) {
   const [threads, setThreads] = useState<Thread[]>([]);
+  const hasAutoSelected = useRef(false);
 
   const loadThreads = useCallback(async () => {
     try {
@@ -24,6 +25,7 @@ export function useThreads(
         if (autoSelectFirstThread && currentThreadId) {
           selectThread(null);
         }
+        hasAutoSelected.current = true;
         return;
       }
 
@@ -31,23 +33,18 @@ export function useThreads(
         ? fetchedThreads.some((thread: Thread) => thread.id === currentThreadId)
         : false;
 
-      if (!hasCurrentThread && autoSelectFirstThread) {
+      if (currentThreadId && !hasCurrentThread && autoSelectFirstThread && !hasAutoSelected.current) {
         selectThread(fetchedThreads[0].id);
       }
+      hasAutoSelected.current = true;
     } catch (error) {
       console.error("Failed to load threads:", error);
     }
   }, [autoSelectFirstThread, currentThreadId, selectThread]);
 
-  const handleNewChat = useCallback(async (callbacks?: { onCreated?: () => void }) => {
-    try {
-      const newThread = await api.createThread("New Chat");
-      setThreads((current) => [newThread, ...current]);
-      selectThread(newThread.id, "push");
-      callbacks?.onCreated?.();
-    } catch (error) {
-      console.error("Failed to create thread:", error);
-    }
+  const handleNewChat = useCallback((callbacks?: { onCreated?: () => void }) => {
+    selectThread(null, "push");
+    callbacks?.onCreated?.();
   }, [selectThread]);
 
   const handleSelectThread = useCallback((threadId: string, callbacks?: { onSelected?: () => void }) => {
@@ -58,17 +55,15 @@ export function useThreads(
   const handleDeleteThread = useCallback(async (threadId: string) => {
     try {
       await api.deleteThread(threadId);
-      setThreads((current) => {
-        const remaining = current.filter((thread) => thread.id !== threadId);
-        if (currentThreadId === threadId) {
-          selectThread(remaining[0]?.id ?? null);
-        }
-        return remaining;
-      });
+      if (currentThreadId === threadId) {
+        const remaining = threads.filter((t) => t.id !== threadId);
+        selectThread(remaining[0]?.id ?? null);
+      }
+      setThreads((current) => current.filter((thread) => thread.id !== threadId));
     } catch (error) {
       console.error("Failed to delete thread:", error);
     }
-  }, [currentThreadId, selectThread]);
+  }, [currentThreadId, selectThread, threads]);
 
   const handleRenameThread = useCallback(async (threadId: string, newName: string) => {
     try {

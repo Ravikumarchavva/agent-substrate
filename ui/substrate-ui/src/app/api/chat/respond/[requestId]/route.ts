@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { engineAuthHeader } from "@/lib/engine-auth";
 
 export async function POST(
   req: NextRequest,
@@ -9,11 +10,9 @@ export async function POST(
 
   try {
     const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const headers: HeadersInit = { "Content-Type": "application/json" };
-    const authHeader = req.headers.get("authorization");
-    if (authHeader) headers["Authorization"] = authHeader;
+    const headers: HeadersInit = { "Content-Type": "application/json", ...engineAuthHeader() };
     const cookieHeader = req.headers.get("cookie");
-    if (cookieHeader) headers["cookie"] = cookieHeader;
+    if (cookieHeader) (headers as Record<string, string>)["cookie"] = cookieHeader;
 
     const upstream = await fetch(
       `${BACKEND_URL}/chat/respond/${requestId}`,

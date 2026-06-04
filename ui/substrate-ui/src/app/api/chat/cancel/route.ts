@@ -3,6 +3,8 @@
  * Proxies a cancellation request to the FastAPI backend so the running
  * agent stream for a given thread is stopped.
  */
+import { engineAuthHeader } from "@/lib/engine-auth";
+
 export async function POST(req: Request) {
   const { thread_id } = (await req.json()) as { thread_id: string };
 
@@ -11,7 +13,7 @@ export async function POST(req: Request) {
 
   const res = await fetch(`${BACKEND_URL}/chat/${thread_id}/cancel`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...engineAuthHeader() },
   });
 
   const data = await res.json();

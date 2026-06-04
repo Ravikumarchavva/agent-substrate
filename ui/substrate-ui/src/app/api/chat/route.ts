@@ -1,15 +1,16 @@
+import { engineAuthHeader } from "@/lib/engine-auth";
+
 export async function POST(req: Request) {
   const body = await req.json();
 
-  // Forward the request to FastAPI backend with thread_id, messages and optional system_instructions
-  // BACKEND_API_URL is for server-side (internal cluster); NEXT_PUBLIC_API_URL is build-time fallback
   const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  const headers: HeadersInit = { "Content-Type": "application/json" };
-  const authHeader = req.headers.get("authorization");
-  if (authHeader) headers["Authorization"] = authHeader;
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    ...engineAuthHeader(),
+  };
   const cookieHeader = req.headers.get("cookie");
-  if (cookieHeader) headers["cookie"] = cookieHeader;
+  if (cookieHeader) (headers as Record<string, string>)["cookie"] = cookieHeader;
 
   const res = await fetch(`${BACKEND_URL}/chat`, {
     method: "POST",
@@ -23,11 +24,14 @@ export async function POST(req: Request) {
     }),
   });
 
-  if (!res.body) {
-    return new Response("No stream", { status: 500 });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "Unknown engine error");
+    return new Response(
+      JSON.stringify({ error: text }),
+      { status: res.status, headers: { "Content-Type": "application/json" } }
+    );
   }
 
-  // Forward the SSE stream directly
   return new Response(res.body, {
     headers: {
       "Content-Type": "text/event-stream",

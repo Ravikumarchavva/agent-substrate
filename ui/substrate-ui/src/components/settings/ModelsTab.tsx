@@ -400,7 +400,7 @@ export function ModelsTab({
             <CustomSelect
               value={String(ttsPlaybackRate)}
               onChange={(value) => { clearNotice(); setTtsPlaybackRate(Number.parseFloat(value) as TTSPlaybackRate); }}
-              options={TTS_PLAYBACK_RATE_OPTIONS}
+              options={TTS_PLAYBACK_RATE_OPTIONS.map((opt) => ({ ...opt, id: String(opt.id) }))}
             />
           </div>
         </CapabilityCard>

@@ -43,6 +43,8 @@ dependencies = [
     "playwright>=1.60.0",
     "psycopg[binary]>=3.3.4",
     "pgvector>=0.4.2",
+    "ddgs>=9.14.4",
+    "crawl4ai>=0.8.7",
 ]
 
 [project.scripts]
@@ -56,6 +58,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "import-linter>=2.11",
+    "ipykernel>=7.2.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.15.15",

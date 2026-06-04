@@ -36,10 +36,11 @@ class Tool(Protocol):
 
 
 class Toolbox:
-    """The agent's toolbox — a name-keyed collection of Tool instances.
+    """A name-keyed collection of Tool instances with schema-building helpers.
 
-    Provides lookup, keyword search, and schema generation so the LLM
-    can discover and invoke tools by name or description match.
+    Use this when you need to share a tool collection across components
+    (e.g. the monolith lifespan wires tools once and passes them to multiple
+    agents). For simple cases just pass a plain ``list[Tool]`` to the agent.
     """
 
     def __init__(self) -> None:
@@ -52,18 +53,6 @@ class Toolbox:
     def get(self, name: str) -> Tool | None:
         """Return the tool with *name*, or None if not registered."""
         return self._tools.get(name)
-
-    def search(self, query: str) -> list[Tool]:
-        """Keyword search over tool names and descriptions.
-
-        Returns every tool whose name or description contains *query*
-        (case-insensitive).  Used by the LLM tool-search flow.
-        """
-        q = query.lower()
-        return [
-            t for t in self._tools.values()
-            if q in t.name.lower() or q in t.description.lower()
-        ]
 
     def all(self) -> list[Tool]:
         """Return all registered tools."""

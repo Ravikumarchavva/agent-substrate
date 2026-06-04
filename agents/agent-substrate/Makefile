@@ -9,7 +9,7 @@ else
 RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) uv run pytest --tb=short -q --junitxml=test-results.xml
 endif
 
-.PHONY: sync lint format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-down docker-up docker-down observability-up observability-down
+.PHONY: sync lint lint-apply protocol-schema format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-down docker-up docker-down observability-up observability-down
 
 help:
 	@echo "Available targets:"
@@ -59,6 +59,9 @@ sync:
 
 lint-apply:
 	uv run ruff check . --fix
+
+protocol-schema:
+	uv run python -m ravi.serving.protocol.export
 
 lint:
 	uv run ruff check .

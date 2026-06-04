@@ -684,13 +684,19 @@ class Console:
         self.console.print(f"\n[user]👤 You →[/user] {text}")
 
     def _print_tool_call(self, chunk: AgentProgress) -> None:
-        self.console.print(f"  [dim]→ tool:[/dim] [tool_name]{chunk.content}[/tool_name]")
+        depth = getattr(chunk, "depth", 0) or 0
+        indent = "  " * (depth + 1)
+        prefix = f"[dim]\\[{chunk.agent_id.key}][/dim] " if depth > 0 else ""
+        self.console.print(f"{indent}[dim]→ tool:[/dim] {prefix}[tool_name]{chunk.content}[/tool_name]")
 
     def _print_tool_result(self, chunk: AgentProgress) -> None:
+        depth = getattr(chunk, "depth", 0) or 0
+        indent = "  " * (depth + 1)
         is_err = "error" in chunk.content
         icon = "✖" if is_err else "✔"
         style = "tool_err" if is_err else "tool_ok"
-        self.console.print(f"  {icon} [{style}]{chunk.content}[/{style}]")
+        prefix = f"[dim]\\[{chunk.agent_id.key}][/dim] " if depth > 0 else ""
+        self.console.print(f"{indent}{icon} {prefix}[{style}]{chunk.content}[/{style}]")
 
     def _print_result(self, result: Any, elapsed: float) -> None:
         """Pretty-print an AgentRunResult."""

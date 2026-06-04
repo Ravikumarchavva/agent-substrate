@@ -1,50 +1,54 @@
-"""ToolSearchTool — agent-facing and client-executed tool discovery.
+"""ToolSearchTool — search available tools by keyword.
 
-Two modes (chosen by the caller):
+Register this as a normal tool and the agent can discover what tools it has
+and how to call them — name, description, and full parameter list — without
+needing to know upfront.
 
-  1. **Text mode** (default) — returns a human-readable list of tool
-     name + description.  Works with any LLM.
-
-  2. **Schema mode** (``format="schema"``) — returns the full JSON schemas
-     of matched tools.  Use this in client-executed tool_search: when
-     OpenAI emits a ``tool_search_call``, execute the search and return
-     the schemas in a ``tool_search_output`` item.
-
-OpenAI hosted tool search (gpt-5.4+):
-    Declare all tools with ``defer_loading: True`` via
-    ``Toolbox.deferred_schemas()`` and add ``{"type": "tool_search"}``
-    to the tools list.  The API handles search server-side; your app does not
-    need to call this tool at all.
-
-Client-executed tool search:
-    Declare ``{"type": "tool_search", "execution": "client"}`` in the tools
-    list.  When the model emits a ``tool_search_call``, invoke this tool with
-    the query and return the result as a ``tool_search_output`` payload.
-
-Fallback (any model):
-    Register as a normal tool.  The model can call it when it needs to
-    discover what tools are available.
+    tools = [CalculatorTool(), WebSearchTool(), WikipediaTool()]
+    agent = ReActAgent("bot", runtime, model=llm,
+                       tools=[*tools, ToolSearchTool(tools)])
 """
 
 from __future__ import annotations
 
 import json
 
-from ravi.kernel.content import TextBlock
-from ravi.kernel.tools import ToolExecutionResult, Toolbox, ToolRisk
+from ravi.kernel import Tool, TextBlock
+from ravi.kernel.tools import ToolExecutionResult, ToolRisk
+
+
+def _param_summary(schema: dict[str, object]) -> str:
+    """Return a one-line parameter summary from a JSON schema, e.g. 'query (str, req), max_results (int)'."""
+    props: dict[str, object] = schema.get("properties", {})  # type: ignore[assignment]
+    required: list[str] = schema.get("required", [])  # type: ignore[assignment]
+    if not props:
+        return "no parameters"
+    parts: list[str] = []
+    for name, info in props.items():
+        assert isinstance(info, dict)
+        typ = info.get("type", "any")
+        req = "req" if name in required else "opt"
+        parts.append(f"{name} ({typ}, {req})")
+    return ", ".join(parts)
 
 
 class ToolSearchTool:
-    """Search the tool registry by keyword.
+    """Search the available tools by keyword.
 
-    Returns matching tools' name and description (text mode, default) or their
-    full JSON schemas (schema mode, for client-executed tool_search).
+    Returns each match with its name, description, and full parameter list so
+    the agent knows exactly how to call the tool without guessing.
+
+    Pass the same list you give the agent (minus this tool itself)::
+
+        tools = [CalculatorTool(), WebSearchTool(), WikipediaTool()]
+        agent = ReActAgent("bot", runtime, model=llm,
+                           tools=[*tools, ToolSearchTool(tools)])
     """
 
     name = "tool_search"
     description = (
         "Search available tools by keyword. "
-        "Returns name and description of matching tools. "
+        "Returns name, description, and parameters for each match. "
         "Use an empty string to list all tools."
     )
     input_schema: dict[str, object] = {
@@ -52,62 +56,50 @@ class ToolSearchTool:
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Keyword (case-insensitive). Empty = list all tools.",
+                "description": "Keyword to search (case-insensitive). Empty string lists all tools.",
             },
             "format": {
                 "type": "string",
                 "enum": ["text", "schema"],
                 "description": (
-                    "'text' returns name+description (default). "
-                    "'schema' returns full JSON schemas for client-executed tool_search."
+                    "'text' (default) returns readable name + description + parameters. "
+                    "'schema' returns full JSON schemas for programmatic use."
                 ),
             },
         },
         "required": ["query"],
+        "additionalProperties": False,
     }
     risk = ToolRisk.SAFE
 
-    def __init__(self, registry: Toolbox) -> None:
-        self._registry = registry
+    def __init__(self, tools: list[Tool]) -> None:
+        self._tools: dict[str, Tool] = {t.name: t for t in tools}
 
     async def execute(
         self, *, query: str = "", format: str = "text", **_: object
     ) -> ToolExecutionResult:
         q = query.strip().lower()
-        tools = self._registry.all()
+        matches = [
+            t for t in self._tools.values()
+            if not q or q in t.name.lower() or q in t.description.lower()
+        ]
 
-        matches = (
-            tools
-            if not q
-            else [t for t in tools if q in t.name.lower() or q in t.description.lower()]
-        )
+        if not matches:
+            msg = f"No tools found matching '{query}'." if q else "No tools registered."
+            return ToolExecutionResult(content=[TextBlock(text=msg)])
 
         if format == "schema":
-            # Return full schemas — used as tool_search_output payload in
-            # client-executed OpenAI tool search.
             schemas = [
-                s
-                for name in [t.name for t in matches]
-                if (s := self._registry.schema_for(name)) is not None
+                {"name": t.name, "description": t.description, "parameters": t.input_schema}
+                for t in matches
             ]
-            if not schemas:
-                text = json.dumps({"tools": [], "query": query})
-            else:
-                text = json.dumps({"tools": schemas, "query": query}, indent=2)
+            text = json.dumps({"tools": schemas, "query": query}, indent=2)
         else:
-            # Human-readable text mode (works with any model)
-            if not matches:
-                text = (
-                    f"No tools found matching '{query}'."
-                    if q
-                    else "No tools registered."
-                )
-            else:
-                header = "Available tools:" if not q else f"Tools matching '{query}':"
-                lines = [f"- **{t.name}**: {t.description}" for t in matches]
-                text = header + "\n" + "\n".join(lines)
+            header = "Available tools:" if not q else f"Tools matching '{query}':"
+            lines: list[str] = []
+            for t in matches:
+                params = _param_summary(t.input_schema)  # type: ignore[arg-type]
+                lines.append(f"• **{t.name}**: {t.description}\n  Parameters: {params}")
+            text = header + "\n\n" + "\n\n".join(lines)
 
-        return ToolExecutionResult(
-            name=self.name,
-            content=[TextBlock(text=text)],
-        )
+        return ToolExecutionResult(content=[TextBlock(text=text)])

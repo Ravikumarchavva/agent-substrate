@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable, Optional
 
 from ravi.kernel.stream import (
+    AgentProgress,
     CompletionEvent,
     ReasoningDelta,
     StreamDone,
@@ -14,6 +15,7 @@ from ravi.kernel.stream import (
 TextDeltaHandler = Callable[[TextDelta], Awaitable[None]]
 ReasoningDeltaHandler = Callable[[ReasoningDelta], Awaitable[None]]
 CompletionHandler = Callable[[CompletionEvent], Awaitable[None]]
+AgentProgressHandler = Callable[[AgentProgress], Awaitable[None]]
 UnknownChunkHandler = Callable[[Any], Awaitable[None]]
 FinishedHandler = Callable[[int], Awaitable[None]]
 ErrorHandler = Callable[[Exception], Awaitable[None]]
@@ -27,6 +29,7 @@ async def stream_agent_run(
     on_text_delta: Optional[TextDeltaHandler] = None,
     on_reasoning_delta: Optional[ReasoningDeltaHandler] = None,
     on_completion: Optional[CompletionHandler] = None,
+    on_agent_progress: Optional[AgentProgressHandler] = None,
     on_tool_result: Any = None,  # kept for call-site compat; no longer dispatched
     on_unknown: Optional[UnknownChunkHandler] = None,
     on_finished: Optional[FinishedHandler] = None,
@@ -39,6 +42,7 @@ async def stream_agent_run(
     - ``TextDelta``        → ``on_text_delta``
     - ``ReasoningDelta``   → ``on_reasoning_delta``
     - ``CompletionEvent``  → ``on_completion``
+    - ``AgentProgress``    → ``on_agent_progress``
     - ``StreamDone``       → loop exits; ``on_finished(step_count)`` called
     - anything else        → ``on_unknown``
     """
@@ -59,6 +63,11 @@ async def stream_agent_run(
                 step_count += 1
                 if on_completion is not None:
                     await on_completion(chunk)
+                continue
+
+            if isinstance(chunk, AgentProgress):
+                if on_agent_progress is not None:
+                    await on_agent_progress(chunk)
                 continue
 
             if isinstance(chunk, StreamDone):

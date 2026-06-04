@@ -4,5 +4,6 @@ from __future__ import annotations
 
 from ravi.agents.core.react import ReActAgent, AgentRunResult
 from ravi.agents.core.proxy import UserProxyAgent
+from ravi.agents.core.orchestrator import OrchestratorAgent
 
-__all__ = ["ReActAgent", "AgentRunResult", "UserProxyAgent"]
+__all__ = ["ReActAgent", "AgentRunResult", "UserProxyAgent", "OrchestratorAgent"]

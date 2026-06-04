@@ -98,7 +98,7 @@ async def test_permanent_retention_subagent_remembers_across_runs():
         # The "coder" subagent remembers across turns
         coder_history = InMemoryHistoryProvider()
 
-        from ravi.agents.orchestrator.agent import OrchestratorAgent, SubAgentConfig
+        from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
 
         coder = ReActAgent(
             "coder",

@@ -262,7 +262,7 @@ async def init_tool_registry(
     # ToolSearchTool — lets the agent discover other tools dynamically
     from ravi.capabilities.tools.tool_search import ToolSearchTool
 
-    registry.add(ToolSearchTool(registry))
+    registry.add(ToolSearchTool(registry.all()))
 
     # Derive tools requiring approval from risk level
     tools_requiring_approval = [

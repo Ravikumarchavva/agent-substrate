@@ -4,16 +4,18 @@ Simple tools are flat modules; complex multi-file tools keep their folder.
 
 Quick-start::
 
-    from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, UuidGeneratorTool
-    agent = ReActAgent("bot", runtime, model=llm, tools=[CalculatorTool(), CurrentTimeTool()])
+    from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool, WikipediaTool, ReadUrlTool
+    agent = ReActAgent("bot", runtime, model=llm, tools=[CalculatorTool(), WebSearchTool()])
 """
 
 from __future__ import annotations
 
-# Built-in utility tools
+# Built-in utility tools (no API key, no extra dependencies)
 from ravi.capabilities.tools.calculator import CalculatorTool
 from ravi.capabilities.tools.current_time import CurrentTimeTool
-from ravi.capabilities.tools.uuid_generator import UuidGeneratorTool
+from ravi.capabilities.tools.web_search import WebSearchTool
+from ravi.capabilities.tools.read_url import ReadUrlTool
+from ravi.capabilities.tools.wikipedia import WikipediaTool
 
 # Capability tools
 from ravi.capabilities.tools.chain_executor import ChainExecutorTool
@@ -31,10 +33,12 @@ from ravi.capabilities.tools.tool_search import ToolSearchTool
 from ravi.capabilities.tools.web_surfer import WebSurferTool
 
 __all__ = [
-    # Built-ins
+    # Built-ins (no API key needed)
     "CalculatorTool",
     "CurrentTimeTool",
-    "UuidGeneratorTool",
+    "WebSearchTool",
+    "ReadUrlTool",
+    "WikipediaTool",
     # Capabilities
     "ChainExecutorTool",
     "DocumentAnalyzerTool",

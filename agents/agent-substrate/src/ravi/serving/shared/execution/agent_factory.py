@@ -20,6 +20,8 @@ from ravi.kernel import (
     AgentRuntime,
     Tool,
 )
+from ravi.kernel.message import Message
+from ravi.kernel.identity import AgentId
 
 logger = setup_logging()
 
@@ -156,39 +158,49 @@ async def load_session_memory(
     is ``None``, a fresh in-process provider is returned seeded from the cold
     store.
     """
-    if history is not None:
-        if await history.count_messages(session_id) > 0:
-            logger.debug("History hit for %s", session_id)
-            return history
+    _aid = AgentId(type="assistant", key=session_id)
 
-        logger.debug(
-            "History miss for %s — loading from %s", session_id, cold_store_name
-        )
+    async def _seed(provider: HistoryProvider) -> None:
+        """Load cold-store ChatMessages into *provider* as Message envelopes."""
         step_rows = await load_persisted_steps()
-        all_messages = await rebuild_messages_from_steps(
+        chat_messages = await rebuild_messages_from_steps(
             step_rows,
             system_instructions,
             include_mcp_app_context=include_mcp_app_context,
         )
-        if all_messages:
-            await history.save_messages(session_id, all_messages)
+        # History stores Message envelopes (target + payload=ChatMessage),
+        # matching how react.py._append wraps them.
+        for chat_msg in chat_messages:
+            envelope = Message(
+                target=_aid,
+                payload=chat_msg,
+                metadata={"run_id": "cold_store"},
+            )
+            await provider.append(_aid, envelope, session_id=session_id)
+        if chat_messages:
             logger.debug(
                 "Seeded session %s with %d messages from %s",
-                session_id,
-                len(all_messages),
-                cold_store_name,
+                session_id, len(chat_messages), cold_store_name,
             )
+
+    if history is not None:
+        # count_messages exists on RedisHistoryProvider but not on InMemoryHistoryProvider.
+        # Fall back to get_messages length check when the method is absent.
+        if hasattr(history, "count_messages"):
+            hit = await history.count_messages(_aid, session_id=session_id) > 0  # type: ignore[attr-defined]
+        else:
+            hit = len(await history.get_messages(_aid, session_id=session_id, limit=1)) > 0
+
+        if hit:
+            logger.debug("History hit for %s", session_id)
+            return history
+
+        logger.debug("History miss for %s — loading from %s", session_id, cold_store_name)
+        await _seed(history)
         return history
 
-    step_rows = await load_persisted_steps()
-    all_messages = await rebuild_messages_from_steps(
-        step_rows,
-        system_instructions,
-        include_mcp_app_context=include_mcp_app_context,
-    )
     fallback = InMemoryHistoryProvider()
-    if all_messages:
-        await fallback.save_messages(session_id, all_messages)
+    await _seed(fallback)
     return fallback
 
 

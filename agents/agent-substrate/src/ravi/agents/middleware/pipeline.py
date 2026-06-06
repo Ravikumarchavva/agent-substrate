@@ -1,29 +1,32 @@
-"""Interceptor re-export + MiddlewarePipeline concrete impl."""
-
+"""Generic MiddlewarePipeline."""
 from __future__ import annotations
 
-from ravi.kernel import Message
-from ravi.kernel.middleware import Interceptor
+from typing import Generic, TypeVar, Protocol, Callable, Awaitable, Sequence
+
+ContextT = TypeVar("ContextT")
 
 
-class MiddlewarePipeline:
-    """Executes a chain of Interceptors in registration order."""
-
-    def __init__(self, interceptors: list[Interceptor] | None = None) -> None:
-        self.interceptors: list[Interceptor] = list(interceptors or [])
-
-    def add(self, interceptor: Interceptor) -> None:
-        self.interceptors.append(interceptor)
-
-    async def execute_pre(self, message: Message) -> Message:
-        for interceptor in self.interceptors:
-            message = await interceptor.pre_process(message)
-        return message
-
-    async def execute_post(self, message: Message) -> Message:
-        for interceptor in self.interceptors:
-            message = await interceptor.post_process(message)
-        return message
+class MiddlewareProtocol(Protocol[ContextT]):
+    async def process(self, context: ContextT, call_next: Callable[[], Awaitable[None]]) -> None: ...
 
 
-__all__ = ["Interceptor", "MiddlewarePipeline"]
+class MiddlewarePipeline(Generic[ContextT]):
+    """Executes a chain of middlewares via call_next() pattern."""
+
+    def __init__(self, middlewares: Sequence[MiddlewareProtocol[ContextT]] | None = None) -> None:
+        self._middlewares = list(middlewares or [])
+
+    def add(self, middleware: MiddlewareProtocol[ContextT]) -> None:
+        self._middlewares.append(middleware)
+
+    async def execute(self, context: ContextT, final: Callable[[ContextT], Awaitable[None]]) -> None:
+        async def build_chain(idx: int) -> None:
+            if idx >= len(self._middlewares):
+                await final(context)
+                return
+            await self._middlewares[idx].process(context, lambda: build_chain(idx + 1))
+
+        await build_chain(0)
+
+
+__all__ = ["MiddlewarePipeline"]

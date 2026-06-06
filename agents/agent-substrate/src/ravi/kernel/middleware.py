@@ -1,23 +1,20 @@
-"""Middleware (interceptor) contract."""
+"""Middleware (interceptor) contracts."""
 
 from __future__ import annotations
 
-from typing import Protocol
-
-from ravi.kernel.message import Message
+from typing import Protocol, Callable, Awaitable, Any
 
 
-class Interceptor(Protocol):
-    """Middleware component that intercepts messages pre- and post-delivery.
+from ravi.exceptions import MiddlewareTermination
 
-    Can mutate messages, raise to halt execution (e.g. for guardrails),
-    or record state asynchronously (e.g. audit logging).
-    """
 
-    async def pre_process(self, message: Message) -> Message:
-        """Called before the message reaches the agent."""
-        ...
+class AgentMiddleware(Protocol):
+    async def process(self, context: Any, call_next: Callable[[], Awaitable[None]]) -> None: ...
 
-    async def post_process(self, message: Message) -> Message:
-        """Called before the message is sent out by the agent."""
-        ...
+
+class ChatMiddleware(Protocol):
+    async def process(self, context: Any, call_next: Callable[[], Awaitable[None]]) -> None: ...
+
+
+class FunctionMiddleware(Protocol):
+    async def process(self, context: Any, call_next: Callable[[], Awaitable[None]]) -> None: ...

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import Callable, Awaitable
 
-from ravi.agents.middleware._contracts import MiddlewareContext
+from ravi.agents.middleware._contracts import AgentRunContext
+from ravi.exceptions import MiddlewareTermination
 
 
 class RateLimiterMiddleware:
@@ -17,20 +18,17 @@ class RateLimiterMiddleware:
         self._last_refill = time.monotonic()
         self._lock = asyncio.Lock()
 
-    async def before(self, ctx: MiddlewareContext) -> MiddlewareContext:
-        while True:
-            async with self._lock:
-                now = time.monotonic()
-                elapsed = now - self._last_refill
-                self._tokens = min(
-                    self._max_tokens, self._tokens + elapsed * self._refill_rate
-                )
-                self._last_refill = now
-                if self._tokens >= 1.0:
-                    self._tokens -= 1.0
-                    return ctx
-                wait = (1.0 - self._tokens) / self._refill_rate
-            await asyncio.sleep(wait)
-
-    async def after(self, ctx: MiddlewareContext, result: Any) -> Any:
-        return result
+    async def process(self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]) -> None:
+        async with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last_refill
+            self._tokens = min(
+                self._max_tokens, self._tokens + elapsed * self._refill_rate
+            )
+            self._last_refill = now
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+            else:
+                raise MiddlewareTermination("Rate limit exceeded")
+        
+        await call_next()

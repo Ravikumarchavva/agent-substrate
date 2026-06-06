@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types as genai_types
 
 import uuid
-from ravi.kernel.llm import LLMClient
+from ravi.kernel.llm import LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,
@@ -173,7 +173,7 @@ class GeminiClient(LLMClient):
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> list[ContentBlock]:
+    ) -> LLMResponse:
         """Generate a single response from Gemini using GenerateContent API."""
         _, contents = self._serialize_messages(messages)
         system_instruction = system
@@ -246,24 +246,16 @@ class GeminiClient(LLMClient):
                         final_text[:200],
                     )
 
+        usage = Usage()
         if response.usage_metadata:
-            from ravi.agents.llm.models import estimate_cost
-
             u = response.usage_metadata
-            in_tok = u.prompt_token_count or 0
-            out_tok = u.candidates_token_count or 0
-            cost_usd = estimate_cost(
-                self.model, input_tokens=in_tok, output_tokens=out_tok
-            )
-            logger.info(
-                "[%s] tokens in=%d out=%d  cost=$%.6f",
-                self.model,
-                in_tok,
-                out_tok,
-                cost_usd,
+            usage = Usage(
+                input_tokens=u.prompt_token_count or 0,
+                cached_tokens=getattr(u, "cached_content_token_count", 0) or 0,
+                output_tokens=u.candidates_token_count or 0,
             )
 
-        return final_blocks
+        return LLMResponse(content=final_blocks, usage=usage)
 
     async def generate_stream(
         self,

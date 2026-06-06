@@ -1,26 +1,42 @@
-"""Local middleware contracts — replaces deleted kernel.middleware.base."""
+"""Local middleware context contracts."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
-
-class MiddlewareStage(str, Enum):
-    LLM_CALL = "llm_call"
-    TOOL_EXECUTION = "tool_execution"
+from ravi.kernel import ChatMessage, Tool
+from ravi.kernel.llm import LLMResponse
+from ravi.agents.core.react import AgentRunResult
+from ravi.kernel.message import ToolExecutionResult
 
 
 @dataclass
-class MiddlewareContext:
-    """Snapshot passed through the middleware pipeline for one agent action."""
+class AgentRunContext:
+    agent_name: str
+    run_id: str
+    session_id: str
+    messages: list[ChatMessage]
+    result: AgentRunResult | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    agent_name: str = ""
-    run_id: str = ""
-    stage: MiddlewareStage = MiddlewareStage.LLM_CALL
-    input_text: str = ""
-    tool_name: str | None = None
-    tool_args: dict[str, Any] | None = None
-    response_schema: type | None = None
+
+@dataclass
+class ChatContext:
+    agent_name: str
+    run_id: str
+    messages: list[ChatMessage]
+    system: str
+    tools: list[Tool] | None
+    result: LLMResponse | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class FunctionContext:
+    agent_name: str
+    run_id: str
+    function_name: str
+    arguments: dict[str, Any]
+    result: ToolExecutionResult | None = None
     metadata: dict[str, Any] = field(default_factory=dict)

@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import random
-from typing import Any
+from typing import Callable, Awaitable
 
 from ravi.logger import setup_logging
-from ravi.agents.middleware._contracts import MiddlewareContext
+from ravi.agents.middleware._contracts import ChatContext
 
 logger = setup_logging()
-
 
 def _backoff(attempt: int, base: float, max_delay: float, jitter: float) -> float:
     delay = min(base * (2**attempt), max_delay)
@@ -16,7 +15,7 @@ def _backoff(attempt: int, base: float, max_delay: float, jitter: float) -> floa
 
 
 class RetryMiddleware:
-    """Retries execution on transient errors using exponential backoff."""
+    """Retries LLM execution on transient errors using exponential backoff."""
 
     def __init__(
         self,
@@ -33,30 +32,24 @@ class RetryMiddleware:
         self.max_delay = max_delay
         self.jitter = jitter
 
-    async def before(self, ctx: MiddlewareContext) -> MiddlewareContext:
-        ctx.metadata.setdefault("_retry_attempt", 0)
-        return ctx
-
-    async def after(self, ctx: MiddlewareContext, result: Any) -> Any:
-        ctx.metadata["_retry_attempt"] = 0
-        return result
-
-    async def on_error(self, ctx: MiddlewareContext, error: Exception) -> None:
-        if not isinstance(error, self.retryable_exceptions):
-            return
-        attempt = ctx.metadata.get("_retry_attempt", 0)
-        if attempt >= self.max_retries:
-            logger.warning(
-                "RetryMiddleware: max retries (%d) exhausted", self.max_retries
-            )
-            return
-        delay = _backoff(attempt, self.base_delay, self.max_delay, self.jitter)
-        logger.info(
-            "RetryMiddleware: attempt %d/%d, waiting %.1fs — %s",
-            attempt + 1,
-            self.max_retries,
-            delay,
-            error,
-        )
-        await asyncio.sleep(delay)
-        ctx.metadata["_retry_attempt"] = attempt + 1
+    async def process(self, context: ChatContext, call_next: Callable[[], Awaitable[None]]) -> None:
+        attempt = 0
+        while True:
+            try:
+                await call_next()
+                return
+            except self.retryable_exceptions as exc:
+                if attempt >= self.max_retries:
+                    logger.warning("RetryMiddleware: max retries (%d) exhausted", self.max_retries)
+                    raise
+                
+                delay = _backoff(attempt, self.base_delay, self.max_delay, self.jitter)
+                logger.info(
+                    "RetryMiddleware: attempt %d/%d, waiting %.1fs — %s",
+                    attempt + 1,
+                    self.max_retries,
+                    delay,
+                    exc,
+                )
+                await asyncio.sleep(delay)
+                attempt += 1

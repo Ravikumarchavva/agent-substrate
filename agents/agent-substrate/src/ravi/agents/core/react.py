@@ -65,15 +65,13 @@ from ravi.kernel.stream import AgentProgress, AgentStep, CompletionEvent, Reason
 from ravi.agents.context import AgentContext, HistoryProvider
 from ravi.agents.context.context import DefaultAgentContext
 from ravi.kernel import Skill
-from ravi.kernel.llm import LLMClient
+from ravi.kernel.llm import LLMClient, Usage
 from ravi.agents.hooks.manager import HookEvent, HookManager
 from ravi.agents.resources.budget import BudgetExceededError, ExecutionBudget
-from ravi.agents.guardrails.runner import (
-    check_input_guardrails,
-    check_output_guardrails,
-    check_tool_call_guardrails,
-)
-from ravi.exceptions import GuardrailTripwireError
+from ravi.agents.middleware._contracts import AgentRunContext, ChatContext, FunctionContext
+from ravi.agents.middleware.pipeline import MiddlewarePipeline
+from ravi.kernel.middleware import AgentMiddleware, ChatMiddleware, FunctionMiddleware
+from ravi.exceptions import MiddlewareTermination
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +180,9 @@ class ReActAgent:
         max_iterations: int = 20,
         tool_timeout: float | None = 30.0,
         context: AgentContext | None = None,
-        guardrails: list[object] | None = None,
+        agent_middleware: list[AgentMiddleware] | None = None,
+        chat_middleware: list[ChatMiddleware] | None = None,
+        function_middleware: list[FunctionMiddleware] | None = None,
         approval_handler: ApprovalHandler | None = None,
         approval_required_risk: ToolRisk = ToolRisk.HIGH,
         hooks: HookManager | None = None,
@@ -200,7 +200,9 @@ class ReActAgent:
         self._base_system = system_instructions or self._DEFAULT_SYSTEM
         self.max_iterations = max_iterations
         self.tool_timeout = tool_timeout
-        self._guardrails: list[object] = list(guardrails or [])
+        self.agent_pipeline = MiddlewarePipeline(agent_middleware)
+        self.chat_pipeline = MiddlewarePipeline(chat_middleware)
+        self.function_pipeline = MiddlewarePipeline(function_middleware)
         self._approval_handler = approval_handler
         self._approval_required_risk = approval_required_risk
         self.hooks = hooks or HookManager()
@@ -311,310 +313,385 @@ class ReActAgent:
                 rid,
             )
 
-        try:
-            # -- input guardrails ------------------------------------------------
-            if self._guardrails and not resume:
-                await check_input_guardrails(
-                    guardrails=self._guardrails,
-                    agent_name=self.name,
-                    run_id=rid,
-                    input_text=input_text,
-                )
+        agent_ctx = AgentRunContext(agent_name=self.name, run_id=rid, session_id=sid, messages=[])
 
-            for step in range(1, self.max_iterations + 1):
-                # -- cooperative pause check ------------------------------------
-                if self.spawn_budget is not None and self.spawn_budget.is_paused(self.id):
-                    logger.info("[%s] paused by priority preemption at step %d", self.name, step)
-                    await self._emit_progress(AgentStep.PAUSED, "paused by priority preemption", rid)
-                    await self.hooks.dispatch(
-                        HookEvent.RUN_END,
-                        {"agent": self.name, "run_id": rid, "status": "paused"},
-                    )
-                    last_output = await self._last_assistant_text(sid)
-                    yield _Finished(AgentRunResult(
-                        output=last_output,
-                        status="paused",
-                        tool_calls=tool_calls,
-                        run_id=rid,
-                    ))
-                    return
 
-                await self.hooks.dispatch(
-                    HookEvent.STEP_START, {"agent": self.name, "step": step}
-                )
-                messages = await self._prompt_window(sid)
+        _event_q: asyncio.Queue[Any] = asyncio.Queue()
 
-                await self.hooks.dispatch(
-                    HookEvent.LLM_START,
-                    {"agent": self.name, "step": step, "message_count": len(messages)},
-                )
-                await self._emit_progress(
-                    AgentStep.THINKING, f"step {step}", rid
-                )
 
-                # -- ExecutionBudget: count prompt tokens for cost estimation --
-                if self.execution_budget is not None:
-                    try:
-                        prompt_tokens = await self.model.count_tokens(messages)
-                    except Exception:
-                        prompt_tokens = 0
 
-                gen_kwargs = {}
-                if step == 1 and initial_tool_choice is not None:
-                    gen_kwargs["tool_choice"] = initial_tool_choice
+        async def _core_loop(ctx: AgentRunContext) -> None:
 
-                content: list[ContentBlock] = []
-                if stream:
-                    async for event in _stream_generate(
-                        self.model, messages, self._system, self._tool_schemas(), **gen_kwargs
-                    ):
-                        if isinstance(event, (TextDelta, ReasoningDelta)):
-                            yield event
-                        elif isinstance(event, CompletionEvent):
-                            content = event.content
-                else:
-                    content = await self.model.generate(
-                        messages, tools=self._tool_schemas(), system=self._system, **gen_kwargs
-                    )
 
-                # -- ExecutionBudget: record this turn's usage -----------------
-                if self.execution_budget is not None:
-                    try:
-                        out_tokens = await self.model.count_tokens(
-                            [ChatMessage(role="assistant", content=content)]
+            try:
+
+
+            try:
+                for step in range(1, self.max_iterations + 1):
+                    # -- cooperative pause check ------------------------------------
+                    if self.spawn_budget is not None and self.spawn_budget.is_paused(self.id):
+                        logger.info("[%s] paused by priority preemption at step %d", self.name, step)
+                        await self._emit_progress(AgentStep.PAUSED, "paused by priority preemption", rid)
+                        await self.hooks.dispatch(
+                            HookEvent.RUN_END,
+                            {"agent": self.name, "run_id": rid, "status": "paused"},
                         )
-                    except Exception:
-                        out_tokens = 0
-                    self.execution_budget.consume(
-                        tokens=prompt_tokens + out_tokens, turns=1
-                    )
-
-                await self.hooks.dispatch(
-                    HookEvent.LLM_END, {"agent": self.name, "step": step}
-                )
-
-                if not content:
-                    break
-
-                tool_uses = [b for b in content if isinstance(b, ToolUseBlock)]
-                await self._append(ChatMessage(role="assistant", content=content), sid, rid)
-
-                if not tool_uses:
-                    output = _content_to_str(content)
-
-                    # -- output guardrails ---------------------------------------
-                    if self._guardrails:
-                        await check_output_guardrails(
-                            guardrails=self._guardrails,
-                            agent_name=self.name,
+                        last_output = await self._last_assistant_text(sid)
+                        await _event_q.put(_Finished(AgentRunResult()
+                            output=last_output,
+                            status="paused",
+                            tool_calls=tool_calls,
                             run_id=rid,
-                            output_text=output,
-                        )
+                        ))
+                        return
 
-                    logger.info("[%s] done at step %d", self.name, step)
                     await self.hooks.dispatch(
-                        HookEvent.STEP_END,
-                        {"agent": self.name, "step": step, "has_tool_calls": False},
+                        HookEvent.STEP_START, {"agent": self.name, "step": step}
                     )
+                    messages = await self._prompt_window(sid)
+
                     await self.hooks.dispatch(
-                        HookEvent.RUN_END,
-                        {"agent": self.name, "run_id": rid, "status": "success"},
+                        HookEvent.LLM_START,
+                        {"agent": self.name, "step": step, "message_count": len(messages)},
                     )
                     await self._emit_progress(
-                        AgentStep.DONE, output[:120], rid
+                        AgentStep.THINKING, f"step {step}", rid
                     )
-                    if stream:
-                        yield CompletionEvent(content=content)
-                    
-                    yield _Finished(AgentRunResult(
-                        output=output,
-                        status="success",
-                        tool_calls=tool_calls,
-                        run_id=rid,
-                    ))
-                    return
 
-                logger.info(
-                    "[%s] step %d: tools → %s",
-                    self.name,
-                    step,
-                    [b.tool_name for b in tool_uses],
-                )
-                result_blocks: list[ContentBlock] = []
+                    # -- ExecutionBudget: count prompt tokens for cost estimation --
+                    if self.execution_budget is not None:
+                        try:
+                            prompt_tokens = await self.model.count_tokens(messages)
+                        except Exception:
+                            prompt_tokens = 0
 
-                # Phase 1: emit TOOL_CALL progress + run guardrails (sequential — fast)
-                for tu in tool_uses:
-                    call_progress = await self._emit_progress(
-                        AgentStep.TOOL_CALL,
-                        tu.tool_name,
-                        rid,
-                        call_id=tu.call_id,
-                        tool_args=json.dumps(dict(tu.arguments)),
-                    )
-                    if stream and call_progress is not None:
-                        yield call_progress
-                    if self._guardrails:
-                        await check_tool_call_guardrails(
-                            guardrails=self._guardrails,
-                            agent_name=self.name,
-                            run_id=rid,
-                            tool_use=tu,
+                    content: list[ContentBlock] = []
+
+
+                    turn_usage: Usage = Usage()
+
+
+                    chat_ctx = ChatContext(agent_name=self.name, messages=messages, result=None)
+
+
+
+                    async def _do_chat(c: ChatContext) -> None:
+
+
+                        nonlocal content, turn_usage
+
+
+                        gen_kwargs = {}
+                        if step == 1 and initial_tool_choice is not None:
+                            gen_kwargs["tool_choice"] = initial_tool_choice
+
+                        if stream:
+                            async for event in _stream_generate(
+                                self.model, messages, self._system, self._tool_schemas(), **gen_kwargs
+                            ):
+                                if isinstance(event, (TextDelta, ReasoningDelta)):
+                                    await _event_q.put(event)
+                                elif isinstance(event, CompletionEvent):
+                                    content = event.content
+                                    turn_usage = event.usage
+                        else:
+                            resp = await self.model.generate(
+                                messages, tools=self._tool_schemas(), system=self._system, **gen_kwargs
+                            )
+                            content = resp.content
+                            turn_usage = resp.usage
+
+
+                        from ravi.kernel.llm import LLMResponse
+
+
+                        c.result = LLMResponse(content=content, usage=turn_usage, model=self.model.model)
+
+
+
+                    await self.chat_pipeline.execute(chat_ctx, _do_chat)
+
+
+                    content = chat_ctx.result.content if chat_ctx.result else content
+
+
+                    turn_usage = chat_ctx.result.usage if chat_ctx.result else turn_usage
+
+
+                    # -- ExecutionBudget: record this turn's usage -----------------
+                    if self.execution_budget is not None:
+                        self.execution_budget.consume(
+                            tokens=turn_usage.total_tokens or prompt_tokens, turns=1
                         )
 
-                # Phase 2: run all tools concurrently; yield progress as each event arrives.
-                # progress_q receives subagent AgentProgress events (from _DispatchTool).
-                # done_q receives tool completion tuples.
-                progress_q: asyncio.Queue[AgentProgress] = asyncio.Queue()
-                done_q: asyncio.Queue[
-                    tuple[ToolUseBlock, ToolCallRecord, ContentBlock]
-                ] = asyncio.Queue()
+                    await self.hooks.dispatch(
+                        HookEvent.LLM_END, {"agent": self.name, "step": step}
+                    )
 
-                # Wire progress sink into any tool that supports it (_DispatchTool)
-                for tool in self._tools.values():
-                    if hasattr(tool, "set_progress_sink"):
-                        tool.set_progress_sink(progress_q)
+                    if not content:
+                        break
 
-                async def _run(t: ToolUseBlock) -> None:
-                    r, b = await self._execute_tool(t)
-                    await done_q.put((t, r, b))
+                    tool_uses = [b for b in content if isinstance(b, ToolUseBlock)]
+                    await self._append(ChatMessage(role="assistant", content=content), sid, rid)
 
-                tasks = [asyncio.create_task(_run(tu)) for tu in tool_uses]
+                    if not tool_uses:
+                        output = _content_to_str(content)
 
-                results_by_call_id: dict[str, tuple[ToolCallRecord, ContentBlock]] = {}
-                completed = 0
-                while completed < len(tool_uses):
-                    # Drain any buffered subagent progress events (non-blocking)
+                        logger.info("[%s] done at step %d", self.name, step)
+                        await self.hooks.dispatch(
+                            HookEvent.STEP_END,
+                            {"agent": self.name, "step": step, "has_tool_calls": False},
+                        )
+                        await self.hooks.dispatch(
+                            HookEvent.RUN_END,
+                            {"agent": self.name, "run_id": rid, "status": "success"},
+                        )
+                        await self._emit_progress(
+                            AgentStep.DONE, output[:120], rid
+                        )
+                        if stream:
+                            await _event_q.put(CompletionEvent(content=content))
+                        
+                        await _event_q.put(_Finished(AgentRunResult()
+                            output=output,
+                            status="success",
+                            tool_calls=tool_calls,
+                            run_id=rid,
+                        ))
+                        return
+
+                    logger.info(
+                        "[%s] step %d: tools → %s",
+                        self.name,
+                        step,
+                        [b.tool_name for b in tool_uses],
+                    )
+                    result_blocks: list[ContentBlock] = []
+
+                    # Phase 1: emit TOOL_CALL progress + run guardrails (sequential — fast)
+                    for tu in tool_uses:
+                        call_progress = await self._emit_progress(
+                            AgentStep.TOOL_CALL,
+                            tu.tool_name,
+                            rid,
+                            call_id=tu.call_id,
+                            tool_args=json.dumps(dict(tu.arguments)),
+                        )
+                        if stream and call_progress is not None:
+                            await _event_q.put(call_progress)
+                        if self._guardrails:
+                            await check_tool_call_guardrails(
+                                guardrails=self._guardrails,
+                                agent_name=self.name,
+                                run_id=rid,
+                                tool_use=tu,
+                            )
+
+                    # Phase 2: run all tools concurrently; await _event_q.put(progress as each event arrives.)
+                    # progress_q receives subagent AgentProgress events (from _DispatchTool).
+                    # done_q receives tool completion tuples.
+                    progress_q: asyncio.Queue[AgentProgress] = asyncio.Queue()
+                    done_q: asyncio.Queue[
+                        tuple[ToolUseBlock, ToolCallRecord, ContentBlock]
+                    ] = asyncio.Queue()
+
+                    # Wire progress sink into any tool that supports it (_DispatchTool)
+                    for tool in self._tools.values():
+                        if hasattr(tool, "set_progress_sink"):
+                            tool.set_progress_sink(progress_q)
+
+                    async def _run(t: ToolUseBlock) -> None:
+                        r, b = await self._execute_tool(t)
+                        await done_q.put((t, r, b))
+
+                    tasks = [asyncio.create_task(_run(tu)) for tu in tool_uses]
+
+                    results_by_call_id: dict[str, tuple[ToolCallRecord, ContentBlock]] = {}
+                    completed = 0
+                    while completed < len(tool_uses):
+                        # Drain any buffered subagent progress events (non-blocking)
+                        while not progress_q.empty():
+                            sub_event = progress_q.get_nowait()
+                            if stream:
+                                await _event_q.put(sub_event)
+
+                        # Wait up to 50 ms for the next tool completion, then loop back
+                        # to drain progress again so subagent events appear promptly.
+                        try:
+                            tu_done, record, block = await asyncio.wait_for(
+                                done_q.get(), timeout=0.05
+                            )
+                        except asyncio.TimeoutError:
+                            continue
+
+                        results_by_call_id[tu_done.call_id] = (record, block)
+                        ui_meta: dict[str, str] = {}
+                        if isinstance(block, ToolResultBlock):
+                            ui_block = next(
+                                (b for b in block.content if isinstance(b, UIResourceBlock)),
+                                None,
+                            )
+                            if ui_block is not None:
+                                ui_meta["ui"] = ui_block.model_dump_json()
+                        result_progress = await self._emit_progress(
+                            AgentStep.TOOL_RESULT,
+                            f"{tu_done.tool_name}: {'error' if record.is_error else 'ok'}",
+                            rid,
+                            call_id=tu_done.call_id,
+                            **ui_meta,
+                        )
+                        if stream and result_progress is not None:
+                            await _event_q.put(result_progress)
+                        completed += 1
+
+                    # Final drain — any events emitted right before task completion
                     while not progress_q.empty():
                         sub_event = progress_q.get_nowait()
                         if stream:
-                            yield sub_event
+                            await _event_q.put(sub_event)
 
-                    # Wait up to 50 ms for the next tool completion, then loop back
-                    # to drain progress again so subagent events appear promptly.
-                    try:
-                        tu_done, record, block = await asyncio.wait_for(
-                            done_q.get(), timeout=0.05
-                        )
-                    except asyncio.TimeoutError:
-                        continue
+                    await asyncio.gather(*tasks)  # ensure all tasks are fully settled
 
-                    results_by_call_id[tu_done.call_id] = (record, block)
-                    ui_meta: dict[str, str] = {}
-                    if isinstance(block, ToolResultBlock):
-                        ui_block = next(
-                            (b for b in block.content if isinstance(b, UIResourceBlock)),
-                            None,
-                        )
-                        if ui_block is not None:
-                            ui_meta["ui"] = ui_block.model_dump_json()
-                    result_progress = await self._emit_progress(
-                        AgentStep.TOOL_RESULT,
-                        f"{tu_done.tool_name}: {'error' if record.is_error else 'ok'}",
-                        rid,
-                        call_id=tu_done.call_id,
-                        **ui_meta,
+                    # Unwire sinks
+                    for tool in self._tools.values():
+                        if hasattr(tool, "set_progress_sink"):
+                            tool.set_progress_sink(None)
+
+                    # Reconstruct in original call order for the tool message
+                    for tu in tool_uses:
+                        record, block = results_by_call_id[tu.call_id]
+                        tool_calls.append(record)
+                        result_blocks.append(block)
+
+                    await self._append(ChatMessage(role="tool", content=result_blocks), sid, rid)
+                    await self.hooks.dispatch(
+                        HookEvent.STEP_END,
+                        {"agent": self.name, "step": step, "has_tool_calls": True},
                     )
-                    if stream and result_progress is not None:
-                        yield result_progress
-                    completed += 1
 
-                # Final drain — any events emitted right before task completion
-                while not progress_q.empty():
-                    sub_event = progress_q.get_nowait()
-                    if stream:
-                        yield sub_event
-
-                await asyncio.gather(*tasks)  # ensure all tasks are fully settled
-
-                # Unwire sinks
-                for tool in self._tools.values():
-                    if hasattr(tool, "set_progress_sink"):
-                        tool.set_progress_sink(None)
-
-                # Reconstruct in original call order for the tool message
-                for tu in tool_uses:
-                    record, block = results_by_call_id[tu.call_id]
-                    tool_calls.append(record)
-                    result_blocks.append(block)
-
-                await self._append(ChatMessage(role="tool", content=result_blocks), sid, rid)
-                await self.hooks.dispatch(
-                    HookEvent.STEP_END,
-                    {"agent": self.name, "step": step, "has_tool_calls": True},
+                logger.warning(
+                    "[%s] hit max_iterations (%d)", self.name, self.max_iterations
                 )
+                last_output = await self._last_assistant_text(sid)
+                await self.hooks.dispatch(
+                    HookEvent.RUN_END,
+                    {"agent": self.name, "run_id": rid, "status": "max_iterations"},
+                )
+                await self._emit_progress(
+                    AgentStep.DONE, last_output[:120], rid, status="max_iterations"
+                )
+                await _event_q.put(_Finished(AgentRunResult()
+                    output=last_output,
+                    status="max_iterations",
+                    tool_calls=tool_calls,
+                    run_id=rid,
+                ))
+                return
 
-            logger.warning(
-                "[%s] hit max_iterations (%d)", self.name, self.max_iterations
-            )
-            last_output = await self._last_assistant_text(sid)
-            await self.hooks.dispatch(
-                HookEvent.RUN_END,
-                {"agent": self.name, "run_id": rid, "status": "max_iterations"},
-            )
-            await self._emit_progress(
-                AgentStep.DONE, last_output[:120], rid, status="max_iterations"
-            )
-            yield _Finished(AgentRunResult(
-                output=last_output,
-                status="max_iterations",
-                tool_calls=tool_calls,
-                run_id=rid,
-            ))
-            return
+            except MiddlewareTermination as exc:
+                logger.warning("[%s] guardrail tripped: %s", self.name, exc.message)
+                await self.hooks.dispatch(
+                    HookEvent.RUN_END,
+                    {"agent": self.name, "run_id": rid, "status": "guardrail_tripped"},
+                )
+                await self._emit_progress(
+                    AgentStep.ERROR, f"guardrail: {exc.message}", rid
+                )
+                await _event_q.put(_Finished(AgentRunResult()
+                    output=f"Request blocked: {exc.message}",
+                    status="error",
+                    tool_calls=tool_calls,
+                    run_id=rid,
+                    error=exc.message,
+                ))
+                return
 
-        except GuardrailTripwireError as exc:
-            logger.warning("[%s] guardrail tripped: %s", self.name, exc.message)
-            await self.hooks.dispatch(
-                HookEvent.RUN_END,
-                {"agent": self.name, "run_id": rid, "status": "guardrail_tripped"},
-            )
-            await self._emit_progress(
-                AgentStep.ERROR, f"guardrail: {exc.message}", rid
-            )
-            yield _Finished(AgentRunResult(
-                output=f"Request blocked: {exc.message}",
-                status="guardrail_tripped",
-                tool_calls=tool_calls,
-                run_id=rid,
-                error=exc.message,
-            ))
-            return
+            except BudgetExceededError as exc:
+                logger.warning("[%s] budget exceeded: %s", self.name, exc)
+                await self._emit_progress(AgentStep.ERROR, f"budget: {exc}", rid)
+                await self.hooks.dispatch(
+                    HookEvent.RUN_END,
+                    {"agent": self.name, "run_id": rid, "status": "budget_exceeded"},
+                )
+                await _event_q.put(_Finished(AgentRunResult()
+                    output="",
+                    status="error",
+                    tool_calls=tool_calls,
+                    run_id=rid,
+                    error=str(exc),
+                ))
+                return
 
-        except BudgetExceededError as exc:
-            logger.warning("[%s] budget exceeded: %s", self.name, exc)
-            await self._emit_progress(AgentStep.ERROR, f"budget: {exc}", rid)
-            await self.hooks.dispatch(
-                HookEvent.RUN_END,
-                {"agent": self.name, "run_id": rid, "status": "budget_exceeded"},
-            )
-            yield _Finished(AgentRunResult(
-                output="",
-                status="error",
-                tool_calls=tool_calls,
-                run_id=rid,
-                error=str(exc),
-            ))
-            return
+            except Exception as exc:
+                logger.exception("[%s] run crashed: %s", self.name, exc)
+                await self.hooks.dispatch(
+                    HookEvent.RUN_END,
+                    {
+                        "agent": self.name,
+                        "run_id": rid,
+                        "status": "error",
+                        "error": str(exc),
+                    },
+                )
+                await self._emit_progress(
+                    AgentStep.ERROR, f"crash: {type(exc).__name__}: {exc}", rid
+                )
+                raise AgentCrashError(
+                    f"Agent '{self.name}' crashed: {exc}",
+                    run_id=rid,
+                    agent_id=self.id,
+                ) from exc
 
-        except Exception as exc:
-            logger.exception("[%s] run crashed: %s", self.name, exc)
-            await self.hooks.dispatch(
-                HookEvent.RUN_END,
-                {
-                    "agent": self.name,
-                    "run_id": rid,
-                    "status": "error",
-                    "error": str(exc),
-                },
-            )
-            await self._emit_progress(
-                AgentStep.ERROR, f"crash: {type(exc).__name__}: {exc}", rid
-            )
-            raise AgentCrashError(
-                f"Agent '{self.name}' crashed: {exc}",
-                run_id=rid,
-                agent_id=self.id,
-            ) from exc
+
+
+                await _event_q.put(StopAsyncIteration)
+
+
+            except Exception as _e:
+
+
+                await _event_q.put(_e)
+
+
+
+        async def _run_pipelines() -> None:
+
+
+            try:
+
+
+                await self.agent_pipeline.execute(agent_ctx, _core_loop)
+
+
+            except Exception as _e:
+
+
+                await _event_q.put(_e)
+
+
+
+        task = asyncio.create_task(_run_pipelines())
+
+
+        while True:
+
+
+            item = await _event_q.get()
+
+
+            if item is StopAsyncIteration:
+
+
+                break
+
+
+            if isinstance(item, Exception):
+
+
+                raise item
+
+
+            yield item
 
     async def run(
         self,
@@ -822,12 +899,39 @@ class ReActAgent:
             {"agent": self.name, "tool": tu.tool_name, "args": dict(tu.arguments)},
         )
         try:
-            if self.tool_timeout is not None:
-                exec_result = await asyncio.wait_for(
-                    tool.execute(**tu.arguments), timeout=self.tool_timeout
-                )
-            else:
-                exec_result = await tool.execute(**tu.arguments)
+
+            func_ctx = FunctionContext(
+
+                agent_name=self.name,
+
+                function_name=tu.tool_name,
+
+                arguments=dict(tu.arguments),
+
+                result=None,
+
+            )
+
+
+            async def _do_function(c: FunctionContext) -> None:
+
+                if self.tool_timeout is not None:
+
+                    c.result = await asyncio.wait_for(
+
+                        tool.execute(**c.arguments), timeout=self.tool_timeout
+
+                    )
+
+                else:
+
+                    c.result = await tool.execute(**c.arguments)
+
+
+            await self.function_pipeline.execute(func_ctx, _do_function)
+
+            exec_result = func_ctx.result
+
 
             duration = (time.monotonic() - t0) * 1000
             await self.hooks.dispatch(
@@ -854,6 +958,10 @@ class ReActAgent:
                     is_error=exec_result.is_error,
                 ),
             )
+        except MiddlewareTermination:
+
+            raise
+
 
         except asyncio.TimeoutError:
             duration = (self.tool_timeout or 0.0) * 1000

@@ -14,6 +14,7 @@ import json
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from ravi.kernel import ChatMessage, ContentBlock
+from ravi.kernel.llm import LLMResponse, Usage
 from ravi.kernel.content import (
     TextBlock,
     ImageBlock,
@@ -285,7 +286,7 @@ class OpenAIChatCompletionClient(OpenAIClient):
         response_format: Optional[type["BaseModel"]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         **kwargs: Any,
-    ) -> list[ContentBlock]:
+    ) -> LLMResponse:
         """Generate a response via Chat Completions API."""
         chat_messages = self._serialize_messages_chat(messages)
         if system_instructions:
@@ -334,7 +335,7 @@ class OpenAIChatCompletionClient(OpenAIClient):
                             ),
                         )
                     )
-                return final_blocks
+                return LLMResponse(content=final_blocks, usage=Usage())
             detail = self._format_provider_error(exc)
             logger.exception("Chat completions request failed: %s", detail)
             raise RuntimeError(detail) from exc
@@ -371,7 +372,19 @@ class OpenAIChatCompletionClient(OpenAIClient):
                     msg.content[:200],
                 )
 
-        return final_blocks
+        u = getattr(response, "usage", None)
+        usage = Usage()
+        if u:
+            cached = 0
+            details = getattr(u, "prompt_tokens_details", None)
+            if details:
+                cached = getattr(details, "cached_tokens", 0) or 0
+            usage = Usage(
+                input_tokens=getattr(u, "prompt_tokens", 0) or 0,
+                cached_tokens=cached,
+                output_tokens=getattr(u, "completion_tokens", 0) or 0,
+            )
+        return LLMResponse(content=final_blocks, usage=usage)
 
     # ------------------------------------------------------------------
     # generate_stream

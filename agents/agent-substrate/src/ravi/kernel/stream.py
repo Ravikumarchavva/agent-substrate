@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 from ravi.kernel.content import ContentBlock
 from ravi.kernel.identity import AgentId
+from ravi.kernel.usage import Usage
 
 
 # ---------------------------------------------------------------------------
@@ -53,10 +54,13 @@ class CompletionEvent:
     """Final token-stream event — carries the fully assembled response.
 
     ``content`` is ``list[ContentBlock]`` so the stream layer stays
-    independent of LLM wire formats.
+    independent of LLM wire formats. ``usage`` carries the token counts
+    for this generation; defaults to ``Usage()`` when the adapter does
+    not yet populate it.
     """
 
     content: list[ContentBlock]
+    usage: Usage = field(default_factory=Usage)
     metadata: dict[str, str] = field(default_factory=dict)
 
 

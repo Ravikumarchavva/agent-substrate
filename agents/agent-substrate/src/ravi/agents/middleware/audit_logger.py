@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Callable, Awaitable
 
 from ravi.logger import setup_logging
-from ravi.agents.middleware._contracts import MiddlewareContext
+from ravi.agents.middleware._contracts import AgentRunContext
 
 logger = setup_logging()
 
@@ -16,41 +16,38 @@ class AuditLoggerMiddleware:
     def __init__(self, *, log_level: int = logging.DEBUG) -> None:
         self.log_level = log_level
 
-    async def before(self, ctx: MiddlewareContext) -> MiddlewareContext:
-        ctx.metadata["_audit_t0"] = time.monotonic()
+    async def process(self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]) -> None:
+        t0 = time.monotonic()
         logger.log(
             self.log_level,
-            "[audit] %s START agent=%r tool=%s input_len=%d",
-            ctx.stage.value,
-            ctx.agent_name,
-            ctx.tool_name,
-            len(ctx.input_text),
+            "[audit] RUN START agent=%r run_id=%s session_id=%s msgs=%d",
+            context.agent_name,
+            context.run_id,
+            context.session_id,
+            len(context.messages),
         )
-        return ctx
 
-    async def after(self, ctx: MiddlewareContext, result: Any) -> Any:
-        t0 = ctx.metadata.get("_audit_t0", time.monotonic())
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        logger.log(
-            self.log_level,
-            "[audit] %s END agent=%r tool=%s elapsed=%.1fms",
-            ctx.stage.value,
-            ctx.agent_name,
-            ctx.tool_name,
-            elapsed_ms,
-        )
-        return result
-
-    async def on_error(self, ctx: MiddlewareContext, error: Exception) -> None:
-        t0 = ctx.metadata.get("_audit_t0", time.monotonic())
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        logger.log(
-            self.log_level,
-            "[audit] %s ERROR agent=%r tool=%s elapsed=%.1fms error=%s: %s",
-            ctx.stage.value,
-            ctx.agent_name,
-            ctx.tool_name,
-            elapsed_ms,
-            type(error).__name__,
-            error,
-        )
+        try:
+            await call_next()
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            status = context.result.status if context.result else "error"
+            logger.log(
+                self.log_level,
+                "[audit] RUN END agent=%r run_id=%s elapsed=%.1fms status=%s",
+                context.agent_name,
+                context.run_id,
+                elapsed_ms,
+                status,
+            )
+        except Exception as exc:
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            logger.log(
+                self.log_level,
+                "[audit] RUN ERROR agent=%r run_id=%s elapsed=%.1fms error=%s: %s",
+                context.agent_name,
+                context.run_id,
+                elapsed_ms,
+                type(exc).__name__,
+                exc,
+            )
+            raise

@@ -25,7 +25,7 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,9 +92,6 @@ def _build_orchestrator(
         context=_ctx(), max_iterations=2, tool_timeout=tool_timeout,
     )
 
-    orchestrator_ctx = AgentContext(
-        memory, SlidingWindowCompaction(max_messages=model_context_window)
-    )
     return OrchestratorAgent(
         "coordinator", runtime,
         model=model_client,

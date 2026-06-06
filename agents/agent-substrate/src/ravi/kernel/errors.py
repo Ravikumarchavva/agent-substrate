@@ -53,9 +53,27 @@ class BudgetExhaustedError(Exception):
     """
 
 
+class MiddlewareTermination(Exception):
+    """Raised by any middleware to immediately halt the agent run.
+
+    Unlike ``AgentCrashError`` (unexpected failure), ``MiddlewareTermination``
+    is an intentional policy-enforced halt — a guardrail blocked the request,
+    the rate limit was exceeded, etc.  The agent loop catches it and produces
+    an ``AgentRunResult`` with ``status="guardrail_tripped"``.
+
+    Raise from any ``AgentMiddleware``, ``ChatMiddleware``, or
+    ``FunctionMiddleware`` to stop execution at that level.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 __all__ = [
     "AgentNotFoundError",
     "HandlerError",
     "AgentCrashError",
     "BudgetExhaustedError",
+    "MiddlewareTermination",
 ]

@@ -44,6 +44,8 @@ from ravi.agents.middleware import (
     FileValidatorMiddleware,
     SchemaValidatorMiddleware,
     HistoryTruncatorMiddleware,
+    AgentTracingMiddleware,
+    ChatTracingMiddleware,
     ContentFilterMiddleware,
     PromptInjectionMiddleware,
     MaxTokenMiddleware,
@@ -57,7 +59,6 @@ from ravi.agents.runtime import LocalRuntime
 from ravi.agents.resources import (
     BudgetExceededError,
     ExecutionBudget,
-    agent_span,
 )
 from ravi.agents.supervision import RetryPolicy
 
@@ -95,6 +96,10 @@ __all__ = [
     "FileValidatorMiddleware",
     "SchemaValidatorMiddleware",
     "HistoryTruncatorMiddleware",
+    # observability
+    "AgentTracingMiddleware",
+    "ChatTracingMiddleware",
+    # guardrails
     "ContentFilterMiddleware",
     "PromptInjectionMiddleware",
     "MaxTokenMiddleware",
@@ -110,7 +115,6 @@ __all__ = [
     # resources
     "BudgetExceededError",
     "ExecutionBudget",
-    "agent_span",
     # supervision
     "RetryPolicy",
 ]

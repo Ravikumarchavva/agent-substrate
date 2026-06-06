@@ -3,12 +3,8 @@
 Quick-start for client apps::
 
     from ravi import ReActAgent, LocalRuntime, create_model_client
-    from ravi import LLMJudgeGuardrail, GuardrailType
+    from ravi import ContentFilterMiddleware, MiddlewareTermination
     from ravi import TextDelta, CompletionEvent, StreamDone
-    from ravi.exceptions import GuardrailTripwireError
-
-All symbols are loaded lazily so importing this package does not trigger
-any logging configuration or heavy module initialisation as a side effect.
 """
 
 from __future__ import annotations
@@ -23,18 +19,29 @@ if TYPE_CHECKING:
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
     )
-    from ravi.agents.guardrails import (
-        ContentFilterGuardrail,
-        GuardrailType,
-        LLMJudgeGuardrail,
-        MaxTokenGuardrail,
-        PIIDetectionGuardrail,
-        PromptInjectionGuardrail,
-        ToolCallValidationGuardrail,
+    from ravi.agents.middleware import (
+        AgentRunContext,
+        ChatContext,
+        FunctionContext,
+        AuditLoggerMiddleware,
+        CacheMiddleware,
+        ContentFilterMiddleware,
+        ContentTruncatorMiddleware,
+        FileValidatorMiddleware,
+        HistoryTruncatorMiddleware,
+        LLMJudgeMiddleware,
+        MaxTokenMiddleware,
+        PIIDetectionMiddleware,
+        PromptInjectionMiddleware,
+        RateLimiterMiddleware,
+        RetryMiddleware,
+        SchemaValidatorMiddleware,
+        ToolCallValidationMiddleware,
+        MiddlewarePipeline,
     )
     from ravi.agents.runtime import LocalRuntime
     from ravi.kernel.skills import Skill
-    from ravi.exceptions import GuardrailTripwireError
+    from ravi.kernel.errors import MiddlewareTermination
     from ravi.kernel import ChatMessage, TextBlock, ToolExecutionResult
     from ravi.kernel.stream import (
         CompletionEvent,
@@ -52,15 +59,26 @@ __all__ = [
     "InMemoryHistoryProvider",
     "AgentContext",
     "SlidingWindowCompaction",
-    # guardrails
-    "ContentFilterGuardrail",
-    "GuardrailType",
-    "LLMJudgeGuardrail",
-    "MaxTokenGuardrail",
-    "PIIDetectionGuardrail",
-    "PromptInjectionGuardrail",
-    "ToolCallValidationGuardrail",
-    "GuardrailTripwireError",
+    # middleware
+    "AgentRunContext",
+    "ChatContext",
+    "FunctionContext",
+    "MiddlewarePipeline",
+    "AuditLoggerMiddleware",
+    "CacheMiddleware",
+    "ContentFilterMiddleware",
+    "ContentTruncatorMiddleware",
+    "FileValidatorMiddleware",
+    "HistoryTruncatorMiddleware",
+    "LLMJudgeMiddleware",
+    "MaxTokenMiddleware",
+    "PIIDetectionMiddleware",
+    "PromptInjectionMiddleware",
+    "RateLimiterMiddleware",
+    "RetryMiddleware",
+    "SchemaValidatorMiddleware",
+    "ToolCallValidationMiddleware",
+    "MiddlewareTermination",
     # llm
     "create_model_client",
     "LLMFactory",
@@ -83,23 +101,35 @@ _LAZY: dict[str, tuple[str, str]] = {
     "InMemoryHistoryProvider": ("ravi.agents.context", "InMemoryHistoryProvider"),
     "AgentContext": ("ravi.agents.context", "AgentContext"),
     "SlidingWindowCompaction": ("ravi.agents.context", "SlidingWindowCompaction"),
-    "ContentFilterGuardrail": ("ravi.agents.guardrails", "ContentFilterGuardrail"),
-    "GuardrailType": ("ravi.agents.guardrails", "GuardrailType"),
-    "LLMJudgeGuardrail": ("ravi.agents.guardrails", "LLMJudgeGuardrail"),
-    "MaxTokenGuardrail": ("ravi.agents.guardrails", "MaxTokenGuardrail"),
-    "PIIDetectionGuardrail": ("ravi.agents.guardrails", "PIIDetectionGuardrail"),
-    "PromptInjectionGuardrail": ("ravi.agents.guardrails", "PromptInjectionGuardrail"),
-    "ToolCallValidationGuardrail": (
-        "ravi.agents.guardrails",
-        "ToolCallValidationGuardrail",
-    ),
-    "GuardrailTripwireError": ("ravi.exceptions", "GuardrailTripwireError"),
+    # middleware
+    "AgentRunContext": ("ravi.agents.middleware", "AgentRunContext"),
+    "ChatContext": ("ravi.agents.middleware", "ChatContext"),
+    "FunctionContext": ("ravi.agents.middleware", "FunctionContext"),
+    "MiddlewarePipeline": ("ravi.agents.middleware", "MiddlewarePipeline"),
+    "AuditLoggerMiddleware": ("ravi.agents.middleware", "AuditLoggerMiddleware"),
+    "CacheMiddleware": ("ravi.agents.middleware", "CacheMiddleware"),
+    "ContentFilterMiddleware": ("ravi.agents.middleware", "ContentFilterMiddleware"),
+    "ContentTruncatorMiddleware": ("ravi.agents.middleware", "ContentTruncatorMiddleware"),
+    "FileValidatorMiddleware": ("ravi.agents.middleware", "FileValidatorMiddleware"),
+    "HistoryTruncatorMiddleware": ("ravi.agents.middleware", "HistoryTruncatorMiddleware"),
+    "LLMJudgeMiddleware": ("ravi.agents.middleware", "LLMJudgeMiddleware"),
+    "MaxTokenMiddleware": ("ravi.agents.middleware", "MaxTokenMiddleware"),
+    "PIIDetectionMiddleware": ("ravi.agents.middleware", "PIIDetectionMiddleware"),
+    "PromptInjectionMiddleware": ("ravi.agents.middleware", "PromptInjectionMiddleware"),
+    "RateLimiterMiddleware": ("ravi.agents.middleware", "RateLimiterMiddleware"),
+    "RetryMiddleware": ("ravi.agents.middleware", "RetryMiddleware"),
+    "SchemaValidatorMiddleware": ("ravi.agents.middleware", "SchemaValidatorMiddleware"),
+    "ToolCallValidationMiddleware": ("ravi.agents.middleware", "ToolCallValidationMiddleware"),
+    "MiddlewareTermination": ("ravi.kernel.errors", "MiddlewareTermination"),
+    # factory
     "create_model_client": ("ravi.adapters.llm.factory", "create_model_client"),
     "LLMFactory": ("ravi.adapters.llm.factory", "LLMFactory"),
+    # stream
     "TextDelta": ("ravi.kernel.stream", "TextDelta"),
     "ReasoningDelta": ("ravi.kernel.stream", "ReasoningDelta"),
     "CompletionEvent": ("ravi.kernel.stream", "CompletionEvent"),
     "StreamDone": ("ravi.kernel.stream", "StreamDone"),
+    # kernel
     "ChatMessage": ("ravi.kernel.content", "ChatMessage"),
     "TextBlock": ("ravi.kernel.content", "TextBlock"),
     "ToolExecutionResult": ("ravi.kernel.tools", "ToolExecutionResult"),
@@ -112,7 +142,7 @@ def __getattr__(name: str) -> object:
 
         module_path, attr = _LAZY[name]
         obj = getattr(importlib.import_module(module_path), attr)
-        globals()[name] = obj  # cache — subsequent access is a plain dict lookup
+        globals()[name] = obj
         return obj
     raise AttributeError(f"module 'ravi' has no attribute {name!r}")
 

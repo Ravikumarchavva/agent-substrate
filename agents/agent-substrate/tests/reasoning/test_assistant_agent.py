@@ -24,6 +24,7 @@ from ravi.kernel import (
     ToolUseBlock,
 )
 from ravi.kernel.stream import CompletionEvent, StreamDone, TextDelta
+from ravi.kernel.llm import LLMResponse, Usage
 from ravi.agents.core import ReActAgent, AgentRunResult
 from ravi.agents.guardrails.content_filter import ContentFilterGuardrail
 from ravi.agents.guardrails.prompt_injection import PromptInjectionGuardrail
@@ -48,9 +49,9 @@ class MockLLMClient:
         tools: Any = None,
         system: str = "",
         **_kw: Any,
-    ) -> list[ContentBlock]:
+    ) -> LLMResponse:
         assert self._queue, "MockLLMClient: no more scripted responses"
-        return self._queue.pop(0)
+        return LLMResponse(content=self._queue.pop(0), usage=Usage())
 
     async def generate_stream(
         self,
@@ -60,11 +61,11 @@ class MockLLMClient:
         system_instructions: str = "",
         **_kw: Any,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
-        content = await self.generate(messages, system=system_instructions)
-        text = " ".join(b.text for b in content if isinstance(b, TextBlock) and b.text)
+        resp = await self.generate(messages, system=system_instructions)
+        text = " ".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
         if text:
             yield TextDelta(text=text)
-        yield CompletionEvent(content=content)
+        yield CompletionEvent(content=resp.content, usage=resp.usage)
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         return 0

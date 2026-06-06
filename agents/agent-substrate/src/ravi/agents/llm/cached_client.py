@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, AsyncIterator
 
-from ravi.kernel.llm import LLMClient
-from ravi.kernel import ContentBlock, TextBlock, Tool, ChatMessage
+from ravi.kernel.llm import LLMClient, LLMResponse, Usage
+from ravi.kernel import TextBlock, Tool, ChatMessage
 from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.logger import setup_logging
 
@@ -52,7 +52,7 @@ class CachedModelClient:
         tools: list[Tool] | None = None,
         system: str = "",
         **kwargs: object,
-    ) -> list[ContentBlock]:
+    ) -> LLMResponse:
         cacheable = tools is None or len(tools) == 0
 
         if cacheable:
@@ -60,16 +60,16 @@ class CachedModelClient:
             if query_text:
                 cached = await self._cache.get(query_text)
                 if cached is not None:
-                    return [TextBlock(text=cached)]
+                    return LLMResponse(content=[TextBlock(text=cached)], usage=Usage())
 
         result = await self._inner.generate(
             messages, tools=tools, system=system, **kwargs
         )
 
-        if cacheable and result:
+        if cacheable and result.content:
             query_text = self._extract_query(messages)
             response_text = "".join(
-                part.text for part in result if isinstance(part, TextBlock)
+                part.text for part in result.content if isinstance(part, TextBlock)
             )
             if query_text and response_text:
                 await self._cache.put(query_text, response_text)

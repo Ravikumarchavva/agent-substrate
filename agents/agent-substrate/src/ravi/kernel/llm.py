@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import AsyncIterator, Protocol
 
 from ravi.kernel.content import ChatMessage, ContentBlock
 from ravi.kernel.stream import CompletionEvent, ReasoningDelta, TextDelta
 from ravi.kernel.tools import Tool
+from ravi.kernel.usage import Usage
+
+
+@dataclass(frozen=True, slots=True)
+class LLMResponse:
+    """Return value of ``LLMClient.generate()``.
+
+    Bundles the generated content with token usage so callers can track
+    costs and enforce budgets without a separate ``count_tokens`` call.
+    """
+
+    content: list[ContentBlock]
+    usage: Usage
 
 
 class LLMClient(Protocol):
@@ -21,7 +35,7 @@ class LLMClient(Protocol):
         tools: list[Tool] | None = None,
         system: str = "",
         **kwargs: object,
-    ) -> list[ContentBlock]: ...
+    ) -> LLMResponse: ...
 
     async def generate_stream(
         self,
@@ -40,4 +54,4 @@ class EmbeddingClient(Protocol):
     async def embed_batch(self, texts: list[str]) -> list[list[float]]: ...
 
 
-__all__ = ["LLMClient", "EmbeddingClient"]
+__all__ = ["LLMClient", "EmbeddingClient", "LLMResponse", "Usage"]

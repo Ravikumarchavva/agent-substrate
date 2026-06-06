@@ -16,7 +16,7 @@ from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
 
-from ravi.kernel.llm import LLMClient
+from ravi.kernel.llm import LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,
@@ -317,6 +317,21 @@ class OpenAIClient(LLMClient):
             return {"type": "function", "name": tool_choice}
         return tool_choice
 
+    @staticmethod
+    def _extract_usage(response: Any) -> Usage:
+        u = getattr(response, "usage", None)
+        if u is None:
+            return Usage()
+        cached = 0
+        details = getattr(u, "input_token_details", None)
+        if details:
+            cached = getattr(details, "cached_tokens", 0) or 0
+        return Usage(
+            input_tokens=getattr(u, "input_tokens", 0) or 0,
+            cached_tokens=cached,
+            output_tokens=getattr(u, "output_tokens", 0) or 0,
+        )
+
     async def generate(
         self,
         messages: list[ChatMessage],
@@ -326,7 +341,7 @@ class OpenAIClient(LLMClient):
         response_format: Optional[type["BaseModel"]] = None,
         tool_choice: Optional[str | dict[str, Any]] = None,
         **kwargs: Any,
-    ) -> list[ContentBlock]:
+    ) -> LLMResponse:
         """Generate a single response from OpenAI using Responses API."""
         _, conversation_input = await self._serialize_messages(messages)
         instructions = system
@@ -423,7 +438,7 @@ class OpenAIClient(LLMClient):
                         f"{final_content_text[:200]}"
                     )
 
-            return final_blocks
+            return LLMResponse(content=final_blocks, usage=self._extract_usage(response))
 
         # ── Structured-only path (no tools) ──────────────────────────────
         # if response_format is not None:
@@ -555,7 +570,7 @@ class OpenAIClient(LLMClient):
                     )
                 # tool_search_call / tool_search_output — skip hosted-search metadata
 
-        return final_blocks
+        return LLMResponse(content=final_blocks, usage=self._extract_usage(response))
 
     async def generate_stream(
         self,

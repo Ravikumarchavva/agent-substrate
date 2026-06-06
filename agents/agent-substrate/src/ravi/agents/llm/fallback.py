@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from ravi.kernel.llm import LLMClient
-from ravi.kernel import ContentBlock, Tool, ChatMessage
+from ravi.kernel.llm import LLMClient, LLMResponse
+from ravi.kernel import Tool, ChatMessage
 from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.logger import setup_logging
 
@@ -54,7 +54,7 @@ class FallbackClient:
         tools: list[Tool] | None = None,
         system: str = "",
         **kwargs: object,
-    ) -> list[ContentBlock]:
+    ) -> LLMResponse:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:

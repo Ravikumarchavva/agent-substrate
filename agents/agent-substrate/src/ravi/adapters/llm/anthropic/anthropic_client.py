@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from anthropic import AsyncAnthropic
 
-from ravi.kernel.llm import LLMClient
+from ravi.kernel.llm import LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,
@@ -124,7 +124,7 @@ class AnthropicClient(LLMClient):
         tool_choice: Optional[str | dict[str, Any]] = None,
         response_format: Optional[type["BaseModel"]] = None,
         **kwargs: Any,
-    ) -> list[ContentBlock]:
+    ) -> LLMResponse:
         """Generate a single response from Anthropic using Messages API."""
         _, conversation = self._serialize_messages(messages)
         system = system_instructions
@@ -203,7 +203,13 @@ class AnthropicClient(LLMClient):
                         final_text[:200],
                     )
 
-        return final_blocks
+        u = getattr(response, "usage", None)
+        usage = Usage(
+            input_tokens=getattr(u, "input_tokens", 0) or 0,
+            cached_tokens=getattr(u, "cache_read_input_tokens", 0) or 0,
+            output_tokens=getattr(u, "output_tokens", 0) or 0,
+        ) if u else Usage()
+        return LLMResponse(content=final_blocks, usage=usage)
 
     async def generate_stream(
         self,

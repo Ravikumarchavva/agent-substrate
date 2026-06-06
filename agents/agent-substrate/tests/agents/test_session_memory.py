@@ -17,6 +17,7 @@ from ravi.kernel import (
 from ravi.kernel.content import ToolUseBlock
 from ravi.kernel.identity import HistoryRetention
 from ravi.kernel.stream import CompletionEvent, TextDelta
+from ravi.kernel.llm import LLMResponse, Usage
 from ravi.agents.core import ReActAgent
 
 
@@ -36,9 +37,9 @@ class MockLLMClient:
         tools: Any = None,
         system: str = "",
         **_kw: Any,
-    ) -> list[ContentBlock]:
+    ) -> LLMResponse:
         assert self._queue, "MockLLMClient: no more scripted responses"
-        return self._queue.pop(0)
+        return LLMResponse(content=self._queue.pop(0), usage=Usage())
 
     async def generate_stream(
         self,

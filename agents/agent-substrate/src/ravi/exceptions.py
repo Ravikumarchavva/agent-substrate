@@ -61,21 +61,13 @@ class AgentExecutionError(AgentError):
 # ---------------------------------------------------------------------------
 
 
-class GuardrailError(AgentError):
-    """Base class for guardrail-related errors."""
-
-    def __init__(
-        self, message: str, guardrail_name: str = "", details: Optional[dict] = None
-    ):
-        super().__init__(message, details)
-        self.guardrail_name = guardrail_name
-
-
-class GuardrailTripwireError(GuardrailError):
-    """Raised when a guardrail triggers a hard stop (tripwire).
+class MiddlewareTermination(AgentError):
+    """Raised when a middleware triggers a hard stop.
 
     This immediately halts the agent run loop and produces an
-    AgentRunResult with status = GUARDRAIL_TRIPPED.
+    AgentRunResult with status = error.
     """
 
-    pass
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message

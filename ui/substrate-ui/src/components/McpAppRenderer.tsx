@@ -19,6 +19,7 @@ type McpAppMethod =
   | "ui/update-model-context"  // MCP Apps spec: update model context
   | "ui/notifications/size-changed" // MCP Apps spec: size change notification
   | "ui/open-link"             // MCP Apps spec: open external URL
+  | "ui/request-display-mode"  // MCP Apps spec: request inline | fullscreen | pip
   | "ui/message";              // MCP Apps spec: send message to chat
 
 type JsonRpcRequest = {
@@ -67,13 +68,15 @@ export function McpAppRenderer({
     const snapshot = JSON.stringify(toolArguments);
     if (snapshot === prevArgsRef.current) return;
     prevArgsRef.current = snapshot;
-    // Send updated tool input to the iframe
-    iframeRef.current.contentWindow.postMessage(
-      {
-        jsonrpc: "2.0",
-        method: "ui/notifications/tool-input",
-        params: { arguments: toolArguments },
-      },
+    // Send updated tool data to the iframe as both tool-input and tool-result
+    // (MCP Apps spec) so any app shape receives the structured_content.
+    const win = iframeRef.current.contentWindow;
+    win.postMessage(
+      { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: toolArguments } },
+      "*"
+    );
+    win.postMessage(
+      { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: [], structuredContent: toolArguments } },
       "*"
     );
   }, [isReady, toolArguments]);
@@ -132,14 +135,15 @@ export function McpAppRenderer({
                 },
               },
             });
-            // Send tool-input notification with arguments
-            if (iframeRef.current?.contentWindow) {
-              iframeRef.current.contentWindow.postMessage(
-                {
-                  jsonrpc: "2.0",
-                  method: "ui/notifications/tool-input",
-                  params: { arguments: toolArguments },
-                },
+            // Send the tool data as both tool-input and tool-result (MCP Apps spec)
+            const win = iframeRef.current?.contentWindow;
+            if (win) {
+              win.postMessage(
+                { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: toolArguments } },
+                "*"
+              );
+              win.postMessage(
+                { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: [], structuredContent: toolArguments } },
                 "*"
               );
             }
@@ -187,6 +191,11 @@ export function McpAppRenderer({
             window.open(data.params.url as string, "_blank", "noopener");
           }
           sendResponse(data.id, {});
+          break;
+
+        case "ui/request-display-mode":
+          // Inline renderer grants the requested mode without relayout.
+          sendResponse(data.id, { mode: (data.params?.mode as string) || "inline" });
           break;
 
         case "ui/message":

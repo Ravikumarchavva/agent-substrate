@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { ToolCall, UploadedFile } from "@/types";
 import { AudioPlayer } from "@/components/AudioPlayer";
+import { Mermaid } from "@/components/Mermaid";
 import {
   getAttachmentKind,
   getAttachmentIcon,
@@ -437,13 +438,25 @@ export function MessageBubble({
             )}
             {safeContent && (
               <div
-                className="px-4 py-3 text-[15px] leading-relaxed"
+                className="px-4 py-3 text-[15px] leading-relaxed user-bubble-md"
                 style={{
                   background: "var(--user-bubble)",
                   borderRadius: "20px 20px 4px 20px",
                 }}
               >
-                {safeContent}
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    p({ children }) { return <p className="mb-1 last:mb-0">{children}</p>; },
+                    ul({ children }) { return <ul className="list-disc pl-4 mb-1 space-y-0.5">{children}</ul>; },
+                    ol({ children }) { return <ol className="list-decimal pl-4 mb-1 space-y-0.5">{children}</ol>; },
+                    li({ children }) { return <li className="leading-snug">{children}</li>; },
+                    strong({ children }) { return <strong className="font-semibold">{children}</strong>; },
+                    code({ children }) { return <code className="bg-black/20 rounded px-1 text-[13px] font-mono">{children}</code>; },
+                  }}
+                >
+                  {safeContent}
+                </ReactMarkdown>
               </div>
             )}
             {timestamp && (
@@ -608,6 +621,25 @@ export function MessageBubble({
                 components={{
                   table({ children, ...props }) {
                     return <CopyableMarkdownTable {...props}>{children}</CopyableMarkdownTable>;
+                  },
+                  pre({ children, className }) {
+                    // ReactMarkdown wraps fenced code in <pre><code>. For mermaid we
+                    // must render OUTSIDE the <pre> — otherwise the .prose-chat pre
+                    // card styling (bg/border/padding) boxes the diagram. Detect a
+                    // mermaid child and render the diagram unwrapped.
+                    const child = Array.isArray(children) ? children[0] : children;
+                    const childClass =
+                      (child as { props?: { className?: string } } | undefined)?.props
+                        ?.className || "";
+                    if (/language-mermaid/.test(childClass)) {
+                      const raw = (child as { props?: { children?: unknown } }).props
+                        ?.children;
+                      return <Mermaid chart={String(raw).replace(/\n$/, "")} />;
+                    }
+                    return <pre className={className}>{children}</pre>;
+                  },
+                  code({ className, children }) {
+                    return <code className={className}>{children}</code>;
                   },
                 }}
               >

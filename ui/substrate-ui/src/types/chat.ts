@@ -20,7 +20,7 @@ export type ToolCall = {
 
 export type Message = {
   id: string;
-  role: "user" | "assistant" | "tool_approval" | "human_input" | "tool_result";
+  role: "user" | "assistant" | "tool_approval" | "human_input" | "tool_result" | "max_iterations";
   content: string;
   reasoning?: string;
   timestamp: Date;

@@ -372,6 +372,18 @@ select {
   transform: scale(0.97);
 }
 
+/* ─── Mermaid diagrams ───────────────────────────────────────────────────── */
+/* The SVG mermaid emits has a hardcoded background rect. Make it transparent
+   so the diagram blends with the chat instead of appearing as a floating box. */
+.mermaid-wrap svg > rect.background,
+.mermaid-wrap svg > g > rect.background {
+  fill: transparent !important;
+}
+.mermaid-wrap svg {
+  display: block !important;
+  margin: 0 auto !important;
+}
+
 /* ─── Prefers reduced motion ─────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

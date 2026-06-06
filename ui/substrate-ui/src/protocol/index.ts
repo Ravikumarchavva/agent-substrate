@@ -21,10 +21,7 @@ import {
   RunCancelledEvent,
   ApprovalRequestedEvent,
   InputRequestedEvent,
-  TaskCreatedEvent,
-  TaskUpdatedEvent,
-  TaskAddedEvent,
-  TaskDeletedEvent,
+  UIResourceEvent,
   ErrorEvent,
   PingEvent,
   ToolCallSummary,
@@ -44,10 +41,7 @@ export type {
   RunCancelledEvent,
   ApprovalRequestedEvent,
   InputRequestedEvent,
-  TaskCreatedEvent,
-  TaskUpdatedEvent,
-  TaskAddedEvent,
-  TaskDeletedEvent,
+  UIResourceEvent,
   ErrorEvent,
   PingEvent,
   ToolCallSummary,
@@ -68,10 +62,7 @@ export type WireEvent =
   | RunCancelledEvent
   | ApprovalRequestedEvent
   | InputRequestedEvent
-  | TaskCreatedEvent
-  | TaskUpdatedEvent
-  | TaskAddedEvent
-  | TaskDeletedEvent
+  | UIResourceEvent
   | ErrorEvent
   | PingEvent;
 

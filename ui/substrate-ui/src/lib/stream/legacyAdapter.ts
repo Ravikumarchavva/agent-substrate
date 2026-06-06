@@ -78,6 +78,9 @@ export function wireEventToLegacy(event: WireEvent): Legacy[] {
       ];
 
     case "run.completed":
+      if (event.reason === "max_iterations") {
+        return [{ type: "max_iterations" }];
+      }
       return [{ type: "agent.run_completed" }];
 
     case "run.failed":
@@ -101,20 +104,27 @@ export function wireEventToLegacy(event: WireEvent): Legacy[] {
         {
           type: "human_input_request",
           request_id: event.request_id,
-          question: event.prompt,
-          options: event.options ?? undefined,
-          allow_freeform: !event.options?.length,
+          question: event.question,
+          context: event.context ?? "",
+          options: event.options ?? [],
+          allow_freeform: event.allow_freeform ?? true,
         },
       ];
 
-    case "task.created":
-      return [{ type: "task_list_created", task_list: event.task_list }];
-    case "task.updated":
-      return [{ type: "task_updated", task: event.task }];
-    case "task.added":
-      return [{ type: "task_added", task: event.task }];
-    case "task.deleted":
-      return [{ type: "task_deleted", task_id: event.task_id }];
+    case "ui.resource":
+      // The narrow waist: ANY interactive UI (kanban, chart, form, …) arrives
+      // as one event. The UI opens/updates a sandboxed iframe for `uri`, fed by
+      // `structured_content`. A later event with the same uri updates in place.
+      return [
+        {
+          type: "ui_resource",
+          call_id: event.call_id ?? "",
+          uri: event.uri,
+          structured_content: event.structured_content ?? {},
+          render: event.render ?? "inline",
+          text: event.text ?? "",
+        },
+      ];
 
     case "error":
       return [{ type: "error", error: event.message }];

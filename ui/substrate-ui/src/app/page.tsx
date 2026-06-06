@@ -8,6 +8,7 @@ import { MessageBubble } from "@/components/MessageBubble";
 import { RaviMark } from "@/components/RaviMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
+import { MaxIterationsCard } from "@/components/MaxIterationsCard";
 import { AppPanel } from "@/components/AppPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
@@ -16,7 +17,7 @@ import { ModelEffortPicker } from "@/components/ModelEffortPicker";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
-import { Message, Task, TaskList, UploadedFile } from "@/types";
+import { Message, UploadedFile } from "@/types";
 import { api } from "@/lib/api";
 import {
   getPreferredChatModel,
@@ -92,17 +93,17 @@ function ChatPageContent() {
 
   const currentThreadId = routeState.threadId ?? lastActiveThreadId;
 
-  // ── Task Board State ─────────────────────────────────────
-  const [taskList, setTaskList] = useState<TaskList | null>(null);
-
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Tracks the active AbortController for the current SSE fetch so we can
   // cancel the stream when the user clicks Stop.
   const wsRef = useRef<AbortController | null>(null);
-  // Tracks which AppPanel item holds the Kanban board so task updates can
-  // patch its toolArguments and be pushed to the iframe via update_context.
-  const kanbanPanelIdRef = useRef<string | null>(null);
+  // Tracks the threadId of the currently active stream, useful for stopping a run
+  // on a brand new thread before it has been persisted to the URL state.
+  const activeStreamThreadIdRef = useRef<string | null>(null);
+  // Prevents the currentThreadId useEffect from wiping the UI when we officially
+  // update the URL to the new thread ID at the end of the first message stream.
+  const isNavigatingToNewThread = useRef(false);
 
   // ── Realtime speech-to-speech panel ────────────────────────────────
   const [realtimeOpen, setRealtimeOpen] = useState(false);
@@ -146,12 +147,20 @@ function ChatPageContent() {
       updateLastActiveThreadId(threadId);
       const nextUrl = buildChatPath(threadId);
       if (mode === "push") {
-        router.push(nextUrl, { scroll: false });
+        const i = document.createElement("iframe");
+        i.style.display = "none";
+        document.body.appendChild(i);
+        i.contentWindow?.history.pushState.call(window.history, null, "", nextUrl);
+        document.body.removeChild(i);
       } else {
-        router.replace(nextUrl, { scroll: false });
+        const i = document.createElement("iframe");
+        i.style.display = "none";
+        document.body.appendChild(i);
+        i.contentWindow?.history.replaceState.call(window.history, null, "", nextUrl);
+        document.body.removeChild(i);
       }
     },
-    [router, updateLastActiveThreadId],
+    [updateLastActiveThreadId],
   );
 
   const openSettingsPanel = useCallback(
@@ -191,6 +200,15 @@ function ChatPageContent() {
   const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile } = useFileAttachments(currentThreadId, selectThread, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
 
+  type ManifestEntry = { tool_name: string; http_url: string; resource_uri: string };
+  const [mcpManifest, setMcpManifest] = useState<ManifestEntry[]>([]);
+  useEffect(() => {
+    fetch("/api/backend/mcp-apps/manifest")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: ManifestEntry[]) => setMcpManifest(data))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (authLoading) {
       return;
@@ -200,10 +218,8 @@ function ChatPageContent() {
       // Clear persisted thread so it doesn't leak into the next session
       updateLastActiveThreadId(null);
       setMessages([]);
-      setTaskList(null);
       setPanelItems([]);
       setActivePanelId(null);
-      kanbanPanelIdRef.current = null;
       setAuthNotice("You were signed out. Sign in again to reopen or start chats.");
       router.replace(buildChatPath(null), { scroll: false });
     }
@@ -270,7 +286,7 @@ function ChatPageContent() {
   }, [_handleNewChat]);
 
   const handleSelectThread = useCallback((threadId: string) => {
-    _handleSelectThread(threadId, { onSelected: () => { setTaskList(null); setMobileSidebarOpen(false); } });
+    _handleSelectThread(threadId, { onSelected: () => { setMobileSidebarOpen(false); } });
   }, [_handleSelectThread]);
 
   useEffect(() => {
@@ -285,36 +301,38 @@ function ChatPageContent() {
   // Load threads on mount (only when authenticated)
   useEffect(() => { if (canLoadData) void loadThreads(); }, [canLoadData, loadThreads]);
 
-  // Load messages when thread changes, and reset panel/task state
+  // Load messages when thread changes, and reset panel/task state.
+  // When doSendMessage creates a new thread the AbortController is already
+  // assigned before React runs this effect, so wsRef.current is non-null —
+  // we use that to skip the panel wipe during an active stream.
   useEffect(() => {
-    clearAttachedFiles();
-    if (currentThreadId && canLoadData) {
-      loadMessages(currentThreadId);
-      setPanelItems([]);
-      setActivePanelId(null);
-      setTaskList(null);
-      kanbanPanelIdRef.current = null;
+    if (isNavigatingToNewThread.current) {
+      // We just officially entered the thread we created.
+      // Do not wipe anything or load messages from DB, because we already have them!
+      isNavigatingToNewThread.current = false;
       return;
     }
 
-    setMessages([]);
-    setPanelItems([]);
-    setActivePanelId(null);
-    setTaskList(null);
-    kanbanPanelIdRef.current = null;
-  }, [canLoadData, clearAttachedFiles, currentThreadId, setPanelItems, setActivePanelId]);
+    clearAttachedFiles();
+    if (currentThreadId && canLoadData) {
+      // loadMessages already guards against overwriting optimistic messages
+      // while a stream is active (it checks wsRef.current internally).
+      loadMessages(currentThreadId);
+      // Only reset the panel when there is no active stream; this preserves
+      // the kanban/MCP panel when doSendMessage creates a thread on first send.
+      if (!wsRef.current) {
+        setPanelItems([]);
+        setActivePanelId(null);
+      }
+      return;
+    }
 
-  // Keep the Kanban panel item's toolArguments in sync with taskList state so
-  // the iframe receives live update_context messages from AppPanel.
-  useEffect(() => {
-    const id = kanbanPanelIdRef.current;
-    if (!taskList || !id) return;
-    setPanelItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, toolArguments: { task_list: taskList } } : item
-      )
-    );
-  }, [taskList, setPanelItems]);
+    if (!wsRef.current) {
+      setMessages([]);
+      setPanelItems([]);
+      setActivePanelId(null);
+    }
+  }, [canLoadData, clearAttachedFiles, currentThreadId, setPanelItems, setActivePanelId]);
 
   useEffect(() => {
     // Auto-scroll to bottom whenever messages change
@@ -359,8 +377,17 @@ function ChatPageContent() {
     });
   }
 
-  // MCP App: handle context updates from interactive widgets
+  // MCP App: handle context updates and ui/message triggers from interactive widgets
   async function handleMcpAppResult(toolName: string, result: unknown) {
+    // If a widget (e.g. kanban Retry button) sends ui/message with role:"user",
+    // submit it as a regular user chat message so the agent can act on it.
+    if (result && typeof result === "object") {
+      const r = result as { type?: string; role?: string; content?: string };
+      if (r.type === "message" && r.role === "user" && r.content) {
+        doSendMessage(r.content);
+        return;
+      }
+    }
     if (!currentThreadId) return;
     try {
       await api.updateMcpContext(currentThreadId, toolName, result);
@@ -375,8 +402,9 @@ function ChatPageContent() {
       wsRef.current.abort();
       wsRef.current = null;
     }
-    if (currentThreadId) {
-      api.cancelChat(currentThreadId).catch((error: unknown) => {
+    const cancelId = currentThreadId || activeStreamThreadIdRef.current;
+    if (cancelId) {
+      api.cancelChat(cancelId).catch((error: unknown) => {
         console.error("Failed to cancel active run:", error);
       });
     }
@@ -397,7 +425,17 @@ function ChatPageContent() {
       url: file.url,
     }));
 
-    // Clear input and show user message immediately (optimistic — never blocked by async work)
+    // ── Mutable bubble tracking ──────────────────────────────────────────
+    // After a step that uses tools (and triggers HITL cards), the agent's
+    // NEXT text response must appear BELOW those cards — not update the old
+    // placeholder that sits above them. We track this with a plain mutable
+    // object (not React state) so handlers can mutate it synchronously.
+    const msgState = {
+      activeAssistantId: nanoid() as string,
+      needsNewBubble: false,
+    };
+
+    // Clear input and show user message AND assistant placeholder immediately!
     setInput("");
     clearAttachedFiles();
     setMessages((prev) => [
@@ -409,17 +447,27 @@ function ChatPageContent() {
         timestamp: new Date(),
         attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
       },
+      { 
+        id: msgState.activeAssistantId, 
+        role: "assistant" as const, 
+        content: "", 
+        reasoning: "", 
+        timestamp: new Date() 
+      }
     ]);
     setLoading(true);
 
     // Ensure a thread exists before opening the stream
     let threadId = currentThreadId;
+    let isNewThread = false;
     if (!threadId) {
       try {
         const newThread = await api.createThread("New Chat");
-        setThreads((prev) => [newThread, ...prev]);
-        selectThread(newThread.id, "push");
         threadId = newThread.id;
+        isNewThread = true;
+        // DO NOT call selectThread or setThreads here! We want to keep the UI perfectly 
+        // stable without triggering route transitions or sidebar layout shifts during stream start.
+        // We will update the URL and sidebar when the stream is completed.
       } catch (error) {
         console.error("Failed to create thread:", error);
         setMessages((prev) => [
@@ -436,25 +484,13 @@ function ChatPageContent() {
       }
     }
 
+    activeStreamThreadIdRef.current = threadId;
+
     // Update thread name on the first message
     if (messages.length === 0) {
       const name = currentInput.slice(0, 50) + (currentInput.length > 50 ? "..." : "");
-      handleRenameThread(threadId!, name);
+      handleRenameThread(threadId, name);
     }
-
-    // ── Mutable bubble tracking ──────────────────────────────────────────
-    // After a step that uses tools (and triggers HITL cards), the agent's
-    // NEXT text response must appear BELOW those cards — not update the old
-    // placeholder that sits above them. We track this with a plain mutable
-    // object (not React state) so handlers can mutate it synchronously.
-    const msgState = {
-      activeAssistantId: nanoid() as string,
-      needsNewBubble: false,
-    };
-    setMessages((m) => [
-      ...m,
-      { id: msgState.activeAssistantId, role: "assistant" as const, content: "", reasoning: "", timestamp: new Date() },
-    ]);
 
     // Call before any handler that writes streaming content. If a tool step
     // just finished (needsNewBubble=true), inserts a fresh bubble at the
@@ -618,46 +654,21 @@ function ChatPageContent() {
         return;
       }
 
-      // ── Task Board Events ───────────────────────────────────────────
-      if (data.type === "task_list_created") {
-        const tl = data.task_list as TaskList;
-        setTaskList(tl);
-        const kanbanId = `kanban-${tl.id}`;
-        kanbanPanelIdRef.current = kanbanId;
+      // ── Interactive UI (MCP Apps) — the narrow waist ────────────────
+      // ANY rich tool UI (kanban, chart, form, map, …) arrives as one event.
+      // Open/update a sandboxed iframe for `uri`, keyed by the resource so
+      // repeat events coalesce onto the same panel and stream fresh data in.
+      if (data.type === "ui_resource") {
+        const uri = data.uri as string;
+        const name = uri.replace(/^ui:\/\//, "");
         openInPanel({
-          id: kanbanId,
-          httpUrl: "/ui/kanban_board",
-          toolName: "manage_tasks",
-          toolArguments: { task_list: tl },
+          id: `ui-${uri}`,
+          httpUrl: `/ui/${name}`,
+          toolName: name,
+          toolArguments: (data.structured_content as Record<string, unknown>) || {},
           timestamp: Date.now(),
         });
-        return;
-      }
-      if (data.type === "task_updated") {
-        const updatedTask = data.task as Task;
-        setTaskList((prev) => {
-          if (!prev || prev.id !== data.task_list_id) return prev;
-          return {
-            ...prev,
-            tasks: prev.tasks.map((t) => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t)),
-          };
-        });
-        return;
-      }
-      if (data.type === "task_added") {
-        const newTask = data.task as Task;
-        setTaskList((prev) => {
-          if (!prev || prev.id !== data.task_list_id) return prev;
-          if (prev.tasks.find((t) => t.id === newTask.id)) return prev;
-          return { ...prev, tasks: [...prev.tasks, newTask] };
-        });
-        return;
-      }
-      if (data.type === "task_deleted") {
-        setTaskList((prev) => {
-          if (!prev || prev.id !== data.task_list_id) return prev;
-          return { ...prev, tasks: prev.tasks.filter((t) => t.id !== data.task_id) };
-        });
+        setPanelCollapsed(false);
         return;
       }
 
@@ -772,6 +783,11 @@ function ChatPageContent() {
         } else {
           setLoading(false);
           void loadThreads();
+          if (isNewThread && !currentThreadId) {
+            isNavigatingToNewThread.current = true;
+            selectThread(threadId, "replace");
+            isNewThread = false;
+          }
         }
         return;
       }
@@ -797,11 +813,33 @@ function ChatPageContent() {
       }
 
       // ── Run-level terminal events ───────────────────────────────────
+      if (data.type === "max_iterations") {
+        finalizeAssistantMessages();
+        setLoading(false);
+        void loadThreads();
+        if (isNewThread && !currentThreadId) {
+          isNavigatingToNewThread.current = true;
+          selectThread(threadId, "replace");
+          isNewThread = false;
+        }
+        const cardId = nanoid();
+        setMessages((m) => [
+          ...m,
+          { id: cardId, role: "max_iterations" as const, content: "", timestamp: new Date() },
+        ]);
+        return;
+      }
+
       if (data.type === "agent.run_completed") {
         // Safety net: if no completion event fired (e.g. tool-only runs), stop loading.
         finalizeAssistantMessages();
         setLoading(false);
         void loadThreads();
+        if (isNewThread && !currentThreadId) {
+          isNavigatingToNewThread.current = true;
+          selectThread(threadId, "replace");
+          isNewThread = false;
+        }
         return;
       }
 
@@ -812,6 +850,11 @@ function ChatPageContent() {
           content: message.content + "\n\n⚠️ " + errorMsg,
         }));
         setLoading(false);
+        if (isNewThread && !currentThreadId) {
+          isNavigatingToNewThread.current = true;
+          selectThread(threadId, "replace");
+          isNewThread = false;
+        }
         return;
       }
 
@@ -1044,6 +1087,39 @@ function ChatPageContent() {
                             </button>
                           ))}
                         </div>
+
+                        {/* MCP App launchers — direct open, no agent needed */}
+                        {mcpManifest.length > 0 && (
+                          <div className="mt-3">
+                            <p className="mb-2 text-xs text-(--muted) font-medium uppercase tracking-wider">Apps</p>
+                            <div className="flex flex-wrap gap-2">
+                              {mcpManifest.map((entry) => {
+                                const label = entry.tool_name.replace(/_/g, " ");
+                                return (
+                                  <button
+                                    key={entry.resource_uri}
+                                    onClick={() => {
+                                      const name = entry.resource_uri.replace(/^ui:\/\//, "");
+                                      openInPanel({
+                                        id: `ui-${entry.resource_uri}`,
+                                        httpUrl: `/ui/${name}`,
+                                        toolName: name,
+                                        toolArguments: {},
+                                        timestamp: Date.now(),
+                                      });
+                                      setPanelCollapsed(false);
+                                    }}
+                                    className="ravi-press flex items-center gap-1.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 text-xs text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
+                                    style={{ boxShadow: "var(--shadow-sm)" }}
+                                  >
+                                    <span className="h-1.5 w-1.5 rounded-full bg-(--accent) opacity-60" />
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1081,6 +1157,22 @@ function ChatPageContent() {
                                 }
                                 allowFreeform={m.metadata.allowFreeform as boolean | undefined}
                                 onRespond={respondToHITL}
+                              />
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (m.role === "max_iterations") {
+                        return (
+                          <div key={m.id} className="px-4 sm:px-6">
+                            <div className="mx-auto max-w-(--chat-width)">
+                              <MaxIterationsCard
+                                onContinue={() =>
+                                  doSendMessage(
+                                    "Continue completing the remaining tasks. Check the existing task board and proceed with any unfinished tasks."
+                                  )
+                                }
                               />
                             </div>
                           </div>

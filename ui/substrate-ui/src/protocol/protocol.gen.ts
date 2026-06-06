@@ -57,15 +57,18 @@ export type Type11 = "input.requested";
 export type RequestId1 = string;
 export type Prompt = string;
 export type Options = string[] | null;
-export type Type12 = "task.created";
-export type Type13 = "task.updated";
-export type Type14 = "task.added";
-export type Type15 = "task.deleted";
-export type TaskId = string;
-export type Type16 = "error";
+export type Type12 = "ui.resource";
+export type CallId2 = string;
+export type Uri = string;
+export type MimeType = string;
+export type Render = string;
+export type Text3 = string;
+export type Agent2 = string;
+export type Depth3 = number;
+export type Type13 = "error";
 export type Message = string;
 export type Code1 = string | null;
-export type Type17 = "ping";
+export type Type14 = "ping";
 
 export interface RaviProtocol {
   WireEvent?:
@@ -81,10 +84,7 @@ export interface RaviProtocol {
     | RunCancelledEvent
     | ApprovalRequestedEvent
     | InputRequestedEvent
-    | TaskCreatedEvent
-    | TaskUpdatedEvent
-    | TaskAddedEvent
-    | TaskDeletedEvent
+    | UIResourceEvent
     | ErrorEvent
     | PingEvent;
 }
@@ -188,6 +188,7 @@ export interface Attachment {
  */
 export interface RunCompletedEvent {
   type?: Type7;
+  reason?: string;
 }
 /**
  * The run terminated with an unrecoverable error.
@@ -221,39 +222,39 @@ export interface Args2 {
 export interface InputRequestedEvent {
   type?: Type11;
   request_id: RequestId1;
-  prompt: Prompt;
-  options?: Options;
+  question: string;
+  context?: string;
+  options?: Array<{ key: string; label: string; description?: string }>;
+  allow_freeform?: boolean;
 }
-export interface TaskCreatedEvent {
+/**
+ * A tool produced an interactive UI to render in a sandboxed iframe.
+ *
+ * The single carrier for every rich UI (kanban, chart, form, map, …): a
+ * ``ui://`` resource reference plus the data to feed it, per MCP Apps. The
+ * host renders ``uri`` and pushes ``structured_content`` over the postMessage
+ * channel. A later event with the same ``call_id`` + ``uri`` updates an
+ * already-mounted iframe rather than remounting it.
+ */
+export interface UIResourceEvent {
   type?: Type12;
-  task_list?: TaskList;
+  call_id?: CallId2;
+  uri: Uri;
+  mime_type?: MimeType;
+  structured_content?: StructuredContent;
+  render?: Render;
+  text?: Text3;
+  agent?: Agent2;
+  depth?: Depth3;
 }
-export interface TaskList {
+export interface StructuredContent {
   [k: string]: unknown;
-}
-export interface TaskUpdatedEvent {
-  type?: Type13;
-  task?: Task;
-}
-export interface Task {
-  [k: string]: unknown;
-}
-export interface TaskAddedEvent {
-  type?: Type14;
-  task?: Task1;
-}
-export interface Task1 {
-  [k: string]: unknown;
-}
-export interface TaskDeletedEvent {
-  type?: Type15;
-  task_id: TaskId;
 }
 /**
  * A serving-level error (distinct from ``run.failed`` which is agent-level).
  */
 export interface ErrorEvent {
-  type?: Type16;
+  type?: Type13;
   message: Message;
   code?: Code1;
 }
@@ -261,7 +262,7 @@ export interface ErrorEvent {
  * Keep-alive heartbeat.
  */
 export interface PingEvent {
-  type?: Type17;
+  type?: Type14;
 }
 
 export const GENERATED_PROTOCOL_VERSION = "1.0.0";

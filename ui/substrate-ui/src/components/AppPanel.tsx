@@ -52,9 +52,10 @@ export function AppPanel({
   const iframeRefs = useRef<Map<string, HTMLIFrameElement | null>>(new Map());
   const { theme } = useTheme();
 
-  // ── Per-item ready / error state ────────────────────────────────
+  // ── Per-item ready / error / flash state ────────────────────────
   const [readyMap, setReadyMap] = useState<Record<string, boolean>>({});
   const [errorMap, setErrorMap] = useState<Record<string, string | null>>({});
+  const [flashMap, setFlashMap] = useState<Record<string, boolean>>({});
 
   // Ref mirror of readyMap so timeout callbacks read the latest value without
   // stale closures.
@@ -73,6 +74,26 @@ export function AppPanel({
   const sendToItem = useCallback((itemId: string, message: unknown) => {
     iframeRefs.current.get(itemId)?.contentWindow?.postMessage(message, "*");
   }, []);
+
+  // ── Feed an app its data (MCP Apps spec) ─────────────────────────
+  // `toolArguments` carries the tool result's structured_content. Send it as
+  // both tool-input (apps that key off arguments) and tool-result (apps that
+  // key off the CallToolResult.structuredContent) so any app shape works.
+  const sendToolData = useCallback(
+    (itemId: string, args: Record<string, unknown>) => {
+      sendToItem(itemId, {
+        jsonrpc: "2.0",
+        method: "ui/notifications/tool-input",
+        params: { arguments: args },
+      });
+      sendToItem(itemId, {
+        jsonrpc: "2.0",
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: args },
+      });
+    },
+    [sendToItem]
+  );
 
   // ── Spotify: broadcast token to every loaded iframe ─────────────
   // Only the Spotify player HTML handles `spotify_token_from_parent`;
@@ -174,13 +195,12 @@ export function AppPanel({
       const snapshot = JSON.stringify(item.toolArguments);
       if (snapshot === (prevArgsRef.current[item.id] ?? "")) continue;
       prevArgsRef.current[item.id] = snapshot;
-      sendToItem(item.id, {
-        jsonrpc: "2.0",
-        method: "ui/notifications/tool-input",
-        params: { arguments: item.toolArguments },
-      });
+      sendToolData(item.id, item.toolArguments);
+      // Flash the tab so the user notices new data arrived
+      setFlashMap((f) => ({ ...f, [item.id]: true }));
+      setTimeout(() => setFlashMap((f) => ({ ...f, [item.id]: false })), 700);
     }
-  }, [items, readyMap, sendToItem]);
+  }, [items, readyMap, sendToolData]);
 
   // ── Clean up state when items are removed ───────────────────────
   useEffect(() => {
@@ -323,11 +343,7 @@ export function AppPanel({
           // Push initial context immediately and record snapshot
           const snapshot = JSON.stringify(senderItem.toolArguments);
           prevArgsRef.current[itemId] = snapshot;
-          sendToItem(itemId, {
-            jsonrpc: "2.0",
-            method: "ui/notifications/tool-input",
-            params: { arguments: senderItem.toolArguments },
-          });
+          sendToolData(itemId, senderItem.toolArguments);
 
           // Forward Spotify token if applicable
           if (senderItem.toolName?.includes("spotify")) {
@@ -371,6 +387,16 @@ export function AppPanel({
           sendToItem(itemId, { jsonrpc: "2.0", id: data.id, result: {} });
           break;
 
+        case "ui/request-display-mode": {
+          // Spec: app asks to render inline | fullscreen | pip. The panel is a
+          // fixed side surface; grant the request and make sure it's expanded
+          // when the app wants more room.
+          const mode = (data.params?.mode as string) || "inline";
+          if (mode !== "inline" && isCollapsed) onToggleCollapse();
+          sendToItem(itemId, { jsonrpc: "2.0", id: data.id, result: { mode } });
+          break;
+        }
+
         case "ui/message":
           onResult?.(senderItem.toolName, {
             type: "message",
@@ -396,7 +422,7 @@ export function AppPanel({
 
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [items, onResult, onClose, sendToItem, fetchAndSendSpotifyToken, fetchAndSendWorkspaceToken, theme]);
+  }, [items, onResult, onClose, sendToItem, sendToolData, isCollapsed, onToggleCollapse, fetchAndSendSpotifyToken, fetchAndSendWorkspaceToken, theme]);
 
   if (items.length === 0) return null;
 
@@ -482,7 +508,7 @@ export function AppPanel({
                   item.id === activeItem?.id
                     ? "bg-(--card)"
                     : "border-transparent text-(--muted) hover:text-foreground hover:bg-(--card)"
-                }`}
+                } ${flashMap[item.id] ? "bg-blue-500/10" : ""}`}
                 style={item.id === activeItem?.id ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
               >
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-background text-foreground">

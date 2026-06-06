@@ -52,6 +52,23 @@ describe("wireEventToLegacy", () => {
     expect(out[0]).toMatchObject({ type: "completion", content: "done", has_tool_calls: true });
   });
 
+  it("maps a ui.resource to a ui_resource open/update", () => {
+    const out = wireEventToLegacy({
+      type: "ui.resource",
+      call_id: "c1",
+      uri: "ui://kanban_board",
+      structured_content: { task_list: { id: "t1", tasks: [] } },
+      render: "panel",
+      text: "",
+    } as WireEvent);
+    expect(out[0]).toMatchObject({
+      type: "ui_resource",
+      uri: "ui://kanban_board",
+      render: "panel",
+    });
+    expect((out[0] as { structured_content: { task_list: unknown } }).structured_content.task_list).toBeTruthy();
+  });
+
   it("maps run lifecycle + HITL", () => {
     expect(wireEventToLegacy({ type: "run.completed" })[0]).toEqual({ type: "agent.run_completed" });
     expect(wireEventToLegacy({ type: "run.failed", error: "x" })[0]).toEqual({ type: "error", error: "x" });
@@ -60,7 +77,7 @@ describe("wireEventToLegacy", () => {
       wireEventToLegacy({ type: "approval.requested", request_id: "r1", tool_name: "send", args: {} })[0]
     ).toMatchObject({ type: "tool_approval_request", request_id: "r1" });
     expect(
-      wireEventToLegacy({ type: "input.requested", request_id: "r2", prompt: "Name?" })[0]
+      wireEventToLegacy({ type: "input.requested", request_id: "r2", question: "Name?" })[0]
     ).toMatchObject({ type: "human_input_request", question: "Name?" });
   });
 });

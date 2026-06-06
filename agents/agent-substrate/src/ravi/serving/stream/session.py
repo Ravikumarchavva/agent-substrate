@@ -55,6 +55,7 @@ class AgentStreamSession:
         cancel_event: asyncio.Event | None = None,
         persister: Persister | None = None,
         poll_interval: float = 0.2,
+        initial_tool_choice: str | None = None,
     ) -> None:
         self._agent = agent
         self._input = user_input
@@ -63,6 +64,7 @@ class AgentStreamSession:
         self._cancel = cancel_event or asyncio.Event()
         self._persister = persister
         self._poll = poll_interval
+        self._initial_tool_choice = initial_tool_choice
         self._queue: asyncio.Queue[WireEvent | object] = asyncio.Queue()
         self._bridge_signaled = False
         self._error: str | None = None
@@ -73,19 +75,23 @@ class AgentStreamSession:
         """Run the agent, mapping + persisting each event. Returns terminal reason."""
         reason = "success"
         try:
-            async for ev in self._agent.run_stream(self._input):
+            async for ev in self._agent.run_stream(
+                self._input,
+                initial_tool_choice=self._initial_tool_choice,
+            ):
                 if isinstance(ev, StreamDone):
                     reason = ev.reason
                     continue
                 wire = map_kernel_event(ev)
                 if wire is None:
                     continue
-                await self._queue.put(wire)
-                if self._persister is not None:
-                    if isinstance(wire, TurnCompletedEvent):
-                        await self._persister.persist_turn(wire)
-                    elif isinstance(wire, ToolResultEvent):
-                        await self._persister.persist_tool(wire)
+                for w in wire if isinstance(wire, list) else [wire]:
+                    await self._queue.put(w)
+                    if self._persister is not None:
+                        if isinstance(w, TurnCompletedEvent):
+                            await self._persister.persist_turn(w)
+                        elif isinstance(w, ToolResultEvent):
+                            await self._persister.persist_tool(w)
         except Exception as exc:  # agent crash → surfaced as run.failed (terminal)
             logger.exception("Agent run failed")
             self._error = str(exc)
@@ -136,6 +142,8 @@ class AgentStreamSession:
                 reason = await agent_task
                 if self._error is not None:
                     terminal = RunFailedEvent(error=self._error)
+                elif reason == "max_iterations":
+                    terminal = RunCompletedEvent(reason="max_iterations")
                 elif reason not in ("success", "complete"):
                     terminal = RunFailedEvent(error=reason)
         finally:

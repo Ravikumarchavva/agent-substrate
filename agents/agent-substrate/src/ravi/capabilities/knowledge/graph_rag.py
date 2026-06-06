@@ -24,12 +24,12 @@ from ravi.logger import setup_logging
 import json
 from typing import TYPE_CHECKING, Any, Optional
 
-from ravi.capabilities.knowledge.graph_store import Entity, Relationship
-from ravi.capabilities.knowledge.vector_store import SearchResult
+from ravi.kernel.graph import Entity, Relationship
+from ravi.kernel.vector import SearchResult
 
 if TYPE_CHECKING:
     from ravi.kernel.llm import LLMClient
-    from ravi.capabilities.knowledge.graph_store import BaseGraphStore
+    from ravi.kernel.graph import GraphStore
     from ravi.capabilities.knowledge.pipeline import RAGPipeline
 
 logger = setup_logging()
@@ -46,7 +46,7 @@ class GraphRAGPipeline:
     def __init__(
         self,
         rag_pipeline: RAGPipeline,
-        graph_store: BaseGraphStore,
+        graph_store: GraphStore,
         model_client: LLMClient,
     ) -> None:
         self._rag = rag_pipeline

@@ -438,6 +438,7 @@ class OrchestratorAgent(ReActAgent):
         resume: bool = False,
         run_id: str | None = None,
         stream: bool = False,
+        initial_tool_choice: str | None = None,
     ) -> Any:
         # Each call gets a fresh run_id for execution scope (budget/progress)
         # while all calls on this instance share the same session_id.
@@ -458,6 +459,7 @@ class OrchestratorAgent(ReActAgent):
                 resume=resume,
                 run_id=run_id,
                 stream=stream,
+                initial_tool_choice=initial_tool_choice,
             ):
                 yield event
         finally:

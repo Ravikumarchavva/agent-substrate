@@ -42,13 +42,22 @@ class ToolCallRequest(BaseModel):
 
 
 class ToolExecutionResult(BaseModel):
-    """Result of a single tool execution — returned to the agent."""
+    """Result of a single tool execution — returned to the agent.
+
+    ``content`` is the model-facing payload (text/image/data blocks the LLM
+    reads).  ``structured_content`` mirrors MCP Apps ``CallToolResult.structuredContent``:
+    UI-facing data that is **invisible to the model** and fed to a companion
+    ``ui://`` iframe over the postMessage channel.  A tool that declares a
+    ``ToolUI`` populates ``structured_content``; the agent lowers it into a
+    ``UIResourceBlock`` (see ``kernel.content``).
+    """
 
     call_id: str = ""
     name: str = ""
     content: list[ContentBlock] = Field(default_factory=list)
     is_error: bool = False
     metadata: JsonObject = Field(default_factory=dict)
+    structured_content: JsonObject = Field(default_factory=dict)
 
     model_config = {"arbitrary_types_allowed": True, "frozen": False}
 

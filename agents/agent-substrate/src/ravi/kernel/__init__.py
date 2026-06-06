@@ -19,6 +19,7 @@ from ravi.kernel.content import (
     ToolUseBlock,
     ToolResultBlock,
     ThinkingBlock,
+    UIResourceBlock,
     ChatMessage,
     ContentBlock,
     CONTENT_BLOCK_TYPES,
@@ -28,9 +29,9 @@ from ravi.kernel.content import (
 from ravi.kernel.identity import (
     AgentId,
     TopicId,
-    Supervision as Supervision,
-    HistoryRetention as HistoryRetention,
-    Priority as Priority,
+    Supervision,
+    HistoryRetention,
+    Priority,
 )
 from ravi.kernel.message import (
     ToolCallRequest,
@@ -42,7 +43,7 @@ from ravi.kernel.message import (
     Subscription,
 )
 from ravi.kernel.protocol import AgentRuntime
-from ravi.kernel.tools import ToolRisk, Tool, Toolbox
+from ravi.kernel.tools import ToolRisk, ToolUI, Tool, Toolbox
 from ravi.kernel.skills import Skill
 from ravi.kernel.llm import LLMClient, EmbeddingClient
 from ravi.kernel.history import HistoryProvider
@@ -51,8 +52,8 @@ from ravi.kernel.middleware import Interceptor
 from ravi.kernel.errors import (
     AgentNotFoundError,
     HandlerError,
-    AgentCrashError as AgentCrashError,
-    BudgetExhaustedError as BudgetExhaustedError,
+    AgentCrashError,
+    BudgetExhaustedError,
 )
 from ravi.kernel.stream import (
     TextDelta,
@@ -62,6 +63,8 @@ from ravi.kernel.stream import (
     AgentProgress,
     AgentStep,
 )
+from ravi.kernel.vector import Document, SearchResult, VectorStore
+from ravi.kernel.graph import Entity, Relationship, SubGraph, GraphStore
 
 __all__ = [
     # Content
@@ -77,6 +80,7 @@ __all__ = [
     "ToolUseBlock",
     "ToolResultBlock",
     "ThinkingBlock",
+    "UIResourceBlock",
     "ChatMessage",
     "ContentBlock",
     "CONTENT_BLOCK_TYPES",
@@ -101,6 +105,7 @@ __all__ = [
     "AgentRuntime",
     # Tools
     "ToolRisk",
+    "ToolUI",
     "Tool",
     "Toolbox",
     # Skills
@@ -128,4 +133,12 @@ __all__ = [
     # Progress stream
     "AgentProgress",
     "AgentStep",
+    # Retrieval / knowledge stores
+    "Document",
+    "SearchResult",
+    "VectorStore",
+    "Entity",
+    "Relationship",
+    "SubGraph",
+    "GraphStore",
 ]

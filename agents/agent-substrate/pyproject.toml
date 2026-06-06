@@ -92,29 +92,37 @@ exclude = ["notebooks/", "examples/", ".venv"]
 [tool.importlinter]
 root_packages = ["ravi"]
 
-# Cognitive stack: agents (L1-L3 merged) imports down into kernel (L0).
-# NOTE: L1/L2/L3 are currently co-located under ravi.agents (orchestration,
-# reasoning, and fabric were merged by a prior refactor). The intra-agents
-# layer ordering is enforced by code review until they are re-separated into
-# top-level packages.
 [[tool.importlinter.contracts]]
-name = "agent stack layers"
+name = "four stack layers"
 type = "layers"
 layers = [
-    "ravi.agents",   # L1-L3 combined — context, llm, guardrails, orchestration
-    "ravi.kernel",   # L0 — pure contracts: types, Protocols, dataclasses
+    "ravi.fabric",        # L3 — orchestration programs (flows, evals, durable)
+    "ravi.capabilities",  # L2 — tools, skills, knowledge, connectors
+    "ravi.agents",        # L1 — core intelligence, LLM, guardrails, middleware
+    "ravi.kernel",        # L0 — pure contracts: Protocols, dataclasses, enums
 ]
 
-# The kernel (L0) is the frozen leaf. It must not import any other ravi package.
+[[tool.importlinter.contracts]]
+name = "agents cannot import capabilities or fabric"
+type = "forbidden"
+source_modules = ["ravi.agents"]
+forbidden_modules = ["ravi.capabilities", "ravi.fabric"]
+
+[[tool.importlinter.contracts]]
+name = "capabilities cannot import fabric"
+type = "forbidden"
+source_modules = ["ravi.capabilities"]
+forbidden_modules = ["ravi.fabric"]
+
 [[tool.importlinter.contracts]]
 name = "kernel is independent"
 type = "forbidden"
 source_modules = ["ravi.kernel"]
 forbidden_modules = [
     "ravi.agents",
-    "ravi.adapters",
     "ravi.capabilities",
-    "ravi.evals",
+    "ravi.fabric",
+    "ravi.adapters",
     "ravi.serving",
     "ravi.config",
     "ravi.logger",
@@ -123,10 +131,8 @@ forbidden_modules = [
 [tool.uv.sources]
 paddleocr = { git = "https://github.com/PaddlePaddle/PaddleOCR.git" }
 
-# Note: adapters/ (concrete I/O ports), catalog/ (the agent's tools/skills/rag),
-# evals/ (LLM-as-judge), and serving/ (monolith + microservices + shared infra)
-# are orthogonal to the four-layer stack and intentionally not part of the
-# layers contract — they carry legitimate cross-edges (e.g. a Redis history
-# adapter implements a fabric contract). The two contracts above are the
-# load-bearing guarantees: the agent stack flows strictly downward, and the
-# kernel imports nothing.
+# Orthogonal peers (not part of the layer stack):
+# adapters/ — concrete I/O ports (LLM clients, memory backends, vector stores)
+# serving/  — FastAPI monolith + microservices + shared infra
+# These carry cross-layer edges by design (e.g. an adapter implements a kernel
+# Protocol; serving wires all layers together in lifespan).

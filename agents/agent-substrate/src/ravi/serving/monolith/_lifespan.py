@@ -19,10 +19,7 @@ from ravi.capabilities.tools.code_interpreter import (
     CodeInterpreterClient,
 )
 from ravi.capabilities.tools.human_input import AskHumanTool
-from ravi.capabilities.tools.task_manager.tool import (
-    TaskManagerTool,
-    current_thread_id as _task_thread_id,
-)
+from ravi.capabilities.tools.task_manager.tool import TaskManagerTool
 from ravi.config import Settings
 from ravi.kernel.llm import LLMClient, EmbeddingClient
 from ravi.agents.runtime.local import LocalRuntime
@@ -220,13 +217,10 @@ async def init_tool_registry(
 ) -> ToolboxResult:
     """Create all tools and return a tool registry."""
 
-    # TaskManagerTool — emitter wired via dynamic closure through bridge_registry
-    async def _task_event_emitter(event: dict) -> None:
-        """Emit task SSE events to the active bridge for the current thread."""
-        tid = _task_thread_id.get("default")
-        await bridge_registry.emit(tid, event)
-
-    task_tool = TaskManagerTool(event_emitter=_task_event_emitter)
+    # TaskManagerTool — renders through ui://kanban_board; each result carries the
+    # board in structured_content (lowered to a UIResourceBlock by the agent), so
+    # no out-of-band SSE emitter is needed.
+    task_tool = TaskManagerTool()
 
     # AskHumanTool placeholder (a real per-thread tool is built in _get_agent_deps)
     ask_tool = AskHumanTool(handler=None, max_requests_per_run=5)  # type: ignore[arg-type]
@@ -253,9 +247,15 @@ async def init_tool_registry(
         code_interpreter_tool = CodeInterpreterTool()
 
     # ── Tool Registry ────────────────────────────────────────────────────
+    from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool, ReadUrlTool
+
     registry = Toolbox()
     registry.add(ask_tool)
     registry.add(task_tool)
+    registry.add(WebSearchTool())
+    registry.add(ReadUrlTool())
+    registry.add(CalculatorTool())
+    registry.add(CurrentTimeTool())
     if code_interpreter_tool:
         registry.add(code_interpreter_tool)
 

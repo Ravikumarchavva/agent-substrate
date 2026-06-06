@@ -16,7 +16,7 @@ import re
 import uuid
 from typing import Any, Optional
 
-from ravi.capabilities.knowledge.vector_store import Document
+from ravi.kernel.vector import Document
 
 
 class TextChunker:

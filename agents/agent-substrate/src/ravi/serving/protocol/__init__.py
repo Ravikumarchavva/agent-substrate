@@ -24,10 +24,7 @@ from ravi.serving.protocol.events import (
     RunCancelledEvent,
     ApprovalRequestedEvent,
     InputRequestedEvent,
-    TaskCreatedEvent,
-    TaskUpdatedEvent,
-    TaskAddedEvent,
-    TaskDeletedEvent,
+    UIResourceEvent,
     ErrorEvent,
     PingEvent,
 )
@@ -56,10 +53,7 @@ __all__ = [
     "RunCancelledEvent",
     "ApprovalRequestedEvent",
     "InputRequestedEvent",
-    "TaskCreatedEvent",
-    "TaskUpdatedEvent",
-    "TaskAddedEvent",
-    "TaskDeletedEvent",
+    "UIResourceEvent",
     "ErrorEvent",
     "PingEvent",
     # requests

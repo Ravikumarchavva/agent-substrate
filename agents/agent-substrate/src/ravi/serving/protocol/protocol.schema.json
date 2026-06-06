@@ -17,14 +17,11 @@
           "run.cancelled": "#/$defs/RunCancelledEvent",
           "run.completed": "#/$defs/RunCompletedEvent",
           "run.failed": "#/$defs/RunFailedEvent",
-          "task.added": "#/$defs/TaskAddedEvent",
-          "task.created": "#/$defs/TaskCreatedEvent",
-          "task.deleted": "#/$defs/TaskDeletedEvent",
-          "task.updated": "#/$defs/TaskUpdatedEvent",
           "text.delta": "#/$defs/TextDeltaEvent",
           "tool.call": "#/$defs/ToolCallEvent",
           "tool.result": "#/$defs/ToolResultEvent",
-          "turn.completed": "#/$defs/TurnCompletedEvent"
+          "turn.completed": "#/$defs/TurnCompletedEvent",
+          "ui.resource": "#/$defs/UIResourceEvent"
         },
         "propertyName": "type"
       },
@@ -66,16 +63,7 @@
           "$ref": "#/$defs/InputRequestedEvent"
         },
         {
-          "$ref": "#/$defs/TaskCreatedEvent"
-        },
-        {
-          "$ref": "#/$defs/TaskUpdatedEvent"
-        },
-        {
-          "$ref": "#/$defs/TaskAddedEvent"
-        },
-        {
-          "$ref": "#/$defs/TaskDeletedEvent"
+          "$ref": "#/$defs/UIResourceEvent"
         },
         {
           "$ref": "#/$defs/ErrorEvent"
@@ -382,76 +370,6 @@
       "title": "RunFailedEvent",
       "type": "object"
     },
-    "TaskAddedEvent": {
-      "properties": {
-        "type": {
-          "const": "task.added",
-          "default": "task.added",
-          "title": "Type",
-          "type": "string"
-        },
-        "task": {
-          "additionalProperties": true,
-          "title": "Task",
-          "type": "object"
-        }
-      },
-      "title": "TaskAddedEvent",
-      "type": "object"
-    },
-    "TaskCreatedEvent": {
-      "properties": {
-        "type": {
-          "const": "task.created",
-          "default": "task.created",
-          "title": "Type",
-          "type": "string"
-        },
-        "task_list": {
-          "additionalProperties": true,
-          "title": "Task List",
-          "type": "object"
-        }
-      },
-      "title": "TaskCreatedEvent",
-      "type": "object"
-    },
-    "TaskDeletedEvent": {
-      "properties": {
-        "type": {
-          "const": "task.deleted",
-          "default": "task.deleted",
-          "title": "Type",
-          "type": "string"
-        },
-        "task_id": {
-          "title": "Task Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "task_id"
-      ],
-      "title": "TaskDeletedEvent",
-      "type": "object"
-    },
-    "TaskUpdatedEvent": {
-      "properties": {
-        "type": {
-          "const": "task.updated",
-          "default": "task.updated",
-          "title": "Type",
-          "type": "string"
-        },
-        "task": {
-          "additionalProperties": true,
-          "title": "Task",
-          "type": "object"
-        }
-      },
-      "title": "TaskUpdatedEvent",
-      "type": "object"
-    },
     "TextDeltaEvent": {
       "description": "Incremental assistant text, token by token.",
       "properties": {
@@ -652,6 +570,61 @@
         }
       },
       "title": "TurnCompletedEvent",
+      "type": "object"
+    },
+    "UIResourceEvent": {
+      "description": "A tool produced an interactive UI to render in a sandboxed iframe.\n\nThe single carrier for every rich UI (kanban, chart, form, map, \u2026): a\n``ui://`` resource reference plus the data to feed it, per MCP Apps. The\nhost renders ``uri`` and pushes ``structured_content`` over the postMessage\nchannel. A later event with the same ``call_id`` + ``uri`` updates an\nalready-mounted iframe rather than remounting it.",
+      "properties": {
+        "type": {
+          "const": "ui.resource",
+          "default": "ui.resource",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "default": "",
+          "title": "Call Id",
+          "type": "string"
+        },
+        "uri": {
+          "title": "Uri",
+          "type": "string"
+        },
+        "mime_type": {
+          "default": "text/html;profile=mcp-app",
+          "title": "Mime Type",
+          "type": "string"
+        },
+        "structured_content": {
+          "additionalProperties": true,
+          "title": "Structured Content",
+          "type": "object"
+        },
+        "render": {
+          "default": "inline",
+          "title": "Render",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "agent": {
+          "default": "",
+          "title": "Agent",
+          "type": "string"
+        },
+        "depth": {
+          "default": 0,
+          "title": "Depth",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "UIResourceEvent",
       "type": "object"
     },
     "ChatRequest": {

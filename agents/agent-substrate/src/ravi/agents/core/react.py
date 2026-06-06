@@ -35,6 +35,7 @@ Priority / pausing:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -51,9 +52,12 @@ from ravi.kernel import (
     Supervision,
     TextBlock,
     Tool,
+    ToolExecutionResult,
     ToolResultBlock,
     ToolRisk,
+    ToolUI,
     ToolUseBlock,
+    UIResourceBlock,
     AgentCrashError,
 )
 from ravi.kernel.message import Message
@@ -273,6 +277,7 @@ class ReActAgent:
         resume: bool = False,
         run_id: str | None = None,
         stream: bool = False,
+        initial_tool_choice: str | None = None,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent | _Finished]:
         # -- History scope (the conversation thread) ---------------------------
         if session_id is not None:
@@ -354,10 +359,14 @@ class ReActAgent:
                     except Exception:
                         prompt_tokens = 0
 
+                gen_kwargs = {}
+                if step == 1 and initial_tool_choice is not None:
+                    gen_kwargs["tool_choice"] = initial_tool_choice
+
                 content: list[ContentBlock] = []
                 if stream:
                     async for event in _stream_generate(
-                        self.model, messages, self._system, self._tool_schemas()
+                        self.model, messages, self._system, self._tool_schemas(), **gen_kwargs
                     ):
                         if isinstance(event, (TextDelta, ReasoningDelta)):
                             yield event
@@ -365,7 +374,7 @@ class ReActAgent:
                             content = event.content
                 else:
                     content = await self.model.generate(
-                        messages, tools=self._tool_schemas(), system=self._system
+                        messages, tools=self._tool_schemas(), system=self._system, **gen_kwargs
                     )
 
                 # -- ExecutionBudget: record this turn's usage -----------------
@@ -440,6 +449,7 @@ class ReActAgent:
                         tu.tool_name,
                         rid,
                         call_id=tu.call_id,
+                        tool_args=json.dumps(dict(tu.arguments)),
                     )
                     if stream and call_progress is not None:
                         yield call_progress
@@ -489,11 +499,20 @@ class ReActAgent:
                         continue
 
                     results_by_call_id[tu_done.call_id] = (record, block)
+                    ui_meta: dict[str, str] = {}
+                    if isinstance(block, ToolResultBlock):
+                        ui_block = next(
+                            (b for b in block.content if isinstance(b, UIResourceBlock)),
+                            None,
+                        )
+                        if ui_block is not None:
+                            ui_meta["ui"] = ui_block.model_dump_json()
                     result_progress = await self._emit_progress(
                         AgentStep.TOOL_RESULT,
                         f"{tu_done.tool_name}: {'error' if record.is_error else 'ok'}",
                         rid,
                         call_id=tu_done.call_id,
+                        **ui_meta,
                     )
                     if stream and result_progress is not None:
                         yield result_progress
@@ -604,6 +623,7 @@ class ReActAgent:
         session_id: str | None = None,
         resume: bool = False,
         run_id: str | None = None,
+        initial_tool_choice: str | None = None,
     ) -> AgentRunResult:
         """Execute the ReAct loop to completion."""
         async for event in self._react(
@@ -612,6 +632,7 @@ class ReActAgent:
             resume=resume,
             run_id=run_id,
             stream=False,
+            initial_tool_choice=initial_tool_choice,
         ):
             if isinstance(event, _Finished):
                 return event.result
@@ -624,6 +645,7 @@ class ReActAgent:
         session_id: str | None = None,
         resume: bool = False,
         run_id: str | None = None,
+        initial_tool_choice: str | None = None,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent | StreamDone]:
         """Execute the ReAct loop, yielding progress events."""
         try:
@@ -633,6 +655,7 @@ class ReActAgent:
                 resume=resume,
                 run_id=run_id,
                 stream=True,
+                initial_tool_choice=initial_tool_choice,
             ):
                 if isinstance(event, _Finished):
                     yield StreamDone(
@@ -715,6 +738,29 @@ class ReActAgent:
             if isinstance(msg.payload, ChatMessage) and msg.payload.role == "assistant":
                 return _content_to_str(msg.payload.content)
         return ""
+
+    @staticmethod
+    def _lower_ui(tool: Tool, exec_result: ToolExecutionResult) -> list[ContentBlock]:
+        """Append a UIResourceBlock when the tool renders through an MCP-App UI.
+
+        If the tool declares a ``ToolUI`` and produced ``structured_content``,
+        lower the declaration + data into a self-describing ``UIResourceBlock``
+        so the wire, history, and renderer share one carrier.  The block's
+        ``text`` stays empty — the model already reads ``exec_result.content``;
+        the block adds only a ``[interactive UI: …]`` marker.  Tools that return
+        a ``UIResourceBlock`` directly are passed through untouched.
+        """
+        content = list(exec_result.content)
+        ui: ToolUI | None = getattr(tool, "ui", None)
+        already = any(isinstance(b, UIResourceBlock) for b in content)
+        if ui is not None and exec_result.structured_content and not already:
+            content.append(
+                UIResourceBlock(
+                    uri=ui.resource_uri,
+                    structured_content=exec_result.structured_content,
+                )
+            )
+        return content
 
     async def _execute_tool(
         self, tu: ToolUseBlock
@@ -804,7 +850,7 @@ class ReActAgent:
                 ),
                 ToolResultBlock(
                     call_id=tu.call_id,
-                    content=exec_result.content,
+                    content=self._lower_ui(tool, exec_result),
                     is_error=exec_result.is_error,
                 ),
             )
@@ -874,6 +920,7 @@ async def _stream_generate(
     messages: list[ChatMessage],
     system: str,
     tools: list[dict[str, object]] | None = None,
+    **kwargs: Any,
 ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
     """Normalize generate_stream to an async generator.
 
@@ -882,7 +929,7 @@ async def _stream_generate(
     """
     import inspect
 
-    result = model.generate_stream(messages, tools=tools, system=system)
+    result = model.generate_stream(messages, tools=tools, system=system, **kwargs)
     if inspect.isawaitable(result):
         result = await result
     async for event in result:

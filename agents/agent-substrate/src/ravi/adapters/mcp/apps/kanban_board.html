@@ -117,7 +117,28 @@
   .col-fail .task-card {
     background: rgba(220,38,38,.06); color: #fca5a5;
     border: 1px solid rgba(220,38,38,.18);
+    flex-direction: column; align-items: stretch; gap: 5px;
   }
+  .col-fail .task-card .card-row {
+    display: flex; align-items: flex-start; gap: 6px;
+  }
+  .col-fail .task-card.exhausted {
+    border-color: rgba(127,29,29,.6); opacity: 0.8;
+  }
+  .retry-badge {
+    font-size: 9px; color: #f87171; opacity: 0.7;
+    margin-left: auto; white-space: nowrap;
+  }
+  .retry-btn {
+    align-self: flex-start; margin-top: 2px;
+    font-size: 10px; cursor: pointer;
+    background: rgba(127,29,29,.25);
+    border: 1px solid rgba(220,38,38,.35);
+    border-radius: 5px; color: #fca5a5;
+    padding: 2px 8px; line-height: 1.6;
+    transition: background 0.15s;
+  }
+  .retry-btn:hover { background: rgba(127,29,29,.5); }
 
   .card-dot {
     flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%;
@@ -254,13 +275,26 @@
           </div>`;
         }
         if (status === "failed") {
-          return `<div class="task-card">
-            <svg class="card-check" viewBox="0 0 24 24" fill="none"
-                 stroke="#f87171" stroke-width="2.5" style="color:#f87171">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-            <span>${esc(t.title)}</span>
+          const maxR = t.max_retries ?? 0;
+          const retryCount = t.retry_count ?? 0;
+          const exhausted = maxR > 0 && retryCount >= maxR;
+          const badge = maxR > 0
+            ? `<span class="retry-badge">${retryCount}/${maxR}</span>`
+            : "";
+          const retryBtn = exhausted
+            ? `<button class="retry-btn" data-id="${esc(t.id)}" data-title="${esc(t.title)}">↺ Retry</button>`
+            : "";
+          return `<div class="task-card${exhausted ? " exhausted" : ""}">
+            <div class="card-row">
+              <svg class="card-check" viewBox="0 0 24 24" fill="none"
+                   stroke="#f87171" stroke-width="2.5" style="color:#f87171">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              <span>${esc(t.title)}</span>
+              ${badge}
+            </div>
+            ${retryBtn}
           </div>`;
         }
         return `<div class="task-card"><span>${esc(t.title)}</span></div>`;
@@ -331,6 +365,18 @@
     if (msg.type === "init_context" || msg.type === "update_context") {
       if (msg.task_list) render(msg.task_list);
     }
+  });
+
+  // ── Retry button — ask the agent to retry via a user message ──
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".retry-btn");
+    if (!btn) return;
+    var title = btn.getAttribute("data-title") || "the failed task";
+    window.parent.postMessage({
+      jsonrpc: "2.0",
+      method: "ui/message",
+      params: { role: "user", content: "retry task: " + title }
+    }, "*");
   });
 
   // Signal ready using JSON-RPC 2.0 so AppPanel's setIsReady(true) fires

@@ -12,6 +12,7 @@ from ravi.kernel.stream import (
     StreamDone,
     TextDelta,
 )
+from ravi.kernel.content import UIResourceBlock
 from ravi.serving.protocol import (
     HandoffEvent,
     ReasoningDeltaEvent,
@@ -19,6 +20,7 @@ from ravi.serving.protocol import (
     ToolCallEvent,
     ToolResultEvent,
     TurnCompletedEvent,
+    UIResourceEvent,
 )
 from ravi.serving.stream.mapper import map_kernel_event
 
@@ -55,6 +57,26 @@ def test_tool_result_ok_and_error() -> None:
         run_id="r", depth=1, metadata={"call_id": "c1"},
     ))
     assert isinstance(err, ToolResultEvent) and err.ok is False and err.error
+
+
+def test_tool_result_with_ui_fans_out_to_ui_resource() -> None:
+    block = UIResourceBlock(
+        uri="ui://kanban_board",
+        structured_content={"task_list": {"tasks": []}},
+        render="panel",
+    )
+    out = map_kernel_event(AgentProgress(
+        agent_id=_AID, step=AgentStep.TOOL_RESULT, content="task_board: ok",
+        run_id="r", depth=0, metadata={"call_id": "c9", "ui": block.model_dump_json()},
+    ))
+    assert isinstance(out, list) and len(out) == 2
+    result, ui = out
+    assert isinstance(result, ToolResultEvent) and result.ok is True
+    assert isinstance(ui, UIResourceEvent)
+    assert ui.uri == "ui://kanban_board"
+    assert ui.call_id == "c9"
+    assert ui.render == "panel"
+    assert ui.structured_content == {"task_list": {"tasks": []}}
 
 
 def test_handoff_tool_call_becomes_handoff_event() -> None:

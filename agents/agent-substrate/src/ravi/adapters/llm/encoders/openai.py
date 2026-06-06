@@ -347,6 +347,27 @@ def encode_messages(
                 if isinstance(block, ToolResultBlock):
                     conversation_input.extend(_encode_tool_result(block))
 
+    # OpenAI 400: every function_call must have a matching function_call_output.
+    # If the history was persisted partially (crash / timeout mid-run) there may
+    # be orphaned function_calls. Add synthetic outputs so the API doesn't reject.
+    call_ids: set[str] = set()
+    output_ids: set[str] = set()
+    for item in conversation_input:
+        t = item.get("type")
+        if t == "function_call":
+            call_ids.add(item.get("call_id", ""))
+        elif t == "function_call_output":
+            output_ids.add(item.get("call_id", ""))
+    for orphan_id in call_ids - output_ids:
+        if orphan_id:
+            conversation_input.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": orphan_id,
+                    "output": "[Tool output not available]",
+                }
+            )
+
     return "\n".join(instruction_parts).strip(), conversation_input
 
 

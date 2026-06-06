@@ -3,17 +3,8 @@
 from __future__ import annotations
 
 
-from ravi.capabilities.knowledge.graph_store import (
-    BaseGraphStore,
-    Entity,
-    Relationship,
-    SubGraph,
-)
-from ravi.capabilities.knowledge.vector_store import (
-    BaseVectorStore,
-    Document,
-    SearchResult,
-)
+from ravi.kernel.graph import Entity, GraphStore, Relationship, SubGraph
+from ravi.kernel.vector import Document, SearchResult, VectorStore
 from ravi.capabilities.knowledge.pipeline import RAGPipeline
 from ravi.capabilities.knowledge.graph_rag import GraphRAGPipeline
 from ravi.capabilities.knowledge.chunking import (
@@ -25,8 +16,8 @@ from ravi.capabilities.knowledge.chunking import (
 from ravi.capabilities.knowledge.reranker import LLMReranker
 
 __all__ = [
-    "BaseGraphStore",
-    "BaseVectorStore",
+    "GraphStore",
+    "VectorStore",
     "Document",
     "Entity",
     "Relationship",

@@ -294,6 +294,9 @@ class OpenAIChatCompletionClient(OpenAIClient):
             "model": self.model,
             "messages": chat_messages,
         }
+        
+        with open("/tmp/openai_prompt.json", "w") as f:
+            json.dump(params, f, indent=2)
         if "temperature" in kwargs:
             params["temperature"] = kwargs.pop("temperature")
         else:
@@ -395,6 +398,9 @@ class OpenAIChatCompletionClient(OpenAIClient):
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+
+        with open("/tmp/openai_prompt.json", "w") as f:
+            json.dump(params, f, indent=2)
         if "temperature" in kwargs:
             params["temperature"] = kwargs.pop("temperature")
         else:

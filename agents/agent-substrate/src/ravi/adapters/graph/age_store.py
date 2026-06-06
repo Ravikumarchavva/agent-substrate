@@ -21,12 +21,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from ravi.capabilities.knowledge.graph_store import (
-    BaseGraphStore,
-    Entity,
-    Relationship,
-    SubGraph,
-)
+from ravi.kernel.graph import Entity, Relationship, SubGraph
 
 logger = setup_logging()
 
@@ -49,7 +44,7 @@ def _escape_props(props: dict[str, Any]) -> str:
     return "{" + ", ".join(parts) + "}" if parts else "{}"
 
 
-class AGEGraphStore(BaseGraphStore):
+class AGEGraphStore:
     """Apache AGE (PostgreSQL graph extension) store.
 
     This store uses raw asyncpg connections to execute Cypher queries

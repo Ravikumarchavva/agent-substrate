@@ -276,6 +276,39 @@ class ThinkingBlock(BaseModel):
         return f"[Thinking] {self.text}"
 
 
+class UIResourceBlock(BaseModel):
+    """An interactive UI rendered in a sandboxed iframe — the MCP Apps carrier.
+
+    The narrow waist for *any* rich tool UI.  Rather than modelling each UI kind
+    (kanban, chart, form, map) as its own block/event/component, a tool emits a
+    single self-describing reference: a ``ui://`` resource URI plus the data to
+    feed it.  The host renders the resource in a sandboxed iframe and pushes
+    ``structured_content`` over the MCP Apps postMessage channel
+    (``ui/notifications/tool-input`` / ``ui/notifications/tool-result``).
+
+    Self-describing on purpose: a reloaded thread can re-render the UI from the
+    block alone, without re-resolving tool definitions.  This is ravi's
+    equivalent of MCP-UI's embedded ``UIResource``.
+
+    - ``uri``                 the ``ui://name`` resource to render.
+    - ``structured_content``  MCP ``structuredContent`` — UI-facing, model-invisible.
+    - ``text``                model-facing fallback (the LLM cannot see pixels).
+    - ``render``              host placement hint (inline bubble / side panel / full).
+    """
+
+    type: Literal["ui_resource"] = "ui_resource"
+    uri: str
+    mime_type: str = "text/html;profile=mcp-app"
+    structured_content: JsonObject = Field(default_factory=dict)
+    text: str = ""
+    render: Literal["inline", "panel", "fullscreen"] = "inline"
+
+    model_config = {"frozen": True}
+
+    def to_text_repr(self) -> str:
+        return self.text or f"[interactive UI: {self.uri}]"
+
+
 # ---------------------------------------------------------------------------
 # ChatMessage — the role-tagged conversation turn
 # ---------------------------------------------------------------------------
@@ -310,6 +343,7 @@ ContentBlock = Annotated[
         ToolUseBlock,
         ToolResultBlock,
         ThinkingBlock,
+        UIResourceBlock,
     ],
     Field(discriminator="type"),
 ]
@@ -332,6 +366,7 @@ CONTENT_BLOCK_TYPES: tuple[type, ...] = (
     ToolUseBlock,
     ToolResultBlock,
     ThinkingBlock,
+    UIResourceBlock,
 )
 
 # ---------------------------------------------------------------------------
@@ -353,6 +388,7 @@ _BLOCK_REGISTRY: dict[str, type[BaseModel]] = {
     "tool_use": ToolUseBlock,
     "tool_result": ToolResultBlock,
     "thinking": ThinkingBlock,
+    "ui_resource": UIResourceBlock,
 }
 
 
@@ -398,6 +434,7 @@ __all__ = [
     "ToolUseBlock",
     "ToolResultBlock",
     "ThinkingBlock",
+    "UIResourceBlock",
     "ContentBlock",
     "CONTENT_BLOCK_TYPES",
     "content_block_from_dict",

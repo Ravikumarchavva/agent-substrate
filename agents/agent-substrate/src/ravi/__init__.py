@@ -33,7 +33,7 @@ if TYPE_CHECKING:
         ToolCallValidationGuardrail,
     )
     from ravi.agents.runtime import LocalRuntime
-    from ravi.agents.skills import Skill
+    from ravi.kernel.skills import Skill
     from ravi.exceptions import GuardrailTripwireError
     from ravi.kernel import ChatMessage, TextBlock, ToolExecutionResult
     from ravi.kernel.stream import (

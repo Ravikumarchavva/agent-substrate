@@ -12,7 +12,9 @@ fans out), or `None` for events the UI does not surface (thinking/started ticks,
 
 from __future__ import annotations
 
-from ravi.kernel.content import TextBlock, ToolUseBlock
+import json
+
+from ravi.kernel.content import TextBlock, ToolUseBlock, UIResourceBlock
 from ravi.kernel.stream import (
     AgentProgress,
     AgentStep,
@@ -25,15 +27,12 @@ from ravi.serving.protocol import (
     HandoffEvent,
     InputRequestedEvent,
     ReasoningDeltaEvent,
-    TaskAddedEvent,
-    TaskCreatedEvent,
-    TaskDeletedEvent,
-    TaskUpdatedEvent,
     TextDeltaEvent,
     ToolCallEvent,
     ToolCallSummary,
     ToolResultEvent,
     TurnCompletedEvent,
+    UIResourceEvent,
     WireEvent,
 )
 
@@ -54,7 +53,7 @@ def _completion_to_turn(event: CompletionEvent) -> TurnCompletedEvent:
     )
 
 
-def _progress_to_wire(ev: AgentProgress) -> WireEvent | None:
+def _progress_to_wire(ev: AgentProgress) -> WireEvent | list[WireEvent] | None:
     agent = ev.agent_id.key if ev.agent_id else ""
     call_id = ev.metadata.get("call_id", "")
 
@@ -66,8 +65,13 @@ def _progress_to_wire(ev: AgentProgress) -> WireEvent | None:
                 target_agent=name[len(_HANDOFF_PREFIX):],
                 depth=ev.depth,
             )
+        args_raw = ev.metadata.get("tool_args", "{}")
+        try:
+            args = json.loads(args_raw) if isinstance(args_raw, str) else {}
+        except (json.JSONDecodeError, TypeError):
+            args = {}
         return ToolCallEvent(
-            call_id=call_id, tool_name=name, agent=agent, depth=ev.depth
+            call_id=call_id, tool_name=name, agent=agent, depth=ev.depth, args=args
         )
 
     if ev.step == AgentStep.TOOL_RESULT:
@@ -76,7 +80,7 @@ def _progress_to_wire(ev: AgentProgress) -> WireEvent | None:
         name = name or ev.content
         if name.startswith(_HANDOFF_PREFIX):
             return None  # subagent events + the orchestrator's next turn convey this
-        return ToolResultEvent(
+        result = ToolResultEvent(
             call_id=call_id,
             tool_name=name,
             ok=(status != "error"),
@@ -84,6 +88,25 @@ def _progress_to_wire(ev: AgentProgress) -> WireEvent | None:
             agent=agent,
             depth=ev.depth,
         )
+        # A tool that renders a UI lowers a UIResourceBlock; react.py threads it
+        # through progress metadata as JSON. Fan out a second wire event for it.
+        ui_json = ev.metadata.get("ui")
+        if ui_json:
+            blk = UIResourceBlock.model_validate_json(ui_json)
+            return [
+                result,
+                UIResourceEvent(
+                    call_id=call_id,
+                    uri=blk.uri,
+                    mime_type=blk.mime_type,
+                    structured_content=blk.structured_content,
+                    render=blk.render,
+                    text=blk.text,
+                    agent=agent,
+                    depth=ev.depth,
+                ),
+            ]
+        return result
 
     if ev.step == AgentStep.HANDOFF:
         # "→ target: reason"  (published to the topic; rarely reaches run_stream)
@@ -97,8 +120,11 @@ def _progress_to_wire(ev: AgentProgress) -> WireEvent | None:
     return None
 
 
-def map_kernel_event(ev: object) -> WireEvent | None:
-    """Translate one kernel stream event to a wire event (or None to drop it)."""
+def map_kernel_event(ev: object) -> WireEvent | list[WireEvent] | None:
+    """Translate one kernel stream event to a wire event (or None to drop it).
+
+    Returns a list when one kernel event fans out (e.g. a tool result that also
+    carries a UI resource → ``tool.result`` + ``ui.resource``)."""
     if isinstance(ev, TextDelta):
         return TextDeltaEvent(text=ev.text)
     if isinstance(ev, ReasoningDelta):
@@ -112,10 +138,12 @@ def map_kernel_event(ev: object) -> WireEvent | None:
 
 
 def map_bridge_event(data: dict) -> WireEvent | None:
-    """Translate an out-of-band HITL/task bridge dict to a wire event.
+    """Translate an out-of-band HITL bridge dict to a wire event.
 
-    The ``WebHITLBridge`` and ``TaskManagerTool`` emit legacy dict shapes; this
-    is the single place that adapts them to the wire protocol.
+    The ``WebHITLBridge`` emits legacy dict shapes for approval / input gates;
+    this is the single place that adapts them to the wire protocol. Rich tool
+    UIs (kanban, …) no longer travel this path — they flow inline as
+    ``ui.resource`` via the tool result (see ``_progress_to_wire``).
     """
     kind = data.get("type")
 
@@ -128,17 +156,11 @@ def map_bridge_event(data: dict) -> WireEvent | None:
     if kind == "human_input_request":
         return InputRequestedEvent(
             request_id=data.get("request_id") or data.get("requestId", ""),
-            prompt=data.get("prompt", ""),
-            options=data.get("options"),
+            question=data.get("question") or data.get("prompt", ""),
+            context=data.get("context", ""),
+            options=data.get("options") or [],
+            allow_freeform=data.get("allow_freeform", True),
         )
-    if kind == "task_list_created":
-        return TaskCreatedEvent(task_list=data.get("task_list", data))
-    if kind == "task_updated":
-        return TaskUpdatedEvent(task=data.get("task", data))
-    if kind == "task_added":
-        return TaskAddedEvent(task=data.get("task", data))
-    if kind == "task_deleted":
-        return TaskDeletedEvent(task_id=data.get("task_id") or data.get("id", ""))
     return None
 
 

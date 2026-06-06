@@ -9,6 +9,7 @@ from ravi.logger import setup_logging
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
@@ -42,6 +43,7 @@ from ravi.serving.monolith.services.agent_service import (
 )
 from ravi.capabilities.tools.task_manager.tool import current_thread_id
 from ravi.capabilities.tools.web_surfer import WebSurferTool
+from ravi.capabilities.tools.web_search import WebSearchTool
 from ravi.capabilities.tools.human_input import AskHumanTool
 from ravi.serving.monolith.security.deps import get_current_user
 from ravi.serving.monolith.sse.bridge import BridgeRegistry, WebHITLBridge
@@ -90,6 +92,32 @@ ATTACHMENT_PLANNING_KEYWORDS = (
     "roadmap",
     "organize",
     "organise",
+)
+
+# Stronger phrases that warrant forcing manage_tasks as the first tool call
+# (model may ignore system prompt instructions on weaker models).
+TASK_FORCE_PHRASES = (
+    "plan tasks",
+    "plan the tasks",
+    "create tasks",
+    "create a task",
+    "task list",
+    "todo list",
+    "to-do list",
+    "checklist for",
+    "plan for",
+    "plan a ",
+    "plan the ",
+    "plan to ",
+    "plan my ",
+    "organise tasks",
+    "organize tasks",
+    "break down",
+    "break this down",
+    "step by step plan",
+    "steps to ",
+    "steps for ",
+    "roadmap for",
 )
 
 WORKSPACE_MAIL_NOUNS = (
@@ -169,6 +197,30 @@ def _tool_name(tool: Any) -> str:
 def _should_allow_task_planning(user_text: str) -> bool:
     normalized = user_text.lower()
     return any(keyword in normalized for keyword in ATTACHMENT_PLANNING_KEYWORDS)
+
+
+def _should_force_task_planning(user_text: str) -> bool:
+    """Return True when the request clearly asks to create a task list.
+
+    Used to force manage_tasks as the initial tool call so weaker models
+    don't ignore the system prompt instruction.
+    """
+    normalized = user_text.lower()
+
+    # Explicit kanban/board request
+    if "kanban" in normalized or "task board" in normalized:
+        return True
+
+    # Phrase-based match
+    if any(phrase in normalized for phrase in TASK_FORCE_PHRASES):
+        return True
+
+    # Numbered task list pattern: "1. foo 2. bar 3. baz"
+    # Matches when the user pastes/types a numbered list of 2+ items
+    if len(re.findall(r"\b\d+[\.\)]\s+\S", user_text)) >= 2:
+        return True
+
+    return False
 
 
 def _should_route_workspace_mail_request(user_text: str) -> bool:
@@ -261,7 +313,11 @@ async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
     )
     tools = [ask_tool] + base_tools
 
-    # Only add WebSurferTool if not already present
+    # Add WebSearchTool (simple query interface) — always available, no setup needed
+    if not any(isinstance(t, WebSearchTool) for t in tools):
+        tools.append(WebSearchTool())
+
+    # Only add WebSurferTool (browser automation) if not already present
     if not any(isinstance(t, WebSurferTool) for t in tools):
         try:
             tools.append(WebSurferTool())
@@ -481,6 +537,26 @@ async def chat(
 
         allow_task_planning = _should_allow_task_planning(display_content)
 
+        # Check if an existing task list exists for this thread.
+        # If so, we avoid forcing a hard reset/creation, and instead nudge the model
+        # to update or continue it.
+        has_existing_tasks = False
+        if allow_task_planning:
+            from ravi.serving.shared.tasks.store import GlobalTaskStore
+            _store = GlobalTaskStore.get()
+            _existing = _store.get_by_conversation(str(body.thread_id))
+            if _existing:
+                has_existing_tasks = True
+                deps["system_instructions"] = (
+                    deps["system_instructions"]
+                    + "\n\n---\n**Existing task board:**\n"
+                    + "A Kanban task list already exists for this conversation. "
+                    + "If the user is providing new details, context, or corrections, "
+                    + "call manage_tasks action=create_list again with updated, more specific tasks "
+                    + "that incorporate their new information. "
+                    + "Otherwise continue working through the existing tasks."
+                )
+
         if attachments:
             deps["system_instructions"] = (
                 deps["system_instructions"]
@@ -508,13 +584,24 @@ async def chat(
                     deps["system_instructions"],
                 )
             )
+        if not initial_tool_choice and allow_task_planning and not has_existing_tasks and _should_force_task_planning(display_content):
+            initial_tool_choice = "manage_tasks"
+            deps["system_instructions"] = (
+                deps["system_instructions"]
+                + "\n\n---\n**Task Planning — call manage_tasks NOW:**\n"
+                + f"The user said: \"{display_content}\"\n"
+                + "Call manage_tasks action=create_list with 5-8 specific, actionable task titles "
+                + "that reflect EXACTLY what the user asked for above. "
+                + "Use concrete titles like the real steps someone would do for this request. "
+                + "Do NOT use generic placeholders like 'Identify tasks', 'Complete kanban tasks', or 'Plan approach'. "
+                + "After creating the list, call start_task before each step and complete_task after."
+            )
         if initial_tool_choice:
             logger.info(
-                "Thread %s: forcing first tool choice to %s for mailbox request",
+                "Thread %s: forcing first tool choice to %s via system prompt",
                 body.thread_id,
                 initial_tool_choice,
             )
-
         # Per-request model override — if the frontend sends a different model,
         # create a fresh client for this request only (supports any provider).
         if resolved_model:
@@ -623,6 +710,7 @@ async def chat(
         is_disconnected=request.is_disconnected,
         cancel_event=cancel_event,
         persister=persister,
+        initial_tool_choice=initial_tool_choice,
     )
 
     async def sse_generator() -> AsyncIterator[str]:

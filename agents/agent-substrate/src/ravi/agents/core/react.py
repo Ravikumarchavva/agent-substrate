@@ -38,7 +38,7 @@ import asyncio
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
 
@@ -68,7 +68,13 @@ from ravi.kernel import Skill
 from ravi.kernel.llm import LLMClient, Usage
 from ravi.agents.hooks.manager import HookEvent, HookManager
 from ravi.agents.resources.budget import BudgetExceededError, ExecutionBudget
-from ravi.agents.middleware._contracts import AgentRunContext, ChatContext, FunctionContext
+from ravi.agents.middleware._contracts import (
+    AgentRunContext,
+    AgentRunResult,
+    ChatContext,
+    FunctionContext,
+    ToolCallRecord,
+)
 from ravi.agents.middleware.pipeline import MiddlewarePipeline
 from ravi.kernel.middleware import AgentMiddleware, ChatMiddleware, FunctionMiddleware
 from ravi.exceptions import MiddlewareTermination
@@ -79,53 +85,9 @@ logger = logging.getLogger(__name__)
 ApprovalHandler = Callable[[str, dict[str, Any]], Awaitable[bool]]
 
 
-# ---------------------------------------------------------------------------
-# Local result types
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class ToolCallRecord:
-    name: str
-    call_id: str
-    arguments: dict[str, Any]
-    result: str
-    is_error: bool
-    duration_ms: float
-
-
 @dataclass
 class _Finished:
-    result: 'AgentRunResult'
-
-
-@dataclass
-class AgentRunResult:
-    """Result of a completed agent run."""
-
-    output: str
-    status: str  # "success" | "error" | "max_iterations" | "guardrail_tripped" | "paused"
-    tool_calls: list[ToolCallRecord] = field(default_factory=list)
-    run_id: str = ""
-    error: str | None = None
-
-    def model_dump(self, **_kwargs: Any) -> dict[str, Any]:
-        return {
-            "output": self.output,
-            "status": self.status,
-            "run_id": self.run_id,
-            "error": self.error,
-            "tool_calls": [
-                {
-                    "name": r.name,
-                    "call_id": r.call_id,
-                    "result": r.result,
-                    "is_error": r.is_error,
-                    "duration_ms": r.duration_ms,
-                }
-                for r in self.tool_calls
-            ],
-        }
+    result: AgentRunResult
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +275,12 @@ class ReActAgent:
                 rid,
             )
 
-        agent_ctx = AgentRunContext(agent_name=self.name, run_id=rid, session_id=sid, messages=[])
+        agent_ctx = AgentRunContext(
+            agent_name=self.name,
+            run_id=rid,
+            session_id=sid,
+            messages=[ChatMessage(role="user", content=[TextBlock(text=input_text)])],
+        )
 
 
         _event_q: asyncio.Queue[Any] = asyncio.Queue()
@@ -321,11 +288,6 @@ class ReActAgent:
 
 
         async def _core_loop(ctx: AgentRunContext) -> None:
-
-
-            try:
-
-
             try:
                 for step in range(1, self.max_iterations + 1):
                     # -- cooperative pause check ------------------------------------
@@ -337,12 +299,12 @@ class ReActAgent:
                             {"agent": self.name, "run_id": rid, "status": "paused"},
                         )
                         last_output = await self._last_assistant_text(sid)
-                        await _event_q.put(_Finished(AgentRunResult()
+                        await _event_q.put(_Finished(AgentRunResult(
                             output=last_output,
                             status="paused",
                             tool_calls=tool_calls,
                             run_id=rid,
-                        ))
+                        )))
                         return
 
                     await self.hooks.dispatch(
@@ -371,7 +333,14 @@ class ReActAgent:
                     turn_usage: Usage = Usage()
 
 
-                    chat_ctx = ChatContext(agent_name=self.name, messages=messages, result=None)
+                    chat_ctx = ChatContext(
+                        agent_name=self.name,
+                        run_id=rid,
+                        messages=messages,
+                        system=self._system,
+                        tools=self._tool_schemas(),
+                        result=None,
+                    )
 
 
 
@@ -405,7 +374,7 @@ class ReActAgent:
                         from ravi.kernel.llm import LLMResponse
 
 
-                        c.result = LLMResponse(content=content, usage=turn_usage, model=self.model.model)
+                        c.result = LLMResponse(content=content, usage=turn_usage)
 
 
 
@@ -452,12 +421,12 @@ class ReActAgent:
                         if stream:
                             await _event_q.put(CompletionEvent(content=content))
                         
-                        await _event_q.put(_Finished(AgentRunResult()
+                        await _event_q.put(_Finished(AgentRunResult(
                             output=output,
                             status="success",
                             tool_calls=tool_calls,
                             run_id=rid,
-                        ))
+                        )))
                         return
 
                     logger.info(
@@ -479,13 +448,6 @@ class ReActAgent:
                         )
                         if stream and call_progress is not None:
                             await _event_q.put(call_progress)
-                        if self._guardrails:
-                            await check_tool_call_guardrails(
-                                guardrails=self._guardrails,
-                                agent_name=self.name,
-                                run_id=rid,
-                                tool_use=tu,
-                            )
 
                     # Phase 2: run all tools concurrently; await _event_q.put(progress as each event arrives.)
                     # progress_q receives subagent AgentProgress events (from _DispatchTool).
@@ -501,7 +463,7 @@ class ReActAgent:
                             tool.set_progress_sink(progress_q)
 
                     async def _run(t: ToolUseBlock) -> None:
-                        r, b = await self._execute_tool(t)
+                        r, b = await self._execute_tool(t, rid)
                         await done_q.put((t, r, b))
 
                     tasks = [asyncio.create_task(_run(tu)) for tu in tool_uses]
@@ -580,12 +542,12 @@ class ReActAgent:
                 await self._emit_progress(
                     AgentStep.DONE, last_output[:120], rid, status="max_iterations"
                 )
-                await _event_q.put(_Finished(AgentRunResult()
+                await _event_q.put(_Finished(AgentRunResult(
                     output=last_output,
                     status="max_iterations",
                     tool_calls=tool_calls,
                     run_id=rid,
-                ))
+                )))
                 return
 
             except MiddlewareTermination as exc:
@@ -597,13 +559,13 @@ class ReActAgent:
                 await self._emit_progress(
                     AgentStep.ERROR, f"guardrail: {exc.message}", rid
                 )
-                await _event_q.put(_Finished(AgentRunResult()
+                await _event_q.put(_Finished(AgentRunResult(
                     output=f"Request blocked: {exc.message}",
-                    status="error",
+                    status="guardrail_tripped",
                     tool_calls=tool_calls,
                     run_id=rid,
                     error=exc.message,
-                ))
+                )))
                 return
 
             except BudgetExceededError as exc:
@@ -613,13 +575,13 @@ class ReActAgent:
                     HookEvent.RUN_END,
                     {"agent": self.name, "run_id": rid, "status": "budget_exceeded"},
                 )
-                await _event_q.put(_Finished(AgentRunResult()
+                await _event_q.put(_Finished(AgentRunResult(
                     output="",
                     status="error",
                     tool_calls=tool_calls,
                     run_id=rid,
                     error=str(exc),
-                ))
+                )))
                 return
 
             except Exception as exc:
@@ -642,35 +604,30 @@ class ReActAgent:
                     agent_id=self.id,
                 ) from exc
 
-
-
+        async def _run_pipelines() -> None:
+            try:
+                await self.agent_pipeline.execute(agent_ctx, _core_loop)
+            except MiddlewareTermination as exc:
+                logger.warning("[%s] agent middleware terminated: %s", self.name, exc.message)
+                await self.hooks.dispatch(
+                    HookEvent.RUN_END,
+                    {"agent": self.name, "run_id": rid, "status": "guardrail_tripped"},
+                )
+                await _event_q.put(_Finished(AgentRunResult(
+                    output=f"Request blocked: {exc.message}",
+                    status="guardrail_tripped",
+                    tool_calls=tool_calls,
+                    run_id=rid,
+                    error=exc.message,
+                )))
+            except Exception as _e:
+                await _event_q.put(_e)
+            finally:
                 await _event_q.put(StopAsyncIteration)
 
 
-            except Exception as _e:
 
-
-                await _event_q.put(_e)
-
-
-
-        async def _run_pipelines() -> None:
-
-
-            try:
-
-
-                await self.agent_pipeline.execute(agent_ctx, _core_loop)
-
-
-            except Exception as _e:
-
-
-                await _event_q.put(_e)
-
-
-
-        task = asyncio.create_task(_run_pipelines())
+        asyncio.create_task(_run_pipelines())
 
 
         while True:
@@ -840,7 +797,7 @@ class ReActAgent:
         return content
 
     async def _execute_tool(
-        self, tu: ToolUseBlock
+        self, tu: ToolUseBlock, rid: str = ""
     ) -> tuple[ToolCallRecord, ToolResultBlock]:
         """Run a single tool call, return a record and a ToolResultBlock."""
         t0 = time.monotonic()
@@ -901,15 +858,11 @@ class ReActAgent:
         try:
 
             func_ctx = FunctionContext(
-
                 agent_name=self.name,
-
+                run_id=rid,
                 function_name=tu.tool_name,
-
                 arguments=dict(tu.arguments),
-
                 result=None,
-
             )
 
 

@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel
@@ -59,7 +59,6 @@ from ravi.agents.supervision.budget import SpawnBudget
 from ravi.agents.supervision.policies import RetryPolicy
 from ravi.agents.resources.budget import ExecutionBudget
 from ravi.agents.core.react import (
-    AgentRunResult,
     ReActAgent,
 )
 from ravi.agents.hooks.manager import HookEvent, HookManager

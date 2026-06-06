@@ -1,73 +1,130 @@
+"""Tests for the middleware pipeline and concrete middleware implementations."""
+
 from __future__ import annotations
 
 import logging
 import pytest
 from ravi.kernel.content import ChatMessage, TextBlock
-from ravi.agents.middleware import MiddlewarePipeline, AuditLoggerMiddleware
-from ravi.agents.middleware._contracts import MiddlewareContext, MiddlewareStage
+from ravi.agents.middleware import (
+    MiddlewarePipeline,
+    AuditLoggerMiddleware,
+    AgentRunContext,
+    AgentRunResult,
+)
+from ravi.exceptions import MiddlewareTermination
 
 
-class DummyInterceptor:
-    async def pre_process(self, message: ChatMessage) -> ChatMessage:
-        content = list(message.content)
-        content.append(TextBlock(text="pre"))
-        return ChatMessage(role=message.role, content=content)
-
-    async def post_process(self, message: ChatMessage) -> ChatMessage:
-        content = list(message.content)
-        content.append(TextBlock(text="post"))
-        return ChatMessage(role=message.role, content=content)
+def _ctx(text: str = "hello") -> AgentRunContext:
+    msg = ChatMessage(role="user", content=[TextBlock(text=text)])
+    return AgentRunContext(agent_name="TestAgent", run_id="r1", session_id="s1", messages=[msg])
 
 
-@pytest.mark.asyncio
-async def test_middleware_pipeline():
-    pipeline = MiddlewarePipeline()
-    interceptor = DummyInterceptor()
-    pipeline.add(interceptor)
-
-    msg = ChatMessage(role="user", content=[TextBlock(text="original")])
-    
-    res_pre = await pipeline.execute_pre(msg)
-    assert len(res_pre.content) == 2
-    assert res_pre.content[0].text == "original"
-    assert res_pre.content[1].text == "pre"
-
-    res_post = await pipeline.execute_post(msg)
-    assert len(res_post.content) == 2
-    assert res_post.content[0].text == "original"
-    assert res_post.content[1].text == "post"
+# ---------------------------------------------------------------------------
+# MiddlewarePipeline — call_next chaining
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_audit_logger_middleware(caplog):
-    # Ensure logs from 'ravi' namespace propagate or are captured by pytest
+async def test_pipeline_calls_final():
+    """Empty pipeline calls final directly."""
+    pipeline = MiddlewarePipeline([])
+    called = []
+
+    async def final(ctx: AgentRunContext) -> None:
+        called.append(ctx.agent_name)
+
+    await pipeline.execute(_ctx(), final)
+    assert called == ["TestAgent"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_chains_middlewares_in_order():
+    """Middlewares execute pre-call_next in registration order, post in reverse."""
+    order: list[str] = []
+
+    class RecordMiddleware:
+        def __init__(self, name: str) -> None:
+            self._name = name
+
+        async def process(self, context: AgentRunContext, call_next) -> None:
+            order.append(f"{self._name}:before")
+            await call_next()
+            order.append(f"{self._name}:after")
+
+    pipeline = MiddlewarePipeline([RecordMiddleware("A"), RecordMiddleware("B")])
+
+    async def final(ctx: AgentRunContext) -> None:
+        order.append("final")
+
+    await pipeline.execute(_ctx(), final)
+    assert order == ["A:before", "B:before", "final", "B:after", "A:after"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_halts_on_middleware_termination():
+    """Raising MiddlewareTermination stops the chain — final and later middlewares skip."""
+    reached_final = []
+    reached_b = []
+
+    class BlockingMiddleware:
+        async def process(self, context: AgentRunContext, call_next) -> None:
+            raise MiddlewareTermination("blocked")
+
+    class TrailingMiddleware:
+        async def process(self, context: AgentRunContext, call_next) -> None:
+            reached_b.append(True)
+            await call_next()
+
+    pipeline = MiddlewarePipeline([BlockingMiddleware(), TrailingMiddleware()])
+
+    with pytest.raises(MiddlewareTermination):
+        await pipeline.execute(_ctx(), lambda c: reached_final.append(True))
+
+    assert not reached_final
+    assert not reached_b
+
+
+@pytest.mark.asyncio
+async def test_pipeline_middleware_can_mutate_context():
+    """Middleware can mutate context before calling next."""
+    class AddMessageMiddleware:
+        async def process(self, context: AgentRunContext, call_next) -> None:
+            context.metadata["injected"] = True
+            await call_next()
+
+    async def noop(c: AgentRunContext) -> None:
+        pass
+
+    pipeline = MiddlewarePipeline([AddMessageMiddleware()])
+    ctx = _ctx()
+    await pipeline.execute(ctx, noop)
+    assert ctx.metadata.get("injected") is True
+
+
+# ---------------------------------------------------------------------------
+# AuditLoggerMiddleware
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_audit_logger_logs_run(caplog):
     ravi_logger = logging.getLogger("ravi")
     ravi_logger.addHandler(caplog.handler)
 
-    middleware = AuditLoggerMiddleware(log_level=logging.INFO)
-    ctx = MiddlewareContext(
-        agent_name="TestAgent",
-        stage=MiddlewareStage.LLM_CALL,
-        input_text="hello audit",
-    )
+    mw = AuditLoggerMiddleware(log_level=logging.INFO)
+    ctx = _ctx("audit test")
+
+    result_holder: list[AgentRunResult] = []
+
+    async def final(c: AgentRunContext) -> None:
+        c.result = AgentRunResult(output="done", status="success", run_id="r1")
+        result_holder.append(c.result)
 
     with caplog.at_level(logging.INFO, logger="ravi"):
-        # Test before
-        ctx_out = await middleware.before(ctx)
-        assert "_audit_t0" in ctx_out.metadata
-        assert "[audit] llm_call START" in caplog.text
+        await MiddlewarePipeline([mw]).execute(ctx, final)
 
-        # Test after
-        caplog.clear()
-        res = await middleware.after(ctx_out, "some_result")
-        assert res == "some_result"
-        assert "[audit] llm_call END" in caplog.text
+    assert "RUN START" in caplog.text
+    assert "RUN END" in caplog.text
+    assert result_holder
 
-        # Test error
-        caplog.clear()
-        await middleware.on_error(ctx_out, ValueError("some error"))
-        assert "[audit] llm_call ERROR" in caplog.text
-        assert "ValueError" in caplog.text
-
-    # Cleanup handler
     ravi_logger.removeHandler(caplog.handler)

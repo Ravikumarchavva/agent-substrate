@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from ravi.kernel.errors import MiddlewareTermination
+
 
 class AgentError(Exception):
     """Base exception for all errors in the Agent Framework."""
@@ -56,18 +58,15 @@ class AgentExecutionError(AgentError):
     pass
 
 
-# ---------------------------------------------------------------------------
-# Guardrail errors
-# ---------------------------------------------------------------------------
+__all__ = [
+    "AgentError",
+    "ConfigurationError",
+    "ModelProviderError",
+    "ContextLimitExceededError",
+    "ToolError",
+    "ToolNotFoundError",
+    "ToolExecutionError",
+    "AgentExecutionError",
+    "MiddlewareTermination",
+]
 
-
-class MiddlewareTermination(AgentError):
-    """Raised when a middleware triggers a hard stop.
-
-    This immediately halts the agent run loop and produces an
-    AgentRunResult with status = error.
-    """
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
-        self.message = message

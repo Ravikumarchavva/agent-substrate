@@ -55,6 +55,7 @@ from ravi.kernel.errors import (
     HandlerError,
     AgentCrashError,
     BudgetExhaustedError,
+    MiddlewareTermination,
 )
 from ravi.kernel.stream import (
     TextDelta,
@@ -130,6 +131,7 @@ __all__ = [
     "HandlerError",
     "AgentCrashError",
     "BudgetExhaustedError",
+    "MiddlewareTermination",
     # Token stream
     "TextDelta",
     "ReasoningDelta",

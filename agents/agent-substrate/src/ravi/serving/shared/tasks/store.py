@@ -21,8 +21,9 @@ from uuid import uuid4
 class Task:
     id: str
     title: str
-    status: str = "todo"  # "todo" | "in_progress" | "done"
+    status: str = "todo"  # "todo" | "in_progress" | "done" | "failed"
     order: int = 0
+    retry_count: int = 0
 
 
 @dataclass
@@ -30,13 +31,22 @@ class TaskList:
     id: str
     conversation_id: str
     tasks: List[Task] = field(default_factory=list)
+    max_retries: int = 3
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "conversation_id": self.conversation_id,
+            "max_retries": self.max_retries,
             "tasks": [
-                {"id": t.id, "title": t.title, "status": t.status, "order": t.order}
+                {
+                    "id": t.id,
+                    "title": t.title,
+                    "status": t.status,
+                    "order": t.order,
+                    "retry_count": t.retry_count,
+                    "max_retries": self.max_retries,
+                }
                 for t in self.tasks
             ],
         }
@@ -62,12 +72,16 @@ class TaskStore:
     # ------------------------------------------------------------------
 
     async def create_task_list(
-        self, conversation_id: str, task_titles: List[str]
+        self,
+        conversation_id: str,
+        task_titles: List[str],
+        max_retries: int = 3,
     ) -> TaskList:
         async with self._lock:
             task_list = TaskList(
                 id=str(uuid4()),
                 conversation_id=conversation_id,
+                max_retries=max_retries,
                 tasks=[
                     Task(id=str(uuid4()), title=t.strip(), status="todo", order=i)
                     for i, t in enumerate(task_titles)
@@ -139,6 +153,25 @@ class TaskStore:
             before = len(task_list.tasks)
             task_list.tasks = [t for t in task_list.tasks if t.id != task_id]
             return len(task_list.tasks) < before
+
+    async def increment_retry(
+        self, task_list_id: str, task_id: str
+    ) -> Optional[Task]:
+        """Increment retry_count and move task back to in_progress.
+
+        Returns None if the task isn't found or has reached max_retries.
+        Caller is responsible for checking the limit before calling.
+        """
+        async with self._lock:
+            task_list = self._lists.get(task_list_id)
+            if not task_list:
+                return None
+            for task in task_list.tasks:
+                if task.id == task_id:
+                    task.retry_count += 1
+                    task.status = "in_progress"
+                    return task
+            return None
 
     async def update_task_title(
         self, task_list_id: str, task_id: str, title: str

@@ -1,8 +1,8 @@
-"""ravi.agents.flow — flow-based agent execution and graphs."""
+"""ravi.fabric.flows — flow-based agent execution and graphs."""
 
 from __future__ import annotations
 
-from ravi.agents.flow.agent import (
+from ravi.fabric.flows.agent import (
     BaseFlow,
     ConditionalFlow,
     ParallelFlow,

@@ -34,10 +34,9 @@ router = APIRouter(tags=["mcp-apps"], dependencies=[Depends(get_current_user)])
 
 _ui_resources: Dict[str, Path] = {}
 
-# Built-in apps directory
-_APPS_DIR = (
-    Path(__file__).resolve().parent.parent.parent / "integrations" / "mcp" / "apps"
-)
+# Built-in apps directory — bundled MCP App HTML lives under ravi/adapters/mcp/apps.
+# __file__ = ravi/serving/monolith/routes/mcp_apps.py → parents[3] = ravi/
+_APPS_DIR = Path(__file__).resolve().parents[3] / "adapters" / "mcp" / "apps"
 
 _MCP_APP_THEME_STYLE = """
 <style id="ravi-mcp-theme-vars">
@@ -257,6 +256,7 @@ async def serve_ui_resource(resource_name: str):
     html = _inject_theme_bridge(html_path.read_text(encoding="utf-8"))
     return HTMLResponse(
         content=html,
+        media_type="text/html;profile=mcp-app",
         headers={
             # Allow embedding in iframes from any origin (dev mode)
             # In production, set this to your specific frontend origin
@@ -281,23 +281,27 @@ async def get_manifest(request: Request) -> List[Dict[str, Any]]:
     The frontend can use this to know which tools have interactive UIs
     and pre-fetch their HTML resources.
     """
-    tools: list[Tool] = getattr(request.app.state, "tools", [])
+    raw_tools = getattr(request.app.state, "tools", [])
+    # app.state.tools is a Toolbox (not a plain list) — call .all() to iterate
+    tool_list: list[Tool] = raw_tools.all() if hasattr(raw_tools, "all") else list(raw_tools)
     manifest: List[Dict[str, Any]] = []
 
-    for tool in tools:
-        schema = tool.get_schema()
-        if schema.meta and schema.meta.get("ui", {}).get("resourceUri"):
-            uri = schema.meta["ui"]["resourceUri"]
-            name = uri.removeprefix("ui://") if uri.startswith("ui://") else uri
-            manifest.append(
-                {
-                    "tool_name": schema.name,
-                    "description": schema.description,
-                    "resource_uri": uri,
-                    "http_url": f"/ui/{name}",
-                    "annotations": schema.annotations,
-                }
-            )
+    for tool in tool_list:
+        ui = getattr(tool, "ui", None)
+        if ui is None:
+            continue
+        uri = ui.resource_uri
+        name = uri.removeprefix("ui://") if uri.startswith("ui://") else uri
+        manifest.append(
+            {
+                "tool_name": getattr(tool, "name", ""),
+                "description": getattr(tool, "description", ""),
+                "resource_uri": uri,
+                "http_url": f"/ui/{name}",
+                "permissions": list(ui.permissions),
+                "prefers_border": ui.prefers_border,
+            }
+        )
 
     return manifest
 

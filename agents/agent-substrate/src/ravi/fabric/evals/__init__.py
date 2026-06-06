@@ -9,7 +9,7 @@ Provides:
 
 Quick start::
 
-    from ravi.evals import (
+    from ravi.fabric.evals import (
         EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS,
     )
 
@@ -30,14 +30,14 @@ Quick start::
 from __future__ import annotations
 
 
-from ravi.evals.models import (
+from ravi.fabric.evals.models import (
     EvalCase,
     EvalDataset,
     EvalScore,
     EvalCaseResult,
     EvalReport,
 )
-from ravi.evals.criteria import (
+from ravi.fabric.evals.criteria import (
     EvalCriterion,
     CORRECTNESS,
     HELPFULNESS,
@@ -46,7 +46,7 @@ from ravi.evals.criteria import (
     CONCISENESS,
     TOOL_USAGE,
 )
-from ravi.evals.judge import LLMJudge
+from ravi.fabric.evals.judge import LLMJudge
 
 __all__ = [
     # Models

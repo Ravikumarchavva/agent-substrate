@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from ravi.capabilities.knowledge.vector_store import Document
+from ravi.kernel.vector import Document
 
 
 class BaseDocumentLoader(ABC):

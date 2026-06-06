@@ -7,24 +7,22 @@ The agent calls this tool when approaching complex multi-step questions:
   3. Call action="complete_task" when each task finishes.
   4. Optionally call action="add_task" / "delete_task" for dynamic changes.
 
-Each action emits an SSE event via the injected event_emitter so the
-frontend KanbanPanel updates in real-time.
+Each action returns the full board in ``structured_content``; the agent lowers
+it into a ``UIResourceBlock`` (``ui://kanban_board``) that renders as a live
+Kanban via the MCP-Apps narrow waist — no bespoke task wire events.
 """
 
 from __future__ import annotations
 from ravi.logger import setup_logging
 
 import contextvars
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
-from ravi.kernel.tools import ToolExecutionResult
-from ravi.serving.shared.tasks.store import GlobalTaskStore, Task, TaskStore
+from ravi.kernel.tools import ToolExecutionResult, ToolUI
+from ravi.serving.shared.tasks.store import GlobalTaskStore, TaskStore
 from ravi.kernel import TextBlock
 
 logger = setup_logging()
-
-# Type alias for the async event emitter (usually bridge.put_event)
-EventEmitter = Callable[[Dict[str, Any]], Awaitable[None]]
 
 # Per-async-task context variable — set by chat route before agent.run_stream().
 # Using ContextVar means concurrent requests get their own value automatically.
@@ -52,14 +50,23 @@ class TaskManagerTool:
     2. start_task  → do the work → complete_task  (repeat per step)
     """
 
-    risk: str = "critical"  # TODO: L4-hitl  # writes task state, fires SSE events
+    risk: str = "critical"  # TODO: L4-hitl  # writes task state
+
+    # Renders through the bundled kanban MCP App (ui://kanban_board). The agent
+    # lowers each result's structured_content into a UIResourceBlock.
+    ui: ToolUI = ToolUI(resource_uri="ui://kanban_board", prefers_border=True)
 
     name: str = "manage_tasks"
     description: str = (
         "Create and update a visible task-board for complex, multi-step work. "
         "ALWAYS call action=create_list FIRST with all planned steps. "
         "Then call start_task before each step and complete_task after. "
-        "The user sees live Kanban updates: Todo → In Progress → Done."
+        "Use fail_task when a step cannot be completed. "
+        "When a task fails and its retry_count < max_retries, call retry_task "
+        "to increment the counter and move it back to in_progress. "
+        "When retry_count >= max_retries the task is permanently failed — "
+        "do not retry further unless the user explicitly asks. "
+        "The user sees live Kanban updates: Todo → In Progress → Done / Failed."
     )
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -71,6 +78,7 @@ class TaskManagerTool:
                     "start_task",
                     "complete_task",
                     "fail_task",
+                    "retry_task",
                     "add_task",
                     "delete_task",
                     "update_title",
@@ -86,13 +94,21 @@ class TaskManagerTool:
                 "type": "string",
                 "description": (
                     "ID of the task to update. "
-                    "If omitted for start_task / complete_task, "
+                    "If omitted for start_task / complete_task / retry_task, "
                     "the first matching task is used automatically."
                 ),
             },
             "title": {
                 "type": "string",
                 "description": "New title for update_title action.",
+            },
+            "max_retries": {
+                "type": "integer",
+                "description": (
+                    "Max retry attempts per failed task (default 3). "
+                    "Only used with create_list."
+                ),
+                "default": 3,
             },
             "thread_id": {
                 "type": "string",
@@ -103,8 +119,7 @@ class TaskManagerTool:
         "additionalProperties": False,
     }
 
-    def __init__(self, event_emitter: Optional[EventEmitter] = None) -> None:
-        self._emit: Optional[EventEmitter] = event_emitter
+    def __init__(self) -> None:
         # task_list_id per conversation thread (supports concurrent requests)
         self._task_lists: Dict[str, Optional[str]] = {}  # thread_id -> task_list_id
 
@@ -124,6 +139,7 @@ class TaskManagerTool:
         tasks: Optional[list[str]] = None,
         task_id: Optional[str] = None,
         title: Optional[str] = None,
+        max_retries: int = 3,
         thread_id: Optional[str] = None,
     ) -> ToolExecutionResult:
 
@@ -138,21 +154,15 @@ class TaskManagerTool:
             if not tasks:
                 return _err("tasks[] is required for create_list")
 
-            task_list = await store.create_task_list(conv_id, tasks)
+            task_list = await store.create_task_list(conv_id, tasks, max_retries=max_retries)
             self._task_lists[conv_id] = task_list.id
 
-            await self._fire(
-                {
-                    "type": "task_list_created",
-                    "task_list": task_list.to_dict(),
-                }
-            )
-
             names = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(tasks))
-            return _ok(
+            return self._board_result(
                 f"Task list created ({len(tasks)} tasks):\n{names}\n\n"
                 f"Now call start_task (no task_id needed — auto-advances) "
-                f"before each step, and complete_task after."
+                f"before each step, and complete_task after.",
+                task_list.to_dict(),
             )
 
         # ── shared guard: need an active task list ────────────────────
@@ -175,14 +185,7 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            await self._fire(
-                {
-                    "type": "task_updated",
-                    "task_list_id": task_list_id,
-                    "task": _task_dict(updated),
-                }
-            )
-            return _ok(f"Started: {updated.title}")
+            return self._board_result(f"Started: {updated.title}", self._board(store, task_list_id))
 
         # ── complete_task ─────────────────────────────────────────────
         if action == "complete_task":
@@ -196,14 +199,7 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            await self._fire(
-                {
-                    "type": "task_updated",
-                    "task_list_id": task_list_id,
-                    "task": _task_dict(updated),
-                }
-            )
-            return _ok(f"Completed: {updated.title}")
+            return self._board_result(f"Completed: {updated.title}", self._board(store, task_list_id))
         # ── fail_task ─────────────────────────────────────────────
         if action == "fail_task":
             resolved = self._resolve_task_id(
@@ -219,29 +215,48 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            await self._fire(
-                {
-                    "type": "task_updated",
-                    "task_list_id": task_list_id,
-                    "task": _task_dict(updated),
-                }
+            return self._board_result(f"Marked as failed: {updated.title}", self._board(store, task_list_id))
+
+        # ── retry_task ────────────────────────────────────────────────
+        if action == "retry_task":
+            resolved = self._resolve_task_id(task_id, "failed", store, task_list_id)
+            if not resolved:
+                return _err("No failed task found to retry.")
+
+            task_list = store.get_task_list(task_list_id)
+            if not task_list:
+                return _err("Task list not found.")
+
+            task = next((t for t in task_list.tasks if t.id == resolved), None)
+            if not task:
+                return _err("Task not found.")
+
+            if task.retry_count >= task_list.max_retries:
+                return _err(
+                    f"Task '{task.title}' has reached the retry limit "
+                    f"({task_list.max_retries}). Mark it as permanently failed "
+                    "or ask the user before retrying."
+                )
+
+            updated = await store.increment_retry(task_list_id, resolved)
+            if not updated:
+                return _err(f"Failed to retry task (id={resolved!r}).")
+
+            return self._board_result(
+                f"Retrying '{updated.title}' "
+                f"(attempt {updated.retry_count}/{task_list.max_retries}).",
+                self._board(store, task_list_id),
             )
-            return _ok(f"Marked as failed: {updated.title}")
+
         # ── add_task ─────────────────────────────────────────────────
         if action == "add_task":
             if not tasks:
                 return _err("tasks[] is required for add_task")
 
             new_tasks = await store.add_tasks(task_list_id, tasks)
-            for t in new_tasks:
-                await self._fire(
-                    {
-                        "type": "task_added",
-                        "task_list_id": task_list_id,
-                        "task": _task_dict(t),
-                    }
-                )
-            return _ok(f"Added {len(new_tasks)} task(s).")
+            return self._board_result(
+                f"Added {len(new_tasks)} task(s).", self._board(store, task_list_id)
+            )
 
         # ── delete_task ───────────────────────────────────────────────
         if action == "delete_task":
@@ -252,14 +267,9 @@ class TaskManagerTool:
             if not deleted:
                 return _err(f"Task {task_id!r} not found.")
 
-            await self._fire(
-                {
-                    "type": "task_deleted",
-                    "task_list_id": task_list_id,
-                    "task_id": task_id,
-                }
+            return self._board_result(
+                f"Deleted task {task_id}.", self._board(store, task_list_id)
             )
-            return _ok(f"Deleted task {task_id}.")
 
         # ── update_title ──────────────────────────────────────────────
         if action == "update_title":
@@ -270,14 +280,9 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task {task_id!r} not found.")
 
-            await self._fire(
-                {
-                    "type": "task_updated",
-                    "task_list_id": task_list_id,
-                    "task": _task_dict(updated),
-                }
+            return self._board_result(
+                f"Renamed task to: {updated.title}", self._board(store, task_list_id)
             )
-            return _ok(f"Renamed task to: {updated.title}")
 
         return _err(f"Unknown action: {action!r}")
 
@@ -349,14 +354,26 @@ class TaskManagerTool:
         # 5. Ultimate fallback: advance to the next task in given status
         return self._first_with_status(status, store, task_list_id)
 
-    async def _fire(self, event: Dict[str, Any]) -> None:
-        """Emit an SSE event to the frontend (non-blocking, swallows errors)."""
-        if not self._emit:
-            return
-        try:
-            await self._emit(event)
-        except Exception as exc:
-            logger.debug("Task event emit failed: %s", exc)
+    @staticmethod
+    def _board(store: TaskStore, task_list_id: str) -> Dict[str, Any]:
+        """Return the full current board as a dict (empty when missing)."""
+        tl = store.get_task_list(task_list_id)
+        return tl.to_dict() if tl else {}
+
+    @staticmethod
+    def _board_result(message: str, task_list: Dict[str, Any]) -> ToolExecutionResult:
+        """A success result that also carries the board for the kanban UI.
+
+        ``content`` is the model-facing text; ``structured_content`` is the
+        UI-facing board the agent lowers into a ``ui://kanban_board``
+        UIResourceBlock.  The board is sent in full each call so the iframe
+        always renders the complete, current state.
+        """
+        return ToolExecutionResult(
+            content=[TextBlock(text=message)],
+            is_error=False,
+            structured_content={"task_list": task_list},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -364,24 +381,8 @@ class TaskManagerTool:
 # ---------------------------------------------------------------------------
 
 
-def _ok(message: str) -> ToolExecutionResult:
-    return ToolExecutionResult(
-        content=[TextBlock(text=message)],
-        is_error=False,
-    )
-
-
 def _err(message: str) -> ToolExecutionResult:
     return ToolExecutionResult(
         content=[TextBlock(text=message)],
         is_error=True,
     )
-
-
-def _task_dict(task: Task) -> Dict[str, Any]:
-    return {
-        "id": task.id,
-        "title": task.title,
-        "status": task.status,
-        "order": task.order,
-    }

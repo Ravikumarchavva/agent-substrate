@@ -58,6 +58,7 @@ def _build_orchestrator(
     model_context_window: int,
     tool_timeout: float | None,
     session_id: str,
+    tools: list[Tool] | None = None,
 ) -> Any:
     """Build an OrchestratorAgent with researcher + calculator + clock specialists."""
     from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
@@ -103,6 +104,7 @@ def _build_orchestrator(
             SubAgentConfig(calculator, priority=Priority.NORMAL),
             SubAgentConfig(clock, priority=Priority.NORMAL),
         ],
+        extra_tools=tools,
         max_iterations=15,
         tool_timeout=tool_timeout,
         session_id=session_id,
@@ -174,6 +176,7 @@ async def load_agent_for_thread(
             model_context_window=model_context_window,
             tool_timeout=tool_timeout,
             session_id=session_id,
+            tools=tools,
         )
     else:
         agent = create_assistant_agent(

@@ -2,10 +2,37 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
 
 from ravi.kernel.message import ToolCallRequest, ToolExecutionResult
+
+
+@dataclass(frozen=True)
+class ToolUI:
+    """Declares that a tool renders through an MCP-App UI resource.
+
+    Mirrors the MCP Apps tool ``_meta.ui`` object so external MCP App servers
+    interoperate and the host can preload the resource before the call:
+
+    - ``resource_uri``    the ``ui://name`` resource that renders this tool.
+    - ``csp``             allowed external origins, keyed by MCP CSP category
+                          (``connectDomains`` / ``resourceDomains`` /
+                          ``frameDomains`` / ``baseUriDomains``).
+    - ``permissions``     sandbox capabilities to request
+                          (``camera`` / ``microphone`` / ``geolocation`` /
+                          ``clipboardWrite``).
+    - ``prefers_border``  host hint to draw a visual boundary.
+
+    Optional on a tool — its absence means the tool has no UI.  Internal tools
+    may skip the declaration and return a ``UIResourceBlock`` directly.
+    """
+
+    resource_uri: str
+    csp: dict[str, list[str]] | None = None
+    permissions: tuple[str, ...] = field(default_factory=tuple)
+    prefers_border: bool = False
 
 
 class ToolRisk(str, Enum):
@@ -26,6 +53,8 @@ class Tool(Protocol):
     """Contract every tool must satisfy.
 
     ``risk`` is optional — defaults to ``ToolRisk.SAFE`` when absent.
+    ``ui`` is optional — a ``ToolUI`` declaration when the tool renders through
+    an MCP-App resource; its absence means the tool has no UI.
     """
 
     name: str
@@ -113,6 +142,7 @@ class Toolbox:
 # Re-exported here for import convenience — canonical home is kernel.message.
 __all__ = [
     "ToolRisk",
+    "ToolUI",
     "Tool",
     "Toolbox",
     # message payloads re-exported so tools can do: from ravi.kernel.tools import ToolExecutionResult

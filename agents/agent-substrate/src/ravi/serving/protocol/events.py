@@ -134,9 +134,10 @@ class TurnCompletedEvent(BaseModel):
 
 
 class RunCompletedEvent(BaseModel):
-    """The whole agent run finished successfully."""
+    """The whole agent run finished."""
 
     type: Literal["run.completed"] = "run.completed"
+    reason: str = "success"
 
 
 class RunFailedEvent(BaseModel):
@@ -168,37 +169,40 @@ class ApprovalRequestedEvent(BaseModel):
 
 
 class InputRequestedEvent(BaseModel):
-    """The agent is waiting for free-form human input."""
+    """The agent is waiting for human input (ask_human tool)."""
 
     type: Literal["input.requested"] = "input.requested"
     request_id: str
-    prompt: str
-    options: list[str] | None = None
+    question: str
+    context: str = ""
+    options: list[dict[str, Any]] = Field(default_factory=list)
+    allow_freeform: bool = True
 
 
 # ---------------------------------------------------------------------------
-# Task board (kanban)
+# Interactive UI (MCP Apps) — the narrow waist for ANY rich tool UI
 # ---------------------------------------------------------------------------
 
 
-class TaskCreatedEvent(BaseModel):
-    type: Literal["task.created"] = "task.created"
-    task_list: dict[str, Any] = Field(default_factory=dict)
+class UIResourceEvent(BaseModel):
+    """A tool produced an interactive UI to render in a sandboxed iframe.
 
+    The single carrier for every rich UI (kanban, chart, form, map, …): a
+    ``ui://`` resource reference plus the data to feed it, per MCP Apps. The
+    host renders ``uri`` and pushes ``structured_content`` over the postMessage
+    channel. A later event with the same ``call_id`` + ``uri`` updates an
+    already-mounted iframe rather than remounting it.
+    """
 
-class TaskUpdatedEvent(BaseModel):
-    type: Literal["task.updated"] = "task.updated"
-    task: dict[str, Any] = Field(default_factory=dict)
-
-
-class TaskAddedEvent(BaseModel):
-    type: Literal["task.added"] = "task.added"
-    task: dict[str, Any] = Field(default_factory=dict)
-
-
-class TaskDeletedEvent(BaseModel):
-    type: Literal["task.deleted"] = "task.deleted"
-    task_id: str
+    type: Literal["ui.resource"] = "ui.resource"
+    call_id: str = ""
+    uri: str
+    mime_type: str = "text/html;profile=mcp-app"
+    structured_content: dict[str, Any] = Field(default_factory=dict)
+    render: str = "inline"     # "inline" | "panel" | "fullscreen"
+    text: str = ""
+    agent: str = ""
+    depth: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -238,10 +242,7 @@ WireEvent = Annotated[
         RunCancelledEvent,
         ApprovalRequestedEvent,
         InputRequestedEvent,
-        TaskCreatedEvent,
-        TaskUpdatedEvent,
-        TaskAddedEvent,
-        TaskDeletedEvent,
+        UIResourceEvent,
         ErrorEvent,
         PingEvent,
     ],
@@ -264,10 +265,7 @@ __all__ = [
     "RunCancelledEvent",
     "ApprovalRequestedEvent",
     "InputRequestedEvent",
-    "TaskCreatedEvent",
-    "TaskUpdatedEvent",
-    "TaskAddedEvent",
-    "TaskDeletedEvent",
+    "UIResourceEvent",
     "ErrorEvent",
     "PingEvent",
     "WireEvent",

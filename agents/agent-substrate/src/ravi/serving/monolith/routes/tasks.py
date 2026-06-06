@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ravi.serving.shared.tasks.store import GlobalTaskStore
-from ravi.serving.monolith.dependencies import ServerDependencies, get_ctx
 from ravi.serving.monolith.security.deps import get_current_user
 
 router = APIRouter(
@@ -45,16 +44,21 @@ async def get_tasks(conversation_id: str):
     return {"task_list": task_list.to_dict() if task_list else None}
 
 
+# Note: user-initiated edits to the kanban now happen inside the MCP-App iframe,
+# which renders state from the tool result's structured_content and persists
+# changes via POST /threads/{id}/mcp-context (ui/update-model-context). These
+# REST endpoints mutate the shared store only — they no longer push SSE bridge
+# events (the bespoke task wire path was removed with the narrow-waist rebuild).
+
+
 @router.patch("/{task_list_id}/{task_id}")
 async def update_task(
     task_list_id: str,
     task_id: str,
     req: TaskUpdateRequest,
-    ctx: ServerDependencies = Depends(get_ctx),
 ):
-    """Update a task's status or title (drag-drop / inline edit from frontend)."""
+    """Update a task's status or title."""
     store = GlobalTaskStore.get()
-    bridge_registry = ctx.bridge_registry
 
     result = None
     if req.status:
@@ -65,22 +69,6 @@ async def update_task(
     if not result:
         return {"status": "error", "detail": "Task not found"}
 
-    # Emit to the correct per-thread bridge (looks up conversation_id from store)
-    task_list_obj = store.get_task_list(task_list_id)
-    if task_list_obj:
-        await bridge_registry.emit(
-            task_list_obj.conversation_id,
-            {
-                "type": "task_updated",
-                "task_list_id": task_list_id,
-                "task": {
-                    "id": result.id,
-                    "title": result.title,
-                    "status": result.status,
-                    "order": result.order,
-                },
-            },
-        )
     return {
         "status": "ok",
         "task": {"id": result.id, "title": result.title, "status": result.status},
@@ -88,57 +76,18 @@ async def update_task(
 
 
 @router.post("/{task_list_id}/tasks")
-async def add_tasks(
-    task_list_id: str,
-    req: AddTasksRequest,
-    ctx: ServerDependencies = Depends(get_ctx),
-):
-    """Append new tasks to an existing task list (user-initiated)."""
+async def add_tasks(task_list_id: str, req: AddTasksRequest):
+    """Append new tasks to an existing task list."""
     store = GlobalTaskStore.get()
-    bridge_registry = ctx.bridge_registry
-
     new_tasks = await store.add_tasks(task_list_id, req.tasks)
-    task_list_obj = store.get_task_list(task_list_id)
-    if task_list_obj:
-        for t in new_tasks:
-            await bridge_registry.emit(
-                task_list_obj.conversation_id,
-                {
-                    "type": "task_added",
-                    "task_list_id": task_list_id,
-                    "task": {
-                        "id": t.id,
-                        "title": t.title,
-                        "status": t.status,
-                        "order": t.order,
-                    },
-                },
-            )
     return {"status": "ok", "added": len(new_tasks)}
 
 
 @router.delete("/{task_list_id}/{task_id}")
-async def delete_task(
-    task_list_id: str,
-    task_id: str,
-    ctx: ServerDependencies = Depends(get_ctx),
-):
-    """Delete a task (user-initiated)."""
+async def delete_task(task_list_id: str, task_id: str):
+    """Delete a task."""
     store = GlobalTaskStore.get()
-    bridge_registry = ctx.bridge_registry
-
     deleted = await store.delete_task(task_list_id, task_id)
     if not deleted:
         return {"status": "error", "detail": "Task not found"}
-
-    task_list_obj = store.get_task_list(task_list_id)
-    if task_list_obj:
-        await bridge_registry.emit(
-            task_list_obj.conversation_id,
-            {
-                "type": "task_deleted",
-                "task_list_id": task_list_id,
-                "task_id": task_id,
-            },
-        )
     return {"status": "ok"}

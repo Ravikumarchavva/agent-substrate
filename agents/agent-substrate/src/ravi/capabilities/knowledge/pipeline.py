@@ -21,11 +21,7 @@ from ravi.logger import setup_logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from ravi.capabilities.knowledge.chunking import get_chunker
-from ravi.capabilities.knowledge.vector_store import (
-    BaseVectorStore,
-    Document,
-    SearchResult,
-)
+from ravi.kernel.vector import Document, SearchResult, VectorStore
 
 if TYPE_CHECKING:
     from ravi.kernel.llm import LLMClient, EmbeddingClient as BaseEmbeddingClient
@@ -43,7 +39,7 @@ class RAGPipeline:
     def __init__(
         self,
         embedding_client: BaseEmbeddingClient,
-        vector_store: BaseVectorStore,
+        vector_store: VectorStore,
         default_chunk_size: int = 512,
         default_chunk_overlap: int = 128,
     ) -> None:

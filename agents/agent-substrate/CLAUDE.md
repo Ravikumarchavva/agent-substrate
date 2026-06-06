@@ -65,12 +65,14 @@ ravi-engine/                     ← repo root
 
 ```
 src/ravi/
-├── kernel/       L0 — FROZEN. Pure contracts: types, Protocols, dataclasses. No I/O.
-│   ├── content.py        ContentBlock, TextBlock, ChatMessage, ToolUseBlock, …
+├── kernel/       L0 — FROZEN. Pure contracts: Protocols, dataclasses, enums. No I/O.
+│   ├── content.py        ContentBlock, TextBlock, ChatMessage, ToolUseBlock, DocumentBlock, …
 │   ├── message.py        Message, MessageContext, MessageHandler, Subscription
 │   ├── tools.py          Tool Protocol, ToolExecutionResult, ToolRisk, ToolCallRequest
 │   ├── llm.py            LLMClient, EmbeddingClient Protocols
 │   ├── history.py        HistoryProvider Protocol
+│   ├── vector.py         VectorStore Protocol, Document, SearchResult
+│   ├── graph.py          GraphStore Protocol, Entity, Relationship, SubGraph
 │   ├── context.py        CompactionStrategy, AgentContextProtocol
 │   ├── middleware.py     Interceptor Protocol
 │   ├── stream.py         TextDelta, ReasoningDelta, CompletionEvent, StreamDone
@@ -78,44 +80,45 @@ src/ravi/
 │   ├── identity.py       AgentId, TopicId
 │   └── errors.py
 │
-├── agents/       L1-L3 combined — context, LLM clients, guardrails, middleware, agent types
-│   ├── assistant/        AssistantAgent (ReAct loop, tools, HITL, guardrail injection)
+├── agents/       L1 — core intelligence: LLM clients, guardrails, middleware, agent types
+│   ├── core/             ReActAgent, OrchestratorAgent, UserProxyAgent
 │   ├── context/          AgentContext, InMemoryHistoryProvider, compaction strategies
-│   ├── llm/              LLMClient (concrete), EmbeddingClient, model registry, cache/fallback/router
+│   ├── llm/              concrete LLM clients, model registry, cache/fallback/router
 │   ├── guardrails/       GuardrailType, run_guardrails, ContentFilter, LLMJudge, MaxToken, PII, PromptInjection
-│   ├── middleware/       Interceptor, MiddlewarePipeline, AuditLogger
-│   ├── flow/             FlowAgent (multi-step graph execution)
-│   ├── orchestrator/     OrchestratorAgent
-│   ├── proxy/            UserProxyAgent
-│   ├── runtime/          LocalRuntime (message dispatch)
-│   ├── hooks/            lifecycle hooks
+│   ├── middleware/       MiddlewarePipeline, AuditLogger, RateLimiter, HistoryTruncator, …
+│   ├── runtime/          LocalRuntime (in-process asyncio message dispatch)
+│   ├── hooks/            lifecycle hooks (RUN_START/END, STEP, LLM, TOOL, HANDOFF)
 │   ├── resources/        ExecutionBudget, agent_span
-│   └── supervision/      RetryPolicy
+│   └── supervision/      SpawnBudget, RetryPolicy
 │
-├── adapters/     concrete I/O ports implementing kernel/agents contracts
-│   ├── llm/              openai/, anthropic/, gemini/, encoders/, factory.py
-│   ├── memory/           redis_history.py, postgres_history.py
-│   ├── mcp/              MCPClient, MCPTool, apps/
-│   ├── vector/           vector store adapters
-│   ├── graph/            graph store adapters
-│   ├── storage/          file storage adapters
-│   ├── events/           EventBus (Redis pub/sub)
-│   └── spotify/          Spotify API adapter
-│
-├── capabilities/ the agent's runtime capabilities
+├── capabilities/ L2 — what agents can do: tools, skills, knowledge, connectors
 │   ├── tools/            tool implementations (human_input, task_manager, web_surfer, …)
 │   ├── skills/           SKILL.md prompt-skill packages
-│   ├── knowledge/        RAG pipeline, loaders, graph_rag
+│   ├── knowledge/        RAG pipeline, chunking, loaders, reranker, graph_rag
 │   ├── connectors/       external service connectors (email, calendar, minio, postgres)
 │   ├── triggers/         event-based trigger definitions
 │   └── internal/         scanner, pipeline engine, skill loader, chain runtime
 │
-├── serving/      deployment shells
+├── fabric/       L3 — how agents are orchestrated: flows, evals, durable execution
+│   ├── flows/            SequentialFlow, ParallelFlow, ConditionalFlow
+│   ├── evals/            EvalCase, EvalDataset, LLMJudge, EvalRunner, EvalReport
+│   └── durable/          Checkpoint, DurableRunner (skeleton — resumable long-running runs)
+│
+├── adapters/     concrete I/O ports implementing kernel Protocols (orthogonal to layers)
+│   ├── llm/              openai/, anthropic/, gemini/, encoders/, factory.py
+│   ├── memory/           redis_history.py, postgres_history.py  (implement HistoryProvider)
+│   ├── mcp/              MCPClient, MCPTool, apps/
+│   ├── vector/           PgVectorStore  (implements VectorStore Protocol)
+│   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
+│   ├── storage/          file storage adapters
+│   ├── events/           EventBus (Redis pub/sub)
+│   └── spotify/          Spotify API adapter
+│
+├── serving/      deployment shells (orthogonal to layers)
 │   ├── monolith/         single FastAPI app (app.py, routes/, sse/, security/, services/)
 │   ├── services/         12 independent microservices (one FastAPI app per folder)
 │   └── shared/           cross-service: auth, database, events, observability, tasks
 │
-├── evals/        LLM-as-judge eval framework (judge, criteria, runner, models)
 ├── config.py     Pydantic Settings (reads .env)
 ├── exceptions.py public exceptions (GuardrailTripwireError, …)
 ├── logger.py     setup_logging()
@@ -157,22 +160,41 @@ Services intentionally missing `models.py`/`service.py` by design: `gateway` (BF
 
 ---
 
-## Frozen kernel — `ravi.kernel` is frozen forever
+## Architecture — four enforced layers
 
-`src/ravi/kernel/` is the contract layer. It is **never edited to add capability**. New features go in `agents/`, `adapters/`, or `capabilities/`.
+```
+kernel (L0)       Pure contracts: Protocols, dataclasses, enums. No I/O.
+    ↑ imported by
+agents (L1)       Core intelligence: LLM loop, guardrails, middleware, agent types.
+    ↑ imported by
+capabilities (L2) What agents can do: tools, skills, knowledge, connectors.
+    ↑ imported by
+fabric (L3)       How agents are orchestrated: flows, evals, durable execution.
+```
+
+`adapters/` and `serving/` are **orthogonal** — they implement kernel Protocols and wire all layers together in lifespan. They are not part of the stack hierarchy.
 
 **Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
 
 ```
-agents  →  kernel        (L1-L3 imports down into L0)
-
-adapters, capabilities, evals, serving  =  orthogonal
+fabric        →  capabilities  →  agents  →  kernel
+adapters, serving  =  orthogonal (cross-layer by design)
 ```
 
-**Enforcement** (CI fails if violated):
+**Import-linter contracts** (`pyproject.toml`, CI fails if violated):
 
-1. `tool.importlinter` contract `kernel is independent` — `ravi.kernel` may not import from any other ravi package.
-2. `tests/architecture/test_kernel_invariants.py` — LOC ceiling, file-count ceiling, no concrete implementations in kernel.
+| Contract | Rule |
+|---|---|
+| `four stack layers` | Each layer only imports from the layer(s) below it |
+| `agents cannot import capabilities or fabric` | L1 must not reach up to L2 or L3 |
+| `capabilities cannot import fabric` | L2 must not reach up to L3 |
+| `kernel is independent` | L0 imports nothing from the rest of the codebase |
+
+**Kernel invariants** (`tests/architecture/test_kernel_invariants.py`):
+- LOC ceiling (14k) and file-count ceiling (115) — catch accidental feature drift
+- No concrete implementations — only Protocols, ABCs, dataclasses, enums
+
+`src/ravi/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New capabilities go in `capabilities/`, new agent behaviour in `agents/`, new orchestration in `fabric/`.
 
 ---
 
@@ -182,12 +204,15 @@ adapters, capabilities, evals, serving  =  orthogonal
 
 | You want to add… | Write it in… |
 |---|---|
-| A new agent type | `agents/<name>/agent.py` — follow `AssistantAgent` pattern |
+| A new agent type | `agents/core/<name>.py` — follow `ReActAgent` pattern |
 | A new guardrail | `agents/guardrails/<name>.py` — implement `run(ctx) -> GuardrailResult` |
 | A new LLM provider | `adapters/llm/<provider>/` — implement `LLMClient` Protocol from `kernel/llm.py` |
 | A new memory backend | `adapters/memory/<name>.py` — implement `HistoryProvider` Protocol from `kernel/history.py` |
+| A new vector store | `adapters/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/vector.py` |
+| A new graph store | `adapters/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/graph.py` |
 | A new tool | `capabilities/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned, no registration needed) |
 | A new skill | `capabilities/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
+| A new agent flow | `fabric/flows/` — extend `BaseFlow` (SequentialFlow / ParallelFlow / ConditionalFlow) |
 
 ### Tool creation
 
@@ -268,6 +293,29 @@ from ravi.adapters.memory.postgres_history import PostgresHistoryProvider
 ```
 
 All `HistoryProvider` methods are `async def`. Always `await` them.
+
+## Knowledge / RAG
+
+Vector and graph store contracts live in the kernel. Adapters implement them; `capabilities/knowledge/` wires them into pipelines.
+
+```python
+# Contracts (kernel)
+from ravi.kernel.vector import VectorStore, Document, SearchResult
+from ravi.kernel.graph import GraphStore, Entity, Relationship, SubGraph
+
+# Concrete adapters
+from ravi.adapters.vector.pgvector_store import PgVectorStore
+from ravi.adapters.graph.age_store import AGEGraphStore
+
+# High-level RAG pipeline
+from ravi.capabilities.knowledge import RAGPipeline, GraphRAGPipeline
+
+pipeline = RAGPipeline(embedding_client=embed_client, vector_store=pg_store)
+await pipeline.ingest("Long document …", collection="kb")
+results = await pipeline.query("What is X?", collection="kb")
+```
+
+`Document` (RAG text chunk) and `DocumentBlock` (LLM message content) are distinct — never conflate them.
 
 ---
 
@@ -370,10 +418,10 @@ make ci
 
 ---
 
-## Evaluation Framework (`evals/`)
+## Evaluation Framework (`fabric/evals/`)
 
 ```python
-from ravi.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+from ravi.fabric.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
 
 runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
 report = await runner.run(dataset)
@@ -413,5 +461,5 @@ runner.export_markdown()
 |---|---|
 | `serving/monolith/routes/spotify_oauth.py` | `session_id = "default_user"` hardcoded — needs real user identity from auth context |
 | `serving/shared/tasks/store.py` | `TaskStore` is in-memory only — should be Postgres-backed for persistence across restarts |
-| `agents/assistant/agent.py` | `_run_inner()` is ~200 lines — guardrail checks should be extracted into helpers |
-| Test coverage | Gaps in: guardrails, middleware, MCP adapter, most microservices, evals |
+| `agents/core/react.py` | `_react()` is ~300 lines — guardrail checks and tool-concurrency drain could be extracted into helpers |
+| Test coverage | Gaps in: guardrails, middleware, MCP adapter, most microservices, fabric/evals |

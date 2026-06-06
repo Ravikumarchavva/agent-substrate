@@ -37,11 +37,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 from pgvector.sqlalchemy import Vector
 
-from ravi.capabilities.knowledge.vector_store import (
-    BaseVectorStore,
-    Document,
-    SearchResult,
-)
+from ravi.kernel.vector import Document, SearchResult
 
 logger = setup_logging()
 
@@ -87,7 +83,7 @@ class VectorDocument(_Base):
 # ── PgVectorStore ─────────────────────────────────────────────────────────────
 
 
-class PgVectorStore(BaseVectorStore):
+class PgVectorStore:
     """PostgreSQL + pgvector vector store.
 
     Creates the ``vector_documents`` table (and HNSW index) on first use

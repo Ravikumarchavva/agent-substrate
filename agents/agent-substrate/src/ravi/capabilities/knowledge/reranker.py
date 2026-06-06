@@ -17,7 +17,7 @@ from ravi.logger import setup_logging
 import json
 from typing import TYPE_CHECKING
 
-from ravi.capabilities.knowledge.vector_store import SearchResult
+from ravi.kernel.vector import SearchResult
 
 if TYPE_CHECKING:
     from ravi.kernel.llm import LLMClient

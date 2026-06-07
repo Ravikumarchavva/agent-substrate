@@ -10,7 +10,7 @@ from __future__ import annotations
 from ravi.agents.context import (
     AgentContext,
     CompactionStrategy,
-    DefaultAgentContext,
+    ContextConfig,
     HistoryProvider,
     InMemoryHistoryProvider,
     SlidingWindowStrategy,
@@ -66,7 +66,7 @@ __all__ = [
     # context
     "AgentContext",
     "CompactionStrategy",
-    "DefaultAgentContext",
+    "ContextConfig",
     "HistoryProvider",
     "InMemoryHistoryProvider",
     "SlidingWindowStrategy",

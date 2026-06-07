@@ -30,11 +30,12 @@ import asyncio
 import logging
 from collections import defaultdict, deque
 from enum import Enum
-from typing import Awaitable, Callable, Deque, Dict, List, Optional, Union
+from typing import Awaitable, Callable, Deque, Dict, List, Union
 
 from ravi.kernel.content import JsonObject
+from ravi.logger import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +124,7 @@ class HookManager:
         except ValueError:
             return False
 
-    def clear(self, event: Optional[HookEvent] = None) -> None:
+    def clear(self, event: HookEvent | None = None) -> None:
         """Clear hooks for a specific event or all events."""
         if event:
             self._hooks[event].clear()
@@ -184,9 +185,9 @@ class CostTracker:
 
     def __init__(
         self,
-        model: Optional[str] = None,
-        cost_per_1k_prompt: Optional[float] = None,
-        cost_per_1k_completion: Optional[float] = None,
+        model: str | None = None,
+        cost_per_1k_prompt: float | None = None,
+        cost_per_1k_completion: float | None = None,
     ):
         from ravi.agents.llm.models import get_model_profile
 

@@ -32,7 +32,7 @@ from ravi.adapters.llm.factory import (
     create_model_client,
     resolve_model_for_available_credentials,
 )
-from ravi.adapters.memory.redis_history import RedisHistoryProvider
+from ravi.adapters.history.redis_history import RedisHistoryProvider
 from ravi.serving.monolith.database import get_session_factory
 from ravi.serving.monolith.sse.bridge import BridgeRegistry
 

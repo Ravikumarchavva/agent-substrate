@@ -16,13 +16,13 @@ the runtime, where a registered agent (typically ReActAgent) handles them.
 
 from __future__ import annotations
 
-import logging
-from typing import Any, AsyncIterator, Callable, Optional
+from typing import Any, AsyncIterator, Callable
 
 from ravi.kernel import AgentId, AgentRuntime, MessageContext, TextBlock
 from ravi.kernel.stream import CompletionEvent, StreamDone
+from ravi.logger import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class UserProxyAgent:
@@ -48,7 +48,7 @@ class UserProxyAgent:
         runtime: AgentRuntime,
         *,
         key: str = "default",
-        hitl_callback: Optional[Callable[[MessageContext, object], Any]] = None,
+        hitl_callback: Callable[[MessageContext, object], Any] | None = None,
     ) -> None:
         self.name = name
         self.runtime = runtime

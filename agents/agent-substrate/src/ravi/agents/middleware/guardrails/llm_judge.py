@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
-from typing import Callable, Awaitable, Any
+from typing import Any, Awaitable, Callable
 
 from ravi.agents.middleware._contracts import ChatContext
-from ravi.exceptions import MiddlewareTermination
+from ravi.kernel.errors import MiddlewareTermination
+from ravi.logger import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 class LLMJudgeMiddleware:

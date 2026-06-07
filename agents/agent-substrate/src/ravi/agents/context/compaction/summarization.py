@@ -187,7 +187,8 @@ def _is_summary(msg: Message) -> bool:
 
 def _extract_summary_text(msg: Message) -> str:
     """Return the raw summary text without the prefix header."""
-    assert isinstance(msg.payload, ChatMessage)
+    if not isinstance(msg.payload, ChatMessage):
+        return ""
     for b in msg.payload.content:
         if isinstance(b, TextBlock) and b.text.startswith(_SUMMARY_PREFIX):
             return b.text[len(_SUMMARY_PREFIX) :].strip()

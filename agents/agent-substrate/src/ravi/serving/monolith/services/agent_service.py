@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.agents.core import ReActAgent
 from ravi.agents.context import (
-    AgentContext,
+    ContextConfig,
     HistoryProvider,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
@@ -64,8 +64,8 @@ def _build_orchestrator(
     from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
     from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool, ReadUrlTool
 
-    def _ctx() -> AgentContext:
-        return AgentContext(
+    def _ctx() -> ContextConfig:
+        return ContextConfig(
             InMemoryHistoryProvider(),
             SlidingWindowCompaction(max_messages=20),
         )

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from ravi.agents.context import (
-    AgentContext,
+    ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
@@ -120,7 +120,7 @@ def make_agent(
         function_middleware=function_middleware,
         approval_handler=approval_handler,
         approval_required_risk=approval_required_risk,
-        context=AgentContext(
+        context=ContextConfig(
             InMemoryHistoryProvider(),
             SlidingWindowCompaction(max_messages=20),
         ),
@@ -397,14 +397,14 @@ async def test_hitl_safe_tool_skips_approval():
 
 
 # ---------------------------------------------------------------------------
-# Tests — AgentContext API
+# Tests — ContextConfig API
 # ---------------------------------------------------------------------------
 
 
 async def test_agent_context_constructor():
-    """AgentContext(history, [strategies]) wires correctly into the agent."""
+    """ContextConfig(history, [strategies]) wires correctly into the agent."""
     async with LocalRuntime() as rt:
-        ctx = AgentContext(
+        ctx = ContextConfig(
             InMemoryHistoryProvider(),
             [SlidingWindowCompaction(max_messages=10)],
         )

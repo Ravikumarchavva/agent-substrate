@@ -67,6 +67,7 @@ from ravi.kernel.stream import (
 )
 from ravi.kernel.vector import Document, SearchResult, VectorStore
 from ravi.kernel.graph import Entity, Relationship, SubGraph, GraphStore
+from ravi.kernel.memory import Memory, ShortTermMemory, LongTermMemory
 
 __all__ = [
     # Content
@@ -148,4 +149,8 @@ __all__ = [
     "Relationship",
     "SubGraph",
     "GraphStore",
+    # Memory
+    "Memory",
+    "ShortTermMemory",
+    "LongTermMemory",
 ]

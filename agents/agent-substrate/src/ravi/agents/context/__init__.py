@@ -14,7 +14,7 @@ from .compaction import (
     SlidingWindowCompaction,
     SummarizationCompaction,
 )
-from .context import AgentContext, AgentContextProtocol, DefaultAgentContext
+from .context import AgentContext, AgentContextProtocol, ContextConfig
 
 __all__ = [
     "HistoryProvider",
@@ -30,5 +30,5 @@ __all__ = [
     "SummarizationCompaction",
     "AgentContext",
     "AgentContextProtocol",
-    "DefaultAgentContext",
+    "ContextConfig",
 ]

@@ -25,7 +25,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ravi.integrations.memory.lineage_postgres import (
+from ravi.capabilities.memory.lineage_postgres import (
     LineageRow,
     PostgresLineageStore,
     _row_to_record,

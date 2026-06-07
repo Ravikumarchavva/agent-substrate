@@ -14,8 +14,8 @@ from ravi.logger import setup_logging
 from pathlib import Path
 from typing import Any, Dict, List
 
-from ravi.capabilities.skills._loader import SkillLoader
-from ravi.capabilities.skills._models import SkillPackage, SkillMetadata
+from ravi.capabilities.tools.skills._loader import SkillLoader
+from ravi.capabilities.tools.skills._models import SkillPackage, SkillMetadata
 
 logger = setup_logging()
 

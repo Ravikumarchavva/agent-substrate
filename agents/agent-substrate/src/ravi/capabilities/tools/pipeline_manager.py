@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel.tools import ToolExecutionResult, ToolType
 from ravi.kernel import TextBlock
 
 
 class PipelineManagerTool:
     """Manage and execute saved adapter pipelines."""
 
+    tool_type = ToolType.PIPELINE
     name: str = "pipeline_manager"
     description: str = (
         "Manage saved adapter pipelines: run, save, list, or delete "

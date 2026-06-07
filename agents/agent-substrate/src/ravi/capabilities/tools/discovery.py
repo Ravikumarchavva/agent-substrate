@@ -39,11 +39,11 @@ class CatalogPackage:
 
 def _default_capability_dirs() -> List[Path]:
     """Return the built-in capability type subdirectories."""
-    package_root = Path(__file__).resolve().parent
+    tools_root = Path(__file__).resolve().parent  # capabilities/tools/
     return [
-        package_root / "tools",
-        package_root / "skills",
-        package_root / "connectors",
+        tools_root,                   # tool packages (task_manager, code_interpreter, …)
+        tools_root / "skills",        # SKILL.md packages
+        tools_root / "connectors",    # connector packages
     ]
 
 
@@ -194,7 +194,7 @@ class CapabilityDiscovery:
     def _load_skill_metadata(self, skill_dir: Path, skill_md: Path) -> Any | None:
         """Parse SKILL.md using the SkillLoader helper."""
         try:
-            from ravi.capabilities.skills._loader import SkillLoader
+            from ravi.capabilities.tools.skills._loader import SkillLoader
 
             loader = SkillLoader.__new__(SkillLoader)
             return loader._load_metadata(skill_dir, skill_md)

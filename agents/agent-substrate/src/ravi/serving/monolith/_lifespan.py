@@ -24,7 +24,7 @@ from ravi.config import Settings
 from ravi.kernel.llm import LLMClient, EmbeddingClient
 from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel.tools import Tool, Toolbox, ToolRisk
-from ravi.capabilities.skills._manager import SkillManager
+from ravi.capabilities.tools.skills._manager import SkillManager
 
 from ravi.integrations.llm.factory import (
     CHAT_MODEL_FALLBACKS,
@@ -32,7 +32,7 @@ from ravi.integrations.llm.factory import (
     create_model_client,
     resolve_model_for_available_credentials,
 )
-from ravi.integrations.history.redis_history import RedisHistoryProvider
+from ravi.capabilities.history.redis_history import RedisHistoryProvider
 from ravi.serving.monolith.database import get_session_factory
 from ravi.serving.monolith.sse.bridge import BridgeRegistry
 
@@ -171,7 +171,7 @@ async def init_infrastructure(
     session_factory = get_session_factory()
 
     # Vector store + RAG pipeline (pgvector-backed)
-    from ravi.integrations.vector.pgvector_store import PgVectorStore
+    from ravi.capabilities.vector.pgvector_store import PgVectorStore
     from ravi.capabilities.knowledge.pipeline import RAGPipeline
 
     vector_store = PgVectorStore(

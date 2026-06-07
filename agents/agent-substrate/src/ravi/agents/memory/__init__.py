@@ -2,7 +2,7 @@
 
 These have no external dependencies and are suitable for tests, notebooks,
 and single-process deployments.  Production deployments use the adapters
-in ``ravi.integrations.memory`` (Redis, Postgres).
+in ``ravi.capabilities.memory`` (Redis, Postgres).
 """
 
 from __future__ import annotations

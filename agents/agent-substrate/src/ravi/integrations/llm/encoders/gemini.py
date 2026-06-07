@@ -20,7 +20,7 @@ from PIL import Image
 
 from google.genai import types as genai_types
 
-from ravi.adapters.llm.encoders._media import pil_to_png_bytes
+from ravi.integrations.llm.encoders._media import pil_to_png_bytes
 
 from ravi.kernel import ChatMessage
 from ravi.kernel.content import (

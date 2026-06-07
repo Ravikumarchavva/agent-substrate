@@ -24,9 +24,9 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from ravi.capabilities.internal.skill_models import SkillPackage, SkillMetadata
+from ravi.capabilities.skills._models import SkillPackage, SkillMetadata
 
 yaml: Any = None  # optional dependency; assigned below if available
 try:
@@ -41,9 +41,9 @@ logger = setup_logging()
 
 def _default_skill_dirs() -> List[Path]:
     """Return built-in skills plus the user's local skill directory."""
-    package_root = Path(__file__).resolve().parents[2]
+    package_root = Path(__file__).resolve().parents[1]
     return [
-        package_root / "capabilities" / "skills",
+        package_root / "skills",
         Path("~/.claude/skills").expanduser(),
     ]
 
@@ -110,7 +110,7 @@ class SkillLoader:
 
     def __init__(
         self,
-        skill_dirs: Optional[List[str | Path]] = None,
+        skill_dirs: List[str | Path] | None = None,
     ) -> None:
         self._dirs: List[Path] = []
         configured_dirs = _default_skill_dirs() if skill_dirs is None else skill_dirs
@@ -162,7 +162,7 @@ class SkillLoader:
 
     def _load_metadata(
         self, skill_dir: Path, skill_md: Path
-    ) -> Optional[SkillMetadata]:
+    ) -> SkillMetadata | None:
         """Parse SKILL.md and return SkillMetadata; returns None on error."""
         try:
             raw = skill_md.read_text(encoding="utf-8")
@@ -227,7 +227,7 @@ class SkillLoader:
     # Activation (lazy full-load)
     # ------------------------------------------------------------------
 
-    def get_metadata(self, name: str) -> Optional[SkillMetadata]:
+    def get_metadata(self, name: str) -> SkillMetadata | None:
         """Return metadata for a skill by name (must have run discover_all first)."""
         return self._metadata.get(name)
 
@@ -235,7 +235,7 @@ class SkillLoader:
         """Return all discovered metadata objects."""
         return list(self._metadata.values())
 
-    def load_skill(self, name: str) -> Optional[SkillPackage]:
+    def load_skill(self, name: str) -> SkillPackage | None:
         """
         Fully load a skill by name (activates it).
         Returns cached Skill if already activated.
@@ -250,7 +250,7 @@ class SkillLoader:
 
         return self._load_full(meta)
 
-    def load_skill_by_path(self, skill_dir: Path) -> Optional[SkillPackage]:
+    def load_skill_by_path(self, skill_dir: Path) -> SkillPackage | None:
         """Directly load a skill from its directory path (bypasses index)."""
         skill_dir = Path(skill_dir).expanduser().resolve()
         skill_md = skill_dir / "SKILL.md"

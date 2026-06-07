@@ -5,7 +5,7 @@ single high-level interface.
 
 Usage::
 
-    from ravi.catalog.rag.pipeline import RAGPipeline
+    from ravi.capabilities.knowledge.pipeline import RAGPipeline
 
     pipeline = RAGPipeline(
         embedding_client=embed_client,
@@ -18,7 +18,7 @@ Usage::
 from __future__ import annotations
 from ravi.logger import setup_logging
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from ravi.capabilities.knowledge.chunking import get_chunker
 from ravi.kernel.vector import Document, SearchResult, VectorStore
@@ -56,9 +56,9 @@ class RAGPipeline:
         *,
         collection: str = "default",
         chunker: str = "text",
-        metadata: Optional[dict[str, Any]] = None,
-        chunk_size: Optional[int] = None,
-        chunk_overlap: Optional[int] = None,
+        metadata:dict[str, Any] | None = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ) -> int:
         """Chunk, embed, and store content.
 
@@ -137,7 +137,7 @@ class RAGPipeline:
         *,
         collection: str = "default",
         limit: int = 5,
-        filter: Optional[dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
     ) -> list[SearchResult]:
         """Embed the question and search the vector store.
 
@@ -158,8 +158,8 @@ class RAGPipeline:
         collection: str = "default",
         model_client: LLMClient,
         limit: int = 5,
-        system: Optional[str] = None,
-        filter: Optional[dict[str, Any]] = None,
+        system: str | None = None,
+        filter: dict[str, Any] | None = None,
     ) -> str:
         """Full RAG: retrieve context, build prompt, generate answer.
 

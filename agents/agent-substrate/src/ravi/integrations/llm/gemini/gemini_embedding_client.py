@@ -4,7 +4,7 @@ Uses the ``google-genai`` SDK's ``embed_content`` endpoint.
 
 Usage::
 
-    from ravi.adapters.llm.gemini.gemini_embedding_client import (
+    from ravi.integrations.llm.gemini.gemini_embedding_client import (
         GeminiEmbeddingClient,
     )
 
@@ -19,7 +19,7 @@ from typing import Any, Optional
 
 from google import genai
 
-from ravi.adapters.llm.base import BaseEmbeddingClient, EmbeddingResult
+from ravi.integrations.llm.base import BaseEmbeddingClient, EmbeddingResult
 
 logger = setup_logging()
 

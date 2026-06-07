@@ -1,7 +1,7 @@
 import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock
-from ravi.adapters.memory.lineage_s3 import S3LineageStore
+from ravi.integrations.memory.lineage_s3 import S3LineageStore
 from ravi.kernel.memory._lineage import ProvenanceTag, LineageNotFoundError
 
 @pytest.fixture

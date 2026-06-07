@@ -1,6 +1,6 @@
 """Convenience base for concrete embedding adapter implementations.
 
-``BaseEmbeddingClient`` and ``EmbeddingResult`` live here — in the adapters
+``BaseEmbeddingClient`` and ``EmbeddingResult`` live here — in the integrations
 layer — because they are implementation helpers, not kernel contracts.
 The kernel only defines the ``EmbeddingClient`` Protocol.
 """
@@ -21,7 +21,7 @@ class EmbeddingResult:
 
 
 class BaseEmbeddingClient:
-    """Convenience base for concrete embedding provider adapters.
+    """Convenience base for concrete embedding provider integrations.
 
     Subclasses implement ``embed()``; ``embed_single`` and ``embed_batch``
     are derived from it, satisfying the ``EmbeddingClient`` Protocol.

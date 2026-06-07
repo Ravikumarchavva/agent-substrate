@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ravi.config import settings
-from ravi.adapters.spotify.auth import SpotifyAuthService
+from ravi.integrations.spotify.auth import SpotifyAuthService
 from ravi.serving.monolith.security.deps import TokenPayload, get_current_user
 
 logger = setup_logging()
@@ -345,7 +345,7 @@ async def restore_tokens(
 
 def _get_oauth_service_with_token(session_id: str = "default_user"):
     """Return a SpotifyService initialised with the current user OAuth token, or None."""
-    from ravi.adapters.spotify.client import SpotifyService
+    from ravi.integrations.spotify.client import SpotifyService
 
     tokens = _user_tokens.get(session_id)
     if not tokens or not tokens.get("access_token"):

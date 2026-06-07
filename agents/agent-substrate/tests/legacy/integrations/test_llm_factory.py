@@ -6,13 +6,13 @@ import pytest
 
 from google.genai import types as genai_types
 
-from ravi.adapters.llm.factory import (
+from ravi.integrations.llm.factory import (
     LLMFactory,
     detect_provider,
     model_supports_vision,
     strip_provider_prefix,
 )
-from ravi.adapters.llm.gemini.gemini_client import GeminiClient
+from ravi.integrations.llm.gemini.gemini_client import GeminiClient
 
 
 def test_detect_provider_openrouter() -> None:

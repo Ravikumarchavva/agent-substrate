@@ -22,7 +22,6 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional
 
 from .config import CodeInterpreterConfig
 
@@ -49,7 +48,7 @@ class VM:
     socket_path: str = ""
     rootfs_path: str = ""
     work_dir: str = ""
-    process: Optional[subprocess.Popen] = field(default=None, repr=False)
+    process: subprocess.Popen | None = field(default=None, repr=False)
     vsock_uds_path: str = ""  # host-side UDS for vsock
     cid: int = 3
     created_at: float = field(default_factory=time.monotonic)

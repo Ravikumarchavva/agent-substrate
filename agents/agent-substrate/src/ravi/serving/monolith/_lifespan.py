@@ -24,15 +24,15 @@ from ravi.config import Settings
 from ravi.kernel.llm import LLMClient, EmbeddingClient
 from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel.tools import Tool, Toolbox, ToolRisk
-from ravi.capabilities.internal.skill_manager import SkillManager
+from ravi.capabilities.skills._manager import SkillManager
 
-from ravi.adapters.llm.factory import (
+from ravi.integrations.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_embedding_client,
     create_model_client,
     resolve_model_for_available_credentials,
 )
-from ravi.adapters.history.redis_history import RedisHistoryProvider
+from ravi.integrations.history.redis_history import RedisHistoryProvider
 from ravi.serving.monolith.database import get_session_factory
 from ravi.serving.monolith.sse.bridge import BridgeRegistry
 
@@ -171,7 +171,7 @@ async def init_infrastructure(
     session_factory = get_session_factory()
 
     # Vector store + RAG pipeline (pgvector-backed)
-    from ravi.adapters.vector.pgvector_store import PgVectorStore
+    from ravi.integrations.vector.pgvector_store import PgVectorStore
     from ravi.capabilities.knowledge.pipeline import RAGPipeline
 
     vector_store = PgVectorStore(
@@ -184,7 +184,7 @@ async def init_infrastructure(
     )
 
     # DataRefStore — zero-context-bloat data exchange (Redis + optional S3)
-    from ravi.capabilities.internal.data_ref import DataRefStore
+    from ravi.capabilities.pipeline.data_ref import DataRefStore
 
     data_store = DataRefStore(redis_url=settings.REDIS_URL)
     await data_store.connect()
@@ -260,7 +260,7 @@ async def init_tool_registry(
         registry.add(code_interpreter_tool)
 
     # ToolSearchTool — lets the agent discover other tools dynamically
-    from ravi.capabilities.tools.tool_search import ToolSearchTool
+    from ravi.capabilities.tools.utils.tool_search import ToolSearchTool
 
     registry.add(ToolSearchTool(registry.all()))
 
@@ -293,8 +293,9 @@ async def init_runtime_services(
 ) -> RuntimeServices:
     """Create chain runtime, pipeline engine, workflow client, and triggers."""
 
-    from ravi.capabilities.internal.chain_runtime import ChainRuntime
-    from ravi.capabilities.internal.pipeline import PipelineEngine, PipelineStore
+    from ravi.capabilities.pipeline.chain import ChainRuntime
+    from ravi.capabilities.pipeline.engine import PipelineEngine
+    from ravi.capabilities.pipeline.store import PipelineStore
     from ravi.capabilities.triggers.conditions import ConditionMonitor
     from ravi.capabilities.triggers.scheduler import TriggerScheduler
     from ravi.capabilities.triggers.webhooks import WebhookRegistry
@@ -313,7 +314,7 @@ async def init_runtime_services(
     restate_admin = os.environ.get("RESTATE_ADMIN_URL", "http://localhost:9070")
     workflow_client: Any = None
     try:
-        from ravi.adapters.runtime.restate.client import RestateWorkflowClient
+        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
 
         workflow_client = RestateWorkflowClient(
             ingress_url=restate_ingress, admin_url=restate_admin

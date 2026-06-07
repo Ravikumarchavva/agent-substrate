@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 # ---------------------------------------------------------------------------
@@ -57,8 +57,8 @@ class SkillMetadata:
     description: str
     path: Path  # absolute path to the skill directory
     skill_md_path: Path  # absolute path to SKILL.md
-    license: Optional[str] = None
-    compatibility: Optional[str] = None
+    license: str | None = None
+    compatibility: str | None = None
     allowed_tools: List[str] = field(default_factory=list)
     version: str = "1.0"
     metadata: Dict[str, str] = field(default_factory=dict)
@@ -105,14 +105,14 @@ class SkillPackage:
         """Return reference file names relative to the skill root."""
         return [r.name for r in self.references]
 
-    def read_reference(self, filename: str) -> Optional[str]:
+    def read_reference(self, filename: str) -> str | None:
         """Read a reference file by name; returns None if not found."""
         for ref in self.references:
             if ref.name == filename:
                 return ref.read_text(encoding="utf-8")
         return None
 
-    def read_script(self, filename: str) -> Optional[str]:
+    def read_script(self, filename: str) -> str | None:
         """Read a script file by name; returns None if not found."""
         for s in self.scripts:
             if s.name == filename:

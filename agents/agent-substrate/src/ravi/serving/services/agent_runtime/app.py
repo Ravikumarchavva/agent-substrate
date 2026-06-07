@@ -11,8 +11,8 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
-from ravi.adapters.history.redis_history import RedisHistoryProvider
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.history.redis_history import RedisHistoryProvider
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.serving.services.agent_runtime.routes import router
 from ravi.serving.services.base import create_service_app
 from ravi.serving.shared.events.factory import get_event_bus
@@ -25,7 +25,7 @@ def _load_tools():
     tools = []
 
     try:
-        from ravi.capabilities.tools.web_surfer import WebSurferTool
+        from ravi.capabilities.tools.web.surfer import WebSurferTool
 
         tools.append(WebSurferTool())
     except Exception:

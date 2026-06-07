@@ -26,7 +26,6 @@ from ravi.logger import setup_logging
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .config import CodeInterpreterConfig
 from .vm_manager import VM, VMPool
@@ -85,15 +84,15 @@ class SessionManager:
 
     def __init__(
         self,
-        config: Optional[CodeInterpreterConfig] = None,
-        pool: Optional[VMPool] = None,
+        config: CodeInterpreterConfig | None = None,
+        pool: VMPool | None = None,
     ):
         self.config = config or CodeInterpreterConfig()
         self._pool = pool or VMPool(self.config)
         self._manager = self._pool.manager
         self._sessions: dict[str, SessionInfo] = {}
         self._lock = asyncio.Lock()
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 

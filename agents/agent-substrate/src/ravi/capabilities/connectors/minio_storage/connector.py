@@ -7,7 +7,7 @@ standalone connector adapter.
 from __future__ import annotations
 from ravi.logger import setup_logging
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = setup_logging()
 
@@ -38,7 +38,7 @@ class MinIOConnector:
         self._secret_key = secret_key
         self._default_bucket = default_bucket
         self._region = region
-        self._session: Optional[Any] = None
+        self._session: Any | None = None
 
     async def connect(self) -> None:
         """Create aiobotocore session."""
@@ -67,7 +67,7 @@ class MinIOConnector:
         data: bytes,
         *,
         content_type: str = "application/octet-stream",
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
     ) -> Dict[str, Any]:
         """Upload an object."""
         b = bucket or self._default_bucket
@@ -81,7 +81,7 @@ class MinIOConnector:
         self,
         key: str,
         *,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
     ) -> bytes:
         """Download an object."""
         b = bucket or self._default_bucket
@@ -94,7 +94,7 @@ class MinIOConnector:
         self,
         *,
         prefix: str = "",
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
         max_keys: int = 100,
     ) -> List[Dict[str, Any]]:
         """List objects in a bucket."""
@@ -116,7 +116,7 @@ class MinIOConnector:
         self,
         key: str,
         *,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
         expires_in: int = 3600,
     ) -> str:
         """Generate a presigned URL for an object."""
@@ -133,7 +133,7 @@ class MinIOConnector:
         self,
         key: str,
         *,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
     ) -> None:
         """Delete an object."""
         b = bucket or self._default_bucket

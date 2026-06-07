@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from ravi.adapters.mcp import app_tools
-from ravi.adapters.mcp.app_tools import GoogleWorkspaceTool
+from ravi.integrations.tools.mcp import app_tools
+from ravi.integrations.tools.mcp.app_tools import GoogleWorkspaceTool
 
 
 class _FakeRedis:

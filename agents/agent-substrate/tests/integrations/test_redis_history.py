@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 import redis.exceptions
-from ravi.adapters.history import RedisHistoryProvider
+from ravi.integrations.history import RedisHistoryProvider
 from ravi.kernel import AgentId, Message, ChatMessage
 from ravi.kernel.content import TextBlock
 

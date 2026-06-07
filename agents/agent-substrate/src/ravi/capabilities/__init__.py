@@ -3,39 +3,42 @@
 Directory layout::
 
     capabilities/
-    ├── tools/        ← Tool implementations (human_input, web_surfer, task_manager, …)
-    ├── skills/       ← SKILL.md prompt-skill packages (debugging, code_review, …)
-    ├── connectors/   ← External service connectors (email, postgres_query, …)
+    ├── tools/        ← Tool implementations grouped by domain (web/, files/, ai/, …)
+    ├── skills/       ← SKILL.md prompt-skill packages + skill system machinery
+    ├── connectors/   ← Stateful external service clients (email, postgres_query, …)
     ├── triggers/     ← Trigger monitors (scheduled, webhooks, events)
     ├── knowledge/    ← RAG pipeline, vector store, chunkers, loaders, reranker
-    └── internal/     ← Scanners, skill loader/manager, pipeline engine, chain runtime
+    ├── pipeline/     ← Declarative pipeline execution engine and store
+    └── discovery.py  ← CapabilityDiscovery — startup-only filesystem scanner
 """
 
 from __future__ import annotations
 
-from ravi.capabilities.internal.chain_runtime import ChainRuntime
-from ravi.capabilities.internal.data_ref import DataRef, DataRefStore
-from ravi.capabilities.internal.pipeline import (
-    PipelineDef,
-    PipelineEngine,
-    PipelineStore,
-)
-from ravi.capabilities.internal.scanner import CatalogPackage, CatalogScanner
-from ravi.capabilities.internal.skill_manager import SkillManager
-from ravi.capabilities.internal.skill_loader import SkillLoader
-from ravi.capabilities.internal.skill_models import SkillPackage, SkillMetadata
+from ravi.capabilities.pipeline.chain import ChainRuntime
+from ravi.capabilities.pipeline.data_ref import DataRef, DataRefStore
+from ravi.capabilities.pipeline.engine import PipelineDef, PipelineEngine, PipelineResult
+from ravi.capabilities.pipeline.store import PipelineStore
+from ravi.capabilities.discovery import CatalogPackage, CapabilityDiscovery
+from ravi.capabilities.skills._manager import SkillManager
+from ravi.capabilities.skills._loader import SkillLoader
+from ravi.capabilities.skills._models import SkillPackage, SkillMetadata
+
+# Backward-compat alias
+CatalogScanner = CapabilityDiscovery
 
 __all__ = [
     "CatalogPackage",
     "CatalogScanner",
+    "CapabilityDiscovery",
     "ChainRuntime",
     "DataRef",
     "DataRefStore",
     "PipelineDef",
     "PipelineEngine",
+    "PipelineResult",
     "PipelineStore",
-    "SkillPackage",
     "SkillLoader",
     "SkillManager",
     "SkillMetadata",
+    "SkillPackage",
 ]

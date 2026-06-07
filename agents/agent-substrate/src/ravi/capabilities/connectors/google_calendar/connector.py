@@ -8,7 +8,7 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = setup_logging()
 
@@ -31,7 +31,7 @@ class GoogleCalendarConnector:
     ) -> None:
         self._credentials_json = credentials_json
         self._calendar_id = calendar_id
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
 
     async def connect(self) -> None:
         """Authenticate and create HTTP client."""
@@ -51,10 +51,10 @@ class GoogleCalendarConnector:
     async def list_events(
         self,
         *,
-        time_min: Optional[str] = None,
-        time_max: Optional[str] = None,
+        time_min: str | None = None,
+        time_max: str | None = None,
         max_results: int = 10,
-        calendar_id: Optional[str] = None,
+        calendar_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         """List upcoming calendar events."""
         assert self._client is not None, "Not connected"
@@ -83,8 +83,8 @@ class GoogleCalendarConnector:
         start: str,
         end: str,
         description: str = "",
-        attendees: Optional[List[str]] = None,
-        calendar_id: Optional[str] = None,
+        attendees: List[str] | None = None,
+        calendar_id: str | None = None,
     ) -> Dict[str, Any]:
         """Create a new calendar event."""
         assert self._client is not None, "Not connected"
@@ -108,7 +108,7 @@ class GoogleCalendarConnector:
         *,
         time_min: str,
         time_max: str,
-        calendar_id: Optional[str] = None,
+        calendar_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         """Check free/busy for a time range."""
         assert self._client is not None, "Not connected"

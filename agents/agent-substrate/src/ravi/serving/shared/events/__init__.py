@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ravi.config import Settings
-    from ravi.adapters.events.redis_event_bus import EventBus
+    from ravi.integrations.events.redis_event_bus import EventBus
 
 
 def get_event_bus(config: "Settings | str") -> "EventBus":

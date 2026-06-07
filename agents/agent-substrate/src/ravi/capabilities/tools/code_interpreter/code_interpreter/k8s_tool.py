@@ -41,7 +41,7 @@ import asyncio
 import base64
 import json
 import os
-from typing import Any, Optional
+from typing import Any
 
 from ravi.kernel import ImageBlock  # was ImageContent, MediaContent
 from ravi.kernel.tools import ToolExecutionResult
@@ -74,14 +74,14 @@ class K8sSandboxCodeInterpreterTool:
         template: str | None = None,
         namespace: str | None = None,
         *,
-        service: Optional[CodeInterpreterService] = None,
-        session_store: Optional[SessionStore] = None,
-        session_store_path: Optional[str] = None,
+        service: CodeInterpreterService | None = None,
+        session_store: SessionStore | None = None,
+        session_store_path: str | None = None,
         request_timeout: int = 120,
         sandbox_ready_timeout: int = 180,
         server_port: int = 8888,
-        shutdown_after_seconds: Optional[int] = None,
-        warmpool: Optional[str] = None,
+        shutdown_after_seconds: int | None = None,
+        warmpool: str | None = None,
     ) -> None:
         super().__init__(
             name="code_interpreter",
@@ -122,7 +122,7 @@ class K8sSandboxCodeInterpreterTool:
                 raise ValueError(
                     "Pass either session_store or session_store_path, not both."
                 )
-            store: Optional[SessionStore] = session_store
+            store: SessionStore | None = session_store
             if store is None and session_store_path is not None:
                 store = JsonSessionStore(session_store_path)
 

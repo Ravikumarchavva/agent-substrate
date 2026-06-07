@@ -138,7 +138,7 @@ def test_serializer_rejects_missing_type():
 
 @requires_redis
 async def test_redis_history():
-    from ravi.adapters.memory.redis_history import RedisHistoryProvider
+    from ravi.integrations.memory.redis_history import RedisHistoryProvider
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -210,7 +210,7 @@ async def test_redis_history():
 
 @requires_postgres
 async def test_postgres_history():
-    from ravi.adapters.memory.postgres_history import PostgresHistoryProvider
+    from ravi.integrations.memory.postgres_history import PostgresHistoryProvider
 
     print("=" * 60)
     print("3. POSTGRES HISTORY TESTS")
@@ -273,8 +273,8 @@ async def test_postgres_history():
 @requires_redis
 @requires_postgres
 async def test_tiered_provider():
-    from ravi.adapters.memory.redis_history import RedisHistoryProvider
-    from ravi.adapters.memory.postgres_history import PostgresHistoryProvider
+    from ravi.integrations.memory.redis_history import RedisHistoryProvider
+    from ravi.integrations.memory.postgres_history import PostgresHistoryProvider
     from ravi.agents.memory.tiered import TieredHistoryProvider
 
     print("=" * 60)

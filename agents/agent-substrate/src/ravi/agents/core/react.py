@@ -102,10 +102,10 @@ class ReActAgent:
 
     Usage::
 
-        from ravi.adapters.llm.openai import OpenAIClient
+        from ravi.integrations.llm.openai import OpenAIClient
         from ravi.agents.runtime import LocalRuntime
         from ravi.agents.context import ContextConfig, SlidingWindowCompaction
-        from ravi.adapters.history import RedisHistoryProvider
+        from ravi.integrations.history import RedisHistoryProvider
         from ravi.kernel import Skill
 
         runtime = LocalRuntime()

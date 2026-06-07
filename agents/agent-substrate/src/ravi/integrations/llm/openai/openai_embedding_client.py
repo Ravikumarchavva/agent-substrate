@@ -6,7 +6,7 @@ OpenAI-compatible endpoint (vLLM, Ollama, etc.) via ``base_url``.
 
 Usage::
 
-    from ravi.adapters.llm.openai.openai_embedding_client import (
+    from ravi.integrations.llm.openai.openai_embedding_client import (
         OpenAIEmbeddingClient,
     )
 
@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 from openai import AsyncOpenAI
 
-from ravi.adapters.llm.base import BaseEmbeddingClient, EmbeddingResult
+from ravi.integrations.llm.base import BaseEmbeddingClient, EmbeddingResult
 
 logger = setup_logging()
 

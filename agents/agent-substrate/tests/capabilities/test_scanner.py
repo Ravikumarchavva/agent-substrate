@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from ravi.capabilities.internal.scanner import CatalogScanner
+from ravi.capabilities.discovery import CapabilityDiscovery as CatalogScanner
 
 
 def test_catalog_scanner_discovery(tmp_path, monkeypatch):
@@ -26,7 +26,7 @@ def test_catalog_scanner_discovery(tmp_path, monkeypatch):
     monkeypatch.setattr(CatalogScanner, "_load_tool_class", lambda *a: MyMockTool)
 
     # Initialize scanner with the temp directory as a scanned path
-    scanner = CatalogScanner(adapter_dirs=[tools_dir])
+    scanner = CatalogScanner(capability_dirs=[tools_dir])
     packages = scanner.discover()
     
     assert len(packages) == 1

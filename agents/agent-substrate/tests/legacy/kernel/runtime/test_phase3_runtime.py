@@ -494,8 +494,8 @@ class TestBaseRemoteRuntime:
     """BaseRemoteRuntime ABC provides shared local dispatch for all remote backends."""
 
     async def test_grpc_inherits_base(self) -> None:
-        from ravi.adapters.runtime._base import BaseRemoteRuntime
-        from ravi.adapters.runtime.grpc import GrpcRuntime
+        from ravi.integrations.runtime._base import BaseRemoteRuntime
+        from ravi.integrations.runtime.grpc import GrpcRuntime
 
         if GrpcRuntime.__bases__[0] is not BaseRemoteRuntime:
             pytest.skip("grpcio not installed")
@@ -517,7 +517,7 @@ class TestGrpcRuntimeProtocol:
             import importlib
             import sys
 
-            mod_name = "ravi.adapters.runtime.grpc.runtime"
+            mod_name = "ravi.integrations.runtime.grpc.runtime"
             if mod_name in sys.modules:
                 del sys.modules[mod_name]
 
@@ -531,7 +531,7 @@ class TestGrpcRuntimeProtocol:
     async def test_local_handler_dispatch(self) -> None:
         """GrpcRuntime dispatches to locally registered handlers."""
         try:
-            from ravi.adapters.runtime.grpc import GrpcRuntime
+            from ravi.integrations.runtime.grpc import GrpcRuntime
         except ImportError:
             pytest.skip("grpcio not installed")
 
@@ -567,7 +567,7 @@ class TestNATSBridgeProtocol:
             import importlib
             import sys
 
-            mod_name = "ravi.adapters.runtime.nats.bridge"
+            mod_name = "ravi.integrations.runtime.nats.bridge"
             if mod_name in sys.modules:
                 del sys.modules[mod_name]
 

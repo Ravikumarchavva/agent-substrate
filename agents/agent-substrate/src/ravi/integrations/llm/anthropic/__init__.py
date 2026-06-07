@@ -1,3 +1,3 @@
-"""ravi.adapters.llm.anthropic — Anthropic LLM adapter."""
+"""ravi.integrations.llm.anthropic — Anthropic LLM adapter."""
 
 from __future__ import annotations

@@ -14,7 +14,7 @@ from typing import AsyncIterator, Dict, Optional, Set
 
 import redis.asyncio as aioredis
 
-from ravi.adapters.events import EventBus
+from ravi.integrations.events import EventBus
 
 logger = setup_logging()
 

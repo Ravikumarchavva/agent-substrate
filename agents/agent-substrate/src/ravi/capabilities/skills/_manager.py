@@ -12,10 +12,10 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from ravi.capabilities.internal.skill_loader import SkillLoader
-from ravi.capabilities.internal.skill_models import SkillPackage, SkillMetadata
+from ravi.capabilities.skills._loader import SkillLoader
+from ravi.capabilities.skills._models import SkillPackage, SkillMetadata
 
 logger = setup_logging()
 
@@ -43,7 +43,7 @@ class SkillManager:
 
     def __init__(
         self,
-        skill_dirs: Optional[List[str | Path]] = None,
+        skill_dirs: List[str | Path] | None = None,
         auto_discover: bool = True,
     ) -> None:
         self._loader = SkillLoader(skill_dirs=skill_dirs)
@@ -141,7 +141,7 @@ class SkillManager:
     # Activation (lazy full-load)
     # ------------------------------------------------------------------
 
-    def activate(self, name: str) -> Optional[SkillPackage]:
+    def activate(self, name: str) -> SkillPackage | None:
         """
         Activate a skill by name (loads full SKILL.md body lazily).
         Returns None if the skill is not found.
@@ -158,7 +158,7 @@ class SkillManager:
         logger.info("Activated skill: %r", name)
         return skill
 
-    def activate_by_path(self, skill_md_path: str | Path) -> Optional[SkillPackage]:
+    def activate_by_path(self, skill_md_path: str | Path) -> SkillPackage | None:
         """
         Activate a skill by its SKILL.md file path (as the model might reference).
         """
@@ -203,11 +203,11 @@ class SkillManager:
         parts.append("</active_skills>")
         return "\n".join(parts)
 
-    def get_skill(self, name: str) -> Optional[SkillPackage]:
+    def get_skill(self, name: str) -> SkillPackage | None:
         """Return an active skill by name; None if not activated."""
         return self._active.get(name)
 
-    def get_metadata(self, name: str) -> Optional[SkillMetadata]:
+    def get_metadata(self, name: str) -> SkillMetadata | None:
         """Return metadata for any discovered skill (even if not activated)."""
         return self._loader.get_metadata(name)
 

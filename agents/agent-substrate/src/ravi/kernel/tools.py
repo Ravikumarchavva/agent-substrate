@@ -49,12 +49,38 @@ class ToolRisk(str, Enum):
     CRITICAL = "critical"
 
 
+class ToolType(str, Enum):
+    """Category classification for a tool.
+
+    Used by the framework to understand what kind of thing a tool is —
+    for discovery grouping, dashboard display, and audit logging.
+    Not used for LLM-provider routing.
+
+    FUNCTION  — default: plain function tool.
+    SKILL     — prompt-skill loaded from a SKILL.md package.
+    MCP       — tool delivered via the MCP protocol.
+    A2A       — remote agent callable via the A2A protocol.
+    KNOWLEDGE — RAG / knowledge-search tool.
+    CONNECTOR — stateful service connector (multi-call lifecycle).
+    PIPELINE  — pipeline execution tool.
+    """
+
+    FUNCTION  = "function"
+    SKILL     = "skill"
+    MCP       = "mcp"
+    A2A       = "a2a"
+    KNOWLEDGE = "knowledge"
+    CONNECTOR = "connector"
+    PIPELINE  = "pipeline"
+
+
 class Tool(Protocol):
     """Contract every tool must satisfy.
 
     ``risk`` is optional — defaults to ``ToolRisk.SAFE`` when absent.
     ``ui`` is optional — a ``ToolUI`` declaration when the tool renders through
     an MCP-App resource; its absence means the tool has no UI.
+    ``tool_type`` is optional — defaults to ``ToolType.FUNCTION`` when absent.
     """
 
     name: str
@@ -142,6 +168,7 @@ class Toolbox:
 # Re-exported here for import convenience — canonical home is kernel.message.
 __all__ = [
     "ToolRisk",
+    "ToolType",
     "ToolUI",
     "Tool",
     "Toolbox",

@@ -26,7 +26,7 @@ from ravi.kernel.content import (
     ToolResultBlock,
 )
 from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
-from ravi.adapters.llm.encoders.openai import (
+from ravi.integrations.llm.encoders.openai import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
 )

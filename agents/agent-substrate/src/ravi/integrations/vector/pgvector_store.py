@@ -5,7 +5,7 @@ Uses SQLAlchemy 2 async + the ``pgvector`` Python package for the
 
 Usage::
 
-    from ravi.adapters.vector.pgvector_store import PgVectorStore
+    from ravi.integrations.vector.pgvector_store import PgVectorStore
 
     store = PgVectorStore(session_factory=get_session_factory(), dimensions=1536)
     await store.ensure_table()

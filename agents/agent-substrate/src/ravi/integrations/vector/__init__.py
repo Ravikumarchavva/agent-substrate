@@ -1,3 +1,3 @@
-"""ravi.adapters.vector — Vector store backends."""
+"""ravi.integrations.vector — Vector store backends."""
 
 from __future__ import annotations

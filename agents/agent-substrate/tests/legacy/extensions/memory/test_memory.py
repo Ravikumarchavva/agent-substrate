@@ -39,9 +39,9 @@ class TestRedisHistoryProvider:
     @pytest.mark.asyncio
     async def test_history_lifecycle(self) -> None:
         """Test connect → load → disconnect cycle."""
-        from ravi.adapters.memory.redis_history import RedisHistoryProvider
+        from ravi.integrations.memory.redis_history import RedisHistoryProvider
 
-        with patch("ravi.adapters.memory.redis_history.aioredis") as mock_redis:
+        with patch("ravi.integrations.memory.redis_history.aioredis") as mock_redis:
             mock_conn = AsyncMock()
             mock_conn.ping = AsyncMock()
             mock_conn.lrange = AsyncMock(return_value=[])

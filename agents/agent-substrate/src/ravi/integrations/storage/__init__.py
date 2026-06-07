@@ -1,4 +1,4 @@
-"""ravi.adapters.storage — Concrete storage backends."""
+"""ravi.integrations.storage — Concrete storage backends."""
 
 from __future__ import annotations
 

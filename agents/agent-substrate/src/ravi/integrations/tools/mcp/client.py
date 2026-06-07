@@ -6,7 +6,7 @@ from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
 if TYPE_CHECKING:
-    from ravi.adapters.mcp.tool import MCPTool
+    from ravi.integrations.tools.mcp.tool import MCPTool
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -235,7 +235,7 @@ class MCPClient:
 
     async def discover_tools(self) -> list[MCPTool]:
         """Discover all tools from the connected MCP server as MCPTool instances."""
-        from ravi.adapters.mcp.tool import MCPTool  # lazy — avoids circular import
+        from ravi.integrations.tools.mcp.tool import MCPTool  # lazy — avoids circular import
 
         return await MCPTool.from_mcp_client(self)
 

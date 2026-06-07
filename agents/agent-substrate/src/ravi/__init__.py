@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ravi.adapters.llm.factory import LLMFactory, create_model_client
+    from ravi.integrations.llm.factory import LLMFactory, create_model_client
     from ravi.agents.core.react import AgentRunResult, ReActAgent
     from ravi.agents.context import (
         AgentContext,
@@ -125,8 +125,8 @@ _LAZY: dict[str, tuple[str, str]] = {
     "ToolCallValidationMiddleware": ("ravi.agents.middleware", "ToolCallValidationMiddleware"),
     "MiddlewareTermination": ("ravi.kernel.errors", "MiddlewareTermination"),
     # factory
-    "create_model_client": ("ravi.adapters.llm.factory", "create_model_client"),
-    "LLMFactory": ("ravi.adapters.llm.factory", "LLMFactory"),
+    "create_model_client": ("ravi.integrations.llm.factory", "create_model_client"),
+    "LLMFactory": ("ravi.integrations.llm.factory", "LLMFactory"),
     # stream
     "TextDelta": ("ravi.kernel.stream", "TextDelta"),
     "ReasoningDelta": ("ravi.kernel.stream", "ReasoningDelta"),

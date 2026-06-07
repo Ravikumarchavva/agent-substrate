@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.serving.services.identity.models import IdentityUser
 from ravi.serving.shared.auth import jwt as jwt_utils
-from ravi.adapters.events import EventBus
+from ravi.integrations.events import EventBus
 from ravi.serving.shared.events import types as events
 
 logger = setup_logging()

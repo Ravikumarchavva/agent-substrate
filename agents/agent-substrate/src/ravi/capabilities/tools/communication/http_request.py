@@ -6,7 +6,7 @@ enforced to prevent SSRF and limit network exposure.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 from urllib.parse import urlparse
 
 from ravi.kernel.tools import ToolExecutionResult
@@ -25,7 +25,7 @@ class HttpRequestTool:
 
     def __init__(
         self,
-        allowed_domains: Optional[List[str]] = None,
+        allowed_domains: List[str] | None = None,
     ) -> None:
         self._allowed_domains = set(allowed_domains or _DEFAULT_ALLOWED_DOMAINS)
 
@@ -39,7 +39,7 @@ class HttpRequestTool:
         *,
         url: str,
         method: str = "GET",
-        headers: Optional[Dict[str, str]] = None,
+        headers: Dict[str, str] | None = None,
         body: str = "",
     ) -> ToolExecutionResult:
         if not self._is_allowed(url):

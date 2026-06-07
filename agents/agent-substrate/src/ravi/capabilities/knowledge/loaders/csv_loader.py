@@ -6,7 +6,7 @@ import csv
 import io
 import uuid
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from ravi.capabilities.knowledge.loaders.base import BaseDocumentLoader
 from ravi.kernel.vector import Document
@@ -27,7 +27,7 @@ class CSVLoader(BaseDocumentLoader):
         self,
         source: Union[str, Path, bytes],
         *,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         metadata = metadata or {}
 

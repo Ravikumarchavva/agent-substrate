@@ -247,7 +247,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from ravi.console import Console
     from ravi.agents.core import ReActAgent
     from ravi.agents.runtime.local import LocalRuntime
-    from ravi.adapters.llm.openai.openai_client import OpenAIClient
+    from ravi.integrations.llm.openai.openai_client import OpenAIClient
     from ravi.agents.context import (
         ContextConfig,
         InMemoryHistoryProvider,
@@ -288,7 +288,7 @@ def _load_mcp_tools(server_urls: list[str]) -> list:
     """
     tools: list = []
     try:
-        from ravi.adapters.mcp import MCPClient
+        from ravi.integrations.tools.mcp import MCPClient
     except ImportError:
         print("⚠ MCP extension not available — skipping MCP tools.")
         return tools

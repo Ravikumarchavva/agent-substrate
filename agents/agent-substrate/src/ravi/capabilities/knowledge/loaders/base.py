@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from ravi.kernel.vector import Document
 
@@ -21,7 +21,7 @@ class BaseDocumentLoader(ABC):
         self,
         source: Union[str, Path, bytes],
         *,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         """Load a source and return a list of documents.
 
@@ -60,7 +60,7 @@ class DocumentLoaderRegistry:
         self,
         source: str | Path,
         *,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         """Auto-detect loader by extension and load."""
         loader = self.get_loader(source)

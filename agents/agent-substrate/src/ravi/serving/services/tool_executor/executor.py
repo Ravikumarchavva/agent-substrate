@@ -14,7 +14,7 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from ravi.kernel.tools import Tool, ToolExecutionResult
-from ravi.adapters.events import EventBus
+from ravi.integrations.events import EventBus
 from ravi.serving.shared.events.envelope import EventEnvelope
 
 logger = setup_logging()

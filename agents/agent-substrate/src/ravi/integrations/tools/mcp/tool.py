@@ -4,7 +4,7 @@ from typing import Any
 
 from ravi.kernel.content import DocumentBlock, ImageBlock, TextBlock
 from ravi.kernel import Tool, ToolResultBlock
-from ravi.adapters.mcp.client import MCPClient
+from ravi.integrations.tools.mcp.client import MCPClient
 
 
 class MCPTool(Tool):

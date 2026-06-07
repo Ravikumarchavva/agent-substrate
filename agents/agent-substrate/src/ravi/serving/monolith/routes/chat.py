@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.config import settings
-from ravi.adapters.llm.factory import (
+from ravi.integrations.llm.factory import (
     CHAT_MODEL_FALLBACKS,
     create_model_client,
     detect_provider,
@@ -42,8 +42,8 @@ from ravi.serving.monolith.services.agent_service import (
     persist_user_message,
 )
 from ravi.capabilities.tools.task_manager.tool import current_thread_id
-from ravi.capabilities.tools.web_surfer import WebSurferTool
-from ravi.capabilities.tools.web_search import WebSearchTool
+from ravi.capabilities.tools.web.surfer import WebSurferTool
+from ravi.capabilities.tools.web.search import WebSearchTool
 from ravi.capabilities.tools.human_input import AskHumanTool
 from ravi.serving.monolith.security.deps import get_current_user
 from ravi.serving.monolith.sse.bridge import BridgeRegistry, WebHITLBridge

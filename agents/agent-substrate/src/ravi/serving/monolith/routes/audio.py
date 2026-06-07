@@ -34,7 +34,7 @@ from fastapi.responses import StreamingResponse
 
 from ravi.config import settings
 from ravi.kernel.llm import LLMClient
-from ravi.adapters.llm.factory import (
+from ravi.integrations.llm.factory import (
     create_model_client,
     detect_provider,
     strip_provider_prefix,

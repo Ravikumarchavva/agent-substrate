@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ravi.adapters.control_plane import RedisHotCache
+from ravi.integrations.control_plane import RedisHotCache
 from ravi.kernel.control_plane._contracts import HotCache, HotCacheEntry
 
 
@@ -194,7 +194,7 @@ class TestFlush:
 class TestLazyClientInit:
     async def test_client_created_lazily_on_first_use(self) -> None:
         with patch(
-            "ravi.adapters.control_plane._redis_cache.aioredis"
+            "ravi.integrations.control_plane._redis_cache.aioredis"
         ) as mock_aioredis:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=None)

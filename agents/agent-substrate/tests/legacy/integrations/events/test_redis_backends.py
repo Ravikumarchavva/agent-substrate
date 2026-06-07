@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ravi.adapters.events import (
+from ravi.integrations.events import (
     RedisPubSubFanout,
     RedisLeaseRegistry,
     RedisStreamsDurableLog,
@@ -335,7 +335,7 @@ class TestRedisStreamsDurableLog:
     # ---- lazy client init -----------------------------------------------
 
     async def test_client_created_lazily_on_first_use(self) -> None:
-        with patch("ravi.adapters.events._redis_log.aioredis") as mock_aioredis:
+        with patch("ravi.integrations.events._redis_log.aioredis") as mock_aioredis:
             mock_client = AsyncMock()
             mock_client.xadd = AsyncMock(return_value="1-0")
             mock_aioredis.from_url.return_value = mock_client
@@ -560,7 +560,7 @@ class TestRedisPubSubFanout:
     # ---- lazy client init -----------------------------------------------
 
     async def test_client_created_lazily(self) -> None:
-        with patch("ravi.adapters.events._redis_fanout.aioredis") as mock_aioredis:
+        with patch("ravi.integrations.events._redis_fanout.aioredis") as mock_aioredis:
             mock_client = AsyncMock()
             mock_client.publish = AsyncMock(return_value=0)
             mock_aioredis.from_url.return_value = mock_client
@@ -831,7 +831,7 @@ class TestRedisLeaseRegistry:
     # ---- lazy client init -----------------------------------------------
 
     async def test_client_created_lazily(self) -> None:
-        with patch("ravi.adapters.events._redis_lease.aioredis") as mock_aioredis:
+        with patch("ravi.integrations.events._redis_lease.aioredis") as mock_aioredis:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=None)
             mock_aioredis.from_url.return_value = mock_client

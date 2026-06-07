@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from ravi.capabilities.internal.skill_loader import SkillLoader
+from ravi.capabilities.skills._loader import SkillLoader
 
 
 def test_skill_loader_parsing(tmp_path):

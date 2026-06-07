@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from ravi.capabilities.knowledge.loaders.base import BaseDocumentLoader
 from ravi.kernel.vector import Document
@@ -18,14 +18,14 @@ class JSONLoader(BaseDocumentLoader):
     For single objects, the entire object becomes one document.
     """
 
-    def __init__(self, text_fields: Optional[list[str]] = None) -> None:
+    def __init__(self, text_fields: list[str] | None = None) -> None:
         self.text_fields = text_fields
 
     async def load(
         self,
         source: Union[str, Path, bytes],
         *,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         metadata = metadata or {}
 

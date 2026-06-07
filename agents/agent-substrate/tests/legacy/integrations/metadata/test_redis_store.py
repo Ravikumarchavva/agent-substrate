@@ -24,7 +24,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ravi.adapters.metadata import RedisMetadataStore
+from ravi.integrations.metadata import RedisMetadataStore
 from ravi.kernel.metadata import (
     KeyNotFoundError,
     MetadataStore,
@@ -435,7 +435,7 @@ class TestCompact:
 class TestLazyClientInit:
     async def test_client_created_lazily_on_first_use(self) -> None:
         with patch(
-            "ravi.adapters.metadata._redis_store.aioredis"
+            "ravi.integrations.metadata._redis_store.aioredis"
         ) as mock_aioredis:
             mock_inner = AsyncMock()
             mock_inner.hgetall = AsyncMock(return_value={})

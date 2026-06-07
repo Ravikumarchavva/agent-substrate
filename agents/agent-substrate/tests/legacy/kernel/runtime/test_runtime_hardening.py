@@ -28,7 +28,7 @@ from ravi.agents.runtime.supervisor import Supervisor
 from ravi.agents.runtime.dispatcher import Dispatcher
 from ravi.agents.runtime.mailbox import Mailbox
 from ravi.agents.runtime.local import LocalRuntime
-from ravi.adapters.runtime._base import BaseRemoteRuntime
+from ravi.integrations.runtime._base import BaseRemoteRuntime
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -637,13 +637,13 @@ class TestNATSKeyValidation:
     """M7: topic keys are validated against a safe pattern."""
 
     async def test_valid_key_passes(self) -> None:
-        from ravi.adapters.runtime.nats.bridge import _validate_key
+        from ravi.integrations.runtime.nats.bridge import _validate_key
 
         _validate_key("thread-abc-123")
         _validate_key("agent.events.test_key")
 
     async def test_invalid_key_raises(self) -> None:
-        from ravi.adapters.runtime.nats.bridge import _validate_key
+        from ravi.integrations.runtime.nats.bridge import _validate_key
 
         with pytest.raises(ValueError, match="invalid topic key"):
             _validate_key("key with spaces")

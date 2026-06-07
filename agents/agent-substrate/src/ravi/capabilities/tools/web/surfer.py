@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal
 
 from ravi.kernel.tools import ToolExecutionResult
 from ravi.kernel import ImageBlock, TextBlock
@@ -137,9 +137,9 @@ class WebSurferTool:
 
         self.headless = headless
         self.browser_type = browser_type
-        self._playwright: Optional[Playwright] = None
-        self._browser: Optional[Browser] = None
-        self._page: Optional[Page] = None
+        self._playwright: Playwright | None = None
+        self._browser: Browser | None = None
+        self._page: Page | None = None
 
     async def _ensure_browser(self) -> None:
         """Ensure browser is initialized and ready."""
@@ -199,11 +199,11 @@ class WebSurferTool:
         self,
         *,
         action: str,
-        url: Optional[str] = None,
-        selector: Optional[str] = None,
-        text: Optional[str] = None,
-        javascript: Optional[str] = None,
-        scroll_direction: Optional[str] = None,
+        url: str | None = None,
+        selector: str | None = None,
+        text: str | None = None,
+        javascript: str | None = None,
+        scroll_direction: str | None = None,
         full_page: bool = True,
         timeout: int = 30000,
     ) -> ToolExecutionResult:

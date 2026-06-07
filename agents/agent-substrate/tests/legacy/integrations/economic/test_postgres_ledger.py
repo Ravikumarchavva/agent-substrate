@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ravi.adapters.economic import PostgresBudgetLedger
-from ravi.adapters.economic._postgres_ledger import (
+from ravi.integrations.economic import PostgresBudgetLedger
+from ravi.integrations.economic._postgres_ledger import (
     EconomicBalance,
     EconomicReservation,
     EconomicSignalRow,
@@ -183,9 +183,9 @@ class TestProtocolConformance:
     async def test_init_db_creates_engine(self) -> None:
         """init_db should set up engine and session factory."""
         with patch(
-            "ravi.adapters.economic._postgres_ledger.create_async_engine"
+            "ravi.integrations.economic._postgres_ledger.create_async_engine"
         ) as mock_engine_factory, patch(
-            "ravi.adapters.economic._postgres_ledger.async_sessionmaker"
+            "ravi.integrations.economic._postgres_ledger.async_sessionmaker"
         ) as mock_sm:
             mock_engine = MagicMock()
             mock_conn_ctx = AsyncMock()

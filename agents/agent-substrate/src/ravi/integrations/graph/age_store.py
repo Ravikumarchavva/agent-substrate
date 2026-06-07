@@ -5,7 +5,7 @@ Uses ``asyncpg`` raw SQL with AGE extension functions.  Requires the
 
 Usage::
 
-    from ravi.adapters.graph.age_store import AGEGraphStore
+    from ravi.integrations.graph.age_store import AGEGraphStore
 
     store = AGEGraphStore(dsn="postgresql://...", graph_name="knowledge")
     await store.connect()

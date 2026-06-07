@@ -16,10 +16,9 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 import contextvars
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from ravi.kernel.tools import ToolExecutionResult, ToolUI
-from ravi.serving.shared.tasks.store import GlobalTaskStore, TaskStore
 from ravi.kernel import TextBlock
 
 logger = setup_logging()
@@ -119,9 +118,10 @@ class TaskManagerTool:
         "additionalProperties": False,
     }
 
-    def __init__(self) -> None:
+    def __init__(self, store: Any) -> None:
+        self._store = store
         # task_list_id per conversation thread (supports concurrent requests)
-        self._task_lists: Dict[str, Optional[str]] = {}  # thread_id -> task_list_id
+        self._task_lists: Dict[str, str | None] = {}  # thread_id -> task_list_id
 
     def reset(self) -> None:
         """Reset between conversations (clears the given thread_id)."""
@@ -136,14 +136,14 @@ class TaskManagerTool:
         self,
         *,
         action: str,
-        tasks: Optional[list[str]] = None,
-        task_id: Optional[str] = None,
-        title: Optional[str] = None,
+        tasks: list[str] | None = None,
+        task_id: str | None = None,
+        title: str | None = None,
         max_retries: int = 3,
-        thread_id: Optional[str] = None,
+        thread_id: str | None = None,
     ) -> ToolExecutionResult:
 
-        store = GlobalTaskStore.get()
+        store = self._store
         # Prefer thread_id from ContextVar (set by chat route per-request),
         # fall back to tool argument, then to "default".
         conv_id = current_thread_id.get() or thread_id or "default"
@@ -291,8 +291,8 @@ class TaskManagerTool:
     # ------------------------------------------------------------------
 
     def _first_with_status(
-        self, status: str, store: TaskStore, task_list_id: Optional[str]
-    ) -> Optional[str]:
+        self, status: str, store: Any, task_list_id: str | None
+    ) -> str | None:
         """Return the first task ID matching the given status."""
         if not task_list_id:
             return None
@@ -306,11 +306,11 @@ class TaskManagerTool:
 
     def _resolve_task_id(
         self,
-        task_id: Optional[str],
+        task_id: str | None,
         status: str,
-        store: TaskStore,
+        store: Any,
         task_list_id: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Resolve a task_id flexibly so the agent rarely fails.
 
         Resolution order:
@@ -355,7 +355,7 @@ class TaskManagerTool:
         return self._first_with_status(status, store, task_list_id)
 
     @staticmethod
-    def _board(store: TaskStore, task_list_id: str) -> Dict[str, Any]:
+    def _board(store: Any, task_list_id: str) -> Dict[str, Any]:
         """Return the full current board as a dict (empty when missing)."""
         tl = store.get_task_list(task_list_id)
         return tl.to_dict() if tl else {}

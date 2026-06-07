@@ -48,7 +48,7 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -113,9 +113,9 @@ class HumanInputResponse(BaseModel):
     """
 
     request_id: str = ""
-    selected_key: Optional[str] = None
+    selected_key: str | None = None
     selected_label: str = ""
-    freeform_text: Optional[str] = None
+    freeform_text: str | None = None
     timed_out: bool = False
 
     @property
@@ -545,7 +545,7 @@ class ToolApprovalRequest(BaseModel):
     context: str = ""
     # HITL behaviour declared on the tool — read by WebHITLBridge
     hitl_mode: str = "blocking"  # HitlMode value
-    hitl_timeout_seconds: Optional[float] = None  # only used in continue_on_timeout
+    hitl_timeout_seconds: float | None = None  # only used in continue_on_timeout
 
 
 class ToolApprovalResponse(BaseModel):
@@ -560,7 +560,7 @@ class ToolApprovalResponse(BaseModel):
 
     request_id: str = ""
     action: ToolApprovalAction = ToolApprovalAction.APPROVE
-    modified_arguments: Optional[Dict[str, Any]] = None
+    modified_arguments: Dict[str, Any] | None = None
     reason: str = ""
 
 

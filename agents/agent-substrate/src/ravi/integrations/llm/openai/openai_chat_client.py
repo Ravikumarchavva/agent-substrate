@@ -23,8 +23,8 @@ from ravi.kernel.content import (
     ToolResultBlock,
 )
 from ravi.kernel.stream import TextDelta, CompletionEvent
-from ravi.adapters.llm.encoders.openai import ensure_strict_tool_schema
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.encoders.openai import ensure_strict_tool_schema
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
 if TYPE_CHECKING:
     from pydantic import BaseModel

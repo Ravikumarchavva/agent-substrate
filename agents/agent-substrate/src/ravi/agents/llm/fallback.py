@@ -6,7 +6,7 @@ failure (rate limit, timeout, API error).
 Usage::
 
     from ravi.agents.llm.fallback import FallbackClient
-    from ravi.adapters.llm.factory import create_model_client
+    from ravi.integrations.llm.factory import create_model_client
 
     primary = create_model_client("gpt-4o", api_keys=keys)
     backup = create_model_client("claude-sonnet-4-20250514", api_keys=keys)

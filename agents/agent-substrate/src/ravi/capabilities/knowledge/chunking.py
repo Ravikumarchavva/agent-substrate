@@ -4,7 +4,7 @@ All chunkers produce ``Document`` objects ready for embedding and storage.
 
 Usage::
 
-    from ravi.catalog.rag.chunking import TextChunker, SentenceChunker
+    from ravi.capabilities.knowledge.chunking import TextChunker, SentenceChunker
 
     chunker = TextChunker(chunk_size=512, overlap=128)
     docs = chunker.chunk("Long text ...", metadata={"source": "readme.md"})
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from ravi.kernel.vector import Document
 
@@ -35,7 +35,7 @@ class TextChunker:
     def chunk(
         self,
         text: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         metadata = metadata or {}
         docs: list[Document] = []
@@ -72,7 +72,7 @@ class SentenceChunker:
     def chunk(
         self,
         text: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         metadata = metadata or {}
         sentences = self._SENTENCE_RE.split(text)
@@ -118,7 +118,7 @@ class PageChunker:
     def chunk(
         self,
         pages: list[str],
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> list[Document]:
         metadata = metadata or {}
         docs: list[Document] = []

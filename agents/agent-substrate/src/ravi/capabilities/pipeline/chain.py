@@ -19,9 +19,9 @@ import asyncio
 import time
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from ravi.capabilities.internal.data_ref import DataRef, DataRefStore
+from ravi.capabilities.pipeline.data_ref import DataRef, DataRefStore
 from ravi.kernel.tools import Tool, Toolbox
 
 logger = setup_logging()
@@ -36,7 +36,7 @@ class ChainResult:
     outputs: List[Any] = field(default_factory=list)
     data_refs: List[DataRef] = field(default_factory=list)
     logs: str = ""
-    error: Optional[str] = None
+    error: str | None = None
     duration_ms: int = 0
 
 
@@ -51,7 +51,7 @@ class AdapterProxy:
     def __init__(
         self,
         tool: Tool,
-        data_store: Optional[DataRefStore] = None,
+        data_store: DataRefStore | None = None,
     ) -> None:
         self._tool = tool
         self._data_store = data_store
@@ -115,7 +115,7 @@ class ChainRuntime:
     def __init__(
         self,
         registry: Toolbox,
-        data_store: Optional[DataRefStore] = None,
+        data_store: DataRefStore | None = None,
     ) -> None:
 
         self._registry = registry

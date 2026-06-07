@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ravi.adapters.events.redis_event_bus import EventBus
+from ravi.integrations.events.redis_event_bus import EventBus
 
 if TYPE_CHECKING:
     from ravi.config import Settings

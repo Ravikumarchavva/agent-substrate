@@ -35,7 +35,7 @@ from ravi.logger import setup_logging
 import base64
 import json
 import os
-from typing import Any, Optional
+from typing import Any
 
 from ravi.kernel import ImageBlock  # was ImageContent
 from ravi.kernel.tools import ToolExecutionResult
@@ -94,11 +94,11 @@ class CodeInterpreterTool:
 
     def __init__(
         self,
-        http_client: Optional[Any] = None,
-        session_manager: Optional[Any] = None,
+        http_client: Any | None = None,
+        session_manager: Any | None = None,
         # Legacy compat
-        config: Optional[Any] = None,
-        pool: Optional[Any] = None,
+        config: Any | None = None,
+        pool: Any | None = None,
     ) -> None:
         self._http_client = http_client
         self._session_manager = session_manager

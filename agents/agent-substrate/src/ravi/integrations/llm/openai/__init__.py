@@ -1,3 +1,3 @@
-"""ravi.adapters.llm.openai — OpenAI LLM adapter."""
+"""ravi.integrations.llm.openai — OpenAI LLM adapter."""
 
 from __future__ import annotations

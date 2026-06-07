@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ravi.adapters.metadata import PostgresMetadataStore
+from ravi.integrations.metadata import PostgresMetadataStore
 from ravi.kernel.metadata import (
     KeyNotFoundError,
     MetadataStore,

@@ -45,6 +45,7 @@ dependencies = [
     "pgvector>=0.4.2",
     "ddgs>=9.14.4",
     "crawl4ai>=0.8.7",
+    "pypdf>=6.13.0",
 ]
 
 [project.scripts]
@@ -122,7 +123,7 @@ forbidden_modules = [
     "ravi.agents",
     "ravi.capabilities",
     "ravi.fabric",
-    "ravi.adapters",
+    "ravi.integrations",
     "ravi.serving",
     "ravi.config",
     "ravi.logger",
@@ -132,7 +133,7 @@ forbidden_modules = [
 paddleocr = { git = "https://github.com/PaddlePaddle/PaddleOCR.git" }
 
 # Orthogonal peers (not part of the layer stack):
-# adapters/ — concrete I/O ports (LLM clients, memory backends, vector stores)
-# serving/  — FastAPI monolith + microservices + shared infra
-# These carry cross-layer edges by design (e.g. an adapter implements a kernel
+# integrations/ — concrete I/O ports (LLM clients, memory backends, vector stores)
+# serving/      — FastAPI monolith + microservices + shared infra
+# These carry cross-layer edges by design (e.g. an integration implements a kernel
 # Protocol; serving wires all layers together in lifespan).

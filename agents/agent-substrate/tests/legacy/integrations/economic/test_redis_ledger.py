@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ravi.adapters.economic import RedisBudgetLedger
+from ravi.integrations.economic import RedisBudgetLedger
 from ravi.guardrails.economic import (
     BudgetExhausted,
     BudgetLedger,
@@ -91,7 +91,7 @@ class TestProtocolConformance:
 
     async def test_client_created_lazily(self) -> None:
         with patch(
-            "ravi.adapters.economic._redis_ledger.aioredis"
+            "ravi.integrations.economic._redis_ledger.aioredis"
         ) as mock_aioredis:
             mock_c = AsyncMock()
             mock_c.incrbyfloat = AsyncMock(return_value=100.0)

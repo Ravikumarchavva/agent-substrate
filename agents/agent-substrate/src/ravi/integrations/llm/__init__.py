@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ravi.adapters.llm.factory import (
+from ravi.integrations.llm.factory import (
     LLMFactory,
     create_model_client,
     detect_provider,

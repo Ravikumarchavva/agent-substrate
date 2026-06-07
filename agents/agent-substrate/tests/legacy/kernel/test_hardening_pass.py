@@ -51,7 +51,7 @@ class TestB1KernelIndependence:
     FORBIDDEN_PREFIXES = (
         "ravi.logger",
         "ravi.shared",
-        "ravi.adapters",
+        "ravi.integrations",
         "ravi.catalog",
         "ravi.fabric",
         "ravi.reasoning",
@@ -70,7 +70,7 @@ class TestB1KernelIndependence:
                 continue
             text = path.read_text(encoding="utf-8")
             # Strip triple-quoted docstring/example blocks so docstring text
-            # like ``from ravi.adapters.llm.factory import X`` does not
+            # like ``from ravi.integrations.llm.factory import X`` does not
             # trigger a false positive.
             stripped = re.sub(r'""".*?"""', "", text, flags=re.DOTALL)
             stripped = re.sub(r"'''.*?'''", "", stripped, flags=re.DOTALL)

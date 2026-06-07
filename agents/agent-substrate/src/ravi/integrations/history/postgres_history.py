@@ -47,7 +47,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from ravi.adapters.llm.encoders.storage import (
+from ravi.integrations.llm.encoders.storage import (
     deserialize_message,
     serialize_message,
 )

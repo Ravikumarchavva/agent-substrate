@@ -19,7 +19,7 @@ from ravi.kernel import (
 )
 from ravi.kernel.stream import CompletionEvent
 from ravi.kernel.llm import LLMClient
-from ravi.adapters.events import EventBus
+from ravi.integrations.events import EventBus
 from ravi.serving.shared.events.envelope import EventEnvelope
 from ravi.serving.shared.execution import (
     create_assistant_agent,

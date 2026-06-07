@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ravi.kernel.tools import ToolExecutionResult
 from ravi.kernel import TextBlock
@@ -54,7 +54,7 @@ class PipelineManagerTool:
         *,
         action: str,
         name: str = "",
-        definition: Optional[dict[str, Any]] = None,
+        definition: dict[str, Any] | None = None,
     ) -> ToolExecutionResult:
         """Execute the pipeline management action."""
         if action == "run":
@@ -98,7 +98,7 @@ class PipelineManagerTool:
         return ToolExecutionResult(content=[TextBlock(text="\n".join(parts))])
 
     async def _save(
-        self, name: str, definition: Optional[dict[str, Any]]
+        self, name: str, definition: dict[str, Any] | None
     ) -> ToolExecutionResult:
         if not name or not definition:
             return ToolExecutionResult(
@@ -107,7 +107,7 @@ class PipelineManagerTool:
                 ],
                 is_error=True,
             )
-        from ravi.capabilities.internal.pipeline import PipelineDef
+        from ravi.capabilities.pipeline.engine import PipelineDef
 
         definition["name"] = name
         pipeline = PipelineDef.from_dict(definition)

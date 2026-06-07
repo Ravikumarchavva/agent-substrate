@@ -7,7 +7,7 @@ with graph context.
 
 Usage::
 
-    from ravi.catalog.rag.graph_rag import GraphRAGPipeline
+    from ravi.capabilities.knowledge.graph_rag import GraphRAGPipeline
 
     pipeline = GraphRAGPipeline(
         rag_pipeline=rag_pipeline,
@@ -22,7 +22,7 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 import json
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from ravi.kernel.graph import Entity, Relationship
 from ravi.kernel.vector import SearchResult
@@ -171,7 +171,7 @@ class GraphRAGPipeline:
         *,
         collection: str = "default",
         limit: int = 5,
-        system: Optional[str] = None,
+        system: str | None = None,
     ) -> str:
         """Full GraphRAG: vector search + graph context → LLM answer."""
         return await self._rag.query_with_context(

@@ -21,7 +21,7 @@ import json
 
 import pytest
 
-from ravi.adapters.control_plane import EnvVarRegionRegistry
+from ravi.integrations.control_plane import EnvVarRegionRegistry
 from ravi.kernel.control_plane._contracts import RegionRegistry, RegionSpec
 
 

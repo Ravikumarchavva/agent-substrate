@@ -19,7 +19,7 @@ from ravi.logger import setup_logging
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional, Union
+from typing import Any, Union
 from uuid import uuid4
 
 logger = setup_logging()
@@ -107,7 +107,7 @@ class DataRefStore:
     def __init__(
         self,
         redis_url: str,
-        s3_store: Optional[Any] = None,
+        s3_store: Any | None = None,
         size_threshold: int = _DEFAULT_SIZE_THRESHOLD,
         s3_bucket: str = "agent-datarefs",
     ) -> None:
@@ -115,7 +115,7 @@ class DataRefStore:
         self._s3 = s3_store
         self._size_threshold = size_threshold
         self._s3_bucket = s3_bucket
-        self._redis: Optional[Any] = None
+        self._redis: Any | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -202,7 +202,7 @@ class DataRefStore:
         if ref.storage == "redis" and self._redis is not None:
             await self._redis.persist(ref.key)
 
-    async def unpin(self, ref: DataRef, ttl: Optional[int] = None) -> None:
+    async def unpin(self, ref: DataRef, ttl: int | None = None) -> None:
         """Re-enable TTL expiry.  Uses original TTL if not specified."""
         ref.pinned = False
         if ref.storage == "redis" and self._redis is not None:

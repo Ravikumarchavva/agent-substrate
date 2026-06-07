@@ -17,7 +17,7 @@ from ravi.kernel.content import (
     DataBlock,
 )
 from ravi.kernel.stream import TextDelta, CompletionEvent
-from ravi.adapters.llm.encoders.gemini import (
+from ravi.integrations.llm.encoders.gemini import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,
 )

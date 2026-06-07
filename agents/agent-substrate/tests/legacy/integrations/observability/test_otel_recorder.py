@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ravi.adapters.observability import OtelEnvelopeSpanRecorder
+from ravi.integrations.observability import OtelEnvelopeSpanRecorder
 from ravi.kernel.observability import (
     EnvelopeSpan,
     EnvelopeSpanRecorder,
@@ -250,9 +250,9 @@ class TestExporterSelection:
     def test_console_exporter_used_without_endpoint(self) -> None:
         """When no otlp_endpoint is given, ConsoleSpanExporter should be used."""
         with patch(
-            "ravi.adapters.observability._otel_recorder.SimpleSpanProcessor"
+            "ravi.integrations.observability._otel_recorder.SimpleSpanProcessor"
         ) as mock_simple, patch(
-            "ravi.adapters.observability._otel_recorder.ConsoleSpanExporter"
+            "ravi.integrations.observability._otel_recorder.ConsoleSpanExporter"
         ) as mock_console:
             mock_simple.return_value = MagicMock()
             mock_console.return_value = MagicMock()
@@ -262,9 +262,9 @@ class TestExporterSelection:
     def test_otlp_exporter_used_with_endpoint(self) -> None:
         """When otlp_endpoint is provided, OTLPSpanExporter should be used."""
         with patch(
-            "ravi.adapters.observability._otel_recorder.BatchSpanProcessor"
+            "ravi.integrations.observability._otel_recorder.BatchSpanProcessor"
         ) as mock_batch, patch(
-            "ravi.adapters.observability._otel_recorder.OTLPSpanExporter"
+            "ravi.integrations.observability._otel_recorder.OTLPSpanExporter"
         ) as mock_otlp:
             mock_batch.return_value = MagicMock()
             mock_otlp.return_value = MagicMock()

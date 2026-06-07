@@ -9,7 +9,7 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 import math
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from ravi.kernel.tools import ToolExecutionResult
 from ravi.kernel import TextBlock
@@ -29,12 +29,12 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
 class KnowledgeSearchTool:
     """Search over indexed documents using embedding similarity."""
 
-    def __init__(self, api_key: Optional[str] = None) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         self._api_key = api_key
         # In-memory document store: list of (id, text_chunk, embedding)
         self._index: List[Tuple[str, str, List[float]]] = []
 
-    async def _embed(self, text: str) -> Optional[List[float]]:
+    async def _embed(self, text: str) -> List[float] | None:
         """Get embedding vector from OpenAI."""
         api_key = self._api_key
         if not api_key:

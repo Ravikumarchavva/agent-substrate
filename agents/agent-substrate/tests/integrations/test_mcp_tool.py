@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from unittest.mock import AsyncMock, Mock
-from ravi.adapters.mcp.tool import MCPTool
+from ravi.integrations.tools.mcp.tool import MCPTool
 from ravi.kernel.content import TextBlock
 
 

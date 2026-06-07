@@ -180,7 +180,7 @@ class LLMFactory:
         kwargs["base_url"] = base_url
 
         if self._provider == "openai":
-            from ravi.adapters.llm.openai.openai_client import OpenAIClient
+            from ravi.integrations.llm.openai.openai_client import OpenAIClient
 
             return OpenAIClient(
                 model=self._bare_model,
@@ -189,7 +189,7 @@ class LLMFactory:
             )
 
         if self._provider in ("groq", "openrouter"):
-            from ravi.adapters.llm.openai.openai_chat_client import (
+            from ravi.integrations.llm.openai.openai_chat_client import (
                 OpenAIChatCompletionClient,
             )
 
@@ -200,7 +200,7 @@ class LLMFactory:
             )
 
         if self._provider == "anthropic":
-            from ravi.adapters.llm.anthropic.anthropic_client import AnthropicClient
+            from ravi.integrations.llm.anthropic.anthropic_client import AnthropicClient
 
             return AnthropicClient(
                 model=self._bare_model,
@@ -209,7 +209,7 @@ class LLMFactory:
             )
 
         if self._provider == "gemini":
-            from ravi.adapters.llm.gemini.gemini_client import GeminiClient
+            from ravi.integrations.llm.gemini.gemini_client import GeminiClient
 
             return GeminiClient(
                 model=self._bare_model,
@@ -387,7 +387,7 @@ def create_model_client(
         base_url = openrouter_base_url or "https://openrouter.ai/api/v1"
 
     if provider == "openrouter" and (openrouter_site_url or openrouter_app_name):
-        from ravi.adapters.llm.openai.openai_chat_client import (
+        from ravi.integrations.llm.openai.openai_chat_client import (
             OpenAIChatCompletionClient,
         )
 
@@ -440,7 +440,7 @@ def create_embedding_client(
     resolved_key = api_key or _pick_api_key(provider, api_keys or {})
 
     if provider == "openai":
-        from ravi.adapters.llm.openai.openai_embedding_client import (
+        from ravi.integrations.llm.openai.openai_embedding_client import (
             OpenAIEmbeddingClient,
         )
 
@@ -452,7 +452,7 @@ def create_embedding_client(
         )
 
     if provider == "gemini":
-        from ravi.adapters.llm.gemini.gemini_embedding_client import (
+        from ravi.integrations.llm.gemini.gemini_embedding_client import (
             GeminiEmbeddingClient,
         )
 

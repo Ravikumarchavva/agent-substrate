@@ -7,7 +7,7 @@ Marked as SENSITIVE risk because it reads potentially sensitive data.
 from __future__ import annotations
 from ravi.logger import setup_logging
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = setup_logging()
 
@@ -34,7 +34,7 @@ class PostgresQueryConnector:
         self._dsn = dsn
         self._read_only = read_only
         self._max_rows = max_rows
-        self._pool: Optional[Any] = None
+        self._pool: Any | None = None
 
     async def connect(self) -> None:
         """Create connection pool."""
@@ -54,8 +54,8 @@ class PostgresQueryConnector:
         self,
         sql: str,
         *,
-        params: Optional[List[Any]] = None,
-        max_rows: Optional[int] = None,
+        params: List[Any] | None = None,
+        max_rows: int | None = None,
     ) -> List[Dict[str, Any]]:
         """Execute a SQL query and return results as list of dicts.
 

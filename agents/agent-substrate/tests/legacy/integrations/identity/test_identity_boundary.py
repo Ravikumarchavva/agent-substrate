@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jwt
 import pytest
 
-from ravi.adapters.identity import (
+from ravi.integrations.identity import (
     JWTDecodeError,
     PostgresPrincipalStore,
     PrincipalNotFound,

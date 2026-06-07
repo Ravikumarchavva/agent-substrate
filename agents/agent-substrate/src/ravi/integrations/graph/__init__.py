@@ -1,3 +1,3 @@
-"""ravi.adapters.graph — Graph database backends."""
+"""ravi.integrations.graph — Graph database backends."""
 
 from __future__ import annotations

@@ -4,6 +4,7 @@ from typing import Any
 
 from ravi.kernel.content import DocumentBlock, ImageBlock, TextBlock
 from ravi.kernel import Tool, ToolResultBlock
+from ravi.kernel.tools import ToolType
 from ravi.integrations.tools.mcp.client import MCPClient
 
 
@@ -61,6 +62,7 @@ class MCPTool(Tool):
             description: Tool description from MCP server
             input_schema: JSON Schema for tool parameters from MCP server
         """
+        self.tool_type = ToolType.MCP
         self.name = name
         self.description = description
         self.input_schema = input_schema

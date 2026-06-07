@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
-from ravi.integrations.history.redis_history import RedisHistoryProvider
+from ravi.capabilities.history.redis_history import RedisHistoryProvider
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.serving.services.agent_runtime.routes import router
 from ravi.serving.services.base import create_service_app

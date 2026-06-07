@@ -11,7 +11,7 @@ from ravi.logger import setup_logging
 import math
 from typing import List, Tuple
 
-from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel.tools import ToolExecutionResult, ToolType
 from ravi.kernel import TextBlock
 
 logger = setup_logging()
@@ -28,6 +28,38 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
 
 class KnowledgeSearchTool:
     """Search over indexed documents using embedding similarity."""
+
+    tool_type = ToolType.KNOWLEDGE
+    name: str = "knowledge_search"
+    description: str = (
+        "Search, index, or check status of the in-memory knowledge index. "
+        "action=index: add a document. action=search: retrieve relevant passages. "
+        "action=status: show index size."
+    )
+    input_schema: dict = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["index", "search", "status"],
+                "description": "Operation to perform on the knowledge index.",
+            },
+            "text": {
+                "type": "string",
+                "description": "Document text to index, or query text to search.",
+            },
+            "doc_id": {
+                "type": "string",
+                "description": "Optional document label (for index action).",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results to return (search action, default 5).",
+            },
+        },
+        "required": ["action"],
+        "additionalProperties": False,
+    }
 
     def __init__(self, api_key: str | None = None) -> None:
         self._api_key = api_key

@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from ravi.kernel import TextBlock
-from ravi.kernel.tools import ToolExecutionResult
+from ravi.kernel.tools import ToolExecutionResult, ToolType
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -23,6 +23,7 @@ logger = setup_logging()
 class SkillTool:
     """Discover and activate agent skills."""
 
+    tool_type: str = ToolType.SKILL
     name: str = "skills"
     description: str = (
         "Manage agent skills. "

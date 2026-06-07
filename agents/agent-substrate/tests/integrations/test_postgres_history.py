@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import pytest
 from sqlalchemy.exc import OperationalError
-from ravi.integrations.history import PostgresHistoryProvider
+from ravi.capabilities.history import PostgresHistoryProvider
 from ravi.kernel import AgentId, ChatMessage
 from ravi.kernel.content import TextBlock
 

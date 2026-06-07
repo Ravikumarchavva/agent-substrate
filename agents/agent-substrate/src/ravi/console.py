@@ -14,7 +14,7 @@ Usage (single task)::
 
 Usage (interactive REPL with skills)::
 
-    from ravi.capabilities.skills._manager import SkillManager
+    from ravi.capabilities.tools.skills._manager import SkillManager
     manager = SkillManager()
     await Console(agent, skill_manager=manager).interactive(stream=True)
 
@@ -46,7 +46,7 @@ from ravi.kernel.tools import ToolExecutionResult
 from ravi.logger import setup_logging
 
 if TYPE_CHECKING:
-    from ravi.capabilities.skills._manager import SkillManager
+    from ravi.capabilities.tools.skills._manager import SkillManager
 
 
 class GutterAccent:

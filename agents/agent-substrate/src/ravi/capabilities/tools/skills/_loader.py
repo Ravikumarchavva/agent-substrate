@@ -26,7 +26,7 @@ from ravi.logger import setup_logging
 from pathlib import Path
 from typing import Any, Dict, List
 
-from ravi.capabilities.skills._models import SkillPackage, SkillMetadata
+from ravi.capabilities.tools.skills._models import SkillPackage, SkillMetadata
 
 yaml: Any = None  # optional dependency; assigned below if available
 try:

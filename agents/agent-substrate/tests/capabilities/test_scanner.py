@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from ravi.capabilities.discovery import CapabilityDiscovery as CatalogScanner
+from ravi.capabilities.tools.discovery import CapabilityDiscovery as CatalogScanner
 
 
 def test_catalog_scanner_discovery(tmp_path, monkeypatch):

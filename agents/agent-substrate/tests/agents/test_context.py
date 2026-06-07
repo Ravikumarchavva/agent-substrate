@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from ravi.agents.context import (
     AgentContext,
-    DefaultAgentContext,
+    ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
     SummarizationStrategy,
@@ -31,23 +31,23 @@ async def test_sliding_window_compaction():
 
 
 @pytest.mark.asyncio
-async def test_agent_context():
+async def test_context_config():
     # Constructor
     history = InMemoryHistoryProvider()
     compaction = SlidingWindowCompaction(max_messages=10)
-    ctx = AgentContext(history, compaction)
+    cfg = ContextConfig(history, compaction)
 
-    assert ctx.history is history
-    assert ctx.compaction is compaction
+    assert cfg.history is history
+    assert cfg.compaction is compaction
 
     # Default constructor
-    default_ctx = AgentContext.default()
-    assert isinstance(default_ctx.history, InMemoryHistoryProvider)
-    assert isinstance(default_ctx.compaction, SlidingWindowCompaction)
+    default_cfg = ContextConfig.default()
+    assert isinstance(default_cfg.history, InMemoryHistoryProvider)
+    assert isinstance(default_cfg.compaction, SlidingWindowCompaction)
 
 
 @pytest.mark.asyncio
-async def test_default_agent_context():
+async def test_agent_context():
     history = InMemoryHistoryProvider()
     compaction = SlidingWindowCompaction(max_messages=10)
     agent_id = AgentId(type="assistant", key="agent_1")
@@ -58,18 +58,18 @@ async def test_default_agent_context():
     envelope = Message(target=agent_id, payload=chat_msg, sender=agent_id)
     await history.append(agent_id, envelope, session_id=session_id)
 
-    default_ctx = DefaultAgentContext(agent_id, history, compaction)
-    assert default_ctx.agent_id == agent_id
-    assert default_ctx.history is history
-    assert default_ctx.compaction is compaction
+    ctx = AgentContext(agent_id, history, compaction)
+    assert ctx.agent_id == agent_id
+    assert ctx.history is history
+    assert ctx.compaction is compaction
 
     # Test prompt window retrieval uses session_id
-    window = await default_ctx.get_prompt_window(session_id)
+    window = await ctx.get_prompt_window(session_id)
     assert len(window) == 1
     assert window[0].payload.content[0].text == "hi"
 
     # Different session_id yields empty window
-    window_other = await default_ctx.get_prompt_window("other-session")
+    window_other = await ctx.get_prompt_window("other-session")
     assert len(window_other) == 0
 
 

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from ravi.agents.core.react import AgentRunResult, ReActAgent
     from ravi.agents.context import (
         AgentContext,
+        ContextConfig,
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
     )
@@ -58,6 +59,7 @@ __all__ = [
     "Skill",
     "InMemoryHistoryProvider",
     "AgentContext",
+    "ContextConfig",
     "SlidingWindowCompaction",
     # middleware
     "AgentRunContext",
@@ -100,6 +102,7 @@ _LAZY: dict[str, tuple[str, str]] = {
     "Skill": ("ravi.agents.skills", "Skill"),
     "InMemoryHistoryProvider": ("ravi.agents.context", "InMemoryHistoryProvider"),
     "AgentContext": ("ravi.agents.context", "AgentContext"),
+    "ContextConfig": ("ravi.agents.context", "ContextConfig"),
     "SlidingWindowCompaction": ("ravi.agents.context", "SlidingWindowCompaction"),
     # middleware
     "AgentRunContext": ("ravi.agents.middleware", "AgentRunContext"),

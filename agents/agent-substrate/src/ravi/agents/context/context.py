@@ -1,4 +1,4 @@
-"""AgentContext and DefaultAgentContext concrete impls."""
+"""AgentContext (protocol impl) and ContextConfig (user-facing config bag)."""
 
 from __future__ import annotations
 
@@ -8,20 +8,24 @@ from ravi.kernel.history import HistoryProvider
 from .compaction import SlidingWindowCompaction
 
 
-class AgentContext:
-    """User-facing context config — pass to ``ReActAgent(context=...)``.
+class ContextConfig:
+    """User-facing config bag — pass to ``ReActAgent(context=...)``.
+
+    Bundles a ``HistoryProvider`` and a ``CompactionStrategy`` together so
+    callers don't have to pass them as two separate arguments.  The agent
+    unpacks them into a running ``AgentContext`` during ``__init__``.
 
     Usage::
 
         # Explicit
-        context = AgentContext(
+        context = ContextConfig(
             InMemoryHistoryProvider(),
             [SlidingWindowCompaction(max_messages=40)],
         )
         agent = ReActAgent("bot", runtime, model=client, context=context)
 
         # Default (in-memory, sliding-window 100)
-        context = AgentContext.default()
+        context = ContextConfig.default()
 
     When ``compaction_strategies`` is a list the first strategy is used.
     """
@@ -46,20 +50,24 @@ class AgentContext:
             self.compaction = SlidingWindowCompaction()
 
     @classmethod
-    def default(cls) -> AgentContext:
+    def default(cls) -> ContextConfig:
         """Return an in-memory context with default sliding-window compaction."""
         from ravi.agents.context.history import InMemoryHistoryProvider
 
         return cls(InMemoryHistoryProvider())
 
 
-class DefaultAgentContext:
-    """Concrete AgentContext for in-process use.
+class AgentContext:
+    """Concrete implementation of ``AgentContextProtocol`` for in-process use.
 
-    ``run_id`` is threaded explicitly through ``get_prompt_window`` so that
-    all history reads and writes are scoped to the current run. A single
-    agent instance can participate in multiple sequential runs without
-    history leaking between them.
+    Wraps a ``HistoryProvider`` and a ``CompactionStrategy`` into the full
+    runtime context that ``ReActAgent`` drives.  All history reads and writes
+    are scoped to ``session_id`` so one agent instance can participate in
+    multiple sequential runs without history leaking between them.
+
+    Construct via ``ContextConfig`` or directly::
+
+        ctx = AgentContext(agent_id, InMemoryHistoryProvider(), SlidingWindowCompaction())
     """
 
     def __init__(
@@ -90,4 +98,4 @@ class DefaultAgentContext:
         return await self._compaction.compact(raw)
 
 
-__all__ = ["AgentContextProtocol", "AgentContext", "DefaultAgentContext"]
+__all__ = ["AgentContextProtocol", "AgentContext", "ContextConfig"]

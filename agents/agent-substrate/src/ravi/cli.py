@@ -249,7 +249,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from ravi.agents.runtime.local import LocalRuntime
     from ravi.adapters.llm.openai.openai_client import OpenAIClient
     from ravi.agents.context import (
-        AgentContext,
+        ContextConfig,
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
     )
@@ -268,7 +268,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 args.name,
                 rt,
                 model=OpenAIClient(model=args.model),
-                context=AgentContext(
+                context=ContextConfig(
                     InMemoryHistoryProvider(),
                     SlidingWindowCompaction(max_messages=1000),
                 ),

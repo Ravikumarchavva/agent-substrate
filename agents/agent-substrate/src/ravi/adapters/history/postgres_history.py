@@ -9,9 +9,15 @@ Tables (created automatically):
 The session row is auto-created on first ``save_messages`` so the provider
 works standalone (no separate session bookkeeping required).
 
+Internal storage key:
+  The public ``HistoryProvider`` methods (``append``, ``get_messages``, ``clear``)
+  compose an internal key of the form ``{agent_type}:{agent_key}:{session_id}``
+  using ``_session_key()``.  Validation runs on the raw ``session_id`` at the
+  public boundary — the composed key is internal and intentionally contains ``:``.
+
 Security:
   - All queries use parameterized ORM operations — no raw SQL interpolation.
-  - Session IDs are validated before every operation.
+  - Raw session IDs are validated at the public protocol boundary.
 """
 
 from __future__ import annotations
@@ -44,7 +50,7 @@ from ravi.adapters.llm.encoders.storage import (
     deserialize_message,
     serialize_message,
 )
-from ravi.kernel import ChatMessage
+from ravi.kernel import ChatMessage, Message, AgentId
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -60,18 +66,19 @@ def _validate_session_id(session_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# ORM Models (memory-specific, separate Base from server models)
+# ORM Models — separate Base from server models to avoid metadata conflicts
 # ---------------------------------------------------------------------------
 
 
-class MemoryBase(DeclarativeBase):
-    """Separate declarative base for the memory subsystem."""
+class HistoryBase(DeclarativeBase):
+    """Separate declarative base for the history subsystem."""
 
     pass
 
 
-class MemorySession(MemoryBase):
-    """Persistent session record."""
+class HistorySession(HistoryBase):
+    """Persistent session record.  Table name kept as ``memory_sessions`` for
+    backwards compatibility with existing deployments."""
 
     __tablename__ = "memory_sessions"
 
@@ -84,18 +91,19 @@ class MemorySession(MemoryBase):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    messages: Mapped[List["MemoryMessage"]] = relationship(
+    messages: Mapped[List["HistoryMessage"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
-        order_by="MemoryMessage.sequence",
+        order_by="HistoryMessage.sequence",
     )
 
     def __repr__(self) -> str:
-        return f"<MemorySession(id={self.id!r}, msgs={self.message_count})>"
+        return f"<HistorySession(id={self.id!r}, msgs={self.message_count})>"
 
 
-class MemoryMessage(MemoryBase):
-    """Single message stored for a session."""
+class HistoryMessage(HistoryBase):
+    """Single message stored for a session.  Table name kept as
+    ``memory_messages`` for backwards compatibility."""
 
     __tablename__ = "memory_messages"
     __table_args__ = (
@@ -118,11 +126,11 @@ class MemoryMessage(MemoryBase):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    session: Mapped["MemorySession"] = relationship(back_populates="messages")
+    session: Mapped[HistorySession] = relationship(back_populates="messages")
 
     def __repr__(self) -> str:
         return (
-            f"<MemoryMessage(id={self.id}, session={self.session_id!r}, "
+            f"<HistoryMessage(id={self.id}, session={self.session_id!r}, "
             f"seq={self.sequence}, type={self.message_type!r})>"
         )
 
@@ -165,7 +173,7 @@ class PostgresHistoryProvider:
             expire_on_commit=False,
         )
         async with self._engine.begin() as conn:
-            await conn.run_sync(MemoryBase.metadata.create_all)
+            await conn.run_sync(HistoryBase.metadata.create_all)
         logger.info("PostgresHistoryProvider connected and tables ensured")
 
     async def disconnect(self) -> None:
@@ -184,13 +192,14 @@ class PostgresHistoryProvider:
 
     # -- HistoryProvider protocol (kernel contract) ---------------------------
 
-    def _session_key(self, agent_id: "AgentId", session_id: str) -> str:  # noqa: F821
+    def _session_key(self, agent_id: AgentId, session_id: str) -> str:
         """Derive the internal storage key for a (agent_id, session_id) pair."""
         return f"{agent_id.type}:{agent_id.key}:{session_id}"
 
     async def append(
-        self, agent_id: "AgentId", message: "Message", *, session_id: str  # noqa: F821
+        self, agent_id: AgentId, message: Message, *, session_id: str
     ) -> None:
+        _validate_session_id(session_id)
         storage_key = self._session_key(agent_id, session_id)
         payload = message.payload
         if hasattr(payload, "model_dump"):
@@ -201,12 +210,13 @@ class PostgresHistoryProvider:
 
     async def get_messages(
         self,
-        agent_id: "AgentId",  # noqa: F821
+        agent_id: AgentId,
         *,
         session_id: str,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> "list[Message]":  # noqa: F821
+    ) -> list[Message]:
+        _validate_session_id(session_id)
         from ravi.kernel.message import Message as _Message
         storage_key = self._session_key(agent_id, session_id)
         chat_msgs = await self.load_messages(storage_key, limit=limit)
@@ -220,8 +230,9 @@ class PostgresHistoryProvider:
         return results
 
     async def clear(
-        self, agent_id: "AgentId", *, session_id: str  # noqa: F821
+        self, agent_id: AgentId, *, session_id: str
     ) -> None:
+        _validate_session_id(session_id)
         storage_key = self._session_key(agent_id, session_id)
         await self.clear_session(storage_key)
 
@@ -234,20 +245,19 @@ class PostgresHistoryProvider:
         session row is locked to prevent concurrent writes racing on the
         sequence counter.  Returns the number of messages saved.
         """
-        _validate_session_id(session_id)
         if not messages:
             return 0
 
         factory = self._get_session()
         async with factory() as db:
-            session_obj = await db.get(MemorySession, session_id, with_for_update=True)
+            session_obj = await db.get(HistorySession, session_id, with_for_update=True)
             if session_obj is None:
-                session_obj = MemorySession(id=session_id, message_count=0)
+                session_obj = HistorySession(id=session_id, message_count=0)
                 db.add(session_obj)
                 await db.flush()
 
-            stmt = select(func.coalesce(func.max(MemoryMessage.sequence), 0)).where(
-                MemoryMessage.session_id == session_id
+            stmt = select(func.coalesce(func.max(HistoryMessage.sequence), 0)).where(
+                HistoryMessage.session_id == session_id
             )
             result = await db.execute(stmt)
             max_seq: int = result.scalar_one()
@@ -255,7 +265,7 @@ class PostgresHistoryProvider:
             for i, msg in enumerate(messages, start=max_seq + 1):
                 payload = serialize_message(msg)
                 db.add(
-                    MemoryMessage(
+                    HistoryMessage(
                         session_id=session_id,
                         sequence=i,
                         message_type=payload.get("type", type(msg).__name__),
@@ -272,24 +282,23 @@ class PostgresHistoryProvider:
         self, session_id: str, *, limit: Optional[int] = None
     ) -> List[ChatMessage]:
         """Load a session's messages ordered by sequence (last *limit* if given)."""
-        _validate_session_id(session_id)
         factory = self._get_session()
         async with factory() as db:
             if limit is not None and limit > 0:
                 # Take the last `limit` by sequence, then restore ascending order.
                 stmt = (
-                    select(MemoryMessage)
-                    .where(MemoryMessage.session_id == session_id)
-                    .order_by(MemoryMessage.sequence.desc())
+                    select(HistoryMessage)
+                    .where(HistoryMessage.session_id == session_id)
+                    .order_by(HistoryMessage.sequence.desc())
                     .limit(limit)
                 )
                 result = await db.execute(stmt)
                 rows = list(reversed(result.scalars().all()))
             else:
                 stmt = (
-                    select(MemoryMessage)
-                    .where(MemoryMessage.session_id == session_id)
-                    .order_by(MemoryMessage.sequence)
+                    select(HistoryMessage)
+                    .where(HistoryMessage.session_id == session_id)
+                    .order_by(HistoryMessage.sequence)
                 )
                 result = await db.execute(stmt)
                 rows = list(result.scalars().all())
@@ -297,26 +306,24 @@ class PostgresHistoryProvider:
             return [deserialize_message(row.payload) for row in rows]
 
     async def count_messages(self, session_id: str) -> int:
-        _validate_session_id(session_id)
         factory = self._get_session()
         async with factory() as db:
             stmt = (
                 select(func.count())
-                .select_from(MemoryMessage)
-                .where(MemoryMessage.session_id == session_id)
+                .select_from(HistoryMessage)
+                .where(HistoryMessage.session_id == session_id)
             )
             result = await db.execute(stmt)
             return result.scalar_one()
 
     async def clear_session(self, session_id: str) -> None:
         """Delete all messages for a session (keeps the session row)."""
-        _validate_session_id(session_id)
         factory = self._get_session()
         async with factory() as db:
             await db.execute(
-                delete(MemoryMessage).where(MemoryMessage.session_id == session_id)
+                delete(HistoryMessage).where(HistoryMessage.session_id == session_id)
             )
-            session_obj = await db.get(MemorySession, session_id)
+            session_obj = await db.get(HistorySession, session_id)
             if session_obj is not None:
                 session_obj.message_count = 0
             await db.commit()

@@ -35,9 +35,9 @@ Usage::
 from __future__ import annotations
 
 import asyncio
-import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -51,9 +51,10 @@ from ravi.kernel import (
     TextBlock,
     Tool,
     ToolExecutionResult,
+    TopicId,
 )
 from ravi.kernel.stream import AgentProgress, AgentStep, StreamDone, TextDelta
-from ravi.kernel.identity import HistoryRetention, HistoryRetention as _HR
+from ravi.kernel.identity import HistoryRetention
 from ravi.kernel.llm import LLMClient
 from ravi.agents.supervision.budget import SpawnBudget
 from ravi.agents.supervision.policies import RetryPolicy
@@ -62,8 +63,9 @@ from ravi.agents.core.react import (
     ReActAgent,
 )
 from ravi.agents.hooks.manager import HookEvent, HookManager
+from ravi.logger import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 # ---------------------------------------------------------------------------
@@ -97,12 +99,7 @@ class SubAgentConfig:
     agent: ReActAgent
     priority: Priority = Priority.NORMAL
     execution_budget: ExecutionBudget | None = None
-    retention: "HistoryRetention" = None  # type: ignore[assignment]  resolved in __post_init__
-
-    def __post_init__(self) -> None:
-        from ravi.kernel.identity import HistoryRetention
-        if self.retention is None:  # type: ignore[comparison-overlap]
-            self.retention = HistoryRetention.RUN
+    retention: HistoryRetention = field(default=HistoryRetention.RUN)
 
 
 # ---------------------------------------------------------------------------
@@ -113,10 +110,15 @@ class SubAgentConfig:
 class _DispatchTool:
     """Wraps a subagent as an LLM-callable tool.
 
-    Runs the subagent via ``run_stream()`` so progress events (tool calls,
-    tool results) flow back to the orchestrator's stream in real time.
+    Runs the subagent via ``run_stream()`` directly — this is local-only
+    orchestration.  Routing through ``AgentRuntime.send_message()`` would
+    require the runtime to support streaming responses, which it does not yet.
     On crash the retry policy is consulted and the subagent is resumed —
     other subagents keep running in parallel while the retry is in flight.
+
+    ``_current_run_id`` is stamped by ``OrchestratorAgent._react()`` at the
+    start of each run so ``AgentProgress`` events are routed to the correct
+    per-run topic.  It defaults to ``""`` until stamped.
 
     Schema exposed to the LLM::
 
@@ -142,6 +144,7 @@ class _DispatchTool:
         self._budget = budget
         self._retry_policy = retry_policy
         self._progress_sink: asyncio.Queue[AgentProgress] | None = None
+        self._current_run_id: str = ""
         self.name = f"handoff_{self._agent.name}"
         self.description = (
             f"Delegate the current task to the '{self._agent.name}' specialist agent. "
@@ -212,17 +215,18 @@ class _DispatchTool:
                 reason=reason,
             ).model_dump(mode="json"),
         )
+        run_id = self._current_run_id or self._supervision.run_id
         await self._runtime.publish_message(
             AgentProgress(
                 agent_id=self._orchestrator_id,
                 step=AgentStep.HANDOFF,
                 content=f"→ {self._agent.name}: {reason or input[:60]}",
-                run_id=self._supervision.run_id,
+                run_id=run_id,
                 parent_id=self._supervision.parent_id,
                 depth=self._supervision.depth,
             ),
             sender=self._orchestrator_id,
-            topic=self._supervision.progress_topic,
+            topic=TopicId("agent.progress", run_id),
         )
 
         output, status, crash_run_id = await self._stream_run(input)
@@ -400,6 +404,7 @@ class OrchestratorAgent(ReActAgent):
                 )
             )
 
+        self._dispatch_tools = dispatch_tools
         all_tools: list[Tool] = [*dispatch_tools, *(extra_tools or [])]
 
         super().__init__(
@@ -439,8 +444,13 @@ class OrchestratorAgent(ReActAgent):
         stream: bool = False,
         initial_tool_choice: str | None = None,
     ) -> Any:
-        # Each call gets a fresh run_id for execution scope (budget/progress)
-        # while all calls on this instance share the same session_id.
+        # Generate a fresh run_id for this execution so AgentProgress events
+        # route to the correct per-run topic.  session_id stays stable across runs.
+        if not resume:
+            run_id = run_id or uuid4().hex
+        for tool in self._dispatch_tools:
+            tool._current_run_id = run_id or ""
+
         for cfg in self._sub_configs:
             self._retry_policy.reset(cfg.agent.id)
             await self.runtime.register(cfg.agent.id, cfg.agent.on_message)
@@ -470,7 +480,7 @@ class OrchestratorAgent(ReActAgent):
             sv = self.supervision
             if sv is not None:
                 for cfg in self._sub_configs:
-                    if cfg.retention == _HR.RUN:
+                    if cfg.retention == HistoryRetention.RUN:
                         try:
                             await cfg.agent.history.clear(
                                 cfg.agent.id,

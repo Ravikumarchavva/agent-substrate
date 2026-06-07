@@ -36,11 +36,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from ravi.agents.supervision.budget import SpawnBudget
 
 from ravi.kernel import (
     AgentId,
@@ -62,10 +64,9 @@ from ravi.kernel import (
 )
 from ravi.kernel.message import Message
 from ravi.kernel.stream import AgentProgress, AgentStep, CompletionEvent, ReasoningDelta, StreamDone, TextDelta
-from ravi.agents.context import AgentContext, HistoryProvider
-from ravi.agents.context.context import DefaultAgentContext
+from ravi.agents.context import AgentContext, ContextConfig, HistoryProvider
 from ravi.kernel import Skill
-from ravi.kernel.llm import LLMClient, Usage
+from ravi.kernel.llm import LLMClient, LLMResponse, Usage
 from ravi.agents.hooks.manager import HookEvent, HookManager
 from ravi.agents.resources.budget import BudgetExceededError, ExecutionBudget
 from ravi.agents.middleware._contracts import (
@@ -77,9 +78,10 @@ from ravi.agents.middleware._contracts import (
 )
 from ravi.agents.middleware.pipeline import MiddlewarePipeline
 from ravi.kernel.middleware import AgentMiddleware, ChatMiddleware, FunctionMiddleware
-from ravi.exceptions import MiddlewareTermination
+from ravi.kernel.errors import MiddlewareTermination
+from ravi.logger import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # Signature: (tool_name, arguments) → True=approved, False=denied
 ApprovalHandler = Callable[[str, dict[str, Any]], Awaitable[bool]]
@@ -102,8 +104,8 @@ class ReActAgent:
 
         from ravi.adapters.llm.openai import OpenAIClient
         from ravi.agents.runtime import LocalRuntime
-        from ravi.agents.context import AgentContext, SlidingWindowCompaction
-        from ravi.adapters.memory import RedisHistoryProvider
+        from ravi.agents.context import ContextConfig, SlidingWindowCompaction
+        from ravi.adapters.history import RedisHistoryProvider
         from ravi.kernel import Skill
 
         runtime = LocalRuntime()
@@ -115,7 +117,7 @@ class ReActAgent:
             tools=[calc_tool],
             skills=[Skill(name="math", instructions="Show your working step by step.")],
             system_instructions="You are a helpful AI assistant.",
-            context=AgentContext(
+            context=ContextConfig(
                 RedisHistoryProvider(session_id="sess-123"),
                 [SlidingWindowCompaction(max_messages=60)],
             ),
@@ -141,7 +143,7 @@ class ReActAgent:
         system_instructions: str | None = None,
         max_iterations: int = 20,
         tool_timeout: float | None = 30.0,
-        context: AgentContext | None = None,
+        context: ContextConfig | None = None,
         agent_middleware: list[AgentMiddleware] | None = None,
         chat_middleware: list[ChatMiddleware] | None = None,
         function_middleware: list[FunctionMiddleware] | None = None,
@@ -172,10 +174,10 @@ class ReActAgent:
 
         # Set by the orchestrator when this agent is a subagent in a supervised tree.
         # Checked before each LLM call; if True, agent pauses cooperatively.
-        self.spawn_budget: Any | None = None  # SpawnBudget | None
+        self.spawn_budget: SpawnBudget | None = None
 
-        _ctx = context if context is not None else AgentContext.default()
-        self._ctx = DefaultAgentContext(self.id, _ctx.history, _ctx.compaction)
+        _cfg = context if context is not None else ContextConfig.default()
+        self._ctx = AgentContext(self.id, _cfg.history, _cfg.compaction)
 
     @property
     def _system(self) -> str:
@@ -369,9 +371,6 @@ class ReActAgent:
                             )
                             content = resp.content
                             turn_usage = resp.usage
-
-
-                        from ravi.kernel.llm import LLMResponse
 
 
                         c.result = LLMResponse(content=content, usage=turn_usage)

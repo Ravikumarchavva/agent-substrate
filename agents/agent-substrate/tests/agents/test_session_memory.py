@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator
 
 import pytest
 
-from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction
 from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel import (
     ChatMessage,
@@ -75,7 +75,7 @@ async def test_standalone_session_accumulates_across_runs():
                 [TextBlock(text="I am fine.")],
                 [TextBlock(text="You said hi earlier.")],
             ]),
-            context=AgentContext(shared_history, SlidingWindowCompaction(max_messages=20)),
+            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=20)),
             max_iterations=5,
         )
 
@@ -108,7 +108,7 @@ async def test_permanent_retention_subagent_remembers_across_runs():
                 [TextBlock(text="Noted: the secret is 42.")],   # run 1
                 [TextBlock(text="The secret I noted was 42.")],  # run 2
             ]),
-            context=AgentContext(coder_history, SlidingWindowCompaction(max_messages=40)),
+            context=ContextConfig(coder_history, SlidingWindowCompaction(max_messages=40)),
             max_iterations=5,
         )
 
@@ -172,7 +172,7 @@ async def test_run_retention_subagent_is_ephemeral():
                 [TextBlock(text="Done run 1.")],
                 [TextBlock(text="Done run 2.")],
             ]),
-            context=AgentContext(scratch_history, SlidingWindowCompaction(max_messages=40)),
+            context=ContextConfig(scratch_history, SlidingWindowCompaction(max_messages=40)),
             max_iterations=5,
         )
 
@@ -222,7 +222,7 @@ async def test_session_isolation_across_different_sessions():
                 [TextBlock(text="Session A response.")],
                 [TextBlock(text="Session B response.")],
             ]),
-            context=AgentContext(shared_history, SlidingWindowCompaction(max_messages=20)),
+            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=20)),
             max_iterations=5,
         )
 

@@ -12,6 +12,48 @@ explicit ``system_instructions=`` kwarg on every ``generate()`` call (see
 ``LLMClient.generate``).  The factory only handles connection wiring.
 
 Provider / model / cost table lives in ``ravi.kernel.llm.models``.
+
+OpenAI-compatible providers
+----------------------------
+The following provider prefixes all route to ``OpenAIChatCompletionClient``
+(standard ``/v1/chat/completions`` endpoint):
+
+    Cloud — require an API key:
+        groq/           https://api.groq.com/openai/v1
+        openrouter/     https://openrouter.ai/api/v1
+        together/       https://api.together.xyz/v1
+        fireworks/      https://api.fireworks.ai/inference/v1
+        perplexity/     https://api.perplexity.ai
+        mistral/        https://api.mistral.ai/v1
+        deepseek/       https://api.deepseek.com/v1
+        cerebras/       https://api.cerebras.ai/v1
+        sambanova/      https://api.sambanova.ai/v1
+        nvidia/         https://integrate.api.nvidia.com/v1
+
+    Local — no real API key needed (pass "" or any non-empty string):
+        ollama/         http://localhost:11434/v1
+        lmstudio/       http://localhost:1234/v1
+        vllm/           http://localhost:8000/v1  (override with base_url=)
+
+    Generic catch-all — you supply the base_url:
+        compatible/     (base_url kwarg required)
+
+Examples::
+
+    # Named cloud provider
+    client = LLMFactory("groq/llama-3.3-70b-versatile", groq_key).build()
+    client = LLMFactory("together/meta-llama/Meta-Llama-3.1-8B", together_key).build()
+    client = LLMFactory("mistral/mistral-large-latest", mistral_key).build()
+    client = LLMFactory("deepseek/deepseek-chat", deepseek_key).build()
+
+    # Local inference server
+    client = LLMFactory("ollama/llama3.2", "ollama").build()
+    client = LLMFactory("vllm/mistral-7b", "EMPTY").build(base_url="http://my-vllm:8000/v1")
+
+    # Completely generic OpenAI-compatible endpoint
+    client = LLMFactory("compatible/my-model", "sk-xxx").build(
+        base_url="https://my-private-api.example.com/v1"
+    )
 """
 
 from __future__ import annotations
@@ -36,13 +78,48 @@ _OPENAI_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "dall-e", "whisper", "tts-")
 _ANTHROPIC_PREFIXES = ("claude-",)
 _GEMINI_PREFIXES = ("gemini-",)
 
+# All providers that use the OpenAI Chat Completions API.
+# "openai" uses the Responses API instead; it is kept separate.
+_CHAT_COMPLETIONS_PROVIDERS: frozenset[str] = frozenset({
+    "groq",
+    "openrouter",
+    "together",
+    "fireworks",
+    "perplexity",
+    "mistral",
+    "deepseek",
+    "cerebras",
+    "sambanova",
+    "nvidia",
+    "ollama",
+    "lmstudio",
+    "vllm",
+    "compatible",  # generic catch-all — caller must pass base_url=
+})
+
 _PROVIDER_PREFIXES: dict[str, str] = {
-    "openai": "openai",
-    "groq": "groq",
-    "anthropic": "anthropic",
-    "gemini": "gemini",
-    "google": "gemini",
-    "openrouter": "openrouter",
+    # Cloud — proprietary APIs
+    "openai":      "openai",
+    "anthropic":   "anthropic",
+    "gemini":      "gemini",
+    "google":      "gemini",
+    # Cloud — OpenAI-compatible
+    "groq":        "groq",
+    "openrouter":  "openrouter",
+    "together":    "together",
+    "fireworks":   "fireworks",
+    "perplexity":  "perplexity",
+    "mistral":     "mistral",
+    "deepseek":    "deepseek",
+    "cerebras":    "cerebras",
+    "sambanova":   "sambanova",
+    "nvidia":      "nvidia",
+    # Local — OpenAI-compatible
+    "ollama":      "ollama",
+    "lmstudio":    "lmstudio",
+    "vllm":        "vllm",
+    # Generic catch-all
+    "compatible":  "compatible",
 }
 
 
@@ -110,10 +187,24 @@ class LLMFactory:
             ...
     """
 
-    # Base URLs for providers that deviate from their SDK default.
+    # Default base URLs for OpenAI-compatible providers.
+    # "compatible" and "vllm" are intentionally absent — callers must pass base_url=.
     _BASE_URLS: ClassVar[dict[str, str]] = {
-        "groq": "https://api.groq.com/openai/v1",
+        # Cloud
+        "groq":       "https://api.groq.com/openai/v1",
         "openrouter": "https://openrouter.ai/api/v1",
+        "together":   "https://api.together.xyz/v1",
+        "fireworks":  "https://api.fireworks.ai/inference/v1",
+        "perplexity": "https://api.perplexity.ai",
+        "mistral":    "https://api.mistral.ai/v1",
+        "deepseek":   "https://api.deepseek.com/v1",
+        "cerebras":   "https://api.cerebras.ai/v1",
+        "sambanova":  "https://api.sambanova.ai/v1",
+        "nvidia":     "https://integrate.api.nvidia.com/v1",
+        # Local defaults (user can override with base_url=)
+        "ollama":     "http://localhost:11434/v1",
+        "lmstudio":   "http://localhost:1234/v1",
+        "vllm":       "http://localhost:8000/v1",
     }
 
     def __init__(self, model: str, api_key: str) -> None:
@@ -176,8 +267,15 @@ class LLMFactory:
             **kwargs: Extra parameters passed to the client constructor
                 (e.g. max_tokens, stop_sequences).
         """
+        # Caller-supplied base_url takes precedence over the provider default.
         base_url = kwargs.get("base_url") or self._BASE_URLS.get(self._provider)
         kwargs["base_url"] = base_url
+
+        if self._provider == "compatible" and not base_url:
+            raise ValueError(
+                "provider 'compatible' requires an explicit base_url= kwarg. "
+                "Example: LLMFactory('compatible/my-model', key).build(base_url='http://...')"
+            )
 
         if self._provider == "openai":
             from ravi.integrations.llm.openai.openai_client import OpenAIClient
@@ -188,16 +286,20 @@ class LLMFactory:
                 **kwargs,
             )
 
-        if self._provider in ("groq", "openrouter"):
-            from ravi.integrations.llm.openai.openai_chat_client import (
+        if self._provider in _CHAT_COMPLETIONS_PROVIDERS:
+            from ravi.capabilities.llm.chat_client import (
                 OpenAIChatCompletionClient,
             )
 
-            return OpenAIChatCompletionClient(
+            client = OpenAIChatCompletionClient(
                 model=self._bare_model,
                 api_key=self._api_key,
                 **kwargs,
             )
+            # Tag the client so tool-schema strict-mode logic can skip strict=true
+            # for providers that don't support it.
+            client.provider = self._provider  # type: ignore[attr-defined]
+            return client
 
         if self._provider == "anthropic":
             from ravi.integrations.llm.anthropic.anthropic_client import AnthropicClient
@@ -382,12 +484,14 @@ def create_model_client(
     if provider == "openai":
         base_url = openai_base_url
     elif provider == "groq":
-        base_url = groq_base_url or "https://api.groq.com/openai/v1"
+        base_url = groq_base_url or LLMFactory._BASE_URLS["groq"]
     elif provider == "openrouter":
-        base_url = openrouter_base_url or "https://openrouter.ai/api/v1"
+        base_url = openrouter_base_url or LLMFactory._BASE_URLS["openrouter"]
+    elif provider in _CHAT_COMPLETIONS_PROVIDERS:
+        base_url = LLMFactory._BASE_URLS.get(provider)
 
     if provider == "openrouter" and (openrouter_site_url or openrouter_app_name):
-        from ravi.integrations.llm.openai.openai_chat_client import (
+        from ravi.capabilities.llm.chat_client import (
             OpenAIChatCompletionClient,
         )
 

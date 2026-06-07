@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 import uuid
+import hashlib
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -56,6 +57,7 @@ from ravi.logger import setup_logging
 logger = setup_logging()
 
 _SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+_MAX_STORAGE_SESSION_KEY_LENGTH = 128
 
 
 def _validate_session_id(session_id: str) -> None:
@@ -194,7 +196,11 @@ class PostgresHistoryProvider:
 
     def _session_key(self, agent_id: AgentId, session_id: str) -> str:
         """Derive the internal storage key for a (agent_id, session_id) pair."""
-        return f"{agent_id.type}:{agent_id.key}:{session_id}"
+        key = f"{agent_id.type}:{agent_id.key}:{session_id}"
+        if len(key) <= _MAX_STORAGE_SESSION_KEY_LENGTH:
+            return key
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        return f"h:{digest}"
 
     async def append(
         self, agent_id: AgentId, message: Message, *, session_id: str

@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-import pytest
-
 from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction
 from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel import (
     ChatMessage,
     ContentBlock,
     TextBlock,
-    ToolExecutionResult,
 )
 from ravi.kernel.content import ToolUseBlock
 from ravi.kernel.identity import HistoryRetention
@@ -49,11 +46,11 @@ class MockLLMClient:
         system_instructions: str = "",
         **_kw: Any,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
-        content = await self.generate(messages, system=system_instructions)
-        text = " ".join(b.text for b in content if isinstance(b, TextBlock) and b.text)
+        resp = await self.generate(messages, system=system_instructions)
+        text = " ".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
         if text:
             yield TextDelta(text=text)
-        yield CompletionEvent(content=content)
+        yield CompletionEvent(content=resp.content, usage=resp.usage)
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         return 0
@@ -93,13 +90,9 @@ async def test_standalone_session_accumulates_across_runs():
 
 async def test_permanent_retention_subagent_remembers_across_runs():
     """A PERMANENT-retention subagent's history persists across two runs in the same session."""
-    shared_history = InMemoryHistoryProvider()
-
     async with LocalRuntime() as rt:
         # The "coder" subagent remembers across turns
         coder_history = InMemoryHistoryProvider()
-
-        from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
 
         coder = ReActAgent(
             "coder",
@@ -237,3 +230,61 @@ async def test_session_isolation_across_different_sessions():
         msgs_b = await shared_history.get_messages(agent.id, session_id="session-B")
         assert len(msgs_a) == 2
         assert len(msgs_b) == 2
+
+
+async def test_orchestrator_propagates_fresh_run_id_to_subagent_history():
+    """A handoff run stamps the same fresh run_id on orchestrator and subagent work."""
+    from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+
+    async with LocalRuntime() as rt:
+        worker_history = InMemoryHistoryProvider()
+        worker = ReActAgent(
+            "worker",
+            rt,
+            model=MockLLMClient([
+                [TextBlock(text="child output one")],
+                [TextBlock(text="child output two")],
+            ]),
+            context=ContextConfig(worker_history, SlidingWindowCompaction(max_messages=40)),
+            max_iterations=3,
+        )
+
+        orchestrator = OrchestratorAgent(
+            "router",
+            rt,
+            model=MockLLMClient([
+                [
+                    ToolUseBlock(
+                        call_id="h1",
+                        tool_name="handoff_worker",
+                        arguments={"input": "child task one"},
+                    )
+                ],
+                [TextBlock(text="final one")],
+                [
+                    ToolUseBlock(
+                        call_id="h2",
+                        tool_name="handoff_worker",
+                        arguments={"input": "child task two"},
+                    )
+                ],
+                [TextBlock(text="final two")],
+            ]),
+            sub_agents=[
+                SubAgentConfig(worker, retention=HistoryRetention.PERMANENT),
+            ],
+            session_id="orch-session",
+            max_iterations=3,
+        )
+
+        first = await orchestrator.run("route one")
+        second = await orchestrator.run("route two")
+
+        assert first.status == "success"
+        assert second.status == "success"
+        assert first.run_id != second.run_id
+
+        msgs = await worker_history.get_messages(worker.id, session_id="orch-session")
+        worker_run_ids = [msg.metadata["run_id"] for msg in msgs]
+        assert worker_run_ids[:2] == [first.run_id, first.run_id]
+        assert worker_run_ids[2:] == [second.run_id, second.run_id]

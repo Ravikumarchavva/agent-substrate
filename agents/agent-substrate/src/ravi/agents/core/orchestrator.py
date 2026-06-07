@@ -1,9 +1,10 @@
-"""OrchestratorAgent — delegates to sub-agents via runtime message-passing.
+"""OrchestratorAgent — delegates to sub-agents via local streaming handoff tools.
 
 Each sub-agent is registered with the runtime and wrapped in a ``_DispatchTool``
 that the LLM calls. The LLM decides which specialist to call via tool-calling
-syntax; the tool delivers the task via ``runtime.send_message`` so crashes are
-isolated from the orchestrator's own ReAct loop.
+syntax; the tool currently invokes the subagent's ``run_stream()`` directly so
+child progress can be forwarded in real time. A future streaming runtime
+contract can replace this local handoff path for remote subagent execution.
 
 Crash recovery:
   When a subagent crashes (``AgentCrashError``), the orchestrator consults its
@@ -116,10 +117,6 @@ class _DispatchTool:
     On crash the retry policy is consulted and the subagent is resumed —
     other subagents keep running in parallel while the retry is in flight.
 
-    ``_current_run_id`` is stamped by ``OrchestratorAgent._react()`` at the
-    start of each run so ``AgentProgress`` events are routed to the correct
-    per-run topic.  It defaults to ``""`` until stamped.
-
     Schema exposed to the LLM::
 
         {"input": "<instruction>", "reason": "<why delegating>"}
@@ -144,7 +141,6 @@ class _DispatchTool:
         self._budget = budget
         self._retry_policy = retry_policy
         self._progress_sink: asyncio.Queue[AgentProgress] | None = None
-        self._current_run_id: str = ""
         self.name = f"handoff_{self._agent.name}"
         self.description = (
             f"Delegate the current task to the '{self._agent.name}' specialist agent. "
@@ -184,7 +180,10 @@ class _DispatchTool:
         crash_run_id: str | None = None
         status = "success"
         try:
-            async for event in self._agent.run_stream(inp, resume=resume, run_id=run_id):
+            effective_run_id = run_id or self._supervision.run_id
+            async for event in self._agent.run_stream(
+                inp, resume=resume, run_id=effective_run_id
+            ):
                 if isinstance(event, AgentProgress):
                     if self._progress_sink is not None:
                         await self._progress_sink.put(event)
@@ -215,7 +214,7 @@ class _DispatchTool:
                 reason=reason,
             ).model_dump(mode="json"),
         )
-        run_id = self._current_run_id or self._supervision.run_id
+        run_id = self._supervision.run_id
         await self._runtime.publish_message(
             AgentProgress(
                 agent_id=self._orchestrator_id,
@@ -229,7 +228,7 @@ class _DispatchTool:
             topic=TopicId("agent.progress", run_id),
         )
 
-        output, status, crash_run_id = await self._stream_run(input)
+        output, status, crash_run_id = await self._stream_run(input, run_id=run_id)
 
         # Crash recovery — retry while other subagents keep running in parallel
         attempt = 0
@@ -300,11 +299,12 @@ class HandoffEventPayload(BaseModel):
 
 
 class OrchestratorAgent(ReActAgent):
-    """Orchestrates a set of specialist sub-agents via runtime message-passing.
+    """Orchestrates a set of specialist sub-agents via local streaming handoffs.
 
     Each sub-agent is registered with the runtime when ``run()`` starts and
     wrapped in a ``_DispatchTool`` so the LLM can delegate declaratively.
-    Execution goes through ``runtime.send_message`` for crash isolation.
+    Execution currently calls subagents' ``run_stream()`` directly because
+    ``AgentRuntime`` only exposes request/response ``send_message()``.
 
     Parameters
     ----------
@@ -363,7 +363,6 @@ class OrchestratorAgent(ReActAgent):
 
         _hooks = hooks or HookManager()
         orchestrator_id = AgentId(type="assistant", key=name)
-
         # Root supervision — generates the shared run_id and carries the session_id.
         # session_id is the conversation thread; stable across runs on this instance.
         root_supervision = Supervision.root(
@@ -444,12 +443,40 @@ class OrchestratorAgent(ReActAgent):
         stream: bool = False,
         initial_tool_choice: str | None = None,
     ) -> Any:
-        # Generate a fresh run_id for this execution so AgentProgress events
-        # route to the correct per-run topic.  session_id stays stable across runs.
-        if not resume:
-            run_id = run_id or uuid4().hex
+        # Generate a fresh supervision tree per execution so every parent,
+        # handoff, and child progress event shares the same run_id.
+        active_run_id = run_id if run_id is not None else uuid4().hex
+        base_sv = self.supervision
+        active_session_id = (
+            session_id
+            if session_id is not None
+            else (base_sv.session_id if base_sv is not None else uuid4().hex)
+        )
+        root_id = base_sv.root_id if base_sv is not None else self.id
+        root_sv = Supervision(
+            run_id=active_run_id,
+            session_id=active_session_id,
+            root_id=root_id,
+            parent_id=None,
+            depth=0,
+            max_agents=base_sv.max_agents if base_sv is not None else 50,
+            retention=HistoryRetention.PERMANENT,
+        )
+        self.supervision = root_sv
+        self._spawn_budget = SpawnBudget(root_sv)
         for tool in self._dispatch_tools:
-            tool._current_run_id = run_id or ""
+            tool._supervision = root_sv
+
+        for cfg in self._sub_configs:
+            child_sv = root_sv.spawn_child(
+                self.id,
+                retention=cfg.retention,
+                priority=cfg.priority,
+            )
+            cfg.agent.supervision = child_sv
+            cfg.agent.spawn_budget = self._spawn_budget
+            if cfg.execution_budget is not None:
+                cfg.agent.execution_budget = cfg.execution_budget
 
         for cfg in self._sub_configs:
             self._retry_policy.reset(cfg.agent.id)
@@ -464,9 +491,9 @@ class OrchestratorAgent(ReActAgent):
         try:
             async for event in super()._react(
                 input_text,
-                session_id=session_id,
+                session_id=active_session_id,
                 resume=resume,
-                run_id=run_id,
+                run_id=active_run_id,
                 stream=stream,
                 initial_tool_choice=initial_tool_choice,
             ):
@@ -477,17 +504,15 @@ class OrchestratorAgent(ReActAgent):
                 await self.runtime.unregister(cfg.agent.id)
 
             # Clear history for RUN-retention subagents so next turn starts fresh.
-            sv = self.supervision
-            if sv is not None:
-                for cfg in self._sub_configs:
-                    if cfg.retention == HistoryRetention.RUN:
-                        try:
-                            await cfg.agent.history.clear(
-                                cfg.agent.id,
-                                session_id=sv.session_id,
-                            )
-                        except Exception:
-                            pass  # best-effort cleanup
+            for cfg in self._sub_configs:
+                if cfg.retention == HistoryRetention.RUN:
+                    try:
+                        await cfg.agent.history.clear(
+                            cfg.agent.id,
+                            session_id=root_sv.session_id,
+                        )
+                    except Exception:
+                        pass  # best-effort cleanup
 
     # -- Dynamic reprioritization -------------------------------------------
 

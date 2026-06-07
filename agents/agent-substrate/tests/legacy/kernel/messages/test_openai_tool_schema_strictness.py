@@ -5,7 +5,7 @@ from google.genai import types as genai_types
 from ravi.integrations.llm.anthropic.anthropic_client import AnthropicClient
 from ravi.integrations.llm.gemini.gemini_client import GeminiClient
 from ravi.integrations.tools.mcp.app_tools import JsonExplorerTool
-from ravi.integrations.llm.openai.openai_chat_client import (
+from ravi.capabilities.llm.chat_client import (
     OpenAIChatCompletionClient,
 )
 from ravi.integrations.llm.openai.openai_client import OpenAIClient

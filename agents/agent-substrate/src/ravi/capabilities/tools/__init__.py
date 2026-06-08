@@ -38,6 +38,10 @@ from ravi.capabilities.tools.pipeline_manager import PipelineManagerTool
 from ravi.capabilities.tools.task_manager.tool import TaskManagerTool
 from ravi.capabilities.tools.utils.tool_search import ToolSearchTool
 
+# CodeInterpreterTool is intentionally NOT exported here.
+# It executes arbitrary code in a sandboxed VM and requires explicit opt-in
+# by the caller: from ravi.capabilities.tools.code_interpreter.tool import CodeInterpreterTool
+
 __all__ = [
     "CalculatorTool",
     "CurrentTimeTool",

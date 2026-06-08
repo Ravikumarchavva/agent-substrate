@@ -80,39 +80,48 @@ src/ravi/
 │   ├── identity.py       AgentId, TopicId
 │   └── errors.py
 │
-├── agents/       L1 — core intelligence: LLM clients, guardrails, middleware, agent types
+├── agents/       L1 — core intelligence: agent types, middleware, guardrails, context
 │   ├── core/             ReActAgent, OrchestratorAgent, UserProxyAgent
 │   ├── context/          AgentContext, InMemoryHistoryProvider, compaction strategies
-│   ├── llm/              concrete LLM clients, model registry, cache/fallback/router
-│   ├── guardrails/       GuardrailType, run_guardrails, ContentFilter, LLMJudge, MaxToken, PII, PromptInjection
-│   ├── middleware/       MiddlewarePipeline, AuditLogger, RateLimiter, HistoryTruncator, …
+│   ├── llm/              model registry, SemanticCache, FallbackClient, ModelRouter
+│   ├── middleware/       MiddlewarePipeline, guardrails, AuditLogger, RateLimiter, …
 │   ├── runtime/          LocalRuntime (in-process asyncio message dispatch)
 │   ├── hooks/            lifecycle hooks (RUN_START/END, STEP, LLM, TOOL, HANDOFF)
-│   ├── resources/        ExecutionBudget, agent_span
+│   ├── resources/        ExecutionBudget
 │   └── supervision/      SpawnBudget, RetryPolicy
 │
-├── capabilities/ L2 — what agents can do: tools, skills, knowledge, connectors
-│   ├── tools/            tool implementations (human_input, task_manager, web_surfer, …)
-│   ├── skills/           SKILL.md prompt-skill packages
-│   ├── knowledge/        RAG pipeline, chunking, loaders, reranker, graph_rag
-│   ├── connectors/       external service connectors (email, calendar, minio, postgres)
-│   ├── triggers/         event-based trigger definitions
-│   └── internal/         scanner, pipeline engine, skill loader, chain runtime
+├── capabilities/ L2 — everything agents can use: tools, knowledge, memory, history, …
+│   ├── llm/              OpenAIChatCompletionClient — universal /v1/chat/completions client
+│   ├── tools/            tool implementations + skills + connectors + discovery scanner
+│   │   ├── skills/       SKILL.md prompt-skill packages (SkillTool, SkillManager)
+│   │   ├── connectors/   stateful service connectors (email, calendar, minio, postgres)
+│   │   ├── web/          WebSearchTool, WebSurferTool, ReadUrlTool, WikipediaTool
+│   │   ├── files/        DocumentAnalyzerTool, InvoiceExtractorTool
+│   │   ├── communication/EmailSenderTool, HttpRequestTool
+│   │   ├── compute/      CalculatorTool
+│   │   ├── ai/           ImageGeneratorTool, KnowledgeSearchTool
+│   │   ├── utils/        CurrentTimeTool, ToolSearchTool
+│   │   ├── task_manager/ TaskManagerTool (Kanban board)
+│   │   └── code_interpreter/ CodeInterpreterTool (Firecracker VM — explicit opt-in only)
+│   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders
+│   ├── memory/           RedisSessionStore, PostgresMemoryStore
+│   ├── history/          RedisHistoryProvider, PostgresHistoryProvider
+│   ├── vector/           PgVectorStore  (implements VectorStore Protocol)
+│   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
+│   ├── pipeline/         PipelineEngine, ChainRuntime, DataRef, PipelineStore
+│   └── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
 │
 ├── fabric/       L3 — how agents are orchestrated: flows, evals, durable execution
 │   ├── flows/            SequentialFlow, ParallelFlow, ConditionalFlow
 │   ├── evals/            EvalCase, EvalDataset, LLMJudge, EvalRunner, EvalReport
 │   └── durable/          Checkpoint, DurableRunner (skeleton — resumable long-running runs)
 │
-├── adapters/     concrete I/O ports implementing kernel Protocols (orthogonal to layers)
-│   ├── llm/              openai/, anthropic/, gemini/, encoders/, factory.py
-│   ├── memory/           redis_history.py, postgres_history.py  (implement HistoryProvider)
-│   ├── mcp/              MCPClient, MCPTool, apps/
-│   ├── vector/           PgVectorStore  (implements VectorStore Protocol)
-│   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
-│   ├── storage/          file storage adapters
+├── integrations/ concrete I/O adapters implementing kernel Protocols (orthogonal to layers)
+│   ├── llm/              LLMFactory, provider clients (openai/, anthropic/, gemini/), encoders/
+│   ├── tools/            protocol bridges — MCP (MCPClient, MCPTool), A2A (planned)
 │   ├── events/           EventBus (Redis pub/sub)
-│   └── spotify/          Spotify API adapter
+│   ├── storage/          file storage adapters
+│   └── spotify/          Spotify API client
 │
 ├── serving/      deployment shells (orthogonal to layers)
 │   ├── monolith/         single FastAPI app (app.py, routes/, sse/, security/, services/)
@@ -172,13 +181,13 @@ capabilities (L2) What agents can do: tools, skills, knowledge, connectors.
 fabric (L3)       How agents are orchestrated: flows, evals, durable execution.
 ```
 
-`adapters/` and `serving/` are **orthogonal** — they implement kernel Protocols and wire all layers together in lifespan. They are not part of the stack hierarchy.
+`integrations/` and `serving/` are **orthogonal** — they implement kernel Protocols and wire all layers together in lifespan. They are not part of the stack hierarchy.
 
 **Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
 
 ```
 fabric        →  capabilities  →  agents  →  kernel
-adapters, serving  =  orthogonal (cross-layer by design)
+integrations, serving  =  orthogonal (cross-layer by design)
 ```
 
 **Import-linter contracts** (`pyproject.toml`, CI fails if violated):
@@ -205,13 +214,13 @@ adapters, serving  =  orthogonal (cross-layer by design)
 | You want to add… | Write it in… |
 |---|---|
 | A new agent type | `agents/core/<name>.py` — follow `ReActAgent` pattern |
-| A new guardrail | `agents/guardrails/<name>.py` — implement `run(ctx) -> GuardrailResult` |
-| A new LLM provider | `adapters/llm/<provider>/` — implement `LLMClient` Protocol from `kernel/llm.py` |
-| A new memory backend | `adapters/memory/<name>.py` — implement `HistoryProvider` Protocol from `kernel/history.py` |
-| A new vector store | `adapters/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/vector.py` |
-| A new graph store | `adapters/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/graph.py` |
+| A new guardrail | `agents/middleware/guardrails/<name>.py` — implement middleware contract |
+| A new LLM provider | `integrations/llm/<provider>/` — implement `LLMClient` Protocol from `kernel/llm.py` |
+| A new memory backend | `capabilities/history/<name>.py` — implement `HistoryProvider` Protocol from `kernel/history.py` |
+| A new vector store | `capabilities/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/vector.py` |
+| A new graph store | `capabilities/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/graph.py` |
 | A new tool | `capabilities/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned, no registration needed) |
-| A new skill | `capabilities/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
+| A new skill | `capabilities/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
 | A new agent flow | `fabric/flows/` — extend `BaseFlow` (SequentialFlow / ParallelFlow / ConditionalFlow) |
 
 ### Tool creation
@@ -234,17 +243,26 @@ Placed at `capabilities/tools/my_tool/tool.py` — `CatalogScanner` discovers it
 ### LLM client
 
 ```python
-from ravi.adapters.llm.factory import create_model_client
-client = create_model_client("gpt-4o", api_keys={"openai": "..."})
+from ravi.integrations.llm import LLMFactory
+
+# Auto-detects provider from model name prefix
+client = LLMFactory("gpt-4o", api_key).build()
+client = LLMFactory("groq/llama-3.3-70b-versatile", api_key).build()
+client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
+
+# Or construct the universal client directly
+from ravi.capabilities.llm import OpenAIChatCompletionClient
+client = OpenAIChatCompletionClient(model="llama3.2", api_key="ollama",
+                                    base_url="http://localhost:11434/v1")
 ```
 
 ### MCP tools
 
 ```python
-from ravi.adapters.mcp import MCPClient
+from ravi.integrations.tools.mcp import MCPClient, MCPTool
 
 client = MCPClient(url="http://localhost:9000/sse")
-tools = await client.discover_tools()   # returns list[MCPTool]
+tools = await MCPTool.from_mcp_client(client)   # returns list[MCPTool]
 ```
 
 ### Event bus — always use factory functions
@@ -286,26 +304,26 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 from ravi.agents.context import InMemoryHistoryProvider
 
 # Redis-backed
-from ravi.adapters.memory.redis_history import RedisHistoryProvider
+from ravi.capabilities.history import RedisHistoryProvider
 
 # Postgres-backed
-from ravi.adapters.memory.postgres_history import PostgresHistoryProvider
+from ravi.capabilities.history import PostgresHistoryProvider
 ```
 
 All `HistoryProvider` methods are `async def`. Always `await` them.
 
 ## Knowledge / RAG
 
-Vector and graph store contracts live in the kernel. Adapters implement them; `capabilities/knowledge/` wires them into pipelines.
+Vector and graph store contracts live in the kernel. Concrete implementations live in `capabilities/`; `capabilities/knowledge/` wires them into pipelines.
 
 ```python
 # Contracts (kernel)
 from ravi.kernel.vector import VectorStore, Document, SearchResult
 from ravi.kernel.graph import GraphStore, Entity, Relationship, SubGraph
 
-# Concrete adapters
-from ravi.adapters.vector.pgvector_store import PgVectorStore
-from ravi.adapters.graph.age_store import AGEGraphStore
+# Concrete implementations
+from ravi.capabilities.vector import PgVectorStore
+from ravi.capabilities.graph import AGEGraphStore
 
 # High-level RAG pipeline
 from ravi.capabilities.knowledge import RAGPipeline, GraphRAGPipeline
@@ -449,7 +467,7 @@ runner.export_markdown()
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **snake_case** — files, modules, functions, variables
 - New DB models → service-local `models.py` (microservices) or `serving/monolith/` (monolith)
-- New skills → `src/ravi/capabilities/skills/<name>/SKILL.md` with YAML frontmatter
+- New skills → `src/ravi/capabilities/tools/skills/<name>/SKILL.md` with YAML frontmatter
 - **DB session dependency** — all microservice routes use `get_db_session` from `serving/shared/database/`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: write `async def test_*` directly, no `@pytest.mark.asyncio` needed.
 

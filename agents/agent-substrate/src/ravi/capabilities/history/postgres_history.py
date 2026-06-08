@@ -47,14 +47,47 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from ravi.integrations.llm.encoders.storage import (
-    deserialize_message,
-    serialize_message,
-)
 from ravi.kernel import ChatMessage, Message, AgentId
 from ravi.logger import setup_logging
 
 logger = setup_logging()
+
+
+# ── Message serialisation (provider-agnostic JSON round-trip) ─────────────────
+
+def _bytes_to_b64(val: Any) -> Any:
+    import base64
+    if isinstance(val, dict):
+        return {k: _bytes_to_b64(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_bytes_to_b64(x) for x in val]
+    if isinstance(val, bytes):
+        return {"__bytes_b64__": base64.b64encode(val).decode("utf-8")}
+    return val
+
+
+def _b64_to_bytes(val: Any) -> Any:
+    import base64
+    if isinstance(val, dict):
+        if "__bytes_b64__" in val:
+            return base64.b64decode(val["__bytes_b64__"])
+        return {k: _b64_to_bytes(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_b64_to_bytes(x) for x in val]
+    return val
+
+
+def serialize_message(message: ChatMessage) -> Dict[str, Any]:
+    """Serialize a ChatMessage to a dict suitable for JSONB storage."""
+    return _bytes_to_b64(message.model_dump())
+
+
+def deserialize_message(data: Dict[str, Any]) -> ChatMessage:
+    """Deserialize a JSONB dict back to a ChatMessage."""
+    return ChatMessage.model_validate(_b64_to_bytes(data))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 _SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 _MAX_STORAGE_SESSION_KEY_LENGTH = 128

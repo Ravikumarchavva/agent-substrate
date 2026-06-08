@@ -7,10 +7,7 @@ Usage::
 
     provider = RedisHistoryProvider(redis_url="redis://localhost:6379/0")
     await provider.connect()
-
-    from ravi.agents.context import ContextConfig
-    agent = ReActAgent("bot", runtime, model=client, context=ContextConfig(provider))
-    ...
+    # Pass to ReActAgent via context=ContextConfig(history_provider=provider)
     await provider.disconnect()
 """
 

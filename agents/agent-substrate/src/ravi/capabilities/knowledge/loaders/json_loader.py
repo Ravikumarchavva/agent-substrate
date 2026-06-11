@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Union
 
 from ravi.capabilities.knowledge.loaders.base import BaseDocumentLoader
+from ravi.kernel.content import TextBlock
 from ravi.kernel.vector import Document
 
 
@@ -45,7 +46,7 @@ class JSONLoader(BaseDocumentLoader):
                 if text:
                     docs.append(
                         Document(
-                            text=text,
+                            content=[TextBlock(text=text)],
                             metadata={**metadata, "item_index": i},
                             id=str(uuid.uuid4()),
                         )
@@ -55,7 +56,7 @@ class JSONLoader(BaseDocumentLoader):
             if text:
                 docs.append(
                     Document(
-                        text=text,
+                        content=[TextBlock(text=text)],
                         metadata=metadata,
                         id=str(uuid.uuid4()),
                     )

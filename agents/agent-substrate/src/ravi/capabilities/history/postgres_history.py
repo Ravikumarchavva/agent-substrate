@@ -157,6 +157,9 @@ class HistoryMessage(HistoryBase):
         nullable=False,
         index=True,
     )
+    run_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default="", index=True
+    )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     message_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
@@ -212,6 +215,13 @@ class PostgresHistoryProvider:
         )
         async with self._engine.begin() as conn:
             await conn.run_sync(HistoryBase.metadata.create_all)
+            from sqlalchemy import text as _text
+            await conn.execute(
+                _text("ALTER TABLE memory_messages ADD COLUMN IF NOT EXISTS run_id VARCHAR(64) NOT NULL DEFAULT ''")
+            )
+            await conn.execute(
+                _text("CREATE INDEX IF NOT EXISTS ix_memory_messages_run_id ON memory_messages (run_id)")
+            )
         logger.info("PostgresHistoryProvider connected and tables ensured")
 
     async def disconnect(self) -> None:
@@ -239,16 +249,28 @@ class PostgresHistoryProvider:
         return f"h:{digest}"
 
     async def append(
-        self, agent_id: AgentId, message: Message, *, session_id: str
+        self,
+        agent_id: AgentId,
+        message: ChatMessage,
+        *,
+        session_id: str,
+        run_id: str = "",
     ) -> None:
         _validate_session_id(session_id)
         storage_key = self._session_key(agent_id, session_id)
-        payload = message.payload
-        if hasattr(payload, "model_dump"):
-            msgs: list[ChatMessage] = [payload]  # type: ignore[list-item]
-        else:
-            return
-        await self.save_messages(storage_key, msgs)
+        await self.save_messages(storage_key, [message], run_id=run_id)
+
+    async def append_many(
+        self,
+        agent_id: AgentId,
+        messages: list[ChatMessage],
+        *,
+        session_id: str,
+        run_id: str = "",
+    ) -> None:
+        _validate_session_id(session_id)
+        storage_key = self._session_key(agent_id, session_id)
+        await self.save_messages(storage_key, messages, run_id=run_id)
 
     async def get_messages(
         self,
@@ -257,27 +279,43 @@ class PostgresHistoryProvider:
         session_id: str,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list[Message]:
+    ) -> list[ChatMessage]:
         _validate_session_id(session_id)
-        from ravi.kernel.message import Message as _Message
-
         storage_key = self._session_key(agent_id, session_id)
-        chat_msgs = await self.load_messages(storage_key, limit=limit)
-        if offset:
-            chat_msgs = chat_msgs[offset:]
-        results: list[_Message] = []
-        for cm in chat_msgs:
-            results.append(_Message(target=agent_id, payload=cm, sender=agent_id))
-        return results
+        return await self.load_messages(storage_key, limit=limit, offset=offset)
 
     async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
         _validate_session_id(session_id)
         storage_key = self._session_key(agent_id, session_id)
         await self.clear_session(storage_key)
 
+    async def clear_run(
+        self, agent_id: AgentId, *, session_id: str, run_id: str
+    ) -> None:
+        _validate_session_id(session_id)
+        storage_key = self._session_key(agent_id, session_id)
+        factory = self._get_session()
+        async with factory() as db:
+            await db.execute(
+                delete(HistoryMessage).where(
+                    HistoryMessage.session_id == storage_key,
+                    HistoryMessage.run_id == run_id
+                )
+            )
+            session_obj = await db.get(HistorySession, storage_key, with_for_update=True)
+            if session_obj is not None:
+                stmt = select(func.count()).select_from(HistoryMessage).where(
+                    HistoryMessage.session_id == storage_key
+                )
+                result = await db.execute(stmt)
+                session_obj.message_count = result.scalar_one()
+            await db.commit()
+
     # -- Session-based API (legacy / internal) --------------------------------
 
-    async def save_messages(self, session_id: str, messages: List[ChatMessage]) -> int:
+    async def save_messages(
+        self, session_id: str, messages: List[ChatMessage], run_id: str = ""
+    ) -> int:
         """Append messages to a session, auto-creating the session row.
 
         Messages are assigned sequential IDs after the current max.  The
@@ -309,21 +347,22 @@ class PostgresHistoryProvider:
                         sequence=i,
                         message_type=payload.get("type", type(msg).__name__),
                         payload=payload,
+                        run_id=run_id,
                     )
                 )
 
             session_obj.message_count = max_seq + len(messages)
             await db.commit()
-            logger.debug("Saved %d messages for session %s", len(messages), session_id)
+            logger.debug("Saved %d messages for session %s (run_id=%s)", len(messages), session_id, run_id)
             return len(messages)
 
     async def load_messages(
-        self, session_id: str, *, limit: Optional[int] = None
+        self, session_id: str, *, limit: Optional[int] = None, offset: Optional[int] = None
     ) -> List[ChatMessage]:
         """Load a session's messages ordered by sequence (last *limit* if given)."""
         factory = self._get_session()
         async with factory() as db:
-            if limit is not None and limit > 0:
+            if limit is not None and limit > 0 and offset is None:
                 # Take the last `limit` by sequence, then restore ascending order.
                 stmt = (
                     select(HistoryMessage)
@@ -339,6 +378,10 @@ class PostgresHistoryProvider:
                     .where(HistoryMessage.session_id == session_id)
                     .order_by(HistoryMessage.sequence)
                 )
+                if offset is not None:
+                    stmt = stmt.offset(offset)
+                if limit is not None:
+                    stmt = stmt.limit(limit)
                 result = await db.execute(stmt)
                 rows = list(result.scalars().all())
 

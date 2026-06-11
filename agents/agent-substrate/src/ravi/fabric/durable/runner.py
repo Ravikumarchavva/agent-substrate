@@ -1,5 +1,4 @@
-from __future__ import annotations
-from ravi.fabric.durable.checkpoint import Checkpoint  # noqa: F401
+from ravi.fabric.durable.checkpoint import FlowCheckpoint  # noqa: F401
 
 
 class DurableRunner:

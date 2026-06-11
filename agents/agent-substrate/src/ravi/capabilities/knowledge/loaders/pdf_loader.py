@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Union
 
 from ravi.capabilities.knowledge.loaders.base import BaseDocumentLoader
+from ravi.kernel.content import TextBlock
 from ravi.kernel.vector import Document
 
 logger = setup_logging()
@@ -100,7 +101,7 @@ class PDFLoader(BaseDocumentLoader):
                     source = str(metadata.get("source", ""))
                     docs.append(
                         Document(
-                            text=page_text,
+                            content=[TextBlock(text=page_text)],
                             metadata={
                                 **metadata,
                                 "page_number": i + 1,
@@ -133,7 +134,7 @@ class PDFLoader(BaseDocumentLoader):
                 source = str(metadata.get("source", ""))
                 docs.append(
                     Document(
-                        text=text,
+                        content=[TextBlock(text=text)],
                         metadata={
                             **metadata,
                             "page_number": i + 1,

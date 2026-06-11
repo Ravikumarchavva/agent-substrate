@@ -1,6 +1,6 @@
 from ravi.fabric.flows import BaseFlow, SequentialFlow, ParallelFlow, ConditionalFlow
 from ravi.fabric.evals import EvalCase, EvalDataset, LLMJudge, EvalReport
-from ravi.fabric.durable import Checkpoint, DurableRunner
+from ravi.fabric.durable import FlowCheckpoint, DurableRunner
 
 __all__ = [
     "BaseFlow",
@@ -11,6 +11,7 @@ __all__ = [
     "EvalDataset",
     "LLMJudge",
     "EvalReport",
-    "Checkpoint",
+    "FlowCheckpoint",
     "DurableRunner",
 ]
+

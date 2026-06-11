@@ -27,7 +27,8 @@ from typing import Any
 
 from ravi.kernel.errors import AgentNotFoundError
 from ravi.kernel.identity import AgentId, TopicId
-from ravi.kernel.message import MessageContext, MessageHandler
+from ravi.kernel.message import MessageContext, MessageHandler, Subscription
+from ravi.kernel.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,11 @@ class LocalRuntime:
 
     # -- Handler registry ----------------------------------------------------
 
+    async def register_agent(self, agent: Agent) -> None:
+        """Register an ``Agent`` instance. The runtime calls ``agent.bind(self)``."""
+        await agent.bind(self)
+        await self.register(agent.id, agent.on_message)
+
     async def register(self, agent_id: AgentId, handler: MessageHandler) -> None:
         """Register *handler* for the specific *agent_id* instance."""
         self._handlers[agent_id] = handler
@@ -71,15 +77,21 @@ class LocalRuntime:
 
     # -- Pub/sub subscription -----------------------------------------------
 
-    async def subscribe(self, agent_id: AgentId, topic: TopicId) -> None:
-        """Subscribe *agent_id* to *topic* — its handler receives published messages."""
+    async def subscribe(self, agent_id: AgentId, topic: TopicId) -> Subscription:
+        """Subscribe *agent_id* to *topic* — its handler receives published messages.
+
+        Returns a ``Subscription`` object that can be passed to ``unsubscribe``.
+        """
         handler = self._handlers.get(agent_id)
         if handler is not None:
             key = f"{topic.type}/{topic.source}"
             self._topic_subs.setdefault(key, []).append(handler)
+        return Subscription(topic=topic, agent_id=agent_id)
 
-    async def unsubscribe(self, agent_id: AgentId, topic: TopicId) -> None:
-        """Remove the *agent_id* subscription from *topic*."""
+    async def unsubscribe(self, subscription: Subscription) -> None:
+        """Remove a subscription returned by ``subscribe``."""
+        agent_id = subscription.agent_id
+        topic = subscription.topic
         handler = self._handlers.get(agent_id)
         if handler is None:
             return

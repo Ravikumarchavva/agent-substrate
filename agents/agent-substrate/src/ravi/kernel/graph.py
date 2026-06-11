@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, runtime_checkable
+
 
 
 @dataclass(frozen=True)
@@ -35,7 +36,9 @@ class SubGraph:
     relationships: tuple[Relationship, ...] = field(default_factory=tuple)
 
 
+@runtime_checkable
 class GraphStore(Protocol):
+
     """Contract every graph store adapter must satisfy.
 
     The core protocol is intentionally query-language-agnostic.
@@ -63,7 +66,9 @@ class GraphStore(Protocol):
     async def delete_relationship(self, relationship_id: str) -> bool: ...
 
 
+@runtime_checkable
 class CypherCapable(Protocol):
+
     """Optional capability for graph stores that speak Cypher (e.g. Neo4j, AGE).
 
     Check with ``isinstance(store, CypherCapable)`` before calling

@@ -119,7 +119,7 @@ async def query(body: QueryRequest, request: Request) -> QueryResponse:
     query_results = [
         QueryResult(
             id=r.id,
-            text=r.text,
+            text=r.to_text(),
             score=r.score,
             metadata=r.metadata,
         )

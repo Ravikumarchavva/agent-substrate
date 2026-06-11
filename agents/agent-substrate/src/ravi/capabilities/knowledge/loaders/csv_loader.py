@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Union
 
 from ravi.capabilities.knowledge.loaders.base import BaseDocumentLoader
+from ravi.kernel.content import TextBlock
 from ravi.kernel.vector import Document
 
 
@@ -47,7 +48,7 @@ class CSVLoader(BaseDocumentLoader):
                 if row_text.strip():
                     docs.append(
                         Document(
-                            text=row_text,
+                            content=[TextBlock(text=row_text)],
                             metadata={**metadata, "row_index": row_idx},
                             id=str(uuid.uuid4()),
                         )
@@ -62,7 +63,7 @@ class CSVLoader(BaseDocumentLoader):
             if lines:
                 docs.append(
                     Document(
-                        text="\n".join(lines),
+                        content=[TextBlock(text="\n".join(lines))],
                         metadata=metadata,
                         id=str(uuid.uuid4()),
                     )

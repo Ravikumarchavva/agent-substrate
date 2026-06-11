@@ -61,45 +61,7 @@ class ToolUI:
 # ToolExecutionResult — canonical tool result type
 # ---------------------------------------------------------------------------
 
-
-class ToolExecutionResult:
-    """Result of a single tool execution — returned to the agent.
-
-    ``content`` is the model-facing payload (blocks the LLM reads).
-    ``structured_content`` is UI-facing data invisible to the model.
-    """
-
-    __slots__ = (
-        "call_id",
-        "name",
-        "content",
-        "is_error",
-        "metadata",
-        "structured_content",
-    )
-
-    def __init__(
-        self,
-        *,
-        call_id: str = "",
-        name: str = "",
-        content: list = None,  # type: ignore[assignment]
-        is_error: bool = False,
-        metadata: JsonObject | None = None,
-        structured_content: JsonObject | None = None,
-    ) -> None:
-        self.call_id = call_id
-        self.name = name
-        self.content: list = content if content is not None else []
-        self.is_error = is_error
-        self.metadata: JsonObject = metadata or {}
-        self.structured_content: JsonObject = structured_content or {}
-
-    @property
-    def text(self) -> str:
-        from ravi.kernel.content import content_blocks_to_str
-
-        return content_blocks_to_str(self.content)
+from ravi.kernel.message import ToolResultPayload as ToolExecutionResult
 
 
 # ---------------------------------------------------------------------------
@@ -129,14 +91,7 @@ class Tool(Protocol):
 # ToolCallRequest — canonical tool-call request type (lives here, not message.py)
 # ---------------------------------------------------------------------------
 
-
-@dataclass(frozen=True, slots=True)
-class ToolCallRequest:
-    """A request to execute a named tool."""
-
-    name: str
-    arguments: JsonObject = field(default_factory=dict)
-    call_id: str = field(default_factory=lambda: __import__("uuid").uuid4().hex)
+from ravi.kernel.message import ToolCallPayload as ToolCallRequest
 
 
 # ---------------------------------------------------------------------------

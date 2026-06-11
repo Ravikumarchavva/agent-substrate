@@ -4,6 +4,17 @@ Pure raw-SQL implementation — no SQLAlchemy ORM model, no version-specific
 dialect helpers. Uses ``engine.begin()`` for writes and ``engine.connect()``
 for reads so DDL and DML both work reliably with asyncpg.
 
+Schema notes
+------------
+- ``text``         : text repr of the content blocks (for FTS / display /
+                     legacy embedding compat).  Computed via
+                     ``Document.to_text()``.
+- ``content_json`` : JSONB column storing the full ``list[ContentBlock]``
+                     payload as JSON.  ``NULL`` on legacy rows; on read, the
+                     adapter reconstructs the blocks from ``content_json``
+                     and falls back to wrapping ``text`` in a ``TextBlock``
+                     for backward-compat.
+
 Usage::
 
     from ravi.capabilities.vector.pgvector_store import PgVectorStore
@@ -24,10 +35,28 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ravi.kernel.content import TextBlock, content_block_from_dict
 from ravi.kernel.vector import Document, SearchResult
 from ravi.logger import setup_logging
 
 logger = setup_logging()
+
+
+def _blocks_to_json(doc: Document) -> str:
+    """Serialize content blocks to a JSON string for the content_json column."""
+    return json.dumps([block.model_dump(mode="json") for block in doc.content])
+
+
+def _blocks_from_json(raw: str | None, fallback_text: str) -> list:
+    """Deserialize blocks from the content_json column, or wrap fallback text."""
+    if raw:
+        try:
+            items = json.loads(raw)
+            return [content_block_from_dict(item) for item in items]
+        except Exception:
+            pass
+    # Legacy row — wrap the raw text column in a TextBlock
+    return [TextBlock(text=fallback_text)]
 
 
 class PgVectorStore:
@@ -65,10 +94,18 @@ class PgVectorStore:
                     id          UUID PRIMARY KEY,
                     collection  VARCHAR(255) NOT NULL,
                     text        TEXT NOT NULL,
+                    content_json JSONB,
                     embedding   vector({self._dimensions}) NOT NULL,
                     metadata    JSONB NOT NULL DEFAULT '{{}}',
                     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
+            """)
+            )
+            # Add content_json column to existing tables that predate this schema
+            await conn.execute(
+                text("""
+                ALTER TABLE vector_documents
+                    ADD COLUMN IF NOT EXISTS content_json JSONB
             """)
             )
             await conn.execute(
@@ -93,17 +130,10 @@ class PgVectorStore:
     async def add(
         self,
         documents: list[Document],
-        embeddings: list[list[float]],
         *,
         collection: str = "default",
     ) -> list[str]:
         await self.ensure_table()
-
-        if len(documents) != len(embeddings):
-            raise ValueError(
-                f"documents ({len(documents)}) and embeddings ({len(embeddings)}) "
-                "must have the same length"
-            )
 
         now = datetime.now(timezone.utc)
         ids: list[str] = []
@@ -112,21 +142,117 @@ class PgVectorStore:
         # transaction with per-row execute calls. asyncpg pipelines them on the wire
         # so latency is amortised across the batch despite the loop.
         async with self._engine.begin() as conn:
-            for doc, emb in zip(documents, embeddings):
+            for doc in documents:
                 doc_id = doc.id or str(uuid.uuid4())
+                if doc.embedding is None:
+                    raise ValueError(f"Document {doc_id} is missing embedding required by PgVectorStore")
+
+                emb_str = "[" + ",".join(str(x) for x in doc.embedding) + "]"
                 await conn.execute(
                     text("""
                         INSERT INTO vector_documents
-                            (id, collection, text, embedding, metadata, created_at)
+                            (id, collection, text, content_json, embedding, metadata, created_at)
                         VALUES
-                            (:id, :collection, :text, CAST(:embedding AS vector), CAST(:metadata AS jsonb), :created_at)
+                            (:id, :collection, :text, CAST(:content_json AS jsonb),
+                             CAST(:embedding AS vector), CAST(:metadata AS jsonb), :created_at)
                         ON CONFLICT (id) DO NOTHING
                     """),
                     {
                         "id": doc_id,
                         "collection": collection,
-                        "text": doc.text,
-                        "embedding": "[" + ",".join(str(x) for x in emb) + "]",
+                        "text": doc.to_text(),
+                        "content_json": _blocks_to_json(doc),
+                        "embedding": emb_str,
+                        "metadata": json.dumps(doc.metadata),
+                        "created_at": now,
+                    },
+                )
+                ids.append(doc_id)
+
+        return ids
+
+    async def get(
+        self,
+        ids: list[str],
+        *,
+        collection: str = "default",
+    ) -> list[Document]:
+        await self.ensure_table()
+        if not ids:
+            return []
+
+        async with self._engine.connect() as conn:
+            result = await conn.execute(
+                text("""
+                    SELECT id, text, content_json, embedding, metadata
+                    FROM vector_documents
+                    WHERE id = ANY(CAST(:ids AS UUID[])) AND collection = :collection
+                """),
+                {"ids": ids, "collection": collection},
+            )
+            rows = result.all()
+
+        documents: list[Document] = []
+        for row in rows:
+            if row.embedding is None:
+                emb = None
+            elif isinstance(row.embedding, str):
+                emb = [float(x) for x in row.embedding.strip("[]").split(",") if x.strip()]
+            elif hasattr(row.embedding, "__iter__"):
+                emb = [float(x) for x in row.embedding]
+            else:
+                emb = None
+
+            documents.append(
+                Document(
+                    id=str(row.id),
+                    content=_blocks_from_json(
+                        row.content_json if hasattr(row, "content_json") else None,
+                        row.text,
+                    ),
+                    embedding=emb,
+                    metadata=row.metadata or {},
+                )
+            )
+        return documents
+
+    async def upsert(
+        self,
+        documents: list[Document],
+        *,
+        collection: str = "default",
+    ) -> list[str]:
+        await self.ensure_table()
+        now = datetime.now(timezone.utc)
+        ids: list[str] = []
+
+        async with self._engine.begin() as conn:
+            for doc in documents:
+                doc_id = doc.id or str(uuid.uuid4())
+                if doc.embedding is None:
+                    raise ValueError(f"Document {doc_id} is missing embedding required by PgVectorStore")
+
+                emb_str = "[" + ",".join(str(x) for x in doc.embedding) + "]"
+                await conn.execute(
+                    text("""
+                        INSERT INTO vector_documents
+                            (id, collection, text, content_json, embedding, metadata, created_at)
+                        VALUES
+                            (:id, :collection, :text, CAST(:content_json AS jsonb),
+                             CAST(:embedding AS vector), CAST(:metadata AS jsonb), :created_at)
+                        ON CONFLICT (id) DO UPDATE SET
+                            text = EXCLUDED.text,
+                            content_json = EXCLUDED.content_json,
+                            embedding = EXCLUDED.embedding,
+                            metadata = EXCLUDED.metadata,
+                            created_at = EXCLUDED.created_at
+                    """),
+                    {
+                        "id": doc_id,
+                        "collection": collection,
+                        "text": doc.to_text(),
+                        "content_json": _blocks_to_json(doc),
+                        "embedding": emb_str,
                         "metadata": json.dumps(doc.metadata),
                         "created_at": now,
                     },
@@ -147,7 +273,7 @@ class PgVectorStore:
             result = await conn.execute(
                 text("""
                     DELETE FROM vector_documents
-                    WHERE id = ANY(:ids::uuid[]) AND collection = :collection
+                    WHERE id = ANY(CAST(:ids AS UUID[])) AND collection = :collection
                 """),
                 {"ids": ids, "collection": collection},
             )
@@ -193,7 +319,7 @@ class PgVectorStore:
         where_sql = " AND ".join(where_clauses)
 
         sql = text(f"""
-            SELECT id, text, metadata,
+            SELECT id, text, content_json, metadata,
                    1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
             FROM vector_documents
             WHERE {where_sql}
@@ -208,7 +334,10 @@ class PgVectorStore:
         return [
             SearchResult(
                 id=str(row.id),
-                text=row.text,
+                content=_blocks_from_json(
+                    row.content_json if hasattr(row, "content_json") else None,
+                    row.text,
+                ),
                 score=float(row.similarity),
                 metadata=row.metadata or {},
             )

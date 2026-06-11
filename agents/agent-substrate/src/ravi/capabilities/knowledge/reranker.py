@@ -58,7 +58,7 @@ class LLMReranker:
         from ravi.kernel import ChatMessage, TextBlock
 
         # Build scoring prompt
-        docs_block = "\n".join(f"[{i}] {r.text[:500]}" for i, r in enumerate(results))
+        docs_block = "\n".join(f"[{i}] {r.to_text()[:500]}" for i, r in enumerate(results))
 
         messages = [
             ChatMessage(
@@ -81,8 +81,9 @@ class LLMReranker:
                     )
                 ),
             )
-            text_parts = [b.text for b in response if isinstance(b, TextBlock)]
+            text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
             text = "".join(text_parts)
+
 
             # Parse the JSON array of indices
             indices = json.loads(text.strip())

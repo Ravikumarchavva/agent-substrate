@@ -7,6 +7,8 @@ from ravi.kernel.graph import Entity, GraphStore, Relationship, SubGraph
 from ravi.kernel.vector import Document, SearchResult, VectorStore
 from ravi.capabilities.knowledge.pipeline import RAGPipeline
 from ravi.capabilities.knowledge.graph_rag import GraphRAGPipeline
+from ravi.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
+from ravi.capabilities.knowledge.protocol import RAGProvider
 from ravi.capabilities.knowledge.chunking import (
     TextChunker,
     SentenceChunker,
@@ -25,9 +27,12 @@ __all__ = [
     "SubGraph",
     "RAGPipeline",
     "GraphRAGPipeline",
+    "PageIndexRAGPipeline",
+    "RAGProvider",
     "TextChunker",
     "SentenceChunker",
     "PageChunker",
     "get_chunker",
     "LLMReranker",
 ]
+

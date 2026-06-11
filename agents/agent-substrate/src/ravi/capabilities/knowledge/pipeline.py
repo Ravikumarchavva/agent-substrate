@@ -16,6 +16,7 @@ Usage::
 """
 
 from __future__ import annotations
+import dataclasses
 from ravi.logger import setup_logging
 
 from typing import TYPE_CHECKING, Any
@@ -97,11 +98,17 @@ class RAGPipeline:
             return 0
 
         # Embed all chunks in a single batch
-        chunk_texts = [doc.text for doc in all_docs]
+        chunk_texts = [doc.to_text() for doc in all_docs]
         result = await self._embedding.embed(chunk_texts)
 
+        # Populate embedding on documents
+        docs_with_embeddings = [
+            dataclasses.replace(doc, embedding=emb)
+            for doc, emb in zip(all_docs, result.embeddings)
+        ]
+
         # Store
-        await self._store.add(all_docs, result.embeddings, collection=collection)
+        await self._store.add(docs_with_embeddings, collection=collection)
 
         logger.info(
             "Ingested %d chunks into collection '%s' (%d tokens used)",
@@ -124,9 +131,13 @@ class RAGPipeline:
         if not documents:
             return 0
 
-        chunk_texts = [doc.text for doc in documents]
+        chunk_texts = [doc.to_text() for doc in documents]
         result = await self._embedding.embed(chunk_texts)
-        await self._store.add(documents, result.embeddings, collection=collection)
+        docs_with_embeddings = [
+            dataclasses.replace(doc, embedding=emb)
+            for doc, emb in zip(documents, result.embeddings)
+        ]
+        await self._store.add(docs_with_embeddings, collection=collection)
         return len(documents)
 
     # ── Query ─────────────────────────────────────────────────────────────────
@@ -186,7 +197,7 @@ class RAGPipeline:
         # Build context block
         context_parts: list[str] = []
         for i, r in enumerate(results, 1):
-            context_parts.append(f"[{i}] {r.text}")
+            context_parts.append(f"[{i}] {r.to_text()}")
         context_block = "\n\n".join(context_parts)
 
         system_prompt = system or (
@@ -209,5 +220,6 @@ class RAGPipeline:
         )
 
         # Extract text from response blocks
-        text_parts = [b.text for b in response if isinstance(b, TextBlock)]
+        text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
         return "".join(text_parts)
+

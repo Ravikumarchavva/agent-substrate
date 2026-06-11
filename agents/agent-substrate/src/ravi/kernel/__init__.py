@@ -45,6 +45,7 @@ from ravi.kernel.message import (
     ToolResultPayload,
     DataPayload,
     ControlPayload,
+    ProgressPayload,
     Payload,
     register_payload_type,
     ToolCallRequest,
@@ -147,6 +148,7 @@ __all__ = [
     "ToolResultPayload",
     "DataPayload",
     "ControlPayload",
+    "ProgressPayload",
     "Payload",
     "register_payload_type",
     # Compat shims (canonical in tools.py)

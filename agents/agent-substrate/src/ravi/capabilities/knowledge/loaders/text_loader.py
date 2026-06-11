@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Union
 
 from ravi.capabilities.knowledge.loaders.base import BaseDocumentLoader
+from ravi.kernel.content import TextBlock
 from ravi.kernel.vector import Document
 
 
@@ -33,7 +34,7 @@ class TextLoader(BaseDocumentLoader):
 
         return [
             Document(
-                text=text,
+                content=[TextBlock(text=text)],
                 metadata=metadata,
                 id=str(uuid.uuid4()),
             )

@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field
 
 from ravi.kernel.content import ChatMessage, JsonObject
 from ravi.kernel.identity import AgentId, TopicId
+from ravi.kernel.stream import AgentProgress
 
 
 # ---------------------------------------------------------------------------
@@ -105,8 +106,24 @@ class ControlPayload(BaseModel):
     model_config = {"frozen": True}
 
 
+class ProgressPayload(BaseModel):
+    """Payload carrying an agent progress event."""
+
+    kind: Literal["progress"] = "progress"
+    progress: AgentProgress
+
+    model_config = {"frozen": True, "arbitrary_types_allowed": True}
+
+
 Payload = Annotated[
-    Union[ChatPayload, ToolCallPayload, ToolResultPayload, DataPayload, ControlPayload],
+    Union[
+        ChatPayload,
+        ToolCallPayload,
+        ToolResultPayload,
+        DataPayload,
+        ControlPayload,
+        ProgressPayload,
+    ],
     Field(discriminator="kind"),
 ]
 """Discriminated union of all canonical payload types.
@@ -126,6 +143,7 @@ _PAYLOAD_REGISTRY: dict[str, type[BaseModel]] = {
     "tool_result": ToolResultPayload,
     "data": DataPayload,
     "control": ControlPayload,
+    "progress": ProgressPayload,
 }
 
 
@@ -263,6 +281,7 @@ __all__ = [
     "ToolResultPayload",
     "DataPayload",
     "ControlPayload",
+    "ProgressPayload",
     "Payload",
     "register_payload_type",
     "ToolCallRequest",

@@ -55,7 +55,7 @@ from ravi.kernel import (
     TopicId,
 )
 from ravi.kernel.stream import AgentProgress, AgentStep, StreamDone, TextDelta
-from ravi.kernel.identity import HistoryRetention
+from ravi.kernel.supervision import HistoryRetention
 from ravi.kernel.llm import LLMClient
 from ravi.agents.supervision.budget import SpawnBudget
 from ravi.agents.supervision.policies import RetryPolicy
@@ -236,17 +236,21 @@ class _DispatchTool:
             attempt += 1
             logger.warning(
                 "[orchestrator] retrying %s (attempt %d, run_id=%s)",
-                self._agent.name, attempt, crash_run_id,
+                self._agent.name,
+                attempt,
+                crash_run_id,
             )
             # Emit a visible retry event into the stream
             if self._progress_sink is not None:
-                await self._progress_sink.put(AgentProgress(
-                    agent_id=self._agent.id,
-                    step=AgentStep.TOOL_CALL,
-                    content=f"↻ {self._agent.name}: retrying (attempt {attempt})",
-                    run_id=crash_run_id or "",
-                    depth=(self._supervision.depth or 0) + 1,
-                ))
+                await self._progress_sink.put(
+                    AgentProgress(
+                        agent_id=self._agent.id,
+                        step=AgentStep.TOOL_CALL,
+                        content=f"↻ {self._agent.name}: retrying (attempt {attempt})",
+                        run_id=crash_run_id or "",
+                        depth=(self._supervision.depth or 0) + 1,
+                    )
+                )
             output, status, crash_run_id = await self._stream_run(
                 input, resume=True, run_id=crash_run_id
             )
@@ -254,7 +258,9 @@ class _DispatchTool:
         if status == "crash":
             logger.error("[orchestrator] %s exhausted retries", self._agent.name)
             return ToolExecutionResult(
-                content=[TextBlock(text=f"Agent '{self._agent.name}' failed after retries")],
+                content=[
+                    TextBlock(text=f"Agent '{self._agent.name}' failed after retries")
+                ],
                 is_error=True,
             )
 
@@ -265,8 +271,6 @@ class _DispatchTool:
         )
 
 
-
-
 # ---------------------------------------------------------------------------
 # Internal resume payload
 # ---------------------------------------------------------------------------
@@ -275,6 +279,7 @@ class _DispatchTool:
 @dataclass
 class _ResumePayload:
     """Sent to on_message when the orchestrator wants to resume a crashed run."""
+
     run_id: str
     session_id: str
     input: str
@@ -351,7 +356,8 @@ class OrchestratorAgent(ReActAgent):
         self._sub_configs: list[SubAgentConfig] = configs
 
         roster = "\n".join(
-            f"  - {c.agent.name}: {getattr(c.agent, 'description', '')}" for c in configs
+            f"  - {c.agent.name}: {getattr(c.agent, 'description', '')}"
+            for c in configs
         )
         default_system = (
             "You are an orchestrator agent. Analyse the user's request and "

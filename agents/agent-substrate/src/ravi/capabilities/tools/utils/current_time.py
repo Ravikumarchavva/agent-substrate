@@ -33,9 +33,12 @@ class CurrentTimeTool:
         "additionalProperties": False,
     }
 
-    async def execute(self, *, timezone: str = "UTC", **_: object) -> ToolExecutionResult:
+    async def execute(
+        self, *, timezone: str = "UTC", **_: object
+    ) -> ToolExecutionResult:
         try:
             import zoneinfo
+
             tz = zoneinfo.ZoneInfo(timezone)
             now = datetime.datetime.now(tz)
             text = now.strftime("%Y-%m-%d %H:%M:%S %Z (UTC%z)")

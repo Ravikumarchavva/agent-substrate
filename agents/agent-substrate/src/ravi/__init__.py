@@ -112,17 +112,32 @@ _LAZY: dict[str, tuple[str, str]] = {
     "AuditLoggerMiddleware": ("ravi.agents.middleware", "AuditLoggerMiddleware"),
     "CacheMiddleware": ("ravi.agents.middleware", "CacheMiddleware"),
     "ContentFilterMiddleware": ("ravi.agents.middleware", "ContentFilterMiddleware"),
-    "ContentTruncatorMiddleware": ("ravi.agents.middleware", "ContentTruncatorMiddleware"),
+    "ContentTruncatorMiddleware": (
+        "ravi.agents.middleware",
+        "ContentTruncatorMiddleware",
+    ),
     "FileValidatorMiddleware": ("ravi.agents.middleware", "FileValidatorMiddleware"),
-    "HistoryTruncatorMiddleware": ("ravi.agents.middleware", "HistoryTruncatorMiddleware"),
+    "HistoryTruncatorMiddleware": (
+        "ravi.agents.middleware",
+        "HistoryTruncatorMiddleware",
+    ),
     "LLMJudgeMiddleware": ("ravi.agents.middleware", "LLMJudgeMiddleware"),
     "MaxTokenMiddleware": ("ravi.agents.middleware", "MaxTokenMiddleware"),
     "PIIDetectionMiddleware": ("ravi.agents.middleware", "PIIDetectionMiddleware"),
-    "PromptInjectionMiddleware": ("ravi.agents.middleware", "PromptInjectionMiddleware"),
+    "PromptInjectionMiddleware": (
+        "ravi.agents.middleware",
+        "PromptInjectionMiddleware",
+    ),
     "RateLimiterMiddleware": ("ravi.agents.middleware", "RateLimiterMiddleware"),
     "RetryMiddleware": ("ravi.agents.middleware", "RetryMiddleware"),
-    "SchemaValidatorMiddleware": ("ravi.agents.middleware", "SchemaValidatorMiddleware"),
-    "ToolCallValidationMiddleware": ("ravi.agents.middleware", "ToolCallValidationMiddleware"),
+    "SchemaValidatorMiddleware": (
+        "ravi.agents.middleware",
+        "SchemaValidatorMiddleware",
+    ),
+    "ToolCallValidationMiddleware": (
+        "ravi.agents.middleware",
+        "ToolCallValidationMiddleware",
+    ),
     "MiddlewareTermination": ("ravi.kernel.errors", "MiddlewareTermination"),
     # factory
     "create_model_client": ("ravi.integrations.llm.factory", "create_model_client"),

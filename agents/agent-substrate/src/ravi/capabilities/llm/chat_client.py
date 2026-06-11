@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 from openai import AsyncOpenAI
 
 from ravi.kernel import ChatMessage, ContentBlock
-from ravi.kernel.llm import LLMClient, LLMResponse, Usage
+from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
 from ravi.kernel.content import (
     DataBlock,
     ImageBlock,
@@ -32,9 +32,18 @@ from ravi.kernel.stream import CompletionEvent, TextDelta
 from ravi.logger import setup_logging
 
 if TYPE_CHECKING:
-    from pydantic import BaseModel
+    pass
 
 logger = setup_logging()
+
+
+def _tools_to_dicts(tools: Any) -> Optional[list[dict[str, Any]]]:
+    if not tools:
+        return None
+    return [
+        {"name": t.name, "description": t.description, "parameters": t.input_schema}
+        for t in tools
+    ]
 
 
 # ── Strict-schema helpers (inlined — no integrations dependency) ──────────────
@@ -185,10 +194,13 @@ class OpenAIChatCompletionClient:
                         url = item.url
                         if not url and item.data:
                             import base64 as _b64
+
                             b64 = _b64.b64encode(item.data).decode()
                             url = f"data:{item.media_type};base64,{b64}"
                         if url:
-                            parts.append({"type": "image_url", "image_url": {"url": url}})
+                            parts.append(
+                                {"type": "image_url", "image_url": {"url": url}}
+                            )
                 if len(parts) == 1 and parts[0].get("type") == "text":
                     result.append({"role": "user", "content": parts[0]["text"]})
                 else:
@@ -230,11 +242,13 @@ class OpenAIChatCompletionClient:
                             content_str = "\n".join(parts_list)
                         else:
                             content_str = block.content or ""
-                        result.append({
-                            "role": "tool",
-                            "tool_call_id": block.call_id,
-                            "content": content_str,
-                        })
+                        result.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": block.call_id,
+                                "content": content_str,
+                            }
+                        )
         return result
 
     # ── Tool schema serialisation ─────────────────────────────────────────────
@@ -250,7 +264,11 @@ class OpenAIChatCompletionClient:
             if tool.get("type") == "function" and "function" in tool:
                 fn = dict(tool["function"])
                 if "parameters" in fn:
-                    fn["parameters"] = _strict_schema(fn["parameters"]) if use_strict else fn["parameters"]
+                    fn["parameters"] = (
+                        _strict_schema(fn["parameters"])
+                        if use_strict
+                        else fn["parameters"]
+                    )
                     fn.pop("strict", None)
                 if use_strict:
                     fn["strict"] = True
@@ -293,7 +311,9 @@ class OpenAIChatCompletionClient:
         body = getattr(exc, "body", None)
         if body:
             try:
-                parts.append(f"body={json.dumps(body, ensure_ascii=True, sort_keys=True)}")
+                parts.append(
+                    f"body={json.dumps(body, ensure_ascii=True, sort_keys=True)}"
+                )
             except TypeError:
                 parts.append(f"body={body}")
         response = getattr(exc, "response", None)
@@ -317,7 +337,9 @@ class OpenAIChatCompletionClient:
         raw: str = body.get("failed_generation", "")
         if not raw:
             return None
-        pattern = re.compile(r"<function=(\w+)\s*(\{.*?\})\s*(?:</function>|/>)", re.DOTALL)
+        pattern = re.compile(
+            r"<function=(\w+)\s*(\{.*?\})\s*(?:</function>|/>)", re.DOTALL
+        )
         calls: dict[int, dict[str, Any]] = {}
         for idx, m in enumerate(pattern.finditer(raw)):
             try:
@@ -327,7 +349,9 @@ class OpenAIChatCompletionClient:
             calls[idx] = {
                 "id": f"recovered_{idx}",
                 "name": m.group(1),
-                "arguments": json.dumps(arguments) if isinstance(arguments, dict) else str(arguments),
+                "arguments": json.dumps(arguments)
+                if isinstance(arguments, dict)
+                else str(arguments),
             }
         if not calls:
             return None
@@ -339,29 +363,33 @@ class OpenAIChatCompletionClient:
     async def generate(
         self,
         messages: list[ChatMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
         *,
-        system_instructions: str = "",
-        response_format: Optional[type["BaseModel"]] = None,
-        tool_choice: Optional[str | dict[str, Any]] = None,
-        **kwargs: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
+        tool_dicts = _tools_to_dicts(options.tools)
         chat_messages = self._serialize_messages(messages)
-        if system_instructions:
-            chat_messages.insert(0, {"role": "system", "content": system_instructions})
+        if options.system_instructions:
+            chat_messages.insert(
+                0, {"role": "system", "content": options.system_instructions}
+            )
 
         params: dict[str, Any] = {"model": self.model, "messages": chat_messages}
-        params["temperature"] = kwargs.pop("temperature", self.temperature)
-        if self.max_tokens:
-            params["max_tokens"] = kwargs.pop("max_tokens", self.max_tokens)
+        params["temperature"] = (
+            options.temperature if options.temperature is not None else self.temperature
+        )
+        if options.max_tokens is not None:
+            params["max_tokens"] = options.max_tokens
+        elif self.max_tokens:
+            params["max_tokens"] = self.max_tokens
 
-        serialized_tools = self._serialize_tools(tools)
-        normalized_choice = self._normalize_tool_choice(tool_choice)
+        serialized_tools = self._serialize_tools(tool_dicts)
+        normalized_choice = self._normalize_tool_choice(options.tool_choice)
         if serialized_tools:
             params["tools"] = serialized_tools
             if normalized_choice:
                 params["tool_choice"] = normalized_choice
 
+        response_format = options.response_format
         if response_format is not None and not serialized_tools:
             params["response_format"] = {"type": "json_object"}
 
@@ -375,7 +403,9 @@ class OpenAIChatCompletionClient:
                     ToolUseBlock(
                         call_id=tc["id"],
                         tool_name=tc["name"],
-                        arguments=json.loads(tc["arguments"]) if tc["arguments"] else {},
+                        arguments=json.loads(tc["arguments"])
+                        if tc["arguments"]
+                        else {},
                     )
                     for _, tc in sorted(tc_dict.items())
                 ]
@@ -428,19 +458,26 @@ class OpenAIChatCompletionClient:
             )
         return LLMResponse(content=final_blocks, usage=usage)
 
-    async def generate_stream(
+    def generate_stream(
         self,
         messages: list[ChatMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
-        tool_choice: Optional[str | dict[str, Any]] = None,
         *,
-        system_instructions: str = "",
-        response_format: Optional[type["BaseModel"]] = None,
-        **kwargs: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
+        return self._do_stream(messages, options=options)
+
+    async def _do_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions,
+    ) -> AsyncIterator[TextDelta | CompletionEvent]:
+        tool_dicts = _tools_to_dicts(options.tools)
         chat_messages = self._serialize_messages(messages)
-        if system_instructions:
-            chat_messages.insert(0, {"role": "system", "content": system_instructions})
+        if options.system_instructions:
+            chat_messages.insert(
+                0, {"role": "system", "content": options.system_instructions}
+            )
 
         params: dict[str, Any] = {
             "model": self.model,
@@ -448,17 +485,22 @@ class OpenAIChatCompletionClient:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
-        params["temperature"] = kwargs.pop("temperature", self.temperature)
-        if self.max_tokens:
-            params["max_tokens"] = kwargs.pop("max_tokens", self.max_tokens)
+        params["temperature"] = (
+            options.temperature if options.temperature is not None else self.temperature
+        )
+        if options.max_tokens is not None:
+            params["max_tokens"] = options.max_tokens
+        elif self.max_tokens:
+            params["max_tokens"] = self.max_tokens
 
-        serialized_tools = self._serialize_tools(tools)
-        normalized_choice = self._normalize_tool_choice(tool_choice)
+        serialized_tools = self._serialize_tools(tool_dicts)
+        normalized_choice = self._normalize_tool_choice(options.tool_choice)
         if serialized_tools:
             params["tools"] = serialized_tools
             if normalized_choice:
                 params["tool_choice"] = normalized_choice
 
+        response_format = options.response_format
         if response_format is not None and not serialized_tools:
             params["response_format"] = {"type": "json_object"}
 
@@ -491,7 +533,11 @@ class OpenAIChatCompletionClient:
                     for tc_delta in delta.tool_calls:
                         idx = tc_delta.index
                         if idx not in collected_tool_calls:
-                            collected_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                            collected_tool_calls[idx] = {
+                                "id": "",
+                                "name": "",
+                                "arguments": "",
+                            }
                         entry = collected_tool_calls[idx]
                         if tc_delta.id:
                             entry["id"] = tc_delta.id
@@ -525,7 +571,9 @@ class OpenAIChatCompletionClient:
                     ToolUseBlock(
                         call_id=tc["id"],
                         tool_name=tc["name"],
-                        arguments=json.loads(tc["arguments"]) if tc["arguments"] else {},
+                        arguments=json.loads(tc["arguments"])
+                        if tc["arguments"]
+                        else {},
                     )
                 )
 
@@ -534,7 +582,10 @@ class OpenAIChatCompletionClient:
                 parsed = response_format.model_validate_json(collected_content)
                 final_blocks.append(DataBlock(data=parsed.model_dump(mode="json")))
             except Exception:
-                logger.debug("Stream: failed to parse structured output: %s", collected_content[:200])
+                logger.debug(
+                    "Stream: failed to parse structured output: %s",
+                    collected_content[:200],
+                )
 
         yield CompletionEvent(content=final_blocks)
 
@@ -542,6 +593,7 @@ class OpenAIChatCompletionClient:
         """Estimate token count using tiktoken (cl100k_base for unknown models)."""
         try:
             import tiktoken
+
             try:
                 enc = tiktoken.encoding_for_model(self.model)
             except KeyError:

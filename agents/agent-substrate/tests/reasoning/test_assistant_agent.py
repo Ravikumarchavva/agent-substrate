@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, AsyncIterator
-from unittest.mock import AsyncMock
 
-import pytest
 
 from ravi.agents.context import (
     ContextConfig,
@@ -20,13 +17,12 @@ from ravi.kernel import (
     TextBlock,
     ToolExecutionResult,
     ToolRisk,
-    ToolResultBlock,
     ToolUseBlock,
 )
 from ravi.kernel.stream import CompletionEvent, StreamDone, TextDelta
 from ravi.kernel.llm import LLMResponse, Usage
-from ravi.agents.core import ReActAgent, AgentRunResult
-from ravi.agents.middleware import ContentFilterMiddleware, PromptInjectionMiddleware
+from ravi.agents.core import ReActAgent
+from ravi.agents.middleware import PromptInjectionMiddleware
 from ravi.agents.middleware._contracts import ChatContext
 from ravi.exceptions import MiddlewareTermination
 
@@ -62,7 +58,9 @@ class MockLLMClient:
         **_kw: Any,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         resp = await self.generate(messages, system=system_instructions)
-        text = " ".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
+        text = " ".join(
+            b.text for b in resp.content if isinstance(b, TextBlock) and b.text
+        )
         if text:
             yield TextDelta(text=text)
         yield CompletionEvent(content=resp.content, usage=resp.usage)
@@ -146,7 +144,9 @@ async def test_run_plain_text():
 async def test_run_with_tool_call():
     """Agent executes a tool when the LLM returns a ToolUseBlock."""
     async with LocalRuntime() as rt:
-        tool_use = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "pong"})
+        tool_use = ToolUseBlock(
+            call_id="c1", tool_name="echo", arguments={"text": "pong"}
+        )
         agent = make_agent(
             rt,
             [
@@ -246,7 +246,9 @@ async def test_run_stream_yields_text_delta():
 async def test_run_stream_with_tool_call():
     """Streaming path correctly executes tools and yields final text."""
     async with LocalRuntime() as rt:
-        tool_use = ToolUseBlock(call_id="c2", tool_name="echo", arguments={"text": "hi"})
+        tool_use = ToolUseBlock(
+            call_id="c2", tool_name="echo", arguments={"text": "hi"}
+        )
         agent = make_agent(
             rt,
             [
@@ -356,6 +358,7 @@ async def test_hitl_approval_granted():
 async def test_hitl_approval_denied():
     """When approval_handler returns False, tool call is blocked with error."""
     async with LocalRuntime() as rt:
+
         async def handler(tool_name: str, args: dict) -> bool:
             return False  # deny
 

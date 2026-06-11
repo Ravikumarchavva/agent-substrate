@@ -154,9 +154,7 @@ class TaskStore:
             task_list.tasks = [t for t in task_list.tasks if t.id != task_id]
             return len(task_list.tasks) < before
 
-    async def increment_retry(
-        self, task_list_id: str, task_id: str
-    ) -> Optional[Task]:
+    async def increment_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
         """Increment retry_count and move task back to in_progress.
 
         Returns None if the task isn't found or has reached max_retries.

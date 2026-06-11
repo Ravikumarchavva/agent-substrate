@@ -26,5 +26,8 @@ For provider-auto-wiring use ``LLMFactory`` from ``ravi.integrations.llm``.
 from __future__ import annotations
 
 from ravi.capabilities.llm.chat_client import OpenAIChatCompletionClient
+from ravi.capabilities.llm.sentence_transformers_embedding_client import (
+    SentenceTransformersEmbeddingClient,
+)
 
-__all__ = ["OpenAIChatCompletionClient"]
+__all__ = ["OpenAIChatCompletionClient", "SentenceTransformersEmbeddingClient"]

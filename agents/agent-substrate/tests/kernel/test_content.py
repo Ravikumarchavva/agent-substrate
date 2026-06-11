@@ -38,7 +38,9 @@ def test_data_block():
 
 
 def test_error_block():
-    block = ErrorBlock(error_type="ValueError", message="invalid value", recoverable=True)
+    block = ErrorBlock(
+        error_type="ValueError", message="invalid value", recoverable=True
+    )
     assert block.type == "error"
     assert block.error_type == "ValueError"
     assert block.message == "invalid value"
@@ -54,7 +56,9 @@ def test_image_block_url():
 
 
 def test_image_block_validation_error():
-    with pytest.raises(ValueError, match="Exactly one of url, data, or file_id must be provided"):
+    with pytest.raises(
+        ValueError, match="Exactly one of url, data, or file_id must be provided"
+    ):
         ImageBlock(url="http://example.com/img.png", file_id="123")
 
 
@@ -69,9 +73,7 @@ def test_tool_use_block():
 
 def test_tool_result_block():
     result = ToolResultBlock(
-        call_id="call1",
-        content=[TextBlock(text="done")],
-        is_error=False
+        call_id="call1", content=[TextBlock(text="done")], is_error=False
     )
     assert result.type == "tool_result"
     assert result.call_id == "call1"
@@ -85,9 +87,12 @@ def test_content_block_from_dict():
     assert isinstance(block, TextBlock)
     assert block.text == "hello dict"
 
+    from ravi.kernel.content import UnknownBlock
+
     raw_error = {"type": "unknown", "text": "fallback"}
     block_fallback = content_block_from_dict(raw_error)
-    assert isinstance(block_fallback, TextBlock)
+    assert isinstance(block_fallback, UnknownBlock)
+    assert block_fallback.raw == raw_error
 
 
 def test_content_blocks_to_str():

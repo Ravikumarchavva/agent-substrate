@@ -41,7 +41,13 @@ from rich.table import Table
 from rich.theme import Theme
 from rich.segment import Segment
 
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent, AgentProgress, AgentStep
+from ravi.kernel.stream import (
+    TextDelta,
+    ReasoningDelta,
+    CompletionEvent,
+    AgentProgress,
+    AgentStep,
+)
 from ravi.kernel.tools import ToolExecutionResult
 from ravi.logger import setup_logging
 
@@ -687,7 +693,9 @@ class Console:
         depth = getattr(chunk, "depth", 0) or 0
         indent = "  " * (depth + 1)
         prefix = f"[dim]\\[{chunk.agent_id.key}][/dim] " if depth > 0 else ""
-        self.console.print(f"{indent}[dim]→ tool:[/dim] {prefix}[tool_name]{chunk.content}[/tool_name]")
+        self.console.print(
+            f"{indent}[dim]→ tool:[/dim] {prefix}[tool_name]{chunk.content}[/tool_name]"
+        )
 
     def _print_tool_result(self, chunk: AgentProgress) -> None:
         depth = getattr(chunk, "depth", 0) or 0

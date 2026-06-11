@@ -5,25 +5,39 @@ from __future__ import annotations
 from ravi.kernel.identity import AgentId
 
 
-class AgentNotFoundError(Exception):
-    """Raised when sending to an AgentId that has no registered handler."""
+class KernelError(Exception):
+    """Base class for all ravi kernel errors.
 
-
-class HandlerError(Exception):
-    """Raised when a message handler raises an exception.
-
-    Wraps the original exception so callers of ``send_message`` receive a
-    typed error rather than a bare exception or silent ``None``.
+    Catching ``KernelError`` is sufficient to intercept any typed error
+    raised by the runtime, routing, or budget layers.
     """
 
 
-class AgentCrashError(Exception):
+class AgentNotFoundError(KernelError):
+    """Raised when sending to an AgentId that has no registered handler."""
+
+    def __init__(self, message: str, *, agent_id: AgentId | None = None) -> None:
+        super().__init__(message)
+        self.agent_id = agent_id
+
+
+class HandlerError(KernelError):
+    """Raised when a message handler raises an exception.
+
+    Wraps the original exception so callers receive a typed error rather
+    than a bare exception or silent ``None``.
+    """
+
+    def __init__(self, message: str, *, cause: Exception | None = None) -> None:
+        super().__init__(message)
+        self.cause = cause
+
+
+class AgentCrashError(KernelError):
     """Raised when an agent's run fails with an unexpected exception.
 
-    Unlike ``HandlerError`` (transport-level), ``AgentCrashError`` is a
-    semantic failure — the agent encountered an unrecoverable error during
-    its ReAct loop. The orchestrator can catch this, consult ``RetryPolicy``,
-    and call ``agent.run(input_text, resume=True)`` to restart from the
+    The orchestrator can catch this, consult the retry policy, and
+    call ``agent.run(input_text, resume=True)`` to restart from the
     persisted history checkpoint.
 
     ``run_id`` and ``agent_id`` identify which run/agent failed so the
@@ -42,18 +56,15 @@ class AgentCrashError(Exception):
         self.agent_id = agent_id
 
 
-class BudgetExhaustedError(Exception):
-    """Raised when the total agent headcount for a run reaches max_agents.
+class BudgetExhaustedError(KernelError):
+    """Raised when an agent headcount or token/cost/turn budget is exhausted.
 
     Prevents runaway trees where many levels each spawn many children,
     multiplying to thousands of agents (and LLM calls) in one run.
-
-    Also raised when an agent's per-agent ``ExecutionBudget`` is exceeded
-    (token/cost/turn cap).
     """
 
 
-class MiddlewareTermination(Exception):
+class MiddlewareTermination(KernelError):
     """Raised by any middleware to immediately halt the agent run.
 
     Unlike ``AgentCrashError`` (unexpected failure), ``MiddlewareTermination``
@@ -70,10 +81,20 @@ class MiddlewareTermination(Exception):
         self.message = message
 
 
+class CancellationError(KernelError):
+    """Raised when an operation is cancelled via ``CancellationToken``.
+
+    Agents and tools should propagate this rather than catch and swallow it,
+    so the cancellation can reach the outermost caller cleanly.
+    """
+
+
 __all__ = [
+    "KernelError",
     "AgentNotFoundError",
     "HandlerError",
     "AgentCrashError",
     "BudgetExhaustedError",
     "MiddlewareTermination",
+    "CancellationError",
 ]

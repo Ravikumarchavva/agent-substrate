@@ -55,8 +55,10 @@ logger = setup_logging()
 
 # ── Message serialisation (provider-agnostic JSON round-trip) ─────────────────
 
+
 def _bytes_to_b64(val: Any) -> Any:
     import base64
+
     if isinstance(val, dict):
         return {k: _bytes_to_b64(v) for k, v in val.items()}
     if isinstance(val, list):
@@ -68,6 +70,7 @@ def _bytes_to_b64(val: Any) -> Any:
 
 def _b64_to_bytes(val: Any) -> Any:
     import base64
+
     if isinstance(val, dict):
         if "__bytes_b64__" in val:
             return base64.b64decode(val["__bytes_b64__"])
@@ -257,20 +260,17 @@ class PostgresHistoryProvider:
     ) -> list[Message]:
         _validate_session_id(session_id)
         from ravi.kernel.message import Message as _Message
+
         storage_key = self._session_key(agent_id, session_id)
         chat_msgs = await self.load_messages(storage_key, limit=limit)
         if offset:
             chat_msgs = chat_msgs[offset:]
         results: list[_Message] = []
         for cm in chat_msgs:
-            results.append(
-                _Message(target=agent_id, payload=cm, sender=agent_id)
-            )
+            results.append(_Message(target=agent_id, payload=cm, sender=agent_id))
         return results
 
-    async def clear(
-        self, agent_id: AgentId, *, session_id: str
-    ) -> None:
+    async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
         _validate_session_id(session_id)
         storage_key = self._session_key(agent_id, session_id)
         await self.clear_session(storage_key)

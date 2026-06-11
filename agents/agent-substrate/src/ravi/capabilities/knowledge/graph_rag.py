@@ -86,15 +86,19 @@ class GraphRAGPipeline:
         ]
 
         try:
+            from ravi.kernel.llm import GenerationOptions
+
             response = await self._model.generate(
                 messages,
-                system=(
-                    "Extract entities and relationships from the text. "
-                    "Return a JSON object with two arrays:\n"
-                    '- "entities": [{"label": "Person", "properties": {"name": "Alice"}}]\n'
-                    '- "relationships": [{"source": "Alice", "target": "Acme Corp", '
-                    '"type": "WORKS_AT"}]\n'
-                    "Return ONLY valid JSON."
+                options=GenerationOptions(
+                    system_instructions=(
+                        "Extract entities and relationships from the text. "
+                        "Return a JSON object with two arrays:\n"
+                        '- "entities": [{"label": "Person", "properties": {"name": "Alice"}}]\n'
+                        '- "relationships": [{"source": "Alice", "target": "Acme Corp", '
+                        '"type": "WORKS_AT"}]\n'
+                        "Return ONLY valid JSON."
+                    )
                 ),
             )
             text_parts = [b.text for b in response if isinstance(b, TextBlock)]

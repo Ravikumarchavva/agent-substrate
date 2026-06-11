@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from ravi.capabilities.pipeline.data_ref import DataRefStore
-from ravi.kernel.tools import Toolbox
+from ravi.agents.tools.toolbox import Toolbox
 from ravi.logger import setup_logging
 
 logger = setup_logging()

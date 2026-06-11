@@ -21,7 +21,9 @@ class EmailSenderTool:
     """Send emails via SMTP — requires human approval for every send."""
 
     name = "email_sender"
-    description = "Send an email to a recipient via SMTP. Requires human approval before sending."
+    description = (
+        "Send an email to a recipient via SMTP. Requires human approval before sending."
+    )
     input_schema: dict[str, object] = {
         "type": "object",
         "properties": {

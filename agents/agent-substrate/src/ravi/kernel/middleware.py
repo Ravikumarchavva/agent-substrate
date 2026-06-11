@@ -1,56 +1,95 @@
-"""Middleware contracts — three typed interceptor levels.
+"""Middleware contracts — one generic interceptor protocol with per-level context protocols.
 
-The kernel cannot reference the concrete context types (AgentRunContext,
-ChatContext, FunctionContext) because those live in the agents layer and
-importing them here would break the layer contract.  The protocols use a
-TypeVar so that each level has a distinct nominal identity — callers at the
-agents layer then narrow the TypeVar to the correct concrete type.
+Middleware[CtxT]   generic interceptor (all three levels share this shape)
 
-    AgentMiddleware  → wraps one agent.run() call    (AgentRunContext)
-    ChatMiddleware   → wraps each model.generate()   (ChatContext)
-    FunctionMiddleware → wraps each tool.execute()   (FunctionContext)
+Level-specific context protocols (minimal — only the fields each middleware level reads):
 
-Raise ``MiddlewareTermination`` (also in this module) to halt execution at
-any level without propagating an error.
+    AgentRunContextProtocol  → wraps one agent.run() call
+    ChatContextProtocol      → wraps each model.generate() call
+    FunctionContextProtocol  → wraps each tool.execute() call
+
+These context protocols live here (not in agents/) so that the kernel can
+type the middleware pipelines without knowing about concrete context classes.
+The agents layer narrows ``CtxT`` to its concrete dataclasses when wiring
+pipelines.
+
+Raise ``MiddlewareTermination`` (see ``ravi.kernel.errors``) from any
+``process`` implementation to halt execution cleanly at that level.
 """
 
 from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Protocol, TypeVar
 
-_AgentCtxT = TypeVar("_AgentCtxT")
-_ChatCtxT = TypeVar("_ChatCtxT")
-_FuncCtxT = TypeVar("_FuncCtxT")
+CtxT = TypeVar("CtxT")
 
 
-class AgentMiddleware(Protocol):
-    """Wraps a single agent.run() call. context is AgentRunContext at runtime."""
+class Middleware(Protocol[CtxT]):
+    """Generic interceptor — call_next() continues down the chain.
+
+    All three middleware levels (agent-run, chat, tool) share this shape.
+    The concrete context type is narrowed by the pipeline at the agents layer.
+    """
 
     async def process(
         self,
-        context: Any,  # AgentRunContext at agents layer
+        context: CtxT,
         call_next: Callable[[], Awaitable[None]],
     ) -> None: ...
 
 
-class ChatMiddleware(Protocol):
-    """Wraps each model.generate() call. context is ChatContext at runtime."""
-
-    async def process(
-        self,
-        context: Any,  # ChatContext at agents layer
-        call_next: Callable[[], Awaitable[None]],
-    ) -> None: ...
+# ---------------------------------------------------------------------------
+# Minimal per-level context protocols
+# ---------------------------------------------------------------------------
+# These describe only the attributes each middleware level actually reads so
+# that middleware can be type-checked without importing concrete dataclasses.
 
 
-class FunctionMiddleware(Protocol):
-    """Wraps each tool.execute() call. context is FunctionContext at runtime."""
+class AgentRunContextProtocol(Protocol):
+    """Attributes readable by AgentMiddleware from an agent run context."""
 
-    async def process(
-        self,
-        context: Any,  # FunctionContext at agents layer
-        call_next: Callable[[], Awaitable[None]],
-    ) -> None: ...
+    agent_name: str
+    run_id: str
+    session_id: str
 
 
-__all__ = ["AgentMiddleware", "ChatMiddleware", "FunctionMiddleware"]
+class ChatContextProtocol(Protocol):
+    """Attributes readable by ChatMiddleware from a chat generation context."""
+
+    agent_name: str
+    run_id: str
+    system_instructions: str
+
+
+class FunctionContextProtocol(Protocol):
+    """Attributes readable by FunctionMiddleware from a tool execution context."""
+
+    agent_name: str
+    run_id: str
+    function_name: str
+    arguments: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Level-specific type aliases for documentation clarity
+# ---------------------------------------------------------------------------
+
+AgentMiddleware = Middleware[Any]
+"""Middleware wrapping one agent.run() call. Context is AgentRunContextProtocol at runtime."""
+
+ChatMiddleware = Middleware[Any]
+"""Middleware wrapping each model.generate() call. Context is ChatContextProtocol at runtime."""
+
+FunctionMiddleware = Middleware[Any]
+"""Middleware wrapping each tool.execute() call. Context is FunctionContextProtocol at runtime."""
+
+
+__all__ = [
+    "Middleware",
+    "AgentMiddleware",
+    "ChatMiddleware",
+    "FunctionMiddleware",
+    "AgentRunContextProtocol",
+    "ChatContextProtocol",
+    "FunctionContextProtocol",
+]

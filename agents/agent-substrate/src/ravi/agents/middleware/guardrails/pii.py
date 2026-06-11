@@ -40,7 +40,9 @@ class PIIDetectionMiddleware:
                         f"Invalid custom PII pattern '{label}': {e}"
                     ) from e
 
-    async def process(self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         if not context.arguments:
             await call_next()
             return
@@ -51,6 +53,8 @@ class PIIDetectionMiddleware:
             for label, pattern in self._patterns.items():
                 match = pattern.search(val)
                 if match:
-                    raise MiddlewareTermination(f"PIIDetection: PII detected ({label}) in argument '{key}'")
+                    raise MiddlewareTermination(
+                        f"PIIDetection: PII detected ({label}) in argument '{key}'"
+                    )
 
         await call_next()

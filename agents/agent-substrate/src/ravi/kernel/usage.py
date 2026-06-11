@@ -13,21 +13,27 @@ class Usage:
     (Anthropic cache_read_input_tokens, OpenAI cached_tokens). These are
     already included in ``input_tokens`` — broken out so callers can compute
     accurate cost (cached tokens are billed at a lower rate).
+
+    ``reasoning_tokens`` counts tokens used for extended thinking / chain-of-
+    thought (Anthropic extended thinking, OpenAI o-series). These are included
+    in ``output_tokens`` — broken out for cost attribution.
     """
 
     input_tokens: int = 0
     cached_tokens: int = 0
     output_tokens: int = 0
+    reasoning_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
 
-    def __add__(self, other: Usage) -> Usage:
+    def __add__(self, other: "Usage") -> "Usage":
         return Usage(
             input_tokens=self.input_tokens + other.input_tokens,
             cached_tokens=self.cached_tokens + other.cached_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
+            reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
         )
 
 

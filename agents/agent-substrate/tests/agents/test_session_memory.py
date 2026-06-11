@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from typing import AsyncIterator
 
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.context import (
+    ContextConfig,
+    InMemoryHistoryProvider,
+    SlidingWindowCompaction,
+)
 from ravi.agents.runtime.local import LocalRuntime
 from ravi.kernel import (
     ChatMessage,
@@ -12,9 +16,9 @@ from ravi.kernel import (
     TextBlock,
 )
 from ravi.kernel.content import ToolUseBlock
-from ravi.kernel.identity import HistoryRetention
+from ravi.kernel.supervision import HistoryRetention
 from ravi.kernel.stream import CompletionEvent, TextDelta
-from ravi.kernel.llm import LLMResponse, Usage
+from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
 from ravi.agents.core import ReActAgent
 
 
@@ -31,29 +35,32 @@ class MockLLMClient:
         self,
         messages: list[ChatMessage],
         *,
-        tools: Any = None,
-        system: str = "",
-        **_kw: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
         assert self._queue, "MockLLMClient: no more scripted responses"
         return LLMResponse(content=self._queue.pop(0), usage=Usage())
 
-    async def generate_stream(
+    def generate_stream(
         self,
         messages: list[ChatMessage],
-        tools: Any = None,
         *,
-        system_instructions: str = "",
-        **_kw: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
-        resp = await self.generate(messages, system=system_instructions)
-        text = " ".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
+        return self._do_stream(messages, options=options)
+
+    async def _do_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions,
+    ) -> AsyncIterator[TextDelta | CompletionEvent]:
+        resp = await self.generate(messages, options=options)
+        text = " ".join(
+            b.text for b in resp.content if isinstance(b, TextBlock) and b.text
+        )
         if text:
             yield TextDelta(text=text)
         yield CompletionEvent(content=resp.content, usage=resp.usage)
-
-    async def count_tokens(self, messages: list[ChatMessage]) -> int:
-        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -68,11 +75,15 @@ async def test_standalone_session_accumulates_across_runs():
         agent = ReActAgent(
             "bot",
             rt,
-            model=MockLLMClient([
-                [TextBlock(text="I am fine.")],
-                [TextBlock(text="You said hi earlier.")],
-            ]),
-            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=20)),
+            model=MockLLMClient(
+                [
+                    [TextBlock(text="I am fine.")],
+                    [TextBlock(text="You said hi earlier.")],
+                ]
+            ),
+            context=ContextConfig(
+                shared_history, SlidingWindowCompaction(max_messages=20)
+            ),
             max_iterations=5,
         )
 
@@ -97,18 +108,23 @@ async def test_permanent_retention_subagent_remembers_across_runs():
         coder = ReActAgent(
             "coder",
             rt,
-            model=MockLLMClient([
-                [TextBlock(text="Noted: the secret is 42.")],   # run 1
-                [TextBlock(text="The secret I noted was 42.")],  # run 2
-            ]),
-            context=ContextConfig(coder_history, SlidingWindowCompaction(max_messages=40)),
+            model=MockLLMClient(
+                [
+                    [TextBlock(text="Noted: the secret is 42.")],  # run 1
+                    [TextBlock(text="The secret I noted was 42.")],  # run 2
+                ]
+            ),
+            context=ContextConfig(
+                coder_history, SlidingWindowCompaction(max_messages=40)
+            ),
             max_iterations=5,
         )
 
         session = "session-persistence-test"
 
         # Manually stamp supervision so coder has the right session
-        from ravi.kernel.identity import AgentId, Supervision
+        from ravi.kernel.identity import AgentId
+        from ravi.kernel.supervision import Supervision
 
         orchestrator_id = AgentId(type="assistant", key="router")
         root_sv = Supervision.root(orchestrator_id, session_id=session)
@@ -127,6 +143,7 @@ async def test_permanent_retention_subagent_remembers_across_runs():
 
         # Run 2 (same session, different run_id): coder should see run 1's history
         from uuid import uuid4
+
         new_run_sv = Supervision(
             run_id=uuid4().hex,
             session_id=session,
@@ -153,7 +170,8 @@ async def test_run_retention_subagent_is_ephemeral():
         scratch_history = InMemoryHistoryProvider()
         session = "session-ephemeral-test"
 
-        from ravi.kernel.identity import AgentId, Supervision
+        from ravi.kernel.identity import AgentId
+        from ravi.kernel.supervision import Supervision
         from uuid import uuid4
 
         orchestrator_id = AgentId(type="assistant", key="router")
@@ -161,11 +179,15 @@ async def test_run_retention_subagent_is_ephemeral():
         scratch = ReActAgent(
             "scratch",
             rt,
-            model=MockLLMClient([
-                [TextBlock(text="Done run 1.")],
-                [TextBlock(text="Done run 2.")],
-            ]),
-            context=ContextConfig(scratch_history, SlidingWindowCompaction(max_messages=40)),
+            model=MockLLMClient(
+                [
+                    [TextBlock(text="Done run 1.")],
+                    [TextBlock(text="Done run 2.")],
+                ]
+            ),
+            context=ContextConfig(
+                scratch_history, SlidingWindowCompaction(max_messages=40)
+            ),
             max_iterations=5,
         )
 
@@ -192,14 +214,20 @@ async def test_run_retention_subagent_is_ephemeral():
         )
         scratch.supervision = sv2
 
-        msgs_before_run2 = await scratch_history.get_messages(scratch.id, session_id=session)
-        assert len(msgs_before_run2) == 0, "RUN-retention: history must be empty after clear"
+        msgs_before_run2 = await scratch_history.get_messages(
+            scratch.id, session_id=session
+        )
+        assert len(msgs_before_run2) == 0, (
+            "RUN-retention: history must be empty after clear"
+        )
 
         r2 = await scratch.run("Task two.", session_id=session)
         assert r2.status == "success"
 
         # Only run 2's messages remain
-        msgs_after_run2 = await scratch_history.get_messages(scratch.id, session_id=session)
+        msgs_after_run2 = await scratch_history.get_messages(
+            scratch.id, session_id=session
+        )
         assert len(msgs_after_run2) == 2
 
 
@@ -211,11 +239,15 @@ async def test_session_isolation_across_different_sessions():
         agent = ReActAgent(
             "agent",
             rt,
-            model=MockLLMClient([
-                [TextBlock(text="Session A response.")],
-                [TextBlock(text="Session B response.")],
-            ]),
-            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=20)),
+            model=MockLLMClient(
+                [
+                    [TextBlock(text="Session A response.")],
+                    [TextBlock(text="Session B response.")],
+                ]
+            ),
+            context=ContextConfig(
+                shared_history, SlidingWindowCompaction(max_messages=20)
+            ),
             max_iterations=5,
         )
 
@@ -241,35 +273,41 @@ async def test_orchestrator_propagates_fresh_run_id_to_subagent_history():
         worker = ReActAgent(
             "worker",
             rt,
-            model=MockLLMClient([
-                [TextBlock(text="child output one")],
-                [TextBlock(text="child output two")],
-            ]),
-            context=ContextConfig(worker_history, SlidingWindowCompaction(max_messages=40)),
+            model=MockLLMClient(
+                [
+                    [TextBlock(text="child output one")],
+                    [TextBlock(text="child output two")],
+                ]
+            ),
+            context=ContextConfig(
+                worker_history, SlidingWindowCompaction(max_messages=40)
+            ),
             max_iterations=3,
         )
 
         orchestrator = OrchestratorAgent(
             "router",
             rt,
-            model=MockLLMClient([
+            model=MockLLMClient(
                 [
-                    ToolUseBlock(
-                        call_id="h1",
-                        tool_name="handoff_worker",
-                        arguments={"input": "child task one"},
-                    )
-                ],
-                [TextBlock(text="final one")],
-                [
-                    ToolUseBlock(
-                        call_id="h2",
-                        tool_name="handoff_worker",
-                        arguments={"input": "child task two"},
-                    )
-                ],
-                [TextBlock(text="final two")],
-            ]),
+                    [
+                        ToolUseBlock(
+                            call_id="h1",
+                            tool_name="handoff_worker",
+                            arguments={"input": "child task one"},
+                        )
+                    ],
+                    [TextBlock(text="final one")],
+                    [
+                        ToolUseBlock(
+                            call_id="h2",
+                            tool_name="handoff_worker",
+                            arguments={"input": "child task two"},
+                        )
+                    ],
+                    [TextBlock(text="final two")],
+                ]
+            ),
             sub_agents=[
                 SubAgentConfig(worker, retention=HistoryRetention.PERMANENT),
             ],

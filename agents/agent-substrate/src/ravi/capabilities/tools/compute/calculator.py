@@ -16,7 +16,9 @@ class CalculatorTool:
     """
 
     name = "calculator"
-    description = "Evaluate a Python arithmetic expression and return the numeric result."
+    description = (
+        "Evaluate a Python arithmetic expression and return the numeric result."
+    )
     input_schema: dict[str, object] = {
         "type": "object",
         "properties": {

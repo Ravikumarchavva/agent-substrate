@@ -16,7 +16,9 @@ from ravi.exceptions import MiddlewareTermination
 
 def _ctx(text: str = "hello") -> AgentRunContext:
     msg = ChatMessage(role="user", content=[TextBlock(text=text)])
-    return AgentRunContext(agent_name="TestAgent", run_id="r1", session_id="s1", messages=[msg])
+    return AgentRunContext(
+        agent_name="TestAgent", run_id="r1", session_id="s1", messages=[msg]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +89,7 @@ async def test_pipeline_halts_on_middleware_termination():
 @pytest.mark.asyncio
 async def test_pipeline_middleware_can_mutate_context():
     """Middleware can mutate context before calling next."""
+
     class AddMessageMiddleware:
         async def process(self, context: AgentRunContext, call_next) -> None:
             context.metadata["injected"] = True

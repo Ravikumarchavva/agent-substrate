@@ -11,22 +11,22 @@ async def test_mcp_tool_wrapping_and_execution():
     # Mock MCPClient
     client = Mock()
     client.is_connected = True
-    
+
     # Mock native MCP SDK response
     mock_mcp_item = Mock()
     mock_mcp_item.type = "text"
     mock_mcp_item.text = "hello from mcp"
-    
+
     mock_mcp_response = Mock()
     mock_mcp_response.content = [mock_mcp_item]
     mock_mcp_response.isError = False
-    
+
     client.call_tool = AsyncMock(return_value=mock_mcp_response)
 
     schema = {
         "type": "object",
         "properties": {"arg": {"type": "string"}},
-        "required": ["arg"]
+        "required": ["arg"],
     }
 
     tool = MCPTool(

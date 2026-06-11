@@ -62,7 +62,7 @@ def _progress_to_wire(ev: AgentProgress) -> WireEvent | list[WireEvent] | None:
         if name.startswith(_HANDOFF_PREFIX):
             return HandoffEvent(
                 source_agent=agent,
-                target_agent=name[len(_HANDOFF_PREFIX):],
+                target_agent=name[len(_HANDOFF_PREFIX) :],
                 depth=ev.depth,
             )
         args_raw = ev.metadata.get("tool_args", "{}")

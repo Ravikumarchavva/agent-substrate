@@ -9,6 +9,7 @@ from ravi.agents.middleware._contracts import ChatContext
 
 logger = setup_logging()
 
+
 def _backoff(attempt: int, base: float, max_delay: float, jitter: float) -> float:
     delay = min(base * (2**attempt), max_delay)
     return delay + random.uniform(0, jitter)
@@ -32,7 +33,9 @@ class RetryMiddleware:
         self.max_delay = max_delay
         self.jitter = jitter
 
-    async def process(self, context: ChatContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         attempt = 0
         while True:
             try:
@@ -40,9 +43,11 @@ class RetryMiddleware:
                 return
             except self.retryable_exceptions as exc:
                 if attempt >= self.max_retries:
-                    logger.warning("RetryMiddleware: max retries (%d) exhausted", self.max_retries)
+                    logger.warning(
+                        "RetryMiddleware: max retries (%d) exhausted", self.max_retries
+                    )
                     raise
-                
+
                 delay = _backoff(attempt, self.base_delay, self.max_delay, self.jitter)
                 logger.info(
                     "RetryMiddleware: attempt %d/%d, waiting %.1fs — %s",

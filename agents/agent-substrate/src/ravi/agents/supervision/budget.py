@@ -36,7 +36,8 @@ from __future__ import annotations
 import threading
 
 from ravi.kernel.errors import BudgetExhaustedError
-from ravi.kernel.identity import AgentId, Priority, Supervision
+from ravi.kernel.identity import AgentId
+from ravi.kernel.supervision import Priority, Supervision
 
 
 class SpawnBudget:
@@ -53,16 +54,14 @@ class SpawnBudget:
 
     def __init__(self, supervision: Supervision) -> None:
         self._max_agents = supervision.max_agents
-        self._total = 1                              # root agent already counts as 1
+        self._total = 1  # root agent already counts as 1
         self._active: dict[AgentId, Priority] = {}  # agent → its current priority
-        self._paused: set[AgentId] = set()           # cooperative pause signals
+        self._paused: set[AgentId] = set()  # cooperative pause signals
         self._lock = threading.Lock()
 
     # -- Acquisition ---------------------------------------------------------
 
-    def acquire(
-        self, agent_id: AgentId, priority: Priority = Priority.NORMAL
-    ) -> None:
+    def acquire(self, agent_id: AgentId, priority: Priority = Priority.NORMAL) -> None:
         """Reserve a slot for *agent_id* at *priority*.
 
         If the pool has room, grants the slot immediately.
@@ -92,9 +91,7 @@ class SpawnBudget:
                 )
 
             # HIGH/CRITICAL: try to preempt the lowest-priority victim.
-            candidates = [
-                (aid, p) for aid, p in self._active.items() if p < priority
-            ]
+            candidates = [(aid, p) for aid, p in self._active.items() if p < priority]
             if not candidates:
                 raise BudgetExhaustedError(
                     f"All {self._total} active agents are priority >= {priority.name}. "

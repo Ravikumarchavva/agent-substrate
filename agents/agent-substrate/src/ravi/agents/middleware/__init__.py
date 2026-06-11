@@ -22,7 +22,10 @@ from ravi.agents.middleware.retry import RetryMiddleware
 from ravi.agents.middleware.schema_validator import SchemaValidatorMiddleware
 
 # Observability
-from ravi.agents.middleware.observability import AgentTracingMiddleware, ChatTracingMiddleware
+from ravi.agents.middleware.observability import (
+    AgentTracingMiddleware,
+    ChatTracingMiddleware,
+)
 
 # Guardrails (safety / policy enforcement)
 from ravi.agents.middleware.guardrails import (

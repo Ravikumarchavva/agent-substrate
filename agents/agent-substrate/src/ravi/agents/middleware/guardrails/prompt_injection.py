@@ -26,6 +26,7 @@ _INJECTION_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"developer\s+mode", re.I),
 ]
 
+
 class PromptInjectionMiddleware:
     """Detect common prompt injection / jailbreak attempts."""
 
@@ -42,15 +43,15 @@ class PromptInjectionMiddleware:
                 except re.error as e:
                     raise ValueError(f"Invalid extra_pattern regex '{p}': {e}") from e
 
-    async def process(self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         if not context.messages:
             await call_next()
             return
 
         last_msg = context.messages[-1]
-        text = " ".join(
-            b.text for b in last_msg.content if isinstance(b, TextBlock)
-        )
+        text = " ".join(b.text for b in last_msg.content if isinstance(b, TextBlock))
 
         for pattern in self._patterns:
             match = pattern.search(text)
@@ -58,5 +59,5 @@ class PromptInjectionMiddleware:
                 raise MiddlewareTermination(
                     f"PromptInjection: Potential injection detected: '{match.group()[:60]}'"
                 )
-                
+
         await call_next()

@@ -19,11 +19,20 @@ Standard topic convention (enforced by the agents layer, not the kernel):
 
 These are pure data types. Transport (SSE, WebSocket, console) lives in the
 serving layer.
+
+Sequencing:
+    Every event carries a ``seq`` counter that is strictly increasing within
+    one run. Over pub/sub transports that may reorder delivery, consumers use
+    ``seq`` to reassemble events in emission order.  ``agent_id`` and ``run_id``
+    on every event allow demultiplexing concurrent multi-agent streams from a
+    single subscription.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import StrEnum
 
 from ravi.kernel.content import ContentBlock
 from ravi.kernel.identity import AgentId
@@ -40,6 +49,9 @@ class TextDelta:
     """Incremental text content — emitted token-by-token."""
 
     text: str
+    agent_id: AgentId | None = None
+    run_id: str = ""
+    seq: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,21 +59,21 @@ class ReasoningDelta:
     """Incremental reasoning / thinking trace — emitted as the model thinks."""
 
     text: str
+    agent_id: AgentId | None = None
+    run_id: str = ""
+    seq: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class CompletionEvent:
-    """Final token-stream event — carries the fully assembled response.
-
-    ``content`` is ``list[ContentBlock]`` so the stream layer stays
-    independent of LLM wire formats. ``usage`` carries the token counts
-    for this generation; defaults to ``Usage()`` when the adapter does
-    not yet populate it.
-    """
+    """Final token-stream event — carries the fully assembled response."""
 
     content: list[ContentBlock]
     usage: Usage = field(default_factory=Usage)
     metadata: dict[str, str] = field(default_factory=dict)
+    agent_id: AgentId | None = None
+    run_id: str = ""
+    seq: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,48 +88,55 @@ class StreamDone:
 # ---------------------------------------------------------------------------
 
 
-class AgentStep:
-    """Enumeration of progress step names. Use these string constants."""
+class AgentStep(StrEnum):
+    """Standard agent progress step names.
+
+    Using ``StrEnum`` ensures ``AgentProgress.step`` is always a known
+    value and enables exhaustive matching in consumers.
+    """
 
     STARTED = "started"
-    THINKING = "thinking"       # LLM call in flight
-    TOOL_CALL = "tool_call"     # about to execute a tool
-    TOOL_RESULT = "tool_result" # tool returned
-    HANDOFF = "handoff"         # delegating to a child agent
-    PAUSED = "paused"           # agent cooperatively paused by priority preemption
-    DONE = "done"               # agent finished successfully
-    ERROR = "error"             # agent encountered an unrecoverable error
+    THINKING = "thinking"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+    HANDOFF = "handoff"
+    PAUSED = "paused"
+    DONE = "done"
+    ERROR = "error"
 
 
 @dataclass(frozen=True, slots=True)
 class AgentProgress:
     """Structured progress event emitted by every agent at every step.
 
-    Every agent MUST emit these at the standard ``AgentStep.*`` points so
-    parents and the UI have full visibility into the supervision tree.
-
     Published to ``TopicId("agent.progress", run_id)`` — ONE topic per
     execution run shared by all agents in the tree. The ``agent_id``,
     ``parent_id``, and ``depth`` fields let the UI reconstruct the hierarchy
     from a single subscription.
+
+    ``seq`` is strictly increasing within one run so subscribers can detect
+    gaps and reorder out-of-order deliveries from pub/sub transports.
+
+    ``ts`` is the emission wall-clock time (UTC). Use for display only;
+    use ``seq`` for ordering.
     """
 
     agent_id: AgentId
-    step: str                                  # one of AgentStep.*
-    content: str                               # human-readable description
-    run_id: str = ""                           # routes event to the correct SSE stream
-    parent_id: AgentId | None = None           # direct manager; None = root agent
-    depth: int = 0                             # org level (0=root, 1=direct report, …)
+    step: AgentStep
+    content: str
+    run_id: str = ""
+    parent_id: AgentId | None = None
+    depth: int = 0
+    seq: int = 0
+    ts: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
     metadata: dict[str, str] = field(default_factory=dict)
 
 
 __all__ = [
-    # Token stream
     "TextDelta",
     "ReasoningDelta",
     "CompletionEvent",
     "StreamDone",
-    # Progress stream
     "AgentProgress",
     "AgentStep",
 ]

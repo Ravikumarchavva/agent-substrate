@@ -54,8 +54,12 @@ from ravi.integrations.llm.openai import (
     OpenAIClient,
     OpenAIEmbeddingClient,
 )
-# Universal OpenAI-compatible client lives in capabilities (supports all providers)
-from ravi.capabilities.llm import OpenAIChatCompletionClient
+
+# Universal clients live in capabilities (no external API dependency)
+from ravi.capabilities.llm import (
+    OpenAIChatCompletionClient,
+    SentenceTransformersEmbeddingClient,
+)
 
 __all__ = [
     # Factory
@@ -76,4 +80,5 @@ __all__ = [
     "OpenAIClient",
     "OpenAIChatCompletionClient",
     "OpenAIEmbeddingClient",
+    "SentenceTransformersEmbeddingClient",
 ]

@@ -68,7 +68,9 @@ class PipelineStore:
             result = await session.execute(
                 text(f"SELECT definition_json FROM {self._TABLE} ORDER BY created_at"),  # noqa: S608
             )
-            return [PipelineDef.from_dict(json.loads(row.definition_json)) for row in result]
+            return [
+                PipelineDef.from_dict(json.loads(row.definition_json)) for row in result
+            ]
 
     async def delete(self, name: str) -> bool:
         """Delete a pipeline by name. Returns True if a row was deleted."""

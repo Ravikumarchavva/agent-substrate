@@ -16,7 +16,9 @@ class AuditLoggerMiddleware:
     def __init__(self, *, log_level: int = logging.DEBUG) -> None:
         self.log_level = log_level
 
-    async def process(self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         t0 = time.monotonic()
         logger.log(
             self.log_level,

@@ -180,7 +180,9 @@ async def load_session_memory(
         if chat_messages:
             logger.debug(
                 "Seeded session %s with %d messages from %s",
-                session_id, len(chat_messages), cold_store_name,
+                session_id,
+                len(chat_messages),
+                cold_store_name,
             )
 
     if history is not None:
@@ -189,13 +191,18 @@ async def load_session_memory(
         if hasattr(history, "count_messages"):
             hit = await history.count_messages(_aid, session_id=session_id) > 0  # type: ignore[attr-defined]
         else:
-            hit = len(await history.get_messages(_aid, session_id=session_id, limit=1)) > 0
+            hit = (
+                len(await history.get_messages(_aid, session_id=session_id, limit=1))
+                > 0
+            )
 
         if hit:
             logger.debug("History hit for %s", session_id)
             return history
 
-        logger.debug("History miss for %s — loading from %s", session_id, cold_store_name)
+        logger.debug(
+            "History miss for %s — loading from %s", session_id, cold_store_name
+        )
         await _seed(history)
         return history
 

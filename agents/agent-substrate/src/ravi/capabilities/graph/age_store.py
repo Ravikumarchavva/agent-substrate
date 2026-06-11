@@ -213,8 +213,8 @@ class AGEGraphStore:
                         pass
 
         return SubGraph(
-            entities=list(entities.values()),
-            relationships=relationships,
+            entities=tuple(entities.values()),
+            relationships=tuple(relationships),
         )
 
     async def delete_entity(self, entity_id: str) -> bool:
@@ -224,4 +224,13 @@ class AGEGraphStore:
             return bool(result)
         except Exception:
             logger.warning("Delete entity failed for %s", entity_id, exc_info=True)
+            return False
+
+    async def delete_relationship(self, relationship_id: str) -> bool:
+        cypher = f"MATCH ()-[r {{_id: '{relationship_id}'}}]-() DELETE r RETURN count(r)"
+        try:
+            result = await self._execute_cypher(cypher)
+            return bool(result)
+        except Exception:
+            logger.warning("Delete relationship failed for %s", relationship_id, exc_info=True)
             return False

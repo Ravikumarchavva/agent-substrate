@@ -30,9 +30,10 @@ Sequencing:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
+
+from pydantic import BaseModel, Field
 
 from ravi.kernel.content import ContentBlock
 from ravi.kernel.identity import AgentId
@@ -44,8 +45,7 @@ from ravi.kernel.usage import Usage
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class TextDelta:
+class TextDelta(BaseModel):
     """Incremental text content — emitted token-by-token."""
 
     text: str
@@ -53,9 +53,10 @@ class TextDelta:
     run_id: str = ""
     seq: int = 0
 
+    model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
-@dataclass(frozen=True, slots=True)
-class ReasoningDelta:
+
+class ReasoningDelta(BaseModel):
     """Incremental reasoning / thinking trace — emitted as the model thinks."""
 
     text: str
@@ -63,24 +64,28 @@ class ReasoningDelta:
     run_id: str = ""
     seq: int = 0
 
+    model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
-@dataclass(frozen=True, slots=True)
-class CompletionEvent:
+
+class CompletionEvent(BaseModel):
     """Final token-stream event — carries the fully assembled response."""
 
     content: list[ContentBlock]
-    usage: Usage = field(default_factory=Usage)
-    metadata: dict[str, str] = field(default_factory=dict)
+    usage: Usage = Field(default_factory=Usage)
+    metadata: dict[str, str] = Field(default_factory=dict)
     agent_id: AgentId | None = None
     run_id: str = ""
     seq: int = 0
 
+    model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
-@dataclass(frozen=True, slots=True)
-class StreamDone:
+
+class StreamDone(BaseModel):
     """End-of-token-stream sentinel. Consumers stop on receipt."""
 
     reason: str = "complete"
+
+    model_config = {"frozen": True}
 
 
 # ---------------------------------------------------------------------------
@@ -105,8 +110,7 @@ class AgentStep(StrEnum):
     ERROR = "error"
 
 
-@dataclass(frozen=True, slots=True)
-class AgentProgress:
+class AgentProgress(BaseModel):
     """Structured progress event emitted by every agent at every step.
 
     Published to ``TopicId("agent.progress", run_id)`` — ONE topic per
@@ -128,8 +132,10 @@ class AgentProgress:
     parent_id: AgentId | None = None
     depth: int = 0
     seq: int = 0
-    ts: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
-    metadata: dict[str, str] = field(default_factory=dict)
+    ts: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+    model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
 
 __all__ = [

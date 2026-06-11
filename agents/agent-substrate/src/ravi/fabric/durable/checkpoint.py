@@ -5,10 +5,11 @@ from typing import Any
 
 
 @dataclass
-class Checkpoint:
+class FlowCheckpoint:
     run_id: str
     flow_id: str
     step_index: int
     state: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now())
     resumed_at: datetime | None = None
+

@@ -29,5 +29,11 @@ from ravi.capabilities.llm.chat_client import OpenAIChatCompletionClient
 from ravi.capabilities.llm.sentence_transformers_embedding_client import (
     SentenceTransformersEmbeddingClient,
 )
+from ravi.capabilities.llm.openai_embedding_client import OpenAIEmbeddingClient
 
-__all__ = ["OpenAIChatCompletionClient", "SentenceTransformersEmbeddingClient"]
+__all__ = [
+    "OpenAIChatCompletionClient",
+    "SentenceTransformersEmbeddingClient",
+    "OpenAIEmbeddingClient",
+]
+

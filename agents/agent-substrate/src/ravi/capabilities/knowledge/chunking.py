@@ -16,6 +16,7 @@ import re
 import uuid
 from typing import Any
 
+from ravi.kernel.content import TextBlock
 from ravi.kernel.vector import Document
 
 
@@ -47,7 +48,7 @@ class TextChunker:
             if chunk_text:
                 docs.append(
                     Document(
-                        text=chunk_text,
+                        content=[TextBlock(text=chunk_text)],
                         metadata={**metadata, "chunk_index": len(docs)},
                         id=str(uuid.uuid4()),
                     )
@@ -87,7 +88,7 @@ class SentenceChunker:
             if current_len + len(sentence) > self.max_chunk_size and current:
                 docs.append(
                     Document(
-                        text=" ".join(current),
+                        content=[TextBlock(text=" ".join(current))],
                         metadata={**metadata, "chunk_index": len(docs)},
                         id=str(uuid.uuid4()),
                     )
@@ -100,7 +101,7 @@ class SentenceChunker:
         if current:
             docs.append(
                 Document(
-                    text=" ".join(current),
+                    content=[TextBlock(text=" ".join(current))],
                     metadata={**metadata, "chunk_index": len(docs)},
                     id=str(uuid.uuid4()),
                 )
@@ -128,7 +129,7 @@ class PageChunker:
             if page_text:
                 docs.append(
                     Document(
-                        text=page_text,
+                        content=[TextBlock(text=page_text)],
                         metadata={**metadata, "page_number": i + 1},
                         id=str(uuid.uuid4()),
                     )

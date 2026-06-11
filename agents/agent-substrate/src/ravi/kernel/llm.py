@@ -91,6 +91,9 @@ class EmbeddingClient(Protocol):
 
     async def embed(self, texts: list[str]) -> EmbeddingResult: ...
 
+    async def embed_single(self, text: str) -> list[float]: ...
+
+
 
 __all__ = [
     "GenerationOptions",

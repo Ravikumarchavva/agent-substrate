@@ -101,8 +101,9 @@ class GraphRAGPipeline:
                     )
                 ),
             )
-            text_parts = [b.text for b in response if isinstance(b, TextBlock)]
+            text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
             text_content = "".join(text_parts)
+
 
             data = json.loads(text_content.strip())
 
@@ -158,15 +159,77 @@ class GraphRAGPipeline:
         graph_depth: int = 1,
     ) -> list[SearchResult]:
         """Query with combined vector + graph context."""
-        # Vector search
+        # 1. Vector search
         vector_results = await self._rag.query(
             question, collection=collection, limit=limit
         )
 
-        # Graph enrichment: extract key terms from question, search graph
-        # This is a simplified approach — full GraphRAG would do entity linking
-        # For now, just return vector results (graph enrichment can be added
-        # as needed without changing the interface)
+        # 2. Graph enrichment: extract potential entities from question / vector results
+        words = [w.strip("?,.!:;()\"'") for w in question.split()]
+        keywords = {w.lower() for w in words if len(w) > 3}
+
+        # Also extract words from the vector search hits to enrich
+        for r in vector_results:
+            for word in r.to_text().split()[:50]:  # Look at the beginning of chunks
+                w = word.strip("?,.!:;()\"'")
+                if len(w) > 4 and w[0].isupper():
+                    keywords.add(w.lower())
+
+        # If CypherCapable, query the graph to find matching entities
+        from ravi.kernel.graph import CypherCapable
+        matched_entities = []
+
+        if isinstance(self._graph, CypherCapable):
+            try:
+                # Retrieve all nodes (limit to 100) to find matches in Python
+                rows = await self._graph.query_cypher("MATCH (n) RETURN n LIMIT 100")
+                for row in rows:
+                    for val in row.values():
+                        if isinstance(val, str):
+                            try:
+                                data = json.loads(val)
+                                eid = data.get("_id", str(data.get("id", "")))
+                                label = data.get("label", "Unknown")
+                                props = {k: v for k, v in data.items() if k not in ("id", "_id", "label")}
+                                name = props.get("name", "").lower() or eid.lower()
+                                if any(kw in name for kw in keywords):
+                                    from ravi.kernel.graph import Entity
+                                    matched_entities.append(Entity(id=eid, label=label, properties=props))
+                            except Exception:
+                                pass
+            except Exception:
+                logger.warning("Failed to query Cypher for entity matches", exc_info=True)
+
+        # Retrieve neighbors of matched entities
+        relationships_found = []
+        entities_found = set()
+
+        for entity in matched_entities[:5]:  # Limit to top 5 matches to avoid context bloat
+            subgraph = await self._graph.get_neighbors(entity.id, depth=graph_depth)
+            for e in subgraph.entities:
+                entities_found.add(f"{e.label}({e.properties.get('name', e.id)})")
+            for r in subgraph.relationships:
+                relationships_found.append(
+                    f"{r.source_id} -[{r.type}]-> {r.target_id}"
+                )
+
+        if entities_found or relationships_found:
+            graph_text = "Knowledge Graph Context:\n"
+            if entities_found:
+                graph_text += f"- Related Entities: {', '.join(entities_found)}\n"
+            if relationships_found:
+                graph_text += "- Relationships:\n" + "\n".join(f"  * {rel}" for rel in relationships_found[:10])
+
+            # Append graph SearchResult
+            from ravi.kernel import TextBlock
+            graph_result = SearchResult(
+                id="graph_context",
+                content=[TextBlock(text=graph_text)],
+                score=1.0,
+                metadata={"source": "knowledge_graph"},
+            )
+            return [*vector_results, graph_result]
+
         return vector_results
 
     async def query_with_context(
@@ -176,12 +239,44 @@ class GraphRAGPipeline:
         collection: str = "default",
         limit: int = 5,
         system: str | None = None,
+        graph_depth: int = 1,
     ) -> str:
         """Full GraphRAG: vector search + graph context → LLM answer."""
-        return await self._rag.query_with_context(
+        from ravi.kernel import ChatMessage, TextBlock
+
+        results = await self.query(
             question,
             collection=collection,
-            model_client=self._model,
             limit=limit,
-            system=system,
+            graph_depth=graph_depth,
         )
+
+        # Build context block
+        context_parts: list[str] = []
+        for i, r in enumerate(results, 1):
+            context_parts.append(f"[{i}] {r.to_text()}")
+        context_block = "\n\n".join(context_parts)
+
+        system_prompt = system or (
+            "You are a helpful assistant. Answer the user's question using "
+            "the provided vector context and knowledge graph context."
+        )
+
+        messages = [
+            ChatMessage(role="user", content=[TextBlock(text=question)]),
+        ]
+
+        from ravi.kernel.llm import GenerationOptions
+
+        response = await self._model.generate(
+            messages,
+            options=GenerationOptions(
+                system_instructions=f"{system_prompt}\n\nContext:\n{context_block}"
+            ),
+        )
+
+        # Extract text from response blocks
+        text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
+        return "".join(text_parts)
+
+

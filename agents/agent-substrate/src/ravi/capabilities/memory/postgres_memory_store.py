@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS agent_memories (
     agent_name  TEXT NOT NULL,
     content     TEXT NOT NULL,
     metadata    JSONB NOT NULL DEFAULT '{}',
+    namespace   VARCHAR(255) NOT NULL DEFAULT 'default',
     search_vec  TSVECTOR GENERATED ALWAYS AS
                     (to_tsvector('english', content)) STORED,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -55,6 +56,8 @@ CREATE INDEX IF NOT EXISTS agent_memories_search_idx
     ON agent_memories USING GIN (search_vec);
 CREATE INDEX IF NOT EXISTS agent_memories_agent_idx
     ON agent_memories (agent_name);
+CREATE INDEX IF NOT EXISTS agent_memories_namespace_idx
+    ON agent_memories (namespace);
 """
 
 
@@ -88,7 +91,16 @@ class PostgresMemoryStore:
     async def create_tables(self) -> None:
         """Create the ``agent_memories`` table if it does not exist."""
         async with self._eng().begin() as conn:
-            await conn.execute(text(_CREATE_TABLE))
+            for stmt in _CREATE_TABLE.split(";"):
+                stmt_clean = stmt.strip()
+                if stmt_clean:
+                    await conn.execute(text(stmt_clean))
+            await conn.execute(
+                text("ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default'")
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS agent_memories_namespace_idx ON agent_memories (namespace)")
+            )
 
     def _eng(self) -> AsyncEngine:
         if self._engine is None:
@@ -102,23 +114,26 @@ class PostgresMemoryStore:
         agent_id: AgentId,
         content: str,
         *,
+        namespace: str = "default",
         metadata: dict[str, Any] | None = None,
+        ttl_seconds: int | None = None,
     ) -> str:
         mem_id = uuid.uuid4().hex
         async with self._eng().begin() as conn:
             await conn.execute(
                 text(
-                    "INSERT INTO agent_memories (id, agent_name, content, metadata) "
-                    "VALUES (:id, :agent_name, :content, CAST(:metadata AS jsonb))"
+                    "INSERT INTO agent_memories (id, agent_name, content, metadata, namespace) "
+                    "VALUES (:id, :agent_name, :content, CAST(:metadata AS jsonb), :namespace)"
                 ),
                 {
                     "id": mem_id,
                     "agent_name": str(agent_id),
                     "content": content,
                     "metadata": json.dumps(metadata or {}),
+                    "namespace": namespace,
                 },
             )
-        logger.debug("[memory] saved id=%s agent=%s", mem_id, agent_id)
+        logger.debug("[memory] saved id=%s agent=%s namespace=%s", mem_id, agent_id, namespace)
         return mem_id
 
     async def search(
@@ -126,6 +141,7 @@ class PostgresMemoryStore:
         agent_id: AgentId,
         query: str,
         *,
+        namespace: str = "default",
         limit: int = 10,
     ) -> list[Memory]:
         async with self._eng().begin() as conn:
@@ -134,12 +150,12 @@ class PostgresMemoryStore:
                     "SELECT id, content, metadata, "
                     "    ts_rank(search_vec, plainto_tsquery('english', :query)) AS score "
                     "FROM agent_memories "
-                    "WHERE agent_name = :agent_name "
+                    "WHERE agent_name = :agent_name AND namespace = :namespace "
                     "  AND search_vec @@ plainto_tsquery('english', :query) "
                     "ORDER BY score DESC "
                     "LIMIT :limit"
                 ),
-                {"agent_name": str(agent_id), "query": query, "limit": limit},
+                {"agent_name": str(agent_id), "query": query, "limit": limit, "namespace": namespace},
             )
             return [
                 Memory(
@@ -153,15 +169,21 @@ class PostgresMemoryStore:
                 for row in rows
             ]
 
-    async def get(self, agent_id: AgentId, memory_id: str) -> Memory | None:
+    async def get(
+        self,
+        agent_id: AgentId,
+        memory_id: str,
+        *,
+        namespace: str = "default",
+    ) -> Memory | None:
         async with self._eng().begin() as conn:
             row = (
                 await conn.execute(
                     text(
                         "SELECT id, content, metadata FROM agent_memories "
-                        "WHERE id = :id AND agent_name = :agent_name"
+                        "WHERE id = :id AND agent_name = :agent_name AND namespace = :namespace"
                     ),
-                    {"id": memory_id, "agent_name": str(agent_id)},
+                    {"id": memory_id, "agent_name": str(agent_id), "namespace": namespace},
                 )
             ).first()
         if row is None:
@@ -174,21 +196,32 @@ class PostgresMemoryStore:
             else json.loads(row.metadata),
         )
 
-    async def delete(self, agent_id: AgentId, memory_id: str) -> bool:
+    async def delete(
+        self,
+        agent_id: AgentId,
+        memory_id: str,
+        *,
+        namespace: str = "default",
+    ) -> bool:
         async with self._eng().begin() as conn:
             result = await conn.execute(
                 text(
-                    "DELETE FROM agent_memories WHERE id = :id AND agent_name = :agent_name"
+                    "DELETE FROM agent_memories WHERE id = :id AND agent_name = :agent_name AND namespace = :namespace"
                 ),
-                {"id": memory_id, "agent_name": str(agent_id)},
+                {"id": memory_id, "agent_name": str(agent_id), "namespace": namespace},
             )
         return result.rowcount > 0
 
-    async def clear(self, agent_id: AgentId) -> None:
+    async def clear(
+        self,
+        agent_id: AgentId,
+        *,
+        namespace: str = "default",
+    ) -> None:
         async with self._eng().begin() as conn:
             await conn.execute(
-                text("DELETE FROM agent_memories WHERE agent_name = :agent_name"),
-                {"agent_name": str(agent_id)},
+                text("DELETE FROM agent_memories WHERE agent_name = :agent_name AND namespace = :namespace"),
+                {"agent_name": str(agent_id), "namespace": namespace},
             )
 
     async def __aenter__(self) -> PostgresMemoryStore:

@@ -37,8 +37,9 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import itertools
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -51,6 +52,8 @@ from ravi.kernel import (
     ContentBlock,
     ErrorBlock,
     MessageContext,
+    RunContext,
+    RuntimeRef,
     Supervision,
     TextBlock,
     Tool,
@@ -61,7 +64,9 @@ from ravi.kernel import (
     ToolUseBlock,
     UIResourceBlock,
     AgentCrashError,
+    JsonObject,
 )
+from ravi.kernel.approval import ApprovalHandler
 from ravi.kernel.llm import GenerationOptions
 from ravi.kernel.stream import (
     AgentProgress,
@@ -90,8 +95,6 @@ from ravi.logger import setup_logging
 
 logger = setup_logging()
 
-# Signature: (tool_name, arguments) → True=approved, False=denied
-ApprovalHandler = Callable[[str, dict[str, Any]], Awaitable[bool]]
 
 
 @dataclass
@@ -227,6 +230,15 @@ class ReActAgent:
             return await self.run(text)
         return None
 
+    async def bind(self, runtime: RuntimeRef) -> None:
+        self.runtime = runtime
+
+    async def save_state(self) -> JsonObject:
+        return {"name": self.name, "session_id": self.id.key}
+
+    async def load_state(self, state: JsonObject) -> None:
+        pass
+
     # -- Non-streaming run ---------------------------------------------------
 
     async def _react(
@@ -255,6 +267,9 @@ class ReActAgent:
         else:
             rid = uuid4().hex
 
+        _seq = itertools.count()
+        run_ctx = RunContext.standalone(trace_id=rid)
+
         tool_calls: list[ToolCallRecord] = []
 
         await self.hooks.dispatch(
@@ -266,7 +281,7 @@ class ReActAgent:
                 "input": input_text[:80],
             },
         )
-        await self._emit_progress(AgentStep.STARTED, input_text[:120], rid)
+        await self._emit_progress(AgentStep.STARTED, input_text[:120], rid, seq=next(_seq))
         logger.info(
             "[%s] run start (resume=%s, stream=%s, session=%s): %.80s",
             self.name,
@@ -295,6 +310,9 @@ class ReActAgent:
         async def _core_loop(ctx: AgentRunContext) -> None:
             try:
                 for step in range(1, self.max_iterations + 1):
+                    # -- cooperative cancellation check -----------------------------
+                    run_ctx.check()
+
                     # -- cooperative pause check ------------------------------------
                     if self.spawn_budget is not None and self.spawn_budget.is_paused(
                         self.id
@@ -305,7 +323,7 @@ class ReActAgent:
                             step,
                         )
                         await self._emit_progress(
-                            AgentStep.PAUSED, "paused by priority preemption", rid
+                            AgentStep.PAUSED, "paused by priority preemption", rid, seq=next(_seq)
                         )
                         await self.hooks.dispatch(
                             HookEvent.RUN_END,
@@ -329,6 +347,9 @@ class ReActAgent:
                     )
                     messages = await self._prompt_window(sid)
 
+                    # -- cooperative cancellation check -----------------------------
+                    run_ctx.check()
+
                     await self.hooks.dispatch(
                         HookEvent.LLM_START,
                         {
@@ -337,7 +358,7 @@ class ReActAgent:
                             "message_count": len(messages),
                         },
                     )
-                    await self._emit_progress(AgentStep.THINKING, f"step {step}", rid)
+                    await self._emit_progress(AgentStep.THINKING, f"step {step}", rid, seq=next(_seq))
 
                     # -- ExecutionBudget: count prompt tokens for cost estimation --
                     if self.execution_budget is not None:
@@ -375,7 +396,14 @@ class ReActAgent:
                                 messages, options=opts
                             ):
                                 if isinstance(event, (TextDelta, ReasoningDelta)):
-                                    await _event_q.put(event)
+                                    stamped = event.model_copy(
+                                        update={
+                                            "seq": next(_seq),
+                                            "agent_id": self.id,
+                                            "run_id": rid,
+                                        }
+                                    )
+                                    await _event_q.put(stamped)
                                 elif isinstance(event, CompletionEvent):
                                     content = event.content
                                     turn_usage = event.usage
@@ -424,9 +452,17 @@ class ReActAgent:
                             HookEvent.RUN_END,
                             {"agent": self.name, "run_id": rid, "status": "success"},
                         )
-                        await self._emit_progress(AgentStep.DONE, output[:120], rid)
+                        await self._emit_progress(AgentStep.DONE, output[:120], rid, seq=next(_seq))
                         if stream:
-                            await _event_q.put(CompletionEvent(content=content))
+                            await _event_q.put(
+                                CompletionEvent(
+                                    content=content,
+                                    seq=next(_seq),
+                                    agent_id=self.id,
+                                    run_id=rid,
+                                    usage=turn_usage,
+                                )
+                            )
 
                         await _event_q.put(
                             _Finished(
@@ -454,6 +490,7 @@ class ReActAgent:
                             AgentStep.TOOL_CALL,
                             tu.tool_name,
                             rid,
+                            seq=next(_seq),
                             call_id=tu.call_id,
                             tool_args=json.dumps(dict(tu.arguments)),
                         )
@@ -474,7 +511,13 @@ class ReActAgent:
                             tool.set_progress_sink(progress_q)
 
                     async def _run(t: ToolUseBlock) -> None:
-                        r, b = await self._execute_tool(t, rid)
+                        r, b = await self._execute_tool(
+                            t,
+                            rid,
+                            run_ctx=run_ctx,
+                            seq_counter=_seq,
+                            event_sink=_event_q if stream else None,
+                        )
                         await done_q.put((t, r, b))
 
                     tasks = [asyncio.create_task(_run(tu)) for tu in tool_uses]
@@ -516,6 +559,7 @@ class ReActAgent:
                             AgentStep.TOOL_RESULT,
                             f"{tu_done.tool_name}: {'error' if record.is_error else 'ok'}",
                             rid,
+                            seq=next(_seq),
                             call_id=tu_done.call_id,
                             **ui_meta,
                         )
@@ -524,6 +568,7 @@ class ReActAgent:
                         completed += 1
 
                     # Final drain — any events emitted right before task completion
+                    # (Also stamp them since they originate from subagents)
                     while not progress_q.empty():
                         sub_event = progress_q.get_nowait()
                         if stream:
@@ -559,7 +604,7 @@ class ReActAgent:
                     {"agent": self.name, "run_id": rid, "status": "max_iterations"},
                 )
                 await self._emit_progress(
-                    AgentStep.DONE, last_output[:120], rid, status="max_iterations"
+                    AgentStep.DONE, last_output[:120], rid, seq=next(_seq), status="max_iterations"
                 )
                 await _event_q.put(
                     _Finished(
@@ -580,7 +625,7 @@ class ReActAgent:
                     {"agent": self.name, "run_id": rid, "status": "guardrail_tripped"},
                 )
                 await self._emit_progress(
-                    AgentStep.ERROR, f"guardrail: {exc.message}", rid
+                    AgentStep.ERROR, f"guardrail: {exc.message}", rid, seq=next(_seq)
                 )
                 await _event_q.put(
                     _Finished(
@@ -597,7 +642,7 @@ class ReActAgent:
 
             except BudgetExceededError as exc:
                 logger.warning("[%s] budget exceeded: %s", self.name, exc)
-                await self._emit_progress(AgentStep.ERROR, f"budget: {exc}", rid)
+                await self._emit_progress(AgentStep.ERROR, f"budget: {exc}", rid, seq=next(_seq))
                 await self.hooks.dispatch(
                     HookEvent.RUN_END,
                     {"agent": self.name, "run_id": rid, "status": "budget_exceeded"},
@@ -627,7 +672,7 @@ class ReActAgent:
                     },
                 )
                 await self._emit_progress(
-                    AgentStep.ERROR, f"crash: {type(exc).__name__}: {exc}", rid
+                    AgentStep.ERROR, f"crash: {type(exc).__name__}: {exc}", rid, seq=next(_seq)
                 )
                 raise AgentCrashError(
                     f"Agent '{self.name}' crashed: {exc}",
@@ -736,7 +781,7 @@ class ReActAgent:
     # -- Progress reporting --------------------------------------------------
 
     async def _emit_progress(
-        self, step: str, content: str, run_id: str, **meta: str
+        self, step: str, content: str, run_id: str, seq: int = 0, **meta: str
     ) -> AgentProgress | None:
         """Publish an ``AgentProgress`` event to the run's shared progress topic.
 
@@ -762,6 +807,7 @@ class ReActAgent:
             run_id=run_id,
             parent_id=sv.parent_id if sv is not None else None,
             depth=sv.depth if sv is not None else 0,
+            seq=seq,
             metadata=dict(meta),
         )
         try:
@@ -817,7 +863,12 @@ class ReActAgent:
         return content
 
     async def _execute_tool(
-        self, tu: ToolUseBlock, rid: str = ""
+        self,
+        tu: ToolUseBlock,
+        rid: str = "",
+        run_ctx: RunContext | None = None,
+        seq_counter: itertools.count | None = None,
+        event_sink: asyncio.Queue[Any] | None = None,
     ) -> tuple[ToolCallRecord, ToolResultBlock]:
         """Run a single tool call, return a record and a ToolResultBlock."""
         t0 = time.monotonic()
@@ -850,11 +901,47 @@ class ReActAgent:
             and _risk_order[tool_risk] >= _risk_order[self._approval_required_risk]
         )
         if needs_approval:
-            approved = await self._approval_handler(tu.tool_name, dict(tu.arguments))  # type: ignore[misc]
+            from ravi.kernel.approval import ApprovalRequest, ApprovalDecision
+            from ravi.kernel.tools import ToolCallRequest
+
+            paused_progress = await self._emit_progress(
+                AgentStep.PAUSED,
+                f"Awaiting approval for {tu.tool_name}",
+                rid,
+                seq=next(seq_counter) if seq_counter is not None else 0,
+                reason="hitl_approval",
+            )
+            if event_sink is not None and paused_progress is not None:
+                await event_sink.put(paused_progress)
+
+            if hasattr(self._approval_handler, "request"):
+                decision = await self._approval_handler.request(
+                    ApprovalRequest(
+                        call=ToolCallRequest(name=tu.tool_name, arguments=dict(tu.arguments)),
+                        risk=tool_risk,
+                        agent_id=self.id,
+                        run_id=rid,
+                    )
+                )
+                approved = decision == ApprovalDecision.APPROVED
+            else:
+                # Backwards compatibility for legacy callable handlers (e.g. tests)
+                approved = await self._approval_handler(tu.tool_name, dict(tu.arguments))  # type: ignore
+                decision = ApprovalDecision.APPROVED if approved else ApprovalDecision.DENIED
+
+            thinking_progress = await self._emit_progress(
+                AgentStep.THINKING,
+                f"Approval decision: {decision}. Resuming.",
+                rid,
+                seq=next(seq_counter) if seq_counter is not None else 0,
+            )
+            if event_sink is not None and thinking_progress is not None:
+                await event_sink.put(thinking_progress)
+
             if not approved:
                 duration = (time.monotonic() - t0) * 1000
-                err = f"Tool '{tu.tool_name}' denied by approval handler"
-                logger.info("[%s] HITL denied: %s", self.name, tu.tool_name)
+                err = f"Tool '{tu.tool_name}' denied by approval handler: {decision}"
+                logger.info("[%s] HITL denied: %s (decision=%s)", self.name, tu.tool_name, decision)
                 return (
                     ToolCallRecord(
                         name=tu.tool_name,
@@ -885,6 +972,8 @@ class ReActAgent:
             )
 
             async def _do_function(c: FunctionContext) -> None:
+                if run_ctx is not None:
+                    run_ctx.check()
 
                 if self.tool_timeout is not None:
                     c.result = await asyncio.wait_for(

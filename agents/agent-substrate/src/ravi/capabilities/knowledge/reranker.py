@@ -68,13 +68,17 @@ class LLMReranker:
         ]
 
         try:
+            from ravi.kernel.llm import GenerationOptions
+
             response = await self._client.generate(
                 messages,
-                system=(
-                    "You are a relevance judge. Given a query and numbered documents, "
-                    "return a JSON array of document indices sorted by relevance to "
-                    "the query (most relevant first). Return ONLY the JSON array of "
-                    "integer indices, e.g. [2, 0, 4, 1, 3]."
+                options=GenerationOptions(
+                    system_instructions=(
+                        "You are a relevance judge. Given a query and numbered documents, "
+                        "return a JSON array of document indices sorted by relevance to "
+                        "the query (most relevant first). Return ONLY the JSON array of "
+                        "integer indices, e.g. [2, 0, 4, 1, 3]."
+                    )
                 ),
             )
             text_parts = [b.text for b in response if isinstance(b, TextBlock)]

@@ -22,7 +22,9 @@ class FileValidatorMiddleware:
         self.allowed_extensions = allowed_extensions
         self.max_file_size_bytes = max_file_size_bytes
 
-    async def process(self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         if not context.arguments:
             await call_next()
             return
@@ -35,7 +37,9 @@ class FileValidatorMiddleware:
 
             p = Path(value)
             if not p.exists():
-                raise MiddlewareTermination(f"FileValidator: {key}={value!r} does not exist")
+                raise MiddlewareTermination(
+                    f"FileValidator: {key}={value!r} does not exist"
+                )
 
             if p.is_file():
                 if self.allowed_extensions is not None:

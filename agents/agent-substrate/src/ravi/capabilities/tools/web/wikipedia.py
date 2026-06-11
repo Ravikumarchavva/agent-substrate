@@ -67,7 +67,9 @@ class WikipediaTool:
                 hits = search_data.get("query", {}).get("search", [])
                 if not hits:
                     return ToolExecutionResult(
-                        content=[TextBlock(text=f"No Wikipedia article found for: {query}")],
+                        content=[
+                            TextBlock(text=f"No Wikipedia article found for: {query}")
+                        ],
                     )
 
                 title = hits[0]["title"]
@@ -118,7 +120,11 @@ class WikipediaTool:
                         summary_resp.raise_for_status()
                         data = summary_resp.json()
                         summary = data.get("extract", "").strip()
-                        url = data.get("content_urls", {}).get("desktop", {}).get("page", "")
+                        url = (
+                            data.get("content_urls", {})
+                            .get("desktop", {})
+                            .get("page", "")
+                        )
                         output = f"# {title}\n\n{summary}"
                         if url:
                             output += f"\n\nSource: {url}"

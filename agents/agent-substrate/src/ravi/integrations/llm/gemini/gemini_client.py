@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types as genai_types
 
 import uuid
-from ravi.kernel.llm import LLMClient, LLMResponse, Usage
+from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,
@@ -23,9 +23,18 @@ from ravi.integrations.llm.encoders.gemini import (
 )
 
 if TYPE_CHECKING:
-    from pydantic import BaseModel
+    pass
 
 logger = setup_logging()
+
+
+def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str, Any]]]:
+    if not options.tools:
+        return None
+    return [
+        {"name": t.name, "description": t.description, "parameters": t.input_schema}
+        for t in options.tools
+    ]
 
 
 class GeminiClient(LLMClient):
@@ -167,44 +176,41 @@ class GeminiClient(LLMClient):
     async def generate(
         self,
         messages: list[ChatMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
         *,
-        system: str = "",
-        tool_choice: Optional[str | dict[str, Any]] = None,
-        response_format: Optional[type["BaseModel"]] = None,
-        **kwargs: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
         """Generate a single response from Gemini using GenerateContent API."""
+        tool_dicts = _tools_from_options(options)
+        response_format = options.response_format
         _, contents = self._serialize_messages(messages)
-        system_instruction = system
 
         config: dict[str, Any] = {}
 
-        if "temperature" in kwargs:
-            config["temperature"] = kwargs["temperature"]
+        if options.temperature is not None:
+            config["temperature"] = options.temperature
         else:
             config["temperature"] = self.temperature
 
-        max_tokens = kwargs.get("max_tokens", self.max_tokens)
+        max_tokens = options.max_tokens or self.max_tokens
         if max_tokens:
             config["max_output_tokens"] = max_tokens
 
-        if system_instruction:
-            config["system_instruction"] = system_instruction
+        if options.system_instructions:
+            config["system_instruction"] = options.system_instructions
 
-        gemini_tools = self._serialize_tools(tools)
-        normalized_tool_config = self._build_tool_config(tool_choice)
+        gemini_tools = self._serialize_tools(tool_dicts)
+        normalized_tool_config = self._build_tool_config(options.tool_choice)
         if gemini_tools:
             config["tools"] = gemini_tools
             if normalized_tool_config is not None:
                 config["tool_config"] = normalized_tool_config
 
-        if response_format is not None and not tools:
+        if response_format is not None and not tool_dicts:
             config["response_mime_type"] = "application/json"
             config["response_schema"] = response_format
 
         response = await self.client.aio.models.generate_content(
-            model=kwargs.get("model", self.model),
+            model=self.model,
             contents=cast(Any, contents),
             config=genai_types.GenerateContentConfig(**config),
         )
@@ -257,37 +263,40 @@ class GeminiClient(LLMClient):
 
         return LLMResponse(content=final_blocks, usage=usage)
 
-    async def generate_stream(
+    def generate_stream(
         self,
         messages: list[ChatMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
         *,
-        system: str = "",
-        tool_choice: Optional[str | dict[str, Any]] = None,
-        response_format: Optional[type["BaseModel"]] = None,
-        **kwargs: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
-        """Generate a streaming response from Gemini."""
+        return self._do_stream(messages, options=options)
 
+    async def _do_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions,
+    ) -> AsyncIterator[TextDelta | CompletionEvent]:
+        tool_dicts = _tools_from_options(options)
+        response_format = options.response_format
         _, contents = self._serialize_messages(messages)
-        system_instruction = system
 
         config: dict[str, Any] = {}
 
-        if "temperature" in kwargs:
-            config["temperature"] = kwargs["temperature"]
+        if options.temperature is not None:
+            config["temperature"] = options.temperature
         else:
             config["temperature"] = self.temperature
 
-        max_tokens = kwargs.get("max_tokens", self.max_tokens)
+        max_tokens = options.max_tokens or self.max_tokens
         if max_tokens:
             config["max_output_tokens"] = max_tokens
 
-        if system_instruction:
-            config["system_instruction"] = system_instruction
+        if options.system_instructions:
+            config["system_instruction"] = options.system_instructions
 
-        gemini_tools = self._serialize_tools(tools)
-        normalized_tool_config = self._build_tool_config(tool_choice)
+        gemini_tools = self._serialize_tools(tool_dicts)
+        normalized_tool_config = self._build_tool_config(options.tool_choice)
         if gemini_tools:
             config["tools"] = gemini_tools
             if normalized_tool_config is not None:
@@ -298,7 +307,7 @@ class GeminiClient(LLMClient):
         collected_tool_calls: list[ToolUseBlock] = []
 
         async for chunk in await self.client.aio.models.generate_content_stream(
-            model=kwargs.get("model", self.model),
+            model=self.model,
             contents=cast(Any, contents),
             config=genai_types.GenerateContentConfig(**config),
         ):

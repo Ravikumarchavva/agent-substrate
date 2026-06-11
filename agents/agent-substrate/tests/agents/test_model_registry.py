@@ -30,7 +30,12 @@ def test_registry_is_not_empty() -> None:
 
 
 def test_known_models_present() -> None:
-    for name in ("gpt-4o", "gpt-4o-mini", "claude-sonnet-4-20250514", "gemini-2.5-flash"):
+    for name in (
+        "gpt-4o",
+        "gpt-4o-mini",
+        "claude-sonnet-4-20250514",
+        "gemini-2.5-flash",
+    ):
         profile = get_model_profile(name)
         assert profile is not None, f"Expected model {name!r} to be in registry"
 
@@ -122,7 +127,6 @@ def test_list_models_by_provider() -> None:
 
 def test_no_duplicate_names() -> None:
     names = [m.name for m in list_models()]
-    assert len(names) == len(set(names)), (
-        "Duplicate model names in registry: "
-        + str([n for n in names if names.count(n) > 1])
+    assert len(names) == len(set(names)), "Duplicate model names in registry: " + str(
+        [n for n in names if names.count(n) > 1]
     )

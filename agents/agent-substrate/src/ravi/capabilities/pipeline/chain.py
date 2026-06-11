@@ -22,7 +22,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from ravi.capabilities.pipeline.data_ref import DataRef, DataRefStore
-from ravi.kernel.tools import Tool, Toolbox
+from ravi.kernel.tools import Tool
+from ravi.agents.tools.toolbox import Toolbox
 
 logger = setup_logging()
 

@@ -92,7 +92,9 @@ class PostgresMemoryStore:
 
     def _eng(self) -> AsyncEngine:
         if self._engine is None:
-            raise RuntimeError("PostgresMemoryStore not connected — call await connect() first")
+            raise RuntimeError(
+                "PostgresMemoryStore not connected — call await connect() first"
+            )
         return self._engine
 
     async def save(
@@ -143,7 +145,9 @@ class PostgresMemoryStore:
                 Memory(
                     id=row.id,
                     content=row.content,
-                    metadata=row.metadata if isinstance(row.metadata, dict) else json.loads(row.metadata),
+                    metadata=row.metadata
+                    if isinstance(row.metadata, dict)
+                    else json.loads(row.metadata),
                     score=float(row.score),
                 )
                 for row in rows
@@ -165,7 +169,9 @@ class PostgresMemoryStore:
         return Memory(
             id=row.id,
             content=row.content,
-            metadata=row.metadata if isinstance(row.metadata, dict) else json.loads(row.metadata),
+            metadata=row.metadata
+            if isinstance(row.metadata, dict)
+            else json.loads(row.metadata),
         )
 
     async def delete(self, agent_id: AgentId, memory_id: str) -> bool:

@@ -26,7 +26,11 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from ravi.kernel.llm.base_client import BaseModelClient, GenerateResult, ModelStreamEvent
+from ravi.kernel.llm.base_client import (
+    BaseModelClient,
+    GenerateResult,
+    ModelStreamEvent,
+)
 from ravi.kernel.messages.base_message import BaseClientMessage
 from ravi.kernel.messages.client_messages import AssistantMessage, ToolCallMessage
 from ravi.kernel.messages._types import CompletionChunk
@@ -40,6 +44,7 @@ from ravi.kernel.messages._types import CompletionChunk
 @dataclass
 class Turn:
     """One scripted LLM response."""
+
     text: Optional[str] = None
     tool_name: Optional[str] = None
     tool_args: dict[str, Any] = field(default_factory=dict)
@@ -144,9 +149,6 @@ class MockLLMClient(BaseModelClient):
         if turn.error:
             raise turn.error
         msg = self._build_message(turn)
-        text = ""
-        if msg.content:
-            text = msg.content[0] if isinstance(msg.content[0], str) else ""
         yield CompletionChunk(
             finish_reason="stop",
             message=msg,

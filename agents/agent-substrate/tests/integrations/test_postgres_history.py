@@ -23,11 +23,10 @@ def test_postgres_history_internal_key_fits_legacy_column() -> None:
 async def test_postgres_history_provider():
     # Fallback to local dev postgres db url if environment is not set
     db_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
+        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
     provider = PostgresHistoryProvider(db_url, echo=False)
-    
+
     try:
         await provider.connect()
     except (OperationalError, Exception) as e:
@@ -35,7 +34,7 @@ async def test_postgres_history_provider():
 
     try:
         session_id = "test-session-456"
-        
+
         # Write clean state
         await provider.clear_session(session_id)
         assert await provider.count_messages(session_id) == 0
@@ -44,13 +43,13 @@ async def test_postgres_history_provider():
         msg = ChatMessage(role="user", content=[TextBlock(text="postgres message")])
         saved_count = await provider.save_messages(session_id, [msg])
         assert saved_count == 1
-        
+
         # Load messages
         loaded = await provider.load_messages(session_id)
         assert len(loaded) == 1
         assert loaded[0].role == "user"
         assert loaded[0].content[0].text == "postgres message"
-        
+
         # Count
         assert await provider.count_messages(session_id) == 1
 

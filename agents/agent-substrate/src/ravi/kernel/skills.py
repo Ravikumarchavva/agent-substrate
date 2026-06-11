@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass
+@dataclass(frozen=True)
 class Skill:
     """A prompt-skill that extends an agent's behaviour via injected instructions.
 
-    Skills are loaded from ``capabilities/skills/<name>/SKILL.md`` or constructed
-    inline. When attached to a ``ReActAgent`` their ``instructions`` are appended
-    to the effective system prompt and their ``allowed_tools`` names are
+    Skills are loaded from ``capabilities/tools/skills/<name>/SKILL.md`` or
+    constructed inline.  When attached to an agent, ``instructions`` are
+    appended to the effective system prompt and ``allowed_tools`` names are
     cross-referenced against the agent's tool registry at runtime.
 
     Example::
@@ -27,7 +27,7 @@ class Skill:
     name: str
     instructions: str
     description: str = ""
-    allowed_tools: list[str] = field(default_factory=list)
+    allowed_tools: tuple[str, ...] = field(default_factory=tuple)
 
 
 __all__ = ["Skill"]

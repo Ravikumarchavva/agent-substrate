@@ -62,7 +62,12 @@ def _build_orchestrator(
 ) -> Any:
     """Build an OrchestratorAgent with researcher + calculator + clock specialists."""
     from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-    from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool, ReadUrlTool
+    from ravi.capabilities.tools import (
+        CalculatorTool,
+        CurrentTimeTool,
+        WebSearchTool,
+        ReadUrlTool,
+    )
 
     def _ctx() -> ContextConfig:
         return ContextConfig(
@@ -71,29 +76,42 @@ def _build_orchestrator(
         )
 
     researcher = ReActAgent(
-        "researcher", runtime, model=model_client,
+        "researcher",
+        runtime,
+        model=model_client,
         description="Searches the web and reads URLs for current information.",
         system_instructions="You are a research specialist. Use web_search and read_url to find accurate, up-to-date facts. Return a concise answer.",
         tools=[WebSearchTool(), ReadUrlTool()],
-        context=_ctx(), max_iterations=5, tool_timeout=tool_timeout,
+        context=_ctx(),
+        max_iterations=5,
+        tool_timeout=tool_timeout,
     )
     calculator = ReActAgent(
-        "calculator", runtime, model=model_client,
+        "calculator",
+        runtime,
+        model=model_client,
         description="Performs precise numerical calculations.",
         system_instructions="You are a calculation specialist. Use the calculator tool for all arithmetic. Return the result with a brief explanation.",
         tools=[CalculatorTool()],
-        context=_ctx(), max_iterations=3, tool_timeout=tool_timeout,
+        context=_ctx(),
+        max_iterations=3,
+        tool_timeout=tool_timeout,
     )
     clock = ReActAgent(
-        "clock", runtime, model=model_client,
+        "clock",
+        runtime,
+        model=model_client,
         description="Reports the current date and time.",
         system_instructions="You are a time specialist. Use current_time to get the exact date and time. Return it in a clear, human-readable format.",
         tools=[CurrentTimeTool()],
-        context=_ctx(), max_iterations=2, tool_timeout=tool_timeout,
+        context=_ctx(),
+        max_iterations=2,
+        tool_timeout=tool_timeout,
     )
 
     return OrchestratorAgent(
-        "coordinator", runtime,
+        "coordinator",
+        runtime,
         model=model_client,
         description="Routes user requests to the right specialist and synthesises results.",
         sub_agents=[

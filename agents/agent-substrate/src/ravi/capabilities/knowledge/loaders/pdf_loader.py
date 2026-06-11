@@ -9,6 +9,7 @@ Requires the optional dependency group: ``uv sync --group optional``
 from __future__ import annotations
 from ravi.logger import setup_logging
 
+import hashlib
 import io
 import uuid
 from pathlib import Path
@@ -18,6 +19,18 @@ from ravi.capabilities.knowledge.loaders.base import BaseDocumentLoader
 from ravi.kernel.vector import Document
 
 logger = setup_logging()
+
+
+def _page_id(source: str, page_number: int, text: str) -> str:
+    """Deterministic, content-addressed page ID.
+
+    The same (source, page, text) always yields the same UUID, so re-ingesting
+    an unchanged document is idempotent under ``ON CONFLICT (id) DO NOTHING``.
+    Including the text hash means an edited page is treated as a new row.
+    """
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    key = f"{source}|{page_number}|{digest}"
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 
 class PDFLoader(BaseDocumentLoader):
@@ -84,6 +97,7 @@ class PDFLoader(BaseDocumentLoader):
 
                 page_text = "\n\n".join(parts).strip()
                 if page_text:
+                    source = str(metadata.get("source", ""))
                     docs.append(
                         Document(
                             text=page_text,
@@ -92,7 +106,7 @@ class PDFLoader(BaseDocumentLoader):
                                 "page_number": i + 1,
                                 "total_pages": len(pdf.pages),
                             },
-                            id=str(uuid.uuid4()),
+                            id=_page_id(source, i + 1, page_text),
                         )
                     )
 
@@ -116,6 +130,7 @@ class PDFLoader(BaseDocumentLoader):
         for i, page in enumerate(reader.pages):
             text = page.extract_text() or ""
             if text.strip():
+                source = str(metadata.get("source", ""))
                 docs.append(
                     Document(
                         text=text,
@@ -124,7 +139,7 @@ class PDFLoader(BaseDocumentLoader):
                             "page_number": i + 1,
                             "total_pages": len(reader.pages),
                         },
-                        id=str(uuid.uuid4()),
+                        id=_page_id(source, i + 1, text),
                     )
                 )
 

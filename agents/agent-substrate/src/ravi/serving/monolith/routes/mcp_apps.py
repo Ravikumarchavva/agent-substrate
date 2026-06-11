@@ -283,7 +283,9 @@ async def get_manifest(request: Request) -> List[Dict[str, Any]]:
     """
     raw_tools = getattr(request.app.state, "tools", [])
     # app.state.tools is a Toolbox (not a plain list) — call .all() to iterate
-    tool_list: list[Tool] = raw_tools.all() if hasattr(raw_tools, "all") else list(raw_tools)
+    tool_list: list[Tool] = (
+        raw_tools.all() if hasattr(raw_tools, "all") else list(raw_tools)
+    )
     manifest: List[Dict[str, Any]] = []
 
     for tool in tool_list:

@@ -49,17 +49,24 @@ class ImageGeneratorTool:
     ) -> ToolExecutionResult:
         if not prompt.strip():
             return ToolExecutionResult(
-                content=[TextBlock(text="Please provide a prompt describing the image.")],
+                content=[
+                    TextBlock(text="Please provide a prompt describing the image.")
+                ],
                 is_error=True,
             )
 
         api_key = self._api_key
         if not api_key:
             import os
+
             api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             return ToolExecutionResult(
-                content=[TextBlock(text="Image generator not configured (no OpenAI API key).")],
+                content=[
+                    TextBlock(
+                        text="Image generator not configured (no OpenAI API key)."
+                    )
+                ],
                 is_error=True,
             )
 
@@ -86,7 +93,11 @@ class ImageGeneratorTool:
         except httpx.HTTPStatusError as exc:
             error_body = exc.response.text[:500]
             return ToolExecutionResult(
-                content=[TextBlock(text=f"DALL-E API error ({exc.response.status_code}): {error_body}")],
+                content=[
+                    TextBlock(
+                        text=f"DALL-E API error ({exc.response.status_code}): {error_body}"
+                    )
+                ],
                 is_error=True,
             )
         except httpx.HTTPError as exc:

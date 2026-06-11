@@ -129,11 +129,15 @@ class LLMJudge:
             try:
                 from ravi.kernel import TextBlock
 
+                from ravi.kernel.llm import GenerationOptions
+
                 response = await self.model_client.generate(
                     messages=[
                         ChatMessage(role="user", content=[TextBlock(text=prompt)]),
                     ],
-                    system="You are a precise evaluation judge. Always respond with valid JSON only.",
+                    options=GenerationOptions(
+                        system_instructions="You are a precise evaluation judge. Always respond with valid JSON only."
+                    ),
                 )
 
                 # Parse response

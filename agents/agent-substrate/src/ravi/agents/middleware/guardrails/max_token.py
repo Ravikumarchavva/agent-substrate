@@ -38,11 +38,15 @@ class MaxTokenMiddleware:
             return len(self._encoding.encode(text))
         return int(len(text) / self.chars_per_token)
 
-    async def process(self, context: ChatContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         # Concatenate text from all messages for a rough input token count
         total_text = ""
         for msg in context.messages:
-            total_text += " ".join(b.text for b in msg.content if getattr(b, "text", None)) + " "
+            total_text += (
+                " ".join(b.text for b in msg.content if getattr(b, "text", None)) + " "
+            )
 
         token_count = self._count_tokens(total_text.strip())
 

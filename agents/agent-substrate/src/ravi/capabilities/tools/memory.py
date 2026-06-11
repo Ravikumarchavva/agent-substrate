@@ -104,14 +104,18 @@ class MemoryTool:
                     content=[TextBlock(text="Long-term memory is not configured.")],
                     is_error=True,
                 )
-            return await self._long_term_op(action, value=value, query=query, memory_id=memory_id)
+            return await self._long_term_op(
+                action, value=value, query=query, memory_id=memory_id
+            )
 
         return ToolExecutionResult(
             content=[TextBlock(text=f"Unknown action: {action!r}")],
             is_error=True,
         )
 
-    async def _short_term_op(self, action: str, *, key: str, value: str) -> ToolExecutionResult:
+    async def _short_term_op(
+        self, action: str, *, key: str, value: str
+    ) -> ToolExecutionResult:
         assert self._short_term is not None
         if action == "get":
             if not key.strip():
@@ -121,13 +125,17 @@ class MemoryTool:
                 )
             state = await self._short_term.get_state(self._session_id)
             if key not in state:
-                return ToolExecutionResult(content=[TextBlock(text=f"No value for key '{key}'.")])
+                return ToolExecutionResult(
+                    content=[TextBlock(text=f"No value for key '{key}'.")]
+                )
             return ToolExecutionResult(content=[TextBlock(text=f"{key}: {state[key]}")])
 
         if action == "set":
             if not key.strip() or not value.strip():
                 return ToolExecutionResult(
-                    content=[TextBlock(text="Both 'key' and 'value' are required for set.")],
+                    content=[
+                        TextBlock(text="Both 'key' and 'value' are required for set.")
+                    ],
                     is_error=True,
                 )
             await self._short_term.update_state(self._session_id, {key: value})
@@ -161,7 +169,9 @@ class MemoryTool:
                 )
             memories = await self._long_term.search(self._agent_id, query)
             if not memories:
-                return ToolExecutionResult(content=[TextBlock(text="No relevant memories found.")])
+                return ToolExecutionResult(
+                    content=[TextBlock(text="No relevant memories found.")]
+                )
             lines = [f"[{m.id[:8]}] {m.content}" for m in memories]
             return ToolExecutionResult(content=[TextBlock(text="\n".join(lines))])
 
@@ -173,7 +183,9 @@ class MemoryTool:
             )
         deleted = await self._long_term.delete(self._agent_id, memory_id)
         if deleted:
-            return ToolExecutionResult(content=[TextBlock(text=f"Deleted memory {memory_id}.")])
+            return ToolExecutionResult(
+                content=[TextBlock(text=f"Deleted memory {memory_id}.")]
+            )
         return ToolExecutionResult(
             content=[TextBlock(text=f"Memory {memory_id} not found.")],
             is_error=True,

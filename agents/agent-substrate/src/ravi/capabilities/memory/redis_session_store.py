@@ -67,7 +67,9 @@ class RedisSessionStore:
 
     def _r(self) -> aioredis.Redis:
         if self._redis is None:
-            raise RuntimeError("RedisSessionStore not connected — call await connect() first")
+            raise RuntimeError(
+                "RedisSessionStore not connected — call await connect() first"
+            )
         return self._redis
 
     async def get_state(self, session_id: str) -> dict[str, Any]:

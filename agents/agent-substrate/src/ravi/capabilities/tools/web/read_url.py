@@ -46,7 +46,9 @@ class ReadUrlTool:
         "additionalProperties": False,
     }
 
-    async def execute(self, *, url: str, offset: int = 0, **_: object) -> ToolExecutionResult:
+    async def execute(
+        self, *, url: str, offset: int = 0, **_: object
+    ) -> ToolExecutionResult:
         try:
             from crawl4ai import AsyncWebCrawler, HTTPCrawlerConfig
             from crawl4ai.async_crawler_strategy import AsyncHTTPCrawlerStrategy
@@ -71,7 +73,9 @@ class ReadUrlTool:
 
             if not result.success:
                 return ToolExecutionResult(
-                    content=[TextBlock(text=f"Failed to fetch {url}: {result.error_message}")],
+                    content=[
+                        TextBlock(text=f"Failed to fetch {url}: {result.error_message}")
+                    ],
                     is_error=True,
                 )
 
@@ -83,7 +87,7 @@ class ReadUrlTool:
                 )
 
             total = len(text)
-            chunk = text[offset: offset + _MAX_CHARS]
+            chunk = text[offset : offset + _MAX_CHARS]
             remaining = total - offset - len(chunk)
             if remaining > 0:
                 chunk += f"\n\n[truncated — {remaining} chars remaining, call again with offset={offset + len(chunk)}]"

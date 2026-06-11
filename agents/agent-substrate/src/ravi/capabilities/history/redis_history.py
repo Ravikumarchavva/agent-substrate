@@ -1,7 +1,8 @@
 """RedisHistoryProvider — Redis-backed HistoryProvider.
 
-Stores each agent's message log as a Redis list with a TTL and a hard
-max_messages cap (LTRIM on every write).
+Stores each agent's ChatMessage log as a Redis list with TTL and a hard
+max_messages cap (LTRIM on every write).  Each entry is a JSON object:
+``{"run_id": "<str>", "msg": <ChatMessage.model_dump(mode="json")>}``.
 
 Usage::
 
@@ -19,64 +20,29 @@ from urllib.parse import urlparse
 
 import redis.asyncio as aioredis
 
-from ravi.kernel import AgentId, ChatMessage
-from ravi.kernel.message import Message
+from ravi.kernel import AgentId
+from ravi.kernel.content import ChatMessage
 from ravi.logger import setup_logging
 
 logger = setup_logging()
 
 
-def _serialize(message: Message) -> str:
-    """Serialize a Message envelope to a JSON string."""
-    target = message.target
-    sender = message.sender
-    payload = message.payload
-
-    payload_dict: dict = {}
-    payload_type = "unknown"
-    if isinstance(payload, ChatMessage):
-        payload_type = "ChatMessage"
-        payload_dict = payload.model_dump(mode="json")
-
-    return json.dumps(
-        {
-            "target_type": target.type if isinstance(target, AgentId) else str(target),
-            "target_key": target.key if isinstance(target, AgentId) else "",
-            "sender_type": sender.type if sender else None,
-            "sender_key": sender.key if sender else None,
-            "correlation_id": message.correlation_id,
-            "causation_id": message.causation_id,
-            "metadata": message.metadata,
-            "payload_type": payload_type,
-            "payload": payload_dict,
-        },
-        default=str,
-    )
+def _serialize(message: ChatMessage, run_id: str) -> str:
+    return json.dumps({"run_id": run_id, "msg": message.model_dump(mode="json")})
 
 
-def _deserialize(raw: str) -> Message:
-    """Deserialize a JSON string back to a Message envelope."""
+def _deserialize(raw: str) -> tuple[str, ChatMessage]:
     data = json.loads(raw)
+    run_id: str = data.get("run_id", "")
+    msg = ChatMessage.model_validate(data["msg"])
+    return run_id, msg
 
-    target = AgentId(type=data["target_type"], key=data["target_key"])
-    sender: AgentId | None = None
-    if data.get("sender_type"):
-        sender = AgentId(type=data["sender_type"], key=data.get("sender_key", ""))
 
-    payload: object = data.get("payload", {})
-    if data.get("payload_type") == "ChatMessage":
-        try:
-            payload = ChatMessage.model_validate(data["payload"])
-        except Exception:
-            pass  # leave as raw dict if validation fails
-
-    return Message(
-        target=target,
-        sender=sender,
-        correlation_id=data.get("correlation_id", ""),
-        causation_id=data.get("causation_id"),
-        metadata=data.get("metadata", {}),
-        payload=payload,
+def _tag(message: ChatMessage, run_id: str) -> ChatMessage:
+    if not run_id or message.metadata.get("run_id") == run_id:
+        return message
+    return message.model_copy(
+        update={"metadata": {**message.metadata, "run_id": run_id}}
     )
 
 
@@ -153,16 +119,35 @@ class RedisHistoryProvider:
 
     # -- HistoryProvider protocol ---------------------------------------------
 
-    async def append(self, agent_id: AgentId, message: Message, *, session_id: str) -> None:
+    async def append(
+        self,
+        agent_id: AgentId,
+        message: ChatMessage,
+        *,
+        session_id: str,
+        run_id: str = "",
+    ) -> None:
         client = self._require_client()
         key = self._key(agent_id, session_id)
+        tagged = _tag(message, run_id)
         pipe = client.pipeline(transaction=True)
-        pipe.rpush(key, _serialize(message))
+        pipe.rpush(key, _serialize(tagged, run_id))
         if self._max_messages > 0:
             pipe.ltrim(key, -self._max_messages, -1)
         if self._ttl > 0:
             pipe.expire(key, self._ttl)
         await pipe.execute()
+
+    async def append_many(
+        self,
+        agent_id: AgentId,
+        messages: list[ChatMessage],
+        *,
+        session_id: str,
+        run_id: str = "",
+    ) -> None:
+        for message in messages:
+            await self.append(agent_id, message, session_id=session_id, run_id=run_id)
 
     async def get_messages(
         self,
@@ -171,17 +156,32 @@ class RedisHistoryProvider:
         session_id: str,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list[Message]:
+    ) -> list[ChatMessage]:
         client = self._require_client()
         key = self._key(agent_id, session_id)
         start = offset if offset is not None else 0
         end = (start + limit - 1) if limit is not None else -1
         raw_items: list[str] = await client.lrange(key, start, end)  # type: ignore[misc]
-        return [_deserialize(r) for r in raw_items]
+        return [_deserialize(r)[1] for r in raw_items]
 
     async def clear(self, agent_id: AgentId, *, session_id: str) -> None:
         client = self._require_client()
         await client.delete(self._key(agent_id, session_id))
+
+    async def clear_run(
+        self, agent_id: AgentId, *, session_id: str, run_id: str
+    ) -> None:
+        client = self._require_client()
+        key = self._key(agent_id, session_id)
+        all_raw: list[str] = await client.lrange(key, 0, -1)  # type: ignore[misc]
+        kept = [r for r in all_raw if json.loads(r).get("run_id") != run_id]
+        pipe = client.pipeline(transaction=True)
+        pipe.delete(key)
+        if kept:
+            pipe.rpush(key, *kept)
+            if self._ttl > 0:
+                pipe.expire(key, self._ttl)
+        await pipe.execute()
 
     async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
         client = self._require_client()

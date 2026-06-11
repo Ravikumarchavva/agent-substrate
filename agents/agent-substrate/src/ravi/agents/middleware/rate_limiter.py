@@ -18,7 +18,9 @@ class RateLimiterMiddleware:
         self._last_refill = time.monotonic()
         self._lock = asyncio.Lock()
 
-    async def process(self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         async with self._lock:
             now = time.monotonic()
             elapsed = now - self._last_refill
@@ -30,5 +32,5 @@ class RateLimiterMiddleware:
                 self._tokens -= 1.0
             else:
                 raise MiddlewareTermination("Rate limit exceeded")
-        
+
         await call_next()

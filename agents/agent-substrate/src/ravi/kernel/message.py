@@ -3,69 +3,153 @@
 Every send or publish wraps a payload in a ``Message``.  The runtime routes
 the message to its target and returns the recipient's reply.
 
-``payload`` is intentionally ``object`` — the kernel does not enforce a
-specific type at the routing layer.  ``list[ContentBlock]`` is the
-conventional payload for multimodal content, but agents can exchange any
-serializable object (events, commands, ACKs, tool results).
+``payload`` is a typed discriminated union (``Payload``).  The canonical
+payload types are:
 
-Tool call/result types live here because they are message payloads that flow
-between the LLM, the agent, and the tool executor — they are communication
-primitives, not tool implementation details.
+    ChatPayload      — a conversation turn (ChatMessage)
+    ToolCallPayload  — a request to execute a tool
+    ToolResultPayload— the result of a tool execution
+    DataPayload      — arbitrary JSON-serializable structured data
+    ControlPayload   — runtime control signals (pause, cancel, handoff)
+
+Use ``register_payload_type()`` to add custom payload kinds without
+modifying this file — the registry key is the ``kind`` discriminator string.
+
+All message types are pydantic models so ``message.model_dump_json()``
+round-trips cleanly for any transport (Kafka, NATS, Redis Streams,
+Temporal, etc.).
 """
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Protocol, runtime_checkable
-from uuid import uuid4
+from datetime import datetime, timezone
+from typing import (
+    Annotated,
+    Any,
+    Awaitable,
+    Callable,
+    Literal,
+    Protocol,
+    Union,
+    runtime_checkable,
+)
 
 from pydantic import BaseModel, Field
 
-from ravi.kernel.content import ContentBlock, JsonObject
+from ravi.kernel.content import ChatMessage, JsonObject
 from ravi.kernel.identity import AgentId, TopicId
 
 
 # ---------------------------------------------------------------------------
-# Tool call / result — message payloads exchanged during tool execution
+# Payload types — the typed union of things a Message can carry
 # ---------------------------------------------------------------------------
 
 
-class ToolCallRequest(BaseModel):
-    """A request to execute a named tool — sent from agent to tool executor."""
+class ChatPayload(BaseModel):
+    """A conversation turn."""
 
-    name: str
-    arguments: JsonObject = Field(default_factory=dict)
-    call_id: str = Field(default_factory=lambda: str(uuid4()))
+    kind: Literal["chat"] = "chat"
+    message: ChatMessage
 
     model_config = {"frozen": True}
 
 
-class ToolExecutionResult(BaseModel):
-    """Result of a single tool execution — returned to the agent.
+class ToolCallPayload(BaseModel):
+    """A request to execute a named tool."""
 
-    ``content`` is the model-facing payload (text/image/data blocks the LLM
-    reads).  ``structured_content`` mirrors MCP Apps ``CallToolResult.structuredContent``:
-    UI-facing data that is **invisible to the model** and fed to a companion
-    ``ui://`` iframe over the postMessage channel.  A tool that declares a
-    ``ToolUI`` populates ``structured_content``; the agent lowers it into a
-    ``UIResourceBlock`` (see ``kernel.content``).
-    """
+    kind: Literal["tool_call"] = "tool_call"
+    name: str
+    arguments: JsonObject = Field(default_factory=dict)
+    call_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
+    model_config = {"frozen": True}
+
+
+class ToolResultPayload(BaseModel):
+    """Result of a single tool execution."""
+
+    kind: Literal["tool_result"] = "tool_result"
     call_id: str = ""
     name: str = ""
-    content: list[ContentBlock] = Field(default_factory=list)
+    content: list[Any] = Field(default_factory=list)
     is_error: bool = False
     metadata: JsonObject = Field(default_factory=dict)
     structured_content: JsonObject = Field(default_factory=dict)
 
-    model_config = {"arbitrary_types_allowed": True, "frozen": False}
+    model_config = {"frozen": True}
 
     @property
     def text(self) -> str:
-        """Human-readable lowering of all content blocks."""
         from ravi.kernel.content import content_blocks_to_str
+
         return content_blocks_to_str(self.content)
+
+
+class DataPayload(BaseModel):
+    """Arbitrary JSON-serializable structured data."""
+
+    kind: Literal["data"] = "data"
+    data: JsonObject
+
+    model_config = {"frozen": True}
+
+
+class ControlPayload(BaseModel):
+    """Runtime control signal — pause, cancel, handoff, etc."""
+
+    kind: Literal["control"] = "control"
+    signal: str
+    data: JsonObject = Field(default_factory=dict)
+
+    model_config = {"frozen": True}
+
+
+Payload = Annotated[
+    Union[ChatPayload, ToolCallPayload, ToolResultPayload, DataPayload, ControlPayload],
+    Field(discriminator="kind"),
+]
+"""Discriminated union of all canonical payload types.
+
+Custom payload kinds registered via ``register_payload_type()`` are
+supported at runtime through the registry; the union above is for
+static type-checking of the built-in kinds.
+"""
+
+# ---------------------------------------------------------------------------
+# Payload registry — for custom kinds added by higher layers
+# ---------------------------------------------------------------------------
+
+_PAYLOAD_REGISTRY: dict[str, type[BaseModel]] = {
+    "chat": ChatPayload,
+    "tool_call": ToolCallPayload,
+    "tool_result": ToolResultPayload,
+    "data": DataPayload,
+    "control": ControlPayload,
+}
+
+
+def register_payload_type(cls: type[BaseModel]) -> None:
+    """Register a custom payload kind for runtime deserialization.
+
+    ``cls`` must have a ``kind`` Literal field as the discriminator.
+    Call once at module load time, before any messages are deserialized.
+    """
+    kind = getattr(cls, "kind", None)
+    if kind is None:
+        kind = getattr(cls.model_fields.get("kind"), "default", None)
+    if not isinstance(kind, str):
+        raise TypeError(f"{cls.__name__} must have a string 'kind' class attribute")
+    _PAYLOAD_REGISTRY[kind] = cls
+
+
+# ---------------------------------------------------------------------------
+# Compatibility shims — kept in tools.py as the canonical source;
+# re-exported here for call sites that import from message.
+# ---------------------------------------------------------------------------
+
+ToolCallRequest = ToolCallPayload
+ToolExecutionResult = ToolResultPayload
 
 
 # ---------------------------------------------------------------------------
@@ -99,27 +183,34 @@ class RuntimeRef(Protocol):
 # ---------------------------------------------------------------------------
 
 
-@dataclass(slots=True)
-class Message:
+class Message(BaseModel):
     """A routable unit of agent communication.
+
+    ``id`` is a time-sortable hex identifier (UUID4 for now; ULID in a
+    future pass).  It enables deduplication and idempotency at the transport
+    layer.
+
+    ``schema_version`` allows consumers to detect format changes when
+    messages are persisted across deployments.
 
     ``target`` is always required — a ``Message`` with no destination cannot
     be delivered.  ``sender`` may be ``None`` for anonymous or bootstrap sends.
 
     ``correlation_id`` ties every message in one logical conversation;
     ``causation_id`` names the specific message that triggered this one.
-
-    ``metadata`` is a flat string→string map for lightweight tags
-    (e.g. ``{"trace_id": "abc123"}``).  Use ``payload`` for structured content.
-    Agent priority lives on ``Supervision.priority``, not here.
     """
 
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    schema_version: int = 1
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     target: AgentId | TopicId
-    payload: object
+    payload: Payload
     sender: AgentId | None = None
-    correlation_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    correlation_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     causation_id: str | None = None
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @property
     def is_broadcast(self) -> bool:
@@ -132,22 +223,23 @@ class Message:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class MessageContext:
+class MessageContext(BaseModel):
     """Execution context provided to every message handler invocation."""
 
-    runtime: RuntimeRef
-    sender: AgentId | None
-    correlation_id: str
     agent_id: AgentId
+    sender: AgentId | None = None
+    correlation_id: str = ""
+    runtime: Any = None
+
+    model_config = {"arbitrary_types_allowed": True}
 
 
 # ---------------------------------------------------------------------------
 # MessageHandler — the handler callable signature
 # ---------------------------------------------------------------------------
 
-MessageHandler = Callable[[MessageContext, object], Awaitable[object]]
-"""Type alias for a message handler: ``async def handle(ctx, payload) -> reply``."""
+MessageHandler = Callable[[MessageContext, Payload], Awaitable[Payload | None]]
+"""Type alias for a message handler: ``async def handle(ctx, payload) -> reply | None``."""
 
 
 # ---------------------------------------------------------------------------
@@ -155,22 +247,27 @@ MessageHandler = Callable[[MessageContext, object], Awaitable[object]]
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class Subscription:
+class Subscription(BaseModel):
     """Tracks a single active topic subscription."""
 
-    id: str
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     topic: TopicId
     agent_id: AgentId
 
+    model_config = {"arbitrary_types_allowed": True}
+
 
 __all__ = [
-    # Tool message payloads
+    "ChatPayload",
+    "ToolCallPayload",
+    "ToolResultPayload",
+    "DataPayload",
+    "ControlPayload",
+    "Payload",
+    "register_payload_type",
     "ToolCallRequest",
     "ToolExecutionResult",
-    # Runtime protocol
     "RuntimeRef",
-    # Message envelope
     "Message",
     "MessageContext",
     "MessageHandler",

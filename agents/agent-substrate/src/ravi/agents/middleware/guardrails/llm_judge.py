@@ -30,7 +30,9 @@ class LLMJudgeMiddleware:
         self._model_client = model_client
         self._judge_prompt = judge_prompt or self._DEFAULT_JUDGE_PROMPT
 
-    async def process(self, context: ChatContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         await call_next()
 
         if not context.result:
@@ -49,9 +51,11 @@ class LLMJudgeMiddleware:
             messages = [
                 ChatMessage(role="user", content=[TextBlock(text=classify_request)])
             ]
+            from ravi.kernel.llm import GenerationOptions
+
             resp = await self._model_client.generate(
                 messages,
-                system=self._judge_prompt,
+                options=GenerationOptions(system_instructions=self._judge_prompt),
             )
             response_text = " ".join(b.text for b in resp.content if hasattr(b, "text"))
             judgment = self._parse_judgment(response_text)
@@ -59,7 +63,9 @@ class LLMJudgeMiddleware:
             reason = judgment.get("reason", "")
 
             if not safe:
-                raise MiddlewareTermination(f"LLMJudge flagged as unsafe: {reason or 'no reason'}")
+                raise MiddlewareTermination(
+                    f"LLMJudge flagged as unsafe: {reason or 'no reason'}"
+                )
 
         except MiddlewareTermination:
             raise

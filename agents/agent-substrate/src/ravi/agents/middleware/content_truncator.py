@@ -18,22 +18,24 @@ class ContentTruncatorMiddleware:
         self.max_chars = max_chars
         self.suffix = suffix
 
-    async def process(self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         await call_next()
-        
+
         if context.result is None:
             return
-            
+
         content = getattr(context.result, "content", None)
         if not content or not isinstance(content, list):
             return
-            
+
         truncated = False
         for i, block in enumerate(content):
             if isinstance(block, TextBlock) and len(block.text) > self.max_chars:
                 content[i] = TextBlock(text=block.text[: self.max_chars] + self.suffix)
                 truncated = True
-                
+
         if truncated:
             logger.debug(
                 "ContentTruncator: truncated tool result to %d chars", self.max_chars

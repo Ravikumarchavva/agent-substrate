@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from ravi.kernel.llm import LLMClient, LLMResponse
-from ravi.kernel import Tool, ChatMessage
+from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse
+from ravi.kernel import ChatMessage
 from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.logger import setup_logging
 
@@ -51,16 +51,12 @@ class FallbackClient:
         self,
         messages: list[ChatMessage],
         *,
-        tools: list[Tool] | None = None,
-        system: str = "",
-        **kwargs: object,
+        options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
-                return await client.generate(
-                    messages, tools=tools, system=system, **kwargs
-                )
+                return await client.generate(messages, options=options)
             except Exception as exc:
                 last_exc = exc
                 next_msg = (
@@ -77,15 +73,24 @@ class FallbackClient:
                 )
         raise last_exc  # type: ignore[misc]
 
-    async def generate_stream(
+    def generate_stream(
         self,
         messages: list[ChatMessage],
-        **kwargs: object,
+        *,
+        options: GenerationOptions = GenerationOptions(),
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
+        return self._do_stream(messages, options=options)
+
+    async def _do_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
-                async for chunk in client.generate_stream(messages, **kwargs):
+                async for chunk in client.generate_stream(messages, options=options):
                     yield chunk
                 return
             except Exception as exc:

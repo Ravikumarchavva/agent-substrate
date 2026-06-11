@@ -1,23 +1,10 @@
-"""Convenience base for concrete embedding adapter implementations.
-
-``BaseEmbeddingClient`` and ``EmbeddingResult`` live here — in the integrations
-layer — because they are implementation helpers, not kernel contracts.
-The kernel only defines the ``EmbeddingClient`` Protocol.
-"""
+"""Convenience base for concrete embedding adapter implementations."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
-
-@dataclass
-class EmbeddingResult:
-    """Batch embedding results and token usage metadata."""
-
-    embeddings: list[list[float]]
-    model: str
-    usage_tokens: int = 0
+from ravi.kernel.llm import EmbeddingResult
 
 
 class BaseEmbeddingClient:

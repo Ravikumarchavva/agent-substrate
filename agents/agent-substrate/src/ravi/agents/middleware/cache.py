@@ -25,17 +25,19 @@ class CacheMiddleware:
         )
         return hashlib.sha256(raw.encode()).hexdigest()
 
-    async def process(self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         key = self._make_key(context)
         if key in self._cache:
             logger.debug("CacheMiddleware: hit for %s", context.function_name)
             context.metadata["_cache_hit"] = True
             context.result = self._cache[key]
             return  # Skip call_next() on cache hit
-            
+
         context.metadata["_cache_hit"] = False
         await call_next()
-        
+
         if len(self._cache) >= self.max_entries:
             oldest = next(iter(self._cache))
             del self._cache[oldest]

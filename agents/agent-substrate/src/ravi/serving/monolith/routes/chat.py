@@ -339,13 +339,20 @@ async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
 def _build_tool_meta_map(tools: list) -> dict:
     """Build a mapping of tool_name → { risk, color, ui? } for event enrichment."""
     from ravi.kernel.tools import ToolRisk
+
     meta_map: dict = {}
     for tool in tools:
         name = getattr(tool, "name", None)
         if not name:
             continue
         risk = getattr(tool, "risk", ToolRisk.SAFE)
-        color = "red" if risk == ToolRisk.CRITICAL else "yellow" if risk == ToolRisk.HIGH else "green"
+        color = (
+            "red"
+            if risk == ToolRisk.CRITICAL
+            else "yellow"
+            if risk == ToolRisk.HIGH
+            else "green"
+        )
         entry: dict = {"risk": str(risk), "color": color}
         # MCP App UI metadata (optional, legacy tools only)
         ui = getattr(tool, "ui", None) or getattr(tool, "_ui", None)
@@ -543,6 +550,7 @@ async def chat(
         has_existing_tasks = False
         if allow_task_planning:
             from ravi.serving.shared.tasks.store import GlobalTaskStore
+
             _store = GlobalTaskStore.get()
             _existing = _store.get_by_conversation(str(body.thread_id))
             if _existing:
@@ -584,12 +592,17 @@ async def chat(
                     deps["system_instructions"],
                 )
             )
-        if not initial_tool_choice and allow_task_planning and not has_existing_tasks and _should_force_task_planning(display_content):
+        if (
+            not initial_tool_choice
+            and allow_task_planning
+            and not has_existing_tasks
+            and _should_force_task_planning(display_content)
+        ):
             initial_tool_choice = "manage_tasks"
             deps["system_instructions"] = (
                 deps["system_instructions"]
                 + "\n\n---\n**Task Planning — call manage_tasks NOW:**\n"
-                + f"The user said: \"{display_content}\"\n"
+                + f'The user said: "{display_content}"\n'
                 + "Call manage_tasks action=create_list with 5-8 specific, actionable task titles "
                 + "that reflect EXACTLY what the user asked for above. "
                 + "Use concrete titles like the real steps someone would do for this request. "

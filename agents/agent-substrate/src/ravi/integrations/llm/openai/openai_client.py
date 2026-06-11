@@ -16,7 +16,7 @@ from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
 
-from ravi.kernel.llm import LLMClient, LLMResponse, Usage
+from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,
@@ -106,6 +106,15 @@ def _build_openai_text_format(response_format: type["BaseModel"]) -> dict[str, A
             "schema": schema_dict,
         }
     }
+
+
+def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str, Any]]]:
+    if not options.tools:
+        return None
+    return [
+        {"name": t.name, "description": t.description, "parameters": t.input_schema}
+        for t in options.tools
+    ]
 
 
 class OpenAIClient(LLMClient):
@@ -336,15 +345,14 @@ class OpenAIClient(LLMClient):
         self,
         messages: list[ChatMessage],
         *,
-        tools: Optional[list[dict[str, Any]]] = None,
-        system: str = "",
-        response_format: Optional[type["BaseModel"]] = None,
-        tool_choice: Optional[str | dict[str, Any]] = None,
-        **kwargs: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
         """Generate a single response from OpenAI using Responses API."""
+        tool_dicts = _tools_from_options(options)
+        response_format = options.response_format
+        tool_choice = options.tool_choice
         _, conversation_input = await self._serialize_messages(messages)
-        instructions = system
+        instructions = options.system_instructions
 
         # ── Unified path: tools + response_format together ────────────────
         # OpenAI Responses API supports both `tools` and `text.format`
@@ -353,49 +361,31 @@ class OpenAIClient(LLMClient):
         # answer.  When a tool-call step is returned, `parsed` stays
         # None; the agent loop continues until the model answers with
         # text, which is then validated against the schema.
-        transformed_tools = self._serialize_tools(tools)
+        transformed_tools = self._serialize_tools(tool_dicts)
         normalized_tool_choice = self._normalize_tool_choice(tool_choice)
 
         if response_format is not None and transformed_tools:
             text_format = _build_openai_text_format(response_format)
 
             params: dict[str, Any] = {
-                "model": kwargs.get("model", self.model),
+                "model": self.model,
                 "input": conversation_input,
                 "tools": transformed_tools,
                 "text": text_format,
             }
 
-            if "temperature" in kwargs:
-                params["temperature"] = kwargs["temperature"]
+            if options.temperature is not None:
+                params["temperature"] = options.temperature
             elif not self.model.startswith("gpt-5"):
                 params["temperature"] = self.temperature
 
             if instructions:
                 params["instructions"] = instructions
-            if self.max_tokens:
-                params["max_output_tokens"] = kwargs.get("max_tokens", self.max_tokens)
+            max_tok = options.max_tokens or self.max_tokens
+            if max_tok:
+                params["max_output_tokens"] = max_tok
             if normalized_tool_choice:
                 params["tool_choice"] = normalized_tool_choice
-
-            params.update(
-                {
-                    k: v
-                    for k, v in kwargs.items()
-                    if k
-                    not in {
-                        "model",
-                        "input",
-                        "instructions",
-                        "max_output_tokens",
-                        "max_tokens",
-                        "temperature",
-                        "tools",
-                        "text",
-                        "tool_choice",
-                    }
-                }
-            )
 
             response = await self.client.responses.create(**params)
 
@@ -438,7 +428,9 @@ class OpenAIClient(LLMClient):
                         f"{final_content_text[:200]}"
                     )
 
-            return LLMResponse(content=final_blocks, usage=self._extract_usage(response))
+            return LLMResponse(
+                content=final_blocks, usage=self._extract_usage(response)
+            )
 
         # ── Structured-only path (no tools) ──────────────────────────────
         # if response_format is not None:
@@ -525,25 +517,22 @@ class OpenAIClient(LLMClient):
         }
 
         # GPT-5 models don't support the temperature parameter
-        if "temperature" in kwargs:
-            params["temperature"] = kwargs["temperature"]
+        if options.temperature is not None:
+            params["temperature"] = options.temperature
         elif not self.model.startswith("gpt-5"):
             params["temperature"] = self.temperature
 
         if instructions:
             params["instructions"] = instructions
 
-        if self.max_tokens:
-            params["max_tokens"] = kwargs.get("max_tokens", self.max_tokens)
+        max_tok = options.max_tokens or self.max_tokens
+        if max_tok:
+            params["max_tokens"] = max_tok
 
-        transformed_tools = self._serialize_tools(tools)
         if transformed_tools:
             params["tools"] = transformed_tools
             if normalized_tool_choice:
                 params["tool_choice"] = normalized_tool_choice
-
-        # Forward any remaining caller kwargs
-        params.update({k: v for k, v in kwargs.items() if k not in params})
 
         response = await self.client.responses.create(**params)
 
@@ -572,23 +561,24 @@ class OpenAIClient(LLMClient):
 
         return LLMResponse(content=final_blocks, usage=self._extract_usage(response))
 
-    async def generate_stream(
+    def generate_stream(
         self,
         messages: list[ChatMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
-        tool_choice: Optional[str | dict[str, Any]] = None,
         *,
-        system: str = "",
-        response_format: Optional[type["BaseModel"]] = None,
-        **kwargs: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
-        """Generate a streaming response from OpenAI using Responses API.
+        return self._do_stream(messages, options=options)
 
-        Yields TextDelta, ReasoningDelta, and finally a CompletionEvent.
-        """
-
+    async def _do_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions,
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
+        tool_dicts = _tools_from_options(options)
+        response_format = options.response_format
         _, conversation_input = await self._serialize_messages(messages)
-        instructions = system
+        instructions = options.system_instructions
 
         params: dict[str, Any] = {
             "model": self.model,
@@ -596,30 +586,25 @@ class OpenAIClient(LLMClient):
             "stream": True,
         }
 
-        # Only add temperature if explicitly passed or if the model supports it
-        # GPT-5 models don't support temperature parameter
-        if "temperature" in kwargs:
-            params["temperature"] = kwargs["temperature"]
+        if options.temperature is not None:
+            params["temperature"] = options.temperature
         elif not self.model.startswith("gpt-5"):
             params["temperature"] = self.temperature
 
         if instructions:
             params["instructions"] = instructions
-        if self.max_tokens:
-            params["max_output_tokens"] = kwargs.get("max_tokens", self.max_tokens)
-        transformed_tools = self._serialize_tools(tools)
-        normalized_tool_choice = self._normalize_tool_choice(tool_choice)
+        max_tok = options.max_tokens or self.max_tokens
+        if max_tok:
+            params["max_output_tokens"] = max_tok
+        transformed_tools = self._serialize_tools(tool_dicts)
+        normalized_tool_choice = self._normalize_tool_choice(options.tool_choice)
         if transformed_tools:
             params["tools"] = transformed_tools
             if normalized_tool_choice:
                 params["tool_choice"] = normalized_tool_choice
 
-        # When response_format is set alongside tools, include text.format
-        # so the model produces schema-conformant text in its final answer.
         if response_format is not None and transformed_tools:
             params["text"] = _build_openai_text_format(response_format)
-
-        params.update({k: v for k, v in kwargs.items() if k not in params})
 
         # Stream and yield deltas, collect final Response object
         final_response = None

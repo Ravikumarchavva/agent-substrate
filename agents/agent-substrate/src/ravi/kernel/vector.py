@@ -7,16 +7,22 @@ from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol
 
 
-@dataclass
+@dataclass(frozen=True)
 class Document:
-    """A chunk of text with optional metadata ready for vector storage."""
+    """A text chunk with optional metadata ready for vector storage.
+
+    ``embedding`` is optional: if provided, the store skips embedding
+    (useful when the caller pre-computes embeddings or when the store
+    supports server-side embedding and the field is ignored).
+    """
 
     text: str
-    metadata: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    embedding: Optional[list[float]] = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True)
 class SearchResult:
     """A single result from a vector similarity search."""
 
@@ -32,10 +38,15 @@ class VectorStore(Protocol):
     async def add(
         self,
         documents: list[Document],
-        embeddings: list[list[float]],
         *,
         collection: str = "default",
-    ) -> list[str]: ...
+    ) -> list[str]:
+        """Persist *documents* and return their assigned ids.
+
+        If ``document.embedding`` is ``None``, the store is responsible for
+        computing embeddings (e.g. via a server-side embedding model).
+        """
+        ...
 
     async def search(
         self,
@@ -45,6 +56,24 @@ class VectorStore(Protocol):
         limit: int = 5,
         filter: Optional[dict[str, Any]] = None,
     ) -> list[SearchResult]: ...
+
+    async def get(
+        self,
+        ids: list[str],
+        *,
+        collection: str = "default",
+    ) -> list[Document]:
+        """Retrieve documents by id."""
+        ...
+
+    async def upsert(
+        self,
+        documents: list[Document],
+        *,
+        collection: str = "default",
+    ) -> list[str]:
+        """Insert or replace documents by id."""
+        ...
 
     async def delete(
         self,

@@ -160,9 +160,7 @@ class SkillLoader:
         self._metadata = found
         return list(found.values())
 
-    def _load_metadata(
-        self, skill_dir: Path, skill_md: Path
-    ) -> SkillMetadata | None:
+    def _load_metadata(self, skill_dir: Path, skill_md: Path) -> SkillMetadata | None:
         """Parse SKILL.md and return SkillMetadata; returns None on error."""
         try:
             raw = skill_md.read_text(encoding="utf-8")

@@ -62,8 +62,15 @@ from ravi.kernel import (
     UIResourceBlock,
     AgentCrashError,
 )
-from ravi.kernel.message import Message
-from ravi.kernel.stream import AgentProgress, AgentStep, CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+from ravi.kernel.llm import GenerationOptions
+from ravi.kernel.stream import (
+    AgentProgress,
+    AgentStep,
+    CompletionEvent,
+    ReasoningDelta,
+    StreamDone,
+    TextDelta,
+)
 from ravi.agents.context import AgentContext, ContextConfig, HistoryProvider
 from ravi.kernel import Skill
 from ravi.kernel.llm import LLMClient, LLMResponse, Usage
@@ -209,19 +216,6 @@ class ReActAgent:
         """Public property — returns all registered tools."""
         return list(self._tools.values())
 
-    def _tool_schemas(self) -> list[dict[str, object]] | None:
-        """Convert registered tools to the dict format expected by LLMClient."""
-        if not self._tools:
-            return None
-        return [
-            {
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.input_schema,
-            }
-            for t in self._tools.values()
-        ]
-
     # -- Actor entry point ---------------------------------------------------
 
     async def on_message(self, _ctx: MessageContext, payload: object) -> object:
@@ -251,7 +245,7 @@ class ReActAgent:
         elif self.supervision is not None:
             sid = self.supervision.session_id
         else:
-            sid = self.id.key   # stable standalone thread
+            sid = self.id.key  # stable standalone thread
 
         # -- Execution scope (this turn) ---------------------------------------
         if run_id is not None:
@@ -265,10 +259,22 @@ class ReActAgent:
 
         await self.hooks.dispatch(
             HookEvent.RUN_START,
-            {"agent": self.name, "run_id": rid, "session_id": sid, "input": input_text[:80]},
+            {
+                "agent": self.name,
+                "run_id": rid,
+                "session_id": sid,
+                "input": input_text[:80],
+            },
         )
         await self._emit_progress(AgentStep.STARTED, input_text[:120], rid)
-        logger.info("[%s] run start (resume=%s, stream=%s, session=%s): %.80s", self.name, resume, stream, sid, input_text)
+        logger.info(
+            "[%s] run start (resume=%s, stream=%s, session=%s): %.80s",
+            self.name,
+            resume,
+            stream,
+            sid,
+            input_text,
+        )
 
         if not resume:
             await self._append(
@@ -284,29 +290,38 @@ class ReActAgent:
             messages=[ChatMessage(role="user", content=[TextBlock(text=input_text)])],
         )
 
-
         _event_q: asyncio.Queue[Any] = asyncio.Queue()
-
-
 
         async def _core_loop(ctx: AgentRunContext) -> None:
             try:
                 for step in range(1, self.max_iterations + 1):
                     # -- cooperative pause check ------------------------------------
-                    if self.spawn_budget is not None and self.spawn_budget.is_paused(self.id):
-                        logger.info("[%s] paused by priority preemption at step %d", self.name, step)
-                        await self._emit_progress(AgentStep.PAUSED, "paused by priority preemption", rid)
+                    if self.spawn_budget is not None and self.spawn_budget.is_paused(
+                        self.id
+                    ):
+                        logger.info(
+                            "[%s] paused by priority preemption at step %d",
+                            self.name,
+                            step,
+                        )
+                        await self._emit_progress(
+                            AgentStep.PAUSED, "paused by priority preemption", rid
+                        )
                         await self.hooks.dispatch(
                             HookEvent.RUN_END,
                             {"agent": self.name, "run_id": rid, "status": "paused"},
                         )
                         last_output = await self._last_assistant_text(sid)
-                        await _event_q.put(_Finished(AgentRunResult(
-                            output=last_output,
-                            status="paused",
-                            tool_calls=tool_calls,
-                            run_id=rid,
-                        )))
+                        await _event_q.put(
+                            _Finished(
+                                AgentRunResult(
+                                    output=last_output,
+                                    status="paused",
+                                    tool_calls=tool_calls,
+                                    run_id=rid,
+                                )
+                            )
+                        )
                         return
 
                     await self.hooks.dispatch(
@@ -316,11 +331,13 @@ class ReActAgent:
 
                     await self.hooks.dispatch(
                         HookEvent.LLM_START,
-                        {"agent": self.name, "step": step, "message_count": len(messages)},
+                        {
+                            "agent": self.name,
+                            "step": step,
+                            "message_count": len(messages),
+                        },
                     )
-                    await self._emit_progress(
-                        AgentStep.THINKING, f"step {step}", rid
-                    )
+                    await self._emit_progress(AgentStep.THINKING, f"step {step}", rid)
 
                     # -- ExecutionBudget: count prompt tokens for cost estimation --
                     if self.execution_budget is not None:
@@ -331,34 +348,31 @@ class ReActAgent:
 
                     content: list[ContentBlock] = []
 
-
                     turn_usage: Usage = Usage()
-
 
                     chat_ctx = ChatContext(
                         agent_name=self.name,
                         run_id=rid,
                         messages=messages,
-                        system=self._system,
-                        tools=self._tool_schemas(),
+                        system_instructions=self._system,
+                        tools=self.list_tools() or None,
                         result=None,
                     )
 
-
-
                     async def _do_chat(c: ChatContext) -> None:
-
 
                         nonlocal content, turn_usage
 
-
-                        gen_kwargs = {}
-                        if step == 1 and initial_tool_choice is not None:
-                            gen_kwargs["tool_choice"] = initial_tool_choice
+                        tool_choice = initial_tool_choice if step == 1 else None
+                        opts = GenerationOptions(
+                            tools=self.list_tools() or None,
+                            system_instructions=self._system,
+                            tool_choice=tool_choice,
+                        )
 
                         if stream:
-                            async for event in _stream_generate(
-                                self.model, messages, self._system, self._tool_schemas(), **gen_kwargs
+                            async for event in self.model.generate_stream(
+                                messages, options=opts
                             ):
                                 if isinstance(event, (TextDelta, ReasoningDelta)):
                                     await _event_q.put(event)
@@ -366,25 +380,19 @@ class ReActAgent:
                                     content = event.content
                                     turn_usage = event.usage
                         else:
-                            resp = await self.model.generate(
-                                messages, tools=self._tool_schemas(), system=self._system, **gen_kwargs
-                            )
+                            resp = await self.model.generate(messages, options=opts)
                             content = resp.content
                             turn_usage = resp.usage
 
-
                         c.result = LLMResponse(content=content, usage=turn_usage)
-
-
 
                     await self.chat_pipeline.execute(chat_ctx, _do_chat)
 
-
                     content = chat_ctx.result.content if chat_ctx.result else content
 
-
-                    turn_usage = chat_ctx.result.usage if chat_ctx.result else turn_usage
-
+                    turn_usage = (
+                        chat_ctx.result.usage if chat_ctx.result else turn_usage
+                    )
 
                     # -- ExecutionBudget: record this turn's usage -----------------
                     if self.execution_budget is not None:
@@ -400,7 +408,9 @@ class ReActAgent:
                         break
 
                     tool_uses = [b for b in content if isinstance(b, ToolUseBlock)]
-                    await self._append(ChatMessage(role="assistant", content=content), sid, rid)
+                    await self._append(
+                        ChatMessage(role="assistant", content=content), sid, rid
+                    )
 
                     if not tool_uses:
                         output = _content_to_str(content)
@@ -414,18 +424,20 @@ class ReActAgent:
                             HookEvent.RUN_END,
                             {"agent": self.name, "run_id": rid, "status": "success"},
                         )
-                        await self._emit_progress(
-                            AgentStep.DONE, output[:120], rid
-                        )
+                        await self._emit_progress(AgentStep.DONE, output[:120], rid)
                         if stream:
                             await _event_q.put(CompletionEvent(content=content))
-                        
-                        await _event_q.put(_Finished(AgentRunResult(
-                            output=output,
-                            status="success",
-                            tool_calls=tool_calls,
-                            run_id=rid,
-                        )))
+
+                        await _event_q.put(
+                            _Finished(
+                                AgentRunResult(
+                                    output=output,
+                                    status="success",
+                                    tool_calls=tool_calls,
+                                    run_id=rid,
+                                )
+                            )
+                        )
                         return
 
                     logger.info(
@@ -467,7 +479,9 @@ class ReActAgent:
 
                     tasks = [asyncio.create_task(_run(tu)) for tu in tool_uses]
 
-                    results_by_call_id: dict[str, tuple[ToolCallRecord, ContentBlock]] = {}
+                    results_by_call_id: dict[
+                        str, tuple[ToolCallRecord, ContentBlock]
+                    ] = {}
                     completed = 0
                     while completed < len(tool_uses):
                         # Drain any buffered subagent progress events (non-blocking)
@@ -489,7 +503,11 @@ class ReActAgent:
                         ui_meta: dict[str, str] = {}
                         if isinstance(block, ToolResultBlock):
                             ui_block = next(
-                                (b for b in block.content if isinstance(b, UIResourceBlock)),
+                                (
+                                    b
+                                    for b in block.content
+                                    if isinstance(b, UIResourceBlock)
+                                ),
                                 None,
                             )
                             if ui_block is not None:
@@ -524,7 +542,9 @@ class ReActAgent:
                         tool_calls.append(record)
                         result_blocks.append(block)
 
-                    await self._append(ChatMessage(role="tool", content=result_blocks), sid, rid)
+                    await self._append(
+                        ChatMessage(role="tool", content=result_blocks), sid, rid
+                    )
                     await self.hooks.dispatch(
                         HookEvent.STEP_END,
                         {"agent": self.name, "step": step, "has_tool_calls": True},
@@ -541,12 +561,16 @@ class ReActAgent:
                 await self._emit_progress(
                     AgentStep.DONE, last_output[:120], rid, status="max_iterations"
                 )
-                await _event_q.put(_Finished(AgentRunResult(
-                    output=last_output,
-                    status="max_iterations",
-                    tool_calls=tool_calls,
-                    run_id=rid,
-                )))
+                await _event_q.put(
+                    _Finished(
+                        AgentRunResult(
+                            output=last_output,
+                            status="max_iterations",
+                            tool_calls=tool_calls,
+                            run_id=rid,
+                        )
+                    )
+                )
                 return
 
             except MiddlewareTermination as exc:
@@ -558,13 +582,17 @@ class ReActAgent:
                 await self._emit_progress(
                     AgentStep.ERROR, f"guardrail: {exc.message}", rid
                 )
-                await _event_q.put(_Finished(AgentRunResult(
-                    output=f"Request blocked: {exc.message}",
-                    status="guardrail_tripped",
-                    tool_calls=tool_calls,
-                    run_id=rid,
-                    error=exc.message,
-                )))
+                await _event_q.put(
+                    _Finished(
+                        AgentRunResult(
+                            output=f"Request blocked: {exc.message}",
+                            status="guardrail_tripped",
+                            tool_calls=tool_calls,
+                            run_id=rid,
+                            error=exc.message,
+                        )
+                    )
+                )
                 return
 
             except BudgetExceededError as exc:
@@ -574,13 +602,17 @@ class ReActAgent:
                     HookEvent.RUN_END,
                     {"agent": self.name, "run_id": rid, "status": "budget_exceeded"},
                 )
-                await _event_q.put(_Finished(AgentRunResult(
-                    output="",
-                    status="error",
-                    tool_calls=tool_calls,
-                    run_id=rid,
-                    error=str(exc),
-                )))
+                await _event_q.put(
+                    _Finished(
+                        AgentRunResult(
+                            output="",
+                            status="error",
+                            tool_calls=tool_calls,
+                            run_id=rid,
+                            error=str(exc),
+                        )
+                    )
+                )
                 return
 
             except Exception as exc:
@@ -607,45 +639,39 @@ class ReActAgent:
             try:
                 await self.agent_pipeline.execute(agent_ctx, _core_loop)
             except MiddlewareTermination as exc:
-                logger.warning("[%s] agent middleware terminated: %s", self.name, exc.message)
+                logger.warning(
+                    "[%s] agent middleware terminated: %s", self.name, exc.message
+                )
                 await self.hooks.dispatch(
                     HookEvent.RUN_END,
                     {"agent": self.name, "run_id": rid, "status": "guardrail_tripped"},
                 )
-                await _event_q.put(_Finished(AgentRunResult(
-                    output=f"Request blocked: {exc.message}",
-                    status="guardrail_tripped",
-                    tool_calls=tool_calls,
-                    run_id=rid,
-                    error=exc.message,
-                )))
+                await _event_q.put(
+                    _Finished(
+                        AgentRunResult(
+                            output=f"Request blocked: {exc.message}",
+                            status="guardrail_tripped",
+                            tool_calls=tool_calls,
+                            run_id=rid,
+                            error=exc.message,
+                        )
+                    )
+                )
             except Exception as _e:
                 await _event_q.put(_e)
             finally:
                 await _event_q.put(StopAsyncIteration)
 
-
-
         asyncio.create_task(_run_pipelines())
 
-
         while True:
-
-
             item = await _event_q.get()
 
-
             if item is StopAsyncIteration:
-
-
                 break
 
-
             if isinstance(item, Exception):
-
-
                 raise item
-
 
             yield item
 
@@ -669,7 +695,9 @@ class ReActAgent:
         ):
             if isinstance(event, _Finished):
                 return event.result
-        return AgentRunResult(output="", status="error", error="Stream ended without result")
+        return AgentRunResult(
+            output="", status="error", error="Stream ended without result"
+        )
 
     async def run_stream(
         self,
@@ -692,7 +720,9 @@ class ReActAgent:
             ):
                 if isinstance(event, _Finished):
                     yield StreamDone(
-                        reason="success" if event.result.status == "success" else event.result.status
+                        reason="success"
+                        if event.result.status == "success"
+                        else event.result.status
                     )
                     return
                 yield event
@@ -706,7 +736,6 @@ class ReActAgent:
     # -- Progress reporting --------------------------------------------------
 
     async def _emit_progress(
-
         self, step: str, content: str, run_id: str, **meta: str
     ) -> AgentProgress | None:
         """Publish an ``AgentProgress`` event to the run's shared progress topic.
@@ -723,6 +752,7 @@ class ReActAgent:
         the agent itself.
         """
         from ravi.kernel.identity import TopicId
+
         sv = self.supervision
         topic_source = run_id if run_id else self.id.key
         event = AgentProgress(
@@ -746,30 +776,21 @@ class ReActAgent:
 
     # -- Internal helpers ----------------------------------------------------
 
-    async def _append(self, chat_msg: ChatMessage, session_id: str, run_id: str) -> None:
-        """Wrap a ChatMessage in a Message envelope and append to history.
-
-        History is keyed by ``session_id`` (the conversation thread).
-        ``run_id`` is tagged into the envelope metadata for audit.
-        """
-        envelope = Message(
-            target=self.id,
-            payload=chat_msg,
-            sender=self.id,
-            metadata={"run_id": run_id},
+    async def _append(
+        self, chat_msg: ChatMessage, session_id: str, run_id: str
+    ) -> None:
+        await self._ctx.history.append(
+            self.id, chat_msg, session_id=session_id, run_id=run_id
         )
-        await self._ctx.history.append(self.id, envelope, session_id=session_id)
 
     async def _prompt_window(self, session_id: str) -> list[ChatMessage]:
-        """Return the compacted history as ChatMessages for the LLM."""
-        window = await self._ctx.get_prompt_window(session_id)
-        return [m.payload for m in window if isinstance(m.payload, ChatMessage)]
+        return await self._ctx.get_prompt_window(session_id)
 
     async def _last_assistant_text(self, session_id: str) -> str:
         window = await self._ctx.get_prompt_window(session_id)
         for msg in reversed(window):
-            if isinstance(msg.payload, ChatMessage) and msg.payload.role == "assistant":
-                return _content_to_str(msg.payload.content)
+            if msg.role == "assistant":
+                return _content_to_str(msg.content)
         return ""
 
     @staticmethod
@@ -855,7 +876,6 @@ class ReActAgent:
             {"agent": self.name, "tool": tu.tool_name, "args": dict(tu.arguments)},
         )
         try:
-
             func_ctx = FunctionContext(
                 agent_name=self.name,
                 run_id=rid,
@@ -864,26 +884,19 @@ class ReActAgent:
                 result=None,
             )
 
-
             async def _do_function(c: FunctionContext) -> None:
 
                 if self.tool_timeout is not None:
-
                     c.result = await asyncio.wait_for(
-
                         tool.execute(**c.arguments), timeout=self.tool_timeout
-
                     )
 
                 else:
-
                     c.result = await tool.execute(**c.arguments)
-
 
             await self.function_pipeline.execute(func_ctx, _do_function)
 
             exec_result = func_ctx.result
-
 
             duration = (time.monotonic() - t0) * 1000
             await self.hooks.dispatch(
@@ -911,9 +924,7 @@ class ReActAgent:
                 ),
             )
         except MiddlewareTermination:
-
             raise
-
 
         except asyncio.TimeoutError:
             duration = (self.tool_timeout or 0.0) * 1000
@@ -973,24 +984,3 @@ class ReActAgent:
 def _content_to_str(content: list[ContentBlock]) -> str:
     """Extract concatenated plain text from a content block list."""
     return " ".join(b.text for b in content if isinstance(b, TextBlock) and b.text)
-
-
-async def _stream_generate(
-    model: LLMClient,
-    messages: list[ChatMessage],
-    system: str,
-    tools: list[dict[str, object]] | None = None,
-    **kwargs: Any,
-) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
-    """Normalize generate_stream to an async generator.
-
-    Handles both async-generator implementations and coroutine-returning-iterator
-    implementations of LLMClient.generate_stream.
-    """
-    import inspect
-
-    result = model.generate_stream(messages, tools=tools, system=system, **kwargs)
-    if inspect.isawaitable(result):
-        result = await result
-    async for event in result:
-        yield event

@@ -41,9 +41,9 @@ def _default_capability_dirs() -> List[Path]:
     """Return the built-in capability type subdirectories."""
     tools_root = Path(__file__).resolve().parent  # capabilities/tools/
     return [
-        tools_root,                   # tool packages (task_manager, code_interpreter, …)
-        tools_root / "skills",        # SKILL.md packages
-        tools_root / "connectors",    # connector packages
+        tools_root,  # tool packages (task_manager, code_interpreter, …)
+        tools_root / "skills",  # SKILL.md packages
+        tools_root / "connectors",  # connector packages
     ]
 
 
@@ -61,7 +61,9 @@ class CapabilityDiscovery:
         capability_dirs: List[str | Path] | None = None,
     ) -> None:
         self._dirs: List[Path] = []
-        configured = _default_capability_dirs() if capability_dirs is None else capability_dirs
+        configured = (
+            _default_capability_dirs() if capability_dirs is None else capability_dirs
+        )
         for d in configured:
             p = Path(d).expanduser().resolve()
             if p.is_dir():

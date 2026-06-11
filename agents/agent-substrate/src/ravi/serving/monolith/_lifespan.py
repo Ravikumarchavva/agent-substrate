@@ -23,7 +23,8 @@ from ravi.capabilities.tools.task_manager.tool import TaskManagerTool
 from ravi.config import Settings
 from ravi.kernel.llm import LLMClient, EmbeddingClient
 from ravi.agents.runtime.local import LocalRuntime
-from ravi.kernel.tools import Tool, Toolbox, ToolRisk
+from ravi.kernel.tools import Tool, ToolRisk
+from ravi.agents.tools.toolbox import Toolbox
 from ravi.capabilities.tools.skills._manager import SkillManager
 
 from ravi.integrations.llm.factory import (
@@ -174,8 +175,11 @@ async def init_infrastructure(
     from ravi.capabilities.vector.pgvector_store import PgVectorStore
     from ravi.capabilities.knowledge.pipeline import RAGPipeline
 
+    from ravi.serving.monolith.database import get_engine
+
     vector_store = PgVectorStore(
         session_factory=session_factory,
+        engine=get_engine(),
         dimensions=1536,
     )
     rag_pipeline = RAGPipeline(
@@ -247,7 +251,12 @@ async def init_tool_registry(
         code_interpreter_tool = CodeInterpreterTool()
 
     # ── Tool Registry ────────────────────────────────────────────────────
-    from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool, ReadUrlTool
+    from ravi.capabilities.tools import (
+        CalculatorTool,
+        CurrentTimeTool,
+        WebSearchTool,
+        ReadUrlTool,
+    )
 
     registry = Toolbox()
     registry.add(ask_tool)

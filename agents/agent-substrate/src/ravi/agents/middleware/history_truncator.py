@@ -17,7 +17,9 @@ class HistoryTruncatorMiddleware:
     def __init__(self, *, max_messages: int = 30) -> None:
         self.max_messages = max_messages
 
-    async def process(self, context: ChatContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         messages = context.messages
         if len(messages) > self.max_messages:
             system_msgs = [m for m in messages if getattr(m, "role", None) == "system"]
@@ -33,5 +35,5 @@ class HistoryTruncatorMiddleware:
                 len(messages),
                 len(pruned),
             )
-            
+
         await call_next()

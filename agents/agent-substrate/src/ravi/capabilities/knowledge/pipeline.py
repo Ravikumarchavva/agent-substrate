@@ -56,7 +56,7 @@ class RAGPipeline:
         *,
         collection: str = "default",
         chunker: str = "text",
-        metadata:dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
     ) -> int:
@@ -199,9 +199,13 @@ class RAGPipeline:
             ChatMessage(role="user", content=[TextBlock(text=question)]),
         ]
 
+        from ravi.kernel.llm import GenerationOptions
+
         response = await model_client.generate(
             messages,
-            system=f"{system_prompt}\n\nContext:\n{context_block}",
+            options=GenerationOptions(
+                system_instructions=f"{system_prompt}\n\nContext:\n{context_block}"
+            ),
         )
 
         # Extract text from response blocks

@@ -21,7 +21,11 @@ from __future__ import annotations
 
 from ravi.capabilities.pipeline.chain import ChainRuntime
 from ravi.capabilities.pipeline.data_ref import DataRef, DataRefStore
-from ravi.capabilities.pipeline.engine import PipelineDef, PipelineEngine, PipelineResult
+from ravi.capabilities.pipeline.engine import (
+    PipelineDef,
+    PipelineEngine,
+    PipelineResult,
+)
 from ravi.capabilities.pipeline.store import PipelineStore
 from ravi.capabilities.tools.discovery import CatalogPackage, CapabilityDiscovery
 from ravi.capabilities.tools.skills._manager import SkillManager

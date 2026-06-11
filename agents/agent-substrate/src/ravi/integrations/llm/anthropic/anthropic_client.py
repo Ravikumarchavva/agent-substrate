@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from anthropic import AsyncAnthropic
 
-from ravi.kernel.llm import LLMClient, LLMResponse, Usage
+from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.content import (
     TextBlock,
@@ -22,9 +22,18 @@ from ravi.integrations.llm.encoders.anthropic import (
 )
 
 if TYPE_CHECKING:
-    from pydantic import BaseModel
+    pass
 
 logger = setup_logging()
+
+
+def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str, Any]]]:
+    if not options.tools:
+        return None
+    return [
+        {"name": t.name, "description": t.description, "parameters": t.input_schema}
+        for t in options.tools
+    ]
 
 
 class AnthropicClient(LLMClient):
@@ -118,27 +127,26 @@ class AnthropicClient(LLMClient):
     async def generate(
         self,
         messages: list[ChatMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
         *,
-        system_instructions: str = "",
-        tool_choice: Optional[str | dict[str, Any]] = None,
-        response_format: Optional[type["BaseModel"]] = None,
-        **kwargs: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
         """Generate a single response from Anthropic using Messages API."""
+        tool_dicts = _tools_from_options(options)
+        response_format = options.response_format
+        tool_choice = options.tool_choice
+        kwargs: dict[str, Any] = dict(options.extra)
         _, conversation = self._serialize_messages(messages)
-        system = system_instructions
+        system = options.system_instructions
 
         thinking_param = self._build_thinking_param(kwargs)
 
         params: dict[str, Any] = {
-            "model": kwargs.get("model", self.model),
+            "model": self.model,
             "messages": conversation,
-            "max_tokens": kwargs.get("max_tokens", self.max_tokens or 8192),
+            "max_tokens": options.max_tokens or self.max_tokens or 8192,
         }
 
         if system:
-            # Use structured system block with cache_control for prompt caching
             params["system"] = [
                 {
                     "type": "text",
@@ -147,16 +155,15 @@ class AnthropicClient(LLMClient):
                 }
             ]
 
-        # Thinking is not compatible with temperature
         if thinking_param:
             params["thinking"] = thinking_param
         else:
-            if "temperature" in kwargs:
-                params["temperature"] = kwargs["temperature"]
+            if options.temperature is not None:
+                params["temperature"] = options.temperature
             else:
                 params["temperature"] = self.temperature
 
-        anthropic_tools = self._serialize_tools(tools)
+        anthropic_tools = self._serialize_tools(tool_dicts)
         normalized_tool_choice = self._normalize_tool_choice(tool_choice)
         if anthropic_tools:
             params["tools"] = anthropic_tools
@@ -204,38 +211,47 @@ class AnthropicClient(LLMClient):
                     )
 
         u = getattr(response, "usage", None)
-        usage = Usage(
-            input_tokens=getattr(u, "input_tokens", 0) or 0,
-            cached_tokens=getattr(u, "cache_read_input_tokens", 0) or 0,
-            output_tokens=getattr(u, "output_tokens", 0) or 0,
-        ) if u else Usage()
+        usage = (
+            Usage(
+                input_tokens=getattr(u, "input_tokens", 0) or 0,
+                cached_tokens=getattr(u, "cache_read_input_tokens", 0) or 0,
+                output_tokens=getattr(u, "output_tokens", 0) or 0,
+            )
+            if u
+            else Usage()
+        )
         return LLMResponse(content=final_blocks, usage=usage)
 
-    async def generate_stream(
+    def generate_stream(
         self,
         messages: list[ChatMessage],
-        tools: Optional[list[dict[str, Any]]] = None,
         *,
-        system_instructions: str = "",
-        tool_choice: Optional[str | dict[str, Any]] = None,
-        response_format: Optional[type["BaseModel"]] = None,
-        **kwargs: Any,
+        options: GenerationOptions = GenerationOptions(),
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
-        """Generate a streaming response from Anthropic using Messages API."""
+        return self._do_stream(messages, options=options)
 
+    async def _do_stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions,
+    ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
+        tool_dicts = _tools_from_options(options)
+        tool_choice = options.tool_choice
+        response_format = options.response_format
+        kwargs: dict[str, Any] = dict(options.extra)
         _, conversation = self._serialize_messages(messages)
-        system = system_instructions
+        system = options.system_instructions
 
         thinking_param = self._build_thinking_param(kwargs)
 
         params: dict[str, Any] = {
-            "model": kwargs.get("model", self.model),
+            "model": self.model,
             "messages": conversation,
-            "max_tokens": kwargs.get("max_tokens", self.max_tokens or 8192),
+            "max_tokens": options.max_tokens or self.max_tokens or 8192,
         }
 
         if system:
-            # Use structured system block with cache_control for prompt caching
             params["system"] = [
                 {
                     "type": "text",
@@ -244,16 +260,15 @@ class AnthropicClient(LLMClient):
                 }
             ]
 
-        # Thinking is not compatible with temperature
         if thinking_param:
             params["thinking"] = thinking_param
         else:
-            if "temperature" in kwargs:
-                params["temperature"] = kwargs["temperature"]
+            if options.temperature is not None:
+                params["temperature"] = options.temperature
             else:
                 params["temperature"] = self.temperature
 
-        anthropic_tools = self._serialize_tools(tools)
+        anthropic_tools = self._serialize_tools(tool_dicts)
         normalized_tool_choice = self._normalize_tool_choice(tool_choice)
         if anthropic_tools:
             params["tools"] = anthropic_tools

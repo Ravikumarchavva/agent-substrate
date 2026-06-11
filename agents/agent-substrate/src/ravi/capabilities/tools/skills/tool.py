@@ -70,7 +70,11 @@ class SkillTool:
         )
 
     def _list(self) -> ToolExecutionResult:
-        metadatas = self._manager._loader.all_metadata() if hasattr(self._manager, "_loader") else []
+        metadatas = (
+            self._manager._loader.all_metadata()
+            if hasattr(self._manager, "_loader")
+            else []
+        )
         if not metadatas:
             return ToolExecutionResult(content=[TextBlock(text="No skills available.")])
         lines = [f"Available skills ({len(metadatas)}):"]
@@ -92,5 +96,8 @@ class SkillTool:
             )
         return ToolExecutionResult(
             content=[TextBlock(text=skill.body)],
-            app_data={"skill_name": skill.name, "skill_version": skill.metadata.version},
+            app_data={
+                "skill_name": skill.name,
+                "skill_version": skill.metadata.version,
+            },
         )

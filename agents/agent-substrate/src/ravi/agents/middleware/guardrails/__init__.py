@@ -16,7 +16,9 @@ from ravi.agents.middleware.guardrails.llm_judge import LLMJudgeMiddleware
 from ravi.agents.middleware.guardrails.max_token import MaxTokenMiddleware
 from ravi.agents.middleware.guardrails.pii import PIIDetectionMiddleware
 from ravi.agents.middleware.guardrails.prompt_injection import PromptInjectionMiddleware
-from ravi.agents.middleware.guardrails.tool_call_validation import ToolCallValidationMiddleware
+from ravi.agents.middleware.guardrails.tool_call_validation import (
+    ToolCallValidationMiddleware,
+)
 
 __all__ = [
     "ContentFilterMiddleware",

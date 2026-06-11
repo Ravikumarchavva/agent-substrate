@@ -154,7 +154,9 @@ class TaskManagerTool:
             if not tasks:
                 return _err("tasks[] is required for create_list")
 
-            task_list = await store.create_task_list(conv_id, tasks, max_retries=max_retries)
+            task_list = await store.create_task_list(
+                conv_id, tasks, max_retries=max_retries
+            )
             self._task_lists[conv_id] = task_list.id
 
             names = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(tasks))
@@ -185,7 +187,9 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            return self._board_result(f"Started: {updated.title}", self._board(store, task_list_id))
+            return self._board_result(
+                f"Started: {updated.title}", self._board(store, task_list_id)
+            )
 
         # ── complete_task ─────────────────────────────────────────────
         if action == "complete_task":
@@ -199,7 +203,9 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            return self._board_result(f"Completed: {updated.title}", self._board(store, task_list_id))
+            return self._board_result(
+                f"Completed: {updated.title}", self._board(store, task_list_id)
+            )
         # ── fail_task ─────────────────────────────────────────────
         if action == "fail_task":
             resolved = self._resolve_task_id(
@@ -215,7 +221,9 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            return self._board_result(f"Marked as failed: {updated.title}", self._board(store, task_list_id))
+            return self._board_result(
+                f"Marked as failed: {updated.title}", self._board(store, task_list_id)
+            )
 
         # ── retry_task ────────────────────────────────────────────────
         if action == "retry_task":

@@ -68,9 +68,9 @@ class ToolCallEvent(BaseModel):
     call_id: str = ""
     tool_name: str
     args: dict[str, Any] = Field(default_factory=dict)
-    agent: str = ""           # which agent in the tree ran it (agent_id.key)
-    depth: int = 0            # 0 = root agent, 1 = direct subagent, …
-    risk: str | None = None   # ToolRisk value, when known
+    agent: str = ""  # which agent in the tree ran it (agent_id.key)
+    depth: int = 0  # 0 = root agent, 1 = direct subagent, …
+    risk: str | None = None  # ToolRisk value, when known
 
 
 class ToolResultEvent(BaseModel):
@@ -199,7 +199,7 @@ class UIResourceEvent(BaseModel):
     uri: str
     mime_type: str = "text/html;profile=mcp-app"
     structured_content: dict[str, Any] = Field(default_factory=dict)
-    render: str = "inline"     # "inline" | "panel" | "fullscreen"
+    render: str = "inline"  # "inline" | "panel" | "fullscreen"
     text: str = ""
     agent: str = ""
     depth: int = 0

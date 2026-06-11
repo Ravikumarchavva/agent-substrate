@@ -40,11 +40,35 @@ def test_every_event_roundtrips_via_discriminator() -> None:
     events = [
         HelloEvent(),
         TextDeltaEvent(text="hi"),
-        ToolCallEvent(call_id="c1", tool_name="web_search", args={"q": "x"}, agent="researcher", depth=1),
-        ToolResultEvent(call_id="c1", tool_name="web_search", ok=True, output="done", agent="researcher", depth=1),
-        HandoffEvent(source_agent="coordinator", target_agent="researcher", reason="needs facts", depth=0),
-        TurnCompletedEvent(text="answer", tool_calls=[ToolCallSummary(id="t1", name="calc")], finish_reason="stop"),
-        ApprovalRequestedEvent(request_id="r1", tool_name="send_email", args={"to": "a@b.c"}),
+        ToolCallEvent(
+            call_id="c1",
+            tool_name="web_search",
+            args={"q": "x"},
+            agent="researcher",
+            depth=1,
+        ),
+        ToolResultEvent(
+            call_id="c1",
+            tool_name="web_search",
+            ok=True,
+            output="done",
+            agent="researcher",
+            depth=1,
+        ),
+        HandoffEvent(
+            source_agent="coordinator",
+            target_agent="researcher",
+            reason="needs facts",
+            depth=0,
+        ),
+        TurnCompletedEvent(
+            text="answer",
+            tool_calls=[ToolCallSummary(id="t1", name="calc")],
+            finish_reason="stop",
+        ),
+        ApprovalRequestedEvent(
+            request_id="r1", tool_name="send_email", args={"to": "a@b.c"}
+        ),
         RunFailedEvent(error="boom", code="crash"),
         ErrorEvent(message="bad"),
     ]

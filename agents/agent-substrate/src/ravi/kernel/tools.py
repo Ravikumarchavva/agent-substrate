@@ -1,4 +1,4 @@
-"""Tool contracts — the Tool Protocol, ToolRisk, and the Toolbox."""
+"""Tool contracts — the Tool Protocol, ToolRisk, ToolType, ToolUI, ToolRegistry."""
 
 from __future__ import annotations
 
@@ -6,42 +6,15 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
 
-from ravi.kernel.message import ToolCallRequest, ToolExecutionResult
-
-
-@dataclass(frozen=True)
-class ToolUI:
-    """Declares that a tool renders through an MCP-App UI resource.
-
-    Mirrors the MCP Apps tool ``_meta.ui`` object so external MCP App servers
-    interoperate and the host can preload the resource before the call:
-
-    - ``resource_uri``    the ``ui://name`` resource that renders this tool.
-    - ``csp``             allowed external origins, keyed by MCP CSP category
-                          (``connectDomains`` / ``resourceDomains`` /
-                          ``frameDomains`` / ``baseUriDomains``).
-    - ``permissions``     sandbox capabilities to request
-                          (``camera`` / ``microphone`` / ``geolocation`` /
-                          ``clipboardWrite``).
-    - ``prefers_border``  host hint to draw a visual boundary.
-
-    Optional on a tool — its absence means the tool has no UI.  Internal tools
-    may skip the declaration and return a ``UIResourceBlock`` directly.
-    """
-
-    resource_uri: str
-    csp: dict[str, list[str]] | None = None
-    permissions: tuple[str, ...] = field(default_factory=tuple)
-    prefers_border: bool = False
+from ravi.kernel.content import JsonObject
 
 
 class ToolRisk(str, Enum):
     """Risk classification for a tool.
 
     SAFE     — no side-effects; execute without approval.
-    HIGH     — external side-effects (email, DB write); require approval when
-               an ApprovalHandler is configured.
-    CRITICAL — destructive / irreversible; always require approval.
+    HIGH     — external side-effects (email, DB write); may require approval.
+    CRITICAL — destructive / irreversible; always requires approval.
     """
 
     SAFE = "safe"
@@ -52,35 +25,97 @@ class ToolRisk(str, Enum):
 class ToolType(str, Enum):
     """Category classification for a tool.
 
-    Used by the framework to understand what kind of thing a tool is —
-    for discovery grouping, dashboard display, and audit logging.
+    Used for discovery grouping, dashboard display, and audit logging.
     Not used for LLM-provider routing.
-
-    FUNCTION  — default: plain function tool.
-    SKILL     — prompt-skill loaded from a SKILL.md package.
-    MCP       — tool delivered via the MCP protocol.
-    A2A       — remote agent callable via the A2A protocol.
-    KNOWLEDGE — RAG / knowledge-search tool.
-    CONNECTOR — stateful service connector (multi-call lifecycle).
-    PIPELINE  — pipeline execution tool.
     """
 
-    FUNCTION  = "function"
-    SKILL     = "skill"
-    MCP       = "mcp"
-    A2A       = "a2a"
+    FUNCTION = "function"
+    SKILL = "skill"
+    MCP = "mcp"
+    A2A = "a2a"
     KNOWLEDGE = "knowledge"
     CONNECTOR = "connector"
-    PIPELINE  = "pipeline"
+    PIPELINE = "pipeline"
+
+
+@dataclass(frozen=True)
+class ToolUI:
+    """Declares that a tool renders through an MCP-App UI resource.
+
+    ``resource_uri``  the ``ui://name`` resource that renders this tool.
+    ``csp``           opaque CSP hints for the host (passed through as-is).
+    ``permissions``   sandbox capabilities to request.
+    ``prefers_border`` host hint to draw a visual boundary.
+
+    ``csp`` is intentionally typed as ``JsonObject`` so the kernel does not
+    encode any specific CSP schema — that is a host/adapter concern.
+    """
+
+    resource_uri: str
+    csp: JsonObject | None = None
+    permissions: tuple[str, ...] = field(default_factory=tuple)
+    prefers_border: bool = False
+
+
+# ---------------------------------------------------------------------------
+# ToolExecutionResult — canonical tool result type
+# ---------------------------------------------------------------------------
+
+
+class ToolExecutionResult:
+    """Result of a single tool execution — returned to the agent.
+
+    ``content`` is the model-facing payload (blocks the LLM reads).
+    ``structured_content`` is UI-facing data invisible to the model.
+    """
+
+    __slots__ = (
+        "call_id",
+        "name",
+        "content",
+        "is_error",
+        "metadata",
+        "structured_content",
+    )
+
+    def __init__(
+        self,
+        *,
+        call_id: str = "",
+        name: str = "",
+        content: list = None,  # type: ignore[assignment]
+        is_error: bool = False,
+        metadata: JsonObject | None = None,
+        structured_content: JsonObject | None = None,
+    ) -> None:
+        self.call_id = call_id
+        self.name = name
+        self.content: list = content if content is not None else []
+        self.is_error = is_error
+        self.metadata: JsonObject = metadata or {}
+        self.structured_content: JsonObject = structured_content or {}
+
+    @property
+    def text(self) -> str:
+        from ravi.kernel.content import content_blocks_to_str
+
+        return content_blocks_to_str(self.content)
+
+
+# ---------------------------------------------------------------------------
+# Tool Protocol
+# ---------------------------------------------------------------------------
 
 
 class Tool(Protocol):
     """Contract every tool must satisfy.
 
-    ``risk`` is optional — defaults to ``ToolRisk.SAFE`` when absent.
-    ``ui`` is optional — a ``ToolUI`` declaration when the tool renders through
-    an MCP-App resource; its absence means the tool has no UI.
-    ``tool_type`` is optional — defaults to ``ToolType.FUNCTION`` when absent.
+    ``risk`` defaults to ``ToolRisk.SAFE`` when absent.
+    ``ui`` is an optional ``ToolUI`` declaration.
+    ``tool_type`` defaults to ``ToolType.FUNCTION`` when absent.
+
+    ``execute`` receives keyword arguments matching the tool's ``input_schema``
+    and returns a ``ToolExecutionResult``.
     """
 
     name: str
@@ -90,89 +125,47 @@ class Tool(Protocol):
     async def execute(self, **kwargs: object) -> ToolExecutionResult: ...
 
 
-class Toolbox:
-    """A name-keyed collection of Tool instances with schema-building helpers.
+# ---------------------------------------------------------------------------
+# ToolCallRequest — canonical tool-call request type (lives here, not message.py)
+# ---------------------------------------------------------------------------
 
-    Use this when you need to share a tool collection across components
-    (e.g. the monolith lifespan wires tools once and passes them to multiple
-    agents). For simple cases just pass a plain ``list[Tool]`` to the agent.
+
+@dataclass(frozen=True, slots=True)
+class ToolCallRequest:
+    """A request to execute a named tool."""
+
+    name: str
+    arguments: JsonObject = field(default_factory=dict)
+    call_id: str = field(default_factory=lambda: __import__("uuid").uuid4().hex)
+
+
+# ---------------------------------------------------------------------------
+# ToolRegistry Protocol
+# ---------------------------------------------------------------------------
+
+
+class ToolRegistry(Protocol):
+    """Contract for a name-keyed collection of Tool instances.
+
+    Implementations may use an in-memory dict (see agents layer), a database,
+    or a remote catalog — the agent loop only needs these four operations.
     """
 
-    def __init__(self) -> None:
-        self._tools: dict[str, Tool] = {}
+    def get(self, name: str) -> Tool | None: ...
 
-    def add(self, tool: Tool) -> None:
-        """Register a tool under its name."""
-        self._tools[tool.name] = tool
+    def all(self) -> list[Tool]: ...
 
-    def get(self, name: str) -> Tool | None:
-        """Return the tool with *name*, or None if not registered."""
-        return self._tools.get(name)
+    def names(self) -> list[str]: ...
 
-    def all(self) -> list[Tool]:
-        """Return all registered tools."""
-        return list(self._tools.values())
-
-    def names(self) -> list[str]:
-        """Return all registered tool names."""
-        return list(self._tools.keys())
-
-    def schemas(self) -> list[dict[str, object]]:
-        """Full tool schemas for LLM function-calling."""
-        return [
-            {"name": t.name, "description": t.description, "parameters": t.input_schema}
-            for t in self._tools.values()
-        ]
-
-    def schema_for(self, name: str) -> dict[str, object] | None:
-        """Return the full schema dict for *name*, or None if not found.
-
-        Used after a tool_search_call to inject the full parameter schema.
-        """
-        t = self._tools.get(name)
-        if t is None:
-            return None
-        return {"name": t.name, "description": t.description, "parameters": t.input_schema}
-
-    def deferred_schemas(self, *, include_tool_search: bool = True) -> list[dict[str, object]]:
-        """Deferred schemas for OpenAI hosted tool search (gpt-5.4+).
-
-        All tools are marked ``defer_loading: true`` — only name and
-        description are sent upfront; the full schema is injected on
-        demand when the model calls ``tool_search``.
-        """
-        schemas: list[dict[str, object]] = [
-            {
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.input_schema,
-                "defer_loading": True,
-            }
-            for t in self._tools.values()
-        ]
-        if include_tool_search:
-            schemas.append({"type": "tool_search"})
-        return schemas
-
-    def by_risk(self, risk: ToolRisk) -> list[Tool]:
-        """Return all tools with the given risk level."""
-        return [t for t in self._tools.values() if getattr(t, "risk", ToolRisk.SAFE) == risk]
-
-    def __len__(self) -> int:
-        return len(self._tools)
-
-    def __contains__(self, name: object) -> bool:
-        return name in self._tools
+    def add(self, tool: Tool) -> None: ...
 
 
-# Re-exported here for import convenience — canonical home is kernel.message.
 __all__ = [
     "ToolRisk",
     "ToolType",
     "ToolUI",
-    "Tool",
-    "Toolbox",
-    # message payloads re-exported so tools can do: from ravi.kernel.tools import ToolExecutionResult
-    "ToolCallRequest",
     "ToolExecutionResult",
+    "ToolCallRequest",
+    "Tool",
+    "ToolRegistry",
 ]

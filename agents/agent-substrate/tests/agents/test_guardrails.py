@@ -13,13 +13,13 @@ from ravi.agents.middleware import (
     MiddlewarePipeline,
 )
 from ravi.kernel.content import ChatMessage, TextBlock
-from ravi.kernel.llm import LLMResponse
-from ravi.kernel.usage import Usage
 
 
 def _agent_ctx(text: str) -> AgentRunContext:
     msg = ChatMessage(role="user", content=[TextBlock(text=text)])
-    return AgentRunContext(agent_name="test", run_id="r1", session_id="s1", messages=[msg])
+    return AgentRunContext(
+        agent_name="test", run_id="r1", session_id="s1", messages=[msg]
+    )
 
 
 def _chat_ctx(messages: list[ChatMessage]) -> ChatContext:
@@ -27,7 +27,7 @@ def _chat_ctx(messages: list[ChatMessage]) -> ChatContext:
         agent_name="test",
         run_id="r1",
         messages=messages,
-        system="",
+        system_instructions="",
         tools=None,
     )
 

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 from ravi.capabilities.tools.skills._loader import SkillLoader
 
 
 def test_skill_loader_parsing(tmp_path):
     skill_dir = tmp_path / "mock_skill"
     skill_dir.mkdir()
-    
+
     skill_md = skill_dir / "SKILL.md"
     skill_md.write_text("""---
 name: mock-skill
@@ -26,7 +25,7 @@ This is the mock skill instructions body.
 
     loader = SkillLoader(skill_dirs=[tmp_path])
     metadatas = loader.discover_all()
-    
+
     assert len(metadatas) == 1
     meta = metadatas[0]
     assert meta.name == "mock-skill"

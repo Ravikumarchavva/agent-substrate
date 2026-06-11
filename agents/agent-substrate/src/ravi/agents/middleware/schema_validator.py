@@ -12,18 +12,20 @@ logger = setup_logging()
 class SchemaValidatorMiddleware:
     """Validates LLM output against a Pydantic schema stored in context.metadata."""
 
-    async def process(self, context: ChatContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         await call_next()
-        
+
         schema = context.metadata.get("response_schema")
         if schema is None or context.result is None:
             return
-            
+
         parsed = getattr(context.result, "parsed", None)
         if parsed is not None:
             context.metadata["schema_valid"] = True
             return
-            
+
         content = getattr(context.result, "content", None)
         if content and isinstance(content, list) and len(content) > 0:
             block = content[0]

@@ -80,46 +80,48 @@ _GEMINI_PREFIXES = ("gemini-",)
 
 # All providers that use the OpenAI Chat Completions API.
 # "openai" uses the Responses API instead; it is kept separate.
-_CHAT_COMPLETIONS_PROVIDERS: frozenset[str] = frozenset({
-    "groq",
-    "openrouter",
-    "together",
-    "fireworks",
-    "perplexity",
-    "mistral",
-    "deepseek",
-    "cerebras",
-    "sambanova",
-    "nvidia",
-    "ollama",
-    "lmstudio",
-    "vllm",
-    "compatible",  # generic catch-all — caller must pass base_url=
-})
+_CHAT_COMPLETIONS_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "groq",
+        "openrouter",
+        "together",
+        "fireworks",
+        "perplexity",
+        "mistral",
+        "deepseek",
+        "cerebras",
+        "sambanova",
+        "nvidia",
+        "ollama",
+        "lmstudio",
+        "vllm",
+        "compatible",  # generic catch-all — caller must pass base_url=
+    }
+)
 
 _PROVIDER_PREFIXES: dict[str, str] = {
     # Cloud — proprietary APIs
-    "openai":      "openai",
-    "anthropic":   "anthropic",
-    "gemini":      "gemini",
-    "google":      "gemini",
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "gemini": "gemini",
+    "google": "gemini",
     # Cloud — OpenAI-compatible
-    "groq":        "groq",
-    "openrouter":  "openrouter",
-    "together":    "together",
-    "fireworks":   "fireworks",
-    "perplexity":  "perplexity",
-    "mistral":     "mistral",
-    "deepseek":    "deepseek",
-    "cerebras":    "cerebras",
-    "sambanova":   "sambanova",
-    "nvidia":      "nvidia",
+    "groq": "groq",
+    "openrouter": "openrouter",
+    "together": "together",
+    "fireworks": "fireworks",
+    "perplexity": "perplexity",
+    "mistral": "mistral",
+    "deepseek": "deepseek",
+    "cerebras": "cerebras",
+    "sambanova": "sambanova",
+    "nvidia": "nvidia",
     # Local — OpenAI-compatible
-    "ollama":      "ollama",
-    "lmstudio":    "lmstudio",
-    "vllm":        "vllm",
+    "ollama": "ollama",
+    "lmstudio": "lmstudio",
+    "vllm": "vllm",
     # Generic catch-all
-    "compatible":  "compatible",
+    "compatible": "compatible",
 }
 
 
@@ -191,20 +193,20 @@ class LLMFactory:
     # "compatible" and "vllm" are intentionally absent — callers must pass base_url=.
     _BASE_URLS: ClassVar[dict[str, str]] = {
         # Cloud
-        "groq":       "https://api.groq.com/openai/v1",
+        "groq": "https://api.groq.com/openai/v1",
         "openrouter": "https://openrouter.ai/api/v1",
-        "together":   "https://api.together.xyz/v1",
-        "fireworks":  "https://api.fireworks.ai/inference/v1",
+        "together": "https://api.together.xyz/v1",
+        "fireworks": "https://api.fireworks.ai/inference/v1",
         "perplexity": "https://api.perplexity.ai",
-        "mistral":    "https://api.mistral.ai/v1",
-        "deepseek":   "https://api.deepseek.com/v1",
-        "cerebras":   "https://api.cerebras.ai/v1",
-        "sambanova":  "https://api.sambanova.ai/v1",
-        "nvidia":     "https://integrate.api.nvidia.com/v1",
+        "mistral": "https://api.mistral.ai/v1",
+        "deepseek": "https://api.deepseek.com/v1",
+        "cerebras": "https://api.cerebras.ai/v1",
+        "sambanova": "https://api.sambanova.ai/v1",
+        "nvidia": "https://integrate.api.nvidia.com/v1",
         # Local defaults (user can override with base_url=)
-        "ollama":     "http://localhost:11434/v1",
-        "lmstudio":   "http://localhost:1234/v1",
-        "vllm":       "http://localhost:8000/v1",
+        "ollama": "http://localhost:11434/v1",
+        "lmstudio": "http://localhost:1234/v1",
+        "vllm": "http://localhost:8000/v1",
     }
 
     def __init__(self, model: str, api_key: str) -> None:
@@ -566,6 +568,13 @@ def create_embedding_client(
             dimensions=dimensions,
         )
 
+    if provider == "sentence_transformers":
+        from ravi.capabilities.llm.sentence_transformers_embedding_client import (
+            SentenceTransformersEmbeddingClient,
+        )
+
+        return SentenceTransformersEmbeddingClient(bare, batch_size=64)
+
     raise ValueError(f"Unsupported embedding provider: {provider!r}")
 
 
@@ -573,7 +582,7 @@ def create_embedding_client(
 
 
 def detect_embedding_provider(model: str) -> str:
-    """Detect the embedding provider — ``"openai"`` or ``"gemini"``."""
+    """Detect the embedding provider — ``"openai"``, ``"gemini"``, or ``"sentence_transformers"``."""
     m = model.lower().strip()
 
     if "/" in m:
@@ -582,6 +591,8 @@ def detect_embedding_provider(model: str) -> str:
             return "openai"
         if prefix in ("gemini", "google"):
             return "gemini"
+        if prefix in ("sentence-transformers",):
+            return "sentence_transformers"
         logger.warning(
             "Unknown embedding provider prefix %r — defaulting to openai", prefix
         )

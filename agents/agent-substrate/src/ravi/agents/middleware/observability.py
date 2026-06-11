@@ -54,7 +54,9 @@ class AgentTracingMiddleware:
         t0 = time.monotonic()
         logger.debug(
             "[trace] agent.run START agent=%r run_id=%s session=%s",
-            context.agent_name, context.run_id, context.session_id,
+            context.agent_name,
+            context.run_id,
+            context.session_id,
         )
         try:
             if span:
@@ -66,13 +68,19 @@ class AgentTracingMiddleware:
             status = context.result.status if context.result else "unknown"
             logger.debug(
                 "[trace] agent.run END agent=%r run_id=%s status=%s elapsed=%.1fms",
-                context.agent_name, context.run_id, status, elapsed_ms,
+                context.agent_name,
+                context.run_id,
+                status,
+                elapsed_ms,
             )
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             logger.debug(
                 "[trace] agent.run ERROR agent=%r run_id=%s error=%s elapsed=%.1fms",
-                context.agent_name, context.run_id, type(exc).__name__, elapsed_ms,
+                context.agent_name,
+                context.run_id,
+                type(exc).__name__,
+                elapsed_ms,
             )
             raise
 
@@ -92,7 +100,9 @@ class ChatTracingMiddleware:
         t0 = time.monotonic()
         logger.debug(
             "[trace] llm_call START agent=%r run_id=%s msgs=%d",
-            context.agent_name, context.run_id, len(context.messages),
+            context.agent_name,
+            context.run_id,
+            len(context.messages),
         )
         try:
             if span:
@@ -104,13 +114,19 @@ class ChatTracingMiddleware:
             tokens = context.result.usage.total_tokens if context.result else 0
             logger.debug(
                 "[trace] llm_call END agent=%r run_id=%s tokens=%d elapsed=%.1fms",
-                context.agent_name, context.run_id, tokens, elapsed_ms,
+                context.agent_name,
+                context.run_id,
+                tokens,
+                elapsed_ms,
             )
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             logger.debug(
                 "[trace] llm_call ERROR agent=%r run_id=%s error=%s elapsed=%.1fms",
-                context.agent_name, context.run_id, type(exc).__name__, elapsed_ms,
+                context.agent_name,
+                context.run_id,
+                type(exc).__name__,
+                elapsed_ms,
             )
             raise
 

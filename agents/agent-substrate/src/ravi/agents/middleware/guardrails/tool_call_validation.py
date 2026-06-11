@@ -36,15 +36,21 @@ class ToolCallValidationMiddleware:
                             ) from e
                     self._arg_patterns[tool][arg_name] = compiled
 
-    async def process(self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]) -> None:
+    async def process(
+        self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]
+    ) -> None:
         tool_name = context.function_name
         tool_args = context.arguments or {}
 
         if tool_name in self.blocked_tools:
-            raise MiddlewareTermination(f"ToolCallValidation: Tool '{tool_name}' is blocked")
+            raise MiddlewareTermination(
+                f"ToolCallValidation: Tool '{tool_name}' is blocked"
+            )
 
         if self.allowed_tools is not None and tool_name not in self.allowed_tools:
-            raise MiddlewareTermination(f"ToolCallValidation: Tool '{tool_name}' is not in the allowed list")
+            raise MiddlewareTermination(
+                f"ToolCallValidation: Tool '{tool_name}' is not in the allowed list"
+            )
 
         if tool_name in self._arg_patterns:
             for arg_name, patterns in self._arg_patterns[tool_name].items():

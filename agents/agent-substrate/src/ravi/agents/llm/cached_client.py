@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, AsyncIterator
 
-from ravi.kernel.llm import LLMClient, LLMResponse, Usage
-from ravi.kernel import TextBlock, Tool, ChatMessage
+from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
+from ravi.kernel import TextBlock, ChatMessage
 from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.logger import setup_logging
 
@@ -49,11 +49,9 @@ class CachedModelClient:
         self,
         messages: list[ChatMessage],
         *,
-        tools: list[Tool] | None = None,
-        system: str = "",
-        **kwargs: object,
+        options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
-        cacheable = tools is None or len(tools) == 0
+        cacheable = not options.tools
 
         if cacheable:
             query_text = self._extract_query(messages)
@@ -62,9 +60,7 @@ class CachedModelClient:
                 if cached is not None:
                     return LLMResponse(content=[TextBlock(text=cached)], usage=Usage())
 
-        result = await self._inner.generate(
-            messages, tools=tools, system=system, **kwargs
-        )
+        result = await self._inner.generate(messages, options=options)
 
         if cacheable and result.content:
             query_text = self._extract_query(messages)
@@ -76,13 +72,13 @@ class CachedModelClient:
 
         return result
 
-    async def generate_stream(
+    def generate_stream(
         self,
         messages: list[ChatMessage],
-        **kwargs: object,
+        *,
+        options: GenerationOptions = GenerationOptions(),
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
-        async for chunk in self._inner.generate_stream(messages, **kwargs):
-            yield chunk
+        return self._inner.generate_stream(messages, options=options)
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         return await self._inner.count_tokens(messages)

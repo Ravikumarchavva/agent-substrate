@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import pytest
 from ravi.kernel.tools import (
     ToolCallRequest,
     ToolExecutionResult,
     ToolRisk,
-    Toolbox,
 )
+from ravi.agents.tools.toolbox import Toolbox
 from ravi.kernel.content import TextBlock
 
 
@@ -22,8 +21,7 @@ class MockToolImpl:
 
     async def execute(self, *, val: str, **_kw: object) -> ToolExecutionResult:
         return ToolExecutionResult(
-            name=self.name,
-            content=[TextBlock(text=f"executed with {val}")]
+            name=self.name, content=[TextBlock(text=f"executed with {val}")]
         )
 
 
@@ -56,14 +54,14 @@ def test_tool_execution_result():
 def test_tool_registry():
     registry = Toolbox()
     tool = MockToolImpl()
-    
+
     registry.add(tool)
     assert len(registry) == 1
     assert "mock_tool" in registry
     assert registry.get("mock_tool") is tool
     assert registry.get("mock_tool") is tool
     assert registry.names() == ["mock_tool"]
-    
+
     # Test by_risk
     assert registry.by_risk(ToolRisk.HIGH) == [tool]
     assert registry.by_risk(ToolRisk.SAFE) == []

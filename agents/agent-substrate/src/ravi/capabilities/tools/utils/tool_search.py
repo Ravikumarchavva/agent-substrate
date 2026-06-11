@@ -80,7 +80,8 @@ class ToolSearchTool:
     ) -> ToolExecutionResult:
         q = query.strip().lower()
         matches = [
-            t for t in self._tools.values()
+            t
+            for t in self._tools.values()
             if not q or q in t.name.lower() or q in t.description.lower()
         ]
 
@@ -90,7 +91,11 @@ class ToolSearchTool:
 
         if format == "schema":
             schemas = [
-                {"name": t.name, "description": t.description, "parameters": t.input_schema}
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.input_schema,
+                }
                 for t in matches
             ]
             text = json.dumps({"tools": schemas, "query": query}, indent=2)

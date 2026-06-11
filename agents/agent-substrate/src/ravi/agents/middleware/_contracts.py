@@ -74,7 +74,7 @@ class ChatContext:
     agent_name: str
     run_id: str
     messages: list[ChatMessage]
-    system: str
+    system_instructions: str
     tools: list[Tool] | None
     result: LLMResponse | None = None
     metadata: dict[str, Any] = field(default_factory=dict)

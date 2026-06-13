@@ -6,10 +6,10 @@ here.  Responsibilities:
 1. Registry lookup and type gate (hosted/provider-defined/unknown/self → error)
 2. Risk/approval with a bounded timeout (HITL can't block a sandbox forever)
 3. Inbound ref resolution: ``{"$artifact": "<ref>"}`` args are fetched from
-   ``ArtifactStore`` server-side before ``execute()`` — big data never enters
+   ``BlobStore`` server-side before ``execute()`` — big data never enters
    the sandbox
 4. ``execute()`` with per-call timeout + ``ctx.check()`` for cancellation
-5. Result shaping: inline when small; ``ArtifactStore`` offload + pinning when
+5. Result shaping: inline when small; ``BlobStore`` offload + pinning when
    large; media ``ContentBlock``s become ``ChainFile``s
 6. Budget: per-chain call counter enforced against ``ChainPolicy.max_tool_calls``
 7. Call trace: every invocation appended for crash-safe at-most-once semantics
@@ -24,9 +24,13 @@ import json
 import time
 from typing import Any
 
-from ravi.kernel.tools.approval import ApprovalDecision, ApprovalHandler, ApprovalRequest
+from ravi.kernel.tools.approval import (
+    ApprovalDecision,
+    ApprovalHandler,
+    ApprovalRequest,
+)
+from ravi.kernel.storage.blob import BlobStore
 from ravi.kernel.tools.chain import (
-    ArtifactStore,
     ChainCallRecord,
     ChainFile,
     ChainPolicy,
@@ -76,7 +80,7 @@ class ToolInvoker:
         self,
         registry: ToolRegistry,
         approval_handler: ApprovalHandler | None = None,
-        artifact_store: ArtifactStore | None = None,
+        artifact_store: BlobStore | None = None,
         policy: ChainPolicy | None = None,
     ) -> None:
         self._registry = registry

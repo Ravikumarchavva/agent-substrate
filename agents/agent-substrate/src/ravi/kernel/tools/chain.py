@@ -29,40 +29,11 @@ Media blocks (ImageBlock, DocumentBlock)
 
 from __future__ import annotations
 
-from typing import Literal, Protocol
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ravi.kernel.tools import ToolRisk
-
-
-# ---------------------------------------------------------------------------
-# ArtifactStore Protocol
-# ---------------------------------------------------------------------------
-
-
-class ArtifactStore(Protocol):
-    """Large/binary data plane for chains and tools.
-
-    ``store`` returns an opaque ref string; ``resolve`` fetches the bytes.
-    ``pin`` prevents TTL expiry for the ref's lifetime; ``unpin`` re-enables it.
-    The concrete implementation in ``capabilities/pipeline/data_ref.py``
-    (``DataRefStore``) satisfies this protocol via a thin adapter.
-    """
-
-    async def store(
-        self,
-        data: bytes | str,
-        *,
-        content_type: str = "application/octet-stream",
-    ) -> str: ...
-
-    async def resolve(self, ref: str) -> bytes: ...
-
-    async def pin(self, ref: str) -> None: ...
-
-    async def unpin(self, ref: str) -> None: ...
-
+from ravi.kernel.tools.tools import ToolRisk
 
 # ---------------------------------------------------------------------------
 # ChainPolicy — per-chain execution limits
@@ -189,7 +160,6 @@ class ChainRunResult(BaseModel):
 
 
 __all__ = [
-    "ArtifactStore",
     "ChainPolicy",
     "ChainFile",
     "InvocationResult",

@@ -1,7 +1,7 @@
-"""SpawnBudget — run-level headcount authority with priority-based preemption.
+"""SpawnTracker — run-level headcount authority with priority-based preemption.
 
 ``Supervision`` (kernel) carries the policy numbers (max_agents, priority).
-``SpawnBudget`` (agents layer) carries the mutable state that enforces them.
+``SpawnTracker`` (agents layer) carries the mutable state that enforces them.
 
 Two orthogonal mechanisms:
 
@@ -18,8 +18,8 @@ priority   — When the pool is full, HIGH/CRITICAL agents can preempt
 
 Usage::
 
-    supervision = Supervision.root(orchestrator_id, max_agents=20)
-    budget = SpawnBudget(supervision)
+    supervision = Supervision.root(orchestrator_id, spawn_budget=SpawnBudget(max_agents=20))
+    budget = SpawnTracker(supervision)
 
     # Before each spawn_child() call:
     budget.acquire(agent_id, priority=Priority.HIGH)   # raises on limit breach
@@ -40,7 +40,7 @@ from ravi.kernel.core.identity import AgentId
 from ravi.kernel.agent.supervision import Priority, Supervision
 
 
-class SpawnBudget:
+class SpawnTracker:
     """Thread-safe mutable headcount tracker for a single execution run.
 
     Priority is the single authority for how slots are allocated and
@@ -53,7 +53,7 @@ class SpawnBudget:
     """
 
     def __init__(self, supervision: Supervision) -> None:
-        self._max_agents = supervision.max_agents
+        self._max_agents = supervision.spawn_budget.max_agents
         self._total = 1  # root agent already counts as 1
         self._active: dict[AgentId, Priority] = {}  # agent → its current priority
         self._paused: set[AgentId] = set()  # cooperative pause signals

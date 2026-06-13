@@ -8,7 +8,7 @@ class BudgetExceededError(Exception):
 
 
 @dataclass
-class ExecutionBudget:
+class ExecutionTracker:
     """Enforces token, cost, or turn limits on an agent's execution loop.
 
     Call ``consume()`` after each LLM turn; it raises ``BudgetExceededError``

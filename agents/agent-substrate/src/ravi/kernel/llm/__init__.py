@@ -5,6 +5,7 @@ from .llm import (
     EmbeddingClient,
     EmbeddingResult,
 )
+from ravi.kernel.core.usage import Usage
 
 __all__ = [
     "GenerationOptions",
@@ -12,4 +13,5 @@ __all__ = [
     "LLMResponse",
     "EmbeddingClient",
     "EmbeddingResult",
+    "Usage",
 ]

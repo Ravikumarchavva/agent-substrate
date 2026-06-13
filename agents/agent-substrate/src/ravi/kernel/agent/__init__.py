@@ -1,4 +1,10 @@
-from .supervision import Supervision, HistoryRetention, Priority
+from .supervision import (
+    Supervision,
+    HistoryRetention,
+    Priority,
+    SpawnBudget,
+    ExecutionBudget,
+)
 from .context import CompactionStrategy, AgentContextProtocol
 from .middleware import (
     Middleware,
@@ -15,6 +21,8 @@ __all__ = [
     "Supervision",
     "HistoryRetention",
     "Priority",
+    "SpawnBudget",
+    "ExecutionBudget",
     "CompactionStrategy",
     "AgentContextProtocol",
     "Middleware",

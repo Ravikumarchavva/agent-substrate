@@ -18,8 +18,9 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator, Callable
 
-from ravi.kernel import AgentId, AgentRuntime, MessageContext, TextBlock
-from ravi.kernel.stream import CompletionEvent, StreamDone
+from ravi.kernel import AgentId, TextBlock
+from ravi.kernel.messaging.message import MessageContext
+from ravi.kernel.messaging.stream import CompletionEvent, StreamDone
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -45,7 +46,7 @@ class UserProxyAgent:
     def __init__(
         self,
         name: str,
-        runtime: AgentRuntime,
+        runtime: Any,
         *,
         key: str = "default",
         hitl_callback: Callable[[MessageContext, object], Any] | None = None,

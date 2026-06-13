@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent, StreamDone
-from ravi.kernel.content import TextBlock
+from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent, StreamDone
+from ravi.kernel.core.content import TextBlock
 
 
 def test_text_delta():

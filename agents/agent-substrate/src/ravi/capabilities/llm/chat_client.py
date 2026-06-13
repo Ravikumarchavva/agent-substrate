@@ -21,14 +21,14 @@ from openai import AsyncOpenAI
 
 from ravi.kernel import ChatMessage, ContentBlock
 from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
-from ravi.kernel.content import (
+from ravi.kernel.core.content import (
     DataBlock,
     ImageBlock,
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,
 )
-from ravi.kernel.stream import CompletionEvent, TextDelta
+from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
 from ravi.logger import setup_logging
 
 if TYPE_CHECKING:

@@ -28,7 +28,7 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Callable, List, Optional, Union
 from uuid import uuid4
 
-from ravi.kernel.stream import TextDelta
+from ravi.kernel.messaging.stream import TextDelta
 from ravi.agents.core.react import AgentRunResult, ReActAgent
 from ravi.agents.hooks.manager import HookEvent, HookManager
 

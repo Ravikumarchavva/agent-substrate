@@ -130,8 +130,9 @@ async def lifespan(app: FastAPI):
         runtime=infra.runtime,
         tools_requiring_approval=tools.tools_requiring_approval,
         tool_timeout=app.state.tool_timeout,
+        code_interpreter_tool=tools.code_interpreter_tool,
     )
-    app.state.chain_runtime = rt.chain_runtime
+    app.state.chain_bridge_registry = rt.chain_bridge_registry
     app.state.pipeline_engine = rt.pipeline_engine
     app.state.pipeline_store = rt.pipeline_store
     app.state.workflow_client = rt.workflow_client

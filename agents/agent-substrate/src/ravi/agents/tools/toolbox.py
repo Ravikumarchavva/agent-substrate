@@ -1,67 +1,120 @@
 """Toolbox — concrete in-memory tool registry.
 
-A mutable name-keyed collection of Tool instances. Use this when you need
+A mutable name-keyed collection of AnyTool instances. Use this when you need
 to share a tool collection across components (e.g. the monolith lifespan
 wires tools once and passes them to multiple agents). For simple cases just
-pass a plain list[Tool] to the agent constructor.
+pass a plain list[AnyTool] to the agent constructor.
 """
 
 from __future__ import annotations
 
-from ravi.kernel.tools import Tool, ToolRisk
+from ravi.kernel.tools import (
+    AnyTool,
+    ToolRisk,
+    is_hosted_tool,
+    is_provider_defined_tool,
+)
 
 
 class Toolbox:
-    """In-memory implementation of ToolRegistry (kernel protocol)."""
+    """In-memory implementation of ToolRegistry (kernel protocol).
+
+    Handles ``Tool``, ``HostedTool``, and ``ProviderDefinedTool`` instances.
+    ``schemas()`` produces the correct wire representation for each:
+
+    - Local tools → ``{"name", "description", "parameters"}`` function schema.
+    - Hosted / provider-defined tools → first entry of ``provider_specs`` dict
+      (legacy path for callers that haven't migrated to ``spec_of()`` yet).
+      TODO: migrate all encoders to call ``spec_of(tool, provider=...)`` from
+      kernel/tools.py instead of reading schemas() — this removes the ambiguity
+      of "which provider" from the toolbox layer.
+
+    Per-tool ``defer_loading`` is respected: set ``tool.defer_loading = True``
+    on any local tool to withhold its full schema until the LLM requests it.
+    """
 
     def __init__(self) -> None:
-        self._tools: dict[str, Tool] = {}
+        self._tools: dict[str, AnyTool] = {}
 
-    def add(self, tool: Tool) -> None:
+    def add(self, tool: AnyTool) -> None:
         self._tools[tool.name] = tool
 
-    def get(self, name: str) -> Tool | None:
+    def get(self, name: str) -> AnyTool | None:
         return self._tools.get(name)
 
-    def all(self) -> list[Tool]:
+    def all(self) -> list[AnyTool]:
         return list(self._tools.values())
 
     def names(self) -> list[str]:
         return list(self._tools.keys())
 
-    def by_risk(self, risk: ToolRisk) -> list[Tool]:
+    def by_risk(self, risk: ToolRisk) -> list[AnyTool]:
         return [t for t in self._tools.values() if getattr(t, "risk", None) == risk]
 
     def schemas(self) -> list[dict[str, object]]:
-        return [
-            {"name": t.name, "description": t.description, "parameters": t.input_schema}
-            for t in self._tools.values()
-        ]
+        """Return the full tool list for the LLM.
+
+        Hosted/provider-defined tools emit their first ``provider_specs`` entry
+        verbatim; local tools emit a function schema.  Per-tool
+        ``defer_loading=True`` is honoured.
+        """
+        result: list[dict[str, object]] = []
+        for t in self._tools.values():
+            if is_hosted_tool(t) or is_provider_defined_tool(t):
+                specs = t.provider_specs  # type: ignore[union-attr]
+                if specs:
+                    first_spec = next(iter(specs.values()))
+                    result.append(dict(first_spec))
+            else:
+                entry: dict[str, object] = {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.input_schema,  # type: ignore[union-attr]
+                }
+                if getattr(t, "defer_loading", False):
+                    entry["defer_loading"] = True
+                result.append(entry)
+        return result
 
     def schema_for(self, name: str) -> dict[str, object] | None:
         t = self._tools.get(name)
         if t is None:
             return None
+        if is_hosted_tool(t) or is_provider_defined_tool(t):
+            specs = t.provider_specs  # type: ignore[union-attr]
+            if not specs:
+                return None
+            return dict(next(iter(specs.values())))
         return {
             "name": t.name,
             "description": t.description,
-            "parameters": t.input_schema,
+            "parameters": t.input_schema,  # type: ignore[union-attr]
         }
 
     def deferred_schemas(
         self, *, include_tool_search: bool = False
     ) -> list[dict[str, object]]:
-        """Return schemas with ``defer_loading=True`` for all tools, optionally appending a
-        ``tool_search`` sentinel so the LLM can discover additional tools dynamically."""
-        result: list[dict[str, object]] = [
-            {
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.input_schema,
-                "defer_loading": True,
-            }
-            for t in self._tools.values()
-        ]
+        """Return all local tool schemas with ``defer_loading=True``.
+
+        Hosted/provider-defined tools are included verbatim (provider-side;
+        no deferred flag needed).  Appends a ``tool_search`` sentinel when
+        ``include_tool_search=True`` so the LLM can discover tools dynamically.
+        """
+        result: list[dict[str, object]] = []
+        for t in self._tools.values():
+            if is_hosted_tool(t) or is_provider_defined_tool(t):
+                specs = t.provider_specs  # type: ignore[union-attr]
+                if specs:
+                    result.append(dict(next(iter(specs.values()))))
+            else:
+                result.append(
+                    {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,  # type: ignore[union-attr]
+                        "defer_loading": True,
+                    }
+                )
         if include_tool_search:
             result.append({"type": "tool_search"})
         return result

@@ -10,12 +10,12 @@ from anthropic import AsyncAnthropic
 
 from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
-from ravi.kernel.content import (
+from ravi.kernel.core.content import (
     TextBlock,
     ToolUseBlock,
     DataBlock,
 )
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.integrations.llm.encoders.anthropic import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,

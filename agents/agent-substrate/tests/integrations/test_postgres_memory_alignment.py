@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import os
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from ravi.kernel import AgentId, ChatMessage, TopicId
-from ravi.kernel.content import TextBlock
-from ravi.kernel.vector import Document
-from ravi.kernel.graph import Entity, Relationship
+from ravi.kernel import AgentId, ChatMessage
+from ravi.kernel.core.content import TextBlock
+from ravi.kernel.storage.vector import Document
 from ravi.kernel.tools import ToolExecutionResult, ToolCallRequest
 
 from ravi.capabilities.memory import PostgresMemoryStore
@@ -38,6 +36,7 @@ async def check_db_available() -> bool:
 
 # ── 1. Tools Unification Tests ───────────────────────────────────────────────
 
+
 def test_tool_types_unification():
     # Construct unified ToolExecutionResult (aliased Pydantic model)
     res = ToolExecutionResult(
@@ -63,6 +62,7 @@ def test_tool_types_unification():
 
 
 # ── 2. PostgresMemoryStore Tenancy Tests ─────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_postgres_memory_store_tenancy():
@@ -113,6 +113,7 @@ async def test_postgres_memory_store_tenancy():
 
 
 # ── 3. PostgresHistoryProvider Protocol Tests ────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_postgres_history_provider_conformance():
@@ -167,6 +168,7 @@ async def test_postgres_history_provider_conformance():
 
 # ── 4. PgVectorStore Protocol Tests ──────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_pgvector_store_conformance():
     if not await check_db_available():
@@ -174,11 +176,14 @@ async def test_pgvector_store_conformance():
 
     # Use raw asyncpg engine for pgvector store
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
     db_url = get_db_url()
     engine = create_async_engine(db_url)
     session_factory = async_sessionmaker(bind=engine)
 
-    store = PgVectorStore(session_factory=session_factory, engine=engine, dimensions=384)
+    store = PgVectorStore(
+        session_factory=session_factory, engine=engine, dimensions=384
+    )
     await store.ensure_table()
 
     # Clear default collection
@@ -189,8 +194,16 @@ async def test_pgvector_store_conformance():
 
     try:
         # Create documents with embeddings populated
-        doc1 = Document.from_text("multimodal text doc 1", id="00000000-0000-0000-0000-000000000001", embedding=emb1)
-        doc2 = Document.from_text("multimodal text doc 2", id="00000000-0000-0000-0000-000000000002", embedding=emb2)
+        doc1 = Document.from_text(
+            "multimodal text doc 1",
+            id="00000000-0000-0000-0000-000000000001",
+            embedding=emb1,
+        )
+        doc2 = Document.from_text(
+            "multimodal text doc 2",
+            id="00000000-0000-0000-0000-000000000002",
+            embedding=emb2,
+        )
 
         # Test add conforming to VectorStore
         ids = await store.add([doc1, doc2])
@@ -211,7 +224,9 @@ async def test_pgvector_store_conformance():
         assert results[0].score > 0.99  # similarity score
 
         # Test upsert conforming to VectorStore
-        doc1_updated = Document.from_text("updated text doc 1", id=doc1.id, embedding=emb1, metadata={"updated": True})
+        doc1_updated = Document.from_text(
+            "updated text doc 1", id=doc1.id, embedding=emb1, metadata={"updated": True}
+        )
         await store.upsert([doc1_updated])
 
         docs_after = await store.get([doc1.id])
@@ -224,6 +239,7 @@ async def test_pgvector_store_conformance():
 
 # ── 5. AGEGraphStore delete_relationship Test ───────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_age_graph_store_delete_relationship():
     # AGE is often not available or setup in standard postgres runtimes,
@@ -231,7 +247,7 @@ async def test_age_graph_store_delete_relationship():
     # We will test the delete_relationship cypher construction.
     db_url = get_db_url().replace("+asyncpg", "")
     store = AGEGraphStore(db_url)
-    
+
     # We can inspect the interface presence
     assert hasattr(store, "delete_relationship")
     assert hasattr(store, "get_neighbors")

@@ -19,7 +19,7 @@ from PIL import Image
 from ravi.integrations.llm.encoders._media import bytes_to_base64, pil_to_base64_png
 
 from ravi.kernel import ChatMessage
-from ravi.kernel.content import (
+from ravi.kernel.core.content import (
     AudioBlock,
     ImageBlock,
     VideoBlock,

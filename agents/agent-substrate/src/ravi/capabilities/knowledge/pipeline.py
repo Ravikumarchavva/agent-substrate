@@ -22,7 +22,7 @@ from ravi.logger import setup_logging
 from typing import TYPE_CHECKING, Any
 
 from ravi.capabilities.knowledge.chunking import get_chunker
-from ravi.kernel.vector import Document, SearchResult, VectorStore
+from ravi.kernel.storage.vector import Document, SearchResult, VectorStore
 
 if TYPE_CHECKING:
     from ravi.kernel.llm import LLMClient, EmbeddingClient as BaseEmbeddingClient
@@ -222,4 +222,3 @@ class RAGPipeline:
         # Extract text from response blocks
         text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
         return "".join(text_parts)
-

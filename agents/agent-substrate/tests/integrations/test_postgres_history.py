@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.exc import OperationalError
 from ravi.capabilities.history import PostgresHistoryProvider
 from ravi.kernel import AgentId, ChatMessage
-from ravi.kernel.content import TextBlock
+from ravi.kernel.core.content import TextBlock
 
 
 def test_postgres_history_internal_key_fits_legacy_column() -> None:

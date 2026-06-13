@@ -4,7 +4,7 @@ import pytest
 import redis.exceptions
 from ravi.capabilities.history import RedisHistoryProvider
 from ravi.kernel import AgentId
-from ravi.kernel.content import ChatMessage, TextBlock
+from ravi.kernel.core.content import ChatMessage, TextBlock
 
 
 @pytest.mark.asyncio

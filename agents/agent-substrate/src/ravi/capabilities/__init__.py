@@ -6,10 +6,10 @@ Directory layout::
     ├── tools/          ← all tool implementations + skills + connectors + discovery
     │   ├── skills/     ← SKILL.md prompt-skill packages
     │   ├── connectors/ ← stateful service connectors
-    │   ├── discovery.py ← CapabilityDiscovery (startup filesystem scanner)
+    │   ├── chain/      ← sandboxed code-mode tool chaining (bridge, prelude, ToolChainTool)
     │   └── web/, files/, ai/, compute/, utils/, communication/, …
     ├── knowledge/    ← RAG pipeline, chunkers, loaders, reranker
-    ├── pipeline/     ← declarative pipeline execution engine
+    ├── pipeline/     ← declarative pipeline execution engine + DataRefStore/ArtifactStore
     ├── memory/       ← ShortTermMemory + LongTermMemory implementations
     ├── history/      ← HistoryProvider implementations
     ├── vector/       ← VectorStore implementations
@@ -19,8 +19,11 @@ Directory layout::
 
 from __future__ import annotations
 
-from ravi.capabilities.pipeline.chain import ChainRuntime
-from ravi.capabilities.pipeline.data_ref import DataRef, DataRefStore
+from ravi.capabilities.pipeline.data_ref import (
+    DataRef,
+    DataRefStore,
+    DataRefArtifactStore,
+)
 from ravi.capabilities.pipeline.engine import (
     PipelineDef,
     PipelineEngine,
@@ -39,9 +42,9 @@ __all__ = [
     "CatalogPackage",
     "CatalogScanner",
     "CapabilityDiscovery",
-    "ChainRuntime",
     "DataRef",
     "DataRefStore",
+    "DataRefArtifactStore",
     "PipelineDef",
     "PipelineEngine",
     "PipelineResult",

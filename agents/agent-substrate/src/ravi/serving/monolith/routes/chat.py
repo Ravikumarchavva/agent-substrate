@@ -29,7 +29,7 @@ from ravi.integrations.llm.factory import (
     strip_provider_prefix,
 )
 from ravi.kernel import ChatMessage
-from ravi.kernel.content import TextBlock, ToolUseBlock
+from ravi.kernel.core.content import TextBlock, ToolUseBlock
 from ravi.serving.monolith.dependencies import ServerDependencies, get_ctx
 from ravi.serving.monolith.database import get_db
 from ravi.serving.monolith.hooks import ChatContext, hooks

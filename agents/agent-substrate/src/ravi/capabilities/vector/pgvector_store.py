@@ -35,8 +35,8 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ravi.kernel.content import TextBlock, content_block_from_dict
-from ravi.kernel.vector import Document, SearchResult
+from ravi.kernel.core.content import TextBlock, content_block_from_dict
+from ravi.kernel.storage.vector import Document, SearchResult
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -145,7 +145,9 @@ class PgVectorStore:
             for doc in documents:
                 doc_id = doc.id or str(uuid.uuid4())
                 if doc.embedding is None:
-                    raise ValueError(f"Document {doc_id} is missing embedding required by PgVectorStore")
+                    raise ValueError(
+                        f"Document {doc_id} is missing embedding required by PgVectorStore"
+                    )
 
                 emb_str = "[" + ",".join(str(x) for x in doc.embedding) + "]"
                 await conn.execute(
@@ -197,7 +199,9 @@ class PgVectorStore:
             if row.embedding is None:
                 emb = None
             elif isinstance(row.embedding, str):
-                emb = [float(x) for x in row.embedding.strip("[]").split(",") if x.strip()]
+                emb = [
+                    float(x) for x in row.embedding.strip("[]").split(",") if x.strip()
+                ]
             elif hasattr(row.embedding, "__iter__"):
                 emb = [float(x) for x in row.embedding]
             else:
@@ -230,7 +234,9 @@ class PgVectorStore:
             for doc in documents:
                 doc_id = doc.id or str(uuid.uuid4())
                 if doc.embedding is None:
-                    raise ValueError(f"Document {doc_id} is missing embedding required by PgVectorStore")
+                    raise ValueError(
+                        f"Document {doc_id} is missing embedding required by PgVectorStore"
+                    )
 
                 emb_str = "[" + ",".join(str(x) for x in doc.embedding) + "]"
                 await conn.execute(

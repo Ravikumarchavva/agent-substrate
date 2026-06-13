@@ -12,4 +12,3 @@ class FlowCheckpoint:
     state: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now())
     resumed_at: datetime | None = None
-

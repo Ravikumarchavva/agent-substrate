@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ravi.kernel.content import TextBlock, ToolUseBlock
-from ravi.kernel.identity import AgentId
-from ravi.kernel.stream import (
+from ravi.kernel.core.content import TextBlock, ToolUseBlock
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.messaging.stream import (
     AgentProgress,
     AgentStep,
     CompletionEvent,
@@ -12,7 +12,7 @@ from ravi.kernel.stream import (
     StreamDone,
     TextDelta,
 )
-from ravi.kernel.content import UIResourceBlock
+from ravi.kernel.core.content import UIResourceBlock
 from ravi.serving.protocol import (
     HandoffEvent,
     ReasoningDeltaEvent,

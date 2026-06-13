@@ -17,11 +17,10 @@ from ravi.kernel import (
     TextBlock,
     ToolUseBlock,
     ToolResultBlock,
-    AgentRuntime,
     Tool,
 )
-from ravi.kernel.message import Message
-from ravi.kernel.identity import AgentId
+from ravi.kernel.messaging.message import Message
+from ravi.kernel.core.identity import AgentId
 
 logger = setup_logging()
 
@@ -213,7 +212,7 @@ async def load_session_memory(
 
 def create_assistant_agent(
     *,
-    runtime: AgentRuntime,
+    runtime: Any,
     model_client: BaseModelClient,
     tools: Optional[List[Tool]] = None,
     system_instructions: str = "",

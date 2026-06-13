@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ravi.kernel.content import ChatMessage, TextBlock, ToolResultBlock
-from ravi.kernel.context import CompactionStrategy
+from ravi.kernel.core.content import ChatMessage, TextBlock, ToolResultBlock
+from ravi.kernel.agent.context import CompactionStrategy
 from ravi.logger import setup_logging
 
 logger = setup_logging()

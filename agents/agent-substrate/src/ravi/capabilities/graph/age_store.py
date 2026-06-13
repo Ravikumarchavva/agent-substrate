@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from ravi.kernel.graph import Entity, Relationship, SubGraph
+from ravi.kernel.storage.graph import Entity, Relationship, SubGraph
 
 logger = setup_logging()
 
@@ -227,10 +227,14 @@ class AGEGraphStore:
             return False
 
     async def delete_relationship(self, relationship_id: str) -> bool:
-        cypher = f"MATCH ()-[r {{_id: '{relationship_id}'}}]-() DELETE r RETURN count(r)"
+        cypher = (
+            f"MATCH ()-[r {{_id: '{relationship_id}'}}]-() DELETE r RETURN count(r)"
+        )
         try:
             result = await self._execute_cypher(cypher)
             return bool(result)
         except Exception:
-            logger.warning("Delete relationship failed for %s", relationship_id, exc_info=True)
+            logger.warning(
+                "Delete relationship failed for %s", relationship_id, exc_info=True
+            )
             return False

@@ -15,9 +15,9 @@ from ravi.kernel import (
     ContentBlock,
     TextBlock,
 )
-from ravi.kernel.content import ToolUseBlock
-from ravi.kernel.supervision import HistoryRetention
-from ravi.kernel.stream import CompletionEvent, TextDelta
+from ravi.kernel.core.content import ToolUseBlock
+from ravi.kernel.agent.supervision import HistoryRetention
+from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
 from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
 from ravi.agents.core import ReActAgent
 
@@ -123,8 +123,8 @@ async def test_permanent_retention_subagent_remembers_across_runs():
         session = "session-persistence-test"
 
         # Manually stamp supervision so coder has the right session
-        from ravi.kernel.identity import AgentId
-        from ravi.kernel.supervision import Supervision
+        from ravi.kernel.core.identity import AgentId
+        from ravi.kernel.agent.supervision import Supervision
 
         orchestrator_id = AgentId(type="assistant", key="router")
         root_sv = Supervision.root(orchestrator_id, session_id=session)
@@ -170,8 +170,8 @@ async def test_run_retention_subagent_is_ephemeral():
         scratch_history = InMemoryHistoryProvider()
         session = "session-ephemeral-test"
 
-        from ravi.kernel.identity import AgentId
-        from ravi.kernel.supervision import Supervision
+        from ravi.kernel.core.identity import AgentId
+        from ravi.kernel.agent.supervision import Supervision
         from uuid import uuid4
 
         orchestrator_id = AgentId(type="assistant", key="router")

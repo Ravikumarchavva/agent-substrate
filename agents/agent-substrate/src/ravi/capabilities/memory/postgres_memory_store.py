@@ -35,8 +35,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from ravi.kernel.identity import AgentId
-from ravi.kernel.memory import Memory
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.storage.memory import Memory
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -96,10 +96,14 @@ class PostgresMemoryStore:
                 if stmt_clean:
                     await conn.execute(text(stmt_clean))
             await conn.execute(
-                text("ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default'")
+                text(
+                    "ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default'"
+                )
             )
             await conn.execute(
-                text("CREATE INDEX IF NOT EXISTS agent_memories_namespace_idx ON agent_memories (namespace)")
+                text(
+                    "CREATE INDEX IF NOT EXISTS agent_memories_namespace_idx ON agent_memories (namespace)"
+                )
             )
 
     def _eng(self) -> AsyncEngine:
@@ -133,7 +137,9 @@ class PostgresMemoryStore:
                     "namespace": namespace,
                 },
             )
-        logger.debug("[memory] saved id=%s agent=%s namespace=%s", mem_id, agent_id, namespace)
+        logger.debug(
+            "[memory] saved id=%s agent=%s namespace=%s", mem_id, agent_id, namespace
+        )
         return mem_id
 
     async def search(
@@ -155,7 +161,12 @@ class PostgresMemoryStore:
                     "ORDER BY score DESC "
                     "LIMIT :limit"
                 ),
-                {"agent_name": str(agent_id), "query": query, "limit": limit, "namespace": namespace},
+                {
+                    "agent_name": str(agent_id),
+                    "query": query,
+                    "limit": limit,
+                    "namespace": namespace,
+                },
             )
             return [
                 Memory(
@@ -183,7 +194,11 @@ class PostgresMemoryStore:
                         "SELECT id, content, metadata FROM agent_memories "
                         "WHERE id = :id AND agent_name = :agent_name AND namespace = :namespace"
                     ),
-                    {"id": memory_id, "agent_name": str(agent_id), "namespace": namespace},
+                    {
+                        "id": memory_id,
+                        "agent_name": str(agent_id),
+                        "namespace": namespace,
+                    },
                 )
             ).first()
         if row is None:
@@ -220,7 +235,9 @@ class PostgresMemoryStore:
     ) -> None:
         async with self._eng().begin() as conn:
             await conn.execute(
-                text("DELETE FROM agent_memories WHERE agent_name = :agent_name AND namespace = :namespace"),
+                text(
+                    "DELETE FROM agent_memories WHERE agent_name = :agent_name AND namespace = :namespace"
+                ),
                 {"agent_name": str(agent_id), "namespace": namespace},
             )
 

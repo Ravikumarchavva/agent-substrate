@@ -32,7 +32,7 @@ from collections import defaultdict, deque
 from enum import Enum
 from typing import Awaitable, Callable, Deque, Dict, List, Union
 
-from ravi.kernel.content import JsonObject
+from ravi.kernel.core.content import JsonObject
 from ravi.logger import setup_logging
 
 logger = setup_logging()

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from ravi.kernel.content import (
+from ravi.kernel.core.content import (
     ChatMessage,
     TextBlock,
     CodeBlock,
@@ -87,7 +87,7 @@ def test_content_block_from_dict():
     assert isinstance(block, TextBlock)
     assert block.text == "hello dict"
 
-    from ravi.kernel.content import UnknownBlock
+    from ravi.kernel.core.content import UnknownBlock
 
     raw_error = {"type": "unknown", "text": "fallback"}
     block_fallback = content_block_from_dict(raw_error)

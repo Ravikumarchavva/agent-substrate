@@ -16,8 +16,8 @@ import re
 import uuid
 from typing import Any
 
-from ravi.kernel.content import TextBlock
-from ravi.kernel.vector import Document
+from ravi.kernel.core.content import TextBlock
+from ravi.kernel.storage.vector import Document
 
 
 class TextChunker:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Protocol
-from ravi.kernel.vector import SearchResult
+from ravi.kernel.storage.vector import SearchResult
 
 
 class RAGProvider(Protocol):

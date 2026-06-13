@@ -25,10 +25,9 @@ import logging
 import uuid
 from typing import Any
 
-from ravi.kernel.errors import AgentNotFoundError
-from ravi.kernel.identity import AgentId, TopicId
-from ravi.kernel.message import MessageContext, MessageHandler, Subscription
-from ravi.kernel.agent import Agent
+from ravi.kernel.core.errors import AgentNotFoundError
+from ravi.kernel.core.identity import AgentId, TopicId
+from ravi.kernel.messaging.message import MessageContext, MessageHandler, Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ class LocalRuntime:
 
     # -- Handler registry ----------------------------------------------------
 
-    async def register_agent(self, agent: Agent) -> None:
+    async def register_agent(self, agent: Any) -> None:
         """Register an ``Agent`` instance. The runtime calls ``agent.bind(self)``."""
         await agent.bind(self)
         await self.register(agent.id, agent.on_message)

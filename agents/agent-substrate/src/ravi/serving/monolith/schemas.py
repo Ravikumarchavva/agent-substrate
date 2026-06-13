@@ -12,7 +12,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from ravi.kernel.content import JsonObject
+from ravi.kernel.core.content import JsonObject
 
 
 # ── Thread / Session schemas ─────────────────────────────────────────────────

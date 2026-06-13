@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 import redis.asyncio as aioredis
 
 from ravi.kernel import AgentId
-from ravi.kernel.content import ChatMessage
+from ravi.kernel.core.content import ChatMessage
 from ravi.logger import setup_logging
 
 logger = setup_logging()

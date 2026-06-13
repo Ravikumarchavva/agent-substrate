@@ -11,14 +11,13 @@ import json
 import uuid
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from ravi.kernel import ChatMessage, TextBlock
 from ravi.kernel.llm import LLMClient, GenerationOptions
-from ravi.kernel.vector import Document, SearchResult
-from ravi.kernel.memory import LongTermMemory
-from ravi.kernel.identity import AgentId
-from ravi.capabilities.knowledge.chunking import PageChunker
+from ravi.kernel.storage.vector import SearchResult
+from ravi.kernel.storage.memory import LongTermMemory
+from ravi.kernel.core.identity import AgentId
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +90,6 @@ class PageIndexRAGPipeline:
         # Fallback local in-memory store for trees if memory_store is not provided
         self._local_trees: dict[str, PageNode] = {}
 
-
-
     # ── Tree Storage Helper ───────────────────────────────────────────────────
 
     async def _get_collection_tree(self, collection: str) -> PageNode:
@@ -110,7 +107,11 @@ class PageIndexRAGPipeline:
                         data = json.loads(m.content)
                         return dict_to_node(data)
                     except Exception:
-                        logger.warning("Failed to deserialize tree for collection %s", collection, exc_info=True)
+                        logger.warning(
+                            "Failed to deserialize tree for collection %s",
+                            collection,
+                            exc_info=True,
+                        )
 
         if collection in self._local_trees:
             return self._local_trees[collection]
@@ -137,7 +138,9 @@ class PageIndexRAGPipeline:
             )
             for m in memories:
                 if m.metadata.get("collection") == collection:
-                    await self._memory.delete(self._agent_id, m.id, namespace="page_index_trees")
+                    await self._memory.delete(
+                        self._agent_id, m.id, namespace="page_index_trees"
+                    )
 
             # Save new tree
             await self._memory.save(
@@ -182,7 +185,9 @@ class PageIndexRAGPipeline:
         else:
             # Content is list of page texts
             if strategy == "hierarchical":
-                doc_tree = await self._build_hierarchical_tree_llm("\n\n".join(content), doc_title)
+                doc_tree = await self._build_hierarchical_tree_llm(
+                    "\n\n".join(content), doc_title
+                )
             else:
                 doc_tree = self._build_flat_tree(content, doc_title)
 
@@ -204,7 +209,7 @@ class PageIndexRAGPipeline:
         doc_root = PageNode(title=title, content="", level=1)
         for i, page_text in enumerate(pages):
             page_node = PageNode(
-                title=f"Page {i+1}",
+                title=f"Page {i + 1}",
                 content=page_text,
                 level=2,
                 metadata={"page_number": i + 1},
@@ -229,7 +234,9 @@ class PageIndexRAGPipeline:
                 # Count level
                 header_prefix = line.split(" ")[0]
                 if all(c == "#" for c in header_prefix):
-                    level = len(header_prefix) + 1  # Shift by 1 because doc_root is level 1
+                    level = (
+                        len(header_prefix) + 1
+                    )  # Shift by 1 because doc_root is level 1
                     header_title = line[len(header_prefix) :].strip()
 
                     # Save current content to current node before branching
@@ -267,11 +274,11 @@ class PageIndexRAGPipeline:
             "{\n"
             '  "title": "Annual Report 2025",\n'
             '  "children": [\n'
-            '    {\n'
+            "    {\n"
             '      "title": "1. Executive Summary",\n'
             '      "children": []\n'
             "    },\n"
-            '    {\n'
+            "    {\n"
             '      "title": "2. Financial Analysis",\n'
             '      "children": [\n'
             '        {"title": "2.1 Revenues", "children": []},\n'
@@ -291,9 +298,10 @@ class PageIndexRAGPipeline:
                     system_instructions="You are a document indexing system. Always respond with raw valid JSON only."
                 ),
             )
-            text_response = "".join(b.text for b in response.content if isinstance(b, TextBlock))
+            text_response = "".join(
+                b.text for b in response.content if isinstance(b, TextBlock)
+            )
             toc_data = json.loads(text_response.strip())
-
 
             # Recursively build PageNode structures from JSON
             def parse_json_node(data: dict[str, Any], level: int) -> PageNode:
@@ -323,7 +331,9 @@ class PageIndexRAGPipeline:
             for para in paragraphs:
                 best_node = doc_root
                 best_score = 0
-                para_words = set(para.lower().split()[:20])  # Use start of paragraph for topic match
+                para_words = set(
+                    para.lower().split()[:20]
+                )  # Use start of paragraph for topic match
                 for node in all_nodes:
                     if node == doc_root:
                         continue
@@ -337,7 +347,10 @@ class PageIndexRAGPipeline:
             return doc_root
 
         except Exception:
-            logger.warning("Failed to build hierarchical TOC tree using LLM, falling back to flat page index", exc_info=True)
+            logger.warning(
+                "Failed to build hierarchical TOC tree using LLM, falling back to flat page index",
+                exc_info=True,
+            )
             pages = [text[i : i + 3000] for i in range(0, len(text), 3000)]
             return self._build_flat_tree(pages, title)
 
@@ -392,8 +405,13 @@ class PageIndexRAGPipeline:
                         system_instructions="You are a document search navigator. Always respond with the single word index or 'retrieve' only."
                     ),
                 )
-                text_response = "".join(b.text for b in response.content if isinstance(b, TextBlock)).strip().lower()
-
+                text_response = (
+                    "".join(
+                        b.text for b in response.content if isinstance(b, TextBlock)
+                    )
+                    .strip()
+                    .lower()
+                )
 
                 if "retrieve" in text_response:
                     break
@@ -409,7 +427,10 @@ class PageIndexRAGPipeline:
                 else:
                     break
             except Exception:
-                logger.warning("Error navigating page index tree, stopping traversal", exc_info=True)
+                logger.warning(
+                    "Error navigating page index tree, stopping traversal",
+                    exc_info=True,
+                )
                 break
 
         # Collect node content
@@ -449,7 +470,9 @@ class PageIndexRAGPipeline:
             "Always cite the section title and path where the answer was found."
         )
 
-        doc_reference = f"Section: {metadata.get('title')}\nPath: {metadata.get('navigation_path')}"
+        doc_reference = (
+            f"Section: {metadata.get('title')}\nPath: {metadata.get('navigation_path')}"
+        )
 
         messages = [
             ChatMessage(
@@ -469,4 +492,3 @@ class PageIndexRAGPipeline:
             options=GenerationOptions(system_instructions=system_prompt),
         )
         return "".join(b.text for b in response.content if isinstance(b, TextBlock))
-

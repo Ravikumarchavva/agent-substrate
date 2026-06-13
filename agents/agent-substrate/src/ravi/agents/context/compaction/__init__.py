@@ -12,7 +12,7 @@ TokenBudgetComposedStrategy     Configurable    Depends            Depends
 
 from __future__ import annotations
 
-from ravi.kernel.context import CompactionStrategy
+from ravi.kernel.agent.context import CompactionStrategy
 
 from ravi.agents.context.compaction.sliding_window import SlidingWindowStrategy
 from ravi.agents.context.compaction.summarization import SummarizationStrategy

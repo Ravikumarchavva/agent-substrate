@@ -5,7 +5,7 @@ from typing import Callable, Awaitable
 
 from ravi.agents.middleware._contracts import AgentRunContext
 from ravi.exceptions import MiddlewareTermination
-from ravi.kernel.content import TextBlock
+from ravi.kernel.core.content import TextBlock
 
 
 class ContentFilterMiddleware:

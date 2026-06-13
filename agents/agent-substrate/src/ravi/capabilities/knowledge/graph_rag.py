@@ -24,12 +24,12 @@ from ravi.logger import setup_logging
 import json
 from typing import TYPE_CHECKING, Any
 
-from ravi.kernel.graph import Entity, Relationship
-from ravi.kernel.vector import SearchResult
+from ravi.kernel.storage.graph import Entity, Relationship
+from ravi.kernel.storage.vector import SearchResult
 
 if TYPE_CHECKING:
     from ravi.kernel.llm import LLMClient
-    from ravi.kernel.graph import GraphStore
+    from ravi.kernel.storage.graph import GraphStore
     from ravi.capabilities.knowledge.pipeline import RAGPipeline
 
 logger = setup_logging()
@@ -104,7 +104,6 @@ class GraphRAGPipeline:
             text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
             text_content = "".join(text_parts)
 
-
             data = json.loads(text_content.strip())
 
             # Store entities
@@ -176,7 +175,8 @@ class GraphRAGPipeline:
                     keywords.add(w.lower())
 
         # If CypherCapable, query the graph to find matching entities
-        from ravi.kernel.graph import CypherCapable
+        from ravi.kernel.storage.graph import CypherCapable
+
         matched_entities = []
 
         if isinstance(self._graph, CypherCapable):
@@ -190,38 +190,50 @@ class GraphRAGPipeline:
                                 data = json.loads(val)
                                 eid = data.get("_id", str(data.get("id", "")))
                                 label = data.get("label", "Unknown")
-                                props = {k: v for k, v in data.items() if k not in ("id", "_id", "label")}
+                                props = {
+                                    k: v
+                                    for k, v in data.items()
+                                    if k not in ("id", "_id", "label")
+                                }
                                 name = props.get("name", "").lower() or eid.lower()
                                 if any(kw in name for kw in keywords):
-                                    from ravi.kernel.graph import Entity
-                                    matched_entities.append(Entity(id=eid, label=label, properties=props))
+                                    from ravi.kernel.storage.graph import Entity
+
+                                    matched_entities.append(
+                                        Entity(id=eid, label=label, properties=props)
+                                    )
                             except Exception:
                                 pass
             except Exception:
-                logger.warning("Failed to query Cypher for entity matches", exc_info=True)
+                logger.warning(
+                    "Failed to query Cypher for entity matches", exc_info=True
+                )
 
         # Retrieve neighbors of matched entities
         relationships_found = []
         entities_found = set()
 
-        for entity in matched_entities[:5]:  # Limit to top 5 matches to avoid context bloat
+        for entity in matched_entities[
+            :5
+        ]:  # Limit to top 5 matches to avoid context bloat
             subgraph = await self._graph.get_neighbors(entity.id, depth=graph_depth)
             for e in subgraph.entities:
                 entities_found.add(f"{e.label}({e.properties.get('name', e.id)})")
             for r in subgraph.relationships:
-                relationships_found.append(
-                    f"{r.source_id} -[{r.type}]-> {r.target_id}"
-                )
+                relationships_found.append(f"{r.source_id} -[{r.type}]-> {r.target_id}")
 
         if entities_found or relationships_found:
             graph_text = "Knowledge Graph Context:\n"
             if entities_found:
                 graph_text += f"- Related Entities: {', '.join(entities_found)}\n"
             if relationships_found:
-                graph_text += "- Relationships:\n" + "\n".join(f"  * {rel}" for rel in relationships_found[:10])
+                graph_text += "- Relationships:\n" + "\n".join(
+                    f"  * {rel}" for rel in relationships_found[:10]
+                )
 
             # Append graph SearchResult
             from ravi.kernel import TextBlock
+
             graph_result = SearchResult(
                 id="graph_context",
                 content=[TextBlock(text=graph_text)],
@@ -278,5 +290,3 @@ class GraphRAGPipeline:
         # Extract text from response blocks
         text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
         return "".join(text_parts)
-
-

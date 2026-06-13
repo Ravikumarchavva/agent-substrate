@@ -1,0 +1,189 @@
+@startuml kernel_domain_model
+title Ravi Engine - Kernel Domain Model\n(content.py . tools.py . chain.py . llm.py . runtime_context.py)
+
+top to bottom direction
+skinparam dpi 200
+skinparam Shadowing false
+skinparam DefaultFontName "Segoe UI"
+hide empty members
+hide stereotypes
+
+skinparam BackgroundColor #ffffff
+skinparam TitleFontColor #111827
+skinparam TitleFontSize 15
+
+skinparam PackageBackgroundColor #f9fafb
+skinparam PackageBorderColor #d1d5db
+skinparam PackageFontColor #374151
+skinparam PackageFontSize 11
+
+skinparam ClassBackgroundColor #ffffff
+skinparam ClassBorderColor #4b5563
+skinparam ClassFontColor #111827
+skinparam ClassFontSize 12
+
+skinparam InterfaceBackgroundColor #eff6ff
+skinparam InterfaceBorderColor #3b82f6
+skinparam InterfaceFontColor #1e3a8a
+
+skinparam ArrowColor #4b5563
+skinparam ArrowFontColor #374151
+skinparam ArrowFontSize 11
+
+skinparam NoteBorderColor #f59e0b
+skinparam NoteBackgroundColor #fef3c7
+skinparam NoteFontColor #78350f
+skinparam NoteFontSize 11
+
+' ------------------------------------------------------------------
+' TIER 1: Messages & Content  (the wire format between LLM and agent)
+' ------------------------------------------------------------------
+package "Messages & Content  (content.py)" as PKG_CONTENT {
+  class ChatMessage {
+    role : "user" | "assistant" | "tool"
+    content : list[ContentBlock]
+  }
+  abstract class ContentBlock
+  class TextBlock
+  class ImageBlock
+  class ToolUseBlock {
+    id : str
+    name : str
+    input : JsonObject
+  }
+  class ToolResultBlock {
+    tool_use_id : str
+    content : list[ContentBlock]
+  }
+
+  ChatMessage  *-- ContentBlock  : "1..*"
+  ContentBlock <|-- TextBlock
+  ContentBlock <|-- ImageBlock
+  ContentBlock <|-- ToolUseBlock
+  ContentBlock <|-- ToolResultBlock
+}
+
+' ------------------------------------------------------------------
+' TIER 2: Tool Taxonomy  (who declares, who executes)
+' ------------------------------------------------------------------
+package "Tool Taxonomy  (tools.py)" as PKG_TOOLS {
+  class ToolCallRequest {
+    name : str
+    arguments : JsonObject
+  }
+  class ToolExecutionResult {
+    content : list[ContentBlock]
+    structured : JsonObject
+  }
+  interface Tool {
+    name : str
+    input_schema : JsonObject
+    execute(...)
+  }
+  interface HostedTool {
+    name : str
+    provider_specs : dict[str, JsonObject]
+  }
+  interface ProviderDefinedTool {
+    name : str
+    provider_specs : dict[str, JsonObject]
+    call_types : tuple[str, ...]
+    handle_call(call)
+  }
+  class FunctionSpec {
+    kind = "function"
+    name : str
+    parameters : JsonObject
+    lazy_schema : bool
+    strict : bool
+  }
+  class ProviderSpec {
+    kind = "provider"
+    provider : str
+    spec : JsonObject
+  }
+
+  Tool ..> ToolExecutionResult : "execute() returns"
+}
+
+note bottom of PKG_TOOLS
+  AnyTool = Tool | HostedTool | ProviderDefinedTool
+  ToolSpec = FunctionSpec | ProviderSpec  (discriminated on "kind")
+  spec_of(tool, provider=) derives the right spec, or None.
+end note
+
+' ------------------------------------------------------------------
+' TIER 3: Chain Contracts  (sandboxed chaining + artifact data plane)
+' ------------------------------------------------------------------
+package "Chain Contracts  (chain.py)" as PKG_CHAIN {
+  interface ArtifactStore {
+    store(data) : str
+    resolve(ref) : bytes
+    pin(ref) / unpin(ref)
+  }
+  class ChainPolicy {
+    max_tool_calls : int = 50
+    call_timeout_s : float = 60
+    approval_timeout_s : float = 55
+    max_inline_result_bytes : int = 4096
+    max_risk_unapproved : ToolRisk
+  }
+  class ChainFile {
+    path : str
+    media_type : str
+    artifact_ref : str
+  }
+  class InvocationResult {
+    status : "ok" | "error" | "denied"
+    text : str
+    structured : JsonObject
+    artifact_ref : str | None
+    files : list[ChainFile]
+  }
+  class ChainCallRecord {
+    tool : str
+    args_digest : str
+    status : str
+    duration_ms : int
+  }
+  class ChainRunResult {
+    status : "ok" | "error" | "timeout"
+    output_text : str
+    tool_calls : int
+    duration_ms : int
+    call_trace : list[ChainCallRecord]
+  }
+
+  InvocationResult  *-- ChainFile
+  ChainRunResult    *-- ChainCallRecord
+  InvocationResult  ..> ArtifactStore : "refs store when\nresult is large"
+}
+
+' ------------------------------------------------------------------
+' TIER 4: Execution Context  (deadline + cancellation threaded everywhere)
+' ------------------------------------------------------------------
+package "Execution Context  (runtime_context.py)" as PKG_CTX {
+  class RunContext {
+    run_id : str
+    trace_id : str
+    deadline : datetime | None
+    cancel_token : CancellationToken
+    check()
+    is_expired() : bool
+  }
+}
+
+' ------------------------------------------------------------------
+' Cross-package arrows — force vertical stacking AND tell the story
+' ------------------------------------------------------------------
+
+' Tier 1 → Tier 2: LLM emits ToolUseBlock; agent translates it to ToolCallRequest
+ToolUseBlock    ..> ToolCallRequest  : "translated to"
+
+' Tier 2 → Tier 3: ToolInvoker converts ToolExecutionResult into InvocationResult
+ToolExecutionResult ..> InvocationResult : "shaped into by\nToolInvoker"
+
+' Tier 3 → Tier 4: every chain run is governed by a RunContext (deadline + cancel)
+ChainRunResult  ..> RunContext       : "produced within"
+
+@enduml

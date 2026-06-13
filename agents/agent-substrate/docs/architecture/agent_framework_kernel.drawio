@@ -1,0 +1,34 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="gkVrtzEL_Xf8b7BMVC6x">
+    <mxGraphModel dx="658" dy="317" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Gl1ZxXkNHhY4wciIyXJq-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="570" width="1380" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="Gl1ZxXkNHhY4wciIyXJq-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;AgentRuntime&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="160" x="700" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="Gl1ZxXkNHhY4wciIyXJq-4" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=26;fillColor=none;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" value="AgentRuntime" vertex="1">
+          <mxGeometry height="156" width="320" x="270" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="Gl1ZxXkNHhY4wciIyXJq-5" parent="Gl1ZxXkNHhY4wciIyXJq-4" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="+ send_message(payload, sender, recipient)" vertex="1">
+          <mxGeometry height="26" width="320" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="Gl1ZxXkNHhY4wciIyXJq-8" parent="Gl1ZxXkNHhY4wciIyXJq-4" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="+ publish_message(payload, sender, topic)" vertex="1">
+          <mxGeometry height="26" width="320" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="Gl1ZxXkNHhY4wciIyXJq-9" parent="Gl1ZxXkNHhY4wciIyXJq-4" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="+ register_agent(agent)" vertex="1">
+          <mxGeometry height="26" width="320" y="78" as="geometry" />
+        </mxCell>
+        <mxCell id="Gl1ZxXkNHhY4wciIyXJq-10" parent="Gl1ZxXkNHhY4wciIyXJq-4" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="+ send_message(payload, sender, recipient)" vertex="1">
+          <mxGeometry height="26" width="320" y="104" as="geometry" />
+        </mxCell>
+        <mxCell id="Gl1ZxXkNHhY4wciIyXJq-11" parent="Gl1ZxXkNHhY4wciIyXJq-4" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="+ send_message(payload, sender, recipient)" vertex="1">
+          <mxGeometry height="26" width="320" y="130" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 
 from ravi.reasoning.memory.lineage import InMemoryLineageStore
-from ravi.kernel.memory import (
+from ravi.kernel.storage.memory import (
     LineageNotFoundError,
     LineageRecord,
     LineageStore,

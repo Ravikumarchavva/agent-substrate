@@ -85,7 +85,7 @@ class ToolboxResult:
 class RuntimeServices:
     """Objects returned by :func:`init_runtime`."""
 
-    chain_runtime: Any
+    chain_bridge_registry: Any
     pipeline_engine: Any
     pipeline_store: Any
     workflow_client: Any
@@ -299,20 +299,21 @@ async def init_runtime_services(
     runtime: LocalRuntime,
     tools_requiring_approval: list[str],
     tool_timeout: float,
+    code_interpreter_tool: Any | None = None,
 ) -> RuntimeServices:
-    """Create chain runtime, pipeline engine, workflow client, and triggers."""
+    """Create ToolChainTool, pipeline engine, workflow client, and triggers."""
 
-    from ravi.capabilities.pipeline.chain import ChainRuntime
+    from ravi.agents.tools.invoker import ToolInvoker
+    from ravi.capabilities.pipeline.data_ref import DataRefArtifactStore
     from ravi.capabilities.pipeline.engine import PipelineEngine
     from ravi.capabilities.pipeline.store import PipelineStore
+    from ravi.capabilities.tools.chain.bridge import ChainBridgeRegistry
+    from ravi.capabilities.tools.chain.tool import ToolChainTool
     from ravi.capabilities.triggers.conditions import ConditionMonitor
     from ravi.capabilities.triggers.scheduler import TriggerScheduler
     from ravi.capabilities.triggers.webhooks import WebhookRegistry
-    from ravi.capabilities.tools.chain_executor import ChainExecutorTool
     from ravi.capabilities.tools.pipeline_manager import PipelineManagerTool
-
-    # ChainRuntime — LLM-written code-based adapter chaining
-    chain_runtime = ChainRuntime(registry=registry, data_store=data_store)
+    from ravi.kernel.tools.chain import ChainPolicy
 
     # PipelineEngine + PipelineStore — declarative saved adapter chains
     pipeline_engine = PipelineEngine(registry=registry, data_store=data_store)
@@ -351,9 +352,34 @@ async def init_runtime_services(
     except Exception as exc:
         logger.warning("TriggerScheduler failed to start: %s", exc)
 
-    # Register chain/pipeline tools with their real dependencies
-    chain_executor_tool = ChainExecutorTool(chain_runtime=chain_runtime)
-    registry.add(chain_executor_tool)
+    # ToolChainTool — sandboxed code-mode chaining via ToolInvoker + CodeInterpreter
+    chain_bridge_registry = ChainBridgeRegistry()
+    bridge_base_url = os.environ.get("CHAIN_BRIDGE_URL", "http://localhost:8001")
+    if code_interpreter_tool is not None:
+        artifact_store = DataRefArtifactStore(data_store)
+        invoker = ToolInvoker(
+            registry=registry,
+            artifact_store=artifact_store,
+            policy=ChainPolicy(),
+        )
+        try:
+            tool_chain = ToolChainTool(
+                invoker=invoker,
+                interpreter=code_interpreter_tool,
+                bridge_registry=chain_bridge_registry,
+                bridge_base_url=bridge_base_url,
+            )
+            registry.add(tool_chain)
+            logger.info(
+                "ToolChainTool registered (sandboxed code-mode chaining enabled)"
+            )
+        except RuntimeError as exc:
+            logger.warning("ToolChainTool not registered: %s", exc)
+    else:
+        logger.info(
+            "ToolChainTool not registered (CodeInterpreter unavailable; chains degrade to sequential calls)"
+        )
+
     pipeline_manager_tool = PipelineManagerTool(
         pipeline_engine=pipeline_engine,
         pipeline_store=pipeline_store,
@@ -361,7 +387,7 @@ async def init_runtime_services(
     registry.add(pipeline_manager_tool)
 
     return RuntimeServices(
-        chain_runtime=chain_runtime,
+        chain_bridge_registry=chain_bridge_registry,
         pipeline_engine=pipeline_engine,
         pipeline_store=pipeline_store,
         workflow_client=workflow_client,

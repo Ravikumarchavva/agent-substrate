@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from ravi.kernel.content import DocumentBlock, ImageBlock, TextBlock
-from ravi.kernel import Tool, ToolResultBlock
-from ravi.kernel.tools import ToolType
+from ravi.kernel.core.content import DocumentBlock, ImageBlock, TextBlock
+from ravi.kernel.tools import ToolExecutionResult, ToolType
 from ravi.integrations.tools.mcp.client import MCPClient
 
 
-class MCPTool(Tool):
+class MCPTool:
     """Adapter that wraps an MCP server tool as a BaseTool.
 
     This class bridges MCP (Model Context Protocol) tools with the agent
@@ -68,18 +67,7 @@ class MCPTool(Tool):
         self.input_schema = input_schema
         self.client = client
 
-    async def execute(self, **kwargs) -> ToolResultBlock:
-        """Execute the MCP tool with given parameters.
-
-        Args:
-            **kwargs: Tool parameters matching the input schema
-
-        Returns:
-            ToolResultBlock with structured content
-
-        Raises:
-            RuntimeError: If MCP client is not connected
-        """
+    async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:  # type: ignore[override]
         if not self.client.is_connected:
             raise RuntimeError(f"MCP client not connected for tool '{self.name}'")
 
@@ -142,16 +130,18 @@ class MCPTool(Tool):
                         content.append(TextBlock(text=str(item)))
 
                 is_error: bool = getattr(result, "isError", False)
-                return ToolResultBlock(
+                return ToolExecutionResult(
                     call_id=call_id, content=content, is_error=is_error
                 )
             else:
                 # Legacy: result is a raw string/object
                 content = [TextBlock(text=str(result))]
-                return ToolResultBlock(call_id=call_id, content=content, is_error=False)
+                return ToolExecutionResult(
+                    call_id=call_id, content=content, is_error=False
+                )
 
         except Exception as e:
-            return ToolResultBlock(
+            return ToolExecutionResult(
                 call_id=call_id,
                 content=[TextBlock(text=f"Tool execution failed: {e}")],
                 is_error=True,

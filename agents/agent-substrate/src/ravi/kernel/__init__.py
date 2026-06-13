@@ -6,7 +6,7 @@ No I/O, no concrete implementations, no external dependencies beyond pydantic.
 
 from __future__ import annotations
 
-from ravi.kernel.content import (
+from ravi.kernel.core.content import (
     JsonObject,
     Role,
     BlockValidationError,
@@ -30,54 +30,57 @@ from ravi.kernel.content import (
     content_block_from_dict,
     content_blocks_to_str,
 )
-from ravi.kernel.identity import (
+from ravi.kernel.core.identity import (
     AgentId,
     TopicId,
 )
-from ravi.kernel.supervision import (
+from ravi.kernel.agent.supervision import (
     Supervision,
     HistoryRetention,
     Priority,
 )
-from ravi.kernel.message import (
+from ravi.kernel.tools.tools import (
+    ToolRisk,
+    ToolType,
+    ToolExecution,
+    ToolUI,
+    ToolCallRequest,
+    ToolExecutionResult,
+    FunctionSpec,
+    ProviderSpec,
+    ToolSpec,
+    spec_of,
+    Tool,
+    HostedTool,
+    ProviderDefinedTool,
+    AnyTool,
+    is_hosted_tool,
+    is_provider_defined_tool,
+    ToolRegistry,
+)
+from ravi.kernel.messaging.message import (
     ChatPayload,
-    ToolCallPayload,
-    ToolResultPayload,
     DataPayload,
     ControlPayload,
     ProgressPayload,
     Payload,
     register_payload_type,
-    ToolCallRequest,
-    ToolExecutionResult,
-    RuntimeRef,
     Message,
-    MessageContext,
     MessageHandler,
     Subscription,
 )
-from ravi.kernel.protocol import AgentRuntime
-from ravi.kernel.tools import (
-    ToolRisk,
-    ToolType,
-    ToolUI,
-    ToolExecutionResult as _ToolExecutionResultFromTools,  # noqa: F401 — re-exported via message
-    ToolCallRequest as _ToolCallRequestFromTools,  # noqa: F401
-    Tool,
-    ToolRegistry,
-)
-from ravi.kernel.skills import Skill
-from ravi.kernel.usage import Usage
-from ravi.kernel.llm import (
+from ravi.kernel.tools.skills import Skill
+from ravi.kernel.core.usage import Usage
+from ravi.kernel.llm.llm import (
     GenerationOptions,
     LLMClient,
     LLMResponse,
     EmbeddingClient,
     EmbeddingResult,
 )
-from ravi.kernel.history import HistoryProvider
-from ravi.kernel.context import CompactionStrategy, AgentContextProtocol
-from ravi.kernel.middleware import (
+from ravi.kernel.storage.history import HistoryProvider
+from ravi.kernel.agent.context import CompactionStrategy, AgentContextProtocol
+from ravi.kernel.agent.middleware import (
     Middleware,
     AgentMiddleware,
     ChatMiddleware,
@@ -86,7 +89,7 @@ from ravi.kernel.middleware import (
     ChatContextProtocol,
     FunctionContextProtocol,
 )
-from ravi.kernel.errors import (
+from ravi.kernel.core.errors import (
     KernelError,
     AgentNotFoundError,
     HandlerError,
@@ -94,8 +97,10 @@ from ravi.kernel.errors import (
     BudgetExhaustedError,
     MiddlewareTermination,
     CancellationError,
+    ConcurrentAppendError,
+    SpawnDenied,
 )
-from ravi.kernel.stream import (
+from ravi.kernel.messaging.stream import (
     TextDelta,
     ReasoningDelta,
     CompletionEvent,
@@ -103,13 +108,47 @@ from ravi.kernel.stream import (
     AgentProgress,
     AgentStep,
 )
-from ravi.kernel.vector import Document, SearchResult, VectorStore
-from ravi.kernel.graph import Entity, Relationship, SubGraph, GraphStore, CypherCapable
-from ravi.kernel.memory import Memory, ShortTermMemory, LongTermMemory
-from ravi.kernel.runtime_context import CancellationToken, RunContext
-from ravi.kernel.agent import Agent, Checkpoint
-from ravi.kernel.events import Event, EventHandler, EventPublisher, EventSubscriber
-from ravi.kernel.approval import ApprovalDecision, ApprovalRequest, ApprovalHandler
+from ravi.kernel.storage.vector import Document, SearchResult, VectorStore
+from ravi.kernel.storage.graph import Entity, Relationship, SubGraph, GraphStore, CypherCapable
+from ravi.kernel.storage.memory import Memory, ShortTermMemory, LongTermMemory
+from ravi.kernel.agent.runtime_context import CancellationToken, RunContext
+from ravi.kernel.messaging.events import Event, EventHandler, EventPublisher, EventSubscriber
+from ravi.kernel.tools.approval import ApprovalDecision, ApprovalRequest, ApprovalHandler
+from ravi.kernel.tools.chain import (
+    ArtifactStore,
+    ChainPolicy,
+    ChainFile,
+    InvocationResult,
+    ChainCallRecord,
+    ChainRunResult,
+)
+from ravi.kernel.runtime import (
+    RunId,
+    RunStatus,
+    new_run_id,
+    RunLogEntry,
+    EventLog,
+    Effect,
+    EffectResult,
+    Journal,
+    DeadLetterReason,
+    DeadLetterEntry,
+    Inbox,
+    FollowGraph,
+    FanoutStrategy,
+    Wakeup,
+    SignalBus,
+    RunRetryPolicy,
+    Lease,
+    Scheduler,
+    RunHandle,
+    RunResult,
+    Supervisor,
+    DurableContextProtocol,
+    DurableAgent,
+    AskOutcome,
+    RunStatusSummary,
+)
 
 __all__ = [
     # Content
@@ -142,32 +181,35 @@ __all__ = [
     "Supervision",
     "HistoryRetention",
     "Priority",
+    # Tools
+    "ToolRisk",
+    "ToolType",
+    "ToolExecution",
+    "ToolUI",
+    "ToolCallRequest",
+    "ToolExecutionResult",
+    "FunctionSpec",
+    "ProviderSpec",
+    "ToolSpec",
+    "spec_of",
+    "Tool",
+    "HostedTool",
+    "ProviderDefinedTool",
+    "AnyTool",
+    "is_hosted_tool",
+    "is_provider_defined_tool",
+    "ToolRegistry",
     # Payload types
     "ChatPayload",
-    "ToolCallPayload",
-    "ToolResultPayload",
     "DataPayload",
     "ControlPayload",
     "ProgressPayload",
     "Payload",
     "register_payload_type",
-    # Compat shims (canonical in tools.py)
-    "ToolCallRequest",
-    "ToolExecutionResult",
-    # Communication
-    "RuntimeRef",
+    # Messaging
     "Message",
-    "MessageContext",
     "MessageHandler",
     "Subscription",
-    # Runtime
-    "AgentRuntime",
-    # Tools
-    "ToolRisk",
-    "ToolType",
-    "ToolUI",
-    "Tool",
-    "ToolRegistry",
     # Skills
     "Skill",
     # LLM
@@ -198,6 +240,8 @@ __all__ = [
     "BudgetExhaustedError",
     "MiddlewareTermination",
     "CancellationError",
+    "ConcurrentAppendError",
+    "SpawnDenied",
     # Token stream
     "TextDelta",
     "ReasoningDelta",
@@ -206,7 +250,7 @@ __all__ = [
     # Progress stream
     "AgentProgress",
     "AgentStep",
-    # Retrieval / knowledge stores
+    # Retrieval / RAG knowledge stores
     "Document",
     "SearchResult",
     "VectorStore",
@@ -222,10 +266,7 @@ __all__ = [
     # Execution context
     "CancellationToken",
     "RunContext",
-    # Agent protocol
-    "Agent",
-    "Checkpoint",
-    # Events
+    # Events (generic pub/sub envelope)
     "Event",
     "EventHandler",
     "EventPublisher",
@@ -234,4 +275,37 @@ __all__ = [
     "ApprovalDecision",
     "ApprovalRequest",
     "ApprovalHandler",
+    # Chain
+    "ArtifactStore",
+    "ChainPolicy",
+    "ChainFile",
+    "InvocationResult",
+    "ChainCallRecord",
+    "ChainRunResult",
+    # Durable runtime contracts
+    "RunId",
+    "RunStatus",
+    "new_run_id",
+    "RunLogEntry",
+    "EventLog",
+    "Effect",
+    "EffectResult",
+    "Journal",
+    "DeadLetterReason",
+    "DeadLetterEntry",
+    "Inbox",
+    "FollowGraph",
+    "FanoutStrategy",
+    "Wakeup",
+    "SignalBus",
+    "RunRetryPolicy",
+    "Lease",
+    "Scheduler",
+    "RunHandle",
+    "RunResult",
+    "Supervisor",
+    "DurableContextProtocol",
+    "DurableAgent",
+    "AskOutcome",
+    "RunStatusSummary",
 ]

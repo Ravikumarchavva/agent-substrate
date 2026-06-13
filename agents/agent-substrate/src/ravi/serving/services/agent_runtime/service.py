@@ -17,7 +17,7 @@ from ravi.kernel import (
     ToolUseBlock,
     Tool as BaseTool,
 )
-from ravi.kernel.stream import CompletionEvent
+from ravi.kernel.messaging.stream import CompletionEvent
 from ravi.kernel.llm import LLMClient
 from ravi.integrations.events import EventBus
 from ravi.serving.shared.events.envelope import EventEnvelope

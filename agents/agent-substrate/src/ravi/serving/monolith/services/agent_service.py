@@ -39,7 +39,7 @@ from ravi.agents.context import (
 from ravi.capabilities.tools.human_input import ToolApprovalHandler
 from ravi.kernel import Priority
 from ravi.kernel.llm import LLMClient as BaseModelClient
-from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, AgentRuntime, Tool
+from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, Tool
 from ravi.serving.shared.execution import create_assistant_agent, load_session_memory
 from ravi.config import settings
 
@@ -53,7 +53,7 @@ logger = setup_logging()
 
 def _build_orchestrator(
     model_client: BaseModelClient,
-    runtime: AgentRuntime,
+    runtime: Any,
     memory: HistoryProvider,
     model_context_window: int,
     tool_timeout: float | None,
@@ -141,7 +141,7 @@ async def load_agent_for_thread(
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
-    runtime: AgentRuntime,
+    runtime: Any,
     enable_capability_search: bool = True,
 ) -> ReActAgent:
     """Load a per-session agent backed by the shared ``HistoryProvider``.

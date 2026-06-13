@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Optional
 
-from ravi.kernel.stream import (
+from ravi.kernel.messaging.stream import (
     AgentProgress,
     CompletionEvent,
     ReasoningDelta,

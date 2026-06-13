@@ -12,7 +12,7 @@ from ravi.agents.middleware import (
     ChatContext,
     MiddlewarePipeline,
 )
-from ravi.kernel.content import ChatMessage, TextBlock
+from ravi.kernel.core.content import ChatMessage, TextBlock
 
 
 def _agent_ctx(text: str) -> AgentRunContext:

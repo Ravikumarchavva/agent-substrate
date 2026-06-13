@@ -45,7 +45,10 @@ class EventEnvelope(BaseModel):
             id=self.event_id,
             type=self.event_type,
             source="serving",
-            data={**self.payload, **({"_trace": self.trace_context} if self.trace_context else {})},
+            data={
+                **self.payload,
+                **({"_trace": self.trace_context} if self.trace_context else {}),
+            },
         )
 
     @classmethod

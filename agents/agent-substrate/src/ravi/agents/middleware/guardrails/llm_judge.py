@@ -5,7 +5,7 @@ import re
 from typing import Any, Awaitable, Callable
 
 from ravi.agents.middleware._contracts import ChatContext
-from ravi.kernel.errors import MiddlewareTermination
+from ravi.kernel.core.errors import MiddlewareTermination
 from ravi.logger import setup_logging
 
 logger = setup_logging()

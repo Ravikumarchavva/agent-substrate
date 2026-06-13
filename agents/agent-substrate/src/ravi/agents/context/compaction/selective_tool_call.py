@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ravi.kernel.content import ChatMessage, ToolUseBlock
+from ravi.kernel.core.content import ChatMessage, ToolUseBlock
 
 
 class SelectiveToolCallCompactionStrategy:

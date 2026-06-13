@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ravi.kernel.errors import MiddlewareTermination
+from ravi.kernel.core.errors import MiddlewareTermination
 
 
 class AgentError(Exception):

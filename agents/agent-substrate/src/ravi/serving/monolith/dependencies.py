@@ -13,7 +13,6 @@ from typing import Any, Optional
 from fastapi import Request
 
 from ravi.agents.context import HistoryProvider
-from ravi.kernel import AgentRuntime
 from ravi.kernel.llm import LLMClient
 from ravi.serving.monolith.sse.bridge import BridgeRegistry
 
@@ -31,7 +30,7 @@ class ServerDependencies:
     tool_timeout: float
     model_client_kwargs: dict[str, Any] = field(default_factory=dict)
     api_keys: dict[str, str] = field(default_factory=dict)
-    runtime: Optional[AgentRuntime] = None
+    runtime: Optional[Any] = None
     cancel_registry: dict[str, Any] = field(default_factory=dict)
     thread_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     mcp_servers: dict[str, dict] = field(default_factory=dict)

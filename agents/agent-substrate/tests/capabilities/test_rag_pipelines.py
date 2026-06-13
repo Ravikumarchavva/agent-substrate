@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 from ravi.kernel import ChatMessage, TextBlock
 from ravi.kernel.llm import LLMResponse, EmbeddingResult, GenerationOptions
-from ravi.kernel.vector import Document, SearchResult
-from ravi.kernel.graph import Entity, Relationship, SubGraph
+from ravi.kernel.storage.vector import Document, SearchResult
+from ravi.kernel.storage.graph import Entity, Relationship, SubGraph
 from ravi.capabilities.llm.openai_embedding_client import OpenAIEmbeddingClient
-from ravi.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline, PageNode, node_to_dict
+from ravi.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
 from ravi.capabilities.knowledge.graph_rag import GraphRAGPipeline
 from ravi.capabilities.knowledge.pipeline import RAGPipeline
 
@@ -19,10 +19,16 @@ class StubLLMClient:
         self.responses = responses
         self.calls = []
 
-    async def generate(self, messages: list[ChatMessage], *, options: GenerationOptions = GenerationOptions()) -> LLMResponse:
+    async def generate(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+    ) -> LLMResponse:
         self.calls.append((messages, options))
         text = self.responses.pop(0) if self.responses else "stub response"
-        from ravi.kernel.usage import Usage
+        from ravi.kernel.core.usage import Usage
+
         return LLMResponse(content=[TextBlock(text=text)], usage=Usage())
 
 
@@ -32,13 +38,24 @@ class StubVectorStore:
     def __init__(self) -> None:
         self.documents = []
 
-    async def add(self, documents: list[Document], *, collection: str = "default") -> list[str]:
+    async def add(
+        self, documents: list[Document], *, collection: str = "default"
+    ) -> list[str]:
         self.documents.extend(documents)
         return [doc.id for doc in documents]
 
-    async def search(self, query_embedding: list[float], *, collection: str = "default", limit: int = 5, filter=None) -> list[SearchResult]:
+    async def search(
+        self,
+        query_embedding: list[float],
+        *,
+        collection: str = "default",
+        limit: int = 5,
+        filter=None,
+    ) -> list[SearchResult]:
         return [
-            SearchResult(id=doc.id, content=doc.content, score=0.9, metadata=doc.metadata)
+            SearchResult(
+                id=doc.id, content=doc.content, score=0.9, metadata=doc.metadata
+            )
             for doc in self.documents[:limit]
         ]
 
@@ -58,7 +75,9 @@ class StubGraphStore:
         self.relationships.extend(relationships)
         return [r.id for r in relationships]
 
-    async def get_neighbors(self, entity_id: str, *, depth: int = 1, relationship_types=None) -> SubGraph:
+    async def get_neighbors(
+        self, entity_id: str, *, depth: int = 1, relationship_types=None
+    ) -> SubGraph:
         # Return all entities and relationships as a subgraph for testing
         return SubGraph(
             entities=tuple(self.entities),
@@ -113,8 +132,9 @@ async def test_page_index_flat_traversal():
     # 3. Answer index '0' (second query in query_with_context)
     # 4. Answer 'retrieve' (second query in query_with_context)
     # 5. Final generation answer
-    stub_llm = StubLLMClient(responses=["0", "retrieve", "0", "retrieve", "Navigated response"])
-
+    stub_llm = StubLLMClient(
+        responses=["0", "retrieve", "0", "retrieve", "Navigated response"]
+    )
 
     pipeline = PageIndexRAGPipeline(model_client=stub_llm)
 
@@ -133,12 +153,16 @@ async def test_page_index_flat_traversal():
     assert len(tree.children[0].children) == 2  # Page 1 and Page 2
 
     # Query with traversal reasoning
-    answers = await pipeline.query("What is the first page about?", collection="test_kb")
+    answers = await pipeline.query(
+        "What is the first page about?", collection="test_kb"
+    )
     assert len(answers) == 1
     assert "Page 1 content here" in answers[0].to_text()
 
     # Query with final answer generation
-    final_answer = await pipeline.query_with_context("What is the first page about?", collection="test_kb")
+    final_answer = await pipeline.query_with_context(
+        "What is the first page about?", collection="test_kb"
+    )
     assert final_answer == "Navigated response"
 
 
@@ -175,7 +199,9 @@ async def test_graph_rag_enrichment():
     extraction_json = json.dumps(
         {
             "entities": [{"label": "Person", "properties": {"name": "Alice"}}],
-            "relationships": [{"source": "Alice", "target": "Acme", "type": "WORKS_AT"}],
+            "relationships": [
+                {"source": "Alice", "target": "Acme", "type": "WORKS_AT"}
+            ],
         }
     )
     stub_llm = StubLLMClient(responses=[extraction_json, "Final Graph RAG answer"])
@@ -186,7 +212,6 @@ async def test_graph_rag_enrichment():
         return_value=EmbeddingResult(embeddings=[[0.1] * 1536], model="test")
     )
     embed_client.embed_single = AsyncMock(return_value=[0.1] * 1536)
-
 
     vector_store = StubVectorStore()
     graph_store = StubGraphStore()
@@ -218,5 +243,7 @@ async def test_graph_rag_enrichment():
     assert "Alice" in graph_results[0].to_text()
 
     # Full GraphRAG response generation
-    answer = await graph_rag.query_with_context("Where does Alice work?", collection="graph_kb")
+    answer = await graph_rag.query_with_context(
+        "Where does Alice work?", collection="graph_kb"
+    )
     assert answer == "Final Graph RAG answer"

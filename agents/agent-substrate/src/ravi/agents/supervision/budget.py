@@ -35,9 +35,9 @@ from __future__ import annotations
 
 import threading
 
-from ravi.kernel.errors import BudgetExhaustedError
-from ravi.kernel.identity import AgentId
-from ravi.kernel.supervision import Priority, Supervision
+from ravi.kernel.core.errors import BudgetExhaustedError
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.agent.supervision import Priority, Supervision
 
 
 class SpawnBudget:

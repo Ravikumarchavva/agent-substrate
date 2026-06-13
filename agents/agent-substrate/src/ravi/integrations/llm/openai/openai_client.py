@@ -18,14 +18,14 @@ from openai.types.responses.response_reasoning_summary_text_delta_event import (
 
 from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
-from ravi.kernel.content import (
+from ravi.kernel.core.content import (
     TextBlock,
     ImageBlock,
     ToolUseBlock,
     DataBlock,
     ToolResultBlock,
 )
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.integrations.llm.encoders.openai import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,

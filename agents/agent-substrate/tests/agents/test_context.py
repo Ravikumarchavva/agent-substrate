@@ -10,7 +10,7 @@ from ravi.agents.context import (
     TokenBudgetComposedStrategy,
 )
 from ravi.kernel import AgentId
-from ravi.kernel.content import ChatMessage, TextBlock
+from ravi.kernel.core.content import ChatMessage, TextBlock
 from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
 
 

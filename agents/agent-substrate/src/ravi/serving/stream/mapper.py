@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import json
 
-from ravi.kernel.content import TextBlock, ToolUseBlock, UIResourceBlock
-from ravi.kernel.stream import (
+from ravi.kernel.core.content import TextBlock, ToolUseBlock, UIResourceBlock
+from ravi.kernel.messaging.stream import (
     AgentProgress,
     AgentStep,
     CompletionEvent,

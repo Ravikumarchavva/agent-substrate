@@ -46,6 +46,7 @@ dependencies = [
     "ddgs>=9.14.4",
     "crawl4ai>=0.8.7",
     "pypdf>=6.13.0",
+    "docling>=2.0.0",
 ]
 
 [project.scripts]

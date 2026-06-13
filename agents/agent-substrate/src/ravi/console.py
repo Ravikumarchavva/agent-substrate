@@ -41,7 +41,7 @@ from rich.table import Table
 from rich.theme import Theme
 from rich.segment import Segment
 
-from ravi.kernel.stream import (
+from ravi.kernel.messaging.stream import (
     TextDelta,
     ReasoningDelta,
     CompletionEvent,
@@ -403,7 +403,7 @@ class Console:
 
                 elif isinstance(chunk, CompletionEvent):
                     if hasattr(chunk, "content"):
-                        from ravi.kernel.content import content_blocks_to_str
+                        from ravi.kernel.core.content import content_blocks_to_str
 
                         final_message = content_blocks_to_str(chunk.content)
                     else:

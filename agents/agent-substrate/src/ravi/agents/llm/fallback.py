@@ -21,7 +21,7 @@ from typing import AsyncIterator
 
 from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse
 from ravi.kernel import ChatMessage
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.logger import setup_logging
 
 logger = setup_logging()

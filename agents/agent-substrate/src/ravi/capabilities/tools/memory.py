@@ -11,8 +11,8 @@ are scoped to the agent.
 from __future__ import annotations
 
 
-from ravi.kernel.identity import AgentId
-from ravi.kernel.memory import LongTermMemory, ShortTermMemory
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.storage.memory import LongTermMemory, ShortTermMemory
 from ravi.kernel.tools import ToolExecutionResult
 from ravi.kernel import TextBlock
 from ravi.logger import setup_logging

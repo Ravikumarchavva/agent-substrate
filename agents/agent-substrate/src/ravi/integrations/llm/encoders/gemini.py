@@ -23,7 +23,7 @@ from google.genai import types as genai_types
 from ravi.integrations.llm.encoders._media import pil_to_png_bytes
 
 from ravi.kernel import ChatMessage
-from ravi.kernel.content import (
+from ravi.kernel.core.content import (
     AudioBlock,
     ImageBlock,
     VideoBlock,

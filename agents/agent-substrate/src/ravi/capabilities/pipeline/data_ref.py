@@ -297,3 +297,44 @@ class DataRefStore:
         if isinstance(data, dict):
             return json.dumps(data).encode("utf-8")
         raise TypeError(f"Cannot convert {type(data).__name__} to bytes")
+
+
+class DataRefArtifactStore:
+    """Adapter that makes ``DataRefStore`` satisfy the kernel ``ArtifactStore`` protocol.
+
+    ``ArtifactStore`` uses plain ref strings; ``DataRefStore`` uses ``DataRef``
+    objects.  This adapter bridges the two so ``ToolInvoker`` and
+    ``ToolChainTool`` can use the existing Redis/S3 backend without changes.
+
+    Keep a ref-id → DataRef map so ``pin``/``unpin`` can operate on the object.
+    """
+
+    def __init__(self, store: DataRefStore) -> None:
+        self._store = store
+        self._refs: dict[str, DataRef] = {}
+
+    async def store(
+        self,
+        data: bytes | str,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        ref = await self._store.store(data, content_type=content_type)
+        self._refs[ref.ref_id] = ref
+        return ref.ref_id
+
+    async def resolve(self, ref: str) -> bytes:
+        data_ref = self._refs.get(ref)
+        if data_ref is None:
+            raise KeyError(f"Artifact ref not found: {ref}")
+        return await self._store.resolve(data_ref)
+
+    async def pin(self, ref: str) -> None:
+        data_ref = self._refs.get(ref)
+        if data_ref is not None:
+            await self._store.pin(data_ref)
+
+    async def unpin(self, ref: str) -> None:
+        data_ref = self._refs.get(ref)
+        if data_ref is not None:
+            await self._store.unpin(data_ref)

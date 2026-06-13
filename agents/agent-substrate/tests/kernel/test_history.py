@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from ravi.agents.context import InMemoryHistoryProvider
 from ravi.kernel import AgentId
-from ravi.kernel.content import ChatMessage, TextBlock
+from ravi.kernel.core.content import ChatMessage, TextBlock
 
 
 @pytest.mark.asyncio

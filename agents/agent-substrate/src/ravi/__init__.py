@@ -41,10 +41,10 @@ if TYPE_CHECKING:
         MiddlewarePipeline,
     )
     from ravi.agents.runtime import LocalRuntime
-    from ravi.kernel.skills import Skill
-    from ravi.kernel.errors import MiddlewareTermination
+    from ravi.kernel.tools.skills import Skill
+    from ravi.kernel.core.errors import MiddlewareTermination
     from ravi.kernel import ChatMessage, TextBlock, ToolExecutionResult
-    from ravi.kernel.stream import (
+    from ravi.kernel.messaging.stream import (
         CompletionEvent,
         ReasoningDelta,
         StreamDone,

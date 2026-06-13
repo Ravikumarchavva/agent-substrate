@@ -47,7 +47,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from ravi.kernel import ChatMessage, Message, AgentId
+from ravi.kernel import ChatMessage, AgentId
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -216,11 +216,16 @@ class PostgresHistoryProvider:
         async with self._engine.begin() as conn:
             await conn.run_sync(HistoryBase.metadata.create_all)
             from sqlalchemy import text as _text
+
             await conn.execute(
-                _text("ALTER TABLE memory_messages ADD COLUMN IF NOT EXISTS run_id VARCHAR(64) NOT NULL DEFAULT ''")
+                _text(
+                    "ALTER TABLE memory_messages ADD COLUMN IF NOT EXISTS run_id VARCHAR(64) NOT NULL DEFAULT ''"
+                )
             )
             await conn.execute(
-                _text("CREATE INDEX IF NOT EXISTS ix_memory_messages_run_id ON memory_messages (run_id)")
+                _text(
+                    "CREATE INDEX IF NOT EXISTS ix_memory_messages_run_id ON memory_messages (run_id)"
+                )
             )
         logger.info("PostgresHistoryProvider connected and tables ensured")
 
@@ -299,13 +304,17 @@ class PostgresHistoryProvider:
             await db.execute(
                 delete(HistoryMessage).where(
                     HistoryMessage.session_id == storage_key,
-                    HistoryMessage.run_id == run_id
+                    HistoryMessage.run_id == run_id,
                 )
             )
-            session_obj = await db.get(HistorySession, storage_key, with_for_update=True)
+            session_obj = await db.get(
+                HistorySession, storage_key, with_for_update=True
+            )
             if session_obj is not None:
-                stmt = select(func.count()).select_from(HistoryMessage).where(
-                    HistoryMessage.session_id == storage_key
+                stmt = (
+                    select(func.count())
+                    .select_from(HistoryMessage)
+                    .where(HistoryMessage.session_id == storage_key)
                 )
                 result = await db.execute(stmt)
                 session_obj.message_count = result.scalar_one()
@@ -353,11 +362,20 @@ class PostgresHistoryProvider:
 
             session_obj.message_count = max_seq + len(messages)
             await db.commit()
-            logger.debug("Saved %d messages for session %s (run_id=%s)", len(messages), session_id, run_id)
+            logger.debug(
+                "Saved %d messages for session %s (run_id=%s)",
+                len(messages),
+                session_id,
+                run_id,
+            )
             return len(messages)
 
     async def load_messages(
-        self, session_id: str, *, limit: Optional[int] = None, offset: Optional[int] = None
+        self,
+        session_id: str,
+        *,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> List[ChatMessage]:
         """Load a session's messages ordered by sequence (last *limit* if given)."""
         factory = self._get_session()

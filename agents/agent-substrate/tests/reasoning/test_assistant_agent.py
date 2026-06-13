@@ -19,7 +19,7 @@ from ravi.kernel import (
     ToolRisk,
     ToolUseBlock,
 )
-from ravi.kernel.stream import CompletionEvent, StreamDone, TextDelta
+from ravi.kernel.messaging.stream import CompletionEvent, StreamDone, TextDelta
 from ravi.kernel.llm import LLMResponse, Usage
 from ravi.agents.core import ReActAgent
 from ravi.agents.middleware import PromptInjectionMiddleware

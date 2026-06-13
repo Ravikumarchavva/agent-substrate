@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import pytest
-from ravi.kernel.content import ChatMessage, TextBlock
+from ravi.kernel.core.content import ChatMessage, TextBlock
 from ravi.agents.middleware import (
     MiddlewarePipeline,
     AuditLoggerMiddleware,

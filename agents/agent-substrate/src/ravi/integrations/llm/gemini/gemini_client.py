@@ -11,12 +11,12 @@ from google.genai import types as genai_types
 import uuid
 from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
 from ravi.kernel import ChatMessage, ContentBlock
-from ravi.kernel.content import (
+from ravi.kernel.core.content import (
     TextBlock,
     ToolUseBlock,
     DataBlock,
 )
-from ravi.kernel.stream import TextDelta, CompletionEvent
+from ravi.kernel.messaging.stream import TextDelta, CompletionEvent
 from ravi.integrations.llm.encoders.gemini import (
     encode_messages as _encode_messages,
     encode_tools as _encode_tools,

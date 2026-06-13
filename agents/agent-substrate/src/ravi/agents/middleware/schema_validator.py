@@ -4,7 +4,7 @@ from typing import Callable, Awaitable
 
 from ravi.logger import setup_logging
 from ravi.agents.middleware._contracts import ChatContext
-from ravi.kernel.content import TextBlock
+from ravi.kernel.core.content import TextBlock
 
 logger = setup_logging()
 

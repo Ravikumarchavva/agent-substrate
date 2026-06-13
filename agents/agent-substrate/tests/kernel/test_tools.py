@@ -6,7 +6,7 @@ from ravi.kernel.tools import (
     ToolRisk,
 )
 from ravi.agents.tools.toolbox import Toolbox
-from ravi.kernel.content import TextBlock
+from ravi.kernel.core.content import TextBlock
 
 
 class MockToolImpl:

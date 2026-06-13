@@ -7,7 +7,7 @@ from typing import Any
 
 from ravi.kernel import ChatMessage, Tool
 from ravi.kernel.llm import LLMResponse
-from ravi.kernel.message import ToolExecutionResult
+from ravi.kernel.tools import ToolExecutionResult
 
 
 # ---------------------------------------------------------------------------

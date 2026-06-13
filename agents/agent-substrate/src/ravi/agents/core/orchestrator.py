@@ -44,7 +44,6 @@ from pydantic import BaseModel
 
 from ravi.kernel import (
     AgentId,
-    AgentRuntime,
     AgentCrashError,
     BudgetExhaustedError,
     Priority,
@@ -54,8 +53,8 @@ from ravi.kernel import (
     ToolExecutionResult,
     TopicId,
 )
-from ravi.kernel.stream import AgentProgress, AgentStep, StreamDone, TextDelta
-from ravi.kernel.supervision import HistoryRetention
+from ravi.kernel.messaging.stream import AgentProgress, AgentStep, StreamDone, TextDelta
+from ravi.kernel.agent.supervision import HistoryRetention
 from ravi.kernel.llm import LLMClient
 from ravi.agents.supervision.budget import SpawnBudget
 from ravi.agents.supervision.policies import RetryPolicy
@@ -127,7 +126,7 @@ class _DispatchTool:
         config: SubAgentConfig,
         hooks: HookManager,
         orchestrator_id: AgentId,
-        runtime: AgentRuntime,
+        runtime: Any,
         supervision: Supervision,
         budget: SpawnBudget,
         retry_policy: RetryPolicy,
@@ -329,7 +328,7 @@ class OrchestratorAgent(ReActAgent):
     def __init__(
         self,
         name: str,
-        runtime: AgentRuntime,
+        runtime: Any,
         *,
         model: LLMClient,
         sub_agents: list[ReActAgent | SubAgentConfig],

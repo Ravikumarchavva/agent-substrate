@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator, Awaitable, Callable, Protocol
 
-from ravi.kernel.stream import StreamDone
+from ravi.kernel.messaging.stream import StreamDone
 from ravi.logger import setup_logging
 from ravi.serving.monolith.sse.bridge import BRIDGE_DONE, WebHITLBridge
 from ravi.serving.protocol import (

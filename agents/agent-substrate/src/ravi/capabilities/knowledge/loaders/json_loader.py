@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any, Union
 
 from ravi.capabilities.knowledge.loaders.base import BaseDocumentLoader
-from ravi.kernel.content import TextBlock
-from ravi.kernel.vector import Document
+from ravi.kernel.core.content import TextBlock
+from ravi.kernel.storage.vector import Document
 
 
 class JSONLoader(BaseDocumentLoader):

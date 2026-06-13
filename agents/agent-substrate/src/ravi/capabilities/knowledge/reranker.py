@@ -17,7 +17,7 @@ from ravi.logger import setup_logging
 import json
 from typing import TYPE_CHECKING
 
-from ravi.kernel.vector import SearchResult
+from ravi.kernel.storage.vector import SearchResult
 
 if TYPE_CHECKING:
     from ravi.kernel.llm import LLMClient
@@ -58,7 +58,9 @@ class LLMReranker:
         from ravi.kernel import ChatMessage, TextBlock
 
         # Build scoring prompt
-        docs_block = "\n".join(f"[{i}] {r.to_text()[:500]}" for i, r in enumerate(results))
+        docs_block = "\n".join(
+            f"[{i}] {r.to_text()[:500]}" for i, r in enumerate(results)
+        )
 
         messages = [
             ChatMessage(
@@ -83,7 +85,6 @@ class LLMReranker:
             )
             text_parts = [b.text for b in response.content if isinstance(b, TextBlock)]
             text = "".join(text_parts)
-
 
             # Parse the JSON array of indices
             indices = json.loads(text.strip())

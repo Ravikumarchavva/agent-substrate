@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, AsyncIterator
 
 from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
 from ravi.kernel import TextBlock, ChatMessage
-from ravi.kernel.stream import TextDelta, ReasoningDelta, CompletionEvent
+from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.logger import setup_logging
 
 if TYPE_CHECKING:

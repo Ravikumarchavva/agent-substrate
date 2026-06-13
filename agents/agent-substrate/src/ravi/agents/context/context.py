@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ravi.kernel.content import ChatMessage
-from ravi.kernel.context import AgentContextProtocol, CompactionStrategy
-from ravi.kernel.history import HistoryProvider
-from ravi.kernel.identity import AgentId
+from ravi.kernel.core.content import ChatMessage
+from ravi.kernel.agent.context import AgentContextProtocol, CompactionStrategy
+from ravi.kernel.storage.history import HistoryProvider
+from ravi.kernel.core.identity import AgentId
 from .compaction import SlidingWindowCompaction
 
 

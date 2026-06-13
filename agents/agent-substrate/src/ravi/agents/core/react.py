@@ -45,15 +45,13 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from ravi.agents.supervision.budget import SpawnBudget
 
+
 from ravi.kernel import (
     AgentId,
-    AgentRuntime,
     ChatMessage,
     ContentBlock,
     ErrorBlock,
-    MessageContext,
     RunContext,
-    RuntimeRef,
     Supervision,
     TextBlock,
     Tool,
@@ -66,9 +64,10 @@ from ravi.kernel import (
     AgentCrashError,
     JsonObject,
 )
-from ravi.kernel.approval import ApprovalHandler
+from ravi.kernel.messaging.message import MessageContext, RuntimeRef
+from ravi.kernel.tools.approval import ApprovalHandler
 from ravi.kernel.llm import GenerationOptions
-from ravi.kernel.stream import (
+from ravi.kernel.messaging.stream import (
     AgentProgress,
     AgentStep,
     CompletionEvent,
@@ -89,12 +88,11 @@ from ravi.agents.middleware._contracts import (
     ToolCallRecord,
 )
 from ravi.agents.middleware.pipeline import MiddlewarePipeline
-from ravi.kernel.middleware import AgentMiddleware, ChatMiddleware, FunctionMiddleware
-from ravi.kernel.errors import MiddlewareTermination
+from ravi.kernel.agent.middleware import AgentMiddleware, ChatMiddleware, FunctionMiddleware
+from ravi.kernel.core.errors import MiddlewareTermination
 from ravi.logger import setup_logging
 
 logger = setup_logging()
-
 
 
 @dataclass
@@ -144,7 +142,7 @@ class ReActAgent:
     def __init__(
         self,
         name: str,
-        runtime: AgentRuntime,
+        runtime: Any,
         *,
         model: LLMClient,
         description: str = "",
@@ -281,7 +279,9 @@ class ReActAgent:
                 "input": input_text[:80],
             },
         )
-        await self._emit_progress(AgentStep.STARTED, input_text[:120], rid, seq=next(_seq))
+        await self._emit_progress(
+            AgentStep.STARTED, input_text[:120], rid, seq=next(_seq)
+        )
         logger.info(
             "[%s] run start (resume=%s, stream=%s, session=%s): %.80s",
             self.name,
@@ -323,7 +323,10 @@ class ReActAgent:
                             step,
                         )
                         await self._emit_progress(
-                            AgentStep.PAUSED, "paused by priority preemption", rid, seq=next(_seq)
+                            AgentStep.PAUSED,
+                            "paused by priority preemption",
+                            rid,
+                            seq=next(_seq),
                         )
                         await self.hooks.dispatch(
                             HookEvent.RUN_END,
@@ -358,7 +361,9 @@ class ReActAgent:
                             "message_count": len(messages),
                         },
                     )
-                    await self._emit_progress(AgentStep.THINKING, f"step {step}", rid, seq=next(_seq))
+                    await self._emit_progress(
+                        AgentStep.THINKING, f"step {step}", rid, seq=next(_seq)
+                    )
 
                     # -- ExecutionBudget: count prompt tokens for cost estimation --
                     if self.execution_budget is not None:
@@ -452,7 +457,9 @@ class ReActAgent:
                             HookEvent.RUN_END,
                             {"agent": self.name, "run_id": rid, "status": "success"},
                         )
-                        await self._emit_progress(AgentStep.DONE, output[:120], rid, seq=next(_seq))
+                        await self._emit_progress(
+                            AgentStep.DONE, output[:120], rid, seq=next(_seq)
+                        )
                         if stream:
                             await _event_q.put(
                                 CompletionEvent(
@@ -604,7 +611,11 @@ class ReActAgent:
                     {"agent": self.name, "run_id": rid, "status": "max_iterations"},
                 )
                 await self._emit_progress(
-                    AgentStep.DONE, last_output[:120], rid, seq=next(_seq), status="max_iterations"
+                    AgentStep.DONE,
+                    last_output[:120],
+                    rid,
+                    seq=next(_seq),
+                    status="max_iterations",
                 )
                 await _event_q.put(
                     _Finished(
@@ -642,7 +653,9 @@ class ReActAgent:
 
             except BudgetExceededError as exc:
                 logger.warning("[%s] budget exceeded: %s", self.name, exc)
-                await self._emit_progress(AgentStep.ERROR, f"budget: {exc}", rid, seq=next(_seq))
+                await self._emit_progress(
+                    AgentStep.ERROR, f"budget: {exc}", rid, seq=next(_seq)
+                )
                 await self.hooks.dispatch(
                     HookEvent.RUN_END,
                     {"agent": self.name, "run_id": rid, "status": "budget_exceeded"},
@@ -672,7 +685,10 @@ class ReActAgent:
                     },
                 )
                 await self._emit_progress(
-                    AgentStep.ERROR, f"crash: {type(exc).__name__}: {exc}", rid, seq=next(_seq)
+                    AgentStep.ERROR,
+                    f"crash: {type(exc).__name__}: {exc}",
+                    rid,
+                    seq=next(_seq),
                 )
                 raise AgentCrashError(
                     f"Agent '{self.name}' crashed: {exc}",
@@ -796,7 +812,7 @@ class ReActAgent:
         Failures are silently swallowed — progress reporting must never crash
         the agent itself.
         """
-        from ravi.kernel.identity import TopicId
+        from ravi.kernel.core.identity import TopicId
 
         sv = self.supervision
         topic_source = run_id if run_id else self.id.key
@@ -901,7 +917,7 @@ class ReActAgent:
             and _risk_order[tool_risk] >= _risk_order[self._approval_required_risk]
         )
         if needs_approval:
-            from ravi.kernel.approval import ApprovalRequest, ApprovalDecision
+            from ravi.kernel.tools.approval import ApprovalRequest, ApprovalDecision
             from ravi.kernel.tools import ToolCallRequest
 
             paused_progress = await self._emit_progress(
@@ -917,7 +933,9 @@ class ReActAgent:
             if hasattr(self._approval_handler, "request"):
                 decision = await self._approval_handler.request(
                     ApprovalRequest(
-                        call=ToolCallRequest(name=tu.tool_name, arguments=dict(tu.arguments)),
+                        call=ToolCallRequest(
+                            name=tu.tool_name, arguments=dict(tu.arguments)
+                        ),
                         risk=tool_risk,
                         agent_id=self.id,
                         run_id=rid,
@@ -926,8 +944,12 @@ class ReActAgent:
                 approved = decision == ApprovalDecision.APPROVED
             else:
                 # Backwards compatibility for legacy callable handlers (e.g. tests)
-                approved = await self._approval_handler(tu.tool_name, dict(tu.arguments))  # type: ignore
-                decision = ApprovalDecision.APPROVED if approved else ApprovalDecision.DENIED
+                approved = await self._approval_handler(
+                    tu.tool_name, dict(tu.arguments)
+                )  # type: ignore
+                decision = (
+                    ApprovalDecision.APPROVED if approved else ApprovalDecision.DENIED
+                )
 
             thinking_progress = await self._emit_progress(
                 AgentStep.THINKING,
@@ -941,7 +963,12 @@ class ReActAgent:
             if not approved:
                 duration = (time.monotonic() - t0) * 1000
                 err = f"Tool '{tu.tool_name}' denied by approval handler: {decision}"
-                logger.info("[%s] HITL denied: %s (decision=%s)", self.name, tu.tool_name, decision)
+                logger.info(
+                    "[%s] HITL denied: %s (decision=%s)",
+                    self.name,
+                    tu.tool_name,
+                    decision,
+                )
                 return (
                     ToolCallRecord(
                         name=tu.tool_name,

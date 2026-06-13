@@ -10,6 +10,7 @@ Tools are grouped by domain:
   (root)        — memory, human_input
   task_manager/ — Kanban board
   code_interpreter/ — sandboxed code execution
+  chain/        — ToolChainTool (sandboxed code-mode tool chaining)
 
 Quick-start::
 
@@ -25,7 +26,7 @@ from ravi.capabilities.tools.web.search import WebSearchTool
 from ravi.capabilities.tools.web.read_url import ReadUrlTool
 from ravi.capabilities.tools.web.wikipedia import WikipediaTool
 from ravi.capabilities.tools.web.surfer import WebSurferTool
-from ravi.capabilities.tools.chain_executor import ChainExecutorTool
+from ravi.capabilities.tools.chain import ToolChainTool
 from ravi.capabilities.tools.files.document_analyzer import DocumentAnalyzerTool
 from ravi.capabilities.tools.communication.email_sender import EmailSenderTool
 from ravi.capabilities.tools.communication.http_request import HttpRequestTool
@@ -49,7 +50,7 @@ __all__ = [
     "ReadUrlTool",
     "WikipediaTool",
     "WebSurferTool",
-    "ChainExecutorTool",
+    "ToolChainTool",
     "DocumentAnalyzerTool",
     "EmailSenderTool",
     "HttpRequestTool",

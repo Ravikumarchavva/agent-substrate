@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, Mock
 from ravi.integrations.tools.mcp.tool import MCPTool
-from ravi.kernel.content import TextBlock
+from ravi.kernel.core.content import TextBlock
 
 
 @pytest.mark.asyncio

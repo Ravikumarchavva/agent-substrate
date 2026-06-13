@@ -1,0 +1,98 @@
+@startuml kernel_arch_highlevel
+title Ravi Engine - Kernel Contracts (L0)\nAll items here are Protocols or dataclasses — zero I/O, zero concrete deps.\nImplementations live in L1 (agents/) and L2 (capabilities/).
+
+top to bottom direction
+skinparam dpi 200
+skinparam Shadowing false
+skinparam DefaultFontName "Segoe UI"
+hide empty members
+hide stereotypes
+
+skinparam BackgroundColor #ffffff
+skinparam TitleFontColor #111827
+skinparam TitleFontSize 14
+
+skinparam PackageBackgroundColor #f9fafb
+skinparam PackageBorderColor #d1d5db
+skinparam PackageFontColor #374151
+skinparam PackageFontSize 11
+
+skinparam ClassBackgroundColor #ffffff
+skinparam ClassBorderColor #4b5563
+skinparam ClassFontColor #111827
+skinparam ClassFontSize 12
+
+skinparam InterfaceBackgroundColor #eff6ff
+skinparam InterfaceBorderColor #3b82f6
+skinparam InterfaceFontColor #1e3a8a
+
+skinparam ArrowColor #4b5563
+skinparam ArrowFontColor #374151
+skinparam ArrowFontSize 11
+
+skinparam NoteBorderColor #f59e0b
+skinparam NoteBackgroundColor #fef3c7
+skinparam NoteFontColor #78350f
+skinparam NoteFontSize 11
+
+' ---------------------------------------------------------------
+' TOP: Capability protocols — what the agent reaches out to
+' Concrete impls live in L2 (capabilities/)
+' ---------------------------------------------------------------
+package "Capability Protocols  (L0 kernel)\nImplemented by: OpenAIChatClient, PgVectorStore, RedisHistoryProvider, ToolInvoker  [L2]" as PKG_CAP {
+  interface LLMClient
+  interface HistoryProvider
+  interface VectorStore
+  interface Tool
+}
+
+' ---------------------------------------------------------------
+' MIDDLE: Per-run execution contracts
+' Concrete impls live in L1 (agents/)
+' ---------------------------------------------------------------
+package "Execution Contracts  (L0 kernel)\nImplemented by: ReActAgent, MiddlewarePipeline  [L1];  RunContext is a value object" as PKG_EXEC {
+  class RunContext {
+    run_id : str
+    trace_id : str
+    deadline : datetime | None
+    cancel_token : CancellationToken
+  }
+  interface Middleware
+  interface Agent
+
+  RunContext ..> Agent : "threaded into every call"
+  Middleware ..> Agent : "wraps"
+}
+
+' ---------------------------------------------------------------
+' BOTTOM: Runtime dispatch contract
+' Concrete impls live in L1 (agents/runtime/)
+' ---------------------------------------------------------------
+package "Runtime Dispatch Contract  (L0  kernel/protocol.py)\nImplemented by: LocalRuntime  [L1];  gRPC / NATS / Restate also plug in here" as PKG_RT {
+  interface AgentRuntime {
+    send_message(payload, recipient)
+    publish_message(payload, topic)
+    register_agent(agent)
+    start() / stop()
+  }
+}
+
+' Force vertical stacking
+PKG_CAP  -[hidden]-> PKG_EXEC
+PKG_EXEC -[hidden]-> PKG_RT
+
+' Runtime creates / manages the per-run layer above it
+AgentRuntime -up-> RunContext  : "creates per-run"
+AgentRuntime -up-> Middleware  : "executes pipeline"
+AgentRuntime -up-> Agent       : "dispatches message"
+
+' Agent calls out to capability protocols above
+Agent -up-> LLMClient       : "generate()"
+Agent -up-> HistoryProvider : "load / save"
+Agent -up-> VectorStore     : "search()"
+Agent -up-> Tool            : "execute()"
+
+' RunContext threads sideways into agent
+RunContext ..> Agent : "threaded into every call"
+
+@enduml

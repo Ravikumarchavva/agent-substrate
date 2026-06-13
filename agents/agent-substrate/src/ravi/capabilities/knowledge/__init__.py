@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 
-from ravi.kernel.graph import Entity, GraphStore, Relationship, SubGraph
-from ravi.kernel.vector import Document, SearchResult, VectorStore
+from ravi.kernel.storage.graph import Entity, GraphStore, Relationship, SubGraph
+from ravi.kernel.storage.vector import Document, SearchResult, VectorStore
 from ravi.capabilities.knowledge.pipeline import RAGPipeline
 from ravi.capabilities.knowledge.graph_rag import GraphRAGPipeline
 from ravi.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
@@ -35,4 +35,3 @@ __all__ = [
     "get_chunker",
     "LLMReranker",
 ]
-

@@ -1,0 +1,411 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 900" width="100%" height="100%">
+  <defs>
+    <!-- Background -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#060a14"/>
+      <stop offset="100%" stop-color="#0d1526"/>
+    </linearGradient>
+
+    <!-- Swim-lane gradients -->
+    <linearGradient id="lane-api"    x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#1c0a2e"/><stop offset="100%" stop-color="#220d37"/></linearGradient>
+    <linearGradient id="lane-rt"     x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#0a1e3c"/><stop offset="100%" stop-color="#0d2449"/></linearGradient>
+    <linearGradient id="lane-svc"    x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#0a2515"/><stop offset="100%" stop-color="#0c2e1a"/></linearGradient>
+    <linearGradient id="lane-store"  x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#1e150a"/><stop offset="100%" stop-color="#271a0c"/></linearGradient>
+
+    <!-- Card fills -->
+    <linearGradient id="card-purple" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#2d1b4e"/><stop offset="100%" stop-color="#1e1035"/></linearGradient>
+    <linearGradient id="card-blue"   x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0d2552"/><stop offset="100%" stop-color="#071840"/></linearGradient>
+    <linearGradient id="card-blue2"  x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#102060"/><stop offset="100%" stop-color="#0a1847"/></linearGradient>
+    <linearGradient id="card-green"  x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0b2e1a"/><stop offset="100%" stop-color="#071e0f"/></linearGradient>
+    <linearGradient id="card-amber"  x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#2e1f05"/><stop offset="100%" stop-color="#1f1404"/></linearGradient>
+    <linearGradient id="card-pink"   x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#2e0b22"/><stop offset="100%" stop-color="#1e0717"/></linearGradient>
+    <linearGradient id="card-gray"   x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#1a2232"/><stop offset="100%" stop-color="#111827"/></linearGradient>
+
+    <!-- Runtime Context highlight card -->
+    <linearGradient id="ctx-card"    x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#1a3a70"/><stop offset="100%" stop-color="#0d2050"/></linearGradient>
+
+    <!-- Arrow markers -->
+    <marker id="arr-down"   viewBox="0 0 10 10" refX="5" refY="8" markerWidth="5" markerHeight="5" orient="90">
+      <polygon points="0,0 10,0 5,10" fill="#94a3b8"/>
+    </marker>
+    <marker id="arr-white"  viewBox="0 0 10 10" refX="5" refY="8" markerWidth="5" markerHeight="5" orient="90">
+      <polygon points="0,0 10,0 5,10" fill="#e2e8f0"/>
+    </marker>
+    <marker id="arr-blue"   viewBox="0 0 10 10" refX="5" refY="8" markerWidth="5" markerHeight="5" orient="90">
+      <polygon points="0,0 10,0 5,10" fill="#60a5fa"/>
+    </marker>
+    <marker id="arr-purple" viewBox="0 0 10 10" refX="5" refY="8" markerWidth="5" markerHeight="5" orient="90">
+      <polygon points="0,0 10,0 5,10" fill="#a78bfa"/>
+    </marker>
+    <marker id="arr-green"  viewBox="0 0 10 10" refX="5" refY="8" markerWidth="5" markerHeight="5" orient="90">
+      <polygon points="0,0 10,0 5,10" fill="#34d399"/>
+    </marker>
+    <marker id="arr-amber"  viewBox="0 0 10 10" refX="5" refY="8" markerWidth="5" markerHeight="5" orient="90">
+      <polygon points="0,0 10,0 5,10" fill="#fbbf24"/>
+    </marker>
+
+    <!-- Glow filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Subtle drop shadow for cards -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- ─────────── BACKGROUND ─────────── -->
+  <rect width="1300" height="900" fill="url(#bg)"/>
+
+  <!-- ========================================================= -->
+  <!--                     HEADER                                -->
+  <!-- ========================================================= -->
+  <text x="650" y="50" font-family="'Segoe UI',system-ui,sans-serif" font-size="30" font-weight="800" fill="#f1f5f9" text-anchor="middle" letter-spacing="0.5">Ravi Engine — Kernel Architecture</text>
+  <text x="650" y="76" font-family="'Segoe UI',system-ui,sans-serif" font-size="13" fill="#64748b" text-anchor="middle">L0 Pure Contracts • Execution Lifecycle • Modular Separation of Concerns</text>
+
+  <!-- ─── LAYER LABELS (left rail) ─── -->
+  <!-- Layer A label -->
+  <rect x="0" y="100" width="6" height="165" fill="#a78bfa"/>
+  <text x="-55" y="182" font-family="'Segoe UI',sans-serif" font-size="11" font-weight="700" fill="#a78bfa" text-anchor="middle" transform="rotate(-90,-55,182)">ENTRYPOINTS</text>
+
+  <!-- Layer B label -->
+  <rect x="0" y="282" width="6" height="130" fill="#60a5fa"/>
+  <text x="-55" y="347" font-family="'Segoe UI',sans-serif" font-size="11" font-weight="700" fill="#60a5fa" text-anchor="middle" transform="rotate(-90,-55,347)">RUNTIME CORE</text>
+
+  <!-- Layer C label -->
+  <rect x="0" y="429" width="6" height="160" fill="#34d399"/>
+  <text x="-55" y="510" font-family="'Segoe UI',sans-serif" font-size="11" font-weight="700" fill="#34d399" text-anchor="middle" transform="rotate(-90,-55,510)">CAPABILITIES</text>
+
+  <!-- Layer D label -->
+  <rect x="0" y="606" width="6" height="130" fill="#fbbf24"/>
+  <text x="-55" y="672" font-family="'Segoe UI',sans-serif" font-size="11" font-weight="700" fill="#fbbf24" text-anchor="middle" transform="rotate(-90,-55,672)">DATA LAYER</text>
+
+  <!-- Layer E label -->
+  <rect x="0" y="754" width="6" height="110" fill="#94a3b8"/>
+  <text x="-55" y="810" font-family="'Segoe UI',sans-serif" font-size="11" font-weight="700" fill="#94a3b8" text-anchor="middle" transform="rotate(-90,-55,810)">PROTOCOLS</text>
+
+
+  <!-- ========================================================= -->
+  <!--   LAYER A — ENTRYPOINTS  (y=100)                         -->
+  <!-- ========================================================= -->
+  <rect x="20" y="100" width="1260" height="165" rx="10" fill="url(#lane-api)" stroke="#5b21b6" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="50" y="122" font-family="'Segoe UI',sans-serif" font-size="12" font-weight="700" fill="#a78bfa" letter-spacing="2">A — ENTRYPOINTS &amp; ORCHESTRATION</text>
+
+  <!-- Card: Agent.on_message -->
+  <g transform="translate(40,130)" filter="url(#shadow)">
+    <rect width="200" height="110" rx="8" fill="url(#card-purple)" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect width="200" height="32" rx="8" fill="#7c3aed" fill-opacity="0.3"/>
+    <text x="100" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#ddd6fe" text-anchor="middle">Agent</text>
+    <text x="14" y="54" font-family="monospace" font-size="12" fill="#c4b5fd">agent.py</text>
+    <text x="14" y="72" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">on_message(ctx, payload)</text>
+    <text x="14" y="90" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">save/load state (checkpoint)</text>
+    <text x="14" y="106" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">bind(runtime)</text>
+  </g>
+
+  <!-- Card: Chain -->
+  <g transform="translate(265,130)" filter="url(#shadow)">
+    <rect width="200" height="110" rx="8" fill="url(#card-purple)" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect width="200" height="32" rx="8" fill="#7c3aed" fill-opacity="0.3"/>
+    <text x="100" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#ddd6fe" text-anchor="middle">Chain</text>
+    <text x="14" y="54" font-family="monospace" font-size="12" fill="#c4b5fd">chain.py</text>
+    <text x="14" y="72" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Sequential step runner</text>
+    <text x="14" y="90" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Passes ctx across steps</text>
+    <text x="14" y="106" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Aggregates sub-results</text>
+  </g>
+
+  <!-- Card: Supervision -->
+  <g transform="translate(490,130)" filter="url(#shadow)">
+    <rect width="200" height="110" rx="8" fill="url(#card-purple)" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect width="200" height="32" rx="8" fill="#7c3aed" fill-opacity="0.3"/>
+    <text x="100" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#ddd6fe" text-anchor="middle">Supervision</text>
+    <text x="14" y="54" font-family="monospace" font-size="12" fill="#c4b5fd">supervision.py</text>
+    <text x="14" y="72" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Policy evaluation per step</text>
+    <text x="14" y="90" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">ALLOW / DENY / ESCALATE</text>
+    <text x="14" y="106" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Pluggable supervisor hooks</text>
+  </g>
+
+  <!-- Card: Approval -->
+  <g transform="translate(715,130)" filter="url(#shadow)">
+    <rect width="200" height="110" rx="8" fill="url(#card-purple)" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect width="200" height="32" rx="8" fill="#7c3aed" fill-opacity="0.3"/>
+    <text x="100" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#ddd6fe" text-anchor="middle">Approval Gate</text>
+    <text x="14" y="54" font-family="monospace" font-size="12" fill="#c4b5fd">approval.py</text>
+    <text x="14" y="72" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">HITL pause / resume</text>
+    <text x="14" y="90" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Blocks execution on signal</text>
+    <text x="14" y="106" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Decision token propagation</text>
+  </g>
+
+  <!-- Card: Middleware Pipeline -->
+  <g transform="translate(940,130)" filter="url(#shadow)">
+    <rect width="320" height="110" rx="8" fill="url(#card-purple)" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect width="320" height="32" rx="8" fill="#7c3aed" fill-opacity="0.3"/>
+    <text x="160" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#ddd6fe" text-anchor="middle">Middleware Pipeline</text>
+    <text x="14" y="54" font-family="monospace" font-size="12" fill="#c4b5fd">middleware.py  •  events.py</text>
+    <text x="14" y="74" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Agent-run / Chat / Tool intercept levels</text>
+    <text x="14" y="92" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">call_next() chain — telemetry, logging, rate-limit</text>
+    <text x="14" y="108" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Raise MiddlewareTermination to halt cleanly</text>
+  </g>
+
+  <!-- ============================================================ -->
+  <!--  DOWNWARD ARROWS A ➜ B                                       -->
+  <!-- ============================================================ -->
+  <line x1="140" y1="240" x2="140" y2="273" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-purple)"/>
+  <line x1="365" y1="240" x2="365" y2="273" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-purple)"/>
+  <line x1="590" y1="240" x2="590" y2="273" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-purple)"/>
+  <line x1="815" y1="240" x2="815" y2="273" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-purple)"/>
+  <line x1="1100" y1="240" x2="1100" y2="273" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-purple)"/>
+
+
+  <!-- ========================================================= -->
+  <!--   LAYER B — RUNTIME CORE  (y=282)                         -->
+  <!-- ========================================================= -->
+  <rect x="20" y="282" width="1260" height="130" rx="10" fill="url(#lane-rt)" stroke="#1d4ed8" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="50" y="302" font-family="'Segoe UI',sans-serif" font-size="12" font-weight="700" fill="#60a5fa" letter-spacing="2">B — RUNTIME CORE  (Central Wiring Bus)</text>
+
+  <!-- RunContext card — visually highlighted as the HUB -->
+  <g transform="translate(40,308)" filter="url(#glow)">
+    <rect width="280" height="90" rx="8" fill="url(#ctx-card)" stroke="#3b82f6" stroke-width="2.5"/>
+    <rect width="280" height="30" rx="8" fill="#3b82f6" fill-opacity="0.35"/>
+    <text x="140" y="20" font-family="'Segoe UI',sans-serif" font-size="14" font-weight="800" fill="#ffffff" text-anchor="middle">RunContext (Hub)</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#93c5fd">runtime_context.py  •  context.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#bfdbfe">run_id • tenant • deadline • CancellationToken</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#bfdbfe">Injected into every Agent/Tool/Middleware call</text>
+  </g>
+
+  <!-- CancellationToken detail -->
+  <g transform="translate(345,308)" filter="url(#shadow)">
+    <rect width="220" height="90" rx="8" fill="url(#card-blue)" stroke="#2563eb" stroke-width="1.5"/>
+    <rect width="220" height="30" rx="8" fill="#2563eb" fill-opacity="0.3"/>
+    <text x="110" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#bfdbfe" text-anchor="middle">CancellationToken</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#93c5fd">runtime_context.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">cancel() / check() / wait()</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Propagated to all sub-calls</text>
+  </g>
+
+  <!-- Checkpoint -->
+  <g transform="translate(590,308)" filter="url(#shadow)">
+    <rect width="220" height="90" rx="8" fill="url(#card-blue)" stroke="#2563eb" stroke-width="1.5"/>
+    <rect width="220" height="30" rx="8" fill="#2563eb" fill-opacity="0.3"/>
+    <text x="110" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#bfdbfe" text-anchor="middle">Checkpoint</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#93c5fd">agent.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Serializable agent snapshot</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Save → persist → resume</text>
+  </g>
+
+  <!-- Errors -->
+  <g transform="translate(835,308)" filter="url(#shadow)">
+    <rect width="200" height="90" rx="8" fill="url(#card-blue)" stroke="#2563eb" stroke-width="1.5"/>
+    <rect width="200" height="30" rx="8" fill="#2563eb" fill-opacity="0.3"/>
+    <text x="100" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#bfdbfe" text-anchor="middle">Errors &amp; Identity</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#93c5fd">errors.py  •  identity.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">AgentId, CancellationError</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">MiddlewareTermination</text>
+  </g>
+
+  <!-- Usage -->
+  <g transform="translate(1060,308)" filter="url(#shadow)">
+    <rect width="200" height="90" rx="8" fill="url(#card-blue)" stroke="#2563eb" stroke-width="1.5"/>
+    <rect width="200" height="30" rx="8" fill="#2563eb" fill-opacity="0.3"/>
+    <text x="100" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#bfdbfe" text-anchor="middle">Usage Accounting</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#93c5fd">usage.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Token counters per run</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Cost envelope enforcement</text>
+  </g>
+
+  <!-- ============================================================ -->
+  <!--  DOWNWARD ARROWS B ➜ C                                       -->
+  <!-- ============================================================ -->
+  <line x1="180" y1="398" x2="180" y2="422" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <line x1="455" y1="398" x2="455" y2="422" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <line x1="700" y1="398" x2="700" y2="422" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <line x1="935" y1="398" x2="935" y2="422" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <line x1="1160" y1="398" x2="1160" y2="422" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+
+  <!-- ========================================================= -->
+  <!--   LAYER C — CAPABILITY SERVICES  (y=429)                  -->
+  <!-- ========================================================= -->
+  <rect x="20" y="429" width="1260" height="160" rx="10" fill="url(#lane-svc)" stroke="#059669" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="50" y="449" font-family="'Segoe UI',sans-serif" font-size="12" font-weight="700" fill="#34d399" letter-spacing="2">C — CAPABILITY SERVICES  (Protocol-bound, Swappable)</text>
+
+  <!-- LLM Engine -->
+  <g transform="translate(40,457)" filter="url(#shadow)">
+    <rect width="230" height="116" rx="8" fill="url(#card-green)" stroke="#059669" stroke-width="1.5"/>
+    <rect width="230" height="30" rx="8" fill="#059669" fill-opacity="0.3"/>
+    <text x="115" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#a7f3d0" text-anchor="middle">LLM &amp; Streaming</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#6ee7b7">llm.py  •  stream.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">LLMClient protocol</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">LLMResponse / AsyncStream</text>
+    <text x="14" y="100" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">OpenAI / vLLM / Anthropic / Gemini</text>
+  </g>
+
+  <!-- Tool Engine -->
+  <g transform="translate(295,457)" filter="url(#shadow)">
+    <rect width="230" height="116" rx="8" fill="url(#card-green)" stroke="#059669" stroke-width="1.5"/>
+    <rect width="230" height="30" rx="8" fill="#059669" fill-opacity="0.3"/>
+    <text x="115" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#a7f3d0" text-anchor="middle">Tool Engine</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#6ee7b7">tools.py  •  skills.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">JSON Schema validation</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Tool call dispatch &amp; results</text>
+    <text x="14" y="100" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Skill registry (reusable units)</text>
+  </g>
+
+  <!-- Vector Store -->
+  <g transform="translate(550,457)" filter="url(#shadow)">
+    <rect width="230" height="116" rx="8" fill="url(#card-green)" stroke="#059669" stroke-width="1.5"/>
+    <rect width="230" height="30" rx="8" fill="#059669" fill-opacity="0.3"/>
+    <text x="115" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#a7f3d0" text-anchor="middle">Vector Store  (RAG)</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#6ee7b7">vector.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Document / SearchResult</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">add / search / get / upsert</text>
+    <text x="14" y="100" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">pgvector / Chroma / Qdrant</text>
+  </g>
+
+  <!-- Graph Store -->
+  <g transform="translate(805,457)" filter="url(#shadow)">
+    <rect width="230" height="116" rx="8" fill="url(#card-green)" stroke="#059669" stroke-width="1.5"/>
+    <rect width="230" height="30" rx="8" fill="#059669" fill-opacity="0.3"/>
+    <text x="115" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#a7f3d0" text-anchor="middle">Graph Store</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#6ee7b7">graph.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">GraphStore / CypherCapable</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Entity / Relationship nodes</text>
+    <text x="14" y="100" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Neo4j / Memgraph adapters</text>
+  </g>
+
+  <!-- Memory Store -->
+  <g transform="translate(1060,457)" filter="url(#shadow)">
+    <rect width="200" height="116" rx="8" fill="url(#card-green)" stroke="#059669" stroke-width="1.5"/>
+    <rect width="200" height="30" rx="8" fill="#059669" fill-opacity="0.3"/>
+    <text x="100" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#a7f3d0" text-anchor="middle">Chat Memory</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#6ee7b7">memory.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">ChatStore protocol</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Per-session message log</text>
+    <text x="14" y="100" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Redis / Postgres adapters</text>
+  </g>
+
+  <!-- ============================================================ -->
+  <!--  DOWNWARD ARROWS C ➜ D                                       -->
+  <!-- ============================================================ -->
+  <line x1="155" y1="573" x2="155" y2="600" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+  <line x1="410" y1="573" x2="410" y2="600" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+  <line x1="665" y1="573" x2="665" y2="600" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+  <line x1="920" y1="573" x2="920" y2="600" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+  <line x1="1160" y1="573" x2="1160" y2="600" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+
+
+  <!-- ========================================================= -->
+  <!--   LAYER D — DATA STRUCTURES  (y=606)                      -->
+  <!-- ========================================================= -->
+  <rect x="20" y="606" width="1260" height="130" rx="10" fill="url(#lane-store)" stroke="#d97706" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="50" y="626" font-family="'Segoe UI',sans-serif" font-size="12" font-weight="700" fill="#fbbf24" letter-spacing="2">D — DATA STRUCTURES  (Immutable Value Objects)</text>
+
+  <!-- ContentBlock -->
+  <g transform="translate(40,634)" filter="url(#shadow)">
+    <rect width="280" height="90" rx="8" fill="url(#card-amber)" stroke="#d97706" stroke-width="1.5"/>
+    <rect width="280" height="30" rx="8" fill="#d97706" fill-opacity="0.3"/>
+    <text x="140" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#fde68a" text-anchor="middle">Content Blocks</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#fcd34d">content.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">TextBlock • ImageBlock • AudioBlock • DataBlock</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Universal multimodal payload primitive</text>
+  </g>
+
+  <!-- Messages -->
+  <g transform="translate(345,634)" filter="url(#shadow)">
+    <rect width="280" height="90" rx="8" fill="url(#card-amber)" stroke="#d97706" stroke-width="1.5"/>
+    <rect width="280" height="30" rx="8" fill="#d97706" fill-opacity="0.3"/>
+    <text x="140" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#fde68a" text-anchor="middle">Messages &amp; History</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#fcd34d">message.py  •  history.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">UserMessage / AssistantMessage / ToolMessage</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">ChatHistory window management</text>
+  </g>
+
+  <!-- Document -->
+  <g transform="translate(650,634)" filter="url(#shadow)">
+    <rect width="280" height="90" rx="8" fill="url(#card-amber)" stroke="#d97706" stroke-width="1.5"/>
+    <rect width="280" height="30" rx="8" fill="#d97706" fill-opacity="0.3"/>
+    <text x="140" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#fde68a" text-anchor="middle">Document &amp; SearchResult</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#fcd34d">vector.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">content[] + embedding + metadata{}</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Ingested → scored → returned to Agent</text>
+  </g>
+
+  <!-- LLMResponse -->
+  <g transform="translate(955,634)" filter="url(#shadow)">
+    <rect width="305" height="90" rx="8" fill="url(#card-amber)" stroke="#d97706" stroke-width="1.5"/>
+    <rect width="305" height="30" rx="8" fill="#d97706" fill-opacity="0.3"/>
+    <text x="152" y="20" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#fde68a" text-anchor="middle">LLMResponse &amp; Stream</text>
+    <text x="14" y="50" font-family="monospace" font-size="12" fill="#fcd34d">llm.py  •  stream.py</text>
+    <text x="14" y="68" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">content[] + tool_calls + usage</text>
+    <text x="14" y="84" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">AsyncStream yields delta ContentBlocks</text>
+  </g>
+
+
+  <!-- ============================================================ -->
+  <!--  DOWNWARD ARROWS D ➜ E                                       -->
+  <!-- ============================================================ -->
+  <line x1="400" y1="736" x2="400" y2="748" stroke="#fbbf24" stroke-width="2" marker-end="url(#arr-amber)"/>
+  <line x1="790" y1="736" x2="790" y2="748" stroke="#fbbf24" stroke-width="2" marker-end="url(#arr-amber)"/>
+  <line x1="1107" y1="736" x2="1107" y2="748" stroke="#fbbf24" stroke-width="2" marker-end="url(#arr-amber)"/>
+
+
+  <!-- ========================================================= -->
+  <!--   LAYER E — KERNEL PROTOCOLS  (y=754)                     -->
+  <!-- ========================================================= -->
+  <rect x="20" y="754" width="1260" height="110" rx="10" fill="#0d1525" stroke="#475569" stroke-width="1" stroke-opacity="0.6"/>
+  <text x="50" y="774" font-family="'Segoe UI',sans-serif" font-size="12" font-weight="700" fill="#94a3b8" letter-spacing="2">E — KERNEL PROTOCOLS  (Pure typing.Protocol — zero concrete deps)</text>
+
+  <!-- Protocols row -->
+  <g transform="translate(40,782)">
+    <rect width="190" height="68" rx="8" fill="url(#card-gray)" stroke="#475569" stroke-width="1.5"/>
+    <text x="95" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">Agent Protocol</text>
+    <text x="95" y="42" font-family="monospace" font-size="11" fill="#94a3b8" text-anchor="middle">agent.py</text>
+    <text x="95" y="60" font-family="'Segoe UI',sans-serif" font-size="10" fill="#64748b" text-anchor="middle">@runtime_checkable</text>
+  </g>
+  <g transform="translate(255,782)">
+    <rect width="190" height="68" rx="8" fill="url(#card-gray)" stroke="#475569" stroke-width="1.5"/>
+    <text x="95" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">LLMClient Protocol</text>
+    <text x="95" y="42" font-family="monospace" font-size="11" fill="#94a3b8" text-anchor="middle">llm.py</text>
+    <text x="95" y="60" font-family="'Segoe UI',sans-serif" font-size="10" fill="#64748b" text-anchor="middle">generate / stream</text>
+  </g>
+  <g transform="translate(470,782)">
+    <rect width="190" height="68" rx="8" fill="url(#card-gray)" stroke="#475569" stroke-width="1.5"/>
+    <text x="95" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">VectorStore Protocol</text>
+    <text x="95" y="42" font-family="monospace" font-size="11" fill="#94a3b8" text-anchor="middle">vector.py</text>
+    <text x="95" y="60" font-family="'Segoe UI',sans-serif" font-size="10" fill="#64748b" text-anchor="middle">add / search / upsert</text>
+  </g>
+  <g transform="translate(685,782)">
+    <rect width="190" height="68" rx="8" fill="url(#card-gray)" stroke="#475569" stroke-width="1.5"/>
+    <text x="95" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">GraphStore Protocol</text>
+    <text x="95" y="42" font-family="monospace" font-size="11" fill="#94a3b8" text-anchor="middle">graph.py</text>
+    <text x="95" y="60" font-family="'Segoe UI',sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Cypher / query nodes</text>
+  </g>
+  <g transform="translate(900,782)">
+    <rect width="190" height="68" rx="8" fill="url(#card-gray)" stroke="#475569" stroke-width="1.5"/>
+    <text x="95" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">ChatStore Protocol</text>
+    <text x="95" y="42" font-family="monospace" font-size="11" fill="#94a3b8" text-anchor="middle">memory.py</text>
+    <text x="95" y="60" font-family="'Segoe UI',sans-serif" font-size="10" fill="#64748b" text-anchor="middle">get / set / clear session</text>
+  </g>
+  <g transform="translate(1115,782)">
+    <rect width="145" height="68" rx="8" fill="url(#card-gray)" stroke="#475569" stroke-width="1.5"/>
+    <text x="72" y="22" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">Middleware</text>
+    <text x="72" y="42" font-family="monospace" font-size="11" fill="#94a3b8" text-anchor="middle">middleware.py</text>
+    <text x="72" y="60" font-family="'Segoe UI',sans-serif" font-size="10" fill="#64748b" text-anchor="middle">process / call_next</text>
+  </g>
+
+  <!-- ============================================================ -->
+  <!--  FLOW LEGEND                                                  -->
+  <!-- ============================================================ -->
+  <text x="50" y="883" font-family="'Segoe UI',sans-serif" font-size="12" font-weight="700" fill="#64748b">FLOW:</text>
+  <line x1="100" y1="879" x2="140" y2="879" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-purple)"/>
+  <text x="150" y="883" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Orchestration control</text>
+
+  <line x1="290" y1="879" x2="330" y2="879" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <text x="340" y="883" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Runtime wiring (DI)</text>
+
+  <line x1="470" y1="879" x2="510" y2="879" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+  <text x="520" y="883" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Capability response payloads</text>
+
+  <line x1="700" y1="879" x2="740" y2="879" stroke="#fbbf24" stroke-width="2" marker-end="url(#arr-amber)"/>
+  <text x="750" y="883" font-family="'Segoe UI',sans-serif" font-size="11" fill="#94a3b8">Value objects fulfil Protocol contracts</text>
+</svg>

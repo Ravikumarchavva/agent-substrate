@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from ravi.capabilities.pipeline.chain import ChainResult, ChainRuntime
-from ravi.capabilities.pipeline.data_ref import DataRef, DataRefStore
+from ravi.capabilities.pipeline.data_ref import (
+    DataRef,
+    DataRefStore,
+    DataRefArtifactStore,
+)
 from ravi.capabilities.pipeline.engine import (
     PipelineDef,
     PipelineEngine,
@@ -13,10 +16,9 @@ from ravi.capabilities.pipeline.engine import (
 from ravi.capabilities.pipeline.store import PipelineStore
 
 __all__ = [
-    "ChainResult",
-    "ChainRuntime",
     "DataRef",
     "DataRefStore",
+    "DataRefArtifactStore",
     "PipelineDef",
     "PipelineEngine",
     "PipelineResult",

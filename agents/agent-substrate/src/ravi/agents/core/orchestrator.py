@@ -15,7 +15,7 @@ Crash recovery:
 Priority / budget:
   ``sub_agents`` accepts both ``ReActAgent`` instances (wrapped at
   ``Priority.NORMAL``) and ``SubAgentConfig`` objects for per-agent priority.
-  A ``SpawnBudget`` enforces the run-wide headcount cap; HIGH/CRITICAL agents
+  A ``SpawnTracker`` enforces the run-wide headcount cap; HIGH/CRITICAL agents
   can preempt lower-priority ones when the pool is full.
 
 Usage::
@@ -47,6 +47,7 @@ from ravi.kernel import (
     AgentCrashError,
     BudgetExhaustedError,
     Priority,
+    SpawnBudget,
     Supervision,
     TextBlock,
     Tool,
@@ -56,9 +57,9 @@ from ravi.kernel import (
 from ravi.kernel.messaging.stream import AgentProgress, AgentStep, StreamDone, TextDelta
 from ravi.kernel.agent.supervision import HistoryRetention
 from ravi.kernel.llm import LLMClient
-from ravi.agents.supervision.budget import SpawnBudget
+from ravi.agents.supervision.budget import SpawnTracker
 from ravi.agents.supervision.policies import RetryPolicy
-from ravi.agents.resources.budget import ExecutionBudget
+from ravi.agents.resources.budget import ExecutionTracker
 from ravi.agents.core.react import (
     ReActAgent,
 )
@@ -86,7 +87,7 @@ class SubAgentConfig:
         NORMAL/LOW/BACKGROUND agents when the headcount pool is full.
     execution_budget:
         Optional per-agent cap (tokens, cost, turns). If None, no per-agent
-        cap is applied (only the run-wide SpawnBudget headcount limit).
+        cap is applied (only the run-wide SpawnTracker headcount limit).
     retention:
         History retention policy for this subagent.
         - ``RUN`` (default) — history is cleared after each run; the subagent
@@ -98,7 +99,7 @@ class SubAgentConfig:
 
     agent: ReActAgent
     priority: Priority = Priority.NORMAL
-    execution_budget: ExecutionBudget | None = None
+    execution_budget: ExecutionTracker | None = None
     retention: HistoryRetention = field(default=HistoryRetention.RUN)
 
 
@@ -128,7 +129,7 @@ class _DispatchTool:
         orchestrator_id: AgentId,
         runtime: Any,
         supervision: Supervision,
-        budget: SpawnBudget,
+        budget: SpawnTracker,
         retry_policy: RetryPolicy,
     ) -> None:
         self._config = config
@@ -373,12 +374,12 @@ class OrchestratorAgent(ReActAgent):
         root_supervision = Supervision.root(
             orchestrator_id,
             session_id=session_id,
-            max_agents=max_agents,
+            spawn_budget=SpawnBudget(max_agents=max_agents),
             retention=HistoryRetention.PERMANENT,
         )
 
-        # SpawnBudget enforces max_agents with priority-based preemption.
-        self._spawn_budget = SpawnBudget(root_supervision)
+        # SpawnTracker enforces max_agents with priority-based preemption.
+        self._spawn_budget = SpawnTracker(root_supervision)
 
         # RetryPolicy for crash-resume logic.
         self._retry_policy = RetryPolicy(max_retries=2)
@@ -464,11 +465,11 @@ class OrchestratorAgent(ReActAgent):
             root_id=root_id,
             parent_id=None,
             depth=0,
-            max_agents=base_sv.max_agents if base_sv is not None else 50,
+            spawn_budget=base_sv.spawn_budget if base_sv is not None else SpawnBudget(),
             retention=HistoryRetention.PERMANENT,
         )
         self.supervision = root_sv
-        self._spawn_budget = SpawnBudget(root_sv)
+        self._spawn_budget = SpawnTracker(root_sv)
         for tool in self._dispatch_tools:
             tool._supervision = root_sv
 
@@ -524,7 +525,7 @@ class OrchestratorAgent(ReActAgent):
     def reprioritize(self, agent_name: str, new_priority: Priority) -> None:
         """Change a subagent's priority mid-run.
 
-        Delegates to ``SpawnBudget.reprioritize``. Thread-safe.
+        Delegates to ``SpawnTracker.reprioritize``. Thread-safe.
         If demoted below NORMAL and pool is full, the agent is automatically
         paused (it will stop making LLM calls at the next cooperative check).
         If promoted, the pause is lifted.

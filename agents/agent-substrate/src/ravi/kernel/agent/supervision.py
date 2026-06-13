@@ -4,11 +4,27 @@ Supervision types live here rather than in ``identity`` because they model
 execution policy, not routing identity.  ``AgentId`` and ``TopicId``
 (in ``identity.py``) are pure routing keys; ``Supervision``, ``Priority``,
 and ``HistoryRetention`` are policy metadata that flows down the agent tree.
+
+Budget model (supervision v2)
+------------------------------
+Two orthogonal frozen configs are embedded in every ``Supervision`` node:
+
+``SpawnBudget``
+    Run-wide cap on the total number of agents that may be spawned.
+    Shared across the entire tree — the same object is propagated to every
+    child via ``spawn_child()``.  The L1 ``SpawnTracker`` (agents layer)
+    carries the mutable state (current count, paused set) that enforces it.
+
+``ExecutionBudget``
+    Per-agent resource limits: tokens, cost, turns, wall-clock time.
+    Each child inherits the parent's policy by default; ``spawn_child()``
+    accepts an override so a sub-agent can be given a tighter budget.
+    The L1 ``ExecutionTracker`` (agents layer) tracks consumption against it.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from uuid import uuid4
 
@@ -43,6 +59,44 @@ class Priority(int, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class SpawnBudget:
+    """Run-wide cap on how many agents may exist simultaneously.
+
+    Shared across the entire agent tree — every ``Supervision`` node in one
+    run carries the same ``SpawnBudget`` instance so the headcount limit is
+    global, not per-branch.
+
+    ``max_agents``   — total agents allowed in the run (root counts as 1).
+    ``allow_preempt``— when True, HIGH/CRITICAL agents may cooperatively
+                       pause lower-priority ones to claim their slot instead
+                       of raising ``SpawnDenied`` immediately.
+    """
+
+    max_agents: int = 50
+    allow_preempt: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionBudget:
+    """Per-agent resource limits — frozen policy carried in Supervision.
+
+    ``None`` means unlimited for that dimension.  The L1 ``ExecutionTracker``
+    (agents layer) tracks actual consumption and raises ``BudgetExhaustedError``
+    when a limit is breached.
+
+    ``max_tokens``   — total LLM tokens (prompt + completion) across all turns.
+    ``max_cost_usd`` — cumulative LLM cost in USD.
+    ``max_turns``    — number of LLM round-trips (one tool call = one turn).
+    ``deadline_s``   — wall-clock seconds from run start; enforced by RunContext.
+    """
+
+    max_tokens: int | None = None
+    max_cost_usd: float | None = None
+    max_turns: int | None = None
+    deadline_s: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Supervision:
     """An agent's formal position in an execution hierarchy.
 
@@ -61,7 +115,7 @@ class Supervision:
     All agents in one run publish there; the UI subscribes once.
 
     ``depth`` is informational only (for UI indentation and AgentProgress).
-    There is no depth limit; the budget is the single unified constraint.
+    There is no depth limit; ``spawn_budget`` is the single unified constraint.
     """
 
     run_id: str
@@ -69,7 +123,8 @@ class Supervision:
     root_id: AgentId
     parent_id: AgentId | None
     depth: int = 0
-    max_agents: int = 50
+    spawn_budget: SpawnBudget = field(default_factory=SpawnBudget)
+    execution_budget: ExecutionBudget = field(default_factory=ExecutionBudget)
     retention: HistoryRetention = HistoryRetention.RUN
     priority: Priority = Priority.NORMAL
 
@@ -79,7 +134,8 @@ class Supervision:
         agent_id: AgentId,
         *,
         session_id: str | None = None,
-        max_agents: int = 50,
+        spawn_budget: SpawnBudget | None = None,
+        execution_budget: ExecutionBudget | None = None,
         retention: HistoryRetention = HistoryRetention.PERMANENT,
         priority: Priority = Priority.NORMAL,
     ) -> Supervision:
@@ -93,6 +149,12 @@ class Supervision:
         session_id:
             The conversation thread id.  If ``None``, a fresh uuid is
             generated.  Pass an explicit id to resume a multi-turn session.
+        spawn_budget:
+            Run-wide agent headcount policy.  Defaults to ``SpawnBudget()``
+            (50 agents, preemption allowed).
+        execution_budget:
+            Per-agent resource limits for the root agent.  Defaults to
+            ``ExecutionBudget()`` (all unlimited).
         """
         return cls(
             run_id=uuid4().hex,
@@ -100,7 +162,8 @@ class Supervision:
             root_id=agent_id,
             parent_id=None,
             depth=0,
-            max_agents=max_agents,
+            spawn_budget=spawn_budget or SpawnBudget(),
+            execution_budget=execution_budget or ExecutionBudget(),
             retention=retention,
             priority=priority,
         )
@@ -111,11 +174,14 @@ class Supervision:
         *,
         retention: HistoryRetention = HistoryRetention.RUN,
         priority: Priority = Priority.NORMAL,
+        execution_budget: ExecutionBudget | None = None,
     ) -> Supervision:
         """Create supervision for a child agent reporting to ``parent_id``.
 
-        Carries the same ``run_id`` and ``session_id``, increments ``depth``,
-        and propagates ``max_agents`` so the entire subtree inherits the limit.
+        Carries the same ``run_id``, ``session_id``, and ``spawn_budget``
+        (the headcount cap is shared across the whole tree).  ``depth``
+        increments by one.  ``execution_budget`` defaults to the parent's
+        policy; pass an explicit value to give the child tighter limits.
         """
         return Supervision(
             run_id=self.run_id,
@@ -123,7 +189,8 @@ class Supervision:
             root_id=self.root_id,
             parent_id=parent_id,
             depth=self.depth + 1,
-            max_agents=self.max_agents,
+            spawn_budget=self.spawn_budget,  # shared tree-wide
+            execution_budget=execution_budget or self.execution_budget,
             retention=retention,
             priority=priority,
         )
@@ -138,4 +205,10 @@ class Supervision:
         return self.parent_id is None
 
 
-__all__ = ["HistoryRetention", "Priority", "Supervision"]
+__all__ = [
+    "HistoryRetention",
+    "Priority",
+    "SpawnBudget",
+    "ExecutionBudget",
+    "Supervision",
+]

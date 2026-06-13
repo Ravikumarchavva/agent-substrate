@@ -20,7 +20,6 @@ from .tools import (
 from .skills import Skill
 from .approval import ApprovalDecision, ApprovalRequest, ApprovalHandler
 from .chain import (
-    ArtifactStore,
     ChainPolicy,
     ChainFile,
     InvocationResult,
@@ -50,7 +49,6 @@ __all__ = [
     "ApprovalDecision",
     "ApprovalRequest",
     "ApprovalHandler",
-    "ArtifactStore",
     "ChainPolicy",
     "ChainFile",
     "InvocationResult",

@@ -58,7 +58,7 @@ from ravi.agents.core.proxy import UserProxyAgent
 from ravi.agents.runtime import LocalRuntime
 from ravi.agents.resources import (
     BudgetExceededError,
-    ExecutionBudget,
+    ExecutionTracker,
 )
 from ravi.agents.supervision import RetryPolicy
 
@@ -114,7 +114,7 @@ __all__ = [
     "LocalRuntime",
     # resources
     "BudgetExceededError",
-    "ExecutionBudget",
+    "ExecutionTracker",
     # supervision
     "RetryPolicy",
 ]

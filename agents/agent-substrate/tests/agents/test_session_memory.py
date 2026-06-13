@@ -150,7 +150,7 @@ async def test_permanent_retention_subagent_remembers_across_runs():
             root_id=root_sv.root_id,
             parent_id=orchestrator_id,
             depth=1,
-            max_agents=root_sv.max_agents,
+            spawn_budget=root_sv.spawn_budget,
             retention=HistoryRetention.PERMANENT,
         )
         coder.supervision = new_run_sv
@@ -209,7 +209,7 @@ async def test_run_retention_subagent_is_ephemeral():
             root_id=sv1.root_id,
             parent_id=orchestrator_id,
             depth=1,
-            max_agents=sv1.max_agents,
+            spawn_budget=sv1.spawn_budget,
             retention=HistoryRetention.RUN,
         )
         scratch.supervision = sv2

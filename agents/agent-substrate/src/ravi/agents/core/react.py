@@ -79,7 +79,7 @@ from ravi.agents.context import AgentContext, ContextConfig, HistoryProvider
 from ravi.kernel import Skill
 from ravi.kernel.llm import LLMClient, LLMResponse, Usage
 from ravi.agents.hooks.manager import HookEvent, HookManager
-from ravi.agents.resources.budget import BudgetExceededError, ExecutionBudget
+from ravi.agents.resources.budget import BudgetExceededError, ExecutionTracker
 from ravi.agents.middleware._contracts import (
     AgentRunContext,
     AgentRunResult,
@@ -88,7 +88,11 @@ from ravi.agents.middleware._contracts import (
     ToolCallRecord,
 )
 from ravi.agents.middleware.pipeline import MiddlewarePipeline
-from ravi.kernel.agent.middleware import AgentMiddleware, ChatMiddleware, FunctionMiddleware
+from ravi.kernel.agent.middleware import (
+    AgentMiddleware,
+    ChatMiddleware,
+    FunctionMiddleware,
+)
 from ravi.kernel.core.errors import MiddlewareTermination
 from ravi.logger import setup_logging
 
@@ -159,7 +163,7 @@ class ReActAgent:
         approval_required_risk: ToolRisk = ToolRisk.HIGH,
         hooks: HookManager | None = None,
         supervision: Supervision | None = None,
-        execution_budget: ExecutionBudget | None = None,
+        execution_budget: ExecutionTracker | None = None,
     ) -> None:
         self.name = name
         self.description = description
@@ -178,7 +182,7 @@ class ReActAgent:
         self._approval_handler = approval_handler
         self._approval_required_risk = approval_required_risk
         self.hooks = hooks or HookManager()
-        self.execution_budget: ExecutionBudget | None = execution_budget
+        self.execution_budget: ExecutionTracker | None = execution_budget
 
         # Set by the orchestrator when this agent is a subagent in a supervised tree.
         # Checked before each LLM call; if True, agent pauses cooperatively.
@@ -365,7 +369,7 @@ class ReActAgent:
                         AgentStep.THINKING, f"step {step}", rid, seq=next(_seq)
                     )
 
-                    # -- ExecutionBudget: count prompt tokens for cost estimation --
+                    # -- ExecutionTracker: count prompt tokens for cost estimation --
                     if self.execution_budget is not None:
                         try:
                             prompt_tokens = await self.model.count_tokens(messages)
@@ -427,7 +431,7 @@ class ReActAgent:
                         chat_ctx.result.usage if chat_ctx.result else turn_usage
                     )
 
-                    # -- ExecutionBudget: record this turn's usage -----------------
+                    # -- ExecutionTracker: record this turn's usage -----------------
                     if self.execution_budget is not None:
                         self.execution_budget.consume(
                             tokens=turn_usage.total_tokens or prompt_tokens, turns=1

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent, StreamDone
+from ravi.kernel.messaging.stream import (
+    TextDelta,
+    ReasoningDelta,
+    CompletionEvent,
+    StreamDone,
+)
 from ravi.kernel.core.content import TextBlock
 
 

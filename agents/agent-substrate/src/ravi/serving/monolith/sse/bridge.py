@@ -32,7 +32,10 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 import asyncio
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from ravi.serving.protocol import WireEvent
 
 from ravi.capabilities.tools.human_input import (
     CallbackApprovalHandler,
@@ -53,6 +56,34 @@ _DONE = object()
 
 # Public alias — consumers can import BRIDGE_DONE instead of the private _DONE.
 BRIDGE_DONE = _DONE
+
+
+def bridge_event_to_wire(data: dict) -> "WireEvent | None":
+    """Normalise a bridge HITL dict into a wire event.
+
+    HITL events are out-of-band (they originate from the bridge, not the run
+    log), and the bridge's dict shape predates the wire protocol, so this small
+    adaptation point absorbs the field aliasing.  Rich tool UIs (kanban, …) flow
+    inline as ``ui.resource`` via the tool result, not through here.
+    """
+    from ravi.serving.protocol import ApprovalRequestedEvent, InputRequestedEvent
+
+    kind = data.get("type")
+    if kind == "tool_approval_request":
+        return ApprovalRequestedEvent(
+            request_id=data.get("request_id") or data.get("requestId", ""),
+            tool_name=data.get("tool_name", ""),
+            args=data.get("arguments") or data.get("input") or {},
+        )
+    if kind == "human_input_request":
+        return InputRequestedEvent(
+            request_id=data.get("request_id") or data.get("requestId", ""),
+            question=data.get("question") or data.get("prompt", ""),
+            context=data.get("context", ""),
+            options=data.get("options") or [],
+            allow_freeform=data.get("allow_freeform", True),
+        )
+    return None
 
 
 class WebHITLBridge:

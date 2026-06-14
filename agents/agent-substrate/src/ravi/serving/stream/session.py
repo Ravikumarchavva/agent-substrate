@@ -2,15 +2,17 @@
 
 This is the single place that orchestrates a streaming chat run:
 
-  * starts the agent's ``run_stream()`` and maps each kernel event to a
-    ``WireEvent`` (via ``stream.mapper``),
-  * merges out-of-band HITL / task-board events from the thread's ``WebHITLBridge``,
+  * registers the agent with the Runtime and submits the entry Message,
+  * tails the run's EventLog, turning each entry into a WireEvent via
+    ``protocol.wire_from_log`` (a log entry *is* a wire event — no mapping),
+  * merges out-of-band HITL / task-board events from the thread's
+    ``WebHITLBridge``,
   * watches for client disconnect and explicit cancel,
   * persists the assistant turn and tool results inline (optional callbacks),
   * frames the run with ``protocol.hello`` … ``run.completed|failed|cancelled``.
 
-The route stays thin: build the agent + bridge, construct a session, and stream
-``session.events()`` as SSE. All the concurrency lives here, not in the route.
+The route stays thin: build the agent + message + bridge, construct a session,
+and stream ``session.events()`` as SSE.  All the concurrency lives here.
 """
 
 from __future__ import annotations
@@ -18,19 +20,25 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator, Awaitable, Callable, Protocol
 
-from ravi.kernel.messaging.stream import StreamDone
 from ravi.logger import setup_logging
-from ravi.serving.monolith.sse.bridge import BRIDGE_DONE, WebHITLBridge
+from ravi.serving.monolith.sse.bridge import (
+    BRIDGE_DONE,
+    WebHITLBridge,
+    bridge_event_to_wire,
+)
 from ravi.serving.protocol import (
     HelloEvent,
     RunCancelledEvent,
     RunCompletedEvent,
     RunFailedEvent,
-    TurnCompletedEvent,
+    TextDeltaEvent,
+    ToolCallEvent,
+    ToolCallSummary,
     ToolResultEvent,
+    TurnCompletedEvent,
     WireEvent,
+    wire_from_log,
 )
-from ravi.serving.stream.mapper import map_bridge_event, map_kernel_event
 
 logger = setup_logging()
 
@@ -48,23 +56,23 @@ class AgentStreamSession:
     def __init__(
         self,
         *,
+        runtime: Any,
         agent: Any,
-        user_input: str,
+        msg: Any,
         bridge: WebHITLBridge,
         is_disconnected: DisconnectCheck | None = None,
         cancel_event: asyncio.Event | None = None,
         persister: Persister | None = None,
         poll_interval: float = 0.2,
-        initial_tool_choice: str | None = None,
     ) -> None:
+        self._runtime = runtime
         self._agent = agent
-        self._input = user_input
+        self._msg = msg
         self._bridge = bridge
         self._is_disconnected = is_disconnected
         self._cancel = cancel_event or asyncio.Event()
         self._persister = persister
         self._poll = poll_interval
-        self._initial_tool_choice = initial_tool_choice
         self._queue: asyncio.Queue[WireEvent | object] = asyncio.Queue()
         self._bridge_signaled = False
         self._error: str | None = None
@@ -72,27 +80,52 @@ class AgentStreamSession:
     # -- workers --------------------------------------------------------------
 
     async def _agent_worker(self) -> str:
-        """Run the agent, mapping + persisting each event. Returns terminal reason."""
-        reason = "success"
+        """Register agent, submit message, tail EventLog. Returns terminal reason."""
         try:
-            async for ev in self._agent.run_stream(
-                self._input,
-                initial_tool_choice=self._initial_tool_choice,
-            ):
-                if isinstance(ev, StreamDone):
-                    reason = ev.reason
-                    continue
-                wire = map_kernel_event(ev)
+            await self._runtime.register(self._agent)
+            run_id = await self._runtime.submit(self._agent.id, self._msg)
+
+            text_acc = ""
+            tool_calls_acc: list[ToolCallSummary] = []
+
+            async for entry in self._runtime.event_log.tail(run_id):
+                kind = entry.kind
+                if kind == "run.completed":
+                    if self._persister and (text_acc or tool_calls_acc):
+                        await self._persister.persist_turn(
+                            TurnCompletedEvent(
+                                text=text_acc,
+                                tool_calls=tool_calls_acc,
+                                finish_reason="stop",
+                            )
+                        )
+                    return "success"
+                if kind == "run.failed":
+                    self._error = (entry.payload or {}).get(
+                        "error", "agent run failed"
+                    )
+                    return "error"
+                if kind == "run.cancelled":
+                    return "cancelled"
+
+                wire = wire_from_log(kind, entry.payload or {})
                 if wire is None:
                     continue
-                for w in wire if isinstance(wire, list) else [wire]:
-                    await self._queue.put(w)
-                    if self._persister is not None:
-                        if isinstance(w, TurnCompletedEvent):
-                            await self._persister.persist_turn(w)
-                        elif isinstance(w, ToolResultEvent):
-                            await self._persister.persist_tool(w)
-        except Exception as exc:  # agent crash → surfaced as run.failed (terminal)
+                await self._queue.put(wire)
+                if self._persister:
+                    if isinstance(wire, ToolResultEvent):
+                        await self._persister.persist_tool(wire)
+                    elif isinstance(wire, TextDeltaEvent):
+                        text_acc += wire.text
+                    elif isinstance(wire, ToolCallEvent):
+                        tool_calls_acc.append(
+                            ToolCallSummary(
+                                id=wire.call_id,
+                                name=wire.tool_name,
+                                args=wire.args,
+                            )
+                        )
+        except Exception as exc:
             logger.exception("Agent run failed")
             self._error = str(exc)
             return "error"
@@ -100,7 +133,7 @@ class AgentStreamSession:
             if not self._bridge_signaled:
                 self._bridge_signaled = True
                 await self._bridge.signal_done()
-        return reason
+        return "success"
 
     async def _bridge_worker(self) -> None:
         """Forward HITL / task-board events until the bridge signals done."""
@@ -108,7 +141,7 @@ class AgentStreamSession:
             event = await self._bridge.get_event()
             if event is BRIDGE_DONE:
                 break
-            wire = map_bridge_event(event)
+            wire = bridge_event_to_wire(event)
             if wire is not None:
                 await self._queue.put(wire)
         self._queue.put_nowait(_WORKERS_DONE)
@@ -137,13 +170,12 @@ class AgentStreamSession:
                     break
                 yield item  # type: ignore[misc]
 
-            # Derive terminal from the agent's reason if not already cancelled.
             if isinstance(terminal, RunCompletedEvent):
                 reason = await agent_task
                 if self._error is not None:
                     terminal = RunFailedEvent(error=self._error)
-                elif reason == "max_iterations":
-                    terminal = RunCompletedEvent(reason="max_iterations")
+                elif reason == "cancelled":
+                    terminal = RunCancelledEvent()
                 elif reason not in ("success", "complete"):
                     terminal = RunFailedEvent(error=reason)
         finally:

@@ -1,12 +1,4 @@
-"""Agent service — builds and registers ReActAgents, returns stream adapters.
-
-Each chat thread maps to a ``correlation_id`` (the session/thread ID).  The
-agent is registered once with the ``Runtime``; each request submits a
-new inbox Message with that correlation_id.  The EventLog records every step.
-
-The returned ``RunStreamAdapter`` presents the ``run_stream()`` interface
-expected by ``AgentStreamSession``, forwarding log entries as stream events.
-"""
+"""Agent service — builds and registers kernel Agents for chat threads."""
 
 from __future__ import annotations
 
@@ -25,7 +17,6 @@ from ravi.agents.context import (
 from ravi.capabilities.tools.human_input import ToolApprovalHandler
 from ravi.kernel.llm import LLMClient
 from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, Tool
-from ravi.serving.stream.run_adapter import RunStreamAdapter
 from ravi.agents.factory import load_session_memory
 from ravi.config import settings
 
@@ -45,15 +36,15 @@ def _make_context(max_messages: int = 20) -> ContextConfig:
     )
 
 
-def _build_orchestrator(
+async def _build_orchestrator(
     model_client: LLMClient,
     runtime: Any,
     model_context_window: int,
     tool_timeout: float | None,
     session_id: str,
     tools: list[Tool] | None = None,
-) -> RunStreamAdapter:
-    """Build an OrchestratorAgent with researcher + calculator + clock specialists."""
+) -> OrchestratorAgent:
+    """Build and register an OrchestratorAgent with specialist sub-agents."""
     from ravi.agents.tools.toolbox import Toolbox
     from ravi.capabilities.tools import (
         CalculatorTool,
@@ -105,18 +96,10 @@ def _build_orchestrator(
         context=_make_context(model_context_window),
     )
 
-    import asyncio
-    loop = asyncio.get_event_loop()
     for agent in [researcher, calculator, clock, orchestrator]:
-        loop.create_task(runtime.register(agent))
+        await runtime.register(agent)
 
-    all_tools = list(tools or [])
-    return RunStreamAdapter(
-        agent_id=orchestrator.id,
-        runtime=runtime,
-        tools=all_tools,
-        correlation_id=session_id,
-    )
+    return orchestrator
 
 
 async def load_agent_for_thread(
@@ -136,11 +119,12 @@ async def load_agent_for_thread(
     max_input_tokens: int = 16_000,
     runtime: Any = None,
     enable_capability_search: bool = True,
-) -> RunStreamAdapter:
-    """Build and register a ReActAgent for this thread, return a stream adapter.
+) -> ReActAgent | OrchestratorAgent:
+    """Build and register a kernel Agent for this thread.
 
-    The agent is registered with the shared Runtime and associated with
-    the thread's session_id via the Message.correlation_id on submit.
+    The returned agent is already registered with ``runtime``.  The caller
+    builds a Message with ``correlation_id=str(thread_id)`` and submits via
+    ``AgentStreamSession`` — no adapter required.
     """
     if runtime is None:
         raise ValueError(
@@ -161,7 +145,7 @@ async def load_agent_for_thread(
     )
 
     if settings.AGENT_MODE.lower() == "orchestrator":
-        return _build_orchestrator(
+        return await _build_orchestrator(
             model_client=model_client,
             runtime=runtime,
             model_context_window=model_context_window,
@@ -186,13 +170,7 @@ async def load_agent_for_thread(
     )
 
     await runtime.register(agent)
-
-    return RunStreamAdapter(
-        agent_id=agent.id,
-        runtime=runtime,
-        tools=tools,
-        correlation_id=session_id,
-    )
+    return agent
 
 
 async def persist_user_message(

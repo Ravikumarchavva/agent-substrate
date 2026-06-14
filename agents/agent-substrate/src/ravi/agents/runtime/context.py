@@ -397,10 +397,10 @@ class RunContext:
             async for chunk in stream:
                 if isinstance(chunk, TextDelta):
                     text_chunks.append(chunk.text)
-                    await self._log("text.delta", {"delta": chunk.text})
+                    await self._log("text.delta", {"text": chunk.text})
                 elif isinstance(chunk, ReasoningDelta):
                     reasoning_chunks.append(chunk.text)
-                    await self._log("reasoning.delta", {"delta": chunk.text})
+                    await self._log("reasoning.delta", {"text": chunk.text})
                 elif isinstance(chunk, CompletionEvent):
                     final_content = chunk.content
                     final_usage = chunk.usage
@@ -451,6 +451,10 @@ class RunContext:
             from ravi.kernel.tools.chain import InvocationResult
             return InvocationResult.model_validate(cached.value)
         try:
+            await self._log(
+                "tool.call",
+                {"call_id": effect_id, "tool_name": name, "args": args},
+            )
             result = await self._tool_invoker.invoke(
                 call, session=self._invoker_session, ctx=self
             )
@@ -461,16 +465,16 @@ class RunContext:
                     value=result.model_dump(mode="json"),
                 )
             )
+            ok = result.status == "ok"
             await self._log(
-                "tool.call",
+                "tool.result",
                 {
-                    "name": name,
                     "call_id": effect_id,
-                    "arguments": args,
-                    "result": result.text or "",
-                    "is_error": result.status != "ok",
-                    "duration_ms": 0.0,
-                }
+                    "tool_name": name,
+                    "ok": ok,
+                    "output": result.text or "",
+                    "error": None if ok else (result.text or "tool error"),
+                },
             )
             return result
         except Exception as exc:

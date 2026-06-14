@@ -49,6 +49,7 @@ async def start_agent_run(body: RunRequest, request: Request):
     tools = request.app.state.tools
     history = request.app.state.history
     event_bus = request.app.state.event_bus
+    runtime = request.app.state.runtime
     conversation_url = request.app.state.conversation_service_url
 
     system_instructions = (
@@ -70,6 +71,7 @@ async def start_agent_run(body: RunRequest, request: Request):
         system_instructions=system_instructions,
         memory=memory,
         session_id=body.thread_id,
+        runtime=runtime,
     )
 
     # Run asynchronously
@@ -80,6 +82,7 @@ async def start_agent_run(body: RunRequest, request: Request):
             run_id=body.run_id,
             thread_id=body.thread_id,
             event_bus=event_bus,
+            runtime=runtime,
         )
     )
 

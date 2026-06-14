@@ -10,9 +10,10 @@ Conventions (enforced here, relied on by the UI):
   * All fields are snake_case.
   * Every event is JSON-serializable with ``model_dump(mode="json")``.
 
-A note on layering: these are *wire* types, distinct from the kernel stream
-types in ``ravi.kernel.stream``. ``serving/stream/mapper.py`` is the only place
-that translates kernel → wire.
+A note on layering: these are *wire* types. Their ``type`` discriminator and
+fields are deliberately identical to the kernel run-log ``kind``/``payload`` for
+streaming events, so ``protocol/from_log.py`` builds them by plain validation
+(``{"type": kind} | payload``) rather than a hand-written translation table.
 """
 
 from __future__ import annotations

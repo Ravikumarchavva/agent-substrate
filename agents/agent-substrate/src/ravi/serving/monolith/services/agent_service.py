@@ -26,7 +26,7 @@ from ravi.capabilities.tools.human_input import ToolApprovalHandler
 from ravi.kernel.llm import LLMClient
 from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, Tool
 from ravi.serving.stream.run_adapter import RunStreamAdapter
-from ravi.serving.shared.execution import load_session_memory
+from ravi.agents.factory import load_session_memory
 from ravi.config import settings
 
 from ravi.serving.monolith.services import (

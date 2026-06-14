@@ -47,6 +47,7 @@ from ravi.fabric.evals.criteria import (
     TOOL_USAGE,
 )
 from ravi.fabric.evals.judge import LLMJudge
+from ravi.fabric.evals.runner import EvalRunner
 
 __all__ = [
     # Models
@@ -65,4 +66,6 @@ __all__ = [
     "TOOL_USAGE",
     # Judge
     "LLMJudge",
+    # Runner
+    "EvalRunner",
 ]

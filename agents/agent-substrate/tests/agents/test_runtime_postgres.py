@@ -53,7 +53,7 @@ async def pg_runtime():
     """Runtime backed by Postgres only (in-memory journal)."""
     if not await _pg_reachable():
         pytest.skip("Postgres not reachable")
-    from ravi.capabilities.runtime import build_postgres_runtime
+    from ravi.infrastructure.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(postgres_url=_PG_URL) as rt:
         yield rt
@@ -66,7 +66,7 @@ async def pg_redis_runtime():
         pytest.skip("Postgres not reachable")
     if not await _redis_reachable():
         pytest.skip("Redis not reachable")
-    from ravi.capabilities.runtime import build_postgres_runtime
+    from ravi.infrastructure.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(
         postgres_url=_PG_URL,

@@ -7,7 +7,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from ravi.serving.shared.tasks.store import GlobalTaskStore
+from ravi.agents.storage.tasks import GlobalTaskStore
 from ravi.serving.monolith.security.deps import get_current_user
 
 router = APIRouter(

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.serving.services.human_gate.models import HITLRequest
 from ravi.integrations.events import EventBus
-from ravi.serving.shared.events.envelope import EventEnvelope
+from ravi.integrations.events.envelope import EventEnvelope
 
 logger = setup_logging()
 

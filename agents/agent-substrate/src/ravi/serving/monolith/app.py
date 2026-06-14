@@ -48,6 +48,7 @@ from ravi.serving.monolith.routes.threads import router as threads_router
 from ravi.serving.monolith.routes.triggers import router as triggers_router
 from ravi.serving.monolith.routes.workflows import router as workflows_router
 from ravi.serving.monolith.routes.rag import router as rag_router
+from ravi.serving.monolith.routes.files import router as files_router
 from ravi.serving.monolith._lifespan import (
     init_infrastructure,
     init_llm_clients,
@@ -91,6 +92,7 @@ async def lifespan(app: FastAPI):
     app.state.data_store = infra.data_store
     app.state.bridge_registry = infra.bridge_registry
     app.state.skill_manager = infra.skill_manager
+    app.state.file_store = infra.file_store
 
     # JWT secret for shared auth middleware
     app.state.jwt_secret = settings.JWT_SECRET
@@ -156,6 +158,7 @@ async def lifespan(app: FastAPI):
         mcp_servers=app.state.mcp_servers,
         session_factory=app.state.session_factory,
         ci_client=app.state.ci_client,
+        file_store=app.state.file_store,
     )
 
     # Quiet noisy loggers
@@ -181,6 +184,8 @@ async def lifespan(app: FastAPI):
         await app.state.history.disconnect()
     if getattr(app.state, "redis_client", None):
         await app.state.redis_client.aclose()
+    if getattr(app.state, "file_store", None):
+        await app.state.file_store.disconnect()
     for tool in app.state.tools.all():
         if hasattr(tool, "stop"):
             try:
@@ -229,6 +234,7 @@ def create_app() -> FastAPI:
     app.include_router(workflows_router)
     app.include_router(triggers_router)
     app.include_router(rag_router)
+    app.include_router(files_router)
 
     # Health check
     @app.get("/health", tags=["infra"])

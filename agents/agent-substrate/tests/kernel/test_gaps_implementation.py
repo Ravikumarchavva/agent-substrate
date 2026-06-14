@@ -5,7 +5,7 @@ import pytest
 from ravi.kernel.core.identity import AgentId, TopicId
 from ravi.kernel.messaging.stream import AgentProgress, AgentStep
 from ravi.kernel.messaging.message import Message, ProgressPayload, _PAYLOAD_REGISTRY
-from ravi.serving.shared.events.envelope import EventEnvelope
+from ravi.integrations.events.envelope import EventEnvelope
 
 
 def test_progress_payload_pydantic_serialization():

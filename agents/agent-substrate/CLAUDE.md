@@ -66,49 +66,61 @@ ravi-engine/                     ← repo root
 ```
 src/ravi/
 ├── kernel/       L0 — FROZEN. Pure contracts: Protocols, dataclasses, enums. No I/O.
-│   ├── content.py        ContentBlock, TextBlock, ChatMessage, ToolUseBlock, DocumentBlock, …
-│   ├── message.py        Message, MessageContext, MessageHandler, Subscription
-│   ├── tools.py          Tool Protocol, ToolExecutionResult, ToolRisk, ToolCallRequest
-│   ├── llm.py            LLMClient, EmbeddingClient Protocols
-│   ├── history.py        HistoryProvider Protocol
-│   ├── vector.py         VectorStore Protocol, Document, SearchResult
-│   ├── graph.py          GraphStore Protocol, Entity, Relationship, SubGraph
-│   ├── context.py        CompactionStrategy, AgentContextProtocol
-│   ├── middleware.py     Interceptor Protocol
-│   ├── stream.py         TextDelta, ReasoningDelta, CompletionEvent, StreamDone
-│   ├── protocol.py       AgentRuntime Protocol
-│   ├── identity.py       AgentId, TopicId
-│   └── errors.py
+│   ├── core/             content.py (ContentBlock, TextBlock, ChatMessage, ToolUseBlock, …),
+│   │                     identity.py (AgentId, TopicId), usage.py (Usage), errors.py
+│   ├── llm/              llm.py — LLMClient, EmbeddingClient Protocols
+│   ├── messaging/        message.py (Message, Subscription), stream.py (TextDelta,
+│   │                     ReasoningDelta, CompletionEvent, StreamDone, AgentProgress),
+│   │                     events.py (Event)
+│   ├── storage/          blob.py (BlobStore), history.py (HistoryProvider),
+│   │                     vector.py (VectorStore, Document), graph.py (GraphStore),
+│   │                     memory.py (SessionStore)
+│   ├── tools/            tools.py (Tool/HostedTool/ProviderDefinedTool, ToolSpec,
+│   │                     spec_of, ToolRisk, ToolExecutionResult), chain.py (chain
+│   │                     contracts: ChainPolicy, InvocationResult, ChainRunResult),
+│   │                     skills.py, approval.py
+│   ├── agent/            context.py (CompactionStrategy), middleware.py (Interceptor),
+│   │                     supervision.py (Supervision, SpawnBudget, Priority),
+│   │                     runtime_context.py (RunMeta)
+│   └── runtime/          agent.py (Agent), inbox.py, scheduler.py, supervisor.py,
+│                         effects.py, fanout.py, follow_graph.py, log_entry.py, ids.py, …
 │
 ├── agents/       L1 — core intelligence: agent types, middleware, guardrails, context
-│   ├── core/             ReActAgent, OrchestratorAgent, UserProxyAgent
-│   ├── context/          AgentContext, InMemoryHistoryProvider, compaction strategies
+│   ├── core/             ReActAgent, OrchestratorAgent (+ SubAgentConfig), UserProxyAgent,
+│   │                     InformationAgent, PersonalFeedAgent
+│   ├── context/          AgentContext, InMemoryHistoryProvider, compaction/ strategies
 │   ├── llm/              model registry, SemanticCache, FallbackClient, ModelRouter
-│   ├── middleware/       MiddlewarePipeline, guardrails, AuditLogger, RateLimiter, …
-│   ├── runtime/          LocalRuntime (in-process asyncio message dispatch)
+│   ├── middleware/       MiddlewarePipeline, guardrails/, AuditLogger, RateLimiter, …
+│   ├── runtime/          Runtime facade + Worker + backends/ (in-process asyncio dispatch)
+│   ├── tools/            Toolbox (ToolRegistry impl), ToolInvoker (chain dispatch, L1)
+│   ├── storage/          InMemoryFileStore, TaskStore/GlobalTaskStore
 │   ├── hooks/            lifecycle hooks (RUN_START/END, STEP, LLM, TOOL, HANDOFF)
-│   ├── resources/        ExecutionBudget
-│   └── supervision/      SpawnBudget, RetryPolicy
+│   ├── resources/        ExecutionTracker (per-agent spend, wired into ReActAgent loop)
+│   ├── supervision/      SpawnTracker (headcount + priority preemption), RetryPolicy
+│   ├── factory.py        create_assistant_agent, load_session_memory, rebuild_messages
+│   └── runner.py         stream_agent_run — dispatch run_stream() chunks via callbacks
 │
 ├── capabilities/ L2 — everything agents can use: tools, knowledge, memory, history, …
 │   ├── llm/              OpenAIChatCompletionClient — universal /v1/chat/completions client
-│   ├── tools/            tool implementations + skills + connectors + discovery scanner
+│   ├── tools/            tool implementations + skills + discovery scanner
 │   │   ├── skills/       SKILL.md prompt-skill packages (SkillTool, SkillManager)
-│   │   ├── connectors/   stateful service connectors (email, calendar, minio, postgres)
+│   │   ├── chain/        ToolChainTool + bridge + prelude (sandboxed code-mode chaining)
 │   │   ├── web/          WebSearchTool, WebSurferTool, ReadUrlTool, WikipediaTool
 │   │   ├── files/        DocumentAnalyzerTool, InvoiceExtractorTool
 │   │   ├── communication/EmailSenderTool, HttpRequestTool
 │   │   ├── compute/      CalculatorTool
+│   │   ├── database/     PostgresQueryTool (queries arbitrary user DBs)
 │   │   ├── ai/           ImageGeneratorTool, KnowledgeSearchTool
 │   │   ├── utils/        CurrentTimeTool, ToolSearchTool
 │   │   ├── task_manager/ TaskManagerTool (Kanban board)
-│   │   └── code_interpreter/ CodeInterpreterTool (Firecracker VM — explicit opt-in only)
-│   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders
+│   │   └── code_interpreter/ CodeInterpreterTool (Firecracker VM / K8s — explicit opt-in)
+│   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
 │   ├── memory/           RedisSessionStore, PostgresMemoryStore
 │   ├── history/          RedisHistoryProvider, PostgresHistoryProvider
 │   ├── vector/           PgVectorStore  (implements VectorStore Protocol)
 │   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
-│   ├── pipeline/         PipelineEngine, ChainRuntime, DataRef, PipelineStore
+│   ├── storage/          S3FileStore (wraps infrastructure MinIOConnector)
+│   ├── pipeline/         PipelineEngine, DataRef/DataRefArtifactStore, PipelineStore
 │   └── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
 │
 ├── fabric/       L3 — how agents are orchestrated: flows, evals, durable execution
@@ -116,17 +128,26 @@ src/ravi/
 │   ├── evals/            EvalCase, EvalDataset, LLMJudge, EvalRunner, EvalReport
 │   └── durable/          Checkpoint, DurableRunner (skeleton — resumable long-running runs)
 │
-├── integrations/ concrete I/O adapters implementing kernel Protocols (orthogonal to layers)
+├── integrations/ external third-party I/O adapters (orthogonal to layers)
 │   ├── llm/              LLMFactory, provider clients (openai/, anthropic/, gemini/), encoders/
 │   ├── tools/            protocol bridges — MCP (MCPClient, MCPTool), A2A (planned)
-│   ├── events/           EventBus (Redis pub/sub)
-│   ├── storage/          file storage adapters
+│   ├── events/           EventBus (Redis pub/sub) + EventEnvelope (wire format)
+│   ├── connectors/       external service connectors (email, google_calendar)
 │   └── spotify/          Spotify API client
+│
+├── infrastructure/ built-in standard backends for the engine itself (orthogonal to layers)
+│   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
+│   ├── cache/            RedisConnector
+│   ├── storage/          MinIOConnector (S3-compatible object storage)
+│   └── runtime/          PostgresEventLog/Inbox/Scheduler, RedisJournal,
+│                         build_postgres_runtime() — durable runtime backends
 │
 ├── serving/      deployment shells (orthogonal to layers)
 │   ├── monolith/         single FastAPI app (app.py, routes/, sse/, security/, services/)
 │   ├── services/         12 independent microservices (one FastAPI app per folder)
-│   └── shared/           cross-service: auth, database, events, observability, tasks
+│   ├── shared/           cross-service infra: auth, database, events, contracts, observability
+│   ├── protocol/         engine↔UI SSE wire protocol (WireEvent union, requests, version)
+│   └── stream/           kernel-event → wire-event mapper, RunStreamAdapter, session
 │
 ├── config.py     Pydantic Settings (reads .env)
 ├── exceptions.py public exceptions (GuardrailTripwireError, …)
@@ -176,18 +197,23 @@ kernel (L0)       Pure contracts: Protocols, dataclasses, enums. No I/O.
     ↑ imported by
 agents (L1)       Core intelligence: LLM loop, guardrails, middleware, agent types.
     ↑ imported by
-capabilities (L2) What agents can do: tools, skills, knowledge, connectors.
+capabilities (L2) What agents can do: tools, skills, knowledge/RAG, memory, stores.
     ↑ imported by
 fabric (L3)       How agents are orchestrated: flows, evals, durable execution.
 ```
 
-`integrations/` and `serving/` are **orthogonal** — they implement kernel Protocols and wire all layers together in lifespan. They are not part of the stack hierarchy.
+`integrations/`, `infrastructure/`, and `serving/` are **orthogonal** — they
+implement kernel Protocols and wire all layers together in lifespan. They are not
+part of the stack hierarchy. Distinction: `infrastructure/` holds built-in
+standard backends the engine runs on (Postgres, Redis, MinIO + durable runtime);
+`integrations/` holds external third-party adapters (LLM providers, MCP, Spotify,
+email/calendar connectors).
 
 **Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
 
 ```
 fabric        →  capabilities  →  agents  →  kernel
-integrations, serving  =  orthogonal (cross-layer by design)
+integrations, infrastructure, serving  =  orthogonal (cross-layer by design)
 ```
 
 **Import-linter contracts** (`pyproject.toml`, CI fails if violated):
@@ -200,7 +226,7 @@ integrations, serving  =  orthogonal (cross-layer by design)
 | `kernel is independent` | L0 imports nothing from the rest of the codebase |
 
 **Kernel invariants** (`tests/architecture/test_kernel_invariants.py`):
-- LOC ceiling (14k) and file-count ceiling (115) — catch accidental feature drift
+- LOC ceiling (6k) and file-count ceiling (45) — catch accidental feature drift
 - No concrete implementations — only Protocols, ABCs, dataclasses, enums
 
 `src/ravi/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New capabilities go in `capabilities/`, new agent behaviour in `agents/`, new orchestration in `fabric/`.
@@ -215,10 +241,10 @@ integrations, serving  =  orthogonal (cross-layer by design)
 |---|---|
 | A new agent type | `agents/core/<name>.py` — follow `ReActAgent` pattern |
 | A new guardrail | `agents/middleware/guardrails/<name>.py` — implement middleware contract |
-| A new LLM provider | `integrations/llm/<provider>/` — implement `LLMClient` Protocol from `kernel/llm.py` |
-| A new memory backend | `capabilities/history/<name>.py` — implement `HistoryProvider` Protocol from `kernel/history.py` |
-| A new vector store | `capabilities/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/vector.py` |
-| A new graph store | `capabilities/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/graph.py` |
+| A new LLM provider | `integrations/llm/<provider>/` — implement `LLMClient` Protocol from `kernel/llm/llm.py` |
+| A new memory backend | `capabilities/history/<name>.py` — implement `HistoryProvider` Protocol from `kernel/storage/history.py` |
+| A new vector store | `capabilities/vector/<name>.py` — implement `VectorStore` Protocol from `kernel/storage/vector.py` |
+| A new graph store | `capabilities/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/storage/graph.py` |
 | A new tool | `capabilities/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned, no registration needed) |
 | A new skill | `capabilities/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
 | A new agent flow | `fabric/flows/` — extend `BaseFlow` (SequentialFlow / ParallelFlow / ConditionalFlow) |
@@ -227,16 +253,21 @@ integrations, serving  =  orthogonal (cross-layer by design)
 
 ```python
 from ravi.kernel.tools import ToolExecutionResult
-from ravi.kernel.content import TextBlock
+from ravi.kernel.core.content import TextBlock
 
 class MyTool:
     name = "my_tool"
     description = "What it does"
     input_schema = {"type": "object", "properties": {...}, "required": [...]}
 
-    async def execute(self, *, param: str) -> ToolExecutionResult:  # type: ignore[override]
+    async def execute(self, *, ctx=None, **kwargs) -> ToolExecutionResult:
         return ToolExecutionResult(content=[TextBlock(text="result")])
 ```
+
+`ravi.kernel.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
+`HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
+(provider call-shape + local `handle_call()`), plus `ToolSpec`/`spec_of` for
+encoders. Use `is_hosted_tool` / `is_provider_defined_tool` to branch at dispatch.
 
 Placed at `capabilities/tools/my_tool/tool.py` — `CatalogScanner` discovers it automatically.
 
@@ -268,12 +299,15 @@ tools = await MCPTool.from_mcp_client(client)   # returns list[MCPTool]
 ### Event bus — always use factory functions
 
 ```python
-from ravi.serving.shared.events.bus import EventBus
+from ravi.integrations.events import EventBus
 from ravi.serving.shared.events.types import workflow_started
 
 bus: EventBus = app.state.bus
-await bus.publish(workflow_started(job_id=job.id, run_id=run.id))
+await bus.publish(workflow_started(run_id=run.id, thread_id=thread.id, user_content=text))
 ```
+
+`EventBus` + `EventEnvelope` live in `integrations/events/`; the domain-event
+factory functions live in `serving/shared/events/types.py`.
 
 Never construct event dicts manually — always use the factory functions from `serving/shared/events/types.py`.
 
@@ -318,8 +352,8 @@ Vector and graph store contracts live in the kernel. Concrete implementations li
 
 ```python
 # Contracts (kernel)
-from ravi.kernel.vector import VectorStore, Document, SearchResult
-from ravi.kernel.graph import GraphStore, Entity, Relationship, SubGraph
+from ravi.kernel.storage.vector import VectorStore, Document, SearchResult
+from ravi.kernel.storage.graph import GraphStore, Entity, Relationship, SubGraph
 
 # Concrete implementations
 from ravi.capabilities.vector import PgVectorStore
@@ -479,7 +513,7 @@ runner.export_markdown()
 | Area | Issue |
 |---|---|
 | `serving/monolith/routes/spotify_oauth.py` | `session_id = "default_user"` hardcoded — needs real user identity from auth context |
-| `serving/shared/tasks/store.py` | `TaskStore` is in-memory only — should be Postgres-backed for persistence across restarts |
+| `agents/storage/tasks.py` | `TaskStore` is in-memory only — should be Postgres-backed for persistence across restarts |
 | `agents/core/react.py` | `_react()` is ~300 lines — guardrail checks and tool-concurrency drain could be extracted into helpers |
 | Test coverage | Gaps in: guardrails, middleware, MCP adapter, most microservices, fabric/evals |
 

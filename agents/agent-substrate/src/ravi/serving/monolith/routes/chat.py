@@ -433,8 +433,49 @@ async def _build_file_context(
     request: Request,
     ctx: ServerDependencies,
 ) -> tuple[str, list[_ImagePayload], list[dict[str, Any]]]:
-    """File attachment context — parked until file store is re-integrated."""
-    return "", [], []
+    """Resolve file_ids to text/image/attachment context for the chat turn."""
+    if not body.file_ids or ctx.file_store is None:
+        return "", [], []
+
+    from sqlalchemy import select
+
+    from ravi.serving.monolith.models import FileMetadata
+
+    rows = (
+        await db.execute(
+            select(FileMetadata).where(
+                FileMetadata.id.in_(body.file_ids),
+                FileMetadata.deleted_at.is_(None),
+            )
+        )
+    ).scalars().all()
+
+    text_parts: list[str] = []
+    image_inputs: list[_ImagePayload] = []
+    attachments: list[dict[str, Any]] = []
+
+    for meta in rows:
+        data = await ctx.file_store.download(meta.object_key)
+        if meta.content_type.startswith("image/"):
+            image_inputs.append(
+                _ImagePayload(data=data, media_type=meta.content_type)
+            )
+        elif meta.content_type.startswith("text/"):
+            text_parts.append(
+                f"[File: {meta.original_name}]\n"
+                + data.decode("utf-8", errors="replace")
+            )
+        else:
+            attachments.append(
+                {
+                    "id": str(meta.id),
+                    "name": meta.original_name,
+                    "mime": meta.content_type,
+                    "size": meta.size_bytes,
+                }
+            )
+
+    return "\n\n".join(text_parts), image_inputs, attachments
 
 
 @router.post("/chat")
@@ -548,7 +589,7 @@ async def chat(
         # to update or continue it.
         has_existing_tasks = False
         if allow_task_planning:
-            from ravi.serving.shared.tasks.store import GlobalTaskStore
+            from ravi.agents.storage.tasks import GlobalTaskStore
 
             _store = GlobalTaskStore.get()
             _existing = _store.get_by_conversation(str(body.thread_id))

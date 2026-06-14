@@ -80,20 +80,18 @@ async def check_policy(
 @router.get("/roles/{user_id}")
 async def get_role(
     user_id: str,
+    request: Request,
     tenant_id: str = "default",
     workspace_id: str = "default",
-    request: Request | None = None,
 ):
     """Get the effective role for a user in a workspace."""
     from ravi.serving.services.policy.service import get_effective_role
-
-    if request is None:
-        raise HTTPException(status_code=500, detail="Request context unavailable")
 
     db_factory = request.app.state.session_factory
     async with db_factory() as db:
         role = await get_effective_role(db, user_id, tenant_id, workspace_id)
     return {"user_id": user_id, "role": role, "workspace_id": workspace_id}
+
 
 
 @router.post("/rules", status_code=201)

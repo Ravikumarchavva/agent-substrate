@@ -136,13 +136,10 @@ async def refresh_tokens(body: RefreshRequest, request: Request):
 @router.post("/agent-token")
 async def issue_agent_token(
     body: AgentTokenRequest,
+    request: Request,
     user: AuthClaims = Depends(get_current_user),
-    request: Request | None = None,
 ):
     """Issue a short-lived agent context token bound to a thread."""
-    if request is None:
-        raise HTTPException(status_code=500, detail="Request context unavailable")
-
     jwt_secret = request.app.state.jwt_secret
     agent_token = jwt_utils.create_agent_context_token(
         user_id=user.sub,
@@ -155,6 +152,7 @@ async def issue_agent_token(
         expires_in=300,
         thread_id=body.thread_id,
     )
+
 
 
 @router.get("/me")

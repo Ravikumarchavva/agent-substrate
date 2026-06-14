@@ -15,7 +15,7 @@ from .middleware import (
     ChatContextProtocol,
     FunctionContextProtocol,
 )
-from .runtime_context import CancellationToken, RunContext
+from .runtime_context import CancellationToken, RunMeta
 
 __all__ = [
     "Supervision",
@@ -33,5 +33,5 @@ __all__ = [
     "ChatContextProtocol",
     "FunctionContextProtocol",
     "CancellationToken",
-    "RunContext",
+    "RunMeta",
 ]

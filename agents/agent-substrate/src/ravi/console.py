@@ -185,11 +185,13 @@ class Console:
         *,
         output: Optional[RichConsole] = None,
         skill_manager: Optional["SkillManager"] = None,
+        runtime: Any = None,
     ) -> None:
         self.agent = agent
         self.console = output or RichConsole(theme=_THEME, highlight=False)
         self._proxy: Optional[Any] = None
         self._skill_manager = skill_manager
+        self._runtime = runtime  # Runtime; if set, use RunStreamAdapter
         # Snapshot of active skills at session start (to detect newly activated ones)
         self._session_skills_used: set[str] = set()
 
@@ -213,6 +215,25 @@ class Console:
             await self._proxy.start()
         return self._proxy
 
+    async def _run_durable(self, task: str) -> str:
+        """Run via RunStreamAdapter; accumulate and return the final text."""
+        from ravi.serving.stream.run_adapter import RunStreamAdapter
+        from ravi.kernel.messaging.stream import CompletionEvent, StreamDone
+
+        adapter = RunStreamAdapter(
+            agent_id=self.agent.id,
+            runtime=self._runtime,
+            tools=list(self.agent.tools.all()) if self.agent.tools else [],
+        )
+        final_text = ""
+        async for chunk in adapter._stream(task):
+            if isinstance(chunk, CompletionEvent):
+                from ravi.kernel.core.content import content_blocks_to_str
+                final_text = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
+            elif isinstance(chunk, StreamDone):
+                break
+        return final_text
+
     # ------------------------------------------------------------------
     # Single-shot run (non-streaming)
     # ------------------------------------------------------------------
@@ -226,7 +247,10 @@ class Console:
             self._print_user(task)
         t0 = time.monotonic()
 
-        if self._is_actor_agent():
+        if self._runtime is not None:
+            # Durable: submit + wait for run.completed via streaming (non-streaming is just full accumulation)
+            result = await self._run_durable(task)
+        elif self._is_actor_agent():
             proxy = await self._get_proxy()
             result = await proxy.ask(task, recipient=self.agent.id)
         else:
@@ -255,12 +279,20 @@ class Console:
         final_message: Any = None
         tool_calls_count = 0
 
-        if self._is_actor_agent():
+        if self._runtime is not None:
+            from ravi.serving.stream.run_adapter import RunStreamAdapter
+            adapter = RunStreamAdapter(
+                agent_id=self.agent.id,
+                runtime=self._runtime,
+                tools=list(self.agent.tools.all()) if self.agent.tools else [],
+            )
+            chunk_iter: AsyncIterator[Any] = adapter._stream(task)
+        elif self._is_actor_agent():
             proxy = await self._get_proxy()
             channel = _ConsoleStreamChannel()
             # ask_stream() returns as soon as on_message() spawns the background task.
             await proxy.ask_stream(task, recipient=self.agent.id, channel=channel)
-            chunk_iter: AsyncIterator[Any] = channel.__aiter__()
+            chunk_iter = channel.__aiter__()
         else:
             chunk_iter = self.agent.run_stream(task, **kwargs)
 

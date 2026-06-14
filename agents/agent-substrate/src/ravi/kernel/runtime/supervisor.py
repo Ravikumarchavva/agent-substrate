@@ -150,7 +150,7 @@ class Supervisor(Protocol):
         ``child_done`` wakeup, resumes, and this coroutine returns the child's
         ``RunResult``.
 
-        Note: from the DurableContext (L1), this is ``await ctx.join(handle)``
+        Note: from the RunContext (L1), this is ``await ctx.join(handle)``
         — the parent's run() coroutine yields control to the runtime here.
         """
         ...

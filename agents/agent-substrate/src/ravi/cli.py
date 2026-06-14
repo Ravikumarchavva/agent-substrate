@@ -246,7 +246,8 @@ def cmd_chat(args: argparse.Namespace) -> None:
     # Late imports so the CLI stays fast for server commands
     from ravi.console import Console
     from ravi.agents.core import ReActAgent
-    from ravi.agents.runtime.local import LocalRuntime
+    from ravi.agents.runtime import Runtime
+    from ravi.agents.tools.toolbox import Toolbox
     from ravi.integrations.llm.openai.openai_client import OpenAIClient
     from ravi.agents.context import (
         ContextConfig,
@@ -263,19 +264,24 @@ def cmd_chat(args: argparse.Namespace) -> None:
             tools.extend(mcp_tools)
 
     async def _run_chat() -> None:
-        async with LocalRuntime() as rt:
+        toolbox: Toolbox | None = None
+        if tools:
+            toolbox = Toolbox()
+            for t in tools:
+                toolbox.register(t)
+        async with Runtime() as rt:
             agent = ReActAgent(
                 args.name,
-                rt,
                 model=OpenAIClient(model=args.model),
+                tools=toolbox,
                 context=ContextConfig(
                     InMemoryHistoryProvider(),
                     SlidingWindowCompaction(max_messages=1000),
                 ),
-                tools=tools or None,
                 max_iterations=args.max_iterations,
             )
-            await Console(agent).interactive(stream=not args.no_stream)
+            await rt.register(agent)
+            await Console(agent, runtime=rt).interactive(stream=not args.no_stream)
 
     # Run the interactive REPL
     asyncio.run(_run_chat())

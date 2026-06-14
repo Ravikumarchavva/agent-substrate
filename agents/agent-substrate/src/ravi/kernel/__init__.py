@@ -68,7 +68,6 @@ from ravi.kernel.messaging.message import (
     Payload,
     register_payload_type,
     Message,
-    MessageHandler,
     Subscription,
 )
 from ravi.kernel.tools.skills import Skill
@@ -120,7 +119,7 @@ from ravi.kernel.storage.graph import (
     CypherCapable,
 )
 from ravi.kernel.storage.memory import Memory, ShortTermMemory, LongTermMemory
-from ravi.kernel.agent.runtime_context import CancellationToken, RunContext
+from ravi.kernel.agent.runtime_context import CancellationToken, RunMeta
 from ravi.kernel.messaging.events import (
     Event,
     EventHandler,
@@ -161,8 +160,8 @@ from ravi.kernel.runtime import (
     RunHandle,
     RunResult,
     Supervisor,
-    DurableContextProtocol,
-    DurableAgent,
+    AgentRunContext,
+    Agent,
     AskOutcome,
     RunStatusSummary,
 )
@@ -227,7 +226,6 @@ __all__ = [
     "register_payload_type",
     # Messaging
     "Message",
-    "MessageHandler",
     "Subscription",
     # Skills
     "Skill",
@@ -286,7 +284,7 @@ __all__ = [
     "LongTermMemory",
     # Execution context
     "CancellationToken",
-    "RunContext",
+    "RunMeta",
     # Events (generic pub/sub envelope)
     "Event",
     "EventHandler",
@@ -324,8 +322,8 @@ __all__ = [
     "RunHandle",
     "RunResult",
     "Supervisor",
-    "DurableContextProtocol",
-    "DurableAgent",
+    "AgentRunContext",
+    "Agent",
     "AskOutcome",
     "RunStatusSummary",
 ]

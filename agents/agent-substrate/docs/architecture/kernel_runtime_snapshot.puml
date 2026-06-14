@@ -1,5 +1,5 @@
 @startuml kernel_runtime_snapshot
-title Ravi Engine - One Request, Object by Object\n(what exists at runtime for a single user message that triggers a tool call)
+title Ravi Engine — One Request, Object by Object\n(Stage 0: LocalRuntime — what exists at runtime for a single user message that triggers a tool call)
 
 top to bottom direction
 skinparam dpi 200
@@ -25,29 +25,52 @@ skinparam NoteBackgroundColor #fef3c7
 skinparam NoteFontColor #78350f
 skinparam NoteFontSize 11
 
-' MESSAGE ARRIVES
+' ── MESSAGE ARRIVES ───────────────────────────────────────────────────
 object "msg : ChatMessage" as msg {
   role    = "user"
   content = [TextBlock("research quantum compute")]
 }
 
-' RUNTIME STAMPS AND DISPATCHES
+' ── STAGE 0 RUNTIME (LocalRuntime) ───────────────────────────────────
 object "runtime : LocalRuntime" as rt {
-  worker_id = "worker-01"
+  ' Implements: Inbox · Scheduler · EventLog (all in-memory asyncio)
+  worker_id  = "worker-01"
+  run_count  = 1
 }
 
+note right of rt
+  Stage 0: asyncio in-process.
+  Implements kernel Inbox + Scheduler +
+  EventLog protocols — all in-memory dicts.
+  Stage 1: Postgres scheduler + Redis inbox.
+end note
+
+' ── PER-RUN CONTEXT ───────────────────────────────────────────────────
 object "ctx : RunContext" as ctx {
   run_id   = "run-3a7c"
   trace_id = "t-9b1e"
   deadline = "12:35:00"
+  ' cancellation: CancellationToken
+  ' supervision:  Supervision | None
 }
 
-' AGENT THINKS
+object "sv : Supervision" as sv {
+  run_id           = "run-3a7c"
+  session_id       = "sess-42"
+  root_id          = AgentId("research-01")
+  depth            = 0
+  spawn_budget     = SpawnBudget(max_agents=50)
+  execution_budget = ExecutionBudget(max_turns=10)
+  priority         = NORMAL
+}
+
+' ── AGENT LOOP ────────────────────────────────────────────────────────
 object "agent : ReActAgent" as agent {
-  id = "research-01"
+  id             = AgentId("research-01")
+  max_iterations = 10
 }
 
-object "llm : OpenAIChatClient" as llm {
+object "llm : OpenAIChatCompletionClient" as llm {
   model = "gpt-4o"
 }
 
@@ -62,50 +85,84 @@ object "toolCall : ToolUseBlock" as toolcall {
   input = {q: "quantum compute 2025"}
 }
 
-' TOOL RUNS THROUGH INVOKER
+' ── TOOL ENFORCEMENT (L1) ─────────────────────────────────────────────
 object "invoker : ToolInvoker" as invoker {
-  policy.max_risk  = SAFE
-  policy.timeout_s = 60
+  policy.max_risk_unapproved = SAFE
+  policy.call_timeout_s      = 60
+  policy.max_tool_calls      = 50
 }
 
-object "toolResult : ToolResultBlock" as toolresult {
+note right of invoker
+  ToolInvoker (L1 agents/) enforces:
+  · ToolRisk gate (max_risk_unapproved)
+  · HITL / ApprovalHandler for HIGH-risk
+  · ctx.check() before every execute()
+  · call_timeout_s via asyncio.wait_for()
+  · call budget (max_tool_calls per chain)
+  · large results → BlobStore; small → inline
+  · inbound {"$artifact": ref} resolved
+    server-side before execute()
+end note
+
+object "toolResult : InvocationResult" as toolresult {
+  status       = "ok"
+  text         = "IBM 1000-qubit..."
+  artifact_ref = None
+}
+
+object "toolResultBlock : ToolResultBlock" as toolresultblock {
   tool_use_id = "call-88fa"
   content     = [TextBlock("IBM 1000-qubit...")]
 }
 
-' FINAL LLM CALL WITH FULL CONTEXT
+' ── FINAL LLM CALL ────────────────────────────────────────────────────
 object "resp2 : LLMResponse" as resp2 {
   content            = [TextBlock("Summary: ...")]
   usage.total_tokens = 1166
 }
 
-' FLOW
-msg        --> rt          : "1. ingested by"
-rt         --> ctx         : "2. stamps run context"
-rt         --> agent       : "3. dispatches to"
-ctx        ..>  agent      : "threaded into every call"
+' ── EVENT LOG (Stage 0: in-memory) ────────────────────────────────────
+object "eventLog : InMemoryEventLog" as evlog {
+  run_id = "run-3a7c"
+  seq    = 3
+}
 
-agent      --> llm         : "4. generate(history + msg)"
-llm        --> resp1       : "5. tool call requested"
-resp1      --> toolcall    : "6. contains"
-
-toolcall   --> invoker     : "7. routed through ToolInvoker"
-invoker    --> toolresult  : "8. executes tool -> result"
-
-note right of invoker
-  Enforces: ToolRisk gate, HITL approval,
-  per-call timeout, call budget.
-  Resolves {"$artifact": ref} args
-  server-side before execute().
+note right of evlog
+  Every step appended to EventLog.
+  On resume (crash recovery) agent
+  folds the log forward — no checkpoint
+  needed.  EventLog is the source of truth.
+  seq uses optimistic concurrency:
+  ConcurrentAppendError on mismatch.
 end note
 
-agent      --> llm         : "9. generate(history + tool result)"
-llm        --> resp2       : "10. final response"
+' ── FLOW ──────────────────────────────────────────────────────────────
+msg          --> rt          : "1. ingested by"
+rt           --> ctx         : "2. stamps RunContext"
+ctx          *-- sv          : "3. carries Supervision"
+rt           --> agent       : "4. dispatches to"
+ctx          ..>  agent      : "threaded into every call"
+
+agent        --> evlog       : "5. append(TURN_START)"
+agent        --> llm         : "6. generate(history + msg)"
+llm          --> resp1       : "7. tool call requested"
+resp1        --> toolcall    : "8. contains ToolUseBlock"
+
+toolcall     --> invoker     : "9. routed through ToolInvoker"
+invoker      --> toolresult  : "10. InvocationResult"
+toolresult   --> toolresultblock : "11. wrapped as ToolResultBlock"
+agent        --> evlog       : "12. append(TOOL_CALL)"
+
+agent        --> llm         : "13. generate(history + tool result)"
+llm          --> resp2       : "14. final LLMResponse"
+agent        --> evlog       : "15. append(TURN_END)"
 
 note right of resp2
   Returned to the caller.
-  The full round-trip - including
-  the tool call - was one agent turn.
+  The full round-trip — including
+  the tool call — was one agent turn.
+  Total usage tracked in Supervision's
+  ExecutionBudget via ExecutionTracker (L1).
 end note
 
 @enduml

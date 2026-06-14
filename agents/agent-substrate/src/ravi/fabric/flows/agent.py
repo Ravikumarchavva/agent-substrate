@@ -29,7 +29,7 @@ from typing import Any, AsyncIterator, Callable, List, Optional, Union
 from uuid import uuid4
 
 from ravi.kernel.messaging.stream import TextDelta
-from ravi.agents.core.react import AgentRunResult, ReActAgent
+from ravi.agents.middleware import AgentRunResult
 from ravi.agents.hooks.manager import HookEvent, HookManager
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 # Type aliases
 # ---------------------------------------------------------------------------
 
-# A "step" is either a concrete ReActAgent or a nested flow.
-FlowStep = Union[ReActAgent, "BaseFlow"]
+# A "step" is either a durable agent or a nested flow.
+FlowStep = Union[Any, "BaseFlow"]
 
 MergeStrategy = Union[
     str,  # "concat" | "vote"

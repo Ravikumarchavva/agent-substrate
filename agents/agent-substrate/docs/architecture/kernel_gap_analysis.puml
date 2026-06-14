@@ -1,5 +1,5 @@
 @startuml kernel_gap_analysis
-title Kernel L0: Current State vs Both Plans\n[Green = plan done | Blue = Stage 0 to add | Orange = needs change | Red = replace/demote | Notes = gaps and conflicts]
+title Ravi Engine — Kernel Stability Status (June 2026)\n[Green = stable & complete | Blue = Stage 1 target | Yellow = in-progress]\nAll five original gaps closed. 7-subpackage reorganisation done.
 
 top to bottom direction
 skinparam dpi 200
@@ -30,242 +30,293 @@ skinparam NoteFontColor #78350f
 skinparam NoteFontSize 10
 
 ' ================================================================
-' ROW 1: Data Foundation  (unchanged)
+' BLOCK 1: kernel/core/  — STABLE
 ' ================================================================
-package "Data Foundation  (identity.py, content.py, stream.py)" as PKG_DATA #f9fafb {
+package "kernel/core/  — STABLE\nidentity · content · errors · usage" as PKG_CORE #dcfce7 {
   class AgentId
   class TopicId
   class ContentBlock
   class ChatMessage
+  class Usage
+}
+
+' ================================================================
+' BLOCK 2: kernel/messaging/  — STABLE
+' ================================================================
+package "kernel/messaging/  — STABLE\nmessage · events · stream" as PKG_MESSAGING #dcfce7 {
+  class Message
+  class Subscription
+  class Event
   class AgentProgress
 }
 
+note right of PKG_MESSAGING
+  NAMING CONFLICTS RESOLVED:
+  · Event (generic pub/sub envelope) stays here.
+  · Runtime log entry lives in runtime/ as
+    LogEntry (was RunEvent — renamed to avoid
+    confusion with pub/sub Event).
+  · FollowGraph (agent social graph) vs
+    GraphStore (RAG) — now clearly separated in
+    runtime/ and storage/ respectively.
+end note
+
 ' ================================================================
-' ROW 2: Message Fabric  (Payload/Message/Subscription KEEP; RuntimeRef+MessageContext REPLACED)
+' BLOCK 3: kernel/llm/  — STABLE
 ' ================================================================
-package "Message Fabric  (message.py)  -- Payload/Message/Subscription stay; RuntimeRef REPLACED" as PKG_MSG #fff7ed {
-  class Message
-  class Payload
-  class Subscription
-  interface RuntimeRef
-  class MessageContext
+package "kernel/llm/  — STABLE\nllm" as PKG_LLM #dcfce7 {
+  interface LLMClient
+  interface EmbeddingClient
+  class LLMResponse
+  class GenerationOptions
 }
 
 ' ================================================================
-' ROW 3: Tool Taxonomy  (DONE -- plan A complete)
+' BLOCK 4: kernel/storage/  — STABLE (BlobStore added)
 ' ================================================================
-package "Tool Taxonomy  (tools.py)  -- PLAN A COMPLETE" as PKG_TOOLS #dcfce7 {
+package "kernel/storage/  — STABLE\nblob · history · vector · graph · memory" as PKG_STORAGE #dcfce7 {
+  interface BlobStore
+  interface HistoryProvider
+  interface VectorStore
+  interface GraphStore
+  interface ShortTermMemory
+  interface LongTermMemory
+}
+
+note right of BlobStore
+  RESOLVED: ArtifactStore alias removed.
+  BlobStore is the canonical name.
+  Stage 0: in-memory dict.
+  Stage 1: MinIO / S3 adapter.
+  Used by ToolInvoker (L1) for large
+  result offload.
+end note
+
+' ================================================================
+' BLOCK 5: kernel/tools/  — STABLE (tool redesign complete)
+' ================================================================
+package "kernel/tools/  — STABLE\ntools · skills · approval · chain" as PKG_TOOLS #dcfce7 {
   interface Tool
   interface HostedTool
   interface ProviderDefinedTool
-  interface ToolRegistry
-  class ToolCallRequest
-  class ToolExecutionResult
+  interface ApprovalHandler
   class ToolSpec
-}
-
-' ================================================================
-' ROW 4: Chain Contracts  (DONE -- plan B kernel complete)
-' ================================================================
-package "Chain Contracts  (chain.py)  -- PLAN B KERNEL COMPLETE" as PKG_CHAIN #dcfce7 {
-  interface ArtifactStore
+  class FunctionSpec
+  class ProviderSpec
   class ChainPolicy
   class InvocationResult
   class ChainRunResult
 }
 
-' ================================================================
-' ROW 5: Capabilities  (unchanged)
-' ================================================================
-package "Capabilities  (llm.py, history.py, vector.py, approval.py)  -- unchanged" as PKG_CAP #f9fafb {
-  interface LLMClient
-  interface HistoryProvider
-  interface VectorStore
-  interface ApprovalHandler
-}
+note right of PKG_TOOLS
+  Tool redesign complete:
+  · AnyTool = Tool | HostedTool | ProviderDefinedTool
+  · ToolSpec discriminated union (FunctionSpec | ProviderSpec)
+  · spec_of(tool, provider) → ToolSpec | None
+  · ArtifactStore alias REMOVED from chain.py;
+    use BlobStore from storage/.
+  Next: ToolInvoker (L1) + chain bridge (L2).
+end note
 
 ' ================================================================
-' ROW 6: Knowledge Graph  (RAG -- NOT the social follow-graph)
+' BLOCK 6: kernel/agent/  — STABLE (Supervision v2)
 ' ================================================================
-package "RAG Knowledge Graph  (graph.py)  -- unchanged; NOT the social follow-graph" as PKG_KG #f9fafb {
-  interface GraphStore
-}
-
-' ================================================================
-' ROW 7: Generic Event Envelope  (NAMING CONFLICT with planned RunEvent)
-' ================================================================
-package "Event Envelope  (events.py)  -- pub/sub generic; NAMING CONFLICT with planned RunEvent" as PKG_EVENTS #fef3c7 {
-  class Event
-  interface EventPublisher
-  interface EventSubscriber
-}
-
-' ================================================================
-' ROW 8: Execution Context  (RunContext needs run_id; otherwise unchanged)
-' ================================================================
-package "Execution Context  (runtime_context.py, supervision.py, middleware.py)  -- extend RunContext" as PKG_EXEC #fff7ed {
-  class RunContext
-  class CancellationToken
-  class Supervision
+package "kernel/agent/  — STABLE\nsupervision · context · middleware · runtime_context" as PKG_AGENT #dcfce7 {
+  class SpawnBudget {
+    max_agents    : int = 50
+    allow_preempt : bool = True
+  }
+  class ExecutionBudget {
+    max_tokens   : int | None
+    max_cost_usd : float | None
+    max_turns    : int | None
+    deadline_s   : float | None
+  }
+  class Supervision {
+    run_id           : str
+    session_id       : str
+    root_id          : AgentId
+    parent_id        : AgentId | None
+    depth            : int
+    spawn_budget     : SpawnBudget
+    execution_budget : ExecutionBudget
+    priority         : Priority
+    retention        : HistoryRetention
+    root(...)
+    spawn_child(...)
+  }
+  class RunContext {
+    run_id       : str
+    trace_id     : str
+    deadline     : datetime | None
+    supervision  : Supervision | None
+    cancellation : CancellationToken
+    check() / is_expired()
+  }
   interface Middleware
 }
 
-' ================================================================
-' ROW 9: Agent Contract  (REPLACED by DurableAgent; Checkpoint DEMOTED)
-' ================================================================
-package "Agent Contract  (agent.py)  -- Agent REPLACED; Checkpoint DEMOTED to compaction" as PKG_AGENT #fee2e2 {
-  interface Agent
-  class Checkpoint
-}
-
-' ================================================================
-' ROW 10: Runtime Dispatch  (GOD OBJECT; SPLIT INTO 5 -- the central problem)
-' ================================================================
-package "Runtime Dispatch  (protocol.py)  -- GOD OBJECT  8 methods  SPLIT INTO 5" as PKG_RT #fee2e2 {
-  interface AgentRuntime
-}
-
-' ================================================================
-' ROW 11: TO ADD -- kernel/runtime/  (Stage 0)
-' ================================================================
-package "TO ADD   kernel/runtime/   (Stage 0 -- the new source of truth)" as PKG_NEW #dbeafe {
-  class RunId
-  class RunStatus
-  class RunEvent
-  interface EventLog
-  class Effect
-  class EffectResult
-  interface Journal
-  interface Inbox
-  interface FollowGraph
-  interface FanoutStrategy
-  class Wakeup
-  interface SignalBus
-  class Lease
-  interface Scheduler
-  interface DurableAgent
-}
-
-' ================================================================
-' ROW 12: L1  (NOT kernel -- ToolInvoker goes here)
-' ================================================================
-package "L1   agents/tools/invoker.py   (NOT kernel -- needs kernel contracts below)" as PKG_L1 #fefce8 {
-  class ToolInvoker
-}
-
-' ================================================================
-' Vertical stacking (hidden arrows force top-to-bottom layout)
-' ================================================================
-PKG_DATA   -[hidden]-> PKG_MSG
-PKG_MSG    -[hidden]-> PKG_TOOLS
-PKG_TOOLS  -[hidden]-> PKG_CHAIN
-PKG_CHAIN  -[hidden]-> PKG_CAP
-PKG_CAP    -[hidden]-> PKG_KG
-PKG_KG     -[hidden]-> PKG_EVENTS
-PKG_EVENTS -[hidden]-> PKG_EXEC
-PKG_EXEC   -[hidden]-> PKG_AGENT
-PKG_AGENT  -[hidden]-> PKG_RT
-PKG_RT     -[hidden]-> PKG_NEW
-PKG_NEW    -[hidden]-> PKG_L1
-
-' ================================================================
-' Semantic cross-package arrows (tell the data-flow story)
-' ================================================================
-' Current model
-AgentRuntime -up-> Agent        : "dispatches to"
-Agent        -up-> RuntimeRef   : "bind() then reply via"
-RunContext   -up-> Agent        : "threaded into on_message"
-Checkpoint   ..>   Agent        : "save_state / load_state"
-
-' New model (Stage 0 targets)
-DurableAgent -up-> EventLog     : "folds log to rebuild state on wake"
-Inbox        ..>   DurableAgent : "drain() becomes inbox arg in run()"
-Scheduler    ..>   DurableAgent : "leases run, triggers wake"
-
-' ToolInvoker (L1) needs these kernel contracts
-ToolInvoker  -up-> ArtifactStore   : "offloads large results"
-ToolInvoker  -up-> ApprovalHandler : "HITL gate (risk check)"
-ToolInvoker  -up-> ToolRegistry    : "lookup + dispatch"
-
-' ================================================================
-' Notes -- ALL outside package blocks
-' ================================================================
-
-note right of AgentRuntime
-  <b>GAP 1 -- God-object must split</b>
-  8 methods: send_message, publish_message,
-  register_agent, register, subscribe,
-  unsubscribe, start, stop.
-  Plan: split into 5 focused contracts:
-  EventLog + Inbox + FollowGraph
-  + Scheduler + SignalBus.
-  RuntimeRef in message.py has the SAME
-  send/publish pair -- that duplication
-  dissolves when agents reply via
-  DurableContext (L1), not by holding
-  a runtime reference.
-end note
-
-note right of Agent
-  <b>GAP 2 -- Synchronous contract cannot scale</b>
-  on_message(ctx: MessageContext, payload) -> reply
-  is synchronous request/reply in one call.
-  Cannot survive a process crash, multi-day
-  HITL pause, or worker migration.
-  DurableAgent.run(ctx: DurableContext, inbox)
-  replaces it completely. No coexistence path --
-  this is a full kernel break.
-end note
-
-note right of Checkpoint
-  <b>GAP 3 -- State authority shift</b>
-  Checkpoint is currently THE source of truth.
-  save_state / load_state are core Agent methods.
-  Plan: EventLog is truth; state = fold(log).
-  Checkpoint demotes to log-compaction snapshot.
-  save_state / load_state go away entirely
-  when Agent is replaced by DurableAgent.
+note right of SpawnBudget
+  RESOLVED — Supervision v2:
+  Old: Supervision.max_agents: int = 50
+  New: spawn_budget: SpawnBudget (frozen, tree-wide)
+       execution_budget: ExecutionBudget (frozen, per-agent)
+  L1 SpawnTracker: mutable headcount (reads spawn_budget).
+  L1 ExecutionTracker: mutable token/cost/turn (reads execution_budget).
+  spawn_child() propagates spawn_budget unchanged;
+  execution_budget can be overridden per child.
 end note
 
 note right of RunContext
-  <b>GAP 4 -- run_id not first-class</b>
-  run_id is buried in Supervision.run_id,
-  and Supervision is optional on RunContext.
-  Plan needs run_id directly on RunContext.
-  Fix: add run_id: str = "" field;
-  populate from supervision.run_id when present;
-  generate a fresh ULID for standalone().
+  RESOLVED — GAP 4:
+  run_id is now a direct field on RunContext.
+  Populated from supervision.run_id when set;
+  standalone() generates a fresh ULID.
+  check() raises CancellationError when
+  token is cancelled or deadline passed.
 end note
 
-note right of Event
-  <b>NAMING CONFLICT 1 -- events.py vs runtime/events.py</b>
-  events.py Event = generic pub/sub envelope
-  (type, source, schema_version, correlation_id, data).
-  Plan's RunEvent = event-sourced run log entry
-  (run_id, seq, kind, payload, ts).
-  COMPLETELY different things.
-  Rename plan's RunEvent to RunLogEntry
-  to eliminate confusion.
+' ================================================================
+' BLOCK 7: kernel/runtime/  — STABLE (Stage 0 done)
+' ================================================================
+package "kernel/runtime/  — Stage 0 COMPLETE\nids · log_entry · effects · inbox · scheduler · supervisor · …" as PKG_RUNTIME #dcfce7 {
+  class RunId
+  class RunStatus
+  interface EventLog {
+    append(run_id, entry, expected_seq) : int
+    read(run_id, from_seq)
+    tail(run_id, from_seq)
+    last_seq(run_id) : int
+  }
+  interface Journal {
+    record(result)
+    lookup(effect_id) : EffectResult | None
+  }
+  interface Inbox {
+    deliver(agent_id, msg)
+    drain(agent_id) : list[Message]
+  }
+  interface Scheduler {
+    enqueue(run_id, priority, tenant)
+    lease(worker_id, capacity) : list[Lease]
+    release(lease, status)
+  }
+  interface Supervisor {
+    spawn(agent_id, parent, supervision, boot)
+    cancel(handle, reason)
+    join(handle) : RunResult
+  }
+  interface DurableAgent {
+    id  : AgentId
+    run(ctx, inbox)
+  }
+  interface FollowGraph
+  interface FanoutStrategy
+  interface SignalBus
+}
+
+note right of EventLog
+  RESOLVED — GAPs 1, 2, 3:
+  GAP 1 (God-object): AgentRuntime split into
+    EventLog + Inbox + FollowGraph + Scheduler + SignalBus.
+  GAP 2 (sync contract): DurableAgent.run(ctx, inbox)
+    replaced on_message(). Can pause days for HITL.
+  GAP 3 (state authority): EventLog is truth.
+    State = fold(log). No save_state/load_state.
+    Checkpoint demotes to log-compaction hint.
+  EventLog uses optimistic-concurrency seq:
+    ConcurrentAppendError on race.
+  Stage 0: all in-memory (asyncio).
+  Stage 1: Postgres (EventLog + Journal + Scheduler)
+            + Redis (Inbox + SignalBus).
 end note
 
-note right of GraphStore
-  <b>NAMING CONFLICT 2 -- graph.py vs runtime/graph.py</b>
-  graph.py GraphStore = RAG knowledge graph
-  (Entity, Relationship, SubGraph, CypherCapable).
-  Plan's SubscriptionGraph = agent social follow-graph.
-  COMPLETELY different things.
-  Rename plan's contract to FollowGraph
-  (already done in this diagram).
-end note
+' ================================================================
+' L1 (not kernel) — key implementations
+' ================================================================
+package "L1  agents/  — key implementations" as PKG_L1 #fefce8 {
+  class SpawnTracker
+  class ExecutionTracker
+  class ToolInvoker
+  class LocalRuntime
+  class InMemoryEventLog
+  class InMemoryInbox
+  class InMemoryScheduler
+}
 
 note right of ToolInvoker
-  <b>GAP 5 -- ToolInvoker not yet implemented</b>
-  All needed kernel contracts ARE present:
-  ToolRegistry, ApprovalHandler,
-  ArtifactStore, ChainPolicy.
-  Still missing: bridge transport + sandbox
-  prelude (L2 capabilities) + ToolChainTool.
-  ToolInvoker itself = first thing to write at L1.
+  RESOLVED — GAP 5:
+  ToolInvoker exists at L1 (agents/tools/invoker.py).
+  Reads: ToolRegistry, ApprovalHandler,
+         BlobStore (large results), ChainPolicy.
+  Enforces: risk gate, HITL approval, ctx/cancel,
+            timeout, call budget, inbound ref resolution.
+  Still to build (L2): chain bridge + sandbox prelude
+  + ToolChainTool (sandboxed code-mode chaining).
 end note
+
+note right of LocalRuntime
+  Stage 0 runtime (agents/runtime/local.py).
+  Implements: Inbox, Scheduler, EventLog, Supervisor.
+  All in-memory asyncio — no Postgres/Redis needed.
+  Stage 1 will swap these implementations out
+  without changing any kernel contracts.
+end note
+
+' ================================================================
+' Stage 1 targets (next milestone)
+' ================================================================
+package "Stage 1 targets  — Postgres-backed runtime (CP model)" as PKG_S1 #dbeafe {
+  class PgEventLog
+  class PgJournal
+  class PgScheduler
+  class RedisInbox
+  class RedisSignalBus
+}
+
+note right of PKG_S1
+  Stage 1 = consistent + partition-tolerant (CP).
+  Postgres: EventLog, Journal, Scheduler (ACID).
+  Redis: Inbox, SignalBus (AP — available + fast).
+  Kernel contracts unchanged; only implementations swap.
+end note
+
+' ================================================================
+' Layout stacking
+' ================================================================
+PKG_CORE     -[hidden]-> PKG_MESSAGING
+PKG_MESSAGING -[hidden]-> PKG_LLM
+PKG_LLM      -[hidden]-> PKG_STORAGE
+PKG_STORAGE  -[hidden]-> PKG_TOOLS
+PKG_TOOLS    -[hidden]-> PKG_AGENT
+PKG_AGENT    -[hidden]-> PKG_RUNTIME
+PKG_RUNTIME  -[hidden]-> PKG_L1
+PKG_L1       -[hidden]-> PKG_S1
+
+' ================================================================
+' Cross-package arrows (tell the story)
+' ================================================================
+' L1 implements kernel contracts
+LocalRuntime      .up.> EventLog    : "implements (Stage 0)"
+LocalRuntime      .up.> Inbox       : "implements"
+LocalRuntime      .up.> Scheduler   : "implements"
+
+' L1 reads kernel policy types
+SpawnTracker      .up.> SpawnBudget     : "reads max_agents"
+ExecutionTracker  .up.> ExecutionBudget : "reads limits"
+ToolInvoker       .up.> BlobStore       : "offload large results"
+ToolInvoker       .up.> ApprovalHandler : "HITL risk gate"
+
+' DurableAgent interaction
+DurableAgent      .up.> EventLog   : "folds on wake"
+Inbox             ..>   DurableAgent : "drain() → inbox arg"
+Scheduler         ..>   DurableAgent : "leases run"
+
+' Stage 1 implements runtime contracts
+PgEventLog     .up.> EventLog   : "implements"
+PgJournal      .up.> Journal    : "implements"
+PgScheduler    .up.> Scheduler  : "implements"
+RedisInbox     .up.> Inbox      : "implements"
+RedisSignalBus .up.> SignalBus  : "implements"
 
 @enduml

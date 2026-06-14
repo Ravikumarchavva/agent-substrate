@@ -53,9 +53,15 @@ from ravi.agents.middleware import (
     PIIDetectionMiddleware,
     ToolCallValidationMiddleware,
 )
-from ravi.agents.core.react import ReActAgent, AgentRunResult
-from ravi.agents.core.proxy import UserProxyAgent
-from ravi.agents.runtime import LocalRuntime
+from ravi.agents.core import (
+    ReActAgent,
+    UserProxyAgent,
+    OrchestratorAgent,
+    SubAgentConfig,
+    InformationAgent,
+    PersonalFeedAgent,
+)
+from ravi.agents.runtime import Runtime, RunContext, Worker
 from ravi.agents.resources import (
     BudgetExceededError,
     ExecutionTracker,
@@ -108,10 +114,17 @@ __all__ = [
     "ToolCallValidationMiddleware",
     "AuditLoggerMiddleware",
     "MiddlewarePipeline",
+    # agent types
     "ReActAgent",
-    "AgentRunResult",
     "UserProxyAgent",
-    "LocalRuntime",
+    "OrchestratorAgent",
+    "SubAgentConfig",
+    "InformationAgent",
+    "PersonalFeedAgent",
+    # runtime
+    "Runtime",
+    "RunContext",
+    "Worker",
     # resources
     "BudgetExceededError",
     "ExecutionTracker",

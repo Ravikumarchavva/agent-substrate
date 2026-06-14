@@ -1,540 +1,205 @@
-"""OrchestratorAgent — delegates to sub-agents via local streaming handoff tools.
+"""OrchestratorAgent — spawns sub-agents and awaits their results.
 
-Each sub-agent is registered with the runtime and wrapped in a ``_DispatchTool``
-that the LLM calls. The LLM decides which specialist to call via tool-calling
-syntax; the tool currently invokes the subagent's ``run_stream()`` directly so
-child progress can be forwarded in real time. A future streaming runtime
-contract can replace this local handoff path for remote subagent execution.
-
-Crash recovery:
-  When a subagent crashes (``AgentCrashError``), the orchestrator consults its
-  ``RetryPolicy``. If the policy allows a retry, the subagent is resumed from
-  its persisted history via ``agent.run(..., resume=True)``. On exhaustion the
-  error is returned as a ToolExecutionResult with ``is_error=True``.
-
-Priority / budget:
-  ``sub_agents`` accepts both ``ReActAgent`` instances (wrapped at
-  ``Priority.NORMAL``) and ``SubAgentConfig`` objects for per-agent priority.
-  A ``SpawnTracker`` enforces the run-wide headcount cap; HIGH/CRITICAL agents
-  can preempt lower-priority ones when the pool is full.
-
-Usage::
-
-    orchestrator = OrchestratorAgent(
-        name="router",
-        description="Routes queries to the right specialist",
-        model=openai_client,
-        runtime=runtime,
-        sub_agents=[
-            SubAgentConfig(code_agent, priority=Priority.HIGH),
-            SubAgentConfig(research_agent, priority=Priority.NORMAL),
-        ],
-    )
-    result = await orchestrator.run("Find all prime numbers under 100")
+The LLM decides which sub-agent to delegate to by calling a tool whose name
+matches the sub-agent's routing key.  The orchestrator spawns the sub-agent,
+waits for the reply (or timeout / failure), and loops until the task is
+complete or the budget is exhausted.
 """
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
-from typing import Any
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
-
-from ravi.kernel import (
-    AgentId,
-    AgentCrashError,
-    BudgetExhaustedError,
-    Priority,
-    SpawnBudget,
-    Supervision,
+from ravi.kernel.core.content import (
+    ChatMessage,
+    Role,
     TextBlock,
-    Tool,
-    ToolExecutionResult,
-    TopicId,
+    ToolResultBlock,
+    ToolUseBlock,
 )
-from ravi.kernel.messaging.stream import AgentProgress, AgentStep, StreamDone, TextDelta
-from ravi.kernel.agent.supervision import HistoryRetention
-from ravi.kernel.llm import LLMClient
-from ravi.agents.supervision.budget import SpawnTracker
-from ravi.agents.supervision.policies import RetryPolicy
-from ravi.agents.resources.budget import ExecutionTracker
-from ravi.agents.core.react import (
-    ReActAgent,
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.llm.llm import GenerationOptions
+from ravi.kernel.messaging.message import ChatPayload, DataPayload, Message
+from ravi.kernel.tools.tools import ToolExecutionResult
+
+from ravi.agents.context.context import ContextConfig
+from ravi.agents.core._loop import (
+    deliver,
+    final_text,
+    load_history,
+    message_to_chat,
+    persist_turns,
 )
-from ravi.agents.hooks.manager import HookEvent, HookManager
-from ravi.logger import setup_logging
 
-logger = setup_logging()
+if TYPE_CHECKING:
+    from ravi.agents.runtime.context import RunContext
+    from ravi.kernel.llm.llm import LLMClient
+    from ravi.kernel.runtime.agent import Agent
 
 
-# ---------------------------------------------------------------------------
-# SubAgentConfig — per-agent priority + budget
-# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class _DelegateTool:
+    """Minimal Tool-protocol stub for sub-agent delegation.
+
+    Synthesized so that ``GenerationOptions(tools=...)`` and ``spec_of()``
+    encode the routing correctly.  ``execute()`` is never called — the
+    orchestrator handles dispatch via ``ctx.spawn`` + ``ctx.ask``.
+    """
+
+    name: str
+    description: str
+    input_schema: dict[str, object] = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "The task to delegate"},
+            },
+            "required": ["task"],
+        }
+    )
+
+    async def execute(self, *, ctx: Any = None, **kwargs: Any) -> ToolExecutionResult:
+        raise RuntimeError(
+            f"_DelegateTool({self.name}).execute() should never be called"
+        )
 
 
 @dataclass
 class SubAgentConfig:
-    """Configuration for one subagent in an OrchestratorAgent.
+    """Declares one sub-agent available to this orchestrator."""
 
-    Parameters
-    ----------
-    agent:
-        The ReActAgent instance.
-    priority:
-        Budget weight for this agent. HIGH/CRITICAL agents can preempt
-        NORMAL/LOW/BACKGROUND agents when the headcount pool is full.
-    execution_budget:
-        Optional per-agent cap (tokens, cost, turns). If None, no per-agent
-        cap is applied (only the run-wide SpawnTracker headcount limit).
-    retention:
-        History retention policy for this subagent.
-        - ``RUN`` (default) — history is cleared after each run; the subagent
-          starts fresh every turn. Use for stateless specialists.
-        - ``PERMANENT`` — history accumulates across runs in the same session;
-          the subagent remembers everything from prior turns.
-        - ``NONE`` — nothing is persisted.
-    """
-
-    agent: ReActAgent
-    priority: Priority = Priority.NORMAL
-    execution_budget: ExecutionTracker | None = None
-    retention: HistoryRetention = field(default=HistoryRetention.RUN)
+    agent: Agent
+    description: str = ""
+    ask_timeout: float = 120.0
 
 
-# ---------------------------------------------------------------------------
-# _DispatchTool — thin LLM-callable wrapper around runtime.send_message
-# ---------------------------------------------------------------------------
-
-
-class _DispatchTool:
-    """Wraps a subagent as an LLM-callable tool.
-
-    Runs the subagent via ``run_stream()`` directly — this is local-only
-    orchestration.  Routing through ``AgentRuntime.send_message()`` would
-    require the runtime to support streaming responses, which it does not yet.
-    On crash the retry policy is consulted and the subagent is resumed —
-    other subagents keep running in parallel while the retry is in flight.
-
-    Schema exposed to the LLM::
-
-        {"input": "<instruction>", "reason": "<why delegating>"}
-    """
-
-    def __init__(
-        self,
-        config: SubAgentConfig,
-        hooks: HookManager,
-        orchestrator_id: AgentId,
-        runtime: Any,
-        supervision: Supervision,
-        budget: SpawnTracker,
-        retry_policy: RetryPolicy,
-    ) -> None:
-        self._config = config
-        self._agent = config.agent
-        self._hooks = hooks
-        self._orchestrator_id = orchestrator_id
-        self._runtime = runtime
-        self._supervision = supervision
-        self._budget = budget
-        self._retry_policy = retry_policy
-        self._progress_sink: asyncio.Queue[AgentProgress] | None = None
-        self.name = f"handoff_{self._agent.name}"
-        self.description = (
-            f"Delegate the current task to the '{self._agent.name}' specialist agent. "
-            f"{getattr(self._agent, 'description', '')}"
-        )
-        self.input_schema: dict[str, object] = {
-            "type": "object",
-            "properties": {
-                "input": {
-                    "type": "string",
-                    "description": (
-                        f"The full instruction to send to the '{self._agent.name}' agent."
-                    ),
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "Why you are delegating to this agent.",
-                },
-            },
-            "required": ["input"],
-            "additionalProperties": False,
-        }
-
-    def set_progress_sink(self, queue: asyncio.Queue[AgentProgress] | None) -> None:
-        """Wire a queue that receives all subagent AgentProgress events."""
-        self._progress_sink = queue
-
-    async def _stream_run(
-        self, inp: str, *, resume: bool = False, run_id: str | None = None
-    ) -> tuple[str, str, str | None]:
-        """Run the subagent with streaming.
-
-        Returns ``(output_text, status, crash_run_id)`` where
-        ``crash_run_id`` is non-None when the subagent crashed.
-        """
-        text_parts: list[str] = []
-        crash_run_id: str | None = None
-        status = "success"
-        try:
-            effective_run_id = run_id or self._supervision.run_id
-            async for event in self._agent.run_stream(
-                inp, resume=resume, run_id=effective_run_id
-            ):
-                if isinstance(event, AgentProgress):
-                    if self._progress_sink is not None:
-                        await self._progress_sink.put(event)
-                elif isinstance(event, TextDelta):
-                    text_parts.append(event.text)
-                elif isinstance(event, StreamDone):
-                    status = event.reason
-        except AgentCrashError as exc:
-            status = "crash"
-            crash_run_id = exc.run_id
-        return "".join(text_parts), status, crash_run_id
-
-    async def execute(
-        self, *, input: str, reason: str = "", **_kw: Any
-    ) -> ToolExecutionResult:  # noqa: A002
-        logger.debug(
-            "Dispatch → %s | reason: %s | input: %.80s",
-            self._agent.name,
-            reason,
-            input,
-        )
-        await self._hooks.dispatch(
-            HookEvent.HANDOFF,
-            HandoffEventPayload(
-                from_agent="orchestrator",
-                to_agent=self._agent.name,
-                input=input,
-                reason=reason,
-            ).model_dump(mode="json"),
-        )
-        run_id = self._supervision.run_id
-        await self._runtime.publish_message(
-            AgentProgress(
-                agent_id=self._orchestrator_id,
-                step=AgentStep.HANDOFF,
-                content=f"→ {self._agent.name}: {reason or input[:60]}",
-                run_id=run_id,
-                parent_id=self._supervision.parent_id,
-                depth=self._supervision.depth,
-            ),
-            sender=self._orchestrator_id,
-            topic=TopicId("agent.progress", run_id),
-        )
-
-        output, status, crash_run_id = await self._stream_run(input, run_id=run_id)
-
-        # Crash recovery — retry while other subagents keep running in parallel
-        attempt = 0
-        while status == "crash" and self._retry_policy.should_retry(self._agent.id):
-            attempt += 1
-            logger.warning(
-                "[orchestrator] retrying %s (attempt %d, run_id=%s)",
-                self._agent.name,
-                attempt,
-                crash_run_id,
-            )
-            # Emit a visible retry event into the stream
-            if self._progress_sink is not None:
-                await self._progress_sink.put(
-                    AgentProgress(
-                        agent_id=self._agent.id,
-                        step=AgentStep.TOOL_CALL,
-                        content=f"↻ {self._agent.name}: retrying (attempt {attempt})",
-                        run_id=crash_run_id or "",
-                        depth=(self._supervision.depth or 0) + 1,
-                    )
-                )
-            output, status, crash_run_id = await self._stream_run(
-                input, resume=True, run_id=crash_run_id
-            )
-
-        if status == "crash":
-            logger.error("[orchestrator] %s exhausted retries", self._agent.name)
-            return ToolExecutionResult(
-                content=[
-                    TextBlock(text=f"Agent '{self._agent.name}' failed after retries")
-                ],
-                is_error=True,
-            )
-
-        is_error = status in ("error", "guardrail_tripped")
-        return ToolExecutionResult(
-            content=[TextBlock(text=output or "(no output)")],
-            is_error=is_error,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Internal resume payload
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class _ResumePayload:
-    """Sent to on_message when the orchestrator wants to resume a crashed run."""
-
-    run_id: str
-    session_id: str
-    input: str
-
-
-# ---------------------------------------------------------------------------
-# Handoff event payload
-# ---------------------------------------------------------------------------
-
-
-class HandoffEventPayload(BaseModel):
-    event: str = "on_handoff"
-    from_agent: str
-    to_agent: str
-    input: str
-    reason: str
-
-
-# ---------------------------------------------------------------------------
-# OrchestratorAgent
-# ---------------------------------------------------------------------------
-
-
-class OrchestratorAgent(ReActAgent):
-    """Orchestrates a set of specialist sub-agents via local streaming handoffs.
-
-    Each sub-agent is registered with the runtime when ``run()`` starts and
-    wrapped in a ``_DispatchTool`` so the LLM can delegate declaratively.
-    Execution currently calls subagents' ``run_stream()`` directly because
-    ``AgentRuntime`` only exposes request/response ``send_message()``.
-
-    Parameters
-    ----------
-    name:           Agent identifier.
-    description:    Human-readable purpose (appended to system prompt roster).
-    runtime:        Actor runtime used by the orchestrator itself.
-    model:          LLM client for the orchestrator's own reasoning loop.
-    sub_agents:     Specialist agents (ReActAgent or SubAgentConfig).
-    system:         Override the default orchestrator system prompt.
-    max_iterations: Max orchestrator ReAct iterations (default 30).
-    hooks:          HookManager — receives HANDOFF events on each delegation.
-    extra_tools:    Additional non-handoff tools for the orchestrator loop.
-    tool_timeout:   Per-tool (including handoff) timeout in seconds.
-    max_agents:     Run-wide headcount cap (defaults to 50).
-    """
+class OrchestratorAgent:
+    """General-purpose orchestrator that spawns sub-agents via the runtime."""
 
     def __init__(
         self,
         name: str,
-        runtime: Any,
         *,
-        model: LLMClient,
-        sub_agents: list[ReActAgent | SubAgentConfig],
-        description: str = "",
-        system: str | None = None,
-        max_iterations: int = 30,
-        hooks: HookManager | None = None,
-        extra_tools: list[Tool] | None = None,
-        tool_timeout: float | None = 60.0,
-        max_agents: int = 50,
-        session_id: str | None = None,
+        model: LLMClient | None = None,
+        sub_agents: list[SubAgentConfig] | None = None,
+        context: ContextConfig | None = None,
+        system_instructions: str = (
+            "You are an orchestrator agent.  "
+            "Break down tasks and delegate to sub-agents via their tools.  "
+            "Return the final consolidated answer when done."
+        ),
+        max_iterations: int = 10,
     ) -> None:
-        if not sub_agents:
-            raise ValueError("OrchestratorAgent requires at least one sub_agent")
+        self.id = AgentId(type="agent", key=name)
+        self.name = name
+        self.model = model
+        self.tools = None  # built dynamically from sub-agents
+        self._sub_agents = sub_agents or []
+        self._context = context or ContextConfig.default()
+        self._system_instructions = system_instructions
+        self._max_iterations = max_iterations
 
-        self.description = description
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            ctx.check()
+            await self._handle_message(ctx, msg)
 
-        # Normalise: bare ReActAgent → SubAgentConfig at NORMAL priority
-        configs: list[SubAgentConfig] = [
-            a if isinstance(a, SubAgentConfig) else SubAgentConfig(a)
-            for a in sub_agents
-        ]
-        self.sub_agents: list[ReActAgent] = [c.agent for c in configs]
-        self._sub_configs: list[SubAgentConfig] = configs
+    async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
+        session_id = msg.correlation_id or ctx.run_id
 
-        roster = "\n".join(
-            f"  - {c.agent.name}: {getattr(c.agent, 'description', '')}"
-            for c in configs
-        )
-        default_system = (
-            "You are an orchestrator agent. Analyse the user's request and "
-            "delegate to the most appropriate specialist agent.\n\n"
-            f"Available specialists:\n{roster}\n\n"
-            "You may call multiple agents in sequence. Synthesise their outputs "
-            "into a coherent final answer."
-        )
+        history_messages = await load_history(self._context, self.id, session_id)
+        user_turn = message_to_chat(msg)
+        messages: list[ChatMessage] = history_messages + [user_turn]
+        n_loaded = len(history_messages)
 
-        _hooks = hooks or HookManager()
-        orchestrator_id = AgentId(type="assistant", key=name)
-        # Root supervision — generates the shared run_id and carries the session_id.
-        # session_id is the conversation thread; stable across runs on this instance.
-        root_supervision = Supervision.root(
-            orchestrator_id,
-            session_id=session_id,
-            spawn_budget=SpawnBudget(max_agents=max_agents),
-            retention=HistoryRetention.PERMANENT,
+        tools = self._build_tools()
+        options = GenerationOptions(
+            system_instructions=self._system_instructions,
+            tools=tools or None,
         )
 
-        # SpawnTracker enforces max_agents with priority-based preemption.
-        self._spawn_budget = SpawnTracker(root_supervision)
+        for _ in range(self._max_iterations):
+            ctx.check()
+            resp = await ctx.llm(messages, options=options)
 
-        # RetryPolicy for crash-resume logic.
-        self._retry_policy = RetryPolicy(max_retries=2)
+            messages.append(ChatMessage(role=Role.ASSISTANT, content=resp.content))
 
-        # Stamp each subagent with supervision + budget, then build dispatch tools.
-        dispatch_tools: list[_DispatchTool] = []
-        for cfg in configs:
-            child_sv = root_supervision.spawn_child(
-                orchestrator_id,
-                retention=cfg.retention,
-                priority=cfg.priority,
-            )
-            cfg.agent.supervision = child_sv
-            cfg.agent.spawn_budget = self._spawn_budget
-            if cfg.execution_budget is not None:
-                cfg.agent.execution_budget = cfg.execution_budget
+            dispatches = [b for b in resp.content if isinstance(b, ToolUseBlock)]
+            if not dispatches:
+                break
 
-            dispatch_tools.append(
-                _DispatchTool(
-                    cfg,
-                    _hooks,
-                    orchestrator_id,
-                    runtime,
-                    root_supervision,
-                    self._spawn_budget,
-                    self._retry_policy,
-                )
-            )
+            results: list[ToolResultBlock] = []
+            for dispatch in dispatches:
+                ctx.check()
+                cfg = self._find_sub_agent_config(dispatch.tool_name)
+                if cfg is None:
+                    results.append(ToolResultBlock(
+                        call_id=dispatch.call_id,
+                        content=[TextBlock(text=f"Unknown sub-agent: {dispatch.tool_name}")],
+                        is_error=True,
+                    ))
+                    continue
 
-        self._dispatch_tools = dispatch_tools
-        all_tools: list[Tool] = [*dispatch_tools, *(extra_tools or [])]
-
-        super().__init__(
-            name,
-            runtime,
-            model=model,
-            tools=all_tools,
-            system_instructions=system or default_system,
-            max_iterations=max_iterations,
-            tool_timeout=tool_timeout,
-            hooks=_hooks,
-            supervision=root_supervision,
-        )
-
-    # -- Actor entry point (override to handle resume payloads) ---------------
-
-    async def on_message(self, ctx: Any, payload: object) -> object:
-        """Actor runtime entry point. Handles both str tasks and _ResumePayload."""
-        if isinstance(payload, _ResumePayload):
-            return await self.run(
-                payload.input,
-                resume=True,
-                run_id=payload.run_id,
-                session_id=payload.session_id,
-            )
-        return await super().on_message(ctx, payload)
-
-    # -- Override _react() to handle subagents ------------------------------
-
-    async def _react(
-        self,
-        input_text: str,
-        *,
-        session_id: str | None = None,
-        resume: bool = False,
-        run_id: str | None = None,
-        stream: bool = False,
-        initial_tool_choice: str | None = None,
-    ) -> Any:
-        # Generate a fresh supervision tree per execution so every parent,
-        # handoff, and child progress event shares the same run_id.
-        active_run_id = run_id if run_id is not None else uuid4().hex
-        base_sv = self.supervision
-        active_session_id = (
-            session_id
-            if session_id is not None
-            else (base_sv.session_id if base_sv is not None else uuid4().hex)
-        )
-        root_id = base_sv.root_id if base_sv is not None else self.id
-        root_sv = Supervision(
-            run_id=active_run_id,
-            session_id=active_session_id,
-            root_id=root_id,
-            parent_id=None,
-            depth=0,
-            spawn_budget=base_sv.spawn_budget if base_sv is not None else SpawnBudget(),
-            retention=HistoryRetention.PERMANENT,
-        )
-        self.supervision = root_sv
-        self._spawn_budget = SpawnTracker(root_sv)
-        for tool in self._dispatch_tools:
-            tool._supervision = root_sv
-
-        for cfg in self._sub_configs:
-            child_sv = root_sv.spawn_child(
-                self.id,
-                retention=cfg.retention,
-                priority=cfg.priority,
-            )
-            cfg.agent.supervision = child_sv
-            cfg.agent.spawn_budget = self._spawn_budget
-            if cfg.execution_budget is not None:
-                cfg.agent.execution_budget = cfg.execution_budget
-
-        for cfg in self._sub_configs:
-            self._retry_policy.reset(cfg.agent.id)
-            await self.runtime.register(cfg.agent.id, cfg.agent.on_message)
-            try:
-                self._spawn_budget.acquire(cfg.agent.id, cfg.priority)
-            except BudgetExhaustedError as exc:
-                raise ValueError(
-                    f"Cannot acquire budget for subagent '{cfg.agent.name}': {exc}"
-                ) from exc
-
-        try:
-            async for event in super()._react(
-                input_text,
-                session_id=active_session_id,
-                resume=resume,
-                run_id=active_run_id,
-                stream=stream,
-                initial_tool_choice=initial_tool_choice,
-            ):
-                yield event
-        finally:
-            for cfg in self._sub_configs:
-                self._spawn_budget.release(cfg.agent.id)
-                await self.runtime.unregister(cfg.agent.id)
-
-            # Clear history for RUN-retention subagents so next turn starts fresh.
-            for cfg in self._sub_configs:
-                if cfg.retention == HistoryRetention.RUN:
-                    try:
-                        await cfg.agent.history.clear(
-                            cfg.agent.id,
-                            session_id=root_sv.session_id,
+                task_text = dispatch.arguments.get("task", str(dispatch.arguments))
+                boot_msg = Message(
+                    target=cfg.agent.id,
+                    sender=self.id,
+                    payload=ChatPayload(
+                        message=ChatMessage(
+                            role=Role.USER,
+                            content=[TextBlock(text=str(task_text))],
                         )
-                    except Exception:
-                        pass  # best-effort cleanup
+                    ),
+                    correlation_id=session_id,
+                )
+                handle = await ctx.spawn(cfg.agent.id, boot=boot_msg)
+                outcome = await ctx.ask(handle, boot_msg, timeout=cfg.ask_timeout)
 
-    # -- Dynamic reprioritization -------------------------------------------
+                if outcome.kind == "replied" and outcome.result:
+                    out = outcome.result.output
+                    text = (
+                        out.data.get("text", str(out.data))
+                        if isinstance(out, DataPayload)
+                        else str(out)
+                    )
+                    results.append(ToolResultBlock(
+                        call_id=dispatch.call_id,
+                        content=[TextBlock(text=text)],
+                        is_error=False,
+                    ))
+                else:
+                    results.append(ToolResultBlock(
+                        call_id=dispatch.call_id,
+                        content=[TextBlock(text=f"Sub-agent {dispatch.tool_name}: {outcome.kind}")],
+                        is_error=True,
+                    ))
 
-    def reprioritize(self, agent_name: str, new_priority: Priority) -> None:
-        """Change a subagent's priority mid-run.
+            messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
+        else:
+            from ravi.kernel.core.errors import BudgetExhaustedError
+            raise BudgetExhaustedError(f"Agent reached max iterations limit ({self._max_iterations})")
 
-        Delegates to ``SpawnTracker.reprioritize``. Thread-safe.
-        If demoted below NORMAL and pool is full, the agent is automatically
-        paused (it will stop making LLM calls at the next cooperative check).
-        If promoted, the pause is lifted.
+        new_turns = messages[n_loaded:]
+        await persist_turns(self._context, self.id, session_id, ctx.run_id, new_turns)
 
-        Callable from outside (e.g. an API endpoint) while the orchestrator
-        is running.
-        """
-        for agent in self.sub_agents:
-            if agent.name == agent_name:
-                self._spawn_budget.reprioritize(agent.id, new_priority)
-                return
-        raise ValueError(f"No subagent named '{agent_name}'")
+        ans = final_text(messages)
+        await deliver(ctx, msg, {"text": ans}, sender=self.id)
+
+    def _build_tools(self) -> list[_DelegateTool]:
+        return [
+            _DelegateTool(
+                name=f"handoff_{cfg.agent.id.key}",
+                description=cfg.description or f"Delegate to the {cfg.agent.id.key} sub-agent",
+            )
+            for cfg in self._sub_agents
+        ]
+
+    def _find_sub_agent_config(self, name: str) -> SubAgentConfig | None:
+        for cfg in self._sub_agents:
+            if f"handoff_{cfg.agent.id.key}" == name or cfg.agent.id.key == name:
+                return cfg
+        return None
+
+
+__all__ = ["SubAgentConfig", "OrchestratorAgent"]

@@ -1,100 +1,90 @@
-"""UserProxyAgent — bridges external callers into the actor runtime.
+"""UserProxyAgent — durable HITL bridge between humans and the agent runtime.
 
-Every multi-agent interaction starts here.  External callers (HTTP routes,
-CLI, tests) create a UserProxyAgent and use ``ask()`` to send tasks into
-the runtime, where a registered agent (typically ReActAgent) handles them.
+The proxy receives messages FROM other agents (HITL clarification requests)
+and suspends via ``ctx.sleep_until_signal`` until a human provides input
+(delivered via the HTTP layer → ``SignalBus.signal()``).
 
-    runtime = LocalRuntime()
-    await runtime.start()
-
-    agent = ReActAgent("assistant", runtime, model=llm)
-    await runtime.register(agent.id, agent.on_message)
-
-    proxy = UserProxyAgent("proxy", runtime)
-    result = await proxy.ask("What is 2+2?", recipient=agent.id)
+External callers that want to START a task should submit a Message directly
+to a ``ReActAgent`` via ``Runtime.submit()``.
 """
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Callable
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.messaging.message import ChatPayload, Message
 
-from ravi.kernel import AgentId, TextBlock
-from ravi.kernel.messaging.message import MessageContext
-from ravi.kernel.messaging.stream import CompletionEvent, StreamDone
-from ravi.logger import setup_logging
+from typing import TYPE_CHECKING
 
-logger = setup_logging()
+if TYPE_CHECKING:
+    from ravi.agents.runtime.context import RunContext
 
 
 class UserProxyAgent:
-    """Routes external requests to registered agents via the runtime.
+    """HITL agent.
+
+    When another agent sends a message with ``reply_to`` set (via
+    ``ctx.ask``), this proxy suspends until a human sends a reply signal
+    ``human_reply:<correlation_id>`` via the signal bus.
+
+    The serving layer is responsible for:
+    1. Surfacing the question to the human (via SSE or notification).
+    2. Calling ``SignalBus.signal(run_id, "human_reply:<cid>", {text: ...})``
+       when the human replies.
 
     Parameters
     ----------
     name:
-        Agent type name.
-    runtime:
-        The runtime this proxy dispatches through.
+        Routing key.
     key:
-        Instance key — use unique keys for per-request proxies.
-    hitl_callback:
-        Optional async callable invoked when a reverse message arrives
-        (e.g. an ReActAgent requesting human input).
-        Signature: ``async (ctx: MessageContext, payload: object) -> object``.
+        Instance key — allows multiple proxy instances (e.g. per user).
     """
 
-    def __init__(
-        self,
-        name: str,
-        runtime: Any,
-        *,
-        key: str = "default",
-        hitl_callback: Callable[[MessageContext, object], Any] | None = None,
-    ) -> None:
-        self.name = name
-        self.runtime = runtime
+    def __init__(self, name: str = "proxy", *, key: str = "default") -> None:
         self.id = AgentId(type="proxy", key=key)
-        self._hitl_callback = hitl_callback
+        self.model = None  # no LLM needed
+        self.tools = None  # no tools needed
 
-    # -- One-shot ask --------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Agent contract
+    # ------------------------------------------------------------------
 
-    async def ask(self, text: str, *, recipient: AgentId) -> object:
-        """Send *text* to *recipient* and return the complete response.
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            ctx.check()
+            await self._handle_message(ctx, msg)
 
-        Returns whatever the recipient's ``on_message()`` returns — typically
-        an ``AgentRunResult`` or a plain string.
-        """
-        return await self.runtime.send_message(text, recipient=recipient)
+    # ------------------------------------------------------------------
+    # HITL suspend/resume
+    # ------------------------------------------------------------------
 
-    # -- Streaming ask -------------------------------------------------------
+    async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
+        cid = msg.correlation_id
 
-    async def ask_stream(
-        self, text: str, *, recipient: AgentId
-    ) -> AsyncIterator[CompletionEvent | StreamDone]:
-        """Send *text* to *recipient* and yield a streaming response.
+        # Emit the question to the event log so the serving layer can surface it
+        question_text = self._extract_text(msg)
+        await ctx._log(
+            "hitl.question",
+            {"correlation_id": cid, "text": question_text},
+        )
 
-        Calls ``ask()`` and wraps the result in a single ``CompletionEvent``
-        followed by ``StreamDone``.  Full topic-based streaming requires a
-        ``LocalRuntime`` with pub/sub support (Pass 6).  # TODO(pass-6-runtime)
-        """
-        result = await self.ask(text, recipient=recipient)
-        output = ""
-        if hasattr(result, "output"):
-            output = str(result.output)
-        elif isinstance(result, str):
-            output = result
-        elif result is not None:
-            output = str(result)
-        yield CompletionEvent(content=[TextBlock(text=output)])
-        yield StreamDone()
+        # Suspend until a human provides a reply
+        signal_name = f"human_reply:{cid}"
+        human_payload = await ctx.sleep_until_signal(signal_name)
 
-    # -- Reverse message handling (HITL) ------------------------------------
+        # Deliver human reply back to the asker
+        if msg.reply_to:
+            await ctx.reply(msg, human_payload)
 
-    async def on_message(self, ctx: MessageContext, payload: object) -> object:
-        """Handle messages sent TO this proxy (e.g. HITL clarification requests).
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
-        If a ``hitl_callback`` was provided it is invoked; otherwise returns None.
-        """
-        if self._hitl_callback is not None:
-            return await self._hitl_callback(ctx, payload)
-        return None
+    def _extract_text(self, msg: Message) -> str:
+        payload = msg.payload
+        if isinstance(payload, ChatPayload):
+            from ravi.kernel.core.content import content_blocks_to_str
+            return content_blocks_to_str(payload.message.content)  # type: ignore[arg-type]
+        return str(getattr(payload, "data", payload))
+
+
+__all__ = ["UserProxyAgent"]

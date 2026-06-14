@@ -11,7 +11,7 @@ from ravi.kernel.core.usage import Usage
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
-    from ravi.kernel.agent.runtime_context import RunContext
+    from ravi.kernel.agent.runtime_context import RunMeta
     from ravi.kernel.tools import AnyTool
 
 
@@ -58,7 +58,7 @@ class LLMClient(Protocol):
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
-        ctx: RunContext | None = None,
+        ctx: RunMeta | None = None,
     ) -> LLMResponse: ...
 
     def generate_stream(
@@ -66,7 +66,7 @@ class LLMClient(Protocol):
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
-        ctx: RunContext | None = None,
+        ctx: RunMeta | None = None,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
         """Return an async iterator of token events.
 

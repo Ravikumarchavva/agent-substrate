@@ -39,6 +39,8 @@ class Toolbox:
     def add(self, tool: AnyTool) -> None:
         self._tools[tool.name] = tool
 
+    register = add
+
     def get(self, name: str) -> AnyTool | None:
         return self._tools.get(name)
 

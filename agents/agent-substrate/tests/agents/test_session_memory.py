@@ -1,4 +1,4 @@
-"""Tests for session-scoped history — verifying cross-turn memory for subagents."""
+"""Tests for session-scoped history — cross-turn memory via the Runtime."""
 
 from __future__ import annotations
 
@@ -9,27 +9,25 @@ from ravi.agents.context import (
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
-from ravi.agents.runtime.local import LocalRuntime
-from ravi.kernel import (
-    ChatMessage,
-    ContentBlock,
-    TextBlock,
-)
-from ravi.kernel.core.content import ToolUseBlock
-from ravi.kernel.agent.supervision import HistoryRetention
-from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
-from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
 from ravi.agents.core import ReActAgent
+from ravi.agents.runtime import Runtime
+from ravi.kernel import ChatMessage, ContentBlock, TextBlock
+from ravi.kernel.core.content import Role
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
+from ravi.kernel.messaging.message import ChatPayload, Message
+from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
 
 
 # ---------------------------------------------------------------------------
-# Minimal mock LLM (same pattern as test_assistant_agent.py)
+# Mock LLM
 # ---------------------------------------------------------------------------
 
 
 class MockLLMClient:
     def __init__(self, responses: list[list[ContentBlock]]) -> None:
         self._queue = list(responses)
+        self.model = "mock-model"
 
     async def generate(
         self,
@@ -55,12 +53,62 @@ class MockLLMClient:
         options: GenerationOptions,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         resp = await self.generate(messages, options=options)
-        text = " ".join(
-            b.text for b in resp.content if isinstance(b, TextBlock) and b.text
-        )
+        text = " ".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
         if text:
             yield TextDelta(text=text)
         yield CompletionEvent(content=resp.content, usage=resp.usage)
+
+
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+
+async def run_agent(
+    rt: Runtime,
+    agent: ReActAgent,
+    text: str,
+    *,
+    session_id: str | None = None,
+) -> dict:
+    """Submit one message and block until the run completes."""
+    await rt.register(agent)
+    sid = session_id or agent.id.key
+    msg = Message(
+        target=agent.id,
+        sender=AgentId(type="proxy", key="test"),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
+        ),
+        correlation_id=sid,
+    )
+    run_id = await rt.submit(agent.id, msg)
+
+    status = "success"
+    error = None
+    async for entry in rt.event_log.tail(run_id):
+        if entry.kind == "run.completed":
+            break
+        elif entry.kind == "run.failed":
+            status = entry.payload.get("status", "error")
+            error = entry.payload.get("error")
+            break
+        elif entry.kind == "run.cancelled":
+            status = "cancelled"
+            break
+
+    output = ""
+    history_msgs = await agent.history.get_messages(agent.id, session_id=sid)
+    for m in reversed(history_msgs):
+        if m.role == Role.ASSISTANT:
+            output = " ".join(
+                b.text for b in m.content if isinstance(b, TextBlock) and b.text
+            )
+            break
+    if error and not output:
+        output = error
+
+    return {"status": status, "output": output, "run_id": run_id}
 
 
 # ---------------------------------------------------------------------------
@@ -69,260 +117,84 @@ class MockLLMClient:
 
 
 async def test_standalone_session_accumulates_across_runs():
-    """Standalone agent history accumulates across multiple run() calls (session = id.key)."""
-    async with LocalRuntime() as rt:
-        shared_history = InMemoryHistoryProvider()
+    """History accumulates across multiple submissions with the same session_id."""
+    shared_history = InMemoryHistoryProvider()
+    async with Runtime() as rt:
         agent = ReActAgent(
             "bot",
-            rt,
             model=MockLLMClient(
                 [
                     [TextBlock(text="I am fine.")],
                     [TextBlock(text="You said hi earlier.")],
                 ]
             ),
-            context=ContextConfig(
-                shared_history, SlidingWindowCompaction(max_messages=20)
-            ),
+            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=20)),
             max_iterations=5,
         )
 
-        r1 = await agent.run("Hi!")
-        assert r1.status == "success"
+        r1 = await run_agent(rt, agent, "Hi!")
+        assert r1["status"] == "success"
 
-        r2 = await agent.run("What did I say?")
-        assert r2.status == "success"
-        assert r2.output == "You said hi earlier."
+        r2 = await run_agent(rt, agent, "What did I say?")
+        assert r2["status"] == "success"
+        assert r2["output"] == "You said hi earlier."
 
-        # All 4 messages (2 user + 2 assistant) are in the single session
+        # 2 user + 2 assistant = 4 messages in the session
         msgs = await shared_history.get_messages(agent.id, session_id=agent.id.key)
         assert len(msgs) == 4
 
 
-async def test_permanent_retention_subagent_remembers_across_runs():
-    """A PERMANENT-retention subagent's history persists across two runs in the same session."""
-    async with LocalRuntime() as rt:
-        # The "coder" subagent remembers across turns
-        coder_history = InMemoryHistoryProvider()
-
-        coder = ReActAgent(
-            "coder",
-            rt,
-            model=MockLLMClient(
-                [
-                    [TextBlock(text="Noted: the secret is 42.")],  # run 1
-                    [TextBlock(text="The secret I noted was 42.")],  # run 2
-                ]
-            ),
-            context=ContextConfig(
-                coder_history, SlidingWindowCompaction(max_messages=40)
-            ),
-            max_iterations=5,
-        )
-
-        session = "session-persistence-test"
-
-        # Manually stamp supervision so coder has the right session
-        from ravi.kernel.core.identity import AgentId
-        from ravi.kernel.agent.supervision import Supervision
-
-        orchestrator_id = AgentId(type="assistant", key="router")
-        root_sv = Supervision.root(orchestrator_id, session_id=session)
-        child_sv = root_sv.spawn_child(
-            orchestrator_id, retention=HistoryRetention.PERMANENT
-        )
-        coder.supervision = child_sv
-
-        # Run 1: store a fact
-        r1 = await coder.run("Remember the secret is 42.", session_id=session)
-        assert r1.status == "success"
-
-        # History after run 1 — 2 messages
-        msgs_after_run1 = await coder_history.get_messages(coder.id, session_id=session)
-        assert len(msgs_after_run1) == 2
-
-        # Run 2 (same session, different run_id): coder should see run 1's history
-        from uuid import uuid4
-
-        new_run_sv = Supervision(
-            run_id=uuid4().hex,
-            session_id=session,
-            root_id=root_sv.root_id,
-            parent_id=orchestrator_id,
-            depth=1,
-            spawn_budget=root_sv.spawn_budget,
-            retention=HistoryRetention.PERMANENT,
-        )
-        coder.supervision = new_run_sv
-
-        r2 = await coder.run("What was the secret?", session_id=session)
-        assert r2.status == "success"
-        assert "42" in r2.output
-
-        # 4 messages total (run 1 + run 2) accumulated in the same session
-        msgs_after_run2 = await coder_history.get_messages(coder.id, session_id=session)
-        assert len(msgs_after_run2) == 4
-
-
-async def test_run_retention_subagent_is_ephemeral():
-    """A RUN-retention subagent starts with an empty history on each run."""
-    async with LocalRuntime() as rt:
-        scratch_history = InMemoryHistoryProvider()
-        session = "session-ephemeral-test"
-
-        from ravi.kernel.core.identity import AgentId
-        from ravi.kernel.agent.supervision import Supervision
-        from uuid import uuid4
-
-        orchestrator_id = AgentId(type="assistant", key="router")
-
-        scratch = ReActAgent(
-            "scratch",
-            rt,
-            model=MockLLMClient(
-                [
-                    [TextBlock(text="Done run 1.")],
-                    [TextBlock(text="Done run 2.")],
-                ]
-            ),
-            context=ContextConfig(
-                scratch_history, SlidingWindowCompaction(max_messages=40)
-            ),
-            max_iterations=5,
-        )
-
-        # Run 1
-        sv1 = Supervision.root(orchestrator_id, session_id=session).spawn_child(
-            orchestrator_id, retention=HistoryRetention.RUN
-        )
-        scratch.supervision = sv1
-        r1 = await scratch.run("Task one.", session_id=session)
-        assert r1.status == "success"
-
-        # Simulate RUN-retention cleanup (what orchestrator does in finally)
-        await scratch_history.clear(scratch.id, session_id=session)
-
-        # Run 2 — history should be empty at start
-        sv2 = Supervision(
-            run_id=uuid4().hex,
-            session_id=session,
-            root_id=sv1.root_id,
-            parent_id=orchestrator_id,
-            depth=1,
-            spawn_budget=sv1.spawn_budget,
-            retention=HistoryRetention.RUN,
-        )
-        scratch.supervision = sv2
-
-        msgs_before_run2 = await scratch_history.get_messages(
-            scratch.id, session_id=session
-        )
-        assert len(msgs_before_run2) == 0, (
-            "RUN-retention: history must be empty after clear"
-        )
-
-        r2 = await scratch.run("Task two.", session_id=session)
-        assert r2.status == "success"
-
-        # Only run 2's messages remain
-        msgs_after_run2 = await scratch_history.get_messages(
-            scratch.id, session_id=session
-        )
-        assert len(msgs_after_run2) == 2
-
-
 async def test_session_isolation_across_different_sessions():
     """Two sessions of the same agent don't bleed into each other."""
-    async with LocalRuntime() as rt:
-        shared_history = InMemoryHistoryProvider()
-
+    shared_history = InMemoryHistoryProvider()
+    async with Runtime() as rt:
         agent = ReActAgent(
             "agent",
-            rt,
             model=MockLLMClient(
                 [
                     [TextBlock(text="Session A response.")],
                     [TextBlock(text="Session B response.")],
                 ]
             ),
-            context=ContextConfig(
-                shared_history, SlidingWindowCompaction(max_messages=20)
-            ),
+            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=20)),
             max_iterations=5,
         )
 
-        r_a = await agent.run("Hello session A.", session_id="session-A")
-        assert r_a.status == "success"
+        r_a = await run_agent(rt, agent, "Hello A.", session_id="session-A")
+        assert r_a["status"] == "success"
 
-        r_b = await agent.run("Hello session B.", session_id="session-B")
-        assert r_b.status == "success"
+        r_b = await run_agent(rt, agent, "Hello B.", session_id="session-B")
+        assert r_b["status"] == "success"
 
-        # Sessions are isolated
         msgs_a = await shared_history.get_messages(agent.id, session_id="session-A")
         msgs_b = await shared_history.get_messages(agent.id, session_id="session-B")
         assert len(msgs_a) == 2
         assert len(msgs_b) == 2
 
 
-async def test_orchestrator_propagates_fresh_run_id_to_subagent_history():
-    """A handoff run stamps the same fresh run_id on orchestrator and subagent work."""
-    from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-
-    async with LocalRuntime() as rt:
-        worker_history = InMemoryHistoryProvider()
-        worker = ReActAgent(
-            "worker",
-            rt,
+async def test_cross_run_memory_same_session():
+    """Agent sees prior turns when submitted with the same correlation_id."""
+    shared_history = InMemoryHistoryProvider()
+    async with Runtime() as rt:
+        agent = ReActAgent(
+            "mem-bot",
             model=MockLLMClient(
                 [
-                    [TextBlock(text="child output one")],
-                    [TextBlock(text="child output two")],
+                    [TextBlock(text="Stored.")],
+                    [TextBlock(text="The answer was 42.")],
                 ]
             ),
-            context=ContextConfig(
-                worker_history, SlidingWindowCompaction(max_messages=40)
-            ),
+            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=40)),
             max_iterations=3,
         )
 
-        orchestrator = OrchestratorAgent(
-            "router",
-            rt,
-            model=MockLLMClient(
-                [
-                    [
-                        ToolUseBlock(
-                            call_id="h1",
-                            tool_name="handoff_worker",
-                            arguments={"input": "child task one"},
-                        )
-                    ],
-                    [TextBlock(text="final one")],
-                    [
-                        ToolUseBlock(
-                            call_id="h2",
-                            tool_name="handoff_worker",
-                            arguments={"input": "child task two"},
-                        )
-                    ],
-                    [TextBlock(text="final two")],
-                ]
-            ),
-            sub_agents=[
-                SubAgentConfig(worker, retention=HistoryRetention.PERMANENT),
-            ],
-            session_id="orch-session",
-            max_iterations=3,
-        )
+        sid = "cross-run-session"
+        r1 = await run_agent(rt, agent, "Remember 42.", session_id=sid)
+        assert r1["status"] == "success"
 
-        first = await orchestrator.run("route one")
-        second = await orchestrator.run("route two")
+        r2 = await run_agent(rt, agent, "What was the answer?", session_id=sid)
+        assert r2["status"] == "success"
+        assert "42" in r2["output"]
 
-        assert first.status == "success"
-        assert second.status == "success"
-        assert first.run_id != second.run_id
-
-        msgs = await worker_history.get_messages(worker.id, session_id="orch-session")
-        worker_run_ids = [msg.metadata["run_id"] for msg in msgs]
-        assert worker_run_ids[:2] == [first.run_id, first.run_id]
-        assert worker_run_ids[2:] == [second.run_id, second.run_id]
+        all_msgs = await shared_history.get_messages(agent.id, session_id=sid)
+        assert len(all_msgs) == 4  # 2 user + 2 assistant

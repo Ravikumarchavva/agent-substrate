@@ -14,7 +14,7 @@ fanout.py         FanoutStrategy  (how an emit reaches all followers)
 wakeup.py         Wakeup, SignalBus  (what resumes a dormant run)
 scheduler.py      Lease, RunRetryPolicy, Scheduler  (work-queue + leasing)
 supervisor.py     RunHandle, RunResult, Supervisor  (spawn/join/cancel subagents)
-agent.py          DurableContextProtocol, DurableAgent  (the revised agent contract)
+agent.py          AgentRunContext, Agent  (the agent contract)
 communication.py  AskOutcome, RunStatusSummary  (ask/reply value types)
 """
 
@@ -29,7 +29,7 @@ from ravi.kernel.runtime.fanout import FanoutStrategy
 from ravi.kernel.runtime.wakeup import SignalBus, Wakeup
 from ravi.kernel.runtime.scheduler import Lease, RunRetryPolicy, Scheduler
 from ravi.kernel.runtime.supervisor import RunHandle, RunResult, Supervisor
-from ravi.kernel.runtime.agent import DurableAgent, DurableContextProtocol
+from ravi.kernel.runtime.agent import Agent, AgentRunContext
 from ravi.kernel.runtime.communication import AskOutcome, RunStatusSummary
 
 __all__ = [
@@ -64,8 +64,8 @@ __all__ = [
     "RunResult",
     "Supervisor",
     # agent
-    "DurableContextProtocol",
-    "DurableAgent",
+    "AgentRunContext",
+    "Agent",
     # communication
     "AskOutcome",
     "RunStatusSummary",

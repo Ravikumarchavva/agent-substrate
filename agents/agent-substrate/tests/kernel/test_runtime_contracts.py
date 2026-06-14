@@ -25,7 +25,7 @@ import pytest
 from ravi.kernel.core.identity import AgentId, TopicId
 from ravi.kernel.messaging.message import Message, DataPayload
 from ravi.kernel.core.errors import ConcurrentAppendError, SpawnDenied
-from ravi.kernel.agent.runtime_context import CancellationToken, RunContext
+from ravi.kernel.agent.runtime_context import CancellationToken, RunMeta
 from ravi.kernel.agent.supervision import Supervision
 from ravi.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from ravi.kernel.runtime.log_entry import RunLogEntry
@@ -34,7 +34,7 @@ from ravi.kernel.runtime.inbox import DeadLetterReason, DeadLetterEntry
 from ravi.kernel.runtime.wakeup import Wakeup
 from ravi.kernel.runtime.scheduler import Lease, RunRetryPolicy
 from ravi.kernel.runtime.supervisor import RunHandle, RunResult
-from ravi.kernel.runtime.agent import DurableContextProtocol, DurableAgent
+from ravi.kernel.runtime.agent import AgentRunContext, Agent
 
 
 # ---------------------------------------------------------------------------
@@ -524,11 +524,11 @@ class TestRunResult:
 
 
 # ---------------------------------------------------------------------------
-# agent.py (DurableAgent conformance)
+# agent.py (Agent conformance)
 # ---------------------------------------------------------------------------
 
 
-class TestDurableAgent:
+class TestAgent:
     def test_minimal_impl_satisfies_protocol(self) -> None:
         class MinimalCtx:
             run_id: str = new_run_id()
@@ -541,12 +541,12 @@ class TestDurableAgent:
                 self.id = _agent_id()
 
             async def run(
-                self, ctx: DurableContextProtocol, inbox: list[Message]
+                self, ctx: AgentRunContext, inbox: list[Message]
             ) -> None:
                 pass
 
         agent = MinimalAgent()
-        assert isinstance(agent, DurableAgent)  # type: ignore[arg-type]
+        assert isinstance(agent, Agent)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -575,25 +575,25 @@ class TestSpawnDenied:
 # ---------------------------------------------------------------------------
 
 
-class TestRunContextRunId:
+class TestRunMeta:
     def test_standalone_generates_run_id(self) -> None:
-        ctx = RunContext.standalone()
-        assert isinstance(ctx.run_id, str)
-        assert len(ctx.run_id) > 0
+        meta = RunMeta.standalone()
+        assert isinstance(meta.run_id, str)
+        assert len(meta.run_id) > 0
 
     def test_standalone_accepts_explicit_run_id(self) -> None:
         rid = new_run_id()
-        ctx = RunContext.standalone(run_id=rid)
-        assert ctx.run_id == rid
+        meta = RunMeta.standalone(run_id=rid)
+        assert meta.run_id == rid
 
     def test_two_standalone_have_different_run_ids(self) -> None:
-        ctx1 = RunContext.standalone()
-        ctx2 = RunContext.standalone()
-        assert ctx1.run_id != ctx2.run_id
+        m1 = RunMeta.standalone()
+        m2 = RunMeta.standalone()
+        assert m1.run_id != m2.run_id
 
     def test_run_id_from_supervision(self) -> None:
         agent = _agent_id()
         sup = Supervision.root(agent)
         token = CancellationToken()
-        ctx = RunContext(cancellation=token, run_id=sup.run_id, supervision=sup)
-        assert ctx.run_id == sup.run_id
+        meta = RunMeta(cancellation=token, run_id=sup.run_id, supervision=sup)
+        assert meta.run_id == sup.run_id

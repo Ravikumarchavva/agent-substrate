@@ -1,24 +1,17 @@
-"""DurableAgent — the revised agent contract for the durable runtime.
+"""Agent — the kernel agent contract.
 
-Replaces ``kernel/agent.py::Agent`` (synchronous request-reply model) with a
-coroutine that survives crashes, multi-day pauses, and worker migration.
+Durability is the baseline — every agent is durable by default.  The
+``Agent`` Protocol defines the single entry point ``run(ctx, inbox)``
+that the runtime calls each time the agent wakes.
 
-Why the old contract cannot scale
-----------------------------------
-``Agent.on_message(ctx, payload) -> reply | None`` assumes the reply is
-produced in a single in-process call.  It cannot survive a process crash, a
-multi-day HITL pause, or a run migrating to a different worker.
-
-The new model
--------------
-``DurableAgent.run(ctx, inbox)`` receives a batch of messages and an execution
+``Agent.run(ctx, inbox)`` receives a batch of messages and an execution
 context that wires in the runtime's durability machinery.  The runtime calls
 ``run`` each time the agent wakes from SUSPENDED, after folding the EventLog
 to reconstruct state.
 
 The author writes normal async code.  Durability is transparent:
 
-    async def run(self, ctx: DurableContextProtocol, inbox: list[Message]) -> None:
+    async def run(self, ctx: AgentRunContext, inbox: list[Message]) -> None:
         for msg in inbox:
             result = await ctx.tool("summarise", content=msg.payload)  # journaled
             await ctx.emit(self.output_topic, result)                   # journaled effect
@@ -28,12 +21,12 @@ On crash/resume the coroutine re-runs from the top, but journaled calls return
 their cached result instead of re-executing — the LLM call isn't repeated,
 the email isn't re-sent.
 
-DurableContextProtocol (kernel-visible slice)
-----------------------------------------------
-The full ``DurableContext`` lives at L1 (agents/) — it composes Journal,
+AgentRunContext (kernel-visible slice)
+--------------------------------------
+The full ``RunContext`` lives at L1 (agents/) — it composes Journal,
 EventLog, Supervisor, and capability clients.  The kernel only sees the minimal
 slice it needs to define the contract: ``run_id``, ``tenant_id``, ``check()``.
-The author's actual ctx at runtime IS a ``DurableContext`` and has all the
+The author's actual ctx at runtime IS a ``RunContext`` (L1) and has all the
 journaled methods (ctx.llm, ctx.tool, ctx.spawn, ctx.join, etc.).
 """
 
@@ -45,15 +38,15 @@ from ravi.kernel.core.identity import AgentId
 from ravi.kernel.messaging.message import Message
 
 
-class DurableContextProtocol(Protocol):
-    """Kernel-visible slice of DurableContext.
+class AgentRunContext(Protocol):
+    """Kernel-visible slice of RunContext (L1).
 
-    The full ``DurableContext`` (L1) satisfies this protocol and adds the
+    The full ``RunContext`` (L1) satisfies this protocol and adds the
     journaled capability methods (``ctx.llm()``, ``ctx.tool()``,
     ``ctx.spawn()``, ``ctx.join()``, ``ctx.emit()``, ``ctx.sleep()``, etc.).
 
-    Kernel code (contracts, type signatures) uses ``DurableContextProtocol``.
-    Agent authors type-hint with ``DurableContext`` from L1 to get IDE support
+    Kernel code (contracts, type signatures) uses ``AgentRunContext``.
+    Agent authors type-hint with ``RunContext`` from L1 to get IDE support
     for the full surface.
     """
 
@@ -66,8 +59,8 @@ class DurableContextProtocol(Protocol):
 
 
 @runtime_checkable
-class DurableAgent(Protocol):
-    """Contract every durable agent must satisfy.
+class Agent(Protocol):
+    """Contract every agent must satisfy.
 
     ``id`` — stable routing identity; used by the Inbox and Scheduler to
     address this agent.
@@ -93,9 +86,9 @@ class DurableAgent(Protocol):
 
     async def run(
         self,
-        ctx: DurableContextProtocol,
+        ctx: AgentRunContext,
         inbox: list[Message],
     ) -> None: ...
 
 
-__all__ = ["DurableContextProtocol", "DurableAgent"]
+__all__ = ["AgentRunContext", "Agent"]

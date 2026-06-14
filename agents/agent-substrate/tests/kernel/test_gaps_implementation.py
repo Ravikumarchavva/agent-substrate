@@ -6,7 +6,6 @@ from ravi.kernel.core.identity import AgentId, TopicId
 from ravi.kernel.messaging.stream import AgentProgress, AgentStep
 from ravi.kernel.messaging.message import Message, ProgressPayload, _PAYLOAD_REGISTRY
 from ravi.serving.shared.events.envelope import EventEnvelope
-from ravi.agents.runtime.local import LocalRuntime
 
 
 def test_progress_payload_pydantic_serialization():
@@ -73,43 +72,34 @@ def test_event_envelope_translation():
     assert reconstructed.event_id == env.event_id
 
 
-class DummyAgent:
-    def __init__(self, agent_id: AgentId):
-        self.id = agent_id
-        self.runtime = None
-
-    async def bind(self, runtime):
-        self.runtime = runtime
-
-    async def on_message(self, ctx, payload):
-        return "reply"
-
-    async def save_state(self):
-        return {"state": 1}
-
-    async def load_state(self, state):
-        pass
-
-
 @pytest.mark.asyncio
-async def test_local_runtime_agent_registration():
-    # Gap 5: register_agent, subscribe returning Subscription, unsubscribe taking Subscription
-    async with LocalRuntime() as rt:
-        agent_id = AgentId(type="assistant", key="dummy")
-        agent = DummyAgent(agent_id)
+async def test_runtime_agent_registration():
+    """Runtime: register + submit routes message to the agent inbox."""
+    from ravi.agents.runtime import Runtime
+    from ravi.kernel.core.identity import AgentId
+    from ravi.kernel.messaging.message import Message, DataPayload
 
-        # Test register_agent
-        await rt.register_agent(agent)
-        assert agent.runtime is rt
+    received: list = []
 
-        # Test subscribe returning Subscription
-        topic = TopicId(type="agent.progress", source="test-run")
-        sub = await rt.subscribe(agent_id, topic)
+    class EchoAgent:
+        id = AgentId(type="agent", key="echo")
+        model = None
+        tools = None
 
-        assert sub.agent_id == agent_id
-        assert sub.topic == topic
-        assert len(rt._topic_subs[f"{topic.type}/{topic.source}"]) == 1
+        async def run(self, ctx, inbox):
+            received.extend(inbox)
 
-        # Test unsubscribe taking Subscription
-        await rt.unsubscribe(sub)
-        assert len(rt._topic_subs[f"{topic.type}/{topic.source}"]) == 0
+    agent = EchoAgent()
+    async with Runtime() as rt:
+        await rt.register(agent)
+        msg = Message(
+            target=agent.id,
+            payload=DataPayload(data={"hello": "world"}),
+        )
+        run_id = await rt.submit(agent.id, msg)
+        # Give the worker a tick to process
+        import asyncio
+        await asyncio.sleep(0.2)
+
+    assert len(received) == 1
+    assert received[0].payload.data == {"hello": "world"}

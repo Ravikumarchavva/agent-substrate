@@ -85,14 +85,9 @@ class Worker:
                     worker_id=self._worker_id, capacity=10
                 )
                 for lease in leases:
-                    agent_id = self._scheduler.agent_for(lease.run_id)
-                    if agent_id is None:
-                        logger.warning("No agent registered for run %s", lease.run_id)
-                        await self._scheduler.release(lease, status=RunStatus.FAILED)
-                        continue
-                    agent = self._registry.get(agent_id)
+                    agent = self._registry.get(lease.agent_id)
                     if agent is None:
-                        logger.warning("Agent %s not in registry", agent_id)
+                        logger.warning("Agent %s not in registry", lease.agent_id)
                         await self._scheduler.release(lease, status=RunStatus.FAILED)
                         continue
                     asyncio.create_task(
@@ -189,6 +184,10 @@ class Worker:
             for msg in inbox_msgs:
                 await self._inbox.ack(agent.id, msg.id)
 
+            # Clean up run-scoped history for transient sub-agents
+            session_ids = {msg.correlation_id or run_id for msg in inbox_msgs} or {run_id}
+            await self._maybe_clear_run_history(agent, run_id, session_ids=session_ids)
+
             final_seq = await self._event_log.last_seq(run_id)
             await self._event_log.append(
                 run_id,
@@ -208,36 +207,65 @@ class Worker:
             await self._scheduler.release(lease, status=RunStatus.CANCELLED)
 
         except Exception as exc:
-            from ravi.kernel.core.errors import MiddlewareTermination, BudgetExhaustedError
+            from ravi.kernel.core.errors import (
+                AgentCrashError,
+                BudgetExhaustedError,
+                MiddlewareTermination,
+            )
             is_guardrail = isinstance(exc, MiddlewareTermination)
-            is_max_iter = isinstance(exc, BudgetExhaustedError)
-            logger.exception("Agent %s run %s failed", agent.id, run_id)
-            if is_guardrail or is_max_iter:
+            is_budget = isinstance(exc, BudgetExhaustedError)
+            is_crash = not is_guardrail and not is_budget
+
+            if is_crash:
+                logger.exception("Agent %s run %s crashed", agent.id, run_id)
+            else:
+                logger.warning("Agent %s run %s stopped: %s", agent.id, run_id, exc)
+
+            if is_guardrail or is_budget:
                 for msg in inbox_msgs:
                     await self._inbox.ack(agent.id, msg.id)
             else:
                 for msg in inbox_msgs:
                     await self._inbox.nack(agent.id, msg.id, error=str(exc))
+
             final_seq = await self._event_log.last_seq(run_id)
-            payload = {}
             if is_guardrail:
-                payload["error"] = f"Request blocked: {exc.message}"
-                payload["status"] = "guardrail_tripped"
-            elif is_max_iter:
-                payload["error"] = str(exc)
-                payload["status"] = "max_iterations"
+                payload = {"error": f"Request blocked: {exc.message}", "status": "guardrail_tripped"}  # type: ignore[union-attr]
+            elif is_budget:
+                payload = {"error": str(exc), "status": "budget_exhausted"}
             else:
-                payload["error"] = str(exc)
+                crash = AgentCrashError(str(exc), run_id=run_id, agent_id=agent.id)
+                payload = {"error": str(crash), "status": "agent_crashed"}
+
             await self._event_log.append(
                 run_id,
-                RunLogEntry(
-                    run_id=run_id,
-                    seq=final_seq + 1,
-                    kind="run.failed",
-                    payload=payload,
-                ),
+                RunLogEntry(run_id=run_id, seq=final_seq + 1, kind="run.failed", payload=payload),
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.FAILED)
         finally:
             self._tokens.pop(run_id, None)
+
+    async def _maybe_clear_run_history(
+        self, agent: object, run_id: str, *, session_ids: set[str]
+    ) -> None:
+        """Call clear_run for each session touched in this run if retention is RUN."""
+        from ravi.kernel.agent.supervision import HistoryRetention
+
+        context_cfg = getattr(agent, "_context", None)
+        if context_cfg is None:
+            return
+        retention = getattr(context_cfg, "retention", HistoryRetention.PERMANENT)
+        if retention != HistoryRetention.RUN:
+            return
+
+        history = getattr(context_cfg, "history", None)
+        if history is None:
+            return
+
+        agent_id = getattr(agent, "id", None)
+        for session_id in session_ids:
+            try:
+                await history.clear_run(agent_id, session_id=session_id, run_id=run_id)
+            except Exception:
+                logger.warning("clear_run failed for agent %s run %s session %s", agent_id, run_id, session_id)

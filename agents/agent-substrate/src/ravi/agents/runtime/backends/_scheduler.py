@@ -83,8 +83,14 @@ class InMemoryScheduler:
             self._pending.discard(run_id)
             expires_at = datetime.now(tz=timezone.utc) + timedelta(seconds=30)
             attempt = self._retry_counts.get(run_id, 0)
+            agent_id = self._agents.get(run_id)
+            if agent_id is None:
+                # Run was registered without a known agent — skip it
+                self._status[run_id] = RunStatus.FAILED
+                continue
             lease = Lease(
                 run_id=run_id,
+                agent_id=agent_id,
                 worker_id=worker_id,
                 expires_at=expires_at,
                 attempt=attempt,
@@ -131,7 +137,7 @@ class InMemoryScheduler:
         for run_id in list(self._pending):
             yield run_id
 
-    def get_status(self, run_id: RunId) -> RunStatus | None:
+    async def get_status(self, run_id: RunId) -> RunStatus | None:
         return self._status.get(run_id)
 
     async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:

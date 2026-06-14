@@ -96,7 +96,7 @@ async def test_runtime_agent_registration():
             target=agent.id,
             payload=DataPayload(data={"hello": "world"}),
         )
-        run_id = await rt.submit(agent.id, msg)
+        await rt.submit(agent.id, msg)
         # Give the worker a tick to process
         import asyncio
         await asyncio.sleep(0.2)

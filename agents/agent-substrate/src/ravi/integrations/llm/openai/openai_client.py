@@ -195,24 +195,6 @@ class OpenAIClient(LLMClient):
                 self._encoding = tiktoken.get_encoding("cl100k_base")
         return self._encoding
 
-    def _messages_to_openai_format(self, messages: list[ChatMessage]) -> list[dict]:
-        """Convert framework messages to OpenAI API format.
-
-        .. deprecated:: Use ``_serialize_messages`` instead.
-        """
-        return [msg.model_dump(mode="json") for msg in messages]
-
-    def _tools_to_openai_format(
-        self, tools: Optional[list[dict[str, Any]]]
-    ) -> Optional[list[dict[str, Any]]]:
-        """Convert tools to OpenAI function calling format.
-
-        .. deprecated:: Use ``_serialize_tools`` instead.
-        """
-        if not tools:
-            return None
-        return tools
-
     # ------------------------------------------------------------------
     # Private helpers — delegates to ``core.messages.encoders.openai``
     # ------------------------------------------------------------------

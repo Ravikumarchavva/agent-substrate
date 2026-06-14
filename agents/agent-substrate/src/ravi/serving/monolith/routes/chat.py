@@ -354,8 +354,7 @@ def _build_tool_meta_map(tools: list) -> dict:
             else "green"
         )
         entry: dict = {"risk": str(risk), "color": color}
-        # MCP App UI metadata (optional, legacy tools only)
-        ui = getattr(tool, "ui", None) or getattr(tool, "_ui", None)
+        ui = getattr(tool, "ui", None)
         if ui:
             entry["ui"] = ui
         meta_map[name] = entry

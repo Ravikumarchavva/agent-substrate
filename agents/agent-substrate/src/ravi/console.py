@@ -114,6 +114,23 @@ _THEME = Theme(
 )
 
 
+try:
+    from prompt_toolkit.completion import Completer, Completion
+
+    class _ConsoleCompleter(Completer):
+        def __init__(self, commands: list[str]) -> None:
+            self.commands = commands
+
+        def get_completions(self, document: Any, complete_event: Any) -> Any:
+            text = document.text_before_cursor
+            if text.startswith("/") and " " not in text:
+                for cmd in self.commands:
+                    if cmd.lower().startswith(text.lower()):
+                        yield Completion(cmd, start_position=-len(text))
+except ImportError:
+    _ConsoleCompleter = None  # type: ignore[assignment,misc]
+
+
 class Console:
     """Rich interactive console for agent execution via the durable Runtime.
 
@@ -495,14 +512,14 @@ class Console:
             greeting = (
                 f"[agent]{name}[/agent] ready · "
                 f"[bold]{tool_count} tools[/bold] · {skill_summary}\n"
-                f"  [dim]/tools · /skills · /reset · /help · exit[/dim]"
+                f"  [dim]/tools · /skills · /reset · /help · /q[/dim]"
             )
 
         self.console.print(Panel(greeting, border_style="cyan", padding=(0, 1)))
 
         while True:
             try:
-                user_input = self._prompt()
+                user_input = await self._prompt()
             except (KeyboardInterrupt, EOFError):
                 self.console.print("\n👋 Bye!", style="info")
                 break
@@ -510,7 +527,7 @@ class Console:
             stripped = user_input.strip()
             if not stripped:
                 continue
-            if stripped.lower() in ("exit", "quit", "/exit", "/quit"):
+            if stripped.lower() == "/q":
                 self.console.print("👋 Bye!", style="info")
                 break
             if stripped.lower() == "/reset":
@@ -557,11 +574,39 @@ class Console:
     # Internal rendering helpers
     # ------------------------------------------------------------------
 
-    def _prompt(self) -> str:
+    async def _prompt(self) -> str:
         try:
-            return self.console.input("\n[user]👤 You → [/user]")
-        except UnsupportedOperation:
-            return input("\nYou → ")
+            if _ConsoleCompleter is None:
+                raise ImportError("prompt_toolkit is not available")
+
+            from prompt_toolkit import PromptSession
+            from prompt_toolkit.formatted_text import HTML
+            from prompt_toolkit.styles import Style
+
+            if not hasattr(self, "_prompt_session"):
+                commands = ["/tools", "/skills", "/reset", "/help", "/q"]
+                completer = _ConsoleCompleter(commands)
+                style = Style.from_dict({
+                    "prompt": "fg:#4e9a06 bold",
+                    "completion-menu.completion": "bg:#2c2c2c fg:#cccccc",
+                    "completion-menu.completion.current": "bg:#00a0a0 fg:#ffffff bold",
+                    "scrollbar.background": "bg:#1e1e1e",
+                    "scrollbar.button": "bg:#00a0a0",
+                })
+                self._prompt_session = PromptSession(
+                    completer=completer,
+                    style=style,
+                    complete_while_typing=True,
+                )
+
+            self.console.print()  # print the leading newline
+            prompt_html = HTML("<prompt>👤 You → </prompt>")
+            return await self._prompt_session.prompt_async(prompt_html)
+        except Exception:
+            try:
+                return self.console.input("\n[user]👤 You → [/user]")
+            except UnsupportedOperation:
+                return input("\nYou → ")
 
     def _print_user(self, text: str) -> None:
         self.console.print(f"\n[user]👤 You →[/user] {text}")
@@ -675,7 +720,7 @@ class Console:
             "  /skills — List discovered skills and active ones\n"
             "  /reset  — Clear agent memory\n"
             "  /help   — Show this message\n"
-            "  exit    — Quit the session"
+            "  /q      — Quit the session"
         )
         self.console.print(Panel(help_text, border_style="dim", padding=(0, 1)))
 

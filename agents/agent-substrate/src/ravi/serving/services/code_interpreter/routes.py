@@ -20,7 +20,6 @@ from .schemas import (
     HealthResponse,
     InstallRequest,
     OutputItem,
-    OutputType,
     SessionDetail,
     SessionListResponse,
 )
@@ -242,34 +241,14 @@ async def readiness(request: Request):
 
 
 def _build_outputs(result: dict) -> list[OutputItem]:
-    """Convert guest-agent result dict to structured OutputItem list.
-
-    Supports both v3 structured ``outputs[]`` and v2 flat-field fallback.
-    """
-    outputs: list[OutputItem] = []
-
-    # v3 agent returns structured outputs
-    if "outputs" in result and result["outputs"]:
-        for o in result["outputs"]:
-            outputs.append(
-                OutputItem(
-                    type=o.get("type", "text"),
-                    content=o.get("content", ""),
-                    name=o.get("name"),
-                    format=o.get("format"),
-                    encoding=o.get("encoding", "utf-8"),
-                )
-            )
-        return outputs
-
-    # v2 fallback — flat output/stderr/error fields
-    if result.get("output"):
-        outputs.append(OutputItem(type=OutputType.text, content=result["output"]))
-    if result.get("stderr"):
-        outputs.append(
-            OutputItem(type=OutputType.stderr, content=result["stderr"], name="stderr")
+    """Convert guest-agent v3 structured outputs[] to OutputItem list."""
+    return [
+        OutputItem(
+            type=o.get("type", "text"),
+            content=o.get("content", ""),
+            name=o.get("name"),
+            format=o.get("format"),
+            encoding=o.get("encoding", "utf-8"),
         )
-    if result.get("error") and not result.get("success"):
-        outputs.append(OutputItem(type=OutputType.error, content=result["error"]))
-
-    return outputs
+        for o in result.get("outputs", [])
+    ]

@@ -475,8 +475,11 @@ class TestRunRetryPolicy:
 
 class TestLease:
     def test_round_trip_json(self) -> None:
+        from ravi.kernel.core.identity import AgentId
+
         lease = Lease(
             run_id=new_run_id(),
+            agent_id=AgentId(type="agent", key="test"),
             worker_id="worker-1",
             expires_at=datetime(2026, 12, 31, tzinfo=timezone.utc),
         )

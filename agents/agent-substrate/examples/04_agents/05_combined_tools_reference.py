@@ -29,7 +29,7 @@ async def main():
     mcp_client = MCPClient()
 
     try:
-        await mcp_client.connect(
+        await mcp_client.connect_stdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
         )

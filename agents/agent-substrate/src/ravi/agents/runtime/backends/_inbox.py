@@ -26,13 +26,9 @@ class InMemoryInbox:
     is stored — the Scheduler uses this hook to enqueue a wakeup for the agent.
     """
 
-    def __init__(
-        self,
-        max_retries: int = 3,
-        on_deliver: Callable[[AgentId], None] | None = None,
-    ) -> None:
+    def __init__(self, max_retries: int = 3) -> None:
         self._max_retries = max_retries
-        self._on_deliver = on_deliver
+        self._on_deliver: Callable[[AgentId], None] | None = None
 
         # msg_id → Message, per agent
         self._messages: dict[AgentId, dict[str, Message]] = defaultdict(dict)
@@ -44,6 +40,10 @@ class InMemoryInbox:
         self._retries: dict[tuple[AgentId, str], int] = defaultdict(int)
         # dead letters
         self._dead: dict[AgentId, list[DeadLetterEntry]] = defaultdict(list)
+
+    def set_deliver_hook(self, cb: Callable[[AgentId], None] | None) -> None:
+        """Wire the Runtime's wakeup callback, invoked after each new delivery."""
+        self._on_deliver = cb
 
     def _sender_key(self, msg: Message) -> str:
         return str(msg.sender) if msg.sender else "__anon__"

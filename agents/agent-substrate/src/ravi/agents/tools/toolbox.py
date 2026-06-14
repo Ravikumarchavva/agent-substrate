@@ -20,14 +20,10 @@ class Toolbox:
     """In-memory implementation of ToolRegistry (kernel protocol).
 
     Handles ``Tool``, ``HostedTool``, and ``ProviderDefinedTool`` instances.
-    ``schemas()`` produces the correct wire representation for each:
+    ``schemas()`` produces the wire representation for each:
 
     - Local tools → ``{"name", "description", "parameters"}`` function schema.
-    - Hosted / provider-defined tools → first entry of ``provider_specs`` dict
-      (legacy path for callers that haven't migrated to ``spec_of()`` yet).
-      TODO: migrate all encoders to call ``spec_of(tool, provider=...)`` from
-      kernel/tools.py instead of reading schemas() — this removes the ambiguity
-      of "which provider" from the toolbox layer.
+    - Hosted / provider-defined tools → first entry of ``provider_specs`` dict.
 
     Per-tool ``defer_loading`` is respected: set ``tool.defer_loading = True``
     on any local tool to withhold its full schema until the LLM requests it.
@@ -52,12 +48,7 @@ class Toolbox:
         return [t for t in self._tools.values() if getattr(t, "risk", None) == risk]
 
     def schemas(self) -> list[dict[str, object]]:
-        """Return the full tool list for the LLM.
-
-        Hosted/provider-defined tools emit their first ``provider_specs`` entry
-        verbatim; local tools emit a function schema.  Per-tool
-        ``defer_loading=True`` is honoured.
-        """
+        """Return the full tool list for the LLM."""
         result: list[dict[str, object]] = []
         for t in self._tools.values():
             if is_hosted_tool(t) or is_provider_defined_tool(t):

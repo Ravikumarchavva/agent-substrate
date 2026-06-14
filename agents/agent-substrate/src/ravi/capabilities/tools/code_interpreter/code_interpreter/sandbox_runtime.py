@@ -15,7 +15,7 @@ import urllib.parse
 import uuid
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -241,20 +241,16 @@ async def execute_command(request: ExecuteRequest) -> ExecuteResponse:
 
 
 @app.post("/upload")
-async def upload_file(request: Request):
+async def upload_file(body: UploadRequest):
     try:
-        filename, content = await _read_legacy_upload(request)
-        if not filename:
-            return JSONResponse(
-                status_code=400, content={"message": "Missing filename"}
-            )
-        target_path = _resolve_workspace_path(filename)
+        target_path = _resolve_workspace_path(body.filename)
         os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        content = base64.b64decode(body.content_base64)
         with open(target_path, "wb") as handle:
             handle.write(content)
         return JSONResponse(
             status_code=200,
-            content={"message": f"File '{filename}' uploaded"},
+            content={"message": f"File '{body.filename}' uploaded"},
         )
     except ValueError:
         return JSONResponse(status_code=403, content={"message": "Access denied"})
@@ -268,7 +264,7 @@ async def upload_file(request: Request):
 async def download_file(encoded_file_path: str):
     decoded_path = urllib.parse.unquote(encoded_file_path)
     try:
-        full_path = _resolve_legacy_path(decoded_path)
+        full_path = _resolve_workspace_path(decoded_path)
     except ValueError:
         return JSONResponse(status_code=403, content={"message": "Access denied"})
 
@@ -285,7 +281,7 @@ async def download_file(encoded_file_path: str):
 async def list_files(encoded_file_path: str):
     decoded_path = urllib.parse.unquote(encoded_file_path)
     try:
-        full_path = _resolve_legacy_path(decoded_path)
+        full_path = _resolve_workspace_path(decoded_path)
     except ValueError:
         return JSONResponse(status_code=403, content={"message": "Access denied"})
 
@@ -303,7 +299,7 @@ async def list_files(encoded_file_path: str):
 async def exists(encoded_file_path: str):
     decoded_path = urllib.parse.unquote(encoded_file_path)
     try:
-        full_path = _resolve_legacy_path(decoded_path)
+        full_path = _resolve_workspace_path(decoded_path)
     except ValueError:
         return JSONResponse(status_code=403, content={"message": "Access denied"})
 
@@ -456,67 +452,6 @@ def _resolve_workspace_path(path: str) -> str:
     return real_path
 
 
-def _resolve_legacy_path(path: str) -> str:
-    if path.startswith("workspace/") or path.startswith("/app/workspace/"):
-        return _resolve_workspace_path(path)
-
-    clean_path = path.lstrip("/")
-    full_path = os.path.realpath(os.path.join(BASE_DIR, clean_path))
-    real_base = os.path.realpath(BASE_DIR)
-    if os.path.commonpath([real_base, full_path]) != real_base:
-        raise ValueError("Path must be inside /app.")
-    return full_path
-
-
-async def _read_legacy_upload(request: Request) -> tuple[str, bytes]:
-    body = await request.body()
-    content_type = request.headers.get("content-type", "")
-    if content_type.startswith("multipart/form-data"):
-        return _parse_single_file_multipart(content_type, body)
-
-    filename = request.headers.get("x-filename") or request.query_params.get("filename")
-    if not filename:
-        raise ValueError("Missing filename.")
-    return filename, body
-
-
-def _parse_single_file_multipart(content_type: str, body: bytes) -> tuple[str, bytes]:
-    boundary_marker = "boundary="
-    if boundary_marker not in content_type:
-        raise ValueError("Missing multipart boundary.")
-    boundary = (
-        content_type.split(boundary_marker, 1)[1].split(";", 1)[0].strip().strip('"')
-    )
-    delimiter = f"--{boundary}".encode("utf-8")
-
-    for raw_part in body.split(delimiter):
-        part = raw_part.strip(b"\r\n")
-        if not part or part == b"--":
-            continue
-        headers, separator, content = part.partition(b"\r\n\r\n")
-        if not separator:
-            continue
-        filename = _multipart_filename(headers.decode("utf-8", errors="replace"))
-        if filename is None:
-            continue
-        if content.endswith(b"\r\n"):
-            content = content[:-2]
-        if content.endswith(b"--"):
-            content = content[:-2]
-        return filename, content
-
-    raise ValueError("No file part found in multipart upload.")
-
-
-def _multipart_filename(headers: str) -> str | None:
-    for header in headers.splitlines():
-        if not header.lower().startswith("content-disposition:"):
-            continue
-        for item in header.split(";"):
-            key, separator, value = item.strip().partition("=")
-            if separator and key == "filename":
-                return value.strip().strip('"')
-    return None
 
 
 def _workspace_relative(path: str) -> str:

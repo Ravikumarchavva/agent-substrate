@@ -1,1 +1,0 @@
-"""Economic extension implementation tests."""

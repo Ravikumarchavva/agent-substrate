@@ -1,35 +1,21 @@
-"""Agent service – creates agents backed by a shared HistoryProvider.
+"""Agent service — builds and registers ReActAgents, returns stream adapters.
 
-Responsibilities:
-  1. Ensure the session is populated in the shared ``HistoryProvider``
-     (cache hit; on a miss, seed it from the Postgres cold store).
-  2. Create a configured ``ReActAgent`` per thread, bound to its session_id.
-  3. Persist new messages to the database (cold store) during streaming.
+Each chat thread maps to a ``correlation_id`` (the session/thread ID).  The
+agent is registered once with the ``Runtime``; each request submits a
+new inbox Message with that correlation_id.  The EventLog records every step.
 
-Stateless agent design
-──────────────────────
-Agents hold **no** state between requests.  Every request:
-  1. Reuses the shared, multi-session ``HistoryProvider`` from ``app.state``;
-     the agent addresses it by ``session_id`` (the thread id).
-  2. On a cache miss, seeds the session from the Postgres cold store.
-  3. Passes a ``SlidingWindowContext(max_messages=N)`` to the agent — the LLM
-     only sees the last N messages, while the full history stays in the
-     provider.
-  4. Runs the agent — each ``save_messages()`` writes through to the provider.
-
-The provider is the source of truth for active sessions.  On the first request
-for a thread (cache miss), the Postgres cold store is read to seed it.
+The returned ``RunStreamAdapter`` presents the ``run_stream()`` interface
+expected by ``AgentStreamSession``, forwarding log entries as stream events.
 """
 
 from __future__ import annotations
-from ravi.logger import setup_logging
 
 import uuid
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ravi.agents.core import ReActAgent
+from ravi.agents.core import ReActAgent, OrchestratorAgent, SubAgentConfig
 from ravi.agents.context import (
     ContextConfig,
     HistoryProvider,
@@ -37,31 +23,38 @@ from ravi.agents.context import (
     SlidingWindowCompaction,
 )
 from ravi.capabilities.tools.human_input import ToolApprovalHandler
-from ravi.kernel import Priority
 from ravi.kernel.llm import LLMClient as BaseModelClient
 from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, Tool
-from ravi.serving.shared.execution import create_assistant_agent, load_session_memory
+from ravi.serving.stream.run_adapter import RunStreamAdapter
+from ravi.serving.shared.execution import load_session_memory
 from ravi.config import settings
 
 from ravi.serving.monolith.services import (
     create_step,
     load_messages_for_memory,
 )
+from ravi.logger import setup_logging
 
 logger = setup_logging()
+
+
+def _make_context(max_messages: int = 20) -> ContextConfig:
+    return ContextConfig(
+        InMemoryHistoryProvider(),
+        SlidingWindowCompaction(max_messages=max_messages),
+    )
 
 
 def _build_orchestrator(
     model_client: BaseModelClient,
     runtime: Any,
-    memory: HistoryProvider,
     model_context_window: int,
     tool_timeout: float | None,
     session_id: str,
     tools: list[Tool] | None = None,
-) -> Any:
+) -> RunStreamAdapter:
     """Build an OrchestratorAgent with researcher + calculator + clock specialists."""
-    from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+    from ravi.agents.tools.toolbox import Toolbox
     from ravi.capabilities.tools import (
         CalculatorTool,
         CurrentTimeTool,
@@ -69,60 +62,60 @@ def _build_orchestrator(
         ReadUrlTool,
     )
 
-    def _ctx() -> ContextConfig:
-        return ContextConfig(
-            InMemoryHistoryProvider(),
-            SlidingWindowCompaction(max_messages=20),
-        )
+    def _registry(*tool_instances) -> Toolbox:
+        tb = Toolbox()
+        for t in tool_instances:
+            tb.register(t)
+        return tb
 
     researcher = ReActAgent(
         "researcher",
-        runtime,
         model=model_client,
-        description="Searches the web and reads URLs for current information.",
+        tools=_registry(WebSearchTool(), ReadUrlTool()),
+        context=_make_context(model_context_window),
         system_instructions="You are a research specialist. Use web_search and read_url to find accurate, up-to-date facts. Return a concise answer.",
-        tools=[WebSearchTool(), ReadUrlTool()],
-        context=_ctx(),
         max_iterations=5,
-        tool_timeout=tool_timeout,
     )
     calculator = ReActAgent(
         "calculator",
-        runtime,
         model=model_client,
-        description="Performs precise numerical calculations.",
+        tools=_registry(CalculatorTool()),
+        context=_make_context(model_context_window),
         system_instructions="You are a calculation specialist. Use the calculator tool for all arithmetic. Return the result with a brief explanation.",
-        tools=[CalculatorTool()],
-        context=_ctx(),
         max_iterations=3,
-        tool_timeout=tool_timeout,
     )
     clock = ReActAgent(
         "clock",
-        runtime,
         model=model_client,
-        description="Reports the current date and time.",
+        tools=_registry(CurrentTimeTool()),
+        context=_make_context(model_context_window),
         system_instructions="You are a time specialist. Use current_time to get the exact date and time. Return it in a clear, human-readable format.",
-        tools=[CurrentTimeTool()],
-        context=_ctx(),
         max_iterations=2,
-        tool_timeout=tool_timeout,
     )
 
-    return OrchestratorAgent(
+    orchestrator = OrchestratorAgent(
         "coordinator",
-        runtime,
         model=model_client,
-        description="Routes user requests to the right specialist and synthesises results.",
         sub_agents=[
-            SubAgentConfig(researcher, priority=Priority.HIGH),
-            SubAgentConfig(calculator, priority=Priority.NORMAL),
-            SubAgentConfig(clock, priority=Priority.NORMAL),
+            SubAgentConfig(researcher, description="Searches the web and reads URLs for current information.", ask_timeout=60.0),
+            SubAgentConfig(calculator, description="Performs precise numerical calculations.", ask_timeout=30.0),
+            SubAgentConfig(clock, description="Reports the current date and time.", ask_timeout=10.0),
         ],
-        extra_tools=tools,
         max_iterations=15,
-        tool_timeout=tool_timeout,
-        session_id=session_id,
+        context=_make_context(model_context_window),
+    )
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+    for agent in [researcher, calculator, clock, orchestrator]:
+        loop.create_task(runtime.register(agent))
+
+    all_tools = list(tools or [])
+    return RunStreamAdapter(
+        agent_id=orchestrator.id,
+        runtime=runtime,
+        tools=all_tools,
+        correlation_id=session_id,
     )
 
 
@@ -141,35 +134,23 @@ async def load_agent_for_thread(
     tools_requiring_approval: Optional[List[str]] = None,
     tool_timeout: Optional[float] = None,
     max_input_tokens: int = 16_000,
-    runtime: Any,
+    runtime: Any = None,
     enable_capability_search: bool = True,
-) -> ReActAgent:
-    """Load a per-session agent backed by the shared ``HistoryProvider``.
+) -> RunStreamAdapter:
+    """Build and register a ReActAgent for this thread, return a stream adapter.
 
-    Stateless design — a fresh ``ReActAgent`` is created on every request.
-    The agent shares the multi-session ``HistoryProvider`` from
-    ``app.state.history`` and addresses it by ``session_id`` (the thread id).
-    Every ``save_messages`` during the run writes through to that provider.
-
-    Windowing is delegated to ``SlidingWindowContext`` — the provider stores
-    the full history while the LLM only sees the last
-    ``model_context_window`` messages per turn.
-
-    Args:
-        db:                   DB session (used only for the Postgres cold path).
-        thread_id:            Thread / session identifier.
-        history:              Shared ``HistoryProvider`` from ``app.state``.
-                              When ``None``, falls back to an in-process
-                              ``InMemoryHistoryProvider`` seeded from Postgres.
-        model_context_window: Max non-system messages passed to the LLM per
-                              turn via ``SlidingWindowContext``.
-        …                     All other kwargs forwarded to the shared agent factory.
-
-    Returns:
-        A configured ``ReActAgent`` ready for ``run_stream()`` (server compat)
-        or actor-model dispatch via ``on_message()``.
+    The agent is registered with the shared Runtime and associated with
+    the thread's session_id via the Message.correlation_id on submit.
     """
+    if runtime is None:
+        raise ValueError(
+            "load_agent_for_thread() requires a runtime. "
+            "Pass app.state.runtime from the server lifespan."
+        )
+
     session_id = str(thread_id)
+
+    # Seed history for this session from Postgres cold store
     memory = await load_session_memory(
         session_id=session_id,
         system_instructions=system_instructions,
@@ -178,40 +159,40 @@ async def load_agent_for_thread(
         cold_store_name="Postgres",
         load_persisted_steps=lambda: load_messages_for_memory(db, thread_id),
     )
-    if runtime is None:
-        raise ValueError(
-            "load_agent_for_thread() requires a runtime. "
-            "Pass app.state.runtime from the server lifespan."
-        )
+
     if settings.AGENT_MODE.lower() == "orchestrator":
-        agent = _build_orchestrator(
+        return _build_orchestrator(
             model_client=model_client,
             runtime=runtime,
-            memory=memory,
             model_context_window=model_context_window,
             tool_timeout=tool_timeout,
             session_id=session_id,
             tools=tools,
         )
-    else:
-        agent = create_assistant_agent(
-            runtime=runtime,
-            model_client=model_client,
-            tools=tools,
-            system_instructions=system_instructions,
-            memory=memory,
-            model_context=SlidingWindowCompaction(max_messages=model_context_window),
-            max_iterations=max_iterations,
-            tool_timeout=tool_timeout,
-            # legacy kwargs forwarded and dropped by factory:
-            verbose=verbose,
-            tool_approval_handler=tool_approval_handler,
-            tools_requiring_approval=tools_requiring_approval,
-            max_input_tokens=max_input_tokens,
-            agent_key=session_id,
-            enable_capability_search=enable_capability_search,
-        )
-    return agent
+
+    # Build the tool registry
+    from ravi.agents.tools.toolbox import Toolbox
+    toolbox = Toolbox()
+    for t in tools:
+        toolbox.register(t)
+
+    agent = ReActAgent(
+        f"assistant-{session_id[:8]}",
+        model=model_client,
+        tools=toolbox,
+        context=ContextConfig(memory, SlidingWindowCompaction(max_messages=model_context_window)),
+        system_instructions=system_instructions,
+        max_iterations=max_iterations,
+    )
+
+    await runtime.register(agent)
+
+    return RunStreamAdapter(
+        agent_id=agent.id,
+        runtime=runtime,
+        tools=tools,
+        correlation_id=session_id,
+    )
 
 
 async def persist_user_message(
@@ -242,14 +223,7 @@ async def persist_assistant_message(
     tool_meta_map: Optional[Dict[str, Dict]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> uuid.UUID:
-    """Save an assistant message step and return its ID.
-
-    Args:
-        tool_meta_map: Optional mapping of tool_name → _meta dict.
-            When provided, each tool_call is enriched with _meta so the
-            frontend can restore MCP App iframes when loading history.
-    """
-    # Serialize tool calls for storage
+    """Save an assistant message step and return its ID."""
     generation: Dict[str, Any] = {
         "finish_reason": getattr(message, "finish_reason", "stop"),
     }
@@ -276,27 +250,21 @@ async def persist_assistant_message(
         for tc in tool_calls:
             tc_name = getattr(tc, "name", getattr(tc, "tool_name", "unknown"))
             tc_data = tc.model_dump(mode="json") if hasattr(tc, "model_dump") else {}
-            # Enrich with _meta UI info for MCP App restoration
             if tool_meta_map and tc_name in tool_meta_map:
                 meta = tool_meta_map[tc_name]
                 ui_info = meta.get("ui", {})
                 resource_uri = ui_info.get("resourceUri", "")
                 if resource_uri:
                     from ravi.serving.monolith.routes.mcp_apps import resolve_ui_uri
-
                     http_url = resolve_ui_uri(resource_uri) or resource_uri
                     tc_data["_meta"] = {
-                        "ui": {
-                            "resourceUri": resource_uri,
-                            "httpUrl": http_url,
-                        }
+                        "ui": {"resourceUri": resource_uri, "httpUrl": http_url}
                     }
             serialized_tcs.append(tc_data)
         generation["tool_calls"] = serialized_tcs
 
     output_text = None
     if hasattr(message, "content") and message.content:
-        # Extract text from multimodal content list or blocks
         texts = []
         for c in message.content:
             if isinstance(c, TextBlock):

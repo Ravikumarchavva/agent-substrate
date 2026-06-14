@@ -6,7 +6,6 @@ from .message import (
     Payload,
     register_payload_type,
     Message,
-    MessageHandler,
     Subscription,
 )
 from .events import Event, EventHandler, EventPublisher, EventSubscriber
@@ -27,7 +26,6 @@ __all__ = [
     "Payload",
     "register_payload_type",
     "Message",
-    "MessageHandler",
     "Subscription",
     "Event",
     "EventHandler",

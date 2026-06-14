@@ -1,5 +1,5 @@
 @startuml kernel_arch_highlevel
-title Ravi Engine - Kernel Contracts (L0)\nAll items here are Protocols or dataclasses — zero I/O, zero concrete deps.\nImplementations live in L1 (agents/) and L2 (capabilities/).
+title Ravi Engine — Kernel (L0) High-Level Architecture\nJune 2026 — seven subdirs; zero I/O; no concrete deps.\nImport flow is strictly downward: kernel → agents → capabilities → fabric.
 
 top to bottom direction
 skinparam dpi 200
@@ -20,7 +20,7 @@ skinparam PackageFontSize 11
 skinparam ClassBackgroundColor #ffffff
 skinparam ClassBorderColor #4b5563
 skinparam ClassFontColor #111827
-skinparam ClassFontSize 12
+skinparam ClassFontSize 11
 
 skinparam InterfaceBackgroundColor #eff6ff
 skinparam InterfaceBorderColor #3b82f6
@@ -35,64 +35,147 @@ skinparam NoteBackgroundColor #fef3c7
 skinparam NoteFontColor #78350f
 skinparam NoteFontSize 11
 
-' ---------------------------------------------------------------
-' TOP: Capability protocols — what the agent reaches out to
-' Concrete impls live in L2 (capabilities/)
-' ---------------------------------------------------------------
-package "Capability Protocols  (L0 kernel)\nImplemented by: OpenAIChatClient, PgVectorStore, RedisHistoryProvider, ToolInvoker  [L2]" as PKG_CAP {
-  interface LLMClient
-  interface HistoryProvider
-  interface VectorStore
-  interface Tool
-}
+' ══════════════════════════════════════════════════════════════════════
+' L0 KERNEL — all subpackages
+' ══════════════════════════════════════════════════════════════════════
+package "kernel/  (L0 — FROZEN, zero I/O)\nAll items are Protocols, frozen dataclasses, or pure value types." as PKG_KERNEL #f0fdf4 {
 
-' ---------------------------------------------------------------
-' MIDDLE: Per-run execution contracts
-' Concrete impls live in L1 (agents/)
-' ---------------------------------------------------------------
-package "Execution Contracts  (L0 kernel)\nImplemented by: ReActAgent, MiddlewarePipeline  [L1];  RunContext is a value object" as PKG_EXEC {
-  class RunContext {
-    run_id : str
-    trace_id : str
-    deadline : datetime | None
-    cancel_token : CancellationToken
+  package "core/\nidentity · content · errors · usage" as PKG_CORE {
+    class AgentId
+    class TopicId
+    class ContentBlock
+    class ChatMessage
+    class Usage
   }
-  interface Middleware
-  interface Agent
 
-  RunContext ..> Agent : "threaded into every call"
-  Middleware ..> Agent : "wraps"
-}
-
-' ---------------------------------------------------------------
-' BOTTOM: Runtime dispatch contract
-' Concrete impls live in L1 (agents/runtime/)
-' ---------------------------------------------------------------
-package "Runtime Dispatch Contract  (L0  kernel/protocol.py)\nImplemented by: LocalRuntime  [L1];  gRPC / NATS / Restate also plug in here" as PKG_RT {
-  interface AgentRuntime {
-    send_message(payload, recipient)
-    publish_message(payload, topic)
-    register_agent(agent)
-    start() / stop()
+  package "messaging/\nmessage · events · stream" as PKG_MESSAGING {
+    class Message
+    class Subscription
+    class Event
+    class AgentProgress
   }
+
+  package "llm/\nllm" as PKG_LLM {
+    interface LLMClient
+    interface EmbeddingClient
+    class LLMResponse
+    class GenerationOptions
+  }
+
+  package "storage/\nblob · history · vector · graph · memory" as PKG_STORAGE {
+    interface BlobStore
+    interface HistoryProvider
+    interface VectorStore
+    interface GraphStore
+  }
+
+  package "tools/\ntools · skills · approval · chain" as PKG_TOOLS {
+    interface Tool
+    interface HostedTool
+    interface ProviderDefinedTool
+    interface ApprovalHandler
+    class ChainPolicy
+    class InvocationResult
+  }
+
+  package "agent/\nsupervision · context · middleware · runtime_context" as PKG_AGENT {
+    class SpawnBudget
+    class ExecutionBudget
+    class Supervision
+    class RunContext
+    interface Middleware
+  }
+
+  package "runtime/\nids · log_entry · effects · inbox · scheduler · supervisor · …" as PKG_RUNTIME {
+    interface EventLog
+    interface Journal
+    interface Inbox
+    interface Scheduler
+    interface Supervisor
+    interface DurableAgent
+    interface SignalBus
+    interface FollowGraph
+  }
+
+  ' Internal dependency flow (hidden arrows for layout)
+  PKG_CORE     -[hidden]-> PKG_MESSAGING
+  PKG_MESSAGING -[hidden]-> PKG_LLM
+  PKG_LLM      -[hidden]-> PKG_STORAGE
+  PKG_STORAGE  -[hidden]-> PKG_TOOLS
+  PKG_TOOLS    -[hidden]-> PKG_AGENT
+  PKG_AGENT    -[hidden]-> PKG_RUNTIME
 }
 
-' Force vertical stacking
-PKG_CAP  -[hidden]-> PKG_EXEC
-PKG_EXEC -[hidden]-> PKG_RT
+' ══════════════════════════════════════════════════════════════════════
+' L1 AGENTS — implementations of kernel contracts
+' ══════════════════════════════════════════════════════════════════════
+package "agents/  (L1)\nCore intelligence — agent types, middleware, guardrails, context.\nImplements kernel Protocols; may not import capabilities or fabric." as PKG_L1 #eff6ff {
+  class ReActAgent
+  class OrchestratorAgent
+  class LocalRuntime
+  class SpawnTracker
+  class ExecutionTracker
+  class ToolInvoker
+  class InMemoryHistoryProvider
+}
 
-' Runtime creates / manages the per-run layer above it
-AgentRuntime -up-> RunContext  : "creates per-run"
-AgentRuntime -up-> Middleware  : "executes pipeline"
-AgentRuntime -up-> Agent       : "dispatches message"
+note right of PKG_L1
+  SpawnTracker  = mutable headcount enforcer.
+                  Reads SpawnBudget.max_agents (kernel).
+  ExecutionTracker = mutable token/cost/turn tracker.
+                     Reads ExecutionBudget limits (kernel).
+  ToolInvoker   = single enforcement core for ALL tool
+                  invocations: risk gate, HITL approval,
+                  ctx/cancellation, result offload to BlobStore.
+  LocalRuntime  = Stage 0 asyncio in-process runtime.
+                  Stage 1: Postgres scheduler + Redis inbox.
+end note
 
-' Agent calls out to capability protocols above
-Agent -up-> LLMClient       : "generate()"
-Agent -up-> HistoryProvider : "load / save"
-Agent -up-> VectorStore     : "search()"
-Agent -up-> Tool            : "execute()"
+' ══════════════════════════════════════════════════════════════════════
+' L2 CAPABILITIES — concrete tools, storage, LLM adapters
+' ══════════════════════════════════════════════════════════════════════
+package "capabilities/  (L2)\nConcrete impls: OpenAIChatClient, PgVectorStore, MinIOBlobStore,\nRedisHistoryProvider, CodeInterpreterTool, …" as PKG_L2 #fef9c3 {
+  class OpenAIChatCompletionClient
+  class PgVectorStore
+  class MinIOBlobStore
+  class CodeInterpreterTool
+}
 
-' RunContext threads sideways into agent
-RunContext ..> Agent : "threaded into every call"
+' ══════════════════════════════════════════════════════════════════════
+' L3 FABRIC — orchestration, flows, evals
+' ══════════════════════════════════════════════════════════════════════
+package "fabric/  (L3)\nOrchestration shells: SequentialFlow, ParallelFlow, EvalRunner." as PKG_L3 #fdf4ff {
+  class SequentialFlow
+  class EvalRunner
+}
+
+' ══════════════════════════════════════════════════════════════════════
+' Layer dependency arrows (all strictly downward)
+' ══════════════════════════════════════════════════════════════════════
+PKG_KERNEL -[hidden]-> PKG_L1
+PKG_L1     -[hidden]-> PKG_L2
+PKG_L2     -[hidden]-> PKG_L3
+
+PKG_L1 -up-> PKG_KERNEL : "imports contracts"
+PKG_L2 -up-> PKG_L1     : "imports L1 + kernel"
+PKG_L3 -up-> PKG_L2     : "imports L2 + L1 + kernel"
+
+' ══════════════════════════════════════════════════════════════════════
+' Key cross-layer wiring
+' ══════════════════════════════════════════════════════════════════════
+ReActAgent          .up.>  LLMClient        : "generate()"
+ReActAgent          .up.>  HistoryProvider  : "load / save"
+ReActAgent          .up.>  ToolInvoker      : "dispatch tool calls"
+OrchestratorAgent   .up.>  SpawnTracker     : "headcount gate"
+OrchestratorAgent   .up.>  Supervision      : "spawn_child()"
+ToolInvoker         .up.>  ApprovalHandler  : "HITL risk gate"
+ToolInvoker         .up.>  BlobStore        : "offload large results"
+LocalRuntime        .up.>  Inbox            : "implements"
+LocalRuntime        .up.>  Scheduler        : "implements"
+LocalRuntime        .up.>  EventLog         : "implements"
+DurableAgent        .up.>  EventLog         : "folds log on wake"
+OpenAIChatCompletionClient .up.> LLMClient  : "implements"
+PgVectorStore       .up.>  VectorStore      : "implements"
+MinIOBlobStore      .up.>  BlobStore        : "implements"
 
 @enduml

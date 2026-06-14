@@ -2,7 +2,7 @@
 
 Quick-start for client apps::
 
-    from ravi import ReActAgent, LocalRuntime, create_model_client
+    from ravi import ReActAgent, Runtime, create_model_client
     from ravi import ContentFilterMiddleware, MiddlewareTermination
     from ravi import TextDelta, CompletionEvent, StreamDone
 """
@@ -13,7 +13,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ravi.integrations.llm.factory import LLMFactory, create_model_client
-    from ravi.agents.core.react import AgentRunResult, ReActAgent
+    from ravi.agents.core.react import ReActAgent
+    from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+    from ravi.agents.core.proxy import UserProxyAgent
+    from ravi.agents.core.information_agent import InformationAgent
+    from ravi.agents.core.personal_feed_agent import PersonalFeedAgent
     from ravi.agents.context import (
         AgentContext,
         ContextConfig,
@@ -21,6 +25,7 @@ if TYPE_CHECKING:
         SlidingWindowCompaction,
     )
     from ravi.agents.middleware import (
+        AgentRunResult,
         AgentRunContext,
         ChatContext,
         FunctionContext,
@@ -40,7 +45,7 @@ if TYPE_CHECKING:
         ToolCallValidationMiddleware,
         MiddlewarePipeline,
     )
-    from ravi.agents.runtime import LocalRuntime
+    from ravi.agents.runtime import Runtime
     from ravi.kernel.tools.skills import Skill
     from ravi.kernel.core.errors import MiddlewareTermination
     from ravi.kernel import ChatMessage, TextBlock, ToolExecutionResult
@@ -52,10 +57,17 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
-    # agents
+    # agent types
     "ReActAgent",
+    "OrchestratorAgent",
+    "SubAgentConfig",
+    "UserProxyAgent",
+    "InformationAgent",
+    "PersonalFeedAgent",
+    # runtime
+    "Runtime",
+    # supporting types
     "AgentRunResult",
-    "LocalRuntime",
     "Skill",
     "InMemoryHistoryProvider",
     "AgentContext",
@@ -96,9 +108,17 @@ __all__ = [
 ]
 
 _LAZY: dict[str, tuple[str, str]] = {
+    # agent types
     "ReActAgent": ("ravi.agents.core.react", "ReActAgent"),
-    "AgentRunResult": ("ravi.agents.core.react", "AgentRunResult"),
-    "LocalRuntime": ("ravi.agents.runtime", "LocalRuntime"),
+    "OrchestratorAgent": ("ravi.agents.core.orchestrator", "OrchestratorAgent"),
+    "SubAgentConfig": ("ravi.agents.core.orchestrator", "SubAgentConfig"),
+    "UserProxyAgent": ("ravi.agents.core.proxy", "UserProxyAgent"),
+    "InformationAgent": ("ravi.agents.core.information_agent", "InformationAgent"),
+    "PersonalFeedAgent": ("ravi.agents.core.personal_feed_agent", "PersonalFeedAgent"),
+    # runtime
+    "Runtime": ("ravi.agents.runtime", "Runtime"),
+    # supporting
+    "AgentRunResult": ("ravi.agents.middleware", "AgentRunResult"),
     "Skill": ("ravi.agents.skills", "Skill"),
     "InMemoryHistoryProvider": ("ravi.agents.context", "InMemoryHistoryProvider"),
     "AgentContext": ("ravi.agents.context", "AgentContext"),

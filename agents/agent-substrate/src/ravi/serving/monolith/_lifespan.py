@@ -22,7 +22,7 @@ from ravi.capabilities.tools.human_input import AskHumanTool
 from ravi.capabilities.tools.task_manager.tool import TaskManagerTool
 from ravi.config import Settings
 from ravi.kernel.llm import LLMClient, EmbeddingClient
-from ravi.agents.runtime.local import LocalRuntime
+from ravi.agents.runtime import Runtime
 from ravi.kernel.tools import Tool, ToolRisk
 from ravi.agents.tools.toolbox import Toolbox
 from ravi.capabilities.tools.skills._manager import SkillManager
@@ -60,7 +60,7 @@ class Infrastructure:
 
     history: RedisHistoryProvider
     redis_client: Any
-    runtime: LocalRuntime
+    runtime: Runtime
     session_factory: Any
     vector_store: Any
     rag_pipeline: Any
@@ -164,8 +164,8 @@ async def init_infrastructure(
     # Standalone Redis client for non-memory operations (auth token JTIs, etc.)
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 
-    # Agent runtime — actor-based message dispatch (in-process by default)
-    runtime = LocalRuntime()
+    # Agent runtime — durable message dispatch (Stage 0: in-process asyncio)
+    runtime = Runtime()
     await runtime.start()
 
     # Session factory
@@ -296,7 +296,7 @@ async def init_runtime_services(
     registry: Toolbox,
     data_store: Any,
     session_factory: Any,
-    runtime: LocalRuntime,
+    runtime: Runtime,
     tools_requiring_approval: list[str],
     tool_timeout: float,
     code_interpreter_tool: Any | None = None,

@@ -232,6 +232,7 @@ def create_assistant_agent(
     silently accepted and dropped until L4 guardrails are wired.
     """
     from ravi.agents.core import ReActAgent
+    from ravi.agents.tools.toolbox import Toolbox
 
     # Resolve compaction: accept SlidingWindowCompaction directly or fall back
     # to a window derived from model_context_window.
@@ -240,7 +241,6 @@ def create_assistant_agent(
         compaction = model_context
     elif model_context is None:
         compaction = SlidingWindowStrategy(max_messages=model_context_window)
-    # ContextConfig objects can't be introspected here — fall back to default
 
     from ravi.agents.context import (
         ContextConfig,
@@ -261,13 +261,16 @@ def create_assistant_agent(
             SlidingWindowCompaction(max_messages=model_context_window),
         )
 
+    # Build tool registry
+    toolbox = Toolbox()
+    for t in (tools or []):
+        toolbox.register(t)
+
     return ReActAgent(
         name,
-        runtime,
         model=model_client,
-        tools=tools,
-        system_instructions=system_instructions or None,
+        tools=toolbox if tools else None,
+        system_instructions=system_instructions or "",
         context=ctx,
         max_iterations=max_iterations,
-        tool_timeout=tool_timeout,
     )

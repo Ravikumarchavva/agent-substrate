@@ -1,4 +1,4 @@
-"""CancellationToken and RunContext — execution-scoped runtime metadata.
+"""CancellationToken and RunMeta — execution-scoped runtime metadata.
 
 Both types are threaded through every kernel API call so that:
 
@@ -7,12 +7,13 @@ Both types are threaded through every kernel API call so that:
   everywhere without adding individual parameters to each call.
 
 ``CancellationToken`` is pure asyncio — no I/O, no threads.
-``RunContext`` is a frozen value object; create one per run() call.
+``RunMeta`` is a frozen value object; create one per run() call.
 """
 
 from __future__ import annotations
 
 import asyncio
+import uuid as _uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable
@@ -92,7 +93,7 @@ class CancellationToken:
 
 
 @dataclass(frozen=True, slots=True)
-class RunContext:
+class RunMeta:
     """Execution-scoped metadata threaded through every kernel call.
 
     ``run_id``       — globally unique identifier for this run; first-class so
@@ -106,16 +107,16 @@ class RunContext:
     ``trace_id``     — distributed trace identifier for observability.
     ``tenant_id``    — tenant namespace; ``None`` for single-tenant deployments.
 
-    ``RunContext`` is immutable.  Thread it down call stacks instead of
-    mutating it.  For child spans create a new ``RunContext`` with a child
-    ``CancellationToken``.
+    ``RunMeta`` is immutable.  Thread it down call stacks instead of
+    mutating it.  For child spans create a new ``RunMeta`` with a child
+    token (so cancellation propagates down) and new trace span.
     """
 
+    run_id: str
     cancellation: CancellationToken
-    run_id: str = field(default_factory=new_run_id)
     supervision: Supervision | None = None
     deadline: datetime | None = None
-    trace_id: str = ""
+    trace_id: str = field(default_factory=lambda: _uuid.uuid4().hex)
     tenant_id: str | None = None
 
     @classmethod
@@ -124,37 +125,34 @@ class RunContext:
         *,
         run_id: str = "",
         trace_id: str = "",
-        tenant_id: str | None = None,
         deadline: datetime | None = None,
-    ) -> "RunContext":
-        """Create a standalone RunContext with a fresh CancellationToken.
-
-        ``run_id`` is generated automatically when not supplied.
-        """
+        tenant_id: str | None = None,
+    ) -> "RunMeta":
+        """Create a standalone RunMeta with a fresh CancellationToken."""
         return cls(
-            cancellation=CancellationToken(),
             run_id=run_id or new_run_id(),
-            supervision=None,
+            cancellation=CancellationToken(),
             deadline=deadline,
-            trace_id=trace_id,
+            trace_id=trace_id or _uuid.uuid4().hex,
             tenant_id=tenant_id,
         )
 
-    def is_expired(self) -> bool:
-        """Return True if the deadline has passed."""
-        if self.deadline is None:
-            return False
-        return datetime.now(tz=timezone.utc) >= self.deadline
-
     def check(self) -> None:
-        """Raise ``CancellationError`` if cancelled or deadline exceeded."""
-        if self.is_expired():
-            raise CancellationError("deadline exceeded")
+        """Raise CancellationError if cancelled or deadline expired."""
         self.cancellation.check()
+        if self.deadline is not None and datetime.now(timezone.utc) > self.deadline:
+            raise CancellationError("deadline exceeded")
+
+    def is_expired(self) -> bool:
+        if self.cancellation.is_cancelled:
+            return True
+        if self.deadline is not None and datetime.now(timezone.utc) > self.deadline:
+            return True
+        return False
 
     def child_token(self) -> CancellationToken:
         """Return a child token cancelled when this context is cancelled."""
         return self.cancellation.child()
 
 
-__all__ = ["CancellationToken", "RunContext"]
+__all__ = ["CancellationToken", "RunMeta"]

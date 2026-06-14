@@ -62,7 +62,7 @@ from pydantic import BaseModel, Field
 from ravi.kernel.core.content import ContentBlock, JsonObject, content_blocks_to_str
 
 if TYPE_CHECKING:
-    from ravi.kernel.agent.runtime_context import RunContext
+    from ravi.kernel.agent.runtime_context import RunMeta
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +287,7 @@ class Tool(Protocol):
     input_schema: dict[str, object]
 
     async def execute(
-        self, *, ctx: RunContext | None = None, **kwargs: Any
+        self, *, ctx: RunMeta | None = None, **kwargs: Any
     ) -> ToolExecutionResult: ...
 
 
@@ -356,7 +356,7 @@ class ProviderDefinedTool(Protocol):
     call_types: tuple[str, ...]
 
     async def handle_call(
-        self, call: JsonObject, *, ctx: RunContext | None = None
+        self, call: JsonObject, *, ctx: RunMeta | None = None
     ) -> JsonObject: ...
 
 

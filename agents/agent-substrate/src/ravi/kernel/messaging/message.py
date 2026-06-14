@@ -27,12 +27,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import (
     Annotated,
-    Awaitable,
-    Callable,
     Literal,
-    Protocol,
     Union,
-    runtime_checkable,
 )
 
 from pydantic import BaseModel, Field
@@ -136,32 +132,6 @@ def register_payload_type(cls: type[BaseModel]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# RuntimeRef — the minimal runtime slice visible to handlers
-# ---------------------------------------------------------------------------
-
-
-@runtime_checkable
-class RuntimeRef(Protocol):
-    """The slice of the runtime a message handler uses to reply or emit."""
-
-    async def send_message(
-        self,
-        payload: object,
-        *,
-        sender: AgentId | None = None,
-        recipient: AgentId,
-    ) -> object: ...
-
-    async def publish_message(
-        self,
-        payload: object,
-        *,
-        sender: AgentId | None = None,
-        topic: TopicId,
-    ) -> None: ...
-
-
-# ---------------------------------------------------------------------------
 # Message
 # ---------------------------------------------------------------------------
 
@@ -192,7 +162,7 @@ class Message(BaseModel):
     correlation_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     causation_id: str | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
-    reply_to: str | None = None  # run_id of the asker; set by DurableContext.ask()
+    reply_to: str | None = None  # run_id of the asker; set by RunContext.ask()
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -200,30 +170,6 @@ class Message(BaseModel):
     def is_broadcast(self) -> bool:
         """True when this message is addressed to a topic (pub/sub fan-out)."""
         return isinstance(self.target, TopicId)
-
-
-# ---------------------------------------------------------------------------
-# MessageContext — execution context handed to handlers
-# ---------------------------------------------------------------------------
-
-
-class MessageContext(BaseModel):
-    """Execution context provided to every message handler invocation."""
-
-    agent_id: AgentId
-    sender: AgentId | None = None
-    correlation_id: str = ""
-    runtime: RuntimeRef | None = None
-
-    model_config = {"arbitrary_types_allowed": True}
-
-
-# ---------------------------------------------------------------------------
-# MessageHandler — the handler callable signature
-# ---------------------------------------------------------------------------
-
-MessageHandler = Callable[[MessageContext, Payload], Awaitable[Payload | None]]
-"""Type alias for a message handler: ``async def handle(ctx, payload) -> reply | None``."""
 
 
 # ---------------------------------------------------------------------------
@@ -250,9 +196,6 @@ __all__ = [
     "register_payload_type",
     "ToolCallRequest",
     "ToolExecutionResult",
-    "RuntimeRef",
     "Message",
-    "MessageContext",
-    "MessageHandler",
     "Subscription",
 ]

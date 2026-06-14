@@ -1,1 +1,0 @@
-"""Economic kernel contract tests."""

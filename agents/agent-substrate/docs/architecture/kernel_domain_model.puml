@@ -1,5 +1,5 @@
 @startuml kernel_domain_model
-title Ravi Engine - Kernel Domain Model\n(content.py . tools.py . chain.py . llm.py . runtime_context.py)
+title Ravi Engine — Kernel Domain Model (L0)\nSubpackage layout after June 2026 reorganisation.\nAll items are Protocols, frozen dataclasses, or value types — zero I/O.
 
 top to bottom direction
 skinparam dpi 200
@@ -10,7 +10,7 @@ hide stereotypes
 
 skinparam BackgroundColor #ffffff
 skinparam TitleFontColor #111827
-skinparam TitleFontSize 15
+skinparam TitleFontSize 14
 
 skinparam PackageBackgroundColor #f9fafb
 skinparam PackageBorderColor #d1d5db
@@ -35,155 +35,343 @@ skinparam NoteBackgroundColor #fef3c7
 skinparam NoteFontColor #78350f
 skinparam NoteFontSize 11
 
-' ------------------------------------------------------------------
-' TIER 1: Messages & Content  (the wire format between LLM and agent)
-' ------------------------------------------------------------------
-package "Messages & Content  (content.py)" as PKG_CONTENT {
-  class ChatMessage {
-    role : "user" | "assistant" | "tool"
-    content : list[ContentBlock]
+' ══════════════════════════════════════════════════════════════
+' CORE  — fundamental primitives, no kernel-internal deps
+' ══════════════════════════════════════════════════════════════
+package "core/  (identity · content · errors · usage)" as PKG_CORE {
+  class AgentId {
+    type : str
+    key  : str
+  }
+  class TopicId {
+    type   : str
+    source : str
   }
   abstract class ContentBlock
   class TextBlock
   class ImageBlock
   class ToolUseBlock {
-    id : str
-    name : str
+    id    : str
+    name  : str
     input : JsonObject
   }
   class ToolResultBlock {
     tool_use_id : str
+    content     : list[ContentBlock]
+  }
+  class ChatMessage {
+    role    : "user" | "assistant" | "tool"
     content : list[ContentBlock]
   }
+  class Usage {
+    input_tokens  : int
+    output_tokens : int
+  }
 
-  ChatMessage  *-- ContentBlock  : "1..*"
   ContentBlock <|-- TextBlock
   ContentBlock <|-- ImageBlock
   ContentBlock <|-- ToolUseBlock
   ContentBlock <|-- ToolResultBlock
+  ChatMessage  *-- ContentBlock : "1..*"
 }
 
-' ------------------------------------------------------------------
-' TIER 2: Tool Taxonomy  (who declares, who executes)
-' ------------------------------------------------------------------
-package "Tool Taxonomy  (tools.py)" as PKG_TOOLS {
-  class ToolCallRequest {
-    name : str
-    arguments : JsonObject
+' ══════════════════════════════════════════════════════════════
+' MESSAGING  — agent ↔ agent wire types
+' ══════════════════════════════════════════════════════════════
+package "messaging/  (message · events · stream)" as PKG_MESSAGING {
+  class Message {
+    id             : str
+    target         : AgentId | TopicId
+    payload        : Payload
+    reply_to       : str | None
+    correlation_id : str
   }
-  class ToolExecutionResult {
+  abstract class Payload
+  class DataPayload
+  class ChatPayload
+  class ControlPayload
+  class Subscription {
+    topic    : TopicId
+    agent_id : AgentId
+  }
+  class Event {
+    id             : str
+    type           : str
+    source         : AgentId
+    schema_version : int
+    data           : JsonObject
+  }
+  class AgentProgress {
+    run_id : str
+    step   : AgentStep
+    seq    : int
+  }
+
+  Payload <|-- DataPayload
+  Payload <|-- ChatPayload
+  Payload <|-- ControlPayload
+  Message *-- Payload
+}
+
+' ══════════════════════════════════════════════════════════════
+' LLM  — LLM client contracts
+' ══════════════════════════════════════════════════════════════
+package "llm/  (llm)" as PKG_LLM {
+  interface LLMClient {
+    generate(messages, options) : LLMResponse
+    generate_stream(...)
+  }
+  interface EmbeddingClient {
+    embed(texts) : EmbeddingResult
+  }
+  class LLMResponse {
     content : list[ContentBlock]
-    structured : JsonObject
+    usage   : Usage
   }
+  class GenerationOptions {
+    model        : str | None
+    temperature  : float | None
+    max_tokens   : int | None
+    tools        : list[AnyTool] | None
+  }
+}
+
+' ══════════════════════════════════════════════════════════════
+' STORAGE  — persistence / retrieval protocols
+' ══════════════════════════════════════════════════════════════
+package "storage/  (blob · history · vector · graph · memory)" as PKG_STORAGE {
+  interface BlobStore {
+    store(data, content_type) : str
+    resolve(ref) : bytes
+    pin(ref) / unpin(ref)
+  }
+  interface HistoryProvider {
+    get_messages(agent_id, session_id) : list[ChatMessage]
+    append / clear
+  }
+  interface VectorStore {
+    upsert(docs) / search(query, top_k) : list[SearchResult]
+  }
+  interface GraphStore {
+    upsert_entity / upsert_relationship
+    query(cypher) : SubGraph
+  }
+  interface ShortTermMemory
+  interface LongTermMemory
+}
+
+note right of BlobStore
+  Stage 0: in-memory dict
+  Stage 1: MinIO / S3 adapter
+  Used by: ToolInvoker (L1),
+  chain tools (L2)
+end note
+
+' ══════════════════════════════════════════════════════════════
+' TOOLS  — tool taxonomy + chain contracts
+' ══════════════════════════════════════════════════════════════
+package "tools/  (tools · skills · approval · chain)" as PKG_TOOLS {
   interface Tool {
-    name : str
+    name         : str
     input_schema : JsonObject
     execute(...)
   }
   interface HostedTool {
-    name : str
     provider_specs : dict[str, JsonObject]
   }
   interface ProviderDefinedTool {
-    name : str
     provider_specs : dict[str, JsonObject]
-    call_types : tuple[str, ...]
+    call_types     : tuple[str, ...]
     handle_call(call)
   }
+  class ToolCallRequest {
+    name      : str
+    arguments : JsonObject
+  }
+  class ToolExecutionResult {
+    content    : list[ContentBlock]
+    structured : JsonObject
+    is_error   : bool
+  }
   class FunctionSpec {
-    kind = "function"
-    name : str
+    kind       = "function"
+    name       : str
     parameters : JsonObject
-    lazy_schema : bool
-    strict : bool
+    strict     : bool
   }
   class ProviderSpec {
-    kind = "provider"
+    kind     = "provider"
     provider : str
-    spec : JsonObject
+    spec     : JsonObject
   }
-
-  Tool ..> ToolExecutionResult : "execute() returns"
+  interface ApprovalHandler {
+    request(req) : ApprovalDecision
+  }
+  class ChainPolicy {
+    max_tool_calls          : int = 50
+    call_timeout_s          : float = 60
+    approval_timeout_s      : float = 55
+    max_inline_result_bytes : int = 4096
+    max_risk_unapproved     : ToolRisk
+  }
+  class InvocationResult {
+    status       : "ok" | "error" | "denied"
+    text         : str
+    artifact_ref : str | None
+  }
+  class ChainRunResult {
+    status     : "ok" | "error" | "timeout"
+    tool_calls : int
+    call_trace : list[ChainCallRecord]
+  }
 }
 
 note bottom of PKG_TOOLS
   AnyTool = Tool | HostedTool | ProviderDefinedTool
   ToolSpec = FunctionSpec | ProviderSpec  (discriminated on "kind")
-  spec_of(tool, provider=) derives the right spec, or None.
+  spec_of(tool, provider=)  →  ToolSpec | None
+  ArtifactStore alias removed; use BlobStore from storage/
 end note
 
-' ------------------------------------------------------------------
-' TIER 3: Chain Contracts  (sandboxed chaining + artifact data plane)
-' ------------------------------------------------------------------
-package "Chain Contracts  (chain.py)" as PKG_CHAIN {
-  interface ArtifactStore {
-    store(data) : str
-    resolve(ref) : bytes
-    pin(ref) / unpin(ref)
+' ══════════════════════════════════════════════════════════════
+' AGENT  — agent execution contracts
+' ══════════════════════════════════════════════════════════════
+package "agent/  (supervision · context · middleware · runtime_context)" as PKG_AGENT {
+  class SpawnBudget {
+    max_agents    : int = 50
+    allow_preempt : bool = True
   }
-  class ChainPolicy {
-    max_tool_calls : int = 50
-    call_timeout_s : float = 60
-    approval_timeout_s : float = 55
-    max_inline_result_bytes : int = 4096
-    max_risk_unapproved : ToolRisk
+  class ExecutionBudget {
+    max_tokens   : int | None
+    max_cost_usd : float | None
+    max_turns    : int | None
+    deadline_s   : float | None
   }
-  class ChainFile {
-    path : str
-    media_type : str
-    artifact_ref : str
+  class Supervision {
+    run_id           : str
+    session_id       : str
+    root_id          : AgentId
+    parent_id        : AgentId | None
+    depth            : int
+    spawn_budget     : SpawnBudget
+    execution_budget : ExecutionBudget
+    priority         : Priority
+    retention        : HistoryRetention
+    root(agent_id, ...)
+    spawn_child(parent_id, ...)
+    progress_topic   : TopicId
   }
-  class InvocationResult {
-    status : "ok" | "error" | "denied"
-    text : str
-    structured : JsonObject
-    artifact_ref : str | None
-    files : list[ChainFile]
-  }
-  class ChainCallRecord {
-    tool : str
-    args_digest : str
-    status : str
-    duration_ms : int
-  }
-  class ChainRunResult {
-    status : "ok" | "error" | "timeout"
-    output_text : str
-    tool_calls : int
-    duration_ms : int
-    call_trace : list[ChainCallRecord]
-  }
-
-  InvocationResult  *-- ChainFile
-  ChainRunResult    *-- ChainCallRecord
-  InvocationResult  ..> ArtifactStore : "refs store when\nresult is large"
-}
-
-' ------------------------------------------------------------------
-' TIER 4: Execution Context  (deadline + cancellation threaded everywhere)
-' ------------------------------------------------------------------
-package "Execution Context  (runtime_context.py)" as PKG_CTX {
   class RunContext {
-    run_id : str
-    trace_id : str
-    deadline : datetime | None
-    cancel_token : CancellationToken
+    run_id      : str
+    trace_id    : str
+    deadline    : datetime | None
+    tenant_id   : str | None
+    cancellation: CancellationToken
+    supervision : Supervision | None
     check()
     is_expired() : bool
+    standalone(...)
   }
+  interface Middleware
+  interface AgentContextProtocol
+
+  Supervision *-- SpawnBudget
+  Supervision *-- ExecutionBudget
 }
 
-' ------------------------------------------------------------------
-' Cross-package arrows — force vertical stacking AND tell the story
-' ------------------------------------------------------------------
+note right of SpawnBudget
+  Frozen policy (kernel).
+  L1 SpawnTracker holds the
+  mutable count + paused set.
+end note
 
-' Tier 1 → Tier 2: LLM emits ToolUseBlock; agent translates it to ToolCallRequest
-ToolUseBlock    ..> ToolCallRequest  : "translated to"
+note right of ExecutionBudget
+  Frozen policy (kernel).
+  L1 ExecutionTracker tracks
+  consumed tokens / cost / turns.
+end note
 
-' Tier 2 → Tier 3: ToolInvoker converts ToolExecutionResult into InvocationResult
-ToolExecutionResult ..> InvocationResult : "shaped into by\nToolInvoker"
+' ══════════════════════════════════════════════════════════════
+' RUNTIME  — durable runtime contracts
+' ══════════════════════════════════════════════════════════════
+package "runtime/  (ids · log_entry · effects · inbox · scheduler · supervisor · …)" as PKG_RUNTIME {
+  class RunId
+  interface EventLog {
+    append(run_id, entry, expected_seq) : int
+    read(run_id, from_seq) : AsyncIterator
+    tail(run_id, from_seq) : AsyncIterator
+    last_seq(run_id) : int
+  }
+  interface Journal {
+    record(result) / lookup(effect_id) : EffectResult | None
+  }
+  interface Inbox {
+    deliver(agent_id, msg)
+    drain(agent_id) : list[Message]
+  }
+  interface Scheduler {
+    enqueue(run_id, priority, tenant)
+    lease(worker_id, capacity) : list[Lease]
+    release(lease, status)
+  }
+  interface Supervisor {
+    spawn(agent_id, parent, supervision, boot) : RunHandle
+    cancel(handle, reason)
+    join(handle) : RunResult
+  }
+  interface DurableAgent {
+    id  : AgentId
+    run(ctx, inbox)
+  }
+  interface FollowGraph
+  interface FanoutStrategy
+  interface SignalBus
+}
 
-' Tier 3 → Tier 4: every chain run is governed by a RunContext (deadline + cancel)
-ChainRunResult  ..> RunContext       : "produced within"
+note bottom of PKG_RUNTIME
+  EventLog: optimistic-concurrency fencing via
+  expected_seq → raises ConcurrentAppendError on race.
+  tail() = live view used by SSE Gateway.
+  Stage 0: all in-memory (asyncio).
+  Stage 1: Postgres (scheduler + journal + event_log)
+           + Redis (inbox + signal_bus).
+end note
+
+' ══════════════════════════════════════════════════════════════
+' Cross-package dependency arrows
+' ══════════════════════════════════════════════════════════════
+PKG_CORE     -[hidden]-> PKG_MESSAGING
+PKG_MESSAGING -[hidden]-> PKG_LLM
+PKG_LLM      -[hidden]-> PKG_STORAGE
+PKG_STORAGE  -[hidden]-> PKG_TOOLS
+PKG_TOOLS    -[hidden]-> PKG_AGENT
+PKG_AGENT    -[hidden]-> PKG_RUNTIME
+
+' Core → everything
+Message      ..> AgentId      : "target / reply_to"
+Subscription ..> TopicId      : "topic"
+LLMResponse  *-- ContentBlock : "content"
+LLMResponse  *-- Usage
+
+' LLM uses content + usage from core
+LLMClient    ..> ChatMessage  : "generate(messages)"
+LLMClient    ..> LLMResponse  : "returns"
+
+' Storage uses core
+HistoryProvider ..> ChatMessage : "stores / returns"
+
+' Tools use content
+Tool       ..> ToolExecutionResult : "execute() returns"
+ToolUseBlock ..> ToolCallRequest   : "translated to"
+
+' Chain uses blob store
+InvocationResult ..> BlobStore : "refs when result large"
+
+' Agent uses core + runtime
+Supervision ..> AgentId : "root_id, parent_id"
+RunContext   ..> Supervision : "optional"
+DurableAgent ..> EventLog    : "folds log on wake"
+Inbox        ..> DurableAgent : "drain() → inbox arg"
+Scheduler    ..> DurableAgent : "leases run"
 
 @enduml

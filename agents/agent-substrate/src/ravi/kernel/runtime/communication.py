@@ -1,6 +1,6 @@
 """Communication value types for the durable ask/send/reply model.
 
-``AskOutcome`` is the discriminated result of ``DurableContext.ask()``.
+``AskOutcome`` is the discriminated result of ``RunContext.ask()``.
 The four ``kind`` values are mutually exclusive and must NOT be collapsed:
 
     replied         — target finished and sent a reply within the timeout
@@ -11,7 +11,7 @@ The four ``kind`` values are mutually exclusive and must NOT be collapsed:
 Collapsing ``timed_out`` with ``target_failed`` is the canonical bug that
 spawns a duplicate agent while the original is still running.
 
-``RunStatusSummary`` is the compact snapshot returned by ``DurableContext.status(handle)``.
+``RunStatusSummary`` is the compact snapshot returned by ``RunContext.status(handle)``.
 It is a batched peek — NOT a stream. The parent agent calls it rarely and only
 when it has a reason (e.g., LLM tool call, supervision rule).  The human/UI
 watches live progress through the SSE path (``EventLog.tail``), which is
@@ -29,7 +29,7 @@ from ravi.kernel.runtime.supervisor import RunHandle, RunResult
 
 
 class AskOutcome(BaseModel):
-    """Discriminated result of a DurableContext.ask() call.
+    """Discriminated result of a RunContext.ask() call.
 
     Always check ``kind`` before accessing ``result`` or ``handle``.
 
@@ -49,7 +49,7 @@ class AskOutcome(BaseModel):
 class RunStatusSummary(BaseModel):
     """Compact batched snapshot of a run's progress.
 
-    Returned by ``DurableContext.status(handle)`` — not a stream.
+    Returned by ``RunContext.status(handle)`` — not a stream.
     ``last_milestone`` is the ``kind`` string of the most recent meaningful
     EventLog entry (e.g. ``"tool.result"``, ``"child.spawned"``).
     """

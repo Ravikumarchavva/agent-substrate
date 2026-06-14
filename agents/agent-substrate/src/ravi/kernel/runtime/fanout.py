@@ -6,7 +6,7 @@ celebrity-agent pull hybrid so a viral agent with 1M followers does not
 trigger 1M synchronous inbox writes.
 
 Fan-out is always initiated by a call to ``FanoutStrategy.publish`` — never
-by the agent directly.  The agent calls ``ctx.emit(topic, msg)``; DurableContext
+by the agent directly.  The agent calls ``ctx.emit(topic, msg)``; RunContext
 (L1) looks up the FanoutStrategy from the runtime and delegates.
 
 Stage 0 — push fan-out (simple, works for normal agents)

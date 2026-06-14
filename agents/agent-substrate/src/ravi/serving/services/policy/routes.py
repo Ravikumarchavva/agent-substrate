@@ -13,7 +13,7 @@ from ravi.logger import setup_logging
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from ravi.serving.shared.auth.claims import AuthClaims

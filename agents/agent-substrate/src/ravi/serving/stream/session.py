@@ -76,6 +76,7 @@ class AgentStreamSession:
         self._queue: asyncio.Queue[WireEvent | object] = asyncio.Queue()
         self._bridge_signaled = False
         self._error: str | None = None
+        self._run_id: str | None = None
 
     # -- workers --------------------------------------------------------------
 
@@ -84,6 +85,7 @@ class AgentStreamSession:
         try:
             await self._runtime.register(self._agent)
             run_id = await self._runtime.submit(self._agent.id, self._msg)
+            self._run_id = run_id
 
             text_acc = ""
             tool_calls_acc: list[ToolCallSummary] = []
@@ -150,6 +152,7 @@ class AgentStreamSession:
 
     async def events(self) -> AsyncIterator[WireEvent]:
         """Yield the full wire-event stream for one run."""
+        print("SESSION EVENTS START")
         yield HelloEvent()
 
         agent_task = asyncio.create_task(self._agent_worker())
@@ -158,12 +161,13 @@ class AgentStreamSession:
 
         try:
             while True:
+                if await self._check_disconnect_or_cancel(agent_task):
+                    terminal = RunCancelledEvent()
+                    break
+
                 try:
                     item = await asyncio.wait_for(self._queue.get(), timeout=self._poll)
                 except asyncio.TimeoutError:
-                    if await self._check_disconnect_or_cancel(agent_task):
-                        terminal = RunCancelledEvent()
-                        break
                     continue
 
                 if item is _WORKERS_DONE:
@@ -196,6 +200,8 @@ class AgentStreamSession:
 
         if disconnected:
             self._bridge.cancel_all_pending("session_disconnected")
+        if self._run_id is not None:
+            await self._runtime.cancel(self._run_id)
         if not agent_task.done():
             agent_task.cancel()
             try:

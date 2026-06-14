@@ -22,6 +22,7 @@ from ravi.serving.protocol import (
     ToolResultEvent,
     TurnCompletedEvent,
     WireEvent,
+    RunCancelledEvent
 )
 from ravi.serving.stream.session import AgentStreamSession
 
@@ -157,3 +158,79 @@ async def test_persister_called_on_turn_complete() -> None:
 
     assert len(persist_calls) == 1
     assert "persisted text" in persist_calls[0].text
+
+
+async def test_cancel_event_cancels_run() -> None:
+    @dataclass
+    class HangingAgent:
+        name: str = "hanging"
+
+        @property
+        def id(self) -> AgentId:
+            return AgentId(type="agent", key=self.name)
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            for msg in inbox:
+                await asyncio.sleep(100)
+
+    async with Runtime() as rt:
+        agent = HangingAgent()
+        msg = _make_msg(agent.id)
+        cancel_event = asyncio.Event()
+        session = AgentStreamSession(
+            runtime=rt,
+            agent=agent,
+            msg=msg,
+            bridge=_StubBridge(),
+            cancel_event=cancel_event,
+            poll_interval=0.01,
+        )
+
+        # Start consuming events, and trigger cancel on hello
+        events = []
+        async for ev in session.events():
+            events.append(ev)
+            if isinstance(ev, HelloEvent):
+                cancel_event.set()
+
+        assert any(isinstance(e, RunCancelledEvent) for e in events)
+
+
+async def test_disconnected_callback_cancels_run() -> None:
+    @dataclass
+    class HangingAgent:
+        name: str = "hanging"
+
+        @property
+        def id(self) -> AgentId:
+            return AgentId(type="agent", key=self.name)
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            for msg in inbox:
+                await asyncio.sleep(100)
+
+    is_disconnected = False
+
+    async def check_disconnected() -> bool:
+        return is_disconnected
+
+    async with Runtime() as rt:
+        agent = HangingAgent()
+        msg = _make_msg(agent.id)
+        session = AgentStreamSession(
+            runtime=rt,
+            agent=agent,
+            msg=msg,
+            bridge=_StubBridge(),
+            is_disconnected=check_disconnected,
+            poll_interval=0.01,
+        )
+
+        events = []
+        async for ev in session.events():
+            events.append(ev)
+            if isinstance(ev, HelloEvent):
+                is_disconnected = True
+
+        assert any(isinstance(e, RunCancelledEvent) for e in events)
+

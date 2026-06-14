@@ -9,6 +9,7 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 import os
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -68,6 +69,7 @@ class Infrastructure:
     bridge_registry: BridgeRegistry
     skill_manager: SkillManager
     file_store: Any
+    runtime_stack: AsyncExitStack | None = None
 
 
 @dataclass
@@ -165,6 +167,32 @@ def init_file_store(settings: Settings) -> Any:
     return InMemoryFileStore()
 
 
+async def init_runtime(settings: Settings) -> tuple[Runtime, AsyncExitStack | None]:
+    """Build the agent runtime per ``settings.RUNTIME_BACKEND``.
+
+    ``memory`` → in-process asyncio Runtime (default; no external state).
+    ``postgres`` → durable EventLog/Inbox/Scheduler in Postgres + Redis journal,
+    owned by an ``AsyncExitStack`` so the pool/redis are closed on shutdown.
+    """
+    if settings.RUNTIME_BACKEND.lower() == "postgres":
+        from ravi.infrastructure.runtime import build_postgres_runtime
+
+        pg_url = (settings.ASYNC_DATABASE_URL or settings.DATABASE_URL).replace(
+            "+asyncpg", ""
+        )
+        stack = AsyncExitStack()
+        runtime = await stack.enter_async_context(
+            build_postgres_runtime(postgres_url=pg_url, redis_url=settings.REDIS_URL)
+        )
+        logger.info("Agent runtime: durable (Postgres EventLog + Redis journal)")
+        return runtime, stack
+
+    runtime = Runtime()
+    await runtime.start()
+    logger.info("Agent runtime: in-memory (Stage 0, in-process asyncio)")
+    return runtime, None
+
+
 async def init_infrastructure(
     settings: Settings,
     embedding_client: EmbeddingClient,
@@ -182,9 +210,8 @@ async def init_infrastructure(
     # Standalone Redis client for non-memory operations (auth token JTIs, etc.)
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 
-    # Agent runtime — durable message dispatch (Stage 0: in-process asyncio)
-    runtime = Runtime()
-    await runtime.start()
+    # Agent runtime — in-memory or durable Postgres-backed (see RUNTIME_BACKEND)
+    runtime, runtime_stack = await init_runtime(settings)
 
     # Session factory
     session_factory = get_session_factory()
@@ -232,6 +259,7 @@ async def init_infrastructure(
         bridge_registry=bridge_registry,
         skill_manager=skill_manager,
         file_store=file_store,
+        runtime_stack=runtime_stack,
     )
 
 

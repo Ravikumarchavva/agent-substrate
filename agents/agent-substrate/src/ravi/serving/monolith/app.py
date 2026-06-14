@@ -86,6 +86,7 @@ async def lifespan(app: FastAPI):
     app.state.history = infra.history
     app.state.redis_client = infra.redis_client
     app.state.runtime = infra.runtime
+    app.state.runtime_stack = infra.runtime_stack
     app.state.session_factory = infra.session_factory
     app.state.vector_store = infra.vector_store
     app.state.rag_pipeline = infra.rag_pipeline
@@ -168,7 +169,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # ---------- SHUTDOWN ----------
-    if getattr(app.state, "runtime", None):
+    # Durable runtime owns a Postgres pool + Redis client via an AsyncExitStack
+    # (which also stops the runtime); the in-memory runtime is stopped directly.
+    if getattr(app.state, "runtime_stack", None):
+        await app.state.runtime_stack.aclose()
+    elif getattr(app.state, "runtime", None):
         await app.state.runtime.stop()
     if getattr(app.state, "workflow_client", None):
         await app.state.workflow_client.disconnect()

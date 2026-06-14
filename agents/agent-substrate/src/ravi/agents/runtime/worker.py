@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from ravi.kernel.agent.runtime_context import CancellationToken, RunMeta
 from ravi.kernel.runtime.ids import RunStatus
 from ravi.kernel.runtime.log_entry import RunLogEntry
+from ravi.kernel.core.errors import CancellationError
 
 if TYPE_CHECKING:
     from ravi.agents.runtime.backends._event_log import InMemoryEventLog
@@ -64,6 +65,7 @@ class Worker:
         self._running = False
         self._poll_task: asyncio.Task | None = None
         self._tokens: dict[str, CancellationToken] = {}  # run_id → token for external cancel
+        self._tasks: dict[str, asyncio.Task] = {}  # run_id → Task
 
     async def start(self) -> None:
         self._running = True
@@ -76,6 +78,53 @@ class Worker:
             try:
                 await self._poll_task
             except asyncio.CancelledError:
+                pass
+        # Cancel all active agent tasks
+        tasks = list(self._tasks.values())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def cancel(self, run_id: str) -> None:
+        """Cancel a running or pending task by run_id."""
+        if hasattr(self._scheduler, "_status"):
+            self._scheduler._status[run_id] = RunStatus.CANCELLED
+
+        task = self._tasks.get(run_id)
+        if task is not None and not task.done():
+            task.cancel()
+        token = self._tokens.get(run_id)
+        if token is not None:
+            token.cancel("cancelled-externally")
+
+        if task is None:
+            from ravi.kernel.runtime.log_entry import RunLogEntry
+            try:
+                seq = await self._event_log.last_seq(run_id)
+                # If run.started was not even logged yet, make sure we sequence it properly
+                if seq < 0:
+                    await self._event_log.append(
+                        run_id,
+                        RunLogEntry(run_id=run_id, seq=0, kind="run.started"),
+                        expected_seq=-1,
+                    )
+                    seq = 0
+                await self._event_log.append(
+                    run_id,
+                    RunLogEntry(
+                        run_id=run_id,
+                        seq=seq + 1,
+                        kind="run.cancelled",
+                        payload={"reason": "cancelled-externally"},
+                    ),
+                    expected_seq=seq,
+                )
+            except Exception:
+                pass
+            try:
+                await self._supervisor.record_completion(run_id, RunStatus.CANCELLED)
+            except Exception:
                 pass
 
     async def _poll_loop(self) -> None:
@@ -90,10 +139,11 @@ class Worker:
                         logger.warning("Agent %s not in registry", lease.agent_id)
                         await self._scheduler.release(lease, status=RunStatus.FAILED)
                         continue
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         self._run_agent(lease, agent),
                         name=f"run-{lease.run_id[:8]}",
                     )
+                    self._tasks[lease.run_id] = task
             except Exception:
                 logger.exception("Worker poll error")
             await asyncio.sleep(self.POLL_INTERVAL)
@@ -197,7 +247,7 @@ class Worker:
             await self._scheduler.release(lease, status=RunStatus.COMPLETED)
             await self._supervisor.record_completion(run_id, RunStatus.COMPLETED)
 
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, CancellationError):
             token.cancel("task-cancelled")
             final_seq = await self._event_log.last_seq(run_id)
             await self._event_log.append(
@@ -248,6 +298,7 @@ class Worker:
             await self._supervisor.record_completion(run_id, RunStatus.FAILED, error=str(exc))
         finally:
             self._tokens.pop(run_id, None)
+            self._tasks.pop(run_id, None)
 
     async def _maybe_clear_run_history(
         self, agent: object, run_id: str, *, session_ids: set[str]

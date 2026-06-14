@@ -1,13 +1,16 @@
 """PostgresQueryConnector — run read-only SQL queries against a Postgres database.
 
 Uses asyncpg with read-only transaction mode by default for safety.
-Marked as SENSITIVE risk because it reads potentially sensitive data.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict, List
+
 from ravi.logger import setup_logging
 
-from typing import Any, Dict, List
+if TYPE_CHECKING:
+    import asyncpg
 
 logger = setup_logging()
 
@@ -34,15 +37,15 @@ class PostgresQueryConnector:
         self._dsn = dsn
         self._read_only = read_only
         self._max_rows = max_rows
-        self._pool: Any | None = None
+        self._pool: asyncpg.Pool | None = None
 
     async def connect(self) -> None:
         """Create connection pool."""
         if not self._dsn:
             raise RuntimeError("Postgres DSN not configured")
-        import asyncpg
+        import asyncpg as _asyncpg
 
-        self._pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=5)
+        self._pool = await _asyncpg.create_pool(self._dsn, min_size=1, max_size=5)
 
     async def disconnect(self) -> None:
         """Close connection pool."""

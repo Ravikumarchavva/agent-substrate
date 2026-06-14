@@ -9,6 +9,7 @@ is defined.
 from __future__ import annotations
 
 
+from ravi.integrations.events.envelope import EventEnvelope
 from ravi.integrations.events.redis_event_bus import EventBus
 
-__all__ = ["EventBus"]
+__all__ = ["EventBus", "EventEnvelope"]

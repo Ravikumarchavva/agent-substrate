@@ -56,7 +56,7 @@ async def redis_client():
 
 
 async def test_pg_event_log_append_and_read(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresEventLog
+    from ravi.infrastructure.runtime import PostgresEventLog
     from ravi.kernel.runtime.log_entry import RunLogEntry
     from ravi.kernel.runtime.ids import new_run_id
 
@@ -75,7 +75,7 @@ async def test_pg_event_log_append_and_read(pg_pool) -> None:
 
 
 async def test_pg_event_log_occ_raises(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresEventLog
+    from ravi.infrastructure.runtime import PostgresEventLog
     from ravi.kernel.runtime.log_entry import RunLogEntry
     from ravi.kernel.core.errors import ConcurrentAppendError
     from ravi.kernel.runtime.ids import new_run_id
@@ -93,7 +93,7 @@ async def test_pg_event_log_occ_raises(pg_pool) -> None:
 
 
 async def test_pg_event_log_last_seq(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresEventLog
+    from ravi.infrastructure.runtime import PostgresEventLog
     from ravi.kernel.runtime.log_entry import RunLogEntry
     from ravi.kernel.runtime.ids import new_run_id
 
@@ -109,7 +109,7 @@ async def test_pg_event_log_last_seq(pg_pool) -> None:
 
 
 async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresEventLog
+    from ravi.infrastructure.runtime import PostgresEventLog
     from ravi.kernel.runtime.log_entry import RunLogEntry
     from ravi.kernel.runtime.ids import new_run_id
 
@@ -138,7 +138,7 @@ async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
 
 
 async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresInbox
+    from ravi.infrastructure.runtime import PostgresInbox
     from ravi.kernel.core.identity import AgentId
     from ravi.kernel.messaging.message import Message
     from ravi.kernel.core.content import TextBlock
@@ -171,7 +171,7 @@ async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
 
 
 async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresInbox
+    from ravi.infrastructure.runtime import PostgresInbox
     from ravi.kernel.core.identity import AgentId
     from ravi.kernel.messaging.message import Message
     from ravi.kernel.core.content import TextBlock
@@ -206,7 +206,7 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
 
 
 async def test_redis_journal_lookup_miss(redis_client) -> None:
-    from ravi.capabilities.runtime import RedisJournal
+    from ravi.infrastructure.runtime import RedisJournal
 
     journal = RedisJournal(redis_client, ttl_seconds=10)
     result = await journal.lookup("nonexistent-effect-id")
@@ -214,7 +214,7 @@ async def test_redis_journal_lookup_miss(redis_client) -> None:
 
 
 async def test_redis_journal_record_and_lookup(redis_client) -> None:
-    from ravi.capabilities.runtime import RedisJournal
+    from ravi.infrastructure.runtime import RedisJournal
     from ravi.kernel.runtime.effects import EffectResult
 
     journal = RedisJournal(redis_client, ttl_seconds=10)
@@ -229,7 +229,7 @@ async def test_redis_journal_record_and_lookup(redis_client) -> None:
 
 
 async def test_redis_journal_at_most_once(redis_client) -> None:
-    from ravi.capabilities.runtime import RedisJournal
+    from ravi.infrastructure.runtime import RedisJournal
     from ravi.kernel.runtime.effects import EffectResult
 
     journal = RedisJournal(redis_client, ttl_seconds=10)
@@ -251,7 +251,7 @@ async def test_redis_journal_at_most_once(redis_client) -> None:
 
 
 async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresScheduler
+    from ravi.infrastructure.runtime import PostgresScheduler
     from ravi.kernel.runtime.ids import new_run_id, RunStatus
     from ravi.kernel.core.identity import AgentId
 
@@ -272,7 +272,7 @@ async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
 
 
 async def test_pg_scheduler_coalescing(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresScheduler
+    from ravi.infrastructure.runtime import PostgresScheduler
     from ravi.kernel.runtime.ids import new_run_id
     from ravi.kernel.core.identity import AgentId
 
@@ -291,7 +291,7 @@ async def test_pg_scheduler_coalescing(pg_pool) -> None:
 
 
 async def test_pg_scheduler_release_completed(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresScheduler
+    from ravi.infrastructure.runtime import PostgresScheduler
     from ravi.kernel.runtime.ids import new_run_id, RunStatus
     from ravi.kernel.core.identity import AgentId
 
@@ -310,7 +310,7 @@ async def test_pg_scheduler_release_completed(pg_pool) -> None:
 
 
 async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
-    from ravi.capabilities.runtime import PostgresScheduler
+    from ravi.infrastructure.runtime import PostgresScheduler
     from ravi.kernel.runtime.ids import new_run_id, RunStatus
     from ravi.kernel.core.identity import AgentId
 

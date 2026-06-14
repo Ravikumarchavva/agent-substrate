@@ -14,7 +14,7 @@ from opentelemetry import trace
 from opentelemetry.propagate import extract, inject
 
 from ravi.logger import setup_logging
-from ravi.serving.shared.events.envelope import EventEnvelope
+from ravi.integrations.events.envelope import EventEnvelope
 
 logger = setup_logging()
 

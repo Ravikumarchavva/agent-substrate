@@ -1,13 +1,13 @@
-"""MinIOConnector — upload, download, list, and presign objects in MinIO/S3.
-
-Re-uses the aiobotocore patterns from ``core/storage/s3.py`` but as a
-standalone connector adapter.
-"""
+"""MinIOConnector — upload, download, list, and presign objects in MinIO/S3."""
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict, List
+
 from ravi.logger import setup_logging
 
-from typing import Any, Dict, List
+if TYPE_CHECKING:
+    from aiobotocore.session import AioSession
 
 logger = setup_logging()
 
@@ -38,7 +38,7 @@ class MinIOConnector:
         self._secret_key = secret_key
         self._default_bucket = default_bucket
         self._region = region
-        self._session: Any | None = None
+        self._session: AioSession | None = None
 
     async def connect(self) -> None:
         """Create aiobotocore session."""
@@ -122,7 +122,7 @@ class MinIOConnector:
         """Generate a presigned URL for an object."""
         b = bucket or self._default_bucket
         async with self._client_ctx() as client:
-            url = await client.generate_presigned_url(
+            url: str = await client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": b, "Key": key},
                 ExpiresIn=expires_in,

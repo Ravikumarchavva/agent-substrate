@@ -2,7 +2,7 @@
 
 The Runtime is backend-agnostic: every backend is injected and defaults to its
 in-process implementation.  It never imports a concrete durable backend, so the
-``agents`` layer stays strictly above ``capabilities``.
+``agents`` layer stays strictly above ``infrastructure``.
 
 Usage (in-memory, Stage 0 — default)::
 
@@ -10,10 +10,10 @@ Usage (in-memory, Stage 0 — default)::
         await rt.register(my_agent)
         run_id = await rt.submit(my_agent.id, boot_msg)
 
-Usage (Postgres + Redis, Stage 1) — use the capabilities-layer factory, which
+Usage (Postgres + Redis, Stage 1) — use the infrastructure-layer factory, which
 constructs the durable backends and injects them::
 
-    from ravi.capabilities.runtime import build_postgres_runtime
+    from ravi.infrastructure.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(
         postgres_url="postgresql://...",
@@ -49,9 +49,9 @@ class Runtime:
     """Durable runtime over injectable kernel-Protocol backends.
 
     Each backend defaults to its in-process implementation.  Pass durable
-    backends (built by ``capabilities.runtime.build_postgres_runtime``) to run
+    backends (built by ``infrastructure.runtime.build_postgres_runtime``) to run
     against Postgres/Redis.  The Runtime never imports a concrete durable
-    backend itself, keeping ``agents`` strictly above ``capabilities``.
+    backend itself, keeping ``agents`` strictly above ``infrastructure``.
     """
 
     def __init__(

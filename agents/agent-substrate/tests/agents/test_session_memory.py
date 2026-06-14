@@ -17,7 +17,7 @@ from ravi.kernel.core.identity import AgentId
 from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
 from ravi.kernel.messaging.message import ChatPayload, Message
 from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
-from ravi.serving.shared.execution.agent_factory import load_session_memory
+from ravi.agents.factory import load_session_memory
 
 
 # ---------------------------------------------------------------------------

@@ -1,16 +1,13 @@
-"""EmailConnector — send and receive emails via SMTP and IMAP.
-
-Extends beyond the basic EmailSenderTool by adding IMAP receive/search
-capabilities.
-"""
+"""EmailConnector — send and receive emails via SMTP and IMAP."""
 
 from __future__ import annotations
-from ravi.logger import setup_logging
 
 import re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List
+
+from ravi.logger import setup_logging
 
 logger = setup_logging()
 

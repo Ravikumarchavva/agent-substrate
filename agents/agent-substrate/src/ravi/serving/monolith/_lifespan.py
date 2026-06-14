@@ -67,6 +67,7 @@ class Infrastructure:
     data_store: Any
     bridge_registry: BridgeRegistry
     skill_manager: SkillManager
+    file_store: Any
 
 
 @dataclass
@@ -147,6 +148,23 @@ def init_llm_clients(settings: Settings) -> LLMClients:
     )
 
 
+def init_file_store(settings: Settings) -> Any:
+    """Return an InMemoryFileStore (local) or S3FileStore (s3) based on config."""
+    if settings.FILE_STORE_BACKEND == "s3":
+        from ravi.capabilities.storage.s3 import S3FileStore
+
+        return S3FileStore(
+            endpoint_url=settings.FILE_STORE_ENDPOINT or "",
+            access_key=settings.FILE_STORE_ACCESS_KEY or "",
+            secret_key=settings.FILE_STORE_SECRET_KEY or "",
+            bucket=settings.FILE_STORE_BUCKET,
+            region=settings.FILE_STORE_REGION,
+        )
+    from ravi.agents.storage.memory import InMemoryFileStore
+
+    return InMemoryFileStore()
+
+
 async def init_infrastructure(
     settings: Settings,
     embedding_client: EmbeddingClient,
@@ -199,6 +217,10 @@ async def init_infrastructure(
     # Skill manager — discovers built-in skills + ~/.claude/skills
     skill_manager = SkillManager(auto_discover=True)
 
+    # File store — InMemoryFileStore (local) or S3FileStore (s3)
+    file_store = init_file_store(settings)
+    await file_store.connect()
+
     return Infrastructure(
         history=history,
         redis_client=redis_client,
@@ -209,6 +231,7 @@ async def init_infrastructure(
         data_store=data_store,
         bridge_registry=bridge_registry,
         skill_manager=skill_manager,
+        file_store=file_store,
     )
 
 
@@ -224,7 +247,7 @@ async def init_tool_registry(
     # TaskManagerTool — renders through ui://kanban_board; each result carries the
     # board in structured_content (lowered to a UIResourceBlock by the agent), so
     # no out-of-band SSE emitter is needed.
-    from ravi.serving.shared.tasks.store import GlobalTaskStore
+    from ravi.agents.storage.tasks import GlobalTaskStore
     task_tool = TaskManagerTool(store=GlobalTaskStore.get())
 
     # AskHumanTool placeholder (a real per-thread tool is built in _get_agent_deps)

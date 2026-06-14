@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from ravi.serving.shared.events.envelope import EventEnvelope
+from ravi.integrations.events.envelope import EventEnvelope
 
 
 # ── Identity & Auth Events ───────────────────────────────────────────────────

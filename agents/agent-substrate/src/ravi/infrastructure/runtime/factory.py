@@ -1,13 +1,8 @@
 """Factory for building a durable Postgres/Redis-backed Runtime.
 
-Lives in ``capabilities`` (L2) because it instantiates the L2 durable backends
-and injects them into the L1 ``Runtime``.  This keeps the dependency direction
-correct — ``capabilities`` may import ``agents``, but ``agents`` must never
-import ``capabilities``.
-
 Usage::
 
-    from ravi.capabilities.runtime import build_postgres_runtime
+    from ravi.infrastructure.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(
         postgres_url="postgresql://postgres:postgres@localhost:5432/agentdb",
@@ -29,10 +24,10 @@ from typing import AsyncIterator
 from ravi.agents.runtime import Runtime
 from ravi.agents.runtime.backends import InMemoryJournal
 
-from ravi.capabilities.runtime.pg_event_log import PostgresEventLog
-from ravi.capabilities.runtime.pg_inbox import PostgresInbox
-from ravi.capabilities.runtime.pg_scheduler import PostgresScheduler
-from ravi.capabilities.runtime.redis_journal import RedisJournal
+from ravi.infrastructure.runtime.pg_event_log import PostgresEventLog
+from ravi.infrastructure.runtime.pg_inbox import PostgresInbox
+from ravi.infrastructure.runtime.pg_scheduler import PostgresScheduler
+from ravi.infrastructure.runtime.redis_journal import RedisJournal
 
 
 @asynccontextmanager

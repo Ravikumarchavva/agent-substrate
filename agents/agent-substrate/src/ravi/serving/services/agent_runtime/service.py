@@ -20,12 +20,9 @@ from ravi.kernel import (
 from ravi.kernel.messaging.stream import CompletionEvent
 from ravi.kernel.llm import LLMClient
 from ravi.integrations.events import EventBus
-from ravi.serving.shared.events.envelope import EventEnvelope
-from ravi.serving.shared.execution import (
-    create_assistant_agent,
-    load_session_memory,
-    stream_agent_run,
-)
+from ravi.integrations.events.envelope import EventEnvelope
+from ravi.agents.factory import create_assistant_agent, load_session_memory
+from ravi.agents.runner import stream_agent_run
 
 logger = setup_logging()
 

@@ -1,14 +1,11 @@
-"""GoogleCalendarConnector — read/write Google Calendar events.
-
-Uses Google Calendar API via httpx with OAuth2 service account or
-user-delegated credentials.
-"""
+"""GoogleCalendarConnector — read/write Google Calendar events via the Calendar API."""
 
 from __future__ import annotations
-from ravi.logger import setup_logging
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+
+from ravi.logger import setup_logging
 
 logger = setup_logging()
 

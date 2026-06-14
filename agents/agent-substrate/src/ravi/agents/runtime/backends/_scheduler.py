@@ -81,6 +81,8 @@ class InMemoryScheduler:
             except asyncio.QueueEmpty:
                 break
             self._pending.discard(run_id)
+            if self._status.get(run_id) == RunStatus.CANCELLED:
+                continue
             expires_at = datetime.now(tz=timezone.utc) + timedelta(seconds=30)
             attempt = self._retry_counts.get(run_id, 0)
             agent_id = self._agents.get(run_id)

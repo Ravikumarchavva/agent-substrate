@@ -188,6 +188,11 @@ class Runtime:
         if self._worker is not None:
             await self._worker.stop()
 
+    async def cancel(self, run_id: str) -> None:
+        """Cancel an in-flight run."""
+        if self._worker is not None:
+            await self._worker.cancel(run_id)
+
     async def __aenter__(self) -> Runtime:
         await self.start()
         return self

@@ -8,15 +8,15 @@ from ravi.kernel.core.content import ChatMessage, TextBlock
 from ravi.agents.middleware import (
     MiddlewarePipeline,
     AuditLoggerMiddleware,
-    AgentRunContext,
+    AgentCallContext,
     AgentRunResult,
 )
 from ravi.exceptions import MiddlewareTermination
 
 
-def _ctx(text: str = "hello") -> AgentRunContext:
+def _ctx(text: str = "hello") -> AgentCallContext:
     msg = ChatMessage(role="user", content=[TextBlock(text=text)])
-    return AgentRunContext(
+    return AgentCallContext(
         agent_name="TestAgent", run_id="r1", session_id="s1", messages=[msg]
     )
 
@@ -32,7 +32,7 @@ async def test_pipeline_calls_final():
     pipeline = MiddlewarePipeline([])
     called = []
 
-    async def final(ctx: AgentRunContext) -> None:
+    async def final(ctx: AgentCallContext) -> None:
         called.append(ctx.agent_name)
 
     await pipeline.execute(_ctx(), final)
@@ -48,14 +48,14 @@ async def test_pipeline_chains_middlewares_in_order():
         def __init__(self, name: str) -> None:
             self._name = name
 
-        async def process(self, context: AgentRunContext, call_next) -> None:
+        async def process(self, context: AgentCallContext, call_next) -> None:
             order.append(f"{self._name}:before")
             await call_next()
             order.append(f"{self._name}:after")
 
     pipeline = MiddlewarePipeline([RecordMiddleware("A"), RecordMiddleware("B")])
 
-    async def final(ctx: AgentRunContext) -> None:
+    async def final(ctx: AgentCallContext) -> None:
         order.append("final")
 
     await pipeline.execute(_ctx(), final)
@@ -69,11 +69,11 @@ async def test_pipeline_halts_on_middleware_termination():
     reached_b = []
 
     class BlockingMiddleware:
-        async def process(self, context: AgentRunContext, call_next) -> None:
+        async def process(self, context: AgentCallContext, call_next) -> None:
             raise MiddlewareTermination("blocked")
 
     class TrailingMiddleware:
-        async def process(self, context: AgentRunContext, call_next) -> None:
+        async def process(self, context: AgentCallContext, call_next) -> None:
             reached_b.append(True)
             await call_next()
 
@@ -91,11 +91,11 @@ async def test_pipeline_middleware_can_mutate_context():
     """Middleware can mutate context before calling next."""
 
     class AddMessageMiddleware:
-        async def process(self, context: AgentRunContext, call_next) -> None:
+        async def process(self, context: AgentCallContext, call_next) -> None:
             context.metadata["injected"] = True
             await call_next()
 
-    async def noop(c: AgentRunContext) -> None:
+    async def noop(c: AgentCallContext) -> None:
         pass
 
     pipeline = MiddlewarePipeline([AddMessageMiddleware()])
@@ -119,7 +119,7 @@ async def test_audit_logger_logs_run(caplog):
 
     result_holder: list[AgentRunResult] = []
 
-    async def final(c: AgentRunContext) -> None:
+    async def final(c: AgentCallContext) -> None:
         c.result = AgentRunResult(output="done", status="success", run_id="r1")
         result_holder.append(c.result)
 

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     )
     from ravi.agents.middleware import (
         AgentRunResult,
-        AgentRunContext,
+        AgentCallContext,
         ChatContext,
         FunctionContext,
         AuditLoggerMiddleware,
@@ -74,7 +74,7 @@ __all__ = [
     "ContextConfig",
     "SlidingWindowCompaction",
     # middleware
-    "AgentRunContext",
+    "AgentCallContext",
     "ChatContext",
     "FunctionContext",
     "MiddlewarePipeline",
@@ -125,7 +125,7 @@ _LAZY: dict[str, tuple[str, str]] = {
     "ContextConfig": ("ravi.agents.context", "ContextConfig"),
     "SlidingWindowCompaction": ("ravi.agents.context", "SlidingWindowCompaction"),
     # middleware
-    "AgentRunContext": ("ravi.agents.middleware", "AgentRunContext"),
+    "AgentCallContext": ("ravi.agents.middleware", "AgentCallContext"),
     "ChatContext": ("ravi.agents.middleware", "ChatContext"),
     "FunctionContext": ("ravi.agents.middleware", "FunctionContext"),
     "MiddlewarePipeline": ("ravi.agents.middleware", "MiddlewarePipeline"),

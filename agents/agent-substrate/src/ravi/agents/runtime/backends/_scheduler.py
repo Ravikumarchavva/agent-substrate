@@ -138,3 +138,10 @@ class InMemoryScheduler:
         """Re-enqueue a suspended run (called by SignalBus/Inbox when a wakeup fires)."""
         if self._status.get(run_id) == RunStatus.SUSPENDED:
             await self.enqueue(run_id, priority=priority, tenant="default")
+
+    async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
+        """Wake the active run for agent_id, if any."""
+        for run_id, aid in list(self._agents.items()):
+            if aid == agent_id:
+                await self.wake_suspended(run_id, priority=priority)
+                break

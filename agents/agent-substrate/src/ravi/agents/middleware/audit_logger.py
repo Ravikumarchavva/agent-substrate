@@ -5,7 +5,7 @@ import time
 from typing import Callable, Awaitable
 
 from ravi.logger import setup_logging
-from ravi.agents.middleware._contracts import AgentRunContext
+from ravi.agents.middleware._contracts import AgentCallContext
 
 logger = setup_logging()
 
@@ -17,7 +17,7 @@ class AuditLoggerMiddleware:
         self.log_level = log_level
 
     async def process(
-        self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]
+        self, context: AgentCallContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
         t0 = time.monotonic()
         logger.log(

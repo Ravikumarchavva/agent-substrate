@@ -174,7 +174,7 @@ async def load_agent_for_thread(
     from ravi.agents.tools.toolbox import Toolbox
     toolbox = Toolbox()
     for t in tools:
-        toolbox.register(t)
+        toolbox.add(t)
 
     agent = ReActAgent(
         f"assistant-{session_id[:8]}",

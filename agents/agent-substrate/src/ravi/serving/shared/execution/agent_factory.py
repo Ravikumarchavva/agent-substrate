@@ -19,7 +19,6 @@ from ravi.kernel import (
     ToolResultBlock,
     Tool,
 )
-from ravi.kernel.messaging.message import Message
 from ravi.kernel.core.identity import AgentId
 
 logger = setup_logging()
@@ -167,15 +166,16 @@ async def load_session_memory(
             system_instructions,
             include_mcp_app_context=include_mcp_app_context,
         )
-        # History stores Message envelopes (target + payload=ChatMessage),
-        # matching how react.py._append wraps them.
+        # Seed the session history with the actual ChatMessage turns.
+        # The history provider contract stores ChatMessage objects directly,
+        # so we must not wrap them in Message envelopes here.
         for chat_msg in chat_messages:
-            envelope = Message(
-                target=_aid,
-                payload=chat_msg,
-                metadata={"run_id": "cold_store"},
+            await provider.append(
+                _aid,
+                chat_msg,
+                session_id=session_id,
+                run_id="cold_store",
             )
-            await provider.append(_aid, envelope, session_id=session_id)
         if chat_messages:
             logger.debug(
                 "Seeded session %s with %d messages from %s",
@@ -264,7 +264,7 @@ def create_assistant_agent(
     # Build tool registry
     toolbox = Toolbox()
     for t in (tools or []):
-        toolbox.register(t)
+        toolbox.add(t)
 
     return ReActAgent(
         name,

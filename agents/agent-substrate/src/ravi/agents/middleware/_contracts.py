@@ -60,7 +60,7 @@ class AgentRunResult:
 
 
 @dataclass
-class AgentRunContext:
+class AgentCallContext:
     agent_name: str
     run_id: str
     session_id: str

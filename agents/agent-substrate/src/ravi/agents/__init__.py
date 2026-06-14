@@ -34,7 +34,7 @@ from ravi.agents.llm import (
 from ravi.agents.middleware import (
     AuditLoggerMiddleware,
     MiddlewarePipeline,
-    AgentRunContext,
+    AgentCallContext,
     ChatContext,
     FunctionContext,
     RateLimiterMiddleware,
@@ -92,7 +92,7 @@ __all__ = [
     "get_model_profile",
     "list_models",
     # middleware
-    "AgentRunContext",
+    "AgentCallContext",
     "ChatContext",
     "FunctionContext",
     "RateLimiterMiddleware",

@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import Callable, Awaitable
 
-from ravi.agents.middleware._contracts import AgentRunContext
+from ravi.agents.middleware._contracts import AgentCallContext
 from ravi.exceptions import MiddlewareTermination
 
 
@@ -19,7 +19,7 @@ class RateLimiterMiddleware:
         self._lock = asyncio.Lock()
 
     async def process(
-        self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]
+        self, context: AgentCallContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
         async with self._lock:
             now = time.monotonic()

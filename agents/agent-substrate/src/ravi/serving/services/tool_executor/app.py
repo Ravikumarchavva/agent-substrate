@@ -32,8 +32,9 @@ def _load_default_tools(ci_http_client=None) -> list:
 
     try:
         from ravi.capabilities.tools.task_manager.tool import TaskManagerTool
+        from ravi.serving.shared.tasks.store import GlobalTaskStore
 
-        tools.append(TaskManagerTool())
+        tools.append(TaskManagerTool(store=GlobalTaskStore.get()))
     except Exception:
         logger.debug("TaskManagerTool not available")
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ravi.kernel.core.content import (
     ChatMessage,
@@ -11,10 +11,13 @@ from ravi.kernel.core.content import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from ravi.kernel.core.identity import AgentId
+from ravi.kernel.core.identity import AgentId, TopicId
 from ravi.kernel.llm.llm import GenerationOptions
 from ravi.kernel.messaging.message import Message
+from ravi.kernel.storage.history import HistoryProvider
 from ravi.kernel.tools import ToolRegistry
+from ravi.kernel.tools.approval import ApprovalHandler
+from ravi.kernel.tools.tools import ToolRisk
 
 from ravi.agents.context.context import ContextConfig
 from ravi.agents.core._loop import (
@@ -46,9 +49,9 @@ class ReActAgent:
         context: ContextConfig | None = None,
         system_instructions: str = "",
         max_iterations: int = 10,
-        output_topic: Any | None = None,
-        approval_handler: Any = None,
-        approval_required_risk: Any = None,
+        output_topic: TopicId | None = None,
+        approval_handler: ApprovalHandler | None = None,
+        approval_required_risk: ToolRisk | None = None,
     ) -> None:
         self.id = AgentId(type="agent", key=name)
         self.name = name
@@ -58,7 +61,7 @@ class ReActAgent:
             from ravi.agents.tools.toolbox import Toolbox
             tb = Toolbox()
             for t in tools:
-                tb.register(t)
+                tb.add(t)
             self.tools = tb
         else:
             self.tools = tools
@@ -71,7 +74,7 @@ class ReActAgent:
         self.approval_required_risk = approval_required_risk
 
     @property
-    def history(self) -> Any:
+    def history(self) -> HistoryProvider:
         return self._context.history
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:

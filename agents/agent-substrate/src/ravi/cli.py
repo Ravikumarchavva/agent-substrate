@@ -268,7 +268,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
         if tools:
             toolbox = Toolbox()
             for t in tools:
-                toolbox.register(t)
+                toolbox.add(t)
         async with Runtime() as rt:
             agent = ReActAgent(
                 args.name,

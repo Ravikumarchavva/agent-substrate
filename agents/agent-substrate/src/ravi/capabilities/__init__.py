@@ -35,12 +35,8 @@ from ravi.capabilities.tools.skills._manager import SkillManager
 from ravi.capabilities.tools.skills._loader import SkillLoader
 from ravi.capabilities.tools.skills._models import SkillPackage, SkillMetadata
 
-# Backward-compat alias
-CatalogScanner = CapabilityDiscovery
-
 __all__ = [
     "CatalogPackage",
-    "CatalogScanner",
     "CapabilityDiscovery",
     "DataRef",
     "DataRefStore",

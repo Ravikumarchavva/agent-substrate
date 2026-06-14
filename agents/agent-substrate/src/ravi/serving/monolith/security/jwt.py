@@ -15,9 +15,6 @@ from ravi.config import settings
 from ravi.serving.shared.auth.claims import AuthClaims
 from ravi.serving.shared.auth import jwt as _jwt
 
-# Backward-compat alias — monolith routes use TokenPayload
-TokenPayload = AuthClaims
-
 _SECRET = settings.JWT_SECRET
 _ALG = settings.JWT_ALGORITHM
 
@@ -63,7 +60,7 @@ def create_agent_context_token(
     )
 
 
-def verify_token(token: str, expected_type: str | None = None) -> TokenPayload | None:
+def verify_token(token: str, expected_type: str | None = None) -> AuthClaims | None:
     return _jwt.verify_token(
         token,
         secret=_SECRET,

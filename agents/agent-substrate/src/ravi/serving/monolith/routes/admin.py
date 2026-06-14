@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.serving.monolith.database import get_db
 from ravi.serving.monolith.models import Step, Thread
-from ravi.serving.monolith.security.deps import TokenPayload, get_current_user
+from ravi.serving.monolith.security.deps import AuthClaims, get_current_user
 
 logger = setup_logging()
 
@@ -28,8 +28,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 def require_admin(
-    current_user: TokenPayload = Depends(get_current_user),
-) -> TokenPayload:
+    current_user: AuthClaims = Depends(get_current_user),
+) -> AuthClaims:
     """Raise 403 unless the authenticated user has an admin role."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden: admin access only")
@@ -42,7 +42,7 @@ def require_admin(
 @router.get("/stats")
 async def admin_stats(
     db: AsyncSession = Depends(get_db),
-    _: TokenPayload = Depends(require_admin),
+    _: AuthClaims = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Return top-level aggregate stats."""
 
@@ -60,7 +60,7 @@ async def list_all_threads(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
-    _: TokenPayload = Depends(require_admin),
+    _: AuthClaims = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     """Return all threads with step counts, newest first."""
 
@@ -104,7 +104,7 @@ async def list_all_threads(
 async def get_thread_steps(
     thread_id: str,
     db: AsyncSession = Depends(get_db),
-    _: TokenPayload = Depends(require_admin),
+    _: AuthClaims = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     """Return all steps for a specific thread (for admin inspection)."""
 
@@ -135,7 +135,7 @@ async def delete_thread(
     thread_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _: TokenPayload = Depends(require_admin),
+    _: AuthClaims = Depends(require_admin),
 ) -> Dict[str, str]:
     """Hard-delete a thread and all its steps (admin only)."""
 

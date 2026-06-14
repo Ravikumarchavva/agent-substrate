@@ -9,9 +9,9 @@ from typing import Any, Dict, List, Optional
 from ravi.agents.context import (
     HistoryProvider,
     InMemoryHistoryProvider,
-    SlidingWindowCompaction as SlidingWindowStrategy,
+    SlidingWindowCompaction,
 )
-from ravi.kernel.llm import LLMClient as BaseModelClient
+from ravi.kernel.llm import LLMClient
 from ravi.kernel import (
     ChatMessage,
     TextBlock,
@@ -213,7 +213,7 @@ async def load_session_memory(
 def create_assistant_agent(
     *,
     runtime: Any,
-    model_client: BaseModelClient,
+    model_client: LLMClient,
     tools: Optional[List[Tool]] = None,
     system_instructions: str = "",
     memory: Optional[HistoryProvider] = None,
@@ -236,17 +236,13 @@ def create_assistant_agent(
 
     # Resolve compaction: accept SlidingWindowCompaction directly or fall back
     # to a window derived from model_context_window.
-    compaction: Optional[SlidingWindowStrategy] = None
-    if isinstance(model_context, SlidingWindowStrategy):
+    compaction: Optional[SlidingWindowCompaction] = None
+    if isinstance(model_context, SlidingWindowCompaction):
         compaction = model_context
     elif model_context is None:
-        compaction = SlidingWindowStrategy(max_messages=model_context_window)
+        compaction = SlidingWindowCompaction(max_messages=model_context_window)
 
-    from ravi.agents.context import (
-        ContextConfig,
-        InMemoryHistoryProvider,
-        SlidingWindowCompaction,
-    )
+    from ravi.agents.context import ContextConfig
 
     if memory is not None:
         ctx = ContextConfig(

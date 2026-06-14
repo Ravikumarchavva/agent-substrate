@@ -225,5 +225,3 @@ class CapabilityDiscovery:
         return ".".join(module_parts)
 
 
-# Backward-compat alias used in existing imports (removed after migration)
-CatalogScanner = CapabilityDiscovery

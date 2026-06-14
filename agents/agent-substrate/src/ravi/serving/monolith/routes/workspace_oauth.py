@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from ravi.serving.monolith.security.deps import TokenPayload, get_current_user
+from ravi.serving.monolith.security.deps import AuthClaims, get_current_user
 
 logger = setup_logging()
 
@@ -132,7 +132,7 @@ async def clear_workspace_tokens_async(
 @router.post("/set-token")
 async def set_workspace_token(
     request: Request,
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ) -> JSONResponse:
     """Accept a Google Workspace OAuth token pushed from the Next.js frontend."""
     body = await request.json()
@@ -151,7 +151,7 @@ async def set_workspace_token(
 @router.get("/token")
 async def get_workspace_token(
     request: Request,
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ) -> JSONResponse:
     """Return the stored Google Workspace access token."""
     redis = _get_redis(request)
@@ -169,7 +169,7 @@ async def get_workspace_token(
 @router.delete("/token")
 async def clear_workspace_token(
     request: Request,
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ) -> JSONResponse:
     """Clear the stored workspace token (disconnect)."""
     redis = _get_redis(request)

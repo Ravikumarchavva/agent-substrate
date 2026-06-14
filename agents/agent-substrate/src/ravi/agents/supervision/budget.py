@@ -37,7 +37,7 @@ import threading
 
 from ravi.kernel.core.errors import BudgetExhaustedError
 from ravi.kernel.core.identity import AgentId
-from ravi.kernel.agent.supervision import Priority, Supervision
+from ravi.kernel.agent.supervision import Priority, SpawnBudget
 
 
 class SpawnTracker:
@@ -52,8 +52,8 @@ class SpawnTracker:
        priority level. NORMAL and below raise ``BudgetExhaustedError``.
     """
 
-    def __init__(self, supervision: Supervision) -> None:
-        self._max_agents = supervision.spawn_budget.max_agents
+    def __init__(self, spawn_budget: SpawnBudget) -> None:
+        self._max_agents = spawn_budget.max_agents
         self._total = 1  # root agent already counts as 1
         self._active: dict[AgentId, Priority] = {}  # agent → its current priority
         self._paused: set[AgentId] = set()  # cooperative pause signals

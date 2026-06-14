@@ -6,7 +6,7 @@ from ravi.agents.context import (
     ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
-    SummarizationStrategy,
+    SummarizationCompaction,
     TokenBudgetComposedStrategy,
 )
 from ravi.kernel import AgentId
@@ -65,7 +65,7 @@ async def test_agent_context():
 
 
 # ---------------------------------------------------------------------------
-# SummarizationStrategy — token-based
+# SummarizationCompaction — token-based
 # ---------------------------------------------------------------------------
 
 
@@ -100,7 +100,7 @@ class _FakeModel:
 async def test_summarization_no_trigger_when_under_budget():
     """History fits in recent_token_budget → returned unchanged, no LLM call."""
     model = _FakeModel()
-    strategy = SummarizationStrategy(
+    strategy = SummarizationCompaction(
         model, recent_token_budget=10_000, min_old_tokens=100
     )
     msgs = [_make_msg("user", "hello")]
@@ -113,7 +113,7 @@ async def test_summarization_no_trigger_when_under_budget():
 async def test_summarization_triggers_on_token_overflow():
     """Old slice exceeds min_old_tokens → LLM called, summary injected at front."""
     model = _FakeModel("User asked about weather.")
-    strategy = SummarizationStrategy(
+    strategy = SummarizationCompaction(
         model,
         recent_token_budget=50,
         min_old_tokens=10,
@@ -134,7 +134,7 @@ async def test_summarization_incremental_update():
     """If the first message in old is already a summary, strategy does an incremental
     update (uses _UPDATE_SYSTEM_PROMPT) rather than re-summarizing from scratch."""
     model = _FakeModel("Updated summary.")
-    strategy = SummarizationStrategy(
+    strategy = SummarizationCompaction(
         model,
         recent_token_budget=50,
         min_old_tokens=10,
@@ -167,7 +167,7 @@ async def test_summarization_graceful_on_llm_failure():
         ) -> LLMResponse:
             raise RuntimeError("network error")
 
-    strategy = SummarizationStrategy(
+    strategy = SummarizationCompaction(
         _FailingModel(),
         recent_token_budget=50,
         min_old_tokens=10,

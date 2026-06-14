@@ -10,7 +10,7 @@ import httpx
 from ravi.agents.core import ReActAgent
 from ravi.agents.context import (
     HistoryProvider,
-    SlidingWindowCompaction as SlidingWindowStrategy,
+    SlidingWindowCompaction,
 )
 from ravi.kernel import (
     TextBlock,
@@ -80,7 +80,7 @@ def create_agent(
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
-        model_context=SlidingWindowStrategy(max_messages=model_context_window),
+        model_context=SlidingWindowCompaction(max_messages=model_context_window),
         max_iterations=max_iterations,
     )
 

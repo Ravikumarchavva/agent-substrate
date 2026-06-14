@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ravi.capabilities.tools.discovery import CapabilityDiscovery as CatalogScanner
+from ravi.capabilities.tools.discovery import CapabilityDiscovery
 
 
 def test_catalog_scanner_discovery(tmp_path, monkeypatch):
@@ -21,10 +21,10 @@ def test_catalog_scanner_discovery(tmp_path, monkeypatch):
         input_schema = {"type": "object", "properties": {}}
 
     # Monkeypatch _load_tool_class to return MyMockTool directly
-    monkeypatch.setattr(CatalogScanner, "_load_tool_class", lambda *a: MyMockTool)
+    monkeypatch.setattr(CapabilityDiscovery, "_load_tool_class", lambda *a: MyMockTool)
 
     # Initialize scanner with the temp directory as a scanned path
-    scanner = CatalogScanner(capability_dirs=[tools_dir])
+    scanner = CapabilityDiscovery(capability_dirs=[tools_dir])
     packages = scanner.discover()
 
     assert len(packages) == 1

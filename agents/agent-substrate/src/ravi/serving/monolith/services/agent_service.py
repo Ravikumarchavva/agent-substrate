@@ -23,7 +23,7 @@ from ravi.agents.context import (
     SlidingWindowCompaction,
 )
 from ravi.capabilities.tools.human_input import ToolApprovalHandler
-from ravi.kernel.llm import LLMClient as BaseModelClient
+from ravi.kernel.llm import LLMClient
 from ravi.kernel import ChatMessage, TextBlock, ToolUseBlock, Tool
 from ravi.serving.stream.run_adapter import RunStreamAdapter
 from ravi.serving.shared.execution import load_session_memory
@@ -46,7 +46,7 @@ def _make_context(max_messages: int = 20) -> ContextConfig:
 
 
 def _build_orchestrator(
-    model_client: BaseModelClient,
+    model_client: LLMClient,
     runtime: Any,
     model_context_window: int,
     tool_timeout: float | None,
@@ -123,7 +123,7 @@ async def load_agent_for_thread(
     db: AsyncSession,
     thread_id: uuid.UUID,
     *,
-    model_client: BaseModelClient,
+    model_client: LLMClient,
     tools: List[Tool],
     system_instructions: str,
     history: Optional[HistoryProvider] = None,

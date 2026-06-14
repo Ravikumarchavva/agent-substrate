@@ -20,6 +20,7 @@ from ravi.kernel.tools.approval import ApprovalHandler
 from ravi.kernel.tools.tools import ToolRisk
 
 from ravi.agents.context.context import ContextConfig
+from ravi.agents.resources.budget import ExecutionTracker
 from ravi.agents.core._loop import (
     deliver,
     final_text,
@@ -52,6 +53,7 @@ class ReActAgent:
         output_topic: TopicId | None = None,
         approval_handler: ApprovalHandler | None = None,
         approval_required_risk: ToolRisk | None = None,
+        execution_budget: ExecutionTracker | None = None,
     ) -> None:
         self.id = AgentId(type="agent", key=name)
         self.name = name
@@ -72,6 +74,7 @@ class ReActAgent:
         self._output_topic = output_topic
         self.approval_handler = approval_handler
         self.approval_required_risk = approval_required_risk
+        self._execution_budget = execution_budget
 
     @property
     def history(self) -> HistoryProvider:
@@ -108,6 +111,12 @@ class ReActAgent:
         for _ in range(self._max_iterations):
             ctx.check()
             resp = await ctx.llm(messages, options=options)
+
+            if self._execution_budget is not None:
+                self._execution_budget.consume(
+                    tokens=resp.usage.total_tokens if resp.usage else 0,
+                    turns=1,
+                )
 
             assistant_turn = ChatMessage(role=Role.ASSISTANT, content=resp.content)
             messages.append(assistant_turn)

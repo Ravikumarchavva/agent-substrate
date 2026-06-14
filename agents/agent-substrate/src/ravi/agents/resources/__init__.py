@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from ravi.agents.resources.budget import BudgetExceededError, ExecutionTracker
+from ravi.agents.resources.budget import ExecutionTracker
 
 __all__ = [
-    "BudgetExceededError",
     "ExecutionTracker",
 ]

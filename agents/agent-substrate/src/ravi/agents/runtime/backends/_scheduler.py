@@ -139,6 +139,22 @@ class InMemoryScheduler:
         if self._status.get(run_id) == RunStatus.SUSPENDED:
             await self.enqueue(run_id, priority=priority, tenant="default")
 
+    async def find_run_for_agent(
+        self, agent_id: AgentId
+    ) -> tuple[RunId, RunStatus] | None:
+        """Return (run_id, status) of the most recent non-terminal run for agent_id.
+
+        Returns None when no active run exists (all runs are terminal or
+        this agent has never had a run).
+        """
+        _terminal = {RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED}
+        for run_id, aid in list(self._agents.items()):
+            if aid == agent_id:
+                status = self._status.get(run_id)
+                if status is not None and status not in _terminal:
+                    return (run_id, status)
+        return None
+
     async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
         """Wake the active run for agent_id, if any."""
         for run_id, aid in list(self._agents.items()):

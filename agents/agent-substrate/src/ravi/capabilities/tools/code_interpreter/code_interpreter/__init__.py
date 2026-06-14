@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .agent_sandbox_tools import (
     AgentSandboxTools,
-    CodeInterpreter,
     code_interpreter,
     code_interpreter_thread,
     configure_default_code_interpreter,
@@ -24,7 +23,6 @@ def main() -> None:
 __all__ = [
     "main",
     "AgentSandboxTools",
-    "CodeInterpreter",
     "K8sSandboxCodeInterpreterTool",
     "code_interpreter",
     "code_interpreter_thread",

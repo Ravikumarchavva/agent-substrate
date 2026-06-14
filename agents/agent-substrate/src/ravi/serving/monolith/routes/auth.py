@@ -17,8 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ravi.config import settings
 from ravi.serving.monolith.security.deps import get_current_user
+from ravi.serving.shared.auth.claims import AuthClaims
 from ravi.serving.monolith.security.jwt import (
-    TokenPayload,
     create_access_token,
     create_agent_context_token,
     create_refresh_token,
@@ -159,7 +159,7 @@ async def refresh_tokens(body: RefreshRequest, request: Request):
 @router.post("/agent-token")
 async def issue_agent_token(
     body: AgentTokenRequest,
-    user: TokenPayload = Depends(get_current_user),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Issue a short-lived agent context token bound to a specific thread.
 
@@ -182,8 +182,8 @@ async def issue_agent_token(
     }
 
 
-@router.get("/me", response_model=TokenPayload)
-async def get_me(user: TokenPayload = Depends(get_current_user)):
+@router.get("/me", response_model=AuthClaims)
+async def get_me(user: AuthClaims = Depends(get_current_user)):
     """Return the decoded access token payload for the calling user."""
     return user
 

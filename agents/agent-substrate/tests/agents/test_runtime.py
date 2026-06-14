@@ -20,7 +20,6 @@ from ravi.kernel.runtime.communication import AskOutcome
 from ravi.kernel.runtime.effects import Effect, EffectResult
 from ravi.agents.runtime import Runtime, RunContext
 from ravi.agents.runtime.backends import InMemoryJournal
-from ravi.serving.stream.run_adapter import RunStreamAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -51,40 +50,6 @@ class RecorderAgent:
         self.received.extend(inbox)
         self.done.set()
 
-
-async def test_run_stream_adapter_is_async_iterable() -> None:
-    class FakeEventLog:
-        async def tail(self, run_id: str):
-            yield type("Entry", (), {"kind": "run.completed", "payload": {}})()
-
-        async def read(self, run_id: str):
-            if False:
-                yield
-
-    class FakeRuntime:
-        def __init__(self) -> None:
-            self.event_log = FakeEventLog()
-            self.submitted = []
-            self._registry = {}
-
-        async def submit(self, agent_id, msg):
-            self.submitted.append((agent_id, msg))
-            return "run-1"
-
-    runtime = FakeRuntime()
-    adapter = RunStreamAdapter(
-        agent_id=AgentId(type="assistant", key="test-agent"),
-        runtime=runtime,
-        tools=[],
-        correlation_id="corr-1",
-    )
-
-    events = []
-    async for event in adapter.run_stream("hello"):
-        events.append(event)
-        break
-
-    assert events
 
 
 async def test_fire_and_forget_delivery() -> None:

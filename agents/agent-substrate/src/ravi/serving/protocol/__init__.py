@@ -34,9 +34,12 @@ from ravi.serving.protocol.requests import (
     InputResponse,
     CancelRequest,
 )
+from ravi.serving.protocol.from_log import wire_from_log, STREAMING_KINDS
 
 __all__ = [
     "PROTOCOL_VERSION",
+    "wire_from_log",
+    "STREAMING_KINDS",
     # events
     "WireEvent",
     "HelloEvent",

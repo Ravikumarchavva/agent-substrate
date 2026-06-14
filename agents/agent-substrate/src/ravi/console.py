@@ -165,16 +165,65 @@ class Console:
 
         setup_logging(mode="pretty", level=logging.WARNING)
 
-    def _adapter(self) -> Any:
-        from ravi.serving.stream.run_adapter import RunStreamAdapter
+    async def _stream(self, task: str) -> "AsyncIterator[Any]":
+        """Submit *task* to the runtime and stream log entries as kernel events."""
+        from ravi.kernel.core.content import TextBlock as _TB, ChatMessage as _CM, Role as _Role
+        from ravi.kernel.messaging.message import ChatPayload as _CP, Message as _Msg
+        from ravi.kernel.messaging.stream import (
+            AgentProgress,
+            AgentStep,
+            CompletionEvent,
+            StreamDone,
+            TextDelta,
+            ReasoningDelta,
+        )
 
-        tools = list(self.agent.tools.all()) if self.agent.tools else []
-        return RunStreamAdapter(
-            agent_id=self.agent.id,
-            runtime=self._runtime,
-            tools=tools,
+        msg = _Msg(
+            target=self.agent.id,
+            payload=_CP(message=_CM(role=_Role.USER, content=[_TB(text=task)])),
             correlation_id=self._correlation_id,
         )
+        await self._runtime.register(self.agent)
+        run_id = await self._runtime.submit(self.agent.id, msg)
+        final_text = ""
+        async for entry in self._runtime.event_log.tail(run_id):
+            kind = entry.kind
+            p = entry.payload or {}
+            if kind == "text.delta":
+                delta = p.get("text", "")
+                final_text += delta
+                yield TextDelta(text=delta)
+            elif kind == "reasoning.delta":
+                yield ReasoningDelta(text=p.get("text", ""))
+            elif kind == "tool.call":
+                yield AgentProgress(
+                    agent_id=self.agent.id,
+                    step=AgentStep.TOOL_CALL,
+                    content=p.get("tool_name", "tool"),
+                    run_id=run_id,
+                )
+            elif kind == "tool.result":
+                name = p.get("tool_name", "tool")
+                content = name if p.get("ok", True) else f"{name} error"
+                yield AgentProgress(
+                    agent_id=self.agent.id,
+                    step=AgentStep.TOOL_RESULT,
+                    content=content,
+                    run_id=run_id,
+                )
+            elif kind == "run.completed":
+                yield CompletionEvent(
+                    content=[_TB(text=final_text)],
+                    metadata={"finish_reason": "stop"},
+                )
+                yield StreamDone(reason="success")
+                return
+            elif kind == "run.failed":
+                yield StreamDone(reason="error")
+                return
+            elif kind == "run.cancelled":
+                yield StreamDone(reason="cancelled")
+                return
 
     # ------------------------------------------------------------------
     # Single-shot run (non-streaming)
@@ -188,9 +237,8 @@ class Console:
 
         from ravi.kernel.messaging.stream import StreamDone
 
-        adapter = self._adapter()
         final_text = ""
-        async for chunk in adapter._stream(task):
+        async for chunk in self._stream(task):
             if isinstance(chunk, CompletionEvent):
                 from ravi.kernel.core.content import content_blocks_to_str
                 final_text = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
@@ -216,7 +264,7 @@ class Console:
         final_message = ""
         tool_calls_count = 0
 
-        chunk_iter: AsyncIterator[Any] = self._adapter()._stream(task)
+        chunk_iter: AsyncIterator[Any] = self._stream(task)
 
         live = None
         text_stream_active = False

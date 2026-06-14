@@ -52,6 +52,9 @@ from ravi.serving.protocol import (
     TurnCompletedEvent,
     ToolResultEvent,
 )
+from ravi.kernel.core.content import ChatMessage as _ChatMessage, Role, TextBlock as _TextBlock
+from ravi.kernel.core.identity import AgentId as _AgentId
+from ravi.kernel.messaging.message import ChatPayload as _ChatPayload, Message as _Message
 from ravi.serving.stream import AgentStreamSession
 
 logger = setup_logging()
@@ -740,7 +743,7 @@ async def chat(
 
     # Tool risk/UI metadata, built in setup so a failure releases the lock here
     # (not inside the generator where it could orphan the lock).
-    tool_meta_map = _build_tool_meta_map(agent.tools)
+    tool_meta_map = _build_tool_meta_map(deps["tools"])
 
     # Per-request cancel signal — set by POST /chat/{thread_id}/cancel.
     cancel_event: asyncio.Event = asyncio.Event()
@@ -756,14 +759,24 @@ async def chat(
         attachments=attachments,
     )
 
+    _user_blocks: list = [_TextBlock(text=user_content)]
+    _entry_msg = _Message(
+        target=agent.id,
+        sender=_AgentId(type="proxy", key="http"),
+        payload=_ChatPayload(
+            message=_ChatMessage(role=Role.USER, content=_user_blocks)
+        ),
+        correlation_id=str(body.thread_id),
+    )
+
     session = AgentStreamSession(
+        runtime=deps["runtime"],
         agent=agent,
-        user_input=user_content,
+        msg=_entry_msg,
         bridge=bridge,
         is_disconnected=request.is_disconnected,
         cancel_event=cancel_event,
         persister=persister,
-        initial_tool_choice=initial_tool_choice,
     )
 
     async def sse_generator() -> AsyncIterator[str]:

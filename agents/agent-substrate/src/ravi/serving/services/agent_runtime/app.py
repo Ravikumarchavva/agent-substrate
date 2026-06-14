@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
+from ravi.agents.runtime.runtime import Runtime
 from ravi.capabilities.history.redis_history import RedisHistoryProvider
 from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.serving.services.agent_runtime.routes import router
@@ -42,41 +43,44 @@ async def lifespan(app):
         "http://localhost:8012",
     )
 
-    # Redis
-    app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
+    async with Runtime() as runtime:
+        app.state.runtime = runtime
 
-    event_bus = get_event_bus(redis_url)
-    await event_bus.connect()
-    app.state.event_bus = event_bus
+        # Redis
+        app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
 
-    # Redis history (shared, multi-session)
-    history = RedisHistoryProvider(redis_url=redis_url)
-    await history.connect()
-    app.state.history = history
+        event_bus = get_event_bus(redis_url)
+        await event_bus.connect()
+        app.state.event_bus = event_bus
 
-    # Model client
-    app.state.model_client = OpenAIClient(
-        model=os.environ.get("MODEL_NAME", "gpt-4o"),
-    )
+        # Redis history (shared, multi-session)
+        history = RedisHistoryProvider(redis_url=redis_url)
+        await history.connect()
+        app.state.history = history
 
-    # Tools
-    app.state.tools = _load_tools()
+        # Model client
+        app.state.model_client = OpenAIClient(
+            model=os.environ.get("MODEL_NAME", "gpt-4o"),
+        )
 
-    # System instructions
-    app.state.system_instructions = os.environ.get(
-        "SYSTEM_INSTRUCTIONS",
-        "You are a helpful assistant.",
-    )
+        # Tools
+        app.state.tools = _load_tools()
 
-    # Service URLs
-    app.state.conversation_service_url = conversation_url
+        # System instructions
+        app.state.system_instructions = os.environ.get(
+            "SYSTEM_INSTRUCTIONS",
+            "You are a helpful assistant.",
+        )
 
-    logger.info("Agent Runtime started — %d tools loaded", len(app.state.tools))
-    yield
+        # Service URLs
+        app.state.conversation_service_url = conversation_url
 
-    await history.disconnect()
-    await app.state.event_bus.disconnect()
-    await app.state.redis.aclose()
+        logger.info("Agent Runtime started — %d tools loaded", len(app.state.tools))
+        yield
+
+        await history.disconnect()
+        await app.state.event_bus.disconnect()
+        await app.state.redis.aclose()
 
 
 app = create_service_app(

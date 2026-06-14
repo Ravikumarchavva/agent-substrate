@@ -14,15 +14,15 @@ from ravi.agents.context import (
 )
 from ravi.kernel import (
     TextBlock,
-    ToolUseBlock,
     Tool as BaseTool,
 )
-from ravi.kernel.messaging.stream import CompletionEvent
+from ravi.kernel.core.content import ChatMessage, Role
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.messaging.message import ChatPayload, Message
 from ravi.kernel.llm import LLMClient
 from ravi.integrations.events import EventBus
 from ravi.integrations.events.envelope import EventEnvelope
 from ravi.agents.factory import create_assistant_agent, load_session_memory
-from ravi.agents.runner import stream_agent_run
 
 logger = setup_logging()
 
@@ -61,7 +61,6 @@ async def load_memory_for_thread(
 
 def create_agent(
     *,
-    runtime: Any,
     model_client: LLMClient,
     tools: List[BaseTool],
     system_instructions: str,
@@ -69,6 +68,7 @@ def create_agent(
     session_id: Optional[str] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
+    runtime: Any = None,
 ) -> ReActAgent:
     """Create the agent used by the runtime service."""
     return create_assistant_agent(
@@ -82,16 +82,6 @@ def create_agent(
     )
 
 
-def _serialize_completion_content(evt: CompletionEvent) -> list[str] | None:
-    if not evt.content:
-        return None
-    texts = []
-    for item in evt.content:
-        if isinstance(item, TextBlock):
-            texts.append(item.text)
-    return ["\n".join(texts)] if texts else None
-
-
 async def execute_agent_run(
     *,
     agent: ReActAgent,
@@ -99,110 +89,109 @@ async def execute_agent_run(
     run_id: str,
     thread_id: str,
     event_bus: EventBus,
+    runtime: Any,
 ) -> None:
-    """Execute a streaming agent run and publish distributed runtime events."""
-    failed = False
+    """Execute an agent run and publish distributed runtime events via the EventBus."""
+    await runtime.register(agent)
 
-    async def _publish_text_delta(chunk) -> None:
-        await event_bus.publish(
-            EventEnvelope(
-                event_type="agent.text_delta",
-                payload={
-                    "type": "text_delta",
-                    "run_id": run_id,
-                    "thread_id": thread_id,
-                    "content": chunk.text,
-                    "partial": True,
-                },
-            )
-        )
-
-    async def _publish_reasoning_delta(chunk) -> None:
-        await event_bus.publish(
-            EventEnvelope(
-                event_type="agent.reasoning_delta",
-                payload={
-                    "type": "reasoning_delta",
-                    "run_id": run_id,
-                    "thread_id": thread_id,
-                    "content": chunk.text,
-                    "partial": True,
-                },
-            )
-        )
-
-    async def _publish_completion(evt: CompletionEvent) -> None:
-        tool_calls = []
-        for block in evt.content:
-            if isinstance(block, ToolUseBlock):
-                tool_calls.append(
-                    {
-                        "id": block.call_id,
-                        "name": block.tool_name,
-                        "arguments": block.arguments,
-                    }
-                )
-
-        await event_bus.publish(
-            EventEnvelope(
-                event_type="agent.completion",
-                payload={
-                    "type": "completion",
-                    "run_id": run_id,
-                    "thread_id": thread_id,
-                    "content": _serialize_completion_content(evt),
-                    "tool_calls": tool_calls or None,
-                    "finish_reason": "stop",
-                    "has_tool_calls": bool(tool_calls),
-                    "partial": False,
-                    "complete": True,
-                },
-            )
-        )
-
-    async def _publish_failure(exc: Exception) -> None:
-        nonlocal failed
-        failed = True
-        logger.exception("Agent run %s failed", run_id)
-        await event_bus.publish(
-            EventEnvelope(
-                event_type="agent.run_failed",
-                payload={
-                    "type": "agent.run_failed",
-                    "run_id": run_id,
-                    "thread_id": thread_id,
-                    "error": str(exc),
-                },
-            )
-        )
-
-    step_count = await stream_agent_run(
-        agent=agent,
-        user_content=user_content,
-        execution_context=ExecutionContext(
-            run_id=run_id,
-            correlation_id=run_id,
-            thread_id=thread_id,
-            input_text=user_content,
+    msg = Message(
+        target=agent.id,
+        sender=AgentId(type="proxy", key="job"),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=user_content)])
         ),
-        on_text_delta=_publish_text_delta,
-        on_reasoning_delta=_publish_reasoning_delta,
-        on_completion=_publish_completion,
-        on_error=_publish_failure,
+        correlation_id=thread_id,
     )
+    actual_run_id = await runtime.submit(agent.id, msg)
 
-    if failed:
-        return
+    async for entry in runtime.event_log.tail(actual_run_id):
+        kind = entry.kind
+        p = entry.payload or {}
 
-    await event_bus.publish(
-        EventEnvelope(
-            event_type="agent.run_completed",
-            correlation_id=run_id,
-            payload={
-                "type": "agent.run_completed",
-                "run_id": run_id,
-                "thread_id": thread_id,
-                "steps_count": step_count,
-            },
-        )
-    )
+        if kind == "text.delta":
+            await event_bus.publish(
+                EventEnvelope(
+                    event_type="agent.text_delta",
+                    payload={
+                        "type": "text_delta",
+                        "run_id": run_id,
+                        "thread_id": thread_id,
+                        "content": p.get("text", ""),
+                        "partial": True,
+                    },
+                )
+            )
+
+        elif kind == "reasoning.delta":
+            await event_bus.publish(
+                EventEnvelope(
+                    event_type="agent.reasoning_delta",
+                    payload={
+                        "type": "reasoning_delta",
+                        "run_id": run_id,
+                        "thread_id": thread_id,
+                        "content": p.get("text", ""),
+                        "partial": True,
+                    },
+                )
+            )
+
+        elif kind == "tool.call":
+            await event_bus.publish(
+                EventEnvelope(
+                    event_type="agent.tool_call",
+                    payload={
+                        "type": "tool_call",
+                        "run_id": run_id,
+                        "thread_id": thread_id,
+                        "name": p.get("tool_name", ""),
+                    },
+                )
+            )
+
+        elif kind == "tool.result":
+            await event_bus.publish(
+                EventEnvelope(
+                    event_type="agent.tool_result",
+                    payload={
+                        "type": "tool_result",
+                        "run_id": run_id,
+                        "thread_id": thread_id,
+                        "name": p.get("tool_name", ""),
+                        "ok": bool(p.get("ok", True)),
+                    },
+                )
+            )
+
+        elif kind == "run.completed":
+            await event_bus.publish(
+                EventEnvelope(
+                    event_type="agent.run_completed",
+                    correlation_id=run_id,
+                    payload={
+                        "type": "agent.run_completed",
+                        "run_id": run_id,
+                        "thread_id": thread_id,
+                    },
+                )
+            )
+            return
+
+        elif kind == "run.failed":
+            error = p.get("error", "Agent run failed")
+            logger.error("Agent run %s failed: %s", run_id, error)
+            await event_bus.publish(
+                EventEnvelope(
+                    event_type="agent.run_failed",
+                    payload={
+                        "type": "agent.run_failed",
+                        "run_id": run_id,
+                        "thread_id": thread_id,
+                        "error": error,
+                    },
+                )
+            )
+            return
+
+        elif kind == "run.cancelled":
+            return

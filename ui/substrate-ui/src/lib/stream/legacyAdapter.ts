@@ -54,7 +54,7 @@ export function wireEventToLegacy(event: WireEvent): Legacy[] {
           type: "tool_result",
           tool_name: event.tool_name,
           tool_call_id: event.call_id ?? "",
-          content: event.ok ? "" : event.error ?? "error",
+          content: event.ok ? (event.output ?? "") : event.error ?? "error",
           is_error: !event.ok,
         },
       ];

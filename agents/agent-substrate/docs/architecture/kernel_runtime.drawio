@@ -1,0 +1,98 @@
+<mxfile host="drawio" version="26.0.0">
+  <diagram id="kernel_runtime" name="Page-1">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- PROTOCOLS (Blue / Purple) -->
+        <mxCell id="agent" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;Protocol&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;Agent&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #b4c6fc;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.3;margin-top:6px;&quot;&gt;+ run(ctx, inbox)&lt;br/&gt;&amp;nbsp;&amp;nbsp;:-&amp;gt; None&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#3b5bdb;fillColor=#edf2ff;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="280" height="100" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="context" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;Protocol&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;AgentRunContext&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #b4c6fc;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ run_id: RunId&lt;br/&gt;+ session_id: str&lt;br/&gt;+ deadline: datetime&lt;br/&gt;+ supervision: Supervision&lt;br/&gt;+ now() :-&amp;gt; datetime&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#3b5bdb;fillColor=#edf2ff;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="400" y="40" width="280" height="150" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="supervisor" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;Protocol&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;Supervisor&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #b4c6fc;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ spawn(child, parent, policy, boot)&lt;br/&gt;&amp;nbsp;&amp;nbsp;:-&amp;gt; RunHandle&lt;br/&gt;+ join(handle) :-&amp;gt; RunResult&lt;br/&gt;+ cancel(handle, reason) :-&amp;gt; None&lt;br/&gt;+ children_of(parent) :-&amp;gt; AsyncIter&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#3b5bdb;fillColor=#edf2ff;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="760" y="40" width="340" height="150" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="inbox" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;Protocol&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;Inbox&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #b4c6fc;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ deliver(agent_id, msg) :-&amp;gt; bool&lt;br/&gt;+ drain(agent_id, max) :-&amp;gt; list[Msg]&lt;br/&gt;+ ack(agent_id, msg_id) :-&amp;gt; None&lt;br/&gt;+ nack(agent_id, msg_id, err) :-&amp;gt; None&lt;br/&gt;+ dead_letters(agent_id) :-&amp;gt; list[DL]&lt;br/&gt;+ pending_count(agent_id) :-&amp;gt; int&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#3b5bdb;fillColor=#edf2ff;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="280" height="180" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="scheduler" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;Protocol&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;Scheduler&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #b4c6fc;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ enqueue(run_id, prio, tenant,&lt;br/&gt;&amp;nbsp;&amp;nbsp;wake, policy) :-&amp;gt; None&lt;br/&gt;+ lease(worker_id, cap) :-&amp;gt; list[Lease]&lt;br/&gt;+ heartbeat(lease) :-&amp;gt; None&lt;br/&gt;+ release(lease, status, wake) :-&amp;gt; None&lt;br/&gt;+ pending_runs(tenant) :-&amp;gt; AsyncIter&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#3b5bdb;fillColor=#edf2ff;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="400" y="280" width="340" height="170" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="signal_bus" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;Protocol&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;SignalBus&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #b4c6fc;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ signal(run_id, name, payload) :-&amp;gt; None&lt;br/&gt;+ timer(run_id, at) :-&amp;gt; None&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#3b5bdb;fillColor=#edf2ff;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="820" y="280" width="280" height="110" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="event_log" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;Protocol&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;EventLog&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #b4c6fc;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ append(run_id, entry, expected) :-&amp;gt; int&lt;br/&gt;+ read(run_id, from_seq) :-&amp;gt; AsyncIter&lt;br/&gt;+ tail(run_id, from_seq) :-&amp;gt; AsyncIter&lt;br/&gt;+ last_seq(run_id) :-&amp;gt; int&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#3b5bdb;fillColor=#edf2ff;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="40" y="550" width="280" height="150" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="follow_graph" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;Protocol&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;FollowGraph&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #b4c6fc;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ follow(follower, topic) :-&amp;gt; Sub&lt;br/&gt;+ unfollow(sub) :-&amp;gt; None&lt;br/&gt;+ followers_of(topic) :-&amp;gt; AsyncIter&lt;br/&gt;+ following(agent) :-&amp;gt; AsyncIter&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#3b5bdb;fillColor=#edf2ff;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="400" y="550" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- DATACLASSES / STRUCTS (Teal / Green) -->
+        <mxCell id="run_log_entry" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#1e293b;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;DataClass&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;RunLogEntry&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #a2e2b3;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ run_id: RunId&lt;br/&gt;+ seq: int&lt;br/&gt;+ kind: str&lt;br/&gt;+ payload: JsonObject&lt;br/&gt;+ ts: datetime&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#2b8a3e;fillColor=#ebfbee;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="40" width="240" height="140" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="run_handle" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#1e293b;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;DataClass&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;RunHandle&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #a2e2b3;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ run_id: RunId&lt;br/&gt;+ agent_id: AgentId&lt;br/&gt;+ parent_run: RunId&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#2b8a3e;fillColor=#ebfbee;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="220" width="240" height="110" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="run_result" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#1e293b;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;DataClass&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;RunResult&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #a2e2b3;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ run_id: RunId&lt;br/&gt;+ status: RunStatus&lt;br/&gt;+ output: Payload | None&lt;br/&gt;+ error: str | None&lt;br/&gt;+ metadata: JsonObject&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#2b8a3e;fillColor=#ebfbee;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="370" width="240" height="140" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="lease" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#1e293b;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;DataClass&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;Lease&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #a2e2b3;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ run_id: RunId&lt;br/&gt;+ agent_id: AgentId&lt;br/&gt;+ worker_id: str&lt;br/&gt;+ expires_at: datetime&lt;br/&gt;+ attempt: int&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#2b8a3e;fillColor=#ebfbee;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="550" width="240" height="140" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="wakeup" value="&lt;div style=&quot;font-family:Inter,sans-serif;font-size:12px;color:#1e293b;&quot;&gt;&lt;div style=&quot;text-align:center;font-size:10px;color:#1e293b;text-transform:uppercase;letter-spacing:1px;&quot;&gt;&amp;lt;&amp;lt;DataClass&amp;gt;&amp;gt;&lt;/div&gt;&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;margin-bottom:4px;&quot;&gt;Wakeup&lt;/div&gt;&lt;hr style=&quot;border:none;border-top:1px solid #a2e2b3;margin:4px 0;&quot;/&gt;&lt;div style=&quot;font-family:Menlo,Monaco,monospace;font-size:11px;color:#0f172a;line-height:1.4;margin-top:6px;&quot;&gt;+ kind: Literal[...]&lt;br/&gt;+ at: datetime | None&lt;br/&gt;+ signal: str | None&lt;br/&gt;+ payload: JsonObject&lt;br/&gt;+ source_run: RunId | None&lt;br/&gt;+ child_run: RunId | None&lt;br/&gt;+ result_ref: str | None&lt;/div&gt;&lt;/div&gt;" style="rounded=1;strokeWidth=2;strokeColor=#2b8a3e;fillColor=#ebfbee;align=left;spacingLeft=8;spacingRight=8;spacingTop=6;html=1;whiteSpace=wrap;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="730" width="240" height="185" as="geometry" />
+        </mxCell>
+        
+        <!-- EDGES / RELATIONSHIPS -->
+        <mxCell id="edge_inbox_sched" value="triggers wakeup" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#3b5bdb;strokeWidth=1.5;fontFamily=Inter;fontSize=11;fontColor=#4b5563;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="inbox" target="scheduler">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="edge_sig_sched" value="triggers timers/signals" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#3b5bdb;strokeWidth=1.5;fontFamily=Inter;fontSize=11;fontColor=#4b5563;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="signal_bus" target="scheduler">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="edge_super_sched" value="wakes parent" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#3b5bdb;strokeWidth=1.5;fontFamily=Inter;fontSize=11;fontColor=#4b5563;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="supervisor" target="scheduler">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="edge_agent_inbox" value="reads" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;dashed=1;strokeColor=#4b5563;strokeWidth=1.2;fontFamily=Inter;fontSize=11;fontColor=#4b5563;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="agent" target="inbox">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="edge_agent_log" value="appends events" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;dashed=1;strokeColor=#4b5563;strokeWidth=1.2;fontFamily=Inter;fontSize=11;fontColor=#4b5563;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="agent" target="event_log">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="20" y="90" />
+              <mxPoint x="20" y="625" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="edge_follow_inbox" value="delivers messages" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;dashed=1;strokeColor=#4b5563;strokeWidth=1.2;fontFamily=Inter;fontSize=11;fontColor=#4b5563;exitX=0.25;exitY=0;exitDx=0;exitDy=0;entryX=0.9;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="follow_graph" target="inbox">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="edge_agent_context" value="uses" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;dashed=1;strokeColor=#4b5563;strokeWidth=1.2;fontFamily=Inter;fontSize=11;fontColor=#4b5563;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.33;entryDx=0;entryDy=0;" edge="1" parent="1" source="agent" target="context">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

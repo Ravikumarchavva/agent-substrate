@@ -1,4 +1,5 @@
 from .tools import (
+    PayloadBase,
     ToolRisk,
     ToolType,
     ToolExecution,
@@ -28,6 +29,7 @@ from .chain import (
 )
 
 __all__ = [
+    "PayloadBase",
     "ToolRisk",
     "ToolType",
     "ToolExecution",

@@ -368,3 +368,44 @@ async def test_journal_dedup_via_context() -> None:
         await rt.register(agent)
         await rt.submit(agent_id, _msg(agent_id, {}))
         await asyncio.wait_for(agent.done.wait(), timeout=2.0)
+
+
+async def test_supervisor_join() -> None:
+    """A parent agent can spawn a child and await its completion via ctx.join()."""
+    from ravi.kernel.runtime.ids import RunStatus
+
+    class ChildJoinAgent:
+        def __init__(self, agent_id: AgentId) -> None:
+            self.id = agent_id
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            # Simply finish
+            pass
+
+    class ParentJoinAgent:
+        def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+            self.id = agent_id
+            self.child_id = child_id
+            self.parent_done = asyncio.Event()
+            self.child_result = None
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            boot = _msg(self.child_id, {"task": "do_work"})
+            handle = await ctx.spawn(self.child_id, boot=boot)
+            self.child_result = await ctx.join(handle)
+            self.parent_done.set()
+
+    parent_id = _agent_id("join_parent")
+    child_id = _agent_id("join_child")
+    child = ChildJoinAgent(child_id)
+    parent = ParentJoinAgent(parent_id, child_id)
+
+    async with Runtime() as rt:
+        await rt.register(child)
+        await rt.register(parent)
+        await rt.submit(parent_id, _msg(parent_id, {"start": True}))
+        await asyncio.wait_for(parent.parent_done.wait(), timeout=3.0)
+
+    assert parent.child_result is not None
+    assert parent.child_result.status == RunStatus.COMPLETED
+    assert parent.child_result.run_id != ""

@@ -292,6 +292,11 @@ class RunContext:
         """Cancel a child run and its entire subtree."""
         await self._supervisor.cancel(handle, reason=reason)
 
+    async def join(self, handle: RunHandle) -> RunResult:
+        """Suspend the parent until the child run reaches a terminal state."""
+        self.check()
+        return await self._supervisor.join(handle)
+
     # ------------------------------------------------------------------
     # Suspension primitives
     # ------------------------------------------------------------------

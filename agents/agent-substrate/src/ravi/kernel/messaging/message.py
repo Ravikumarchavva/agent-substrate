@@ -3,8 +3,7 @@
 Every send or publish wraps a payload in a ``Message``.  The runtime routes
 the message to its target and returns the recipient's reply.
 
-``payload`` is a typed discriminated union (``Payload``).  The canonical
-payload types are:
+``payload`` accepts any ``PayloadBase`` subclass.  Built-in kinds:
 
     ChatPayload         — a conversation turn (ChatMessage)
     ToolCallRequest     — a request to execute a tool       (defined in tools.py)
@@ -13,101 +12,77 @@ payload types are:
     ControlPayload      — runtime control signals (pause, cancel, handoff)
     ProgressPayload     — an AgentProgress event
 
-Use ``register_payload_type()`` to add custom payload kinds without
-modifying this file — the registry key is the ``kind`` discriminator string.
+Use ``register_payload_type()`` to add custom payload kinds at runtime.
+Custom types **must** subclass ``PayloadBase`` — this is enforced at
+registration time so deserialization is always safe.
 
 All message types are pydantic models so ``message.model_dump_json()``
-round-trips cleanly for any transport (Kafka, NATS, Redis Streams,
-Temporal, etc.).
+round-trips cleanly for any transport (Kafka, NATS, Redis Streams, etc.).
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import (
-    Annotated,
-    Literal,
-    Union,
-)
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SerializeAsAny, field_validator
 
 from ravi.kernel.core.content import ChatMessage, JsonObject
 from ravi.kernel.core.identity import AgentId, TopicId
 from ravi.kernel.messaging.stream import AgentProgress
-from ravi.kernel.tools import ToolCallRequest, ToolExecutionResult
+from ravi.kernel.tools import PayloadBase, ToolCallRequest, ToolExecutionResult
 
 
 # ---------------------------------------------------------------------------
-# Payload types — the typed union of things a Message can carry
+# Built-in payload types  (all inherit PayloadBase)
 # ---------------------------------------------------------------------------
 
 
-class ChatPayload(BaseModel):
+class ChatPayload(PayloadBase):
     """A conversation turn."""
 
     kind: Literal["chat"] = "chat"
     message: ChatMessage
 
-    model_config = {"frozen": True}
 
-
-class DataPayload(BaseModel):
+class DataPayload(PayloadBase):
     """Arbitrary JSON-serializable structured data."""
 
     kind: Literal["data"] = "data"
     data: JsonObject
 
-    model_config = {"frozen": True}
 
-
-class ControlPayload(BaseModel):
+class ControlPayload(PayloadBase):
     """Runtime control signal — pause, cancel, handoff, etc."""
 
     kind: Literal["control"] = "control"
     signal: str
     data: JsonObject = Field(default_factory=dict)
 
-    model_config = {"frozen": True}
 
-
-class ProgressPayload(BaseModel):
+class ProgressPayload(PayloadBase):
     """Payload carrying an agent progress event."""
 
     kind: Literal["progress"] = "progress"
     progress: AgentProgress
-
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
 
-Payload = Annotated[
-    Union[
-        ChatPayload,
-        ToolCallRequest,
-        ToolExecutionResult,
-        DataPayload,
-        ControlPayload,
-        ProgressPayload,
-    ],
-    Field(discriminator="kind"),
-]
-"""Discriminated union of all canonical payload types.
-
-``ToolCallRequest`` and ``ToolExecutionResult`` are defined in ``tools.py``
-and imported here — tool types are owned by the tools module, not the
-messaging module.
-
-Custom payload kinds registered via ``register_payload_type()`` are
-supported at runtime through the registry; the union above is for
-static type-checking of the built-in kinds.
-"""
-
 # ---------------------------------------------------------------------------
-# Payload registry — for custom kinds added by higher layers
+# Payload type alias
+#
+# SerializeAsAny ensures subclass-specific fields survive model_dump / JSON
+# round-trips even though the annotation names only the base class.
 # ---------------------------------------------------------------------------
 
-_PAYLOAD_REGISTRY: dict[str, type[BaseModel]] = {
+Payload = SerializeAsAny[PayloadBase]
+
+# ---------------------------------------------------------------------------
+# Payload registry — maps kind string → concrete PayloadBase subclass
+# ---------------------------------------------------------------------------
+
+_PAYLOAD_REGISTRY: dict[str, type[PayloadBase]] = {
     "chat": ChatPayload,
     "tool_call": ToolCallRequest,
     "tool_result": ToolExecutionResult,
@@ -120,9 +95,11 @@ _PAYLOAD_REGISTRY: dict[str, type[BaseModel]] = {
 def register_payload_type(cls: type[BaseModel]) -> None:
     """Register a custom payload kind for runtime deserialization.
 
-    ``cls`` must have a ``kind`` Literal field as the discriminator.
-    Call once at module load time, before any messages are deserialized.
+    ``cls`` must subclass ``PayloadBase`` and have a ``kind`` Literal field.
+    Call once at module load time, before any messages of that kind arrive.
     """
+    if not (isinstance(cls, type) and issubclass(cls, PayloadBase)):
+        raise TypeError(f"{cls.__name__} must subclass PayloadBase")
     kind = getattr(cls, "kind", None)
     if kind is None:
         kind = getattr(cls.model_fields.get("kind"), "default", None)
@@ -166,6 +143,24 @@ class Message(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
+    @field_validator("payload", mode="before")
+    @classmethod
+    def _parse_payload(cls, v: Any) -> Any:
+        """Dispatch dict payloads to the registry; validate instance payloads."""
+        if isinstance(v, PayloadBase):
+            if v.kind in _PAYLOAD_REGISTRY:
+                return v
+            raise ValueError(f"Unregistered payload type: {type(v).__name__!r}")
+        if isinstance(v, dict):
+            kind = v.get("kind")
+            model = _PAYLOAD_REGISTRY.get(kind)
+            if model is None:
+                raise ValueError(f"Unknown payload kind: {kind!r}")
+            return model.model_validate(v)
+        raise TypeError(
+            f"payload must be a PayloadBase subclass or dict, got {type(v).__name__!r}"
+        )
+
     @property
     def is_broadcast(self) -> bool:
         """True when this message is addressed to a topic (pub/sub fan-out)."""
@@ -188,6 +183,7 @@ class Subscription(BaseModel):
 
 
 __all__ = [
+    "PayloadBase",
     "ChatPayload",
     "DataPayload",
     "ControlPayload",

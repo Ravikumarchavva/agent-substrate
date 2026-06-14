@@ -1,12 +1,11 @@
-"""ravi.fabric.flows — flow-based agent execution and graphs."""
+"""ravi.fabric.flows — kernel-native agent orchestration flows."""
 
 from __future__ import annotations
 
 from ravi.fabric.flows.agent import (
-    BaseFlow,
     ConditionalFlow,
     ParallelFlow,
     SequentialFlow,
 )
 
-__all__ = ["BaseFlow", "SequentialFlow", "ParallelFlow", "ConditionalFlow"]
+__all__ = ["SequentialFlow", "ParallelFlow", "ConditionalFlow"]

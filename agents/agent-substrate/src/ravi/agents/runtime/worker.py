@@ -195,6 +195,7 @@ class Worker:
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.COMPLETED)
+            await self._supervisor.record_completion(run_id, RunStatus.COMPLETED)
 
         except asyncio.CancelledError:
             token.cancel("task-cancelled")
@@ -205,6 +206,7 @@ class Worker:
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.CANCELLED)
+            await self._supervisor.record_completion(run_id, RunStatus.CANCELLED)
 
         except Exception as exc:
             from ravi.kernel.core.errors import (
@@ -243,6 +245,7 @@ class Worker:
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.FAILED)
+            await self._supervisor.record_completion(run_id, RunStatus.FAILED, error=str(exc))
         finally:
             self._tokens.pop(run_id, None)
 

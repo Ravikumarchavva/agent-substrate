@@ -1,9 +1,12 @@
-"""Multi-agent flows — composable, deterministic execution pipelines.
+"""Multi-agent flows — kernel-native agent orchestration pipelines.
 
-Flows wrap one or more agents (or nested flows) and coordinate execution.
-Every flow exposes the same ``run`` / ``run_stream`` surface as
-``ReActAgent`` so flows can be nested or substituted wherever an agent is
-expected.
+Each flow implements the kernel Agent protocol:
+    id: AgentId
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None
+
+Flows coordinate steps or branches via ctx.spawn() + ctx.ask(), replying to
+their caller with ctx.reply().  Register all steps and the flow itself with
+the same Runtime before submitting a message to the flow's id.
 
 Built-in flow types
 -------------------
@@ -12,80 +15,70 @@ SequentialFlow
     previous steps appended to the original input.
 
 ParallelFlow
-    Runs all branches concurrently with ``asyncio.gather``; outputs merged
-    via a configurable strategy (concat / vote / custom callable).
+    Runs all branches concurrently with asyncio.gather; outputs merged via a
+    configurable strategy (concat / vote / custom callable).
 
 ConditionalFlow
     Evaluates a predicate against the current input and routes to one of two
-    sub-flows (``if_true`` / ``if_false``).
+    sub-agents (if_true / if_false).
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Callable, List, Optional, Union
-from uuid import uuid4
+from dataclasses import dataclass
+from functools import cached_property
+from typing import TYPE_CHECKING, Callable
 
-from ravi.kernel.messaging.stream import TextDelta
-from ravi.agents.middleware import AgentRunResult
-from ravi.agents.hooks.manager import HookEvent, HookManager
+from ravi.kernel.core.content import ChatMessage, Role, TextBlock, content_blocks_to_str
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.messaging.message import ChatPayload, DataPayload, Message
+from ravi.kernel.runtime.communication import AskOutcome
+
+if TYPE_CHECKING:
+    from ravi.agents.runtime.context import RunContext
+    from ravi.kernel.runtime.supervisor import RunHandle
 
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Type aliases
-# ---------------------------------------------------------------------------
-
-# A "step" is either a durable agent or a nested flow.
-FlowStep = Union[Any, "BaseFlow"]
-
-MergeStrategy = Union[
-    str,  # "concat" | "vote"
-    Callable[[List[str]], str],
-]
-
-
-# ---------------------------------------------------------------------------
-# BaseFlow
+# Private helpers
 # ---------------------------------------------------------------------------
 
 
-class BaseFlow(ABC):
-    """Abstract base for all multi-agent flows.
+def _text_from_message(msg: Message) -> str:
+    """Extract plain text from ChatPayload or DataPayload."""
+    p = msg.payload
+    if isinstance(p, ChatPayload):
+        return content_blocks_to_str(p.message.content)
+    if isinstance(p, DataPayload):
+        return str(p.data.get("text", ""))
+    return ""
 
-    Parameters
-    ----------
-    name:        Unique identifier used in graphs and SSE events.
-    description: Human-readable purpose.
-    hooks:       Optional HookManager to receive FLOW_START / FLOW_END events.
-    """
 
-    def __init__(
-        self,
-        name: str,
-        description: str = "",
-        *,
-        hooks: Optional[HookManager] = None,
-    ) -> None:
-        self.name = name
-        self.description = description
-        self.hooks = hooks or HookManager()
+def _make_step_message(target: AgentId, text: str, *, sender: AgentId) -> Message:
+    """Build a ChatPayload Message with a fresh correlation_id for each step call."""
+    return Message(
+        target=target,
+        sender=sender,
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
+        ),
+    )
 
-    @abstractmethod
-    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
-        """Execute the flow to completion."""
-        ...
 
-    @abstractmethod
-    async def run_stream(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
-        """Execute the flow, yielding stream events tagged with ``agent_id``."""
-        ...
-
-    def __repr__(self) -> str:
-        return f"<{self.__class__.__name__}(name={self.name!r})>"
+def _text_from_outcome(outcome: AskOutcome) -> str:
+    """Extract reply text from AskOutcome.result.output (DataPayload or ChatPayload)."""
+    if outcome.result is None:
+        return ""
+    out = outcome.result.output
+    if isinstance(out, DataPayload):
+        return str(out.data.get("text", ""))
+    if isinstance(out, ChatPayload):
+        return content_blocks_to_str(out.message.content)
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -93,85 +86,42 @@ class BaseFlow(ABC):
 # ---------------------------------------------------------------------------
 
 
-class SequentialFlow(BaseFlow):
-    """Execute steps in order, piping accumulated output → next step input.
+@dataclass
+class SequentialFlow:
+    """Execute steps in order, piping accumulated output into each next step.
 
-    Parameters
-    ----------
-    steps:       Ordered list of agents / nested flows.
-    name:        Flow identifier.
-    description: Human-readable purpose.
-    hooks:       Optional hook manager for FLOW_* events.
+    Each step is a kernel Agent registered with the same Runtime as this flow.
+    The flow replies to its caller with the fully accumulated output.
     """
 
-    def __init__(
-        self,
-        steps: List[FlowStep],
-        name: str = "sequential_flow",
-        description: str = "Sequential multi-agent pipeline",
-        *,
-        hooks: Optional[HookManager] = None,
-    ) -> None:
-        super().__init__(name=name, description=description, hooks=hooks)
-        if not steps:
+    steps: list
+    name: str = "sequential_flow"
+    description: str = ""
+    step_timeout: float = 300.0
+
+    def __post_init__(self) -> None:
+        if not self.steps:
             raise ValueError("SequentialFlow requires at least one step")
-        self.steps = steps
 
-    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
-        run_id = str(uuid4())
-        await self.hooks.dispatch(
-            HookEvent.FLOW_START,
-            {"flow": self.name, "run_id": run_id, "steps": len(self.steps)},
-        )
+    @cached_property
+    def id(self) -> AgentId:
+        return AgentId(type="flow", key=self.name)
 
-        accumulated = input_text
-        last_result: AgentRunResult | None = None
-
-        for step in self.steps:
-            last_result = await step.run(accumulated, **kwargs)
-            if last_result.output:
-                accumulated = f"{accumulated}\n\n{last_result.output}"
-
-        await self.hooks.dispatch(
-            HookEvent.FLOW_END,
-            {
-                "flow": self.name,
-                "run_id": run_id,
-                "status": last_result.status if last_result else "error",
-            },
-        )
-
-        if last_result is None:
-            return AgentRunResult(output="", status="error", run_id=run_id)
-        return AgentRunResult(
-            output=last_result.output,
-            status=last_result.status,
-            tool_calls=last_result.tool_calls,
-            run_id=run_id,
-        )
-
-    async def run_stream(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
-        run_id = str(uuid4())
-        await self.hooks.dispatch(
-            HookEvent.FLOW_START, {"flow": self.name, "run_id": run_id}
-        )
-
-        accumulated = input_text
-        for step in self.steps:
-            agent_id = step.name
-            partial: list[str] = []
-            async for chunk in step.run_stream(accumulated, **kwargs):
-                if hasattr(chunk, "__dict__"):
-                    vars(chunk)["agent_id"] = agent_id
-                yield chunk
-                if isinstance(chunk, TextDelta):
-                    partial.append(chunk.text)
-            if partial:
-                accumulated = f"{accumulated}\n\n{''.join(partial)}"
-
-        await self.hooks.dispatch(
-            HookEvent.FLOW_END, {"flow": self.name, "run_id": run_id}
-        )
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            ctx.check()
+            accumulated = _text_from_message(msg)
+            for step in self.steps:
+                step_msg = _make_step_message(step.id, accumulated, sender=self.id)
+                handle: RunHandle = await ctx.spawn(step.id, boot=step_msg)
+                outcome = await ctx.ask(handle, step_msg, timeout=self.step_timeout)
+                if outcome.kind != "replied":
+                    await ctx.reply(msg, {"text": "", "error": outcome.kind})
+                    return
+                output = _text_from_outcome(outcome)
+                if output:
+                    accumulated = f"{accumulated}\n\n{output}"
+            await ctx.reply(msg, {"text": accumulated})
 
 
 # ---------------------------------------------------------------------------
@@ -179,101 +129,57 @@ class SequentialFlow(BaseFlow):
 # ---------------------------------------------------------------------------
 
 
-class ParallelFlow(BaseFlow):
-    """Run all branches concurrently and merge outputs.
+@dataclass
+class ParallelFlow:
+    """Run all branches concurrently and merge their outputs.
 
     Merge strategies
     ----------------
     ``"concat"`` (default)  — join outputs with ``\\n\\n`` in branch order.
     ``"vote"``              — majority vote; ties broken by branch order.
     ``Callable``            — custom ``(outputs: list[str]) -> str``.
-
-    Parameters
-    ----------
-    branches:    List of agents / flows to run in parallel.
-    name:        Flow identifier.
-    description: Human-readable purpose.
-    merge:       Merge strategy (default ``"concat"``).
-    hooks:       Optional hook manager.
     """
 
-    def __init__(
-        self,
-        branches: List[FlowStep],
-        name: str = "parallel_flow",
-        description: str = "Parallel multi-agent execution",
-        *,
-        merge: MergeStrategy = "concat",
-        hooks: Optional[HookManager] = None,
-    ) -> None:
-        super().__init__(name=name, description=description, hooks=hooks)
-        if not branches:
-            raise ValueError("ParallelFlow requires at least one branch")
-        self.branches = branches
-        self.merge = merge
+    branches: list
+    name: str = "parallel_flow"
+    description: str = ""
+    merge: str | Callable[[list[str]], str] = "concat"
+    branch_timeout: float = 300.0
 
-    def _merge_outputs(self, outputs: List[str]) -> str:
+    def __post_init__(self) -> None:
+        if not self.branches:
+            raise ValueError("ParallelFlow requires at least one branch")
+
+    @cached_property
+    def id(self) -> AgentId:
+        return AgentId(type="flow", key=self.name)
+
+    def _merge_outputs(self, outputs: list[str]) -> str:
         if callable(self.merge):
             return self.merge(outputs)
         if self.merge == "vote":
             from collections import Counter
-
             return Counter(outputs).most_common(1)[0][0]
         return "\n\n".join(outputs)
 
-    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
-        run_id = str(uuid4())
-        await self.hooks.dispatch(
-            HookEvent.FLOW_START,
-            {"flow": self.name, "run_id": run_id, "branches": len(self.branches)},
-        )
-
-        results: list[AgentRunResult] = await asyncio.gather(
-            *[step.run(input_text, **kwargs) for step in self.branches]
-        )
-
-        merged = self._merge_outputs([r.output for r in results])
-        all_tool_calls = [tc for r in results for tc in r.tool_calls]
-        status = "success" if all(r.status == "success" for r in results) else "error"
-
-        await self.hooks.dispatch(
-            HookEvent.FLOW_END, {"flow": self.name, "run_id": run_id}
-        )
-        return AgentRunResult(
-            output=merged, status=status, tool_calls=all_tool_calls, run_id=run_id
-        )
-
-    async def run_stream(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
-        run_id = str(uuid4())
-        await self.hooks.dispatch(
-            HookEvent.FLOW_START, {"flow": self.name, "run_id": run_id}
-        )
-
-        queue: asyncio.Queue[Any | None] = asyncio.Queue()
-
-        async def _drain(step: FlowStep) -> None:
-            agent_id = step.name
-            try:
-                async for chunk in step.run_stream(input_text, **kwargs):
-                    if hasattr(chunk, "__dict__"):
-                        vars(chunk)["agent_id"] = agent_id
-                    await queue.put(chunk)
-            finally:
-                await queue.put(None)
-
-        tasks = [asyncio.create_task(_drain(s)) for s in self.branches]
-        done = 0
-        while done < len(self.branches):
-            item = await queue.get()
-            if item is None:
-                done += 1
-            else:
-                yield item
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await self.hooks.dispatch(
-            HookEvent.FLOW_END, {"flow": self.name, "run_id": run_id}
-        )
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            ctx.check()
+            text = _text_from_message(msg)
+            pairs: list[tuple[Message, RunHandle]] = []
+            for branch in self.branches:
+                bm = _make_step_message(branch.id, text, sender=self.id)
+                handle: RunHandle = await ctx.spawn(branch.id, boot=bm)
+                pairs.append((bm, handle))
+            outcomes: list[AskOutcome] = await asyncio.gather(*[
+                ctx.ask(handle, bm, timeout=self.branch_timeout)
+                for bm, handle in pairs
+            ])
+            outputs = [
+                _text_from_outcome(o) if o.kind == "replied" else ""
+                for o in outcomes
+            ]
+            await ctx.reply(msg, {"text": self._merge_outputs(outputs)})
 
 
 # ---------------------------------------------------------------------------
@@ -281,67 +187,37 @@ class ParallelFlow(BaseFlow):
 # ---------------------------------------------------------------------------
 
 
-class ConditionalFlow(BaseFlow):
-    """Route to one of two sub-flows based on a predicate.
+@dataclass
+class ConditionalFlow:
+    """Route to one of two sub-agents based on a predicate.
 
-    Parameters
-    ----------
-    predicate:   ``(input_text: str) -> bool`` — called at runtime.
-    if_true:     Branch taken when predicate is truthy.
-    if_false:    Branch taken when predicate is falsy.
-    name:        Flow identifier.
-    description: Human-readable purpose.
-    hooks:       Optional hook manager.
+    If the predicate raises, ``if_false`` is taken as the safe fallback.
     """
 
-    def __init__(
-        self,
-        predicate: Callable[[str], bool],
-        if_true: FlowStep,
-        if_false: FlowStep,
-        name: str = "conditional_flow",
-        description: str = "Conditional branching flow",
-        *,
-        hooks: Optional[HookManager] = None,
-    ) -> None:
-        super().__init__(name=name, description=description, hooks=hooks)
-        self.predicate = predicate
-        self.if_true = if_true
-        self.if_false = if_false
+    predicate: Callable[[str], bool]
+    if_true: object
+    if_false: object
+    name: str = "conditional_flow"
+    description: str = ""
+    branch_timeout: float = 300.0
 
-    def _select(self, input_text: str) -> FlowStep:
-        try:
-            return self.if_true if self.predicate(input_text) else self.if_false
-        except Exception as exc:
-            logger.warning("[%s] predicate raised %s — taking if_false", self.name, exc)
-            return self.if_false
+    @cached_property
+    def id(self) -> AgentId:
+        return AgentId(type="flow", key=self.name)
 
-    async def run(self, input_text: str, **kwargs: Any) -> AgentRunResult:
-        run_id = str(uuid4())
-        branch = self._select(input_text)
-        await self.hooks.dispatch(
-            HookEvent.FLOW_START,
-            {"flow": self.name, "run_id": run_id, "branch": branch.name},
-        )
-        result = await branch.run(input_text, **kwargs)
-        await self.hooks.dispatch(
-            HookEvent.FLOW_END,
-            {"flow": self.name, "run_id": run_id, "branch": branch.name},
-        )
-        return result
-
-    async def run_stream(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
-        run_id = str(uuid4())
-        branch = self._select(input_text)
-        await self.hooks.dispatch(
-            HookEvent.FLOW_START,
-            {"flow": self.name, "run_id": run_id, "branch": branch.name},
-        )
-        async for chunk in branch.run_stream(input_text, **kwargs):
-            if hasattr(chunk, "__dict__"):
-                vars(chunk)["agent_id"] = branch.name
-            yield chunk
-        await self.hooks.dispatch(
-            HookEvent.FLOW_END,
-            {"flow": self.name, "run_id": run_id, "branch": branch.name},
-        )
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            ctx.check()
+            text = _text_from_message(msg)
+            try:
+                branch = self.if_true if self.predicate(text) else self.if_false
+            except Exception as exc:
+                logger.warning(
+                    "[%s] predicate raised %s — taking if_false", self.name, exc
+                )
+                branch = self.if_false
+            bm = _make_step_message(branch.id, text, sender=self.id)
+            handle: RunHandle = await ctx.spawn(branch.id, boot=bm)
+            outcome = await ctx.ask(handle, bm, timeout=self.branch_timeout)
+            text_out = _text_from_outcome(outcome) if outcome.kind == "replied" else ""
+            await ctx.reply(msg, {"text": text_out})

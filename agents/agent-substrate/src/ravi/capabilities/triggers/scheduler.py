@@ -4,7 +4,7 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 logger = setup_logging()
@@ -21,7 +21,7 @@ class TriggerDef:
     target_name: str  # pipeline name or workflow ID template
     target_params: dict[str, Any] = field(default_factory=dict)
     enabled: bool = True
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     def to_dict(self) -> dict[str, Any]:
         return {

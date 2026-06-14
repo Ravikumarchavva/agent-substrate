@@ -13,13 +13,14 @@ children after a crash (Stage 0: never needed, but the API is correct).
 
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from typing import TYPE_CHECKING, AsyncIterator
 
 from ravi.kernel.core.identity import AgentId
 from ravi.kernel.messaging.message import Message
 from ravi.kernel.runtime.ids import RunId, RunStatus, new_run_id
-from ravi.kernel.runtime.supervisor import RunHandle
+from ravi.kernel.runtime.supervisor import RunHandle, RunResult
 from ravi.kernel.agent.supervision import Supervision
 
 if TYPE_CHECKING:
@@ -42,6 +43,8 @@ class InMemorySupervisor:
         self._journal = journal
         self._scheduler = scheduler
         self._children: dict[RunId, list[RunHandle]] = defaultdict(list)
+        self._results: dict[RunId, RunResult] = {}
+        self._events: dict[RunId, asyncio.Event] = {}
 
     async def spawn(
         self,
@@ -120,6 +123,7 @@ class InMemorySupervisor:
             ),
             expected_seq=seq,
         )
+        await self.record_completion(handle.run_id, RunStatus.CANCELLED)
 
     def children_of(self, parent: RunId) -> AsyncIterator[RunHandle]:
         return self._children_iter(parent)
@@ -127,3 +131,30 @@ class InMemorySupervisor:
     async def _children_iter(self, parent: RunId) -> AsyncIterator[RunHandle]:  # type: ignore[return]
         for handle in list(self._children.get(parent, [])):
             yield handle
+
+    async def join(self, handle: RunHandle) -> RunResult:
+        run_id = handle.run_id
+        if run_id in self._results:
+            return self._results[run_id]
+
+        event = self._events.get(run_id)
+        if event is None:
+            event = asyncio.Event()
+            self._events[run_id] = event
+
+        await event.wait()
+        return self._results[run_id]
+
+    async def record_completion(
+        self, run_id: RunId, status: RunStatus, error: str | None = None
+    ) -> None:
+        res = RunResult(run_id=run_id, status=status, error=error)
+        self._results[run_id] = res
+
+        event = self._events.pop(run_id, None)
+        if event is not None:
+            event.set()
+        else:
+            event = asyncio.Event()
+            event.set()
+            self._events[run_id] = event

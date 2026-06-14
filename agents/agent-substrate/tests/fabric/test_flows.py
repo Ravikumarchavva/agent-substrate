@@ -2,58 +2,87 @@
 
 from __future__ import annotations
 
+import asyncio
 import pytest
 from dataclasses import dataclass
 
-from ravi.agents.middleware import AgentRunResult
-from ravi.fabric.flows import SequentialFlow, ParallelFlow, ConditionalFlow
-from ravi.kernel.messaging.stream import TextDelta
+from ravi.agents.runtime.context import RunContext
+from ravi.agents.runtime.runtime import Runtime
+from ravi.fabric.flows import ConditionalFlow, ParallelFlow, SequentialFlow
+from ravi.kernel.core.content import ChatMessage, Role, TextBlock
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.messaging.message import ChatPayload, Message
+from ravi.kernel.runtime.ids import new_run_id
 
 
 # ---------------------------------------------------------------------------
-# Helpers — stub "agent" compatible with BaseFlow duck-typing
+# Helpers — kernel-compliant stub agents
 # ---------------------------------------------------------------------------
+
 
 @dataclass
-class StubAgent:
-    name: str
-    reply: str = "ok"
-    status: str = "success"
+class EchoAgent:
+    """Replies to every message with a fixed text."""
 
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
-        return AgentRunResult(
-            output=self.reply,
-            status=self.status,
-            run_id="stub-run",
+    reply: str
+    name: str = "echo"
+
+    @property
+    def id(self) -> AgentId:
+        return AgentId(type="agent", key=self.name)
+
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            await ctx.reply(msg, {"text": self.reply})
+
+
+async def _run_flow(flow, text: str, *extra_agents, timeout: float = 5.0) -> str:
+    """Register flow + extra_agents in a Runtime, submit text, return reply text."""
+    sentinel = new_run_id()
+    msg = Message(
+        target=flow.id,
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
+        ),
+        reply_to=sentinel,
+    )
+    cid = msg.correlation_id
+    async with Runtime() as rt:
+        for agent in extra_agents:
+            await rt.register(agent)
+        await rt.register(flow)
+        await rt.submit(flow.id, msg)
+        payload = await asyncio.wait_for(
+            rt.signal_bus.wait_for_signal(sentinel, f"reply:{cid}"),
+            timeout=timeout,
         )
-
-    async def run_stream(self, input_text: str, **kwargs):
-        yield TextDelta(text=self.reply)
+    return str(payload.get("text", ""))
 
 
 # ---------------------------------------------------------------------------
 # SequentialFlow
 # ---------------------------------------------------------------------------
 
+
 async def test_sequential_run_accumulates_output():
-    a = StubAgent(name="a", reply="hello")
-    b = StubAgent(name="b", reply="world")
+    a = EchoAgent(name="a", reply="hello")
+    b = EchoAgent(name="b", reply="world")
     flow = SequentialFlow(steps=[a, b], name="seq")
 
-    result = await flow.run("start")
+    result = await _run_flow(flow, "start", a, b)
 
-    assert result.status == "success"
-    # last step's output is returned
-    assert result.output == "world"
-    assert result.run_id != ""
+    assert "start" in result
+    assert "hello" in result
+    assert "world" in result
 
 
 async def test_sequential_run_single_step():
-    agent = StubAgent(name="only", reply="done")
+    agent = EchoAgent(name="only", reply="done")
     flow = SequentialFlow(steps=[agent])
-    result = await flow.run("input")
-    assert result.output == "done"
-    assert result.status == "success"
+
+    result = await _run_flow(flow, "input", agent)
+
+    assert "done" in result
 
 
 async def test_sequential_raises_on_empty_steps():
@@ -61,63 +90,51 @@ async def test_sequential_raises_on_empty_steps():
         SequentialFlow(steps=[])
 
 
-async def test_sequential_run_stream_yields_text_delta():
-    a = StubAgent(name="a", reply="foo")
-    b = StubAgent(name="b", reply="bar")
-    flow = SequentialFlow(steps=[a, b])
+async def test_sequential_step_order():
+    """Steps run in order; each step receives accumulated output."""
+    results: list[str] = []
 
-    chunks = []
-    async for chunk in flow.run_stream("in"):
-        chunks.append(chunk)
+    @dataclass
+    class RecordingAgent:
+        name: str
+        label: str
 
-    texts = [c.text for c in chunks if isinstance(c, TextDelta)]
-    assert "foo" in texts
-    assert "bar" in texts
+        @property
+        def id(self) -> AgentId:
+            return AgentId(type="agent", key=self.name)
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            for msg in inbox:
+                if msg.reply_to:
+                    results.append(self.label)
+                    await ctx.reply(msg, {"text": self.label})
+
+    a = RecordingAgent(name="ra", label="A")
+    b = RecordingAgent(name="rb", label="B")
+    c = RecordingAgent(name="rc", label="C")
+    flow = SequentialFlow(steps=[a, b, c], name="ordered")
+
+    await _run_flow(flow, "go", a, b, c)
+
+    # Each step only replies once (to the ask message; boot reply is also possible
+    # but we filter by reply_to in RecordingAgent)
+    assert results == ["A", "B", "C"]
 
 
 # ---------------------------------------------------------------------------
 # ParallelFlow
 # ---------------------------------------------------------------------------
 
+
 async def test_parallel_run_merges_concat():
-    a = StubAgent(name="a", reply="A")
-    b = StubAgent(name="b", reply="B")
+    a = EchoAgent(name="a", reply="A")
+    b = EchoAgent(name="b", reply="B")
     flow = ParallelFlow(branches=[a, b], name="par")
 
-    result = await flow.run("in")
+    result = await _run_flow(flow, "in", a, b)
 
-    assert "A" in result.output
-    assert "B" in result.output
-    assert result.run_id != ""
-
-
-async def test_parallel_run_status_success_if_all_success():
-    a = StubAgent(name="a", reply="ok")
-    b = StubAgent(name="b", reply="ok")
-    flow = ParallelFlow(branches=[a, b])
-    result = await flow.run("x")
-    assert result.status == "success"
-
-
-async def test_parallel_run_status_error_if_any_fails():
-    a = StubAgent(name="a", reply="ok", status="success")
-    b = StubAgent(name="b", reply="err", status="error")
-    flow = ParallelFlow(branches=[a, b])
-    result = await flow.run("x")
-    assert result.status == "error"
-
-
-async def test_parallel_run_stream_yields_from_all_branches():
-    a = StubAgent(name="a", reply="X")
-    b = StubAgent(name="b", reply="Y")
-    flow = ParallelFlow(branches=[a, b])
-
-    chunks = []
-    async for chunk in flow.run_stream("in"):
-        chunks.append(chunk)
-
-    texts = [c.text for c in chunks if isinstance(c, TextDelta)]
-    assert set(texts) == {"X", "Y"}
+    assert "A" in result
+    assert "B" in result
 
 
 async def test_parallel_raises_on_empty_branches():
@@ -125,53 +142,73 @@ async def test_parallel_raises_on_empty_branches():
         ParallelFlow(branches=[])
 
 
+async def test_parallel_custom_merge():
+    a = EchoAgent(name="a", reply="X")
+    b = EchoAgent(name="b", reply="Y")
+    flow = ParallelFlow(
+        branches=[a, b],
+        name="custom_par",
+        merge=lambda outputs: " | ".join(outputs),
+    )
+
+    result = await _run_flow(flow, "in", a, b)
+
+    assert result == "X | Y"
+
+
+async def test_parallel_vote_merge():
+    a = EchoAgent(name="a", reply="yes")
+    b = EchoAgent(name="b", reply="yes")
+    c = EchoAgent(name="c", reply="no")
+    flow = ParallelFlow(branches=[a, b, c], name="vote_par", merge="vote")
+
+    result = await _run_flow(flow, "in", a, b, c)
+
+    assert result == "yes"
+
+
 # ---------------------------------------------------------------------------
 # ConditionalFlow
 # ---------------------------------------------------------------------------
 
+
 async def test_conditional_routes_true():
-    yes = StubAgent(name="yes", reply="yes_output")
-    no = StubAgent(name="no", reply="no_output")
+    yes = EchoAgent(name="yes", reply="yes_output")
+    no = EchoAgent(name="no", reply="no_output")
     flow = ConditionalFlow(
         predicate=lambda t: "yes" in t,
         if_true=yes,
         if_false=no,
     )
-    result = await flow.run("yes please")
-    assert result.output == "yes_output"
+
+    result = await _run_flow(flow, "yes please", yes, no)
+
+    assert result == "yes_output"
 
 
 async def test_conditional_routes_false():
-    yes = StubAgent(name="yes", reply="yes_output")
-    no = StubAgent(name="no", reply="no_output")
+    yes = EchoAgent(name="yes", reply="yes_output")
+    no = EchoAgent(name="no", reply="no_output")
     flow = ConditionalFlow(
         predicate=lambda t: "yes" in t,
         if_true=yes,
         if_false=no,
     )
-    result = await flow.run("nope")
-    assert result.output == "no_output"
+
+    result = await _run_flow(flow, "nope", yes, no)
+
+    assert result == "no_output"
 
 
 async def test_conditional_predicate_exception_takes_if_false():
-    yes = StubAgent(name="yes", reply="yes_output")
-    no = StubAgent(name="no", reply="fallback")
+    yes = EchoAgent(name="yes", reply="yes_output")
+    no = EchoAgent(name="no", reply="fallback")
     flow = ConditionalFlow(
         predicate=lambda t: (_ for _ in ()).throw(RuntimeError("boom")),
         if_true=yes,
         if_false=no,
     )
-    result = await flow.run("anything")
-    assert result.output == "fallback"
 
+    result = await _run_flow(flow, "anything", yes, no)
 
-async def test_conditional_run_stream():
-    yes = StubAgent(name="yes", reply="stream_yes")
-    no = StubAgent(name="no", reply="stream_no")
-    flow = ConditionalFlow(predicate=lambda t: True, if_true=yes, if_false=no)
-
-    chunks = []
-    async for chunk in flow.run_stream("in"):
-        chunks.append(chunk)
-    texts = [c.text for c in chunks if isinstance(c, TextDelta)]
-    assert "stream_yes" in texts
+    assert result == "fallback"

@@ -1,11 +1,11 @@
-"""SlidingWindowStrategy — retains only the N most-recent messages."""
+"""SlidingWindowCompaction — retains only the N most-recent messages."""
 
 from __future__ import annotations
 
 from ravi.kernel.core.content import ChatMessage
 
 
-class SlidingWindowStrategy:
+class SlidingWindowCompaction:
     """Drops oldest messages once history exceeds *max_messages*."""
 
     def __init__(self, max_messages: int = 100) -> None:
@@ -17,4 +17,4 @@ class SlidingWindowStrategy:
         return raw_history[-self.max_messages :]
 
 
-__all__ = ["SlidingWindowStrategy"]
+__all__ = ["SlidingWindowCompaction"]

@@ -2,16 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-
-class BudgetExceededError(Exception):
-    """Raised when an agent exceeds its token, cost, or turn budget."""
+from ravi.kernel.core.errors import BudgetExhaustedError
 
 
 @dataclass
 class ExecutionTracker:
     """Enforces token, cost, or turn limits on an agent's execution loop.
 
-    Call ``consume()`` after each LLM turn; it raises ``BudgetExceededError``
+    Call ``consume()`` after each LLM turn; it raises ``BudgetExhaustedError``
     as soon as any limit is breached.
 
     Limits of ``None`` mean unlimited.
@@ -34,15 +32,15 @@ class ExecutionTracker:
 
     def _check(self) -> None:
         if self.max_tokens is not None and self._used_tokens > self.max_tokens:
-            raise BudgetExceededError(
+            raise BudgetExhaustedError(
                 f"Token budget exceeded: {self._used_tokens} > {self.max_tokens}"
             )
         if self.max_cost_usd is not None and self._used_cost > self.max_cost_usd:
-            raise BudgetExceededError(
+            raise BudgetExhaustedError(
                 f"Cost budget exceeded: ${self._used_cost:.4f} > ${self.max_cost_usd:.4f}"
             )
         if self.max_turns is not None and self._used_turns > self.max_turns:
-            raise BudgetExceededError(
+            raise BudgetExhaustedError(
                 f"Turn limit exceeded: {self._used_turns} > {self.max_turns}"
             )
 

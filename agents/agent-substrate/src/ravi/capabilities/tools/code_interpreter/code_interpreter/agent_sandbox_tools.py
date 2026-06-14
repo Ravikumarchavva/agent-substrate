@@ -324,8 +324,6 @@ class AgentSandboxTools:
         return resolved
 
 
-CodeInterpreter = AgentSandboxTools
-
 _default_lock = threading.RLock()
 _default_tool: AgentSandboxTools | None = None
 

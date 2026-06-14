@@ -14,5 +14,4 @@ from ravi.serving.shared.auth.middleware import (  # noqa: F401
     optional_current_user,
 )
 
-# Re-export alias for annotation convenience
-from ravi.serving.monolith.security.jwt import TokenPayload  # noqa: F401
+from ravi.serving.shared.auth.claims import AuthClaims  # noqa: F401

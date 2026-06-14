@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ravi.config import settings
 from ravi.integrations.spotify.auth import SpotifyAuthService
-from ravi.serving.monolith.security.deps import TokenPayload, get_current_user
+from ravi.serving.monolith.security.deps import AuthClaims, get_current_user
 
 logger = setup_logging()
 
@@ -167,7 +167,7 @@ async def spotify_callback(
 @router.post("/set-token")
 async def set_access_token_from_frontend(
     request: Request,
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ):
     """Accept and store an OAuth token pushed from the frontend after user-facing OAuth.
 
@@ -187,7 +187,7 @@ async def set_access_token_from_frontend(
 
 @router.get("/token")
 async def get_access_token(
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ):
     """Get current user's Spotify access token.
 
@@ -213,7 +213,7 @@ async def get_access_token(
 
 @router.post("/refresh")
 async def refresh_token(
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ):
     """Refresh the access token using refresh token.
 
@@ -258,7 +258,7 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ):
     """Log out user and clear tokens."""
     session_id = current_user.sub
@@ -273,7 +273,7 @@ async def logout(
 @router.post("/restore")
 async def restore_tokens(
     request: Request,
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ):
     """Restore OAuth tokens from client-side localStorage.
 
@@ -363,7 +363,7 @@ async def get_liked_songs(
     limit: int = Query(50, ge=1, le=50),
     offset: int = Query(0, ge=0),
     market: Optional[str] = Query(None),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ):
     """Fetch the current user's liked (saved) tracks.
 
@@ -385,7 +385,7 @@ async def get_liked_songs(
 async def get_playlists(
     limit: int = Query(50, ge=1, le=50),
     offset: int = Query(0, ge=0),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ):
     """Fetch the current user's playlists.
 
@@ -409,7 +409,7 @@ async def get_playlist_tracks(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     market: Optional[str] = Query(None),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: AuthClaims = Depends(get_current_user),
 ):
     """Fetch tracks for a specific playlist."""
     svc = _get_oauth_service_with_token(current_user.sub)

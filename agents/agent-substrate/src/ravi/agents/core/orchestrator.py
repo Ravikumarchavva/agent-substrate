@@ -23,7 +23,9 @@ from ravi.kernel.llm.llm import GenerationOptions
 from ravi.kernel.messaging.message import ChatPayload, DataPayload, Message
 from ravi.kernel.tools.tools import ToolExecutionResult
 
+from ravi.kernel.agent.supervision import Priority, SpawnBudget
 from ravi.agents.context.context import ContextConfig
+from ravi.agents.supervision.budget import SpawnTracker
 from ravi.agents.core._loop import (
     deliver,
     final_text,
@@ -72,6 +74,7 @@ class SubAgentConfig:
     agent: Agent
     description: str = ""
     ask_timeout: float = 120.0
+    priority: Priority = Priority.NORMAL
 
 
 class OrchestratorAgent:
@@ -90,6 +93,7 @@ class OrchestratorAgent:
             "Return the final consolidated answer when done."
         ),
         max_iterations: int = 10,
+        spawn_budget: SpawnBudget | None = None,
     ) -> None:
         self.id = AgentId(type="agent", key=name)
         self.name = name
@@ -99,6 +103,7 @@ class OrchestratorAgent:
         self._context = context or ContextConfig.default()
         self._system_instructions = system_instructions
         self._max_iterations = max_iterations
+        self._spawn_budget = spawn_budget or SpawnBudget()
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
@@ -107,6 +112,7 @@ class OrchestratorAgent:
 
     async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
         session_id = msg.correlation_id or ctx.run_id
+        spawn_tracker = SpawnTracker(self._spawn_budget)
 
         history_messages = await load_history(self._context, self.id, session_id)
         user_turn = message_to_chat(msg)
@@ -141,6 +147,7 @@ class OrchestratorAgent:
                     ))
                     continue
 
+                spawn_tracker.acquire(cfg.agent.id, priority=cfg.priority)
                 task_text = dispatch.arguments.get("task", str(dispatch.arguments))
                 boot_msg = Message(
                     target=cfg.agent.id,
@@ -153,8 +160,11 @@ class OrchestratorAgent:
                     ),
                     correlation_id=session_id,
                 )
-                handle = await ctx.spawn(cfg.agent.id, boot=boot_msg)
-                outcome = await ctx.ask(handle, boot_msg, timeout=cfg.ask_timeout)
+                try:
+                    handle = await ctx.spawn(cfg.agent.id, boot=boot_msg)
+                    outcome = await ctx.ask(handle, boot_msg, timeout=cfg.ask_timeout)
+                finally:
+                    spawn_tracker.release(cfg.agent.id)
 
                 if outcome.kind == "replied" and outcome.result:
                     out = outcome.result.output

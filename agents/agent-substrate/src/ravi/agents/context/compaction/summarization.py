@@ -1,4 +1,4 @@
-"""SummarizationStrategy — condenses old turns into an LLM-generated summary."""
+"""SummarizationCompaction — condenses old turns into an LLM-generated summary."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ _SUMMARY_PREFIX = "[Earlier conversation summary]"
 _DEFAULT_CPT = 4.0
 
 
-class SummarizationStrategy:
+class SummarizationCompaction:
     """Summarizes old messages with an LLM, keeping recent turns verbatim.
 
     Aggressiveness: Medium
@@ -122,7 +122,7 @@ class SummarizationStrategy:
             ).strip()
         except Exception as exc:
             logger.warning(
-                "SummarizationStrategy: LLM call failed (%s); using placeholder", exc
+                "SummarizationCompaction: LLM call failed (%s); using placeholder", exc
             )
             summary = (
                 f"[Summary unavailable — {len(messages)} earlier messages omitted]"
@@ -179,4 +179,4 @@ def _make_summary_message(summary: str) -> ChatMessage:
     )
 
 
-__all__ = ["SummarizationStrategy"]
+__all__ = ["SummarizationCompaction"]

@@ -13,14 +13,12 @@ from ravi.agents.context import (
     ContextConfig,
     HistoryProvider,
     InMemoryHistoryProvider,
-    SlidingWindowStrategy,
-    SummarizationStrategy,
+    SlidingWindowCompaction,
+    SummarizationCompaction,
     ToolResultCompactionStrategy,
     SelectiveToolCallCompactionStrategy,
     TruncationStrategy,
     TokenBudgetComposedStrategy,
-    SlidingWindowCompaction,
-    SummarizationCompaction,
 )
 from ravi.agents.llm import (
     EmbeddingClient,
@@ -63,7 +61,6 @@ from ravi.agents.core import (
 )
 from ravi.agents.runtime import Runtime, RunContext, Worker
 from ravi.agents.resources import (
-    BudgetExceededError,
     ExecutionTracker,
 )
 from ravi.agents.supervision import RetryPolicy
@@ -75,14 +72,12 @@ __all__ = [
     "ContextConfig",
     "HistoryProvider",
     "InMemoryHistoryProvider",
-    "SlidingWindowStrategy",
-    "SummarizationStrategy",
+    "SlidingWindowCompaction",
+    "SummarizationCompaction",
     "ToolResultCompactionStrategy",
     "SelectiveToolCallCompactionStrategy",
     "TruncationStrategy",
     "TokenBudgetComposedStrategy",
-    "SlidingWindowCompaction",
-    "SummarizationCompaction",
     # llm
     "EmbeddingClient",
     "LLMClient",
@@ -126,7 +121,6 @@ __all__ = [
     "RunContext",
     "Worker",
     # resources
-    "BudgetExceededError",
     "ExecutionTracker",
     # supervision
     "RetryPolicy",

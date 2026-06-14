@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Callable, Awaitable
 
-from ravi.agents.middleware._contracts import AgentRunContext
+from ravi.agents.middleware._contracts import AgentCallContext
 from ravi.exceptions import MiddlewareTermination
 from ravi.kernel.core.content import TextBlock
 
@@ -44,7 +44,7 @@ class PromptInjectionMiddleware:
                     raise ValueError(f"Invalid extra_pattern regex '{p}': {e}") from e
 
     async def process(
-        self, context: AgentRunContext, call_next: Callable[[], Awaitable[None]]
+        self, context: AgentCallContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
         if not context.messages:
             await call_next()

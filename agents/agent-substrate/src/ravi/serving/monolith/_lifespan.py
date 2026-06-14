@@ -224,7 +224,8 @@ async def init_tool_registry(
     # TaskManagerTool — renders through ui://kanban_board; each result carries the
     # board in structured_content (lowered to a UIResourceBlock by the agent), so
     # no out-of-band SSE emitter is needed.
-    task_tool = TaskManagerTool()
+    from ravi.serving.shared.tasks.store import GlobalTaskStore
+    task_tool = TaskManagerTool(store=GlobalTaskStore.get())
 
     # AskHumanTool placeholder (a real per-thread tool is built in _get_agent_deps)
     ask_tool = AskHumanTool(handler=None, max_requests_per_run=5)  # type: ignore[arg-type]

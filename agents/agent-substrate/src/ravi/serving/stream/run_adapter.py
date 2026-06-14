@@ -66,7 +66,8 @@ class RunStreamAdapter:
         initial_tool_choice: str | None = None,
         **_kwargs: Any,
     ) -> AsyncIterator[Any]:
-        return self._stream(input_text)
+        async for event in self._stream(input_text):
+            yield event
 
     async def _stream(self, input_text: str) -> AsyncIterator[Any]:
         msg = Message(
@@ -104,6 +105,13 @@ class RunStreamAdapter:
             elif kind == "tool.call":
                 name = payload.get("name", "tool")
                 status = payload.get("status", "ok")
+                yield AgentProgress(
+                    agent_id=self._agent_id,
+                    step=AgentStep.TOOL_CALL,
+                    content=name,
+                    run_id=run_id,
+                    metadata={"tool_name": name},
+                )
                 yield AgentProgress(
                     agent_id=self._agent_id,
                     step=AgentStep.TOOL_RESULT,

@@ -22,7 +22,7 @@ from __future__ import annotations
 import time
 from typing import Callable, Awaitable
 
-from ravi.agents.middleware._contracts import AgentRunContext, ChatContext
+from ravi.agents.middleware._contracts import AgentCallContext, ChatContext
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -47,7 +47,7 @@ class AgentTracingMiddleware:
 
     async def process(
         self,
-        context: AgentRunContext,
+        context: AgentCallContext,
         call_next: Callable[[], Awaitable[None]],
     ) -> None:
         span = _otel_span(f"agent.run/{context.agent_name}")

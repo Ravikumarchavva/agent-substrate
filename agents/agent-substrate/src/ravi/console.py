@@ -187,11 +187,14 @@ class Console:
         skill_manager: Optional["SkillManager"] = None,
         runtime: Any = None,
     ) -> None:
+        import uuid as _uuid
+
         self.agent = agent
         self.console = output or RichConsole(theme=_THEME, highlight=False)
         self._proxy: Optional[Any] = None
         self._skill_manager = skill_manager
         self._runtime = runtime  # Runtime; if set, use RunStreamAdapter
+        self._correlation_id = _uuid.uuid4().hex
         # Snapshot of active skills at session start (to detect newly activated ones)
         self._session_skills_used: set[str] = set()
 
@@ -224,6 +227,7 @@ class Console:
             agent_id=self.agent.id,
             runtime=self._runtime,
             tools=list(self.agent.tools.all()) if self.agent.tools else [],
+            correlation_id=self._correlation_id,
         )
         final_text = ""
         async for chunk in adapter._stream(task):
@@ -285,6 +289,7 @@ class Console:
                 agent_id=self.agent.id,
                 runtime=self._runtime,
                 tools=list(self.agent.tools.all()) if self.agent.tools else [],
+                correlation_id=self._correlation_id,
             )
             chunk_iter: AsyncIterator[Any] = adapter._stream(task)
         elif self._is_actor_agent():
@@ -664,7 +669,10 @@ class Console:
                 self.console.print("👋 Bye!", style="info")
                 break
             if stripped.lower() == "/reset":
-                await self.agent.reset()
+                if hasattr(self.agent, "reset"):
+                    await self.agent.reset()
+                elif hasattr(self.agent, "_context") and hasattr(self.agent._context, "history"):
+                    await self.agent._context.history.clear(self.agent.id, session_id=self._correlation_id)
                 self.console.print("🔄 Agent memory cleared.", style="info")
                 continue
             if stripped.lower() == "/tools":

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ravi.agents.middleware.pipeline import MiddlewarePipeline
 from ravi.agents.middleware._contracts import (
-    AgentRunContext,
+    AgentCallContext,
     AgentRunResult,
     ChatContext,
     FunctionContext,
@@ -41,7 +41,7 @@ __all__ = [
     # pipeline
     "MiddlewarePipeline",
     # context and result types
-    "AgentRunContext",
+    "AgentCallContext",
     "AgentRunResult",
     "ChatContext",
     "FunctionContext",

@@ -8,16 +8,16 @@ from ravi.agents.middleware import (
     ContentFilterMiddleware,
     MaxTokenMiddleware,
     PromptInjectionMiddleware,
-    AgentRunContext,
+    AgentCallContext,
     ChatContext,
     MiddlewarePipeline,
 )
 from ravi.kernel.core.content import ChatMessage, TextBlock
 
 
-def _agent_ctx(text: str) -> AgentRunContext:
+def _agent_ctx(text: str) -> AgentCallContext:
     msg = ChatMessage(role="user", content=[TextBlock(text=text)])
-    return AgentRunContext(
+    return AgentCallContext(
         agent_name="test", run_id="r1", session_id="s1", messages=[msg]
     )
 

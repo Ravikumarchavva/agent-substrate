@@ -28,6 +28,7 @@ import uuid as _uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from ravi.kernel.agent.runtime_context import RunMeta
 from ravi.kernel.core.content import JsonObject, content_block_from_dict
 from ravi.kernel.core.errors import CancellationError
 from ravi.kernel.core.identity import AgentId, TopicId
@@ -40,6 +41,7 @@ from ravi.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from ravi.kernel.runtime.log_entry import RunLogEntry
 from ravi.kernel.runtime.supervisor import RunHandle, RunResult
 from ravi.kernel.agent.supervision import Supervision
+from ravi.kernel.tools.chain import InvocationResult
 
 if TYPE_CHECKING:
     from ravi.agents.runtime.backends._event_log import InMemoryEventLog
@@ -55,7 +57,7 @@ if TYPE_CHECKING:
 
 
 class RunContext:
-    """Journaled execution context — satisfies RunContext.
+    """Journaled execution context — satisfies AgentRunContext (kernel Protocol).
 
     Created fresh by the Worker for each agent.run() invocation.
     ``_step_seq`` increments with every journaled operation, forming the
@@ -65,8 +67,7 @@ class RunContext:
     def __init__(
         self,
         *,
-        run_id: RunId,
-        tenant_id: str | None,
+        meta: RunMeta,
         event_log: InMemoryEventLog,
         journal: InMemoryJournal,
         inbox: InMemoryInbox,
@@ -75,13 +76,13 @@ class RunContext:
         scheduler: InMemoryScheduler,
         supervisor: InMemorySupervisor,
         signal_bus: InMemorySignalBus,
-        cancellation: asyncio.Event | None = None,
         llm_client: LLMClient | None = None,
         tool_invoker: ToolInvoker | None = None,
         agent: Any = None,
     ) -> None:
-        self.run_id = run_id
-        self.tenant_id = tenant_id
+        self.run_id = meta.run_id
+        self.tenant_id = meta.tenant_id
+        self._meta = meta
         self._event_log = event_log
         self._journal = journal
         self._inbox = inbox
@@ -90,25 +91,28 @@ class RunContext:
         self._scheduler = scheduler
         self._supervisor = supervisor
         self._signal_bus = signal_bus
-        self._cancelled = cancellation or asyncio.Event()
         self._step_seq = 0
         self._llm_client = llm_client
         self._tool_invoker = tool_invoker
         self.agent = agent
         self._invoker_session: Any = None  # opened lazily when tool() is first called
 
+    @property
+    def meta(self) -> RunMeta:
+        """Execution-scoped metadata: deadline, trace_id, supervision, cancellation."""
+        return self._meta
+
     # ------------------------------------------------------------------
     # AgentRunContext surface
     # ------------------------------------------------------------------
 
     def check(self) -> None:
-        """Raise CancellationError if this run has been cancelled."""
-        if self._cancelled.is_set():
-            raise CancellationError("run cancelled")
-        status = self._scheduler.get_status(self.run_id)
-        if status == RunStatus.CANCELLED:
-            self._cancelled.set()
-            raise CancellationError("run cancelled")
+        """Raise CancellationError if this run has been cancelled or deadline exceeded."""
+        self._meta.check()
+        # Stage-0 belt-and-suspenders: sync scheduler cancellation signal into the token.
+        if self._scheduler.get_status(self.run_id) == RunStatus.CANCELLED:
+            self._meta.cancellation.cancel("scheduler-cancelled")
+            self._meta.cancellation.check()
 
     # ------------------------------------------------------------------
     # Journaled generic effect helper
@@ -157,13 +161,7 @@ class RunContext:
     async def send(self, target: AgentId, msg: Message) -> None:
         """Fire-and-forget delivery.  Does not suspend the caller."""
         await self._inbox.deliver(target, msg)
-        # Ensure the target's run is enqueued if it exists
-        for run_id, agent_id in list(self._scheduler._agents.items()):
-            if agent_id == target:
-                status = self._scheduler.get_status(run_id)
-                if status in (RunStatus.SUSPENDED, None):
-                    await self._scheduler.wake_suspended(run_id)
-                break
+        await self._scheduler.wake_agent(target)
 
     async def emit(self, topic: TopicId, msg: Message) -> None:
         """Publish to all followers of ``topic`` (fire-and-forget)."""
@@ -205,11 +203,7 @@ class RunContext:
         if target_run:
             await self._scheduler.wake_suspended(target_run)
         else:
-            for run_id, agent_id in list(self._scheduler._agents.items()):
-                if agent_id == target_agent:
-                    await self._scheduler.wake_suspended(run_id)
-                    target_run = run_id
-                    break
+            await self._scheduler.wake_agent(target_agent)
 
         await self._log(
             "ask.sent", {"target": str(target_agent), "correlation_id": correlation_id}
@@ -387,7 +381,38 @@ class RunContext:
                 raise RuntimeError(cached.value.get("error", "journaled llm error"))
             return _deserialize(cached.value)
         try:
-            resp = await self._llm_client.generate(messages, options=options)
+            from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
+            from ravi.kernel.core.content import TextBlock
+
+            text_chunks = []
+            reasoning_chunks = []
+            final_content = None
+            final_usage = None
+
+            try:
+                stream = self._llm_client.generate_stream(messages, options=options, ctx=self._meta)
+            except TypeError:
+                stream = self._llm_client.generate_stream(messages, options=options)
+
+            async for chunk in stream:
+                if isinstance(chunk, TextDelta):
+                    text_chunks.append(chunk.text)
+                    await self._log("text.delta", {"delta": chunk.text})
+                elif isinstance(chunk, ReasoningDelta):
+                    reasoning_chunks.append(chunk.text)
+                    await self._log("reasoning.delta", {"delta": chunk.text})
+                elif isinstance(chunk, CompletionEvent):
+                    final_content = chunk.content
+                    final_usage = chunk.usage
+
+            if final_content is None:
+                text_str = "".join(text_chunks)
+                final_content = [TextBlock(text=text_str)]
+            if final_usage is None:
+                final_usage = Usage()
+
+            resp = LLMResponse(content=final_content, usage=final_usage)
+
             await self._journal.record(
                 EffectResult(effect_id=effect_id, status="ok", value=_serialize(resp))
             )
@@ -403,7 +428,7 @@ class RunContext:
     # Tool capability (journaled — at-most-once side effects)
     # ------------------------------------------------------------------
 
-    async def tool(self, name: str, **args: Any) -> Any:
+    async def tool(self, name: str, **args: Any) -> InvocationResult:
         """Journaled tool call via ToolInvoker.  At-most-once: won't re-execute on replay."""
         from ravi.kernel.tools import ToolCallRequest
 

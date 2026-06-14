@@ -75,9 +75,13 @@ def _progress_to_wire(ev: AgentProgress) -> WireEvent | list[WireEvent] | None:
         )
 
     if ev.step == AgentStep.TOOL_RESULT:
-        # content is "tool_name: ok" or "tool_name: error"
-        name, _, status = ev.content.rpartition(": ")
-        name = name or ev.content
+        content = ev.content
+        if content.startswith("Tool ") and " status: " in content:
+            part1, _, status = content.rpartition(": ")
+            name = part1[len("Tool "):-len(" status")]
+        else:
+            name, _, status = content.rpartition(": ")
+            name = name or content
         if name.startswith(_HANDOFF_PREFIX):
             return None  # subagent events + the orchestrator's next turn convey this
         result = ToolResultEvent(

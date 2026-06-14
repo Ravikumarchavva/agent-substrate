@@ -1,12 +1,11 @@
 """Example 1-3: ReAct Agent — Full Reference
-Module: ravi.reasoning.agents.assistant, ravi.orchestration.agents
 
-Complete reference showing the new actor-model wiring:
-  - LocalRuntime with explicit handler registration
-  - AssistantAgent + UserProxyAgent pattern
-  - Streaming with per-event callbacks
-  - Multi-turn conversation via InMemoryHistoryProvider
-  - OrchestratorAgent delegating to two specialist agents
+Demonstrates:
+  1. Basic single-turn run via Runtime
+  2. Multi-turn conversation via shared history
+  3. UserProxyAgent → ReActAgent via Runtime
+  4. OrchestratorAgent delegating to specialist sub-agents
+  5. Interactive REPL with OrchestratorAgent
 
 Run:
     cd ravi-engine
@@ -20,14 +19,37 @@ import datetime
 import math
 
 from ravi.config import settings
-from ravi.agents.context import InMemoryHistoryProvider, SlidingWindowCompaction
-from ravi.agents.runtime.local import LocalRuntime
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.agents import ReActAgent, OrchestratorAgent, SubAgentConfig, UserProxyAgent, Runtime
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.integrations.llm import LLMFactory
 from ravi.kernel import TextBlock, ToolExecutionResult
-from ravi.kernel.stream import CompletionEvent, StreamDone, TextDelta
-from ravi.agents.orchestration.agents.orchestrator.agent import OrchestratorAgent
-from ravi.agents.orchestration.agents.proxy.agent import UserProxyAgent
-from ravi.agents.reasoning.agents.assistant.agent import AgentRunResult, AssistantAgent
+from ravi.kernel.core.content import ChatMessage, Role
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.messaging.message import Message, ChatPayload
+
+
+# ---------------------------------------------------------------------------
+# Shared helper
+# ---------------------------------------------------------------------------
+
+
+async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: str | None = None) -> str:
+    sid = session_id or agent.id.key
+    msg = Message(
+        target=agent.id,
+        sender=AgentId(type="proxy", key="user"),
+        payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])),
+        correlation_id=sid,
+    )
+    run_id = await rt.submit(agent.id, msg)
+    async for entry in rt.event_log.tail(run_id):
+        if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
+            break
+    history = await agent.history.get_messages(agent.id, session_id=sid)
+    for m in reversed(history):
+        if m.role == Role.ASSISTANT:
+            return " ".join(b.text for b in m.content if isinstance(b, TextBlock) and b.text)
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -37,15 +59,10 @@ from ravi.agents.reasoning.agents.assistant.agent import AgentRunResult, Assista
 
 class MathTool:
     name = "math"
-    description = (
-        "Evaluate a Python math expression. "
-        "You may use any function from the `math` module."
-    )
+    description = "Evaluate a Python math expression. You may use any function from the `math` module."
     input_schema: dict[str, object] = {
         "type": "object",
-        "properties": {
-            "expression": {"type": "string", "description": "e.g. 'math.sqrt(144)'"}
-        },
+        "properties": {"expression": {"type": "string", "description": "e.g. 'math.sqrt(144)'"}},
         "required": ["expression"],
     }
 
@@ -54,9 +71,7 @@ class MathTool:
             result = eval(expression, {"math": math, "__builtins__": {}})  # noqa: S307
             return ToolExecutionResult(name=self.name, content=[TextBlock(text=str(result))])
         except Exception as exc:
-            return ToolExecutionResult(
-                name=self.name, content=[TextBlock(text=str(exc))], is_error=True
-            )
+            return ToolExecutionResult(name=self.name, content=[TextBlock(text=str(exc))], is_error=True)
 
 
 class ClockTool:
@@ -70,79 +85,43 @@ class ClockTool:
 
 
 # ---------------------------------------------------------------------------
-# 1. Basic run() — non-streaming, single turn
+# 1. Basic single-turn run
 # ---------------------------------------------------------------------------
 
 
-async def demo_basic_run(rt: LocalRuntime) -> None:
-    print("=== 1. Basic run() ===")
+async def demo_basic_run() -> None:
+    print("=== 1. Basic single-turn run ===")
 
-    model = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1])
-    agent = AssistantAgent(
+    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    agent = ReActAgent(
         "Calculator",
-        rt,
         model=model,
         tools=[MathTool()],
-        system="You are a maths assistant. Use the math tool for any calculation.",
-        history=InMemoryHistoryProvider(),
-        compaction=SlidingWindowCompaction(max_messages=20),
+        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20)),
+        system_instructions="You are a maths assistant. Use the math tool for any calculation.",
         max_iterations=6,
     )
 
-    result: AgentRunResult = await agent.run("What is math.sqrt(256) * math.pi?")
-    print(f"  status : {result.status}")
-    print(f"  output : {result.output!r}")
-    for tc in result.tool_calls:
-        print(f"  tool   : {tc.name}({tc.arguments})  → {tc.result!r}")
+    async with Runtime() as rt:
+        await rt.register(agent)
+        output = await run_agent(rt, agent, "What is math.sqrt(256) * math.pi?")
+    print(f"  output : {output!r}")
 
 
 # ---------------------------------------------------------------------------
-# 2. run_stream() — streaming with per-event callbacks
+# 2. Multi-turn conversation via shared history
 # ---------------------------------------------------------------------------
 
 
-async def demo_streaming(rt: LocalRuntime) -> None:
-    print("\n=== 2. run_stream() ===")
+async def demo_multi_turn() -> None:
+    print("\n=== 2. Multi-turn conversation ===")
 
-    model = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1])
-    agent = AssistantAgent(
-        "Streamer",
-        rt,
-        model=model,
-        tools=[ClockTool()],
-        history=InMemoryHistoryProvider(),
-        compaction=SlidingWindowCompaction(max_messages=20),
-        max_iterations=5,
-    )
-
-    print("  stream: ", end="", flush=True)
-    async for event in agent.run_stream("What is the current UTC time?"):
-        if isinstance(event, TextDelta):
-            print(event.text, end="", flush=True)
-        elif isinstance(event, CompletionEvent):
-            pass  # final assembled content available here if needed
-        elif isinstance(event, StreamDone):
-            break
-    print()  # newline after streamed output
-
-
-# ---------------------------------------------------------------------------
-# 3. Multi-turn conversation via shared HistoryProvider
-# ---------------------------------------------------------------------------
-
-
-async def demo_multi_turn(rt: LocalRuntime) -> None:
-    print("\n=== 3. Multi-turn conversation ===")
-
-    model = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1])
-    history = InMemoryHistoryProvider()
-    agent = AssistantAgent(
+    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    agent = ReActAgent(
         "Tutor",
-        rt,
         model=model,
         tools=[MathTool()],
-        history=history,
-        compaction=SlidingWindowCompaction(max_messages=40),
+        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=40)),
         max_iterations=6,
     )
 
@@ -151,94 +130,140 @@ async def demo_multi_turn(rt: LocalRuntime) -> None:
         "What is 7 * 8?",
         "What is my name and what was the result I asked for?",
     ]
-    for q in turns:
-        result = await agent.run(q)
-        print(f"  Q: {q!r}")
-        print(f"  A: {result.output!r}")
-
-    msg_count = await history.count_messages(agent.id.key)
-    print(f"  history depth: {msg_count} messages")
+    session = "tutor-session"
+    async with Runtime() as rt:
+        await rt.register(agent)
+        for q in turns:
+            output = await run_agent(rt, agent, q, session_id=session)
+            print(f"  Q: {q!r}")
+            print(f"  A: {output!r}")
 
 
 # ---------------------------------------------------------------------------
-# 4. UserProxyAgent → AssistantAgent via LocalRuntime
+# 3. UserProxyAgent → ReActAgent via Runtime
 # ---------------------------------------------------------------------------
 
 
-async def demo_proxy(rt: LocalRuntime) -> None:
-    print("\n=== 4. UserProxyAgent → AssistantAgent ===")
+async def demo_proxy() -> None:
+    print("\n=== 3. UserProxyAgent → ReActAgent ===")
 
-    model = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1])
-    agent = AssistantAgent(
+    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    backend = ReActAgent(
         "Backend",
-        rt,
         model=model,
         tools=[MathTool(), ClockTool()],
-        history=InMemoryHistoryProvider(),
-        compaction=SlidingWindowCompaction(max_messages=20),
+        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20)),
         max_iterations=6,
     )
-    await rt.register(agent.id.type, agent.on_message)
 
-    proxy = UserProxyAgent("proxy", rt, key="user-1")
-    result = await proxy.ask(
-        "What is math.factorial(10)?",
-        recipient=agent.id,
-    )
-    print(f"  proxy.ask result : {getattr(result, 'output', result)!r}")
+    async with Runtime() as rt:
+        await rt.register(backend)
+        proxy = UserProxyAgent("proxy", rt, key="user-1")
+        output = await proxy.ask("What is math.factorial(10)?", recipient=backend.id)
+    print(f"  proxy.ask result : {output!r}")
 
 
 # ---------------------------------------------------------------------------
-# 5. OrchestratorAgent — delegates to specialist sub-agents
+# 4. OrchestratorAgent — delegates to specialist sub-agents
 # ---------------------------------------------------------------------------
 
 
-async def demo_orchestrator(rt: LocalRuntime) -> None:
-    print("\n=== 5. OrchestratorAgent ===")
+async def demo_orchestrator() -> None:
+    print("\n=== 4. OrchestratorAgent ===")
 
-    model = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1])
+    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
 
-    math_agent = AssistantAgent(
+    math_agent = ReActAgent(
         "MathSpecialist",
-        rt,
         model=model,
         tools=[MathTool()],
-        system="You are a mathematics specialist. Use the math tool for every calculation.",
-        history=InMemoryHistoryProvider(),
-        compaction=SlidingWindowCompaction(max_messages=20),
+        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20)),
+        system_instructions="You are a mathematics specialist. Use the math tool for every calculation.",
         max_iterations=5,
     )
-    math_agent.description = "Handles mathematical calculations and expressions."
-
-    time_agent = AssistantAgent(
+    time_agent = ReActAgent(
         "TimeSpecialist",
-        rt,
         model=model,
         tools=[ClockTool()],
-        system="You are a time specialist. Always check the clock tool.",
-        history=InMemoryHistoryProvider(),
-        compaction=SlidingWindowCompaction(max_messages=20),
+        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20)),
+        system_instructions="You are a time specialist. Always check the clock tool.",
         max_iterations=4,
     )
-    time_agent.description = "Reports current time and timezone information."
-
     orchestrator = OrchestratorAgent(
         "Router",
-        rt,
         model=model,
-        sub_agents=[math_agent, time_agent],
-        description="Routes queries to math or time specialists.",
+        sub_agents=[
+            SubAgentConfig(agent=math_agent, description="Handles mathematical calculations."),
+            SubAgentConfig(agent=time_agent, description="Reports current time information."),
+        ],
         max_iterations=10,
     )
 
-    result = await orchestrator.run(
-        "What is math.log2(1024)? Also, what is the current UTC time?"
+    async with Runtime() as rt:
+        await rt.register(math_agent)
+        await rt.register(time_agent)
+        await rt.register(orchestrator)
+        output = await run_agent(rt, orchestrator, "What is math.log2(1024)? Also, what is the current UTC time?")
+    print(f"  output : {output!r}")
+
+
+# ---------------------------------------------------------------------------
+# 5. Interactive REPL with OrchestratorAgent
+# ---------------------------------------------------------------------------
+
+
+async def demo_interactive() -> None:
+    print("\n=== 5. Interactive REPL (OrchestratorAgent) ===")
+    print("Type 'exit' to quit.\n")
+
+    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    math_agent = ReActAgent(
+        "MathSpecialist",
+        model=model,
+        tools=[MathTool()],
+        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20)),
+        system_instructions="You are a mathematics specialist. Use the math tool for every calculation.",
     )
-    print(f"  status : {result.status}")
-    print(f"  output : {result.output!r}")
+    time_agent = ReActAgent(
+        "TimeSpecialist",
+        model=model,
+        tools=[ClockTool()],
+        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20)),
+        system_instructions="You are a time specialist. Always check the clock tool.",
+    )
+    orchestrator = OrchestratorAgent(
+        "Router",
+        model=model,
+        sub_agents=[
+            SubAgentConfig(agent=math_agent, description="Handles mathematical calculations."),
+            SubAgentConfig(agent=time_agent, description="Reports current time information."),
+        ],
+        max_iterations=10,
+    )
+
+    session = "repl-session"
+    async with Runtime() as rt:
+        await rt.register(math_agent)
+        await rt.register(time_agent)
+        await rt.register(orchestrator)
+        while True:
+            try:
+                user_input = input("You: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\nBye!")
+                break
+            if user_input.lower() in ("exit", "quit", "q"):
+                print("Bye!")
+                break
+            if not user_input:
+                continue
+            output = await run_agent(rt, orchestrator, user_input, session_id=session)
+            print(f"Bot: {output}\n")
 
 
-from ravi.console import Console
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
 
 
 async def main() -> None:
@@ -249,61 +274,35 @@ async def main() -> None:
     print("      Ravi Agent Framework Reference Demos      ")
     print("=" * 50)
     print("Select a demo to run:")
-    print("  1. Basic non-streaming single-turn run()")
-    print("  2. Token-by-token streaming run_stream()")
-    print("  3. Multi-turn conversation via shared history")
-    print("  4. UserProxyAgent routing via LocalRuntime")
-    print("  5. OrchestratorAgent (multi-agent Hub & Spoke)")
-    print("  6. Live Interactive REPL chat with OrchestratorAgent 🚀")
-    print("  exit. Exit the demo suite")
+    print("  1. Basic single-turn run")
+    print("  2. Multi-turn conversation via shared history")
+    print("  3. UserProxyAgent routing via Runtime")
+    print("  4. OrchestratorAgent (Hub & Spoke)")
+    print("  5. Interactive REPL with OrchestratorAgent")
+    print("  exit. Exit")
 
-    async with LocalRuntime() as rt:
-        while True:
-            try:
-                choice = input("\nSelect demo [1-6, exit]: ").strip()
-            except (KeyboardInterrupt, EOFError):
-                print("\n👋 Bye!")
-                break
+    while True:
+        try:
+            choice = input("\nSelect demo [1-5, exit]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nBye!")
+            break
 
-            if choice.lower() in ("exit", "quit", "q"):
-                print("👋 Bye!")
-                break
-            elif choice == "1":
-                await demo_basic_run(rt)
-            elif choice == "2":
-                await demo_streaming(rt)
-            elif choice == "3":
-                await demo_multi_turn(rt)
-            elif choice == "4":
-                await demo_proxy(rt)
-            elif choice == "5":
-                await demo_orchestrator(rt)
-            elif choice == "6":
-                print("\n=== Live Interactive Chat with Orchestrator (Specialists: Math, Clock) ===")
-                # Instantiate Orchestrator
-                model = OpenAIClient(model=settings.CHAT_MODEL.split("/")[-1])
-                math_agent = AssistantAgent(
-                    "MathSpecialist", rt, model=model, tools=[MathTool()],
-                    system="You are a mathematics specialist. Use the math tool for every calculation."
-                )
-                math_agent.description = "Handles mathematical calculations and expressions."
-                time_agent = AssistantAgent(
-                    "TimeSpecialist", rt, model=model, tools=[ClockTool()],
-                    system="You are a time specialist. Always check the clock tool."
-                )
-                time_agent.description = "Reports current time and timezone information."
-                
-                orchestrator = OrchestratorAgent(
-                    "Router",
-                    rt,
-                    model=model,
-                    sub_agents=[math_agent, time_agent],
-                    description="Routes queries to math or time specialists.",
-                    max_iterations=10,
-                )
-                await Console(orchestrator).interactive(stream=True)
-            else:
-                print("Invalid choice, select 1 to 6 or exit.")
+        if choice.lower() in ("exit", "quit", "q"):
+            print("Bye!")
+            break
+        elif choice == "1":
+            await demo_basic_run()
+        elif choice == "2":
+            await demo_multi_turn()
+        elif choice == "3":
+            await demo_proxy()
+        elif choice == "4":
+            await demo_orchestrator()
+        elif choice == "5":
+            await demo_interactive()
+        else:
+            print("Invalid choice, select 1 to 5 or exit.")
 
 
 if __name__ == "__main__":

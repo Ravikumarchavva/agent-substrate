@@ -134,7 +134,7 @@ async def demo_tool_protocol() -> None:
 async def demo_stream_events() -> None:
     print("\n=== 4. Stream event types ===")
 
-    # Simulate what agent.run_stream() yields
+    # Simulate what an agent emits — consumed via rt.submit() + rt.event_log.tail()
     simulated_stream = [
         TextDelta(text="The "),
         TextDelta(text="answer "),

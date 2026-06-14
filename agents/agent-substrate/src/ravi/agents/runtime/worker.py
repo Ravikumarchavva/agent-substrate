@@ -15,6 +15,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from ravi.kernel.agent.runtime_context import CancellationToken, RunMeta
 from ravi.kernel.runtime.ids import RunStatus
 from ravi.kernel.runtime.log_entry import RunLogEntry
 
@@ -62,6 +63,7 @@ class Worker:
         self._registry = registry
         self._running = False
         self._poll_task: asyncio.Task | None = None
+        self._tokens: dict[str, CancellationToken] = {}  # run_id → token for external cancel
 
     async def start(self) -> None:
         self._running = True
@@ -146,12 +148,15 @@ class Worker:
         from ravi.agents.runtime.context import RunContext
 
         run_id = lease.run_id
+        token = CancellationToken()
+        meta = RunMeta(run_id=run_id, cancellation=token, tenant_id=None)
+        self._tokens[run_id] = token
+
         llm_client = getattr(agent, "model", None)
         tool_invoker = self._build_tool_invoker(agent)
 
         ctx = RunContext(
-            run_id=run_id,
-            tenant_id=None,
+            meta=meta,
             event_log=self._event_log,
             journal=self._journal,
             inbox=self._inbox,
@@ -193,6 +198,7 @@ class Worker:
             await self._scheduler.release(lease, status=RunStatus.COMPLETED)
 
         except asyncio.CancelledError:
+            token.cancel("task-cancelled")
             final_seq = await self._event_log.last_seq(run_id)
             await self._event_log.append(
                 run_id,
@@ -233,3 +239,5 @@ class Worker:
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.FAILED)
+        finally:
+            self._tokens.pop(run_id, None)

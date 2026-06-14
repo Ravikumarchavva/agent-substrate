@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from ravi.integrations.tools.mcp.tool import MCPTool
 
 from mcp import ClientSession, StdioServerParameters
+from mcp.types import CallToolResult
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 
@@ -149,23 +150,6 @@ class MCPClient:
                 await self.exit_stack.aclose()
             raise RuntimeError(f"Failed to connect to MCP server via SSE: {e}") from e
 
-    async def connect(
-        self, command: str, args: list[str], env: Optional[dict[str, str]] = None
-    ) -> None:
-        """Connect to an MCP server via stdio transport (backward compatibility).
-
-        This method is kept for backward compatibility. Use connect_stdio() instead.
-
-        Args:
-            command: Command to start the MCP server (e.g., "npx", "python")
-            args: Arguments for the command
-            env: Optional environment variables for the server process
-
-        Raises:
-            RuntimeError: If already connected or connection fails
-        """
-        await self.connect_stdio(command, args, env)
-
     async def disconnect(self) -> None:
         """Disconnect from the MCP server."""
         if self.exit_stack:
@@ -210,7 +194,7 @@ class MCPClient:
         except Exception as e:
             raise RuntimeError(f"Failed to list tools: {e}") from e
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> CallToolResult:
         """Execute a tool on the MCP server.
 
         Args:
@@ -218,7 +202,7 @@ class MCPClient:
             arguments: Tool arguments as a dictionary
 
         Returns:
-            Tool execution result as a JSON string
+            CallToolResult from the MCP SDK
 
         Raises:
             RuntimeError: If not connected or tool execution fails
@@ -227,9 +211,7 @@ class MCPClient:
             raise RuntimeError("Not connected to an MCP server")
 
         try:
-            response = await self.session.call_tool(name, arguments)
-            return response  # type: ignore[return-value]
-
+            return await self.session.call_tool(name, arguments)
         except Exception as e:
             raise RuntimeError(f"Tool execution failed for '{name}': {e}") from e
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ravi.kernel.core.content import ChatMessage
 from ravi.kernel.agent.context import AgentContextProtocol, CompactionStrategy
+from ravi.kernel.agent.supervision import HistoryRetention
 from ravi.kernel.storage.history import HistoryProvider
 from ravi.kernel.core.identity import AgentId
 from .compaction import SlidingWindowCompaction
@@ -12,14 +13,21 @@ from .compaction import SlidingWindowCompaction
 class ContextConfig:
     """User-facing config bag — pass to agent constructors via ``context=...``.
 
-    Bundles a ``HistoryProvider`` and a ``CompactionStrategy`` together so
-    callers don't have to pass them as two separate arguments.
+    Bundles a ``HistoryProvider``, a ``CompactionStrategy``, and a
+    ``HistoryRetention`` policy together so callers don't have to pass them
+    as separate arguments.
+
+    ``retention`` controls what happens to history after a run completes:
+    - ``PERMANENT`` (default) — kept forever; suitable for user-facing agents.
+    - ``RUN`` — deleted after the run ends; for transient sub-agents.
+    - ``NONE`` — never written; stateless workers.
 
     Usage::
 
         context = ContextConfig(
             InMemoryHistoryProvider(),
             [SlidingWindowCompaction(max_messages=40)],
+            retention=HistoryRetention.RUN,
         )
         agent = ReActAgent("bot", runtime, model=client, context=context)
     """
@@ -30,8 +38,11 @@ class ContextConfig:
         compaction_strategies: list[CompactionStrategy]
         | CompactionStrategy
         | None = None,
+        *,
+        retention: HistoryRetention = HistoryRetention.PERMANENT,
     ) -> None:
         self.history = history
+        self.retention = retention
         if isinstance(compaction_strategies, list):
             self.compaction: CompactionStrategy = (
                 compaction_strategies[0]

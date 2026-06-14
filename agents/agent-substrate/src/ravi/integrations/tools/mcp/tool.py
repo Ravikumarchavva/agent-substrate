@@ -18,7 +18,7 @@ class MCPTool:
         ```python
         # Connect to MCP server
         mcp_client = MCPClient()
-        await mcp_client.connect(
+        await mcp_client.connect_stdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
         )
@@ -75,70 +75,63 @@ class MCPTool:
         try:
             result = await self.client.call_tool(self.name, kwargs)
 
-            if hasattr(result, "content"):
-                # Native MCP SDK response
-                content = []
-                for item in result.content:  # type: ignore[union-attr]
-                    if hasattr(item, "type"):
-                        if item.type == "text" and hasattr(item, "text"):
-                            content.append(TextBlock(text=item.text))
-                        elif item.type == "image" and hasattr(item, "data"):
-                            mime = getattr(item, "mimeType", "image/png")
-                            content.append(ImageBlock(data=item.data, media_type=mime))
-                        elif item.type == "resource" and hasattr(item, "resource"):
-                            r = item.resource
-                            uri = getattr(r, "uri", "")
-                            text = getattr(r, "text", None)
-                            content.append(
-                                DocumentBlock(url=uri or None)
-                                if not text
-                                else TextBlock(text=f"[{uri}]\n{text}" if uri else text)
-                            )
-                        else:
-                            # Fallback if other types are present
-                            content.append(TextBlock(text=str(item)))
-                    elif isinstance(item, dict):
-                        # Decode from dict
-                        item_type = item.get("type", "text")
-                        if item_type == "text":
-                            content.append(TextBlock(text=str(item.get("text", ""))))
-                        elif item_type == "image":
-                            content.append(
-                                ImageBlock(
-                                    data=str(item.get("data", "")),
-                                    media_type=str(
-                                        item.get(
-                                            "mediaType",
-                                            item.get("mimeType", "image/png"),
-                                        )
-                                    ),
-                                )
-                            )
-                        elif item_type == "resource":
-                            r = item.get("resource", {})
-                            uri = str(r.get("uri", ""))
-                            text = r.get("text")
-                            content.append(
-                                DocumentBlock(url=uri or None)
-                                if not text
-                                else TextBlock(text=f"[{uri}]\n{text}" if uri else text)
-                            )
-                        else:
-                            content.append(TextBlock(text=str(item)))
+            # Native MCP SDK response — always a CallToolResult with .content
+            content = []
+            for item in result.content:  # type: ignore[union-attr]
+                if hasattr(item, "type"):
+                    if item.type == "text" and hasattr(item, "text"):
+                        content.append(TextBlock(text=item.text))
+                    elif item.type == "image" and hasattr(item, "data"):
+                        mime = getattr(item, "mimeType", "image/png")
+                        content.append(ImageBlock(data=item.data, media_type=mime))
+                    elif item.type == "resource" and hasattr(item, "resource"):
+                        r = item.resource
+                        uri = getattr(r, "uri", "")
+                        text = getattr(r, "text", None)
+                        content.append(
+                            DocumentBlock(url=uri or None)
+                            if not text
+                            else TextBlock(text=f"[{uri}]\n{text}" if uri else text)
+                        )
                     else:
-                        # Fallback
+                        # Fallback if other types are present
                         content.append(TextBlock(text=str(item)))
+                elif isinstance(item, dict):
+                    # Decode from dict
+                    item_type = item.get("type", "text")
+                    if item_type == "text":
+                        content.append(TextBlock(text=str(item.get("text", ""))))
+                    elif item_type == "image":
+                        content.append(
+                            ImageBlock(
+                                data=str(item.get("data", "")),
+                                media_type=str(
+                                    item.get(
+                                        "mediaType",
+                                        item.get("mimeType", "image/png"),
+                                    )
+                                ),
+                            )
+                        )
+                    elif item_type == "resource":
+                        r = item.get("resource", {})
+                        uri = str(r.get("uri", ""))
+                        text = r.get("text")
+                        content.append(
+                            DocumentBlock(url=uri or None)
+                            if not text
+                            else TextBlock(text=f"[{uri}]\n{text}" if uri else text)
+                        )
+                    else:
+                        content.append(TextBlock(text=str(item)))
+                else:
+                    # Fallback
+                    content.append(TextBlock(text=str(item)))
 
-                is_error: bool = getattr(result, "isError", False)
-                return ToolExecutionResult(
-                    call_id=call_id, content=content, is_error=is_error
-                )
-            else:
-                # Legacy: result is a raw string/object
-                content = [TextBlock(text=str(result))]
-                return ToolExecutionResult(
-                    call_id=call_id, content=content, is_error=False
-                )
+            is_error: bool = getattr(result, "isError", False)
+            return ToolExecutionResult(
+                call_id=call_id, content=content, is_error=is_error
+            )
 
         except Exception as e:
             return ToolExecutionResult(
@@ -166,7 +159,7 @@ class MCPTool:
         Example:
             ```python
             mcp_client = MCPClient()
-            await mcp_client.connect(command="npx", args=[...])
+            await mcp_client.connect_stdio(command="npx", args=[...])
 
             # Auto-discover all tools
             tools = await MCPTool.from_mcp_client(mcp_client)

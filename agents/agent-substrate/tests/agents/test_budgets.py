@@ -118,7 +118,6 @@ async def test_react_agent_respects_execution_budget() -> None:
     from ravi.agents.runtime import Runtime
     from ravi.kernel.core.content import ChatMessage, Role, TextBlock
     from ravi.kernel.core.identity import AgentId
-    from ravi.kernel.llm.llm import LLMResponse
     from ravi.kernel.core.usage import Usage
     from ravi.kernel.messaging.message import Message, ChatPayload
     from ravi.kernel.messaging.stream import CompletionEvent

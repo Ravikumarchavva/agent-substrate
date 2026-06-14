@@ -1,6 +1,6 @@
 """Redis Streams event backbone for async inter-service communication.
 
-Concrete implementation of the legacy ``EventBus`` API.
+Concrete implementation of the ``EventBus`` protocol.
 Lives in ``integrations`` because it is a Redis-backed adapter.
 """
 

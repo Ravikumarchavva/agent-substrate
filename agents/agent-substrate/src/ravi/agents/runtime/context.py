@@ -30,7 +30,6 @@ from typing import TYPE_CHECKING, Any
 
 from ravi.kernel.agent.runtime_context import RunMeta
 from ravi.kernel.core.content import JsonObject, content_block_from_dict
-from ravi.kernel.core.errors import CancellationError
 from ravi.kernel.core.identity import AgentId, TopicId
 from ravi.kernel.core.usage import Usage
 from ravi.kernel.llm.llm import GenerationOptions, LLMResponse
@@ -109,10 +108,6 @@ class RunContext:
     def check(self) -> None:
         """Raise CancellationError if this run has been cancelled or deadline exceeded."""
         self._meta.check()
-        # Stage-0 belt-and-suspenders: sync scheduler cancellation signal into the token.
-        if self._scheduler.get_status(self.run_id) == RunStatus.CANCELLED:
-            self._meta.cancellation.cancel("scheduler-cancelled")
-            self._meta.cancellation.check()
 
     # ------------------------------------------------------------------
     # Journaled generic effect helper
@@ -226,7 +221,7 @@ class RunContext:
             last_seq = -1
             if target_run:
                 last_seq = await self._event_log.last_seq(target_run)
-                target_status = self._scheduler.get_status(target_run)
+                target_status = await self._scheduler.get_status(target_run)
             else:
                 target_status = None
 

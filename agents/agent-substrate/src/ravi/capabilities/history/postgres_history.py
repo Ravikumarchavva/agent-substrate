@@ -3,11 +3,8 @@
 Durable, queryable persistence for session messages using SQLAlchemy 2.0 async ORM.
 
 Tables (created automatically):
-  ``memory_sessions``  — one row per session (timestamps, message count).
-  ``memory_messages``  — one row per message within a session (JSONB payload).
-
-The session row is auto-created on first ``save_messages`` so the provider
-works standalone (no separate session bookkeeping required).
+  ``history_sessions``  — one row per session (timestamps, message count).
+  ``history_messages``  — one row per message within a session (JSONB payload).
 
 Internal storage key:
   The public ``HistoryProvider`` methods (``append``, ``get_messages``, ``clear``)
@@ -115,10 +112,9 @@ class HistoryBase(DeclarativeBase):
 
 
 class HistorySession(HistoryBase):
-    """Persistent session record.  Table name kept as ``memory_sessions`` for
-    backwards compatibility with existing deployments."""
+    """Persistent session record."""
 
-    __tablename__ = "memory_sessions"
+    __tablename__ = "history_sessions"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     message_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -140,12 +136,11 @@ class HistorySession(HistoryBase):
 
 
 class HistoryMessage(HistoryBase):
-    """Single message stored for a session.  Table name kept as
-    ``memory_messages`` for backwards compatibility."""
+    """Single message stored for a session."""
 
-    __tablename__ = "memory_messages"
+    __tablename__ = "history_messages"
     __table_args__ = (
-        UniqueConstraint("session_id", "sequence", name="uq_session_sequence"),
+        UniqueConstraint("session_id", "sequence", name="uq_history_session_sequence"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -153,7 +148,7 @@ class HistoryMessage(HistoryBase):
     )
     session_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("memory_sessions.id", ondelete="CASCADE"),
+        ForeignKey("history_sessions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -215,18 +210,6 @@ class PostgresHistoryProvider:
         )
         async with self._engine.begin() as conn:
             await conn.run_sync(HistoryBase.metadata.create_all)
-            from sqlalchemy import text as _text
-
-            await conn.execute(
-                _text(
-                    "ALTER TABLE memory_messages ADD COLUMN IF NOT EXISTS run_id VARCHAR(64) NOT NULL DEFAULT ''"
-                )
-            )
-            await conn.execute(
-                _text(
-                    "CREATE INDEX IF NOT EXISTS ix_memory_messages_run_id ON memory_messages (run_id)"
-                )
-            )
         logger.info("PostgresHistoryProvider connected and tables ensured")
 
     async def disconnect(self) -> None:
@@ -320,17 +303,11 @@ class PostgresHistoryProvider:
                 session_obj.message_count = result.scalar_one()
             await db.commit()
 
-    # -- Session-based API (legacy / internal) --------------------------------
+    # -- Internal helpers (used by protocol methods above) --------------------
 
     async def save_messages(
         self, session_id: str, messages: List[ChatMessage], run_id: str = ""
     ) -> int:
-        """Append messages to a session, auto-creating the session row.
-
-        Messages are assigned sequential IDs after the current max.  The
-        session row is locked to prevent concurrent writes racing on the
-        sequence counter.  Returns the number of messages saved.
-        """
         if not messages:
             return 0
 
@@ -377,11 +354,9 @@ class PostgresHistoryProvider:
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[ChatMessage]:
-        """Load a session's messages ordered by sequence (last *limit* if given)."""
         factory = self._get_session()
         async with factory() as db:
             if limit is not None and limit > 0 and offset is None:
-                # Take the last `limit` by sequence, then restore ascending order.
                 stmt = (
                     select(HistoryMessage)
                     .where(HistoryMessage.session_id == session_id)
@@ -405,6 +380,17 @@ class PostgresHistoryProvider:
 
             return [deserialize_message(row.payload) for row in rows]
 
+    async def clear_session(self, session_id: str) -> None:
+        factory = self._get_session()
+        async with factory() as db:
+            await db.execute(
+                delete(HistoryMessage).where(HistoryMessage.session_id == session_id)
+            )
+            session_obj = await db.get(HistorySession, session_id)
+            if session_obj is not None:
+                session_obj.message_count = 0
+            await db.commit()
+
     async def count_messages(self, session_id: str) -> int:
         factory = self._get_session()
         async with factory() as db:
@@ -416,14 +402,3 @@ class PostgresHistoryProvider:
             result = await db.execute(stmt)
             return result.scalar_one()
 
-    async def clear_session(self, session_id: str) -> None:
-        """Delete all messages for a session (keeps the session row)."""
-        factory = self._get_session()
-        async with factory() as db:
-            await db.execute(
-                delete(HistoryMessage).where(HistoryMessage.session_id == session_id)
-            )
-            session_obj = await db.get(HistorySession, session_id)
-            if session_obj is not None:
-                session_obj.message_count = 0
-            await db.commit()

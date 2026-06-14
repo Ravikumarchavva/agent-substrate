@@ -4,11 +4,9 @@
 Runs inside the Firecracker microVM.  Accepts multiple requests over
 vsock port 52, maintaining full Python state between calls.
 
-v3 additions over v2:
-  - Structured ``outputs[]`` per response (text, image, error, file, stderr)
-  - Auto-capture matplotlib figures as base64 PNG after each python exec
-  - Binary file read/write (base64-encoded)
-  - Backward-compatible: still returns flat output/stderr/error fields
+Structured ``outputs[]`` per response (text, image, error, file, stderr).
+Auto-captures matplotlib figures as base64 PNG after each python exec.
+Binary file read/write (base64-encoded).
 
 Protocol: length-prefixed JSON  (4-byte big-endian length + JSON body)
 
@@ -146,9 +144,6 @@ class GuestAgent:
         return {
             "success": success,
             "outputs": outputs,
-            "output": stdout_text,  # backward compat
-            "stderr": stderr_text,  # backward compat
-            "error": error,
             "execution_time": elapsed,
             "cell_id": cell_id,
             "script_path": script_path,
@@ -237,9 +232,6 @@ class GuestAgent:
             return {
                 "success": proc.returncode == 0,
                 "outputs": outputs,
-                "output": stdout_text,
-                "stderr": stderr_text,
-                "error": stderr_text if proc.returncode != 0 else None,
                 "exit_code": proc.returncode,
                 "execution_time": round(time.monotonic() - start, 4),
             }
@@ -249,9 +241,6 @@ class GuestAgent:
                 "outputs": [
                     {"type": "error", "content": f"Timed out after {timeout}s"}
                 ],
-                "output": "",
-                "stderr": "",
-                "error": f"Bash timed out after {timeout}s",
                 "exit_code": -1,
                 "execution_time": float(timeout),
             }

@@ -144,10 +144,9 @@ def map_kernel_event(ev: object) -> WireEvent | list[WireEvent] | None:
 def map_bridge_event(data: dict) -> WireEvent | None:
     """Translate an out-of-band HITL bridge dict to a wire event.
 
-    The ``WebHITLBridge`` emits legacy dict shapes for approval / input gates;
-    this is the single place that adapts them to the wire protocol. Rich tool
-    UIs (kanban, …) no longer travel this path — they flow inline as
-    ``ui.resource`` via the tool result (see ``_progress_to_wire``).
+    Single adaptation point from bridge dict shapes to the wire protocol.
+    Rich tool UIs (kanban, …) flow inline as ``ui.resource`` via the tool
+    result (see ``_progress_to_wire``), not through this path.
     """
     kind = data.get("type")
 

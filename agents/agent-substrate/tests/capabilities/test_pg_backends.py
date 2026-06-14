@@ -264,7 +264,7 @@ async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
     await sched.enqueue(run_id, priority=5, tenant="test")
 
     leases = await sched.lease(worker_id="w1", capacity=100)
-    our_lease = next((l for l in leases if l.run_id == run_id), None)
+    our_lease = next((lease for lease in leases if lease.run_id == run_id), None)
     assert our_lease is not None
 
     status = await sched.get_status(run_id)
@@ -274,30 +274,36 @@ async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
 async def test_pg_scheduler_coalescing(pg_pool) -> None:
     from ravi.capabilities.runtime import PostgresScheduler
     from ravi.kernel.runtime.ids import new_run_id
+    from ravi.kernel.core.identity import AgentId
 
     sched = PostgresScheduler(pg_pool)
     await sched.setup()
 
     run_id = new_run_id()
+    agent_id = AgentId(type="agent", key=f"coalesce-{id(object())}")
+    sched.register_run(run_id, agent_id)
     await sched.enqueue(run_id, priority=5, tenant="test")
     await sched.enqueue(run_id, priority=5, tenant="test")  # no-op
 
     leases = await sched.lease(worker_id="w1", capacity=10)
-    run_ids = [l.run_id for l in leases if l.run_id == run_id]
+    run_ids = [lease.run_id for lease in leases if lease.run_id == run_id]
     assert len(run_ids) == 1
 
 
 async def test_pg_scheduler_release_completed(pg_pool) -> None:
     from ravi.capabilities.runtime import PostgresScheduler
     from ravi.kernel.runtime.ids import new_run_id, RunStatus
+    from ravi.kernel.core.identity import AgentId
 
     sched = PostgresScheduler(pg_pool)
     await sched.setup()
 
     run_id = new_run_id()
+    agent_id = AgentId(type="agent", key=f"release-{id(object())}")
+    sched.register_run(run_id, agent_id)
     await sched.enqueue(run_id, priority=5, tenant="test")
-    leases = await sched.lease(worker_id="w1", capacity=1)
-    target = next(l for l in leases if l.run_id == run_id)
+    leases = await sched.lease(worker_id="w1", capacity=100)
+    target = next(lease for lease in leases if lease.run_id == run_id)
 
     await sched.release(target, status=RunStatus.COMPLETED)
     assert await sched.get_status(run_id) == RunStatus.COMPLETED

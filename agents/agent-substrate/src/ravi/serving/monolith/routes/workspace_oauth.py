@@ -66,11 +66,7 @@ async def _workspace_tokens_are_usable(
     tokens: dict[str, Any],
     session_id: str,
 ) -> bool:
-    """Return True when the stored token payload is present and unexpired.
-
-    Legacy payloads created before ``expires_at`` was stored are treated as
-    stale so the frontend can restore a fresh token from Prisma.
-    """
+    """Return True when the stored token payload is present and unexpired."""
     expires_at = tokens.get("expires_at")
     if not isinstance(expires_at, (int, float)):
         logger.info(

@@ -29,7 +29,6 @@ at the start of every ``lease()`` call.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, AsyncIterator
 
@@ -85,28 +84,15 @@ class PostgresScheduler:
 
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
+        self._pending_registrations: dict[RunId, AgentId] = {}
 
     async def setup(self) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(_CREATE_TABLES)
 
-    # -- Extra methods (mirror InMemoryScheduler's non-Protocol surface) -----
-
     def register_run(self, run_id: RunId, agent_id: AgentId) -> None:
-        """Synchronous registration stub — the actual INSERT happens lazily in enqueue.
-
-        We store the mapping in a local dict first so that the first ``enqueue``
-        call can persist it atomically alongside the queue entry.
-        """
+        """The actual INSERT happens lazily in enqueue; store mapping here first."""
         self._pending_registrations[run_id] = agent_id
-
-    def __init_extra(self) -> None:
-        self._pending_registrations: dict[RunId, AgentId] = {}
-
-    # Patch __init__ to also run __init_extra
-    def __init__(self, pool: asyncpg.Pool) -> None:  # type: ignore[misc]
-        self._pool = pool
-        self._pending_registrations: dict[RunId, AgentId] = {}
 
     def agent_for(self, run_id: RunId) -> AgentId | None:
         return self._pending_registrations.get(run_id)
@@ -140,6 +126,21 @@ class PostgresScheduler:
         if row is None:
             return None
         return (RunId(row["run_id"]), _STATUS_MAP[row["status"]])
+
+    async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
+        """Re-enqueue the active suspended run for agent_id, if any."""
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ravi_run_queue rq
+                SET status = 'pending', worker_id = NULL, expires_at = NULL
+                WHERE rq.status = 'suspended'
+                  AND rq.run_id IN (
+                      SELECT run_id FROM ravi_agent_runs WHERE agent_id = $1
+                  )
+                """,
+                str(agent_id),
+            )
 
     async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:
         """Re-enqueue a suspended run."""
@@ -211,30 +212,39 @@ class PostgresScheduler:
                 # Claim up to capacity pending runs
                 rows = await conn.fetch(
                     """
-                    UPDATE ravi_run_queue
+                    UPDATE ravi_run_queue rq
                     SET status = 'running', worker_id = $1, expires_at = $2
-                    WHERE run_id IN (
+                    WHERE rq.run_id IN (
                         SELECT run_id FROM ravi_run_queue
                         WHERE status = 'pending'
                         ORDER BY priority, enqueued_at
                         LIMIT $3
                         FOR UPDATE SKIP LOCKED
                     )
-                    RETURNING run_id, attempt
+                    RETURNING rq.run_id, rq.attempt,
+                        (SELECT agent_id FROM ravi_agent_runs WHERE run_id = rq.run_id) AS agent_id
                     """,
                     worker_id,
                     expires_at,
                     capacity,
                 )
-        return [
-            Lease(
-                run_id=RunId(row["run_id"]),
-                worker_id=worker_id,
-                expires_at=expires_at,
-                attempt=row["attempt"],
+        leases: list[Lease] = []
+        for row in rows:
+            raw_aid: str | None = row["agent_id"]
+            if raw_aid is None:
+                continue  # no agent registered — skip
+            type_, _, key = raw_aid.partition("/")
+            agent_id = AgentId(type=type_, key=key)
+            leases.append(
+                Lease(
+                    run_id=RunId(row["run_id"]),
+                    agent_id=agent_id,
+                    worker_id=worker_id,
+                    expires_at=expires_at,
+                    attempt=row["attempt"],
+                )
             )
-            for row in rows
-        ]
+        return leases
 
     async def heartbeat(self, lease: Lease) -> None:
         new_expires = datetime.now(tz=timezone.utc) + timedelta(seconds=_LEASE_SECONDS)

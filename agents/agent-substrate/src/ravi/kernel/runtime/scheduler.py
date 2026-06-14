@@ -41,6 +41,7 @@ from typing import AsyncIterator, Protocol
 
 from pydantic import BaseModel
 
+from ravi.kernel.core.identity import AgentId
 from ravi.kernel.runtime.ids import RunId, RunStatus
 from ravi.kernel.runtime.wakeup import Wakeup
 
@@ -71,6 +72,7 @@ class Lease(BaseModel):
     """
 
     run_id: RunId
+    agent_id: AgentId
     worker_id: str
     expires_at: datetime
     attempt: int = 0

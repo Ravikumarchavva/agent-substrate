@@ -30,7 +30,6 @@ async def stream_agent_run(
     on_reasoning_delta: Optional[ReasoningDeltaHandler] = None,
     on_completion: Optional[CompletionHandler] = None,
     on_agent_progress: Optional[AgentProgressHandler] = None,
-    on_tool_result: Any = None,  # kept for call-site compat; no longer dispatched
     on_unknown: Optional[UnknownChunkHandler] = None,
     on_finished: Optional[FinishedHandler] = None,
     on_error: Optional[ErrorHandler] = None,

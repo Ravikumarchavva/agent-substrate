@@ -222,15 +222,8 @@ def create_assistant_agent(
     max_iterations: int = 30,
     tool_timeout: Optional[float] = None,
     name: str = "ChatBot",
-    # legacy kwargs accepted but unused (# TODO L4-guardrails / # TODO L4-hitl)
-    **_dropped: Any,
 ) -> Any:
-    """Create a configured ``ReActAgent`` for the actor-model runtime.
-
-    Maps the old parameter surface to the new ``ReActAgent.__init__``
-    signature.  Legacy kwargs (guardrails, verbose, session_id, etc.) are
-    silently accepted and dropped until L4 guardrails are wired.
-    """
+    """Create a configured ``ReActAgent`` for the runtime."""
     from ravi.agents.core import ReActAgent
     from ravi.agents.tools.toolbox import Toolbox
 

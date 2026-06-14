@@ -96,9 +96,6 @@ class CodeInterpreterTool:
         self,
         http_client: Any | None = None,
         session_manager: Any | None = None,
-        # Legacy compat
-        config: Any | None = None,
-        pool: Any | None = None,
     ) -> None:
         self._http_client = http_client
         self._session_manager = session_manager
@@ -108,13 +105,7 @@ class CodeInterpreterTool:
             self._mode = "http"
         elif session_manager:
             self._mode = "direct"
-        elif config or pool:
-            # Legacy: build a session manager locally
-            self._mode = "direct"
-            self._deferred_config = config
-            self._deferred_pool = pool
         else:
-            # Auto-detect from env
             url = os.environ.get("CODE_INTERPRETER_URL", "")
             if url:
                 from .http_client import CodeInterpreterClient
@@ -139,8 +130,8 @@ class CodeInterpreterTool:
             from .session_manager import SessionManager
             from .vm_manager import VMPool
 
-            cfg = getattr(self, "_deferred_config", None) or CodeInterpreterConfig()
-            pool = getattr(self, "_deferred_pool", None) or VMPool(cfg)
+            cfg = CodeInterpreterConfig()
+            pool = VMPool(cfg)
             self._session_manager = SessionManager(cfg, pool)
             await self._session_manager.start()
 
@@ -199,145 +190,13 @@ class CodeInterpreterTool:
         self, code: str, exec_type: str, timeout: int
     ) -> ToolExecutionResult:
         """Execute via the code-interpreter HTTP service."""
-        try:
-            http_client = self._require_http_client()
-            resp = await http_client.execute(
-                session_id=self.session_id,
-                code=code,
-                exec_type=exec_type,
-                timeout=timeout,
-            )
-            if not resp.success and any(
-                err in str(resp.error).lower()
-                for err in [
-                    "capacity",
-                    "microvm",
-                    "503",
-                    "service unavailable",
-                    "timeout",
-                    "degraded",
-                    "not available",
-                ]
-            ):
-                raise RuntimeError(f"Overloaded MicroVM Service: {resp.error}")
-        except Exception as exc:
-            logger.warning(
-                "code_interpreter HTTP error or capacity issue. Activating local fallback sandbox. Reason: %s",
-                exc,
-            )
-            try:
-                import sys
-                import io
-                import traceback
-                import matplotlib
-
-                matplotlib.use("Agg")
-                import matplotlib.pyplot as plt
-
-                old_stdout = sys.stdout
-                old_stderr = sys.stderr
-                redirected_output = io.StringIO()
-                redirected_error = io.StringIO()
-                sys.stdout = redirected_output
-                sys.stderr = redirected_error
-
-                local_ns = {}
-                local_ns["plt"] = plt
-                local_ns["matplotlib"] = matplotlib
-                try:
-                    import numpy as np
-
-                    local_ns["np"] = np
-                except ImportError:
-                    pass
-                try:
-                    import pandas as pd
-
-                    local_ns["pd"] = pd
-                except ImportError:
-                    pass
-
-                success = True
-                error_str = None
-
-                try:
-                    plt.close("all")
-                    exec(code, {}, local_ns)
-
-                    media = []
-                    figs = [plt.figure(num) for num in plt.get_fignums()]
-                    for idx, fig in enumerate(figs):
-                        buf = io.BytesIO()
-                        fig.savefig(buf, format="png", bbox_inches="tight")
-                        buf.seek(0)
-                        img_data = buf.getvalue()
-
-                        from ravi.kernel import ImageBlock  # was ImageContent
-
-                        media.append(ImageBlock(data=img_data, media_type="image/png"))
-                        plt.close(fig)
-                except Exception as e:
-                    success = False
-                    error_str = f"Error during local fallback execution: {e}\n{traceback.format_exc()}"
-                finally:
-                    sys.stdout = old_stdout
-                    sys.stderr = old_stderr
-
-                stdout_text = redirected_output.getvalue()
-                stderr_text = redirected_error.getvalue()
-
-                if not success:
-                    return ToolExecutionResult(
-                        content=[
-                            TextBlock(
-                                text=json.dumps(
-                                    {
-                                        "success": False,
-                                        "error": error_str,
-                                        "output": stdout_text,
-                                        "stderr": stderr_text,
-                                        "exec_type": "python",
-                                    }
-                                )
-                            )
-                        ],
-                        is_error=True,
-                    )
-
-                response_data = {
-                    "success": True,
-                    "output": stdout_text
-                    + (f"\n[stderr]\n{stderr_text}" if stderr_text else ""),
-                    "execution_time": 0.05,
-                    "cell_id": "fallback-cell",
-                    "exec_type": "python",
-                }
-
-                return ToolExecutionResult(
-                    content=[TextBlock(text=json.dumps(response_data))],
-                    is_error=False,
-                    media=media or None,
-                )
-            except Exception as fallback_exc:
-                logger.error(
-                    "Local fallback execution engine error: %s",
-                    fallback_exc,
-                    exc_info=True,
-                )
-                return ToolExecutionResult(
-                    content=[
-                        TextBlock(
-                            text=json.dumps(
-                                {
-                                    "success": False,
-                                    "error": f"HTTP Error: {exc} | Fallback Error: {fallback_exc}",
-                                }
-                            )
-                        )
-                    ],
-                    is_error=True,
-                )
-
+        http_client = self._require_http_client()
+        resp = await http_client.execute(
+            session_id=self.session_id,
+            code=code,
+            exec_type=exec_type,
+            timeout=timeout,
+        )
         return self._response_to_tool_result(resp)
 
     def _response_to_tool_result(self, resp) -> ToolExecutionResult:
@@ -428,94 +287,45 @@ class CodeInterpreterTool:
         return self._build_direct_result(result, exec_type)
 
     def _build_direct_result(self, result: dict, exec_type: str) -> ToolExecutionResult:
-        """Convert raw guest-agent dict → ToolResult (direct mode)."""
+        """Convert raw guest-agent v3 dict → ToolResult (direct mode)."""
         success = result.get("success", False)
-
-        # Handle v3 structured outputs
-        if "outputs" in result and result["outputs"]:
-            text_parts = []
-            media = []
-            for o in result["outputs"]:
-                otype = o.get("type", "text")
-                if otype == "text":
-                    text_parts.append(o["content"].rstrip())
-                elif otype == "stderr":
-                    text_parts.append(f"[stderr] {o['content'].rstrip()}")
-                elif otype == "error":
-                    text_parts.append(f"[error] {o['content'].rstrip()}")
-                elif otype == "image":
-                    try:
-                        media.append(
-                            ImageBlock(
-                                data=base64.b64decode(o["content"]),
-                                media_type=f"image/{o.get('format', 'png')}",
-                            )
-                        )
-                        text_parts.append(f"[Generated {o.get('name', 'figure.png')}]")
-                    except Exception:
-                        text_parts.append(
-                            f"[Generated {o.get('name', 'figure.png')}] (image decode failed)"
-                        )
-
-            text = "\n".join(text_parts) if text_parts else "(no output)"
-            data = {
-                "success": success,
-                "output": text,
-                "execution_time": result.get("execution_time", 0),
-                "cell_id": result.get("cell_id"),
-                "exec_type": exec_type,
-            }
-            if result.get("error"):
-                data["error"] = result["error"]
-
-            return ToolExecutionResult(
-                content=[TextBlock(text=json.dumps(data))],
-                is_error=not success,
-                media=media or None,
-            )
-
-        # v2 fallback
-        if success:
-            parts = []
-            if result.get("output"):
-                parts.append(result["output"].rstrip())
-            if result.get("stderr"):
-                parts.append(f"[stderr]\n{result['stderr'].rstrip()}")
-            text = "\n".join(parts) if parts else "(no output)"
-
-            return ToolExecutionResult(
-                content=[
-                    TextBlock(
-                        text=json.dumps(
-                            {
-                                "success": True,
-                                "output": text,
-                                "execution_time": result.get("execution_time", 0),
-                                "cell_id": result.get("cell_id"),
-                                "exec_type": exec_type,
-                            }
+        text_parts = []
+        media = []
+        for o in result.get("outputs", []):
+            otype = o.get("type", "text")
+            if otype == "text":
+                text_parts.append(o["content"].rstrip())
+            elif otype == "stderr":
+                text_parts.append(f"[stderr] {o['content'].rstrip()}")
+            elif otype == "error":
+                text_parts.append(f"[error] {o['content'].rstrip()}")
+            elif otype == "image":
+                try:
+                    media.append(
+                        ImageBlock(
+                            data=base64.b64decode(o["content"]),
+                            media_type=f"image/{o.get('format', 'png')}",
                         )
                     )
-                ],
-                is_error=False,
-            )
-        else:
-            return ToolExecutionResult(
-                content=[
-                    TextBlock(
-                        text=json.dumps(
-                            {
-                                "success": False,
-                                "error": result.get("error", "Unknown error"),
-                                "output": result.get("output", ""),
-                                "stderr": result.get("stderr", ""),
-                                "exec_type": exec_type,
-                            }
-                        )
+                    text_parts.append(f"[Generated {o.get('name', 'figure.png')}]")
+                except Exception:
+                    text_parts.append(
+                        f"[Generated {o.get('name', 'figure.png')}] (image decode failed)"
                     )
-                ],
-                is_error=True,
-            )
+
+        text = "\n".join(text_parts) if text_parts else "(no output)"
+        data: dict = {
+            "success": success,
+            "output": text,
+            "execution_time": result.get("execution_time", 0),
+            "cell_id": result.get("cell_id"),
+            "exec_type": exec_type,
+        }
+        return ToolExecutionResult(
+            content=[TextBlock(text=json.dumps(data))],
+            is_error=not success,
+            media=media or None,
+        )
 
     def _require_http_client(self) -> Any:
         if self._http_client is None:

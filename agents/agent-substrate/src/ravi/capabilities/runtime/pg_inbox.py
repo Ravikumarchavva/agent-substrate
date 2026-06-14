@@ -75,11 +75,14 @@ class PostgresInbox:
         pool: asyncpg.Pool,
         *,
         max_retries: int = 3,
-        on_deliver: Callable[[AgentId], None] | None = None,
     ) -> None:
         self._pool = pool
         self._max_retries = max_retries
-        self._on_deliver = on_deliver
+        self._on_deliver: Callable[[AgentId], None] | None = None
+
+    def set_deliver_hook(self, cb: Callable[[AgentId], None] | None) -> None:
+        """Wire the Runtime's wakeup callback, invoked after each new delivery."""
+        self._on_deliver = cb
 
     async def setup(self) -> None:
         async with self._pool.acquire() as conn:

@@ -6,14 +6,10 @@ for reads so DDL and DML both work reliably with asyncpg.
 
 Schema notes
 ------------
-- ``text``         : text repr of the content blocks (for FTS / display /
-                     legacy embedding compat).  Computed via
-                     ``Document.to_text()``.
+- ``text``         : text repr of the content blocks (for FTS / display).
+                     Computed via ``Document.to_text()``.
 - ``content_json`` : JSONB column storing the full ``list[ContentBlock]``
-                     payload as JSON.  ``NULL`` on legacy rows; on read, the
-                     adapter reconstructs the blocks from ``content_json``
-                     and falls back to wrapping ``text`` in a ``TextBlock``
-                     for backward-compat.
+                     payload as JSON.  Required on all rows.
 
 Usage::
 
@@ -35,7 +31,7 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ravi.kernel.core.content import TextBlock, content_block_from_dict
+from ravi.kernel.core.content import content_block_from_dict
 from ravi.kernel.storage.vector import Document, SearchResult
 from ravi.logger import setup_logging
 
@@ -47,16 +43,10 @@ def _blocks_to_json(doc: Document) -> str:
     return json.dumps([block.model_dump(mode="json") for block in doc.content])
 
 
-def _blocks_from_json(raw: str | None, fallback_text: str) -> list:
-    """Deserialize blocks from the content_json column, or wrap fallback text."""
-    if raw:
-        try:
-            items = json.loads(raw)
-            return [content_block_from_dict(item) for item in items]
-        except Exception:
-            pass
-    # Legacy row — wrap the raw text column in a TextBlock
-    return [TextBlock(text=fallback_text)]
+def _blocks_from_json(raw: str | list) -> list:
+    """Deserialize blocks from the content_json column."""
+    items: list = json.loads(raw) if isinstance(raw, str) else raw
+    return [content_block_from_dict(item) for item in items]
 
 
 class PgVectorStore:
@@ -99,13 +89,6 @@ class PgVectorStore:
                     metadata    JSONB NOT NULL DEFAULT '{{}}',
                     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
-            """)
-            )
-            # Add content_json column to existing tables that predate this schema
-            await conn.execute(
-                text("""
-                ALTER TABLE vector_documents
-                    ADD COLUMN IF NOT EXISTS content_json JSONB
             """)
             )
             await conn.execute(
@@ -210,10 +193,7 @@ class PgVectorStore:
             documents.append(
                 Document(
                     id=str(row.id),
-                    content=_blocks_from_json(
-                        row.content_json if hasattr(row, "content_json") else None,
-                        row.text,
-                    ),
+                    content=_blocks_from_json(row.content_json),
                     embedding=emb,
                     metadata=row.metadata or {},
                 )
@@ -340,10 +320,7 @@ class PgVectorStore:
         return [
             SearchResult(
                 id=str(row.id),
-                content=_blocks_from_json(
-                    row.content_json if hasattr(row, "content_json") else None,
-                    row.text,
-                ),
+                content=_blocks_from_json(row.content_json),
                 score=float(row.similarity),
                 metadata=row.metadata or {},
             )

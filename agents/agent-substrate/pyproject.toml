@@ -72,7 +72,7 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
-norecursedirs = ["tests/legacy"]
+
 
 [tool.ruff]
 exclude = ["notebooks/", "examples/", ".venv"]

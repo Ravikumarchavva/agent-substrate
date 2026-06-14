@@ -206,3 +206,31 @@ def test_content_block_invalid_raises() -> None:
         assert False, "Should have raised BlockValidationError"
     except BlockValidationError:
         pass
+
+
+def test_custom_payload_serialization_round_trip() -> None:
+    """A custom payload registered via register_payload_type is correctly deserialized from JSON."""
+    from typing import Literal
+    from ravi.kernel.core.identity import AgentId
+    from ravi.kernel.messaging.message import Message, register_payload_type
+    from ravi.kernel.tools import PayloadBase
+
+    class CustomTestPayload(PayloadBase):
+        kind: Literal["custom_test"] = "custom_test"
+        info: str
+
+    register_payload_type(CustomTestPayload)
+
+    agent = AgentId(type="test", key="custom")
+    payload = CustomTestPayload(info="hello world")
+    msg = Message(target=agent, payload=payload)
+
+    # Convert to JSON string
+    json_str = msg.model_dump_json()
+
+    # Deserialize back
+    restored = Message.model_validate_json(json_str)
+
+    assert restored.payload.kind == "custom_test"
+    assert isinstance(restored.payload, CustomTestPayload)
+    assert restored.payload.info == "hello world"

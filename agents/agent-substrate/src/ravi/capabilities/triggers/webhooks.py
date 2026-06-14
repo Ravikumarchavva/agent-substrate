@@ -5,7 +5,7 @@ from ravi.logger import setup_logging
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 logger = setup_logging()
@@ -22,7 +22,7 @@ class WebhookDef:
     target_params: dict[str, Any] = field(default_factory=dict)
     secret: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     enabled: bool = True
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     @property
     def url_path(self) -> str:

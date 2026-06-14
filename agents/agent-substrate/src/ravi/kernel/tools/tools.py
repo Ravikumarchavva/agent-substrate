@@ -135,11 +135,27 @@ class ToolUI:
 
 
 # ---------------------------------------------------------------------------
+# PayloadBase — shared base class for all Message payload types
+# ---------------------------------------------------------------------------
+
+
+class PayloadBase(BaseModel):
+    """Base class for all types that can be carried as a ``Message`` payload.
+
+    Subclasses must supply a ``kind: Literal[...]`` field so the payload
+    registry can dispatch deserialization by discriminator string.
+    """
+
+    kind: str
+    model_config = {"frozen": True}
+
+
+# ---------------------------------------------------------------------------
 # ToolCallRequest — canonical tool-call request type
 # ---------------------------------------------------------------------------
 
 
-class ToolCallRequest(BaseModel):
+class ToolCallRequest(PayloadBase):
     """A request to execute a named tool.
 
     ``call_id`` is generated automatically so callers don't need to
@@ -160,7 +176,7 @@ class ToolCallRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ToolExecutionResult(BaseModel):
+class ToolExecutionResult(PayloadBase):
     """Result of a single tool execution.
 
     ``call_id`` defaults to ``""`` so tools can construct results without

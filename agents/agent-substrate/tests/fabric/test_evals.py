@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import pytest
+from dataclasses import dataclass
 
-from ravi.agents.middleware import AgentRunResult, ToolCallRecord
+from ravi.agents.runtime.context import RunContext
 from ravi.fabric.evals import (
     EvalCase,
     EvalDataset,
@@ -14,67 +15,47 @@ from ravi.fabric.evals import (
     CORRECTNESS,
 )
 from ravi.fabric.evals.judge import LLMJudge
+from ravi.kernel.core.identity import AgentId
+from ravi.kernel.messaging.message import Message
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers — kernel-compliant stub agents
 # ---------------------------------------------------------------------------
 
+
+@dataclass
 class OKAgent:
-    name = "ok_agent"
+    @property
+    def id(self) -> AgentId:
+        return AgentId(type="agent", key="ok_agent")
 
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
-        return AgentRunResult(
-            output=f"reply to: {input_text}",
-            status="success",
-            run_id="ok-run",
-        )
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            # Extract input text from the message payload
+            from ravi.kernel.messaging.message import ChatPayload, DataPayload
+            from ravi.kernel.core.content import content_blocks_to_str
+
+            p = msg.payload
+            if isinstance(p, ChatPayload):
+                text = content_blocks_to_str(p.message.content)
+            elif isinstance(p, DataPayload):
+                text = str(p.data.get("text", ""))
+            else:
+                text = ""
+            await ctx.reply(msg, {"text": f"reply to: {text}"})
 
 
+@dataclass
 class SlowAgent:
-    name = "slow_agent"
+    @property
+    def id(self) -> AgentId:
+        return AgentId(type="agent", key="slow_agent")
 
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         await asyncio.sleep(10)  # exceeds any reasonable timeout
-        return AgentRunResult(output="never", status="success", run_id="slow-run")
-
-
-class ToolAgent:
-    name = "tool_agent"
-
-    async def run(self, input_text: str, **kwargs) -> AgentRunResult:
-        calls = [
-            ToolCallRecord(
-                name="search",
-                call_id="c1",
-                arguments={},
-                result="r",
-                is_error=False,
-                duration_ms=10,
-            ),
-            ToolCallRecord(
-                name="search",
-                call_id="c2",
-                arguments={},
-                result="r",
-                is_error=False,
-                duration_ms=10,
-            ),
-            ToolCallRecord(
-                name="calc",
-                call_id="c3",
-                arguments={},
-                result="42",
-                is_error=False,
-                duration_ms=5,
-            ),
-        ]
-        return AgentRunResult(
-            output="done",
-            status="success",
-            tool_calls=calls,
-            run_id="tool-run",
-        )
+        for msg in inbox:
+            await ctx.reply(msg, {"text": "never"})
 
 
 def _dataset(*inputs: str) -> EvalDataset:
@@ -86,12 +67,13 @@ def _dataset(*inputs: str) -> EvalDataset:
 # No-judge tests
 # ---------------------------------------------------------------------------
 
+
 async def test_runner_no_judge_all_success():
     runner = EvalRunner(agent=OKAgent())
     report = await runner.run(_dataset("q1", "q2"))
     assert report.total_cases == 2
     assert report.pass_rate == 1.0
-    assert all(r.status == "success" for r in report.results)
+    assert all(r.status == "completed" for r in report.results)
 
 
 async def test_runner_no_judge_scores_empty():
@@ -100,18 +82,17 @@ async def test_runner_no_judge_scores_empty():
     assert report.results[0].scores == []
 
 
-async def test_runner_tool_calls_counted():
-    runner = EvalRunner(agent=ToolAgent())
-    report = await runner.run(_dataset("use tools"))
+async def test_runner_output_contains_input():
+    runner = EvalRunner(agent=OKAgent())
+    report = await runner.run(_dataset("hello"))
     result = report.results[0]
-    assert result.tool_calls_total == 3
-    assert result.tool_calls_by_name["search"] == 2
-    assert result.tool_calls_by_name["calc"] == 1
+    assert "hello" in result.actual_output
 
 
 # ---------------------------------------------------------------------------
 # Timeout test
 # ---------------------------------------------------------------------------
+
 
 async def test_runner_timeout_marks_error():
     runner = EvalRunner(agent=SlowAgent(), timeout=0.05)
@@ -126,6 +107,7 @@ async def test_runner_timeout_marks_error():
 # Concurrency test
 # ---------------------------------------------------------------------------
 
+
 async def test_runner_concurrency_runs_all():
     runner = EvalRunner(agent=OKAgent(), concurrency=2)
     report = await runner.run(_dataset("a", "b", "c"))
@@ -136,6 +118,7 @@ async def test_runner_concurrency_runs_all():
 # ---------------------------------------------------------------------------
 # Judge integration (mock)
 # ---------------------------------------------------------------------------
+
 
 async def test_runner_with_mock_judge_populates_scores(monkeypatch):
     mock_scores = [
@@ -177,15 +160,11 @@ async def test_runner_judge_skipped_on_error(monkeypatch):
 async def test_report_criteria_names_populated():
     mock_scores = [EvalScore(criterion="correctness", score=1.0, passed=True)]
 
-    async def mock_score(**kw):
+    async def _score(**kw):
         return mock_scores
 
     judge = LLMJudge.__new__(LLMJudge)
     judge.criteria = [CORRECTNESS]
-
-    async def _score(**kw):
-        return mock_scores
-
     judge.score = _score
 
     runner = EvalRunner(agent=OKAgent(), judge=judge)

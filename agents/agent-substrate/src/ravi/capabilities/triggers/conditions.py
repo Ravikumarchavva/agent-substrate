@@ -5,7 +5,7 @@ from ravi.logger import setup_logging
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 logger = setup_logging()
@@ -24,7 +24,7 @@ class ConditionDef:
     target_name: str = ""
     target_params: dict[str, Any] = field(default_factory=dict)
     enabled: bool = True
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     def to_dict(self) -> dict[str, Any]:
         return {

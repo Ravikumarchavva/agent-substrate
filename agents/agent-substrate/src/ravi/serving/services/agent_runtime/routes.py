@@ -73,16 +73,33 @@ async def start_agent_run(body: RunRequest, request: Request):
         session_id=body.thread_id,
     )
 
-    # Run asynchronously
-    asyncio.create_task(
+    forwarding_tasks: dict = request.app.state.forwarding_tasks
+    run_id = body.run_id
+
+    if run_id in forwarding_tasks and not forwarding_tasks[run_id].done():
+        logger.warning(
+            "Forwarding task already running for run %s — skipping duplicate", run_id
+        )
+        return RunResponse(run_id=run_id, status="accepted")
+
+    task = asyncio.create_task(
         execute_agent_run(
             agent=agent,
             user_content=body.user_content,
-            run_id=body.run_id,
+            run_id=run_id,
             thread_id=body.thread_id,
             event_bus=event_bus,
             runtime=runtime,
-        )
+        ),
+        name=f"forward-{run_id}",
     )
+    forwarding_tasks[run_id] = task
 
-    return RunResponse(run_id=body.run_id, status="accepted")
+    def _on_done(t: asyncio.Task) -> None:
+        forwarding_tasks.pop(run_id, None)
+        if not t.cancelled() and t.exception():
+            logger.error("Forwarding task for run %s failed: %s", run_id, t.exception())
+
+    task.add_done_callback(_on_done)
+
+    return RunResponse(run_id=run_id, status="accepted")

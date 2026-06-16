@@ -22,7 +22,7 @@ from ravi.serving.protocol import (
     ToolResultEvent,
     TurnCompletedEvent,
     WireEvent,
-    RunCancelledEvent
+    RunCancelledEvent,
 )
 from ravi.serving.stream.session import AgentStreamSession
 
@@ -30,6 +30,7 @@ from ravi.serving.stream.session import AgentStreamSession
 # ---------------------------------------------------------------------------
 # Stub bridge — signals done immediately and never emits HITL events
 # ---------------------------------------------------------------------------
+
 
 class _StubBridge:
     """Mirrors WebHITLBridge: get_event() blocks until signal_done() is called.
@@ -57,6 +58,7 @@ class _StubBridge:
 # Stub agents
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ReplyAgent:
     """Replies to every message with a fixed text string.
@@ -64,6 +66,7 @@ class ReplyAgent:
     Logs a ``text.delta`` entry so the session persister accumulates text —
     mirroring what ``ctx.llm()`` does in a real ``ReActAgent`` run.
     """
+
     reply: str
     name: str = "reply"
 
@@ -80,6 +83,7 @@ class ReplyAgent:
 @dataclass
 class CrashAgent:
     """Always raises an exception."""
+
     name: str = "crash"
 
     @property
@@ -94,6 +98,7 @@ class CrashAgent:
 # Helper
 # ---------------------------------------------------------------------------
 
+
 def _make_msg(agent_id: AgentId, text: str = "hello") -> Message:
     return Message(
         target=agent_id,
@@ -103,7 +108,9 @@ def _make_msg(agent_id: AgentId, text: str = "hello") -> Message:
     )
 
 
-async def _stream_events(agent: Any, text: str = "hello", timeout: float = 5.0) -> list[WireEvent]:
+async def _stream_events(
+    agent: Any, text: str = "hello", timeout: float = 5.0
+) -> list[WireEvent]:
     async with Runtime() as rt:
         msg = _make_msg(agent.id, text)
         session = AgentStreamSession(
@@ -112,9 +119,7 @@ async def _stream_events(agent: Any, text: str = "hello", timeout: float = 5.0) 
             msg=msg,
             bridge=_StubBridge(),
         )
-        return await asyncio.wait_for(
-            _collect(session), timeout=timeout
-        )
+        return await asyncio.wait_for(_collect(session), timeout=timeout)
 
 
 async def _collect(session: AgentStreamSession) -> list[WireEvent]:
@@ -124,6 +129,7 @@ async def _collect(session: AgentStreamSession) -> list[WireEvent]:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 async def test_hello_emitted_first() -> None:
     agent = ReplyAgent(reply="hi", name="hi_agent")
@@ -244,4 +250,3 @@ async def test_disconnected_callback_cancels_run() -> None:
                 is_disconnected = True
 
         assert any(isinstance(e, RunCancelledEvent) for e in events)
-

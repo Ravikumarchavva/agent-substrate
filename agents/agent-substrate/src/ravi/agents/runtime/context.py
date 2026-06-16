@@ -381,7 +381,11 @@ class RunContext:
                 raise RuntimeError(cached.value.get("error", "journaled llm error"))
             return _deserialize(cached.value)
         try:
-            from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
+            from ravi.kernel.messaging.stream import (
+                TextDelta,
+                ReasoningDelta,
+                CompletionEvent,
+            )
             from ravi.kernel.core.content import TextBlock
 
             text_chunks = []
@@ -390,7 +394,9 @@ class RunContext:
             final_usage = None
 
             try:
-                stream = self._llm_client.generate_stream(messages, options=options, ctx=self._meta)
+                stream = self._llm_client.generate_stream(
+                    messages, options=options, ctx=self._meta
+                )
             except TypeError:
                 stream = self._llm_client.generate_stream(messages, options=options)
 
@@ -416,11 +422,16 @@ class RunContext:
             await self._journal.record(
                 EffectResult(effect_id=effect_id, status="ok", value=_serialize(resp))
             )
-            await self._log("llm.call", {"model": self._llm_client.model, "tokens": resp.usage.total_tokens})
+            await self._log(
+                "llm.call",
+                {"model": self._llm_client.model, "tokens": resp.usage.total_tokens},
+            )
             return resp
         except Exception as exc:
             await self._journal.record(
-                EffectResult(effect_id=effect_id, status="error", value={"error": str(exc)})
+                EffectResult(
+                    effect_id=effect_id, status="error", value={"error": str(exc)}
+                )
             )
             raise
 
@@ -449,6 +460,7 @@ class RunContext:
             if cached.status == "error":
                 raise RuntimeError(cached.value.get("error", "journaled tool error"))
             from ravi.kernel.tools.chain import InvocationResult
+
             return InvocationResult.model_validate(cached.value)
         try:
             await self._log(
@@ -479,7 +491,9 @@ class RunContext:
             return result
         except Exception as exc:
             await self._journal.record(
-                EffectResult(effect_id=effect_id, status="error", value={"error": str(exc)})
+                EffectResult(
+                    effect_id=effect_id, status="error", value={"error": str(exc)}
+                )
             )
             raise
 

@@ -28,6 +28,7 @@ _REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 async def _pg_pool():
     try:
         import asyncpg
+
         pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=3)
         return pool
     except Exception:
@@ -47,6 +48,7 @@ async def pg_pool():
 async def redis_client():
     try:
         import redis.asyncio as aioredis
+
         client = aioredis.from_url(_REDIS_URL)
         await client.ping()
         yield client
@@ -127,6 +129,7 @@ async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
         await log.append(run_id, e, expected_seq=i - 1)
 
     collected: list[str] = []
+
     async def drain():
         async for entry in log.tail(run_id):
             collected.append(entry.kind)
@@ -322,14 +325,21 @@ async def test_pg_scheduler_release_completed(pg_pool) -> None:
 async def _pg_session_factory() -> "async_sessionmaker | None":
     """Return a SQLAlchemy async_sessionmaker pointed at the test PG instance."""
     try:
-        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+        from sqlalchemy.ext.asyncio import (
+            create_async_engine,
+            async_sessionmaker,
+            AsyncSession,
+        )
 
         url = _PG_URL.replace("postgresql://", "postgresql+asyncpg://")
         engine = create_async_engine(url, pool_pre_ping=True)
-        factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
         # quick connectivity check
         async with factory() as s:
             from sqlalchemy import text
+
             await s.execute(text("SELECT 1"))
         return factory
     except Exception:

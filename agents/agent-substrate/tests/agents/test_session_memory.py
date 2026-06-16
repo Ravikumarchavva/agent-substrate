@@ -55,7 +55,9 @@ class MockLLMClient:
         options: GenerationOptions,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         resp = await self.generate(messages, options=options)
-        text = " ".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
+        text = " ".join(
+            b.text for b in resp.content if isinstance(b, TextBlock) and b.text
+        )
         if text:
             yield TextDelta(text=text)
         yield CompletionEvent(content=resp.content, usage=resp.usage)
@@ -128,7 +130,9 @@ async def test_load_session_memory_seeds_chat_messages_without_message_envelopes
         async def append(self, agent_id, message, *, session_id, run_id="") -> None:
             self.seen_message = message
 
-        async def append_many(self, agent_id, messages, *, session_id, run_id="") -> None:
+        async def append_many(
+            self, agent_id, messages, *, session_id, run_id=""
+        ) -> None:
             self.seen_message = messages[0] if messages else None
 
         async def get_messages(self, agent_id, *, session_id, limit=None, offset=None):
@@ -180,7 +184,10 @@ async def test_standalone_session_accumulates_across_runs():
                     [TextBlock(text="You said hi earlier.")],
                 ]
             ),
-            context=ContextConfig(shared_history, pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+            context=ContextConfig(
+                shared_history,
+                pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
+            ),
             max_iterations=5,
         )
 
@@ -208,7 +215,10 @@ async def test_session_isolation_across_different_sessions():
                     [TextBlock(text="Session B response.")],
                 ]
             ),
-            context=ContextConfig(shared_history, pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
+            context=ContextConfig(
+                shared_history,
+                pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
+            ),
             max_iterations=5,
         )
 
@@ -236,7 +246,10 @@ async def test_cross_run_memory_same_session():
                     [TextBlock(text="The answer was 42.")],
                 ]
             ),
-            context=ContextConfig(shared_history, pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
+            context=ContextConfig(
+                shared_history,
+                pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
+            ),
             max_iterations=3,
         )
 

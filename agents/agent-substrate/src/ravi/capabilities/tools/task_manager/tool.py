@@ -213,7 +213,9 @@ class TaskManagerTool:
             )
             if not resolved:
                 # Fall back to any todo task if none is in progress
-                resolved = await self._resolve_task_id(task_id, "todo", store, task_list_id)
+                resolved = await self._resolve_task_id(
+                    task_id, "todo", store, task_list_id
+                )
             if not resolved:
                 return _err("No in-progress or todo task to mark as failed.")
 
@@ -222,12 +224,15 @@ class TaskManagerTool:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
             return self._board_result(
-                f"Marked as failed: {updated.title}", await self._board(store, task_list_id)
+                f"Marked as failed: {updated.title}",
+                await self._board(store, task_list_id),
             )
 
         # ── retry_task ────────────────────────────────────────────────
         if action == "retry_task":
-            resolved = await self._resolve_task_id(task_id, "failed", store, task_list_id)
+            resolved = await self._resolve_task_id(
+                task_id, "failed", store, task_list_id
+            )
             if not resolved:
                 return _err("No failed task found to retry.")
 
@@ -263,7 +268,8 @@ class TaskManagerTool:
 
             new_tasks = await store.add_tasks(task_list_id, tasks)
             return self._board_result(
-                f"Added {len(new_tasks)} task(s).", await self._board(store, task_list_id)
+                f"Added {len(new_tasks)} task(s).",
+                await self._board(store, task_list_id),
             )
 
         # ── delete_task ───────────────────────────────────────────────
@@ -289,7 +295,8 @@ class TaskManagerTool:
                 return _err(f"Task {task_id!r} not found.")
 
             return self._board_result(
-                f"Renamed task to: {updated.title}", await self._board(store, task_list_id)
+                f"Renamed task to: {updated.title}",
+                await self._board(store, task_list_id),
             )
 
         return _err(f"Unknown action: {action!r}")

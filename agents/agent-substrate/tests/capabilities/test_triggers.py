@@ -40,7 +40,7 @@ async def test_scheduler_trigger_dispatch():
         target_params={"param1": "val1"},
     )
     await scheduler.add_trigger(trigger)
-    
+
     # Let's fire the trigger manually to avoid waiting for interval
     await scheduler._fire_trigger("test-trigger")
 
@@ -85,6 +85,7 @@ async def test_webhook_trigger_dispatch():
 async def _redis_reachable(url: str) -> bool:
     try:
         import redis.asyncio as aioredis
+
         client = aioredis.from_url(url)
         await client.ping()
         await client.aclose()
@@ -100,7 +101,7 @@ async def test_condition_trigger_dispatch(redis_url):
 
     rt = MockRuntime()
     monitor = ConditionMonitor(runtime=rt)
-    
+
     bus = EventBus(redis_url=redis_url)
     monitor.set_event_bus(bus)
 

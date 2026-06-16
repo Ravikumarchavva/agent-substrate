@@ -126,7 +126,11 @@ async def test_react_agent_respects_execution_budget() -> None:
         model = "mock-model"
 
         async def generate_stream(
-            self, messages: list[ChatMessage], *, options: object = None, ctx: object = None
+            self,
+            messages: list[ChatMessage],
+            *,
+            options: object = None,
+            ctx: object = None,
         ):  # type: ignore[override]
             yield CompletionEvent(
                 content=[TextBlock(text="hello")],

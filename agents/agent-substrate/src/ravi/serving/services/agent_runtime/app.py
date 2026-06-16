@@ -4,16 +4,20 @@ Entry point: uvicorn ravi.serving.services.agent_runtime.app:app --port 8014
 """
 
 from __future__ import annotations
+
 from ravi.logger import setup_logging
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
-from ravi.agents.runtime.runtime import Runtime
-from ravi.capabilities.history.redis_history import RedisHistoryProvider
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from ravi.infrastructure.serving_factory import (
+    build_history_provider,
+    build_runtime_default_tools,
+)
+from ravi.integrations.llm.factory import create_model_client
 from ravi.serving.services.agent_runtime.routes import router
 from ravi.serving.services.base import create_service_app
 from ravi.serving.shared.events.factory import get_event_bus
@@ -21,27 +25,8 @@ from ravi.serving.shared.events.factory import get_event_bus
 logger = setup_logging()
 
 
-def _load_tools():
-    """Load the default tool set for the agent runtime."""
-    tools = []
-
-    try:
-        from ravi.capabilities.tools.web.surfer import WebSurferTool
-
-        tools.append(WebSurferTool())
-    except Exception:
-        logger.debug("WebSurferTool not available")
-
-    return tools
-
-
 @asynccontextmanager
 async def _runtime_cm(backend: str, pg_url: str, redis_url: str):
-    """Yield a durable Postgres-backed runtime, or in-memory as opt-out.
-
-    Mirrors the monolith's RUNTIME_BACKEND selection so both deployment modes
-    are durable by default.
-    """
     if backend == "postgres" and pg_url:
         from ravi.infrastructure.runtime import build_postgres_runtime
 
@@ -51,58 +36,83 @@ async def _runtime_cm(backend: str, pg_url: str, redis_url: str):
             logger.info("Agent Runtime: durable (Postgres EventLog + Redis journal)")
             yield rt
     else:
+        from ravi.agents.runtime import Runtime
+
         async with Runtime() as rt:
             logger.info("Agent Runtime: in-memory (no durability)")
             yield rt
+
+
+async def _cancel_listener(runtime: object, event_bus: object) -> None:
+    """Consume job.cancel_requested events and cancel the local runtime run."""
+    try:
+        async for envelope in event_bus.subscribe(  # type: ignore[union-attr]
+            "job.cancel_requested",
+            group="agent-runtime-cancel",
+        ):
+            run_id: str = envelope.payload.get("run_id", "")
+            if run_id:
+                logger.info("Cancelling run %s via event bus", run_id)
+                try:
+                    await runtime.cancel(run_id)  # type: ignore[union-attr]
+                except Exception:
+                    logger.exception("Failed to cancel run %s", run_id)
+    except asyncio.CancelledError:
+        pass
 
 
 @asynccontextmanager
 async def lifespan(app):
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     conversation_url = os.environ.get(
-        "CONVERSATION_SERVICE_URL",
-        "http://localhost:8012",
+        "CONVERSATION_SERVICE_URL", "http://localhost:8012"
     )
     backend = os.environ.get("RUNTIME_BACKEND", "postgres").lower()
     pg_url = (
-        os.environ.get("DATABASE_URL", "")
-        or os.environ.get("ASYNC_DATABASE_URL", "")
+        os.environ.get("DATABASE_URL", "") or os.environ.get("ASYNC_DATABASE_URL", "")
     ).replace("+asyncpg", "")
 
     async with _runtime_cm(backend, pg_url, redis_url) as runtime:
         app.state.runtime = runtime
 
-        # Redis
         app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
 
         event_bus = get_event_bus(redis_url)
         await event_bus.connect()
         app.state.event_bus = event_bus
 
-        # Redis history (shared, multi-session)
-        history = RedisHistoryProvider(redis_url=redis_url)
-        await history.connect()
+        history = await build_history_provider(redis_url)
         app.state.history = history
 
-        # Model client
-        app.state.model_client = OpenAIClient(
-            model=os.environ.get("MODEL_NAME", "gpt-4o"),
+        app.state.model_client = create_model_client(
+            os.environ.get("MODEL_NAME", "gpt-4o"),
+            api_keys={"openai": os.environ.get("OPENAI_API_KEY", "")},
         )
 
-        # Tools
-        app.state.tools = _load_tools()
-
-        # System instructions
+        app.state.tools = build_runtime_default_tools()
         app.state.system_instructions = os.environ.get(
             "SYSTEM_INSTRUCTIONS",
-            "You are a helpful assistant.",
+            "You are Ravi, an intelligent general-purpose AI assistant. "
+            "You reason carefully, use tools purposefully, and communicate with clarity and precision.",
         )
-
-        # Service URLs
         app.state.conversation_service_url = conversation_url
+        app.state.forwarding_tasks: dict[str, asyncio.Task] = {}
+
+        cancel_task = asyncio.create_task(
+            _cancel_listener(runtime, event_bus), name="cancel-listener"
+        )
 
         logger.info("Agent Runtime started — %d tools loaded", len(app.state.tools))
         yield
+
+        cancel_task.cancel()
+        try:
+            await cancel_task
+        except asyncio.CancelledError:
+            pass
+
+        for task in list(app.state.forwarding_tasks.values()):
+            task.cancel()
 
         await history.disconnect()
         await app.state.event_bus.disconnect()

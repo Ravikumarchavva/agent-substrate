@@ -8,11 +8,10 @@ and Stream services via events and direct calls.
 from __future__ import annotations
 from ravi.logger import setup_logging
 
-import asyncio
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Optional
 
 import httpx
 from sqlalchemy import select, update
@@ -160,21 +159,6 @@ async def cancel_run(
 
 
 # ── Orchestration ────────────────────────────────────────────────────────────
-
-# In-process cancel signals keyed by run_id. In a multi-replica setup these
-# would be replaced by Redis pub/sub or shared cancel flags.
-_cancel_signals: Dict[str, asyncio.Event] = {}
-
-
-def get_cancel_signal(run_id: str) -> asyncio.Event:
-    """Get or create a cancel signal for a run."""
-    if run_id not in _cancel_signals:
-        _cancel_signals[run_id] = asyncio.Event()
-    return _cancel_signals[run_id]
-
-
-def cleanup_cancel_signal(run_id: str) -> None:
-    _cancel_signals.pop(run_id, None)
 
 
 async def dispatch_run(

@@ -1,25 +1,7 @@
-"""Typed event system for the agent framework.
+"""Typed async event queue bridging the agent loop and the SSE transport.
 
 ``EventBus`` is a thin, typed wrapper around ``asyncio.Queue`` that makes the
 event contract between the agent and the SSE layer explicit and discoverable.
-
-Previously, event dicts were created inline throughout ``chat.py``,
-``WebHITLBridge``, and ``TaskManagerTool`` with no shared contract.
-
-Usage::
-
-    from ravi.serving.monolith.sse.events import EventBus, TextDeltaEvent, CompletionEvent
-
-    bus = EventBus()
-
-    # Producer (agent loop)
-    await bus.emit(TextDeltaEvent(content="Hello ", partial=True))
-    await bus.emit(CompletionEvent(message="Done"))
-    bus.close()  # signals the consumer to stop
-
-    # Consumer (SSE route)
-    async for event in bus:
-        yield f"data: {event.to_sse()}\\n\\n"
 """
 
 from __future__ import annotations
@@ -282,11 +264,7 @@ class EventBus:
     async def poll(self, timeout: float) -> Any:
         """Return the next item (including ``BUS_CLOSED`` sentinel) within *timeout* seconds.
 
-        Unlike ``get()``, this preserves the ``BUS_CLOSED`` sentinel so callers
-        can distinguish a clean shutdown from a timeout.  Raises
-        ``asyncio.TimeoutError`` when no item arrives within the window.
-
-        Replaces the old pattern of accessing ``bus._queue.get()`` directly.
+        Raises ``asyncio.TimeoutError`` when no item arrives within the window.
         """
         return await asyncio.wait_for(self._queue.get(), timeout=timeout)
 

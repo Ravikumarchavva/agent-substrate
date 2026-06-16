@@ -23,6 +23,7 @@ from ravi.serving.protocol import (
 # wire_from_log — streaming kinds
 # ---------------------------------------------------------------------------
 
+
 def test_text_delta() -> None:
     assert wire_from_log("text.delta", {"text": "hi"}) == TextDeltaEvent(text="hi")
 
@@ -70,6 +71,7 @@ def test_non_streaming_kinds_return_none() -> None:
 # ---------------------------------------------------------------------------
 # bridge_event_to_wire — out-of-band HITL dicts
 # ---------------------------------------------------------------------------
+
 
 def test_bridge_approval_request() -> None:
     ev = bridge_event_to_wire(

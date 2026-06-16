@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Set, Type
@@ -206,22 +207,22 @@ class CapabilityDiscovery:
 
     @staticmethod
     def _to_module_path(py_file: Path) -> str | None:
-        """Convert a .py file path to a dotted module path."""
-        parts = py_file.resolve().parts
-        idx: int | None = None
-        for i, part in enumerate(parts):
-            if part == "ravi":
-                idx = i
+        """Convert a .py file path to a dotted module path via sys.path lookup."""
+        resolved = py_file.resolve()
+        for entry in sorted(sys.path, key=len, reverse=True):
+            if not entry:
+                continue
+            base = Path(entry).resolve()
+            try:
+                rel = resolved.relative_to(base)
+            except ValueError:
+                continue
+            parts = list(rel.parts)
+            parts[-1] = parts[-1].removesuffix(".py")
+            return ".".join(parts)
 
-        if idx is None:
-            logger.warning(
-                "Cannot determine module path for %s — 'ravi' not found in path",
-                py_file,
-            )
-            return None
-
-        module_parts = list(parts[idx:])
-        module_parts[-1] = module_parts[-1].replace(".py", "")
-        return ".".join(module_parts)
-
-
+        logger.warning(
+            "Cannot determine module path for %s — no sys.path entry matches",
+            py_file,
+        )
+        return None

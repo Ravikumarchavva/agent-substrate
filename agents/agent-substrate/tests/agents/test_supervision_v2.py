@@ -147,7 +147,9 @@ async def test_history_retention_run_clears_after_completion() -> None:
     # Verify: fetching history for the session returns nothing.
     session_id = written_session[0] if written_session else run_id
     remaining = await history.get_messages(agent.id, session_id=session_id)
-    assert remaining == [], f"Expected empty history after RUN retention cleanup, got {remaining}"
+    assert remaining == [], (
+        f"Expected empty history after RUN retention cleanup, got {remaining}"
+    )
 
 
 # ---------------------------------------------------------------------------

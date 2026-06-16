@@ -3,44 +3,29 @@
 from __future__ import annotations
 
 from ravi.logger import setup_logging
-from typing import TYPE_CHECKING
 
 import httpx
 
-if TYPE_CHECKING:
-    from ravi.agents.runtime import Runtime
-
-from ravi.agents.core import ReActAgent
-from ravi.agents.context import (
-    HistoryProvider,
-    SlidingWindowCompaction,
-    CompactionPipeline,
-)
-from ravi.kernel import (
-    TextBlock,
-    Tool as BaseTool,
-)
+from ravi.infrastructure.serving_factory import build_agent_for_run
+from ravi.integrations.events import EventBus
+from ravi.integrations.events.envelope import EventEnvelope
 from ravi.kernel.core.content import ChatMessage, Role
 from ravi.kernel.core.identity import AgentId
 from ravi.kernel.messaging.message import ChatPayload, Message
-from ravi.kernel.llm import LLMClient
-from ravi.integrations.events import EventBus
-from ravi.integrations.events.envelope import EventEnvelope
-from ravi.agents.factory import create_assistant_agent, load_session_memory
+from ravi.kernel import TextBlock
 
 logger = setup_logging()
-
-
 
 
 async def load_memory_for_thread(
     *,
     thread_id: str,
     system_instructions: str,
-    history: HistoryProvider | None,
+    history: object,
     conversation_service_url: str,
-) -> HistoryProvider:
+) -> object:
     """Load agent history from the cache or the conversation service."""
+    from ravi.agents.factory import load_session_memory
 
     async def _load_persisted_steps() -> list[dict]:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -61,49 +46,49 @@ async def load_memory_for_thread(
 
 def create_agent(
     *,
-    model_client: LLMClient,
-    tools: list[BaseTool],
+    model_client: object,
+    tools: list,
     system_instructions: str,
-    memory: HistoryProvider,
+    memory: object,
     session_id: str | None = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
-) -> ReActAgent:
+) -> object:
     """Create the agent used by the runtime service."""
-    return create_assistant_agent(
+    return build_agent_for_run(
         model_client=model_client,
         tools=tools,
         system_instructions=system_instructions,
         memory=memory,
-        model_context=CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)]),
+        session_id=session_id,
+        model_context_window=model_context_window,
         max_iterations=max_iterations,
-        name=f"assistant-{session_id}" if session_id else "ChatBot",
     )
 
 
 async def execute_agent_run(
     *,
-    agent: ReActAgent,
+    agent: object,
     user_content: str,
     run_id: str,
     thread_id: str,
     event_bus: EventBus,
-    runtime: Runtime,
+    runtime: object,
 ) -> None:
     """Execute an agent run and publish distributed runtime events via the EventBus."""
-    await runtime.register(agent)
+    await runtime.register(agent)  # type: ignore[union-attr]
 
     msg = Message(
-        target=agent.id,
+        target=agent.id,  # type: ignore[union-attr]
         sender=AgentId(type="proxy", key="job"),
         payload=ChatPayload(
             message=ChatMessage(role=Role.USER, content=[TextBlock(text=user_content)])
         ),
         correlation_id=thread_id,
     )
-    actual_run_id = await runtime.submit(agent.id, msg)
+    actual_run_id = await runtime.submit(agent.id, msg)  # type: ignore[union-attr]
 
-    async for entry in runtime.event_log.tail(actual_run_id):
+    async for entry in runtime.event_log.tail(actual_run_id):  # type: ignore[union-attr]
         kind = entry.kind
         p = entry.payload or {}
 

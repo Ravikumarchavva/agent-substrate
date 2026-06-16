@@ -12,8 +12,8 @@ from typing import Any, Optional
 
 from fastapi import Request
 
-from ravi.agents.context import HistoryProvider
 from ravi.kernel.llm import LLMClient
+from ravi.kernel.storage.history import HistoryProvider
 from ravi.serving.monolith.sse.bridge import BridgeRegistry
 
 

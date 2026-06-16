@@ -51,7 +51,6 @@ class RecorderAgent:
         self.done.set()
 
 
-
 async def test_fire_and_forget_delivery() -> None:
     agent_id = _agent_id("recorder")
     agent = RecorderAgent(agent_id)

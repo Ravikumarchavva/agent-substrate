@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS ravi_task_lists (
 )
 """
 
-_SELECT_BY_ID = "SELECT id, conversation_id, max_retries, tasks FROM ravi_task_lists WHERE id = :id"
+_SELECT_BY_ID = (
+    "SELECT id, conversation_id, max_retries, tasks FROM ravi_task_lists WHERE id = :id"
+)
 _SELECT_BY_CONV = "SELECT id, conversation_id, max_retries, tasks FROM ravi_task_lists WHERE conversation_id = :cid"
 _UPDATE_TASKS = "UPDATE ravi_task_lists SET tasks = CAST(:tasks AS jsonb), updated_at = now() WHERE id = :id"
 
@@ -119,7 +121,9 @@ class PgTaskStore:
         from sqlalchemy import text
 
         async with self._factory() as session:
-            result = await session.execute(text(_SELECT_BY_CONV), {"cid": conversation_id})
+            result = await session.execute(
+                text(_SELECT_BY_CONV), {"cid": conversation_id}
+            )
             row = result.first()
         return _row_to_task_list(row) if row else None
 
@@ -240,7 +244,9 @@ def _task_to_dict(t: Task) -> dict:
 def _row_to_task_list(row: object) -> TaskList:
     m = row._mapping  # type: ignore[union-attr]
     tasks_raw = m["tasks"]
-    tasks_data: list = json.loads(tasks_raw) if isinstance(tasks_raw, str) else (tasks_raw or [])
+    tasks_data: list = (
+        json.loads(tasks_raw) if isinstance(tasks_raw, str) else (tasks_raw or [])
+    )
     return TaskList(
         id=m["id"],
         conversation_id=m["conversation_id"],

@@ -72,7 +72,9 @@ async def build_postgres_runtime(
             import redis.asyncio as aioredis
 
             redis_client = aioredis.from_url(redis_url)
-            journal: object = RedisJournal(redis_client, ttl_seconds=journal_ttl_seconds)
+            journal: object = RedisJournal(
+                redis_client, ttl_seconds=journal_ttl_seconds
+            )
         else:
             journal = InMemoryJournal()
 

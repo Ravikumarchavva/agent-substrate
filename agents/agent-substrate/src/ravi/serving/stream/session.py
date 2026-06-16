@@ -114,9 +114,7 @@ class AgentStreamSession:
                         )
                     return "success"
                 if kind == "run.failed":
-                    self._error = (entry.payload or {}).get(
-                        "error", "agent run failed"
-                    )
+                    self._error = (entry.payload or {}).get("error", "agent run failed")
                     return "error"
                 if kind == "run.cancelled":
                     return "cancelled"
@@ -202,7 +200,10 @@ class AgentStreamSession:
                     timeout=5.0,
                 )
             except asyncio.TimeoutError:
-                logger.warning("Stream tasks did not finish within 5s on cleanup for run %s", self._run_id)
+                logger.warning(
+                    "Stream tasks did not finish within 5s on cleanup for run %s",
+                    self._run_id,
+                )
 
         yield terminal
 

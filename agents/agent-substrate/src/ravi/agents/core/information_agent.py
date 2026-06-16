@@ -84,16 +84,20 @@ class InformationAgent:
     async def _process_item(self, ctx: RunContext, msg: Message) -> None:
         """Summarize the content in an inbox message and emit to the topic."""
         raw_text = self._extract_text(msg)
-        summary_text = await summarize(ctx, raw_text, instructions=self._system_instructions)
+        summary_text = await summarize(
+            ctx, raw_text, instructions=self._system_instructions
+        )
         await self._emit_summary(ctx, summary_text, source_id=msg.id)
 
-    async def _process_item_from_signal(
-        self, ctx: RunContext, payload: dict
-    ) -> None:
+    async def _process_item_from_signal(self, ctx: RunContext, payload: dict) -> None:
         """Summarize content delivered via a signal payload."""
         raw_text = payload.get("text", str(payload))
-        summary_text = await summarize(ctx, raw_text, instructions=self._system_instructions)
-        await self._emit_summary(ctx, summary_text, source_id=payload.get("source_id", ""))
+        summary_text = await summarize(
+            ctx, raw_text, instructions=self._system_instructions
+        )
+        await self._emit_summary(
+            ctx, summary_text, source_id=payload.get("source_id", "")
+        )
 
     async def _emit_summary(
         self, ctx: RunContext, summary: str, *, source_id: str

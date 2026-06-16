@@ -145,11 +145,17 @@ class OrchestratorAgent:
                 ctx.check()
                 cfg = self._find_sub_agent_config(dispatch.tool_name)
                 if cfg is None:
-                    results.append(ToolResultBlock(
-                        call_id=dispatch.call_id,
-                        content=[TextBlock(text=f"Unknown sub-agent: {dispatch.tool_name}")],
-                        is_error=True,
-                    ))
+                    results.append(
+                        ToolResultBlock(
+                            call_id=dispatch.call_id,
+                            content=[
+                                TextBlock(
+                                    text=f"Unknown sub-agent: {dispatch.tool_name}"
+                                )
+                            ],
+                            is_error=True,
+                        )
+                    )
                     continue
 
                 spawn_tracker.acquire(cfg.agent.id, priority=cfg.priority)
@@ -178,22 +184,33 @@ class OrchestratorAgent:
                         if isinstance(out, DataPayload)
                         else str(out)
                     )
-                    results.append(ToolResultBlock(
-                        call_id=dispatch.call_id,
-                        content=[TextBlock(text=text)],
-                        is_error=False,
-                    ))
+                    results.append(
+                        ToolResultBlock(
+                            call_id=dispatch.call_id,
+                            content=[TextBlock(text=text)],
+                            is_error=False,
+                        )
+                    )
                 else:
-                    results.append(ToolResultBlock(
-                        call_id=dispatch.call_id,
-                        content=[TextBlock(text=f"Sub-agent {dispatch.tool_name}: {outcome.kind}")],
-                        is_error=True,
-                    ))
+                    results.append(
+                        ToolResultBlock(
+                            call_id=dispatch.call_id,
+                            content=[
+                                TextBlock(
+                                    text=f"Sub-agent {dispatch.tool_name}: {outcome.kind}"
+                                )
+                            ],
+                            is_error=True,
+                        )
+                    )
 
             messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
         else:
             from ravi.kernel.core.errors import BudgetExhaustedError
-            raise BudgetExhaustedError(f"Agent reached max iterations limit ({self._max_iterations})")
+
+            raise BudgetExhaustedError(
+                f"Agent reached max iterations limit ({self._max_iterations})"
+            )
 
         new_turns = messages[n_loaded:]
         await persist_turns(self._context, self.id, session_id, ctx.run_id, new_turns)
@@ -205,7 +222,8 @@ class OrchestratorAgent:
         return [
             _DelegateTool(
                 name=f"handoff_{cfg.agent.id.key}",
-                description=cfg.description or f"Delegate to the {cfg.agent.id.key} sub-agent",
+                description=cfg.description
+                or f"Delegate to the {cfg.agent.id.key} sub-agent",
             )
             for cfg in self._sub_agents
         ]

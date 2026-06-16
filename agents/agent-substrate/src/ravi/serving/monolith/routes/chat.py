@@ -28,33 +28,41 @@ from ravi.integrations.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
+from ravi.infrastructure.serving_factory import build_agent_for_thread, build_chat_tools
+
+# current_thread_id: ContextVar that scopes TaskManagerTool to the active thread.
+# Defined in capabilities; both serving and capabilities need it — tracked as an
+# explicit exception in the import-linter "serving boundary" contract.
+from ravi.capabilities.tools.task_manager.tool import current_thread_id
 from ravi.kernel import ChatMessage
 from ravi.kernel.core.content import TextBlock, ToolUseBlock
+from ravi.kernel.core.content import (
+    ChatMessage as _ChatMessage,
+    Role,
+    TextBlock as _TextBlock,
+)
+from ravi.kernel.core.identity import AgentId as _AgentId
+from ravi.kernel.messaging.message import (
+    ChatPayload as _ChatPayload,
+    Message as _Message,
+)
 from ravi.serving.monolith.dependencies import ServerDependencies, get_ctx
 from ravi.serving.monolith.database import get_db
 from ravi.serving.monolith.hooks import ChatContext, hooks
 from ravi.serving.monolith.schemas import ChatRequest
 from ravi.serving.monolith.services import get_thread
 from ravi.serving.monolith.services.agent_service import (
-    load_agent_for_thread,
     persist_assistant_message,
     persist_tool_result,
     persist_user_message,
 )
-from ravi.capabilities.tools.task_manager.tool import current_thread_id
-from ravi.capabilities.tools.web.surfer import WebSurferTool
-from ravi.capabilities.tools.web.search import WebSearchTool
-from ravi.capabilities.tools.human_input import AskHumanTool
 from ravi.serving.monolith.security.deps import get_current_user
-from ravi.serving.monolith.sse.bridge import BridgeRegistry, WebHITLBridge
+from ravi.serving.monolith.sse.bridge import WebHITLBridge
 from ravi.serving.protocol import (
     PROTOCOL_VERSION,
     TurnCompletedEvent,
     ToolResultEvent,
 )
-from ravi.kernel.core.content import ChatMessage as _ChatMessage, Role, TextBlock as _TextBlock
-from ravi.kernel.core.identity import AgentId as _AgentId
-from ravi.kernel.messaging.message import ChatPayload as _ChatPayload, Message as _Message
 from ravi.serving.stream import AgentStreamSession
 
 logger = setup_logging()
@@ -304,34 +312,12 @@ def _serialize_attached_file(meta: Any) -> dict[str, Any]:
 
 async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
     """Assemble per-request agent dependencies with an isolated HITL bridge."""
-    bridge_registry: BridgeRegistry = ctx.bridge_registry
-    bridge = await bridge_registry.acquire(str(thread_id))
-
-    # Build a fresh AskHumanTool for this request wired to the thread's bridge.
-    # Removes the placeholder from ctx.tools so only one instance exists.
-    base_tools = [t for t in ctx.tools.all() if not isinstance(t, AskHumanTool)]
-    ask_tool = AskHumanTool(
-        handler=bridge.human_handler,
-        max_requests_per_run=5,
-    )
-    tools = [ask_tool] + base_tools
-
-    # Add WebSearchTool (simple query interface) — always available, no setup needed
-    if not any(isinstance(t, WebSearchTool) for t in tools):
-        tools.append(WebSearchTool())
-
-    # Only add WebSurferTool (browser automation) if not already present
-    if not any(isinstance(t, WebSurferTool) for t in tools):
-        try:
-            tools.append(WebSurferTool())
-        except Exception:
-            logger.debug("WebSurferTool not available for this request")
-
+    bridge = await ctx.bridge_registry.acquire(str(thread_id))
+    tools = build_chat_tools(ctx.tools, bridge)
     return {
         "model_client": ctx.model_client,
         "tools": tools,
         "system_instructions": ctx.system_instructions,
-        "tool_approval_handler": bridge.approval_handler,
         "tools_requiring_approval": ctx.tools_requiring_approval,
         "tool_timeout": ctx.tool_timeout,
         "bridge": bridge,
@@ -445,13 +431,17 @@ async def _build_file_context(
     from ravi.serving.monolith.models import FileMetadata
 
     rows = (
-        await db.execute(
-            select(FileMetadata).where(
-                FileMetadata.id.in_(body.file_ids),
-                FileMetadata.deleted_at.is_(None),
+        (
+            await db.execute(
+                select(FileMetadata).where(
+                    FileMetadata.id.in_(body.file_ids),
+                    FileMetadata.deleted_at.is_(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     text_parts: list[str] = []
     image_inputs: list[_ImagePayload] = []
@@ -460,9 +450,7 @@ async def _build_file_context(
     for meta in rows:
         data = await ctx.file_store.download(meta.object_key)
         if meta.content_type.startswith("image/"):
-            image_inputs.append(
-                _ImagePayload(data=data, media_type=meta.content_type)
-            )
+            image_inputs.append(_ImagePayload(data=data, media_type=meta.content_type))
         elif meta.content_type.startswith("text/"):
             text_parts.append(
                 f"[File: {meta.original_name}]\n"
@@ -592,9 +580,7 @@ async def chat(
         # to update or continue it.
         has_existing_tasks = False
         if allow_task_planning:
-            from ravi.agents.storage.tasks import GlobalTaskStore
-
-            _store = GlobalTaskStore.get()
+            _store = request.app.state.task_tool.store
             _existing = await _store.get_by_conversation(str(body.thread_id))
             if _existing:
                 has_existing_tasks = True
@@ -683,7 +669,7 @@ async def chat(
                 + body.system_instructions.strip()
             )
 
-        agent = await load_agent_for_thread(
+        agent = await build_agent_for_thread(
             db,
             body.thread_id,
             model_client=deps["model_client"],
@@ -691,11 +677,7 @@ async def chat(
             system_instructions=deps["system_instructions"],
             history=ctx.history,
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
-            tool_approval_handler=deps["tool_approval_handler"],
-            tools_requiring_approval=deps["tools_requiring_approval"],
-            tool_timeout=deps["tool_timeout"],
             runtime=deps["runtime"],
-            enable_capability_search=False,
         )
 
         # 4. Extract user content from last message

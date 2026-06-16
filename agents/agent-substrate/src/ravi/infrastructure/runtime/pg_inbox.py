@@ -207,10 +207,13 @@ class PostgresInbox:
 
     async def pending_count(self, agent_id: AgentId) -> int:
         async with self._pool.acquire() as conn:
-            return await conn.fetchval(
-                "SELECT COUNT(*) FROM ravi_inbox WHERE agent_id = $1",
-                str(agent_id),
-            ) or 0
+            return (
+                await conn.fetchval(
+                    "SELECT COUNT(*) FROM ravi_inbox WHERE agent_id = $1",
+                    str(agent_id),
+                )
+                or 0
+            )
 
 
 __all__ = ["PostgresInbox"]

@@ -154,7 +154,6 @@ async def issue_agent_token(
     )
 
 
-
 @router.get("/me")
 async def get_me(user: AuthClaims = Depends(get_current_user)):
     """Return the decoded access token payload."""

@@ -408,4 +408,3 @@ class PostgresHistoryProvider:
             )
             result = await db.execute(stmt)
             return result.scalar_one()
-

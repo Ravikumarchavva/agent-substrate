@@ -64,7 +64,9 @@ class Worker:
         self._registry = registry
         self._running = False
         self._poll_task: asyncio.Task | None = None
-        self._tokens: dict[str, CancellationToken] = {}  # run_id → token for external cancel
+        self._tokens: dict[
+            str, CancellationToken
+        ] = {}  # run_id → token for external cancel
         self._tasks: dict[str, asyncio.Task] = {}  # run_id → Task
 
     async def start(self) -> None:
@@ -100,6 +102,7 @@ class Worker:
 
         if task is None:
             from ravi.kernel.runtime.log_entry import RunLogEntry
+
             try:
                 seq = await self._event_log.last_seq(run_id)
                 # If run.started was not even logged yet, make sure we sequence it properly
@@ -159,6 +162,7 @@ class Worker:
         registry = getattr(agent, "tools", None)
         if registry is None:
             from ravi.agents.tools.toolbox import Toolbox
+
             registry = Toolbox()
         from ravi.agents.tools.invoker import ToolInvoker
         from ravi.kernel.tools.chain import ChainPolicy
@@ -167,12 +171,19 @@ class Worker:
         approval = getattr(agent, "approval_handler", None)
         if approval is not None and not hasattr(approval, "request"):
             from ravi.kernel.tools.approval import ApprovalDecision
+
             class CallbackApprovalHandlerAdapter:
                 def __init__(self, callback):
                     self.callback = callback
+
                 async def request(self, req):
                     approved = await self.callback(req.call.name, req.call.arguments)
-                    return ApprovalDecision.APPROVED if approved else ApprovalDecision.DENIED
+                    return (
+                        ApprovalDecision.APPROVED
+                        if approved
+                        else ApprovalDecision.DENIED
+                    )
+
             approval = CallbackApprovalHandlerAdapter(approval)
 
         blob_store = getattr(agent, "blob_store", None)
@@ -239,7 +250,10 @@ class Worker:
         middleware = getattr(agent, "middleware", None)
         if hooks:
             from ravi.agents.hooks.manager import HookEvent
-            await hooks.dispatch(HookEvent.RUN_START, {"agent_name": str(agent.id), "run_id": run_id})
+
+            await hooks.dispatch(
+                HookEvent.RUN_START, {"agent_name": str(agent.id), "run_id": run_id}
+            )
 
         try:
             if middleware is not None:
@@ -252,7 +266,9 @@ class Worker:
                 await self._inbox.ack(agent.id, msg.id)
 
             # Clean up run-scoped history for transient sub-agents
-            session_ids = {msg.correlation_id or run_id for msg in inbox_msgs} or {run_id}
+            session_ids = {msg.correlation_id or run_id for msg in inbox_msgs} or {
+                run_id
+            }
             await self._maybe_clear_run_history(agent, run_id, session_ids=session_ids)
 
             final_seq = await self._event_log.last_seq(run_id)
@@ -281,6 +297,7 @@ class Worker:
                 BudgetExhaustedError,
                 MiddlewareTermination,
             )
+
             is_guardrail = isinstance(exc, MiddlewareTermination)
             is_budget = isinstance(exc, BudgetExhaustedError)
             is_crash = not is_guardrail and not is_budget
@@ -299,7 +316,10 @@ class Worker:
 
             final_seq = await self._event_log.last_seq(run_id)
             if is_guardrail:
-                payload = {"error": f"Request blocked: {exc.message}", "status": "guardrail_tripped"}  # type: ignore[union-attr]
+                payload = {
+                    "error": f"Request blocked: {exc.message}",
+                    "status": "guardrail_tripped",
+                }  # type: ignore[union-attr]
             elif is_budget:
                 payload = {"error": str(exc), "status": "budget_exhausted"}
             else:
@@ -308,15 +328,22 @@ class Worker:
 
             await self._event_log.append(
                 run_id,
-                RunLogEntry(run_id=run_id, seq=final_seq + 1, kind="run.failed", payload=payload),
+                RunLogEntry(
+                    run_id=run_id, seq=final_seq + 1, kind="run.failed", payload=payload
+                ),
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.FAILED)
-            await self._supervisor.record_completion(run_id, RunStatus.FAILED, error=str(exc))
+            await self._supervisor.record_completion(
+                run_id, RunStatus.FAILED, error=str(exc)
+            )
         finally:
             if hooks:
                 from ravi.agents.hooks.manager import HookEvent
-                await hooks.dispatch(HookEvent.RUN_END, {"agent_name": str(agent.id), "run_id": run_id})
+
+                await hooks.dispatch(
+                    HookEvent.RUN_END, {"agent_name": str(agent.id), "run_id": run_id}
+                )
             self._tokens.pop(run_id, None)
             self._tasks.pop(run_id, None)
 
@@ -342,4 +369,9 @@ class Worker:
             try:
                 await history.clear_run(agent_id, session_id=session_id, run_id=run_id)
             except Exception:
-                logger.warning("clear_run failed for agent %s run %s session %s", agent_id, run_id, session_id)
+                logger.warning(
+                    "clear_run failed for agent %s run %s session %s",
+                    agent_id,
+                    run_id,
+                    session_id,
+                )

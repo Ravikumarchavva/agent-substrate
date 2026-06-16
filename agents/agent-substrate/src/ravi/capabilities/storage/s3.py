@@ -61,7 +61,9 @@ class S3FileStore:
         *,
         content_type: str = "application/octet-stream",
     ) -> None:
-        await self._connector.upload(key, data, content_type=content_type, bucket=self._bucket)
+        await self._connector.upload(
+            key, data, content_type=content_type, bucket=self._bucket
+        )
 
     async def download(self, key: str) -> bytes:
         return await self._connector.download(key, bucket=self._bucket)
@@ -70,4 +72,6 @@ class S3FileStore:
         await self._connector.delete(key, bucket=self._bucket)
 
     async def presign_url(self, key: str, *, expires_in: int = 3600) -> str:
-        return await self._connector.presign_url(key, bucket=self._bucket, expires_in=expires_in)
+        return await self._connector.presign_url(
+            key, bucket=self._bucket, expires_in=expires_in
+        )

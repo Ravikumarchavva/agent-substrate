@@ -61,9 +61,7 @@ class EvalRunner:
             await rt.register(self._agent)
 
             if self._concurrency == 1:
-                results = [
-                    await self._run_case(case, rt=rt) for case in dataset.cases
-                ]
+                results = [await self._run_case(case, rt=rt) for case in dataset.cases]
             else:
                 sem = asyncio.Semaphore(self._concurrency)
 
@@ -76,9 +74,7 @@ class EvalRunner:
                 )
 
         total_duration = time.monotonic() - wall_start
-        criteria_names = (
-            [c.name for c in self._judge.criteria] if self._judge else []
-        )
+        criteria_names = [c.name for c in self._judge.criteria] if self._judge else []
         return EvalReport(
             dataset_name=dataset.name,
             results=results,

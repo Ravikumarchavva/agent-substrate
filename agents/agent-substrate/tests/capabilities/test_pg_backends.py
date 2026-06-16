@@ -12,7 +12,12 @@ from __future__ import annotations
 
 import os
 import asyncio
+from typing import TYPE_CHECKING
+
 import pytest
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import async_sessionmaker
 
 _PG_URL = os.environ.get(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb"
@@ -307,6 +312,91 @@ async def test_pg_scheduler_release_completed(pg_pool) -> None:
 
     await sched.release(target, status=RunStatus.COMPLETED)
     assert await sched.get_status(run_id) == RunStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# PgTaskStore
+# ---------------------------------------------------------------------------
+
+
+async def _pg_session_factory() -> "async_sessionmaker | None":
+    """Return a SQLAlchemy async_sessionmaker pointed at the test PG instance."""
+    try:
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+
+        url = _PG_URL.replace("postgresql://", "postgresql+asyncpg://")
+        engine = create_async_engine(url, pool_pre_ping=True)
+        factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        # quick connectivity check
+        async with factory() as s:
+            from sqlalchemy import text
+            await s.execute(text("SELECT 1"))
+        return factory
+    except Exception:
+        return None
+
+
+async def test_pg_task_store_persist_and_reload() -> None:
+    """Create a task list, mutate it, then reload through a fresh PgTaskStore instance
+    (simulating a restart) — board should survive."""
+    factory = await _pg_session_factory()
+    if factory is None:
+        pytest.skip("Postgres not reachable")
+
+    from ravi.infrastructure.storage.pg_task_store import PgTaskStore
+
+    conv_id = f"conv-{id(object())}"
+
+    store1 = PgTaskStore(factory)
+    await store1.setup()
+
+    tl = await store1.create_task_list(conv_id, ["plan", "code", "test"], max_retries=2)
+    await store1.update_status(tl.id, tl.tasks[0].id, "in_progress")
+    await store1.update_status(tl.id, tl.tasks[0].id, "done")
+
+    # Fresh store — simulates restart
+    store2 = PgTaskStore(factory)
+    reloaded = await store2.get_by_conversation(conv_id)
+    assert reloaded is not None
+    assert reloaded.conversation_id == conv_id
+    assert len(reloaded.tasks) == 3
+    done_tasks = [t for t in reloaded.tasks if t.status == "done"]
+    assert len(done_tasks) == 1
+    assert done_tasks[0].title == "plan"
+
+    # Verify get_task_list by id also works
+    by_id = await store2.get_task_list(tl.id)
+    assert by_id is not None
+    assert by_id.id == tl.id
+
+
+async def test_pg_task_store_add_and_delete() -> None:
+    """add_tasks and delete_task persist across store instances."""
+    factory = await _pg_session_factory()
+    if factory is None:
+        pytest.skip("Postgres not reachable")
+
+    from ravi.infrastructure.storage.pg_task_store import PgTaskStore
+
+    conv_id = f"conv-add-{id(object())}"
+    store = PgTaskStore(factory)
+    await store.setup()
+
+    tl = await store.create_task_list(conv_id, ["alpha"], max_retries=1)
+    added = await store.add_tasks(tl.id, ["beta", "gamma"])
+    assert len(added) == 2
+
+    fresh = PgTaskStore(factory)
+    reloaded = await fresh.get_by_conversation(conv_id)
+    assert reloaded is not None
+    assert len(reloaded.tasks) == 3
+
+    deleted = await fresh.delete_task(tl.id, added[0].id)
+    assert deleted is True
+
+    after_delete = await fresh.get_task_list(tl.id)
+    assert after_delete is not None
+    assert len(after_delete.tasks) == 2
 
 
 async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:

@@ -61,7 +61,8 @@ CREATE INDEX IF NOT EXISTS ravi_run_queue_pending_idx
 
 CREATE TABLE IF NOT EXISTS ravi_agent_runs (
     run_id   TEXT NOT NULL PRIMARY KEY,
-    agent_id TEXT NOT NULL
+    agent_id TEXT NOT NULL,
+    spec     JSONB
 );
 CREATE INDEX IF NOT EXISTS ravi_agent_runs_agent_idx
     ON ravi_agent_runs (agent_id);
@@ -89,6 +90,43 @@ class PostgresScheduler:
     async def setup(self) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(_CREATE_TABLES)
+
+    async def save_run_spec(self, run_id: RunId, spec: dict) -> None:
+        """Persist the agent spec for a run so it can be rebuilt on cold resume."""
+        import json
+
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE ravi_agent_runs SET spec = $1::jsonb WHERE run_id = $2
+                """,
+                json.dumps(spec),
+                run_id,
+            )
+
+    async def pending_run_specs(self) -> list[tuple[RunId, AgentId, dict]]:
+        """Return (run_id, agent_id, spec) for all pending runs that have a spec.
+
+        Used by the cold-resume hook to rebuild and register agents for orphaned
+        runs that were requeued by reclaim_orphans().
+        """
+        import json
+
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT rq.run_id, ar.agent_id, ar.spec
+                FROM ravi_run_queue rq
+                JOIN ravi_agent_runs ar USING (run_id)
+                WHERE rq.status = 'pending' AND ar.spec IS NOT NULL
+                """
+            )
+        result: list[tuple[RunId, AgentId, dict]] = []
+        for row in rows:
+            type_, _, key = row["agent_id"].partition("/")
+            spec = json.loads(row["spec"]) if isinstance(row["spec"], str) else dict(row["spec"])
+            result.append((RunId(row["run_id"]), AgentId(type=type_, key=key), spec))
+        return result
 
     async def reclaim_orphans(self, *, all_running: bool = False) -> int:
         """Requeue runs left ``running`` by a crashed worker, at startup.

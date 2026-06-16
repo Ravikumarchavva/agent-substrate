@@ -64,6 +64,7 @@ class AgentStreamSession:
         cancel_event: asyncio.Event | None = None,
         persister: Persister | None = None,
         poll_interval: float = 0.2,
+        spec: dict | None = None,
     ) -> None:
         self._runtime = runtime
         self._agent = agent
@@ -73,6 +74,7 @@ class AgentStreamSession:
         self._cancel = cancel_event or asyncio.Event()
         self._persister = persister
         self._poll = poll_interval
+        self._spec = spec
         self._queue: asyncio.Queue[WireEvent | object] = asyncio.Queue()
         self._bridge_signaled = False
         self._error: str | None = None
@@ -86,6 +88,15 @@ class AgentStreamSession:
             await self._runtime.register(self._agent)
             run_id = await self._runtime.submit(self._agent.id, self._msg)
             self._run_id = run_id
+
+            # Persist the agent spec so it can be rebuilt on cold resume.
+            if self._spec is not None:
+                scheduler = getattr(self._runtime, "_scheduler", None)
+                if scheduler is not None and hasattr(scheduler, "save_run_spec"):
+                    try:
+                        await scheduler.save_run_spec(run_id, self._spec)
+                    except Exception:
+                        logger.debug("save_run_spec unavailable or failed — skipping")
 
             text_acc = ""
             tool_calls_acc: list[ToolCallSummary] = []

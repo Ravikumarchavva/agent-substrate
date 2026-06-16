@@ -40,7 +40,7 @@ class AddTasksRequest(BaseModel):
 async def get_tasks(conversation_id: str):
     """Return the active task list for a conversation (or null if none)."""
     store = GlobalTaskStore.get()
-    task_list = store.get_by_conversation(conversation_id)
+    task_list = await store.get_by_conversation(conversation_id)
     return {"task_list": task_list.to_dict() if task_list else None}
 
 

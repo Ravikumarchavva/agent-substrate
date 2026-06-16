@@ -36,14 +36,40 @@ def _load_tools():
 
 
 @asynccontextmanager
+async def _runtime_cm(backend: str, pg_url: str, redis_url: str):
+    """Yield a durable Postgres-backed runtime, or in-memory as opt-out.
+
+    Mirrors the monolith's RUNTIME_BACKEND selection so both deployment modes
+    are durable by default.
+    """
+    if backend == "postgres" and pg_url:
+        from ravi.infrastructure.runtime import build_postgres_runtime
+
+        async with build_postgres_runtime(
+            postgres_url=pg_url, redis_url=redis_url
+        ) as rt:
+            logger.info("Agent Runtime: durable (Postgres EventLog + Redis journal)")
+            yield rt
+    else:
+        async with Runtime() as rt:
+            logger.info("Agent Runtime: in-memory (no durability)")
+            yield rt
+
+
+@asynccontextmanager
 async def lifespan(app):
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     conversation_url = os.environ.get(
         "CONVERSATION_SERVICE_URL",
         "http://localhost:8012",
     )
+    backend = os.environ.get("RUNTIME_BACKEND", "postgres").lower()
+    pg_url = (
+        os.environ.get("DATABASE_URL", "")
+        or os.environ.get("ASYNC_DATABASE_URL", "")
+    ).replace("+asyncpg", "")
 
-    async with Runtime() as runtime:
+    async with _runtime_cm(backend, pg_url, redis_url) as runtime:
         app.state.runtime = runtime
 
         # Redis

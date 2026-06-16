@@ -97,6 +97,17 @@ def _build_thinking_layout(
     return Group(header, accented_content)
 
 
+def _has_wide_or_combining_characters(text: str) -> bool:
+    """Detect Indic/CJK characters that cause cell width calculation mismatches in terminals."""
+    for char in text:
+        cp = ord(char)
+        # 0x0900 to 0x0FFF: Indic and South-East Asian scripts
+        # 0x3000 to 0x9FFF: CJK symbols, Hiragana, Katakana, CJK Unified Ideographs
+        if 0x0900 <= cp <= 0x0FFF or 0x3000 <= cp <= 0x9FFF:
+            return True
+    return False
+
+
 _THEME = Theme(
     {
         "agent": "bold cyan",
@@ -328,93 +339,124 @@ class Console:
                     pass
                 live = None
 
+        use_sequential = _has_wide_or_combining_characters(task)
+        active_stream_type = None
+
         try:
             async for chunk in chunk_iter:
-                if isinstance(chunk, TextDelta):
-                    if live and reasoning_stream_active:
-                        reasoning_stream_active = False
-                        reasoning_updated.set()
-                        if refresh_task:
-                            await refresh_task
-                        live.stop()
-                        live = None
-                        refresh_task = None
-
-                    if not live:
-                        live = Live(
-                            Panel(Markdown(""), title=f"[agent]🤖 {self.agent.name}[/agent]",
-                                  border_style="cyan", padding=(1, 2)),
-                            console=self.console,
-                            auto_refresh=False,
-                        )
-                        live.start()
-                        text_stream_active = True
-                        text_updated.set()
-                        refresh_task = asyncio.create_task(
-                            text_refresh_loop(live, self.agent.name)
-                        )
-
-                    text_buffer.append(chunk.text)
-                    text_updated.set()
-
-                elif isinstance(chunk, ReasoningDelta):
-                    if live and text_stream_active:
-                        text_stream_active = False
-                        text_updated.set()
-                        if refresh_task:
-                            await refresh_task
-                        live.stop()
-                        live = None
-                        refresh_task = None
-
-                    if not live:
-                        live = Live(
-                            Panel("", title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
-                                  border_style="dim", padding=(1, 2)),
-                            console=self.console,
-                            auto_refresh=False,
-                        )
-                        live.start()
-                        reasoning_stream_active = True
-                        reasoning_updated.set()
-                        refresh_task = asyncio.create_task(
-                            reasoning_refresh_loop(live, self.agent.name)
-                        )
-
-                    reasoning_buffer.append(chunk.text)
-                    reasoning_updated.set()
-
-                elif isinstance(chunk, CompletionEvent):
-                    if hasattr(chunk, "content"):
-                        from ravi.kernel.core.content import content_blocks_to_str
-                        final_message = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
+                # Dynamically switch to sequential if any wide/combining characters are detected in incoming text
+                if not use_sequential and isinstance(chunk, (TextDelta, ReasoningDelta)) and _has_wide_or_combining_characters(chunk.text):
+                    use_sequential = True
                     if live:
-                        if text_stream_active:
-                            text_stream_active = False
-                            text_updated.set()
-                            if refresh_task:
-                                await refresh_task
-                            live.update(
-                                Panel(Markdown("".join(text_buffer)),
-                                      title=f"[agent]🤖 {self.agent.name}[/agent]",
-                                      border_style="cyan", padding=(1, 2))
-                            )
-                        elif reasoning_stream_active:
+                        text_stream_active = False
+                        reasoning_stream_active = False
+                        text_updated.set()
+                        reasoning_updated.set()
+                        if refresh_task:
+                            await refresh_task
+                        live.stop()
+                        live = None
+                        refresh_task = None
+
+                if use_sequential:
+                    if isinstance(chunk, TextDelta):
+                        if active_stream_type == "reasoning":
+                            self.console.print()
+                        if active_stream_type != "text":
+                            self.console.print(f"\n[agent]🤖 {self.agent.name}:[/agent]\n", end="", style="")
+                            active_stream_type = "text"
+                        self.console.print(chunk.text, end="", style="")
+                        if hasattr(self.console.file, "flush"):
+                            self.console.file.flush()
+                        text_buffer.append(chunk.text)
+
+                    elif isinstance(chunk, ReasoningDelta):
+                        if active_stream_type == "text":
+                            self.console.print()
+                        if active_stream_type != "reasoning":
+                            self.console.print(f"\n[thinking]💭 {self.agent.name} thinking...[/thinking]\n", end="", style="")
+                            active_stream_type = "reasoning"
+                        self.console.print(chunk.text, end="", style="thinking")
+                        if hasattr(self.console.file, "flush"):
+                            self.console.file.flush()
+                        reasoning_buffer.append(chunk.text)
+
+                    elif isinstance(chunk, CompletionEvent):
+                        if hasattr(chunk, "content"):
+                            from ravi.kernel.core.content import content_blocks_to_str
+                            final_message = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
+                        if active_stream_type is not None:
+                            self.console.print()
+                            active_stream_type = None
+
+                    elif isinstance(chunk, AgentProgress):
+                        if chunk.step == AgentStep.TOOL_CALL:
+                            if active_stream_type is not None:
+                                self.console.print()
+                                active_stream_type = None
+                            tool_calls_count += 1
+                            self._print_tool_call(chunk)
+                        elif chunk.step == AgentStep.TOOL_RESULT:
+                            self._print_tool_result(chunk)
+                else:
+                    if isinstance(chunk, TextDelta):
+                        if live and reasoning_stream_active:
                             reasoning_stream_active = False
                             reasoning_updated.set()
                             if refresh_task:
                                 await refresh_task
-                            live.update(
-                                Panel("".join(reasoning_buffer),
-                                      title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
-                                      border_style="dim", padding=(1, 2))
-                            )
-                        live.stop()
-                        live = None
-                        refresh_task = None
+                            live.stop()
+                            live = None
+                            refresh_task = None
 
-                elif isinstance(chunk, AgentProgress):
-                    if chunk.step == AgentStep.TOOL_CALL:
+                        if not live:
+                            live = Live(
+                                Panel(Markdown(""), title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                      border_style="cyan", padding=(1, 2)),
+                                console=self.console,
+                                auto_refresh=False,
+                            )
+                            live.start()
+                            text_stream_active = True
+                            text_updated.set()
+                            refresh_task = asyncio.create_task(
+                                text_refresh_loop(live, self.agent.name)
+                            )
+
+                        text_buffer.append(chunk.text)
+                        text_updated.set()
+
+                    elif isinstance(chunk, ReasoningDelta):
+                        if live and text_stream_active:
+                            text_stream_active = False
+                            text_updated.set()
+                            if refresh_task:
+                                await refresh_task
+                            live.stop()
+                            live = None
+                            refresh_task = None
+
+                        if not live:
+                            live = Live(
+                                Panel("", title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                      border_style="dim", padding=(1, 2)),
+                                console=self.console,
+                                auto_refresh=False,
+                            )
+                            live.start()
+                            reasoning_stream_active = True
+                            reasoning_updated.set()
+                            refresh_task = asyncio.create_task(
+                                reasoning_refresh_loop(live, self.agent.name)
+                            )
+
+                        reasoning_buffer.append(chunk.text)
+                        reasoning_updated.set()
+
+                    elif isinstance(chunk, CompletionEvent):
+                        if hasattr(chunk, "content"):
+                            from ravi.kernel.core.content import content_blocks_to_str
+                            final_message = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
                         if live:
                             if text_stream_active:
                                 text_stream_active = False
@@ -439,10 +481,37 @@ class Console:
                             live.stop()
                             live = None
                             refresh_task = None
-                        tool_calls_count += 1
-                        self._print_tool_call(chunk)
-                    elif chunk.step == AgentStep.TOOL_RESULT:
-                        self._print_tool_result(chunk)
+
+                    elif isinstance(chunk, AgentProgress):
+                        if chunk.step == AgentStep.TOOL_CALL:
+                            if live:
+                                if text_stream_active:
+                                    text_stream_active = False
+                                    text_updated.set()
+                                    if refresh_task:
+                                        await refresh_task
+                                    live.update(
+                                        Panel(Markdown("".join(text_buffer)),
+                                              title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                              border_style="cyan", padding=(1, 2))
+                                    )
+                                elif reasoning_stream_active:
+                                    reasoning_stream_active = False
+                                    reasoning_updated.set()
+                                    if refresh_task:
+                                        await refresh_task
+                                    live.update(
+                                        Panel("".join(reasoning_buffer),
+                                              title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                              border_style="dim", padding=(1, 2))
+                                    )
+                                live.stop()
+                                live = None
+                                refresh_task = None
+                            tool_calls_count += 1
+                            self._print_tool_call(chunk)
+                        elif chunk.step == AgentStep.TOOL_RESULT:
+                            self._print_tool_result(chunk)
 
         finally:
             text_stream_active = False

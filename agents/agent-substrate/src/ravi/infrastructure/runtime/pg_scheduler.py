@@ -90,6 +90,36 @@ class PostgresScheduler:
         async with self._pool.acquire() as conn:
             await conn.execute(_CREATE_TABLES)
 
+    async def reclaim_orphans(self, *, all_running: bool = False) -> int:
+        """Requeue runs left ``running`` by a crashed worker, at startup.
+
+        ``all_running=False`` (default, multi-worker safe): only leases whose
+        ``expires_at`` has passed — never steals a live peer's run.
+        ``all_running=True`` (single-worker deployments, e.g. the monolith): a
+        fresh process owns no leases, so every ``running`` row is orphaned and
+        is requeued immediately rather than waiting out the lease.
+
+        Requeued runs become ``pending``; when their agent is (re-)registered
+        the worker leases them and the kernel replays from the EventLog (the
+        journal makes completed effects at-most-once).  Returns the count.
+        """
+        where = "status = 'running'"
+        if not all_running:
+            where += " AND expires_at < now()"
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                f"""
+                UPDATE ravi_run_queue
+                SET status = 'pending', worker_id = NULL, expires_at = NULL
+                WHERE {where}
+                """
+            )
+        # asyncpg returns e.g. "UPDATE 3"
+        try:
+            return int(result.split()[-1])
+        except (ValueError, IndexError):
+            return 0
+
     def register_run(self, run_id: RunId, agent_id: AgentId) -> None:
         """The actual INSERT happens lazily in enqueue; store mapping here first."""
         self._pending_registrations[run_id] = agent_id

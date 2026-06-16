@@ -26,10 +26,12 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_SESSION_TTL: int = 3600  # seconds (1 hour default)
 
-    # Agent runtime backend: "memory" (in-process, default) or "postgres"
-    # (durable EventLog/Inbox/Scheduler in Postgres + Redis effect journal —
-    # runs and their event logs survive restarts and can be read by any worker).
-    RUNTIME_BACKEND: str = "memory"
+    # Agent runtime backend: "postgres" (durable, default) or "memory".
+    # postgres → EventLog/Inbox/Scheduler in Postgres + Redis effect journal;
+    # runs and their event logs survive restarts and are readable by any worker.
+    # memory → in-process, no durability; an opt-out for lightweight dev runs
+    # that don't need run survival (lighter: no Postgres tail-polling).
+    RUNTIME_BACKEND: str = "postgres"
 
     # Session management
     SESSION_MAX_MESSAGES: int = 200

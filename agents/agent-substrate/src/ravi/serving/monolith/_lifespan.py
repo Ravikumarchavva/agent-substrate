@@ -182,7 +182,13 @@ async def init_runtime(settings: Settings) -> tuple[Runtime, AsyncExitStack | No
         )
         stack = AsyncExitStack()
         runtime = await stack.enter_async_context(
-            build_postgres_runtime(postgres_url=pg_url, redis_url=settings.REDIS_URL)
+            build_postgres_runtime(
+                postgres_url=pg_url,
+                redis_url=settings.REDIS_URL,
+                # Monolith is single-worker: any 'running' row left at startup
+                # was orphaned by a prior process, so requeue it immediately.
+                reclaim_orphans=True,
+            )
         )
         logger.info("Agent runtime: durable (Postgres EventLog + Redis journal)")
         return runtime, stack

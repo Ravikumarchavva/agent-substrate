@@ -152,7 +152,6 @@ class AgentStreamSession:
 
     async def events(self) -> AsyncIterator[WireEvent]:
         """Yield the full wire-event stream for one run."""
-        print("SESSION EVENTS START")
         yield HelloEvent()
 
         agent_task = asyncio.create_task(self._agent_worker())

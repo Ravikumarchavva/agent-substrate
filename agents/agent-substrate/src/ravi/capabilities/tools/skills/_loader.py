@@ -24,17 +24,11 @@ from __future__ import annotations
 from ravi.logger import setup_logging
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
+
+import yaml
 
 from ravi.capabilities.tools.skills._models import SkillPackage, SkillMetadata
-
-yaml: Any = None  # optional dependency; assigned below if available
-try:
-    import yaml
-
-    _YAML_AVAILABLE = True
-except ImportError:
-    _YAML_AVAILABLE = False
 
 logger = setup_logging()
 
@@ -69,13 +63,6 @@ def _parse_frontmatter(raw: str) -> tuple[dict, str]:
 
     fm_text = rest[:end].strip()
     body = rest[end + 4 :].strip()  # skip \n---
-
-    if not _YAML_AVAILABLE:
-        logger.warning(
-            "PyYAML is not installed – cannot parse SKILL.md frontmatter. "
-            "Install it with: pip install pyyaml"
-        )
-        return {}, body
 
     try:
         fm = yaml.safe_load(fm_text) or {}

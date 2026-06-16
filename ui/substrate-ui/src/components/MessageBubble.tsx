@@ -11,6 +11,8 @@ import {
   RotateCw,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Loader2,
   PanelRightOpen,
   WrenchIcon,
@@ -160,10 +162,12 @@ export function MessageBubble({
   const [copied, setCopied] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(-1);
   const [inlineImageIndex, setInlineImageIndex] = useState<number>(0);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   
   // Ensure content is always a valid string
   const safeContent = typeof content === 'string' ? content : String(content || "");
   const safeReasoning = typeof reasoning === 'string' ? reasoning : String(reasoning || "");
+  const isLongUserMessage = isUser && (safeContent.length > 300 || safeContent.split("\n").length > 5);
   const visibleToolCalls = toolCalls?.filter((tool) => isToolExecuting || isPersistentToolCall(tool)) ?? [];
   const visibleAttachments = attachments ?? [];
   const imageAttachments = visibleAttachments.filter((attachment) => {
@@ -438,25 +442,61 @@ export function MessageBubble({
             )}
             {safeContent && (
               <div
-                className="px-4 py-3 text-[15px] leading-relaxed user-bubble-md"
+                className="user-bubble-md overflow-hidden flex flex-col"
                 style={{
                   background: "var(--user-bubble)",
                   borderRadius: "20px 20px 4px 20px",
                 }}
               >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    p({ children }) { return <p className="mb-1 last:mb-0">{children}</p>; },
-                    ul({ children }) { return <ul className="list-disc pl-4 mb-1 space-y-0.5">{children}</ul>; },
-                    ol({ children }) { return <ol className="list-decimal pl-4 mb-1 space-y-0.5">{children}</ol>; },
-                    li({ children }) { return <li className="leading-snug">{children}</li>; },
-                    strong({ children }) { return <strong className="font-semibold">{children}</strong>; },
-                    code({ children }) { return <code className="bg-black/20 rounded px-1 text-[13px] font-mono">{children}</code>; },
-                  }}
+                <div
+                  className={`px-4 pt-3 text-[15px] leading-relaxed relative ${
+                    isLongUserMessage && isCollapsed ? "max-h-[140px] overflow-hidden" : "pb-3"
+                  }`}
                 >
-                  {safeContent}
-                </ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p({ children }) { return <p className="mb-1 last:mb-0">{children}</p>; },
+                      ul({ children }) { return <ul className="list-disc pl-4 mb-1 space-y-0.5">{children}</ul>; },
+                      ol({ children }) { return <ol className="list-decimal pl-4 mb-1 space-y-0.5">{children}</ol>; },
+                      li({ children }) { return <li className="leading-snug">{children}</li>; },
+                      strong({ children }) { return <strong className="font-semibold">{children}</strong>; },
+                      code({ children }) { return <code className="bg-black/20 rounded px-1 text-[13px] font-mono">{children}</code>; },
+                    }}
+                  >
+                    {safeContent}
+                  </ReactMarkdown>
+                  {isLongUserMessage && isCollapsed && (
+                    <div 
+                      className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none" 
+                      style={{
+                        background: "linear-gradient(to top, var(--user-bubble) 20%, transparent 100%)"
+                      }}
+                    />
+                  )}
+                </div>
+                {isLongUserMessage && (
+                  <div className="px-4 pb-2.5 pt-1 flex justify-start">
+                    <button
+                      type="button"
+                      onClick={() => setIsCollapsed(!isCollapsed)}
+                      className="text-[11px] font-semibold text-(--muted) hover:text-foreground transition-colors cursor-pointer flex items-center gap-1 select-none btn-icon"
+                      style={{ minHeight: "unset", minWidth: "unset" }}
+                    >
+                      {isCollapsed ? (
+                        <>
+                          Show more
+                          <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                        </>
+                      ) : (
+                        <>
+                          Show less
+                          <ChevronUp className="w-3.5 h-3.5 shrink-0" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {timestamp && (

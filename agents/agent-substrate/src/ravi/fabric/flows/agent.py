@@ -159,6 +159,7 @@ class ParallelFlow:
             return self.merge(outputs)
         if self.merge == "vote":
             from collections import Counter
+
             return Counter(outputs).most_common(1)[0][0]
         return "\n\n".join(outputs)
 
@@ -171,13 +172,14 @@ class ParallelFlow:
                 bm = _make_step_message(branch.id, text, sender=self.id)
                 handle: RunHandle = await ctx.spawn(branch.id, boot=bm)
                 pairs.append((bm, handle))
-            outcomes: list[AskOutcome] = await asyncio.gather(*[
-                ctx.ask(handle, bm, timeout=self.branch_timeout)
-                for bm, handle in pairs
-            ])
+            outcomes: list[AskOutcome] = await asyncio.gather(
+                *[
+                    ctx.ask(handle, bm, timeout=self.branch_timeout)
+                    for bm, handle in pairs
+                ]
+            )
             outputs = [
-                _text_from_outcome(o) if o.kind == "replied" else ""
-                for o in outcomes
+                _text_from_outcome(o) if o.kind == "replied" else "" for o in outcomes
             ]
             await ctx.reply(msg, {"text": self._merge_outputs(outputs)})
 

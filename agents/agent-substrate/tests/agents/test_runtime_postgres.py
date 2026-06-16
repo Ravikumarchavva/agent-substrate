@@ -302,9 +302,7 @@ async def test_pg_streaming_session(pg_runtime) -> None:
         runtime=pg_runtime, agent=agent, msg=msg, bridge=_StubBridge()
     )
 
-    events = await asyncio.wait_for(
-        _collect_events(session), timeout=20.0
-    )
+    events = await asyncio.wait_for(_collect_events(session), timeout=20.0)
 
     # Wire events stream out, framed by hello … run.completed
     assert isinstance(events[0], HelloEvent)
@@ -401,6 +399,7 @@ async def test_pg_cold_resume() -> None:
 
     class EchoSpecAgent:
         """Completes immediately after one message."""
+
         def __init__(self, aid: AgentId) -> None:
             self.id = aid
 
@@ -430,9 +429,11 @@ async def test_pg_cold_resume() -> None:
     # At this point runtime A is torn down.  Simulate a crash by inserting a
     # fresh run_id that is 'running' (orphaned) with a spec.
     import asyncpg
+
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:
         import json as _json
+
         orphan_run_id = f"orphan-resume-{id(object())}"
         orphan_agent_id = _agent_id("orphan-spec-agent")
         async with pool.acquire() as conn:
@@ -475,7 +476,11 @@ async def test_pg_cold_resume() -> None:
 
         # Cleanup
         async with pool.acquire() as conn:
-            await conn.execute("DELETE FROM ravi_run_queue WHERE run_id = $1", orphan_run_id)
-            await conn.execute("DELETE FROM ravi_agent_runs WHERE run_id = $1", orphan_run_id)
+            await conn.execute(
+                "DELETE FROM ravi_run_queue WHERE run_id = $1", orphan_run_id
+            )
+            await conn.execute(
+                "DELETE FROM ravi_agent_runs WHERE run_id = $1", orphan_run_id
+            )
     finally:
         await pool.close()

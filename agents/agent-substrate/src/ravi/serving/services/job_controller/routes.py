@@ -10,7 +10,7 @@ Routes:
 from __future__ import annotations
 from ravi.logger import setup_logging
 
-import asyncio
+import asyncio  # used by create_task in create_run_endpoint
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,14 +18,13 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ravi.serving.shared.database.dependency import get_db_session
+from ravi.serving.shared.events.types import job_cancel_requested
 
 from ravi.serving.services.job_controller.service import (
     cancel_run,
-    cleanup_cancel_signal,
     create_run,
     dispatch_run,
     get_active_run_for_thread,
-    get_cancel_signal,
     get_run,
 )
 
@@ -139,6 +138,7 @@ async def get_run_endpoint(
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run_endpoint(
     run_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
 ):
     """Cancel an active workflow run."""
@@ -151,13 +151,13 @@ async def cancel_run_endpoint(
             detail=f"Cannot cancel run in '{run.status}' state",
         )
 
-    # Signal the agent to stop
-    signal = get_cancel_signal(str(run_id))
-    signal.set()
-    cleanup_cancel_signal(str(run_id))
-
-    # Update DB
     await cancel_run(db, run_id)
+
+    # Propagate cancellation cross-service via the event bus
+    await request.app.state.event_bus.publish(
+        job_cancel_requested(run_id=str(run_id), thread_id=str(run.thread_id))
+    )
+
     return CancelOut(
         status="cancelled",
         run_id=str(run_id),
@@ -168,6 +168,7 @@ async def cancel_run_endpoint(
 @router.post("/threads/{thread_id}/cancel")
 async def cancel_by_thread_endpoint(
     thread_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
 ):
     """Cancel the active workflow run for a thread (convenience for Gateway).
@@ -183,11 +184,13 @@ async def cancel_by_thread_endpoint(
             thread_id=str(thread_id),
         )
 
-    signal = get_cancel_signal(str(active.id))
-    signal.set()
-    cleanup_cancel_signal(str(active.id))
-
     await cancel_run(db, active.id)
+
+    # Propagate cancellation cross-service via the event bus
+    await request.app.state.event_bus.publish(
+        job_cancel_requested(run_id=str(active.id), thread_id=str(thread_id))
+    )
+
     return CancelOut(
         status="cancelled",
         run_id=str(active.id),

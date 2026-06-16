@@ -21,8 +21,8 @@ router = APIRouter(prefix="/auth/spotify", tags=["spotify-oauth"])
 _FRONTEND_ORIGIN = settings.FRONTEND_URL
 
 # Redis key patterns
-_TOKEN_KEY = "spotify:token:{user_id}"   # EX 86400 (24 h)
-_STATE_KEY  = "spotify:state:{state}"    # EX 600   (10 min CSRF window)
+_TOKEN_KEY = "spotify:token:{user_id}"  # EX 86400 (24 h)
+_STATE_KEY = "spotify:state:{state}"  # EX 600   (10 min CSRF window)
 
 
 def _token_key(user_id: str) -> str:
@@ -108,22 +108,26 @@ async def spotify_callback(
     try:
         token_data = await auth_service.exchange_code_for_token(code)
 
-        token_payload = json.dumps({
-            "access_token": token_data["access_token"],
-            "refresh_token": token_data.get("refresh_token"),
-            "expires_in": token_data.get("expires_in", 3600),
-            "scope": token_data.get("scope", ""),
-        })
+        token_payload = json.dumps(
+            {
+                "access_token": token_data["access_token"],
+                "refresh_token": token_data.get("refresh_token"),
+                "expires_in": token_data.get("expires_in", 3600),
+                "scope": token_data.get("scope", ""),
+            }
+        )
         await redis.set(_token_key(user_id), token_payload, ex=86400)
 
         logger.info("Stored Spotify tokens for user %s", user_id)
 
-        safe_tokens = json.dumps({
-            "access_token": token_data["access_token"],
-            "refresh_token": token_data.get("refresh_token", ""),
-            "expires_in": token_data.get("expires_in", 3600),
-            "scope": token_data.get("scope", ""),
-        })
+        safe_tokens = json.dumps(
+            {
+                "access_token": token_data["access_token"],
+                "refresh_token": token_data.get("refresh_token", ""),
+                "expires_in": token_data.get("expires_in", 3600),
+                "scope": token_data.get("scope", ""),
+            }
+        )
         origin_json = json.dumps(_FRONTEND_ORIGIN)
 
         return HTMLResponse(
@@ -160,13 +164,17 @@ async def set_access_token_from_frontend(
 ):
     """Accept and store an OAuth token pushed from the frontend after user-facing OAuth."""
     body = await request.json()
-    token_payload = json.dumps({
-        "access_token": body["access_token"],
-        "refresh_token": body.get("refresh_token"),
-        "expires_in": body.get("expires_in", 3600),
-    })
+    token_payload = json.dumps(
+        {
+            "access_token": body["access_token"],
+            "refresh_token": body.get("refresh_token"),
+            "expires_in": body.get("expires_in", 3600),
+        }
+    )
     await _redis(request).set(_token_key(current_user.sub), token_payload, ex=86400)
-    logger.info("Spotify OAuth token stored from frontend push for user %s", current_user.sub)
+    logger.info(
+        "Spotify OAuth token stored from frontend push for user %s", current_user.sub
+    )
     return JSONResponse({"status": "ok"})
 
 
@@ -193,7 +201,9 @@ async def get_access_token(
             status_code=401,
             detail="Not authenticated. Please log in with Spotify first.",
         )
-    return JSONResponse({"access_token": tokens["access_token"], "expires_in": tokens["expires_in"]})
+    return JSONResponse(
+        {"access_token": tokens["access_token"], "expires_in": tokens["expires_in"]}
+    )
 
 
 @router.post("/refresh")
@@ -210,17 +220,23 @@ async def refresh_token(
 
     auth_service = get_auth_service()
     try:
-        new_token_data = await auth_service.refresh_access_token(tokens["refresh_token"])
-        tokens.update({
-            "access_token": new_token_data["access_token"],
-            "expires_in": new_token_data.get("expires_in", 3600),
-        })
+        new_token_data = await auth_service.refresh_access_token(
+            tokens["refresh_token"]
+        )
+        tokens.update(
+            {
+                "access_token": new_token_data["access_token"],
+                "expires_in": new_token_data.get("expires_in", 3600),
+            }
+        )
         await _save_tokens(request, current_user.sub, tokens)
         logger.info("Refreshed Spotify access token for user %s", current_user.sub)
-        return JSONResponse({
-            "access_token": new_token_data["access_token"],
-            "expires_in": new_token_data.get("expires_in", 3600),
-        })
+        return JSONResponse(
+            {
+                "access_token": new_token_data["access_token"],
+                "expires_in": new_token_data.get("expires_in", 3600),
+            }
+        )
     except Exception as e:
         logger.error("Failed to refresh token: %s", e)
         raise HTTPException(status_code=500, detail="Token refresh failed")
@@ -254,44 +270,58 @@ async def restore_tokens(
 
     existing = await _get_tokens(request, user_id)
     if existing and existing.get("access_token"):
-        return JSONResponse({
-            "access_token": existing["access_token"],
-            "expires_in": existing.get("expires_in", 3600),
-            "status": "already_active",
-        })
+        return JSONResponse(
+            {
+                "access_token": existing["access_token"],
+                "expires_in": existing.get("expires_in", 3600),
+                "status": "already_active",
+            }
+        )
 
     if refresh_token_val:
         try:
             auth_service = get_auth_service()
             new_data = await auth_service.refresh_access_token(refresh_token_val)
-            await _save_tokens(request, user_id, {
-                "access_token": new_data["access_token"],
-                "refresh_token": refresh_token_val,
-                "expires_in": new_data.get("expires_in", 3600),
-                "scope": body.get("scope", ""),
-            })
+            await _save_tokens(
+                request,
+                user_id,
+                {
+                    "access_token": new_data["access_token"],
+                    "refresh_token": refresh_token_val,
+                    "expires_in": new_data.get("expires_in", 3600),
+                    "scope": body.get("scope", ""),
+                },
+            )
             logger.info("Restored Spotify tokens (refreshed) for user %s", user_id)
-            return JSONResponse({
-                "access_token": new_data["access_token"],
-                "expires_in": new_data.get("expires_in", 3600),
-                "status": "refreshed",
-            })
+            return JSONResponse(
+                {
+                    "access_token": new_data["access_token"],
+                    "expires_in": new_data.get("expires_in", 3600),
+                    "status": "refreshed",
+                }
+            )
         except Exception as e:
             logger.warning("Could not refresh during restore: %s", e)
 
     if access_token_val:
-        await _save_tokens(request, user_id, {
-            "access_token": access_token_val,
-            "refresh_token": refresh_token_val,
-            "expires_in": body.get("expires_in", 3600),
-            "scope": body.get("scope", ""),
-        })
+        await _save_tokens(
+            request,
+            user_id,
+            {
+                "access_token": access_token_val,
+                "refresh_token": refresh_token_val,
+                "expires_in": body.get("expires_in", 3600),
+                "scope": body.get("scope", ""),
+            },
+        )
         logger.info("Restored Spotify tokens (as-is) for user %s", user_id)
-        return JSONResponse({
-            "access_token": access_token_val,
-            "expires_in": body.get("expires_in", 3600),
-            "status": "stored",
-        })
+        return JSONResponse(
+            {
+                "access_token": access_token_val,
+                "expires_in": body.get("expires_in", 3600),
+                "status": "stored",
+            }
+        )
 
     raise HTTPException(status_code=400, detail="Could not restore tokens")
 
@@ -318,7 +348,9 @@ async def get_liked_songs(
     current_user: AuthClaims = Depends(get_current_user),
 ):
     """Fetch the current user's liked (saved) tracks."""
-    svc = _get_oauth_service_with_token_sync(await _get_tokens(request, current_user.sub))
+    svc = _get_oauth_service_with_token_sync(
+        await _get_tokens(request, current_user.sub)
+    )
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
     try:
@@ -337,7 +369,9 @@ async def get_playlists(
     current_user: AuthClaims = Depends(get_current_user),
 ):
     """Fetch the current user's playlists."""
-    svc = _get_oauth_service_with_token_sync(await _get_tokens(request, current_user.sub))
+    svc = _get_oauth_service_with_token_sync(
+        await _get_tokens(request, current_user.sub)
+    )
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
     try:
@@ -358,7 +392,9 @@ async def get_playlist_tracks(
     current_user: AuthClaims = Depends(get_current_user),
 ):
     """Fetch tracks for a specific playlist."""
-    svc = _get_oauth_service_with_token_sync(await _get_tokens(request, current_user.sub))
+    svc = _get_oauth_service_with_token_sync(
+        await _get_tokens(request, current_user.sub)
+    )
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
     try:
@@ -368,4 +404,6 @@ async def get_playlist_tracks(
         return JSONResponse(result)
     except Exception as e:
         logger.error("Failed to fetch playlist tracks for %s: %s", playlist_id, e)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch playlist tracks: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch playlist tracks: {e}"
+        )

@@ -83,6 +83,7 @@ class UserProxyAgent:
         payload = msg.payload
         if isinstance(payload, ChatPayload):
             from ravi.kernel.core.content import content_blocks_to_str
+
             return content_blocks_to_str(payload.message.content)  # type: ignore[arg-type]
         return str(getattr(payload, "data", payload))
 

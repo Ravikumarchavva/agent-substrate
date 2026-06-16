@@ -452,8 +452,6 @@ def _resolve_workspace_path(path: str) -> str:
     return real_path
 
 
-
-
 def _workspace_relative(path: str) -> str:
     rel = os.path.relpath(os.path.realpath(path), os.path.realpath(WORKSPACE_DIR))
     return "" if rel == "." else rel

@@ -131,6 +131,38 @@ forbidden_modules = [
     "ravi.logger",
 ]
 
+[[tool.importlinter.contracts]]
+name = "serving cannot import agents or capabilities"
+type = "forbidden"
+source_modules = ["ravi.serving"]
+forbidden_modules = ["ravi.agents", "ravi.capabilities", "ravi.fabric"]
+# infrastructure/ is orthogonal — it may cross-cut to agents/capabilities by design.
+# We only want to catch DIRECT imports from serving/ to agents/capabilities.
+allow_indirect_imports = "true"
+ignore_imports = [
+    # current_thread_id ContextVar spans both chat.py and capabilities/task_manager
+    "ravi.serving.monolith.routes.chat -> ravi.capabilities.tools.task_manager.tool",
+    # WebHITLBridge delivers human-input events; must know the capability type
+    "ravi.serving.monolith.sse.bridge -> ravi.capabilities.tools.human_input",
+    # pipelines/triggers routes need DTOs defined in capabilities (PipelineDef, TriggerDef, ConditionDef)
+    "ravi.serving.monolith.routes.pipelines -> ravi.capabilities.pipeline.engine",
+    "ravi.serving.monolith.routes.triggers -> ravi.capabilities.triggers.conditions",
+    "ravi.serving.monolith.routes.triggers -> ravi.capabilities.triggers.scheduler",
+    # agent_runtime: in-memory fallback Runtime (for RUNTIME_BACKEND=memory env)
+    "ravi.serving.services.agent_runtime.app -> ravi.agents.runtime",
+    # agent_runtime service: load_session_memory is an L1 concern with no kernel protocol yet
+    "ravi.serving.services.agent_runtime.service -> ravi.agents.factory",
+    # tool_executor and code_interpreter ARE capability executors by design
+    "ravi.serving.services.tool_executor.app -> ravi.agents.storage.tasks",
+    "ravi.serving.services.tool_executor.app -> ravi.capabilities.tools.code_interpreter.http_client",
+    "ravi.serving.services.tool_executor.app -> ravi.capabilities.tools.code_interpreter.tool",
+    "ravi.serving.services.tool_executor.app -> ravi.capabilities.tools.task_manager.tool",
+    "ravi.serving.services.tool_executor.app -> ravi.capabilities.tools.web.surfer",
+    "ravi.serving.services.code_interpreter.app -> ravi.capabilities.tools.code_interpreter.config",
+    "ravi.serving.services.code_interpreter.app -> ravi.capabilities.tools.code_interpreter.session_manager",
+    "ravi.serving.services.code_interpreter.schemas -> ravi.capabilities.tools.code_interpreter.schemas",
+]
+
 [tool.uv.sources]
 paddleocr = { git = "https://github.com/PaddlePaddle/PaddleOCR.git" }
 

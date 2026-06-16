@@ -105,7 +105,9 @@ class ConditionMonitor:
             try:
                 await self._event_bus.disconnect()
             except Exception as exc:
-                logger.warning("ConditionMonitor failed to disconnect EventBus: %s", exc)
+                logger.warning(
+                    "ConditionMonitor failed to disconnect EventBus: %s", exc
+                )
 
         logger.info("ConditionMonitor stopped")
 
@@ -159,7 +161,9 @@ class ConditionMonitor:
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("ConditionMonitor loop error for event type %s", event_type)
+            logger.exception(
+                "ConditionMonitor loop error for event type %s", event_type
+            )
 
     async def _dispatch(self, condition: ConditionDef, event: dict[str, Any]) -> None:
         """Dispatch a workflow when condition is met."""

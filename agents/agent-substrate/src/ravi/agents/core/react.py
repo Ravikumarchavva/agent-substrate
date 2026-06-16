@@ -65,6 +65,7 @@ class ReActAgent:
 
         if isinstance(tools, list):
             from ravi.agents.tools.toolbox import Toolbox
+
             tb = Toolbox()
             for t in tools:
                 tb.add(t)
@@ -117,10 +118,19 @@ class ReActAgent:
         for _ in range(self._max_iterations):
             ctx.check()
             if self.hooks:
-                await self.hooks.dispatch(HookEvent.LLM_START, {"agent_name": self.name, "run_id": ctx.run_id})
+                await self.hooks.dispatch(
+                    HookEvent.LLM_START, {"agent_name": self.name, "run_id": ctx.run_id}
+                )
             resp = await ctx.llm(messages, options=options)
             if self.hooks:
-                await self.hooks.dispatch(HookEvent.LLM_END, {"agent_name": self.name, "run_id": ctx.run_id, "usage": resp.usage})
+                await self.hooks.dispatch(
+                    HookEvent.LLM_END,
+                    {
+                        "agent_name": self.name,
+                        "run_id": ctx.run_id,
+                        "usage": resp.usage,
+                    },
+                )
 
             if self._execution_budget is not None:
                 self._execution_budget.consume(
@@ -139,22 +149,29 @@ class ReActAgent:
             for tc in tool_calls:
                 ctx.check()
                 inv_result = await ctx.tool(tc.tool_name, **tc.arguments)
-                results.append(ToolResultBlock(
-                    call_id=tc.call_id,
-                    content=[TextBlock(text=inv_result.text or "")],
-                    is_error=inv_result.status != "ok",
-                ))
+                results.append(
+                    ToolResultBlock(
+                        call_id=tc.call_id,
+                        content=[TextBlock(text=inv_result.text or "")],
+                        is_error=inv_result.status != "ok",
+                    )
+                )
 
             messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
         else:
             from ravi.kernel.core.errors import BudgetExhaustedError
-            raise BudgetExhaustedError(f"Agent reached max iterations limit ({self._max_iterations})")
+
+            raise BudgetExhaustedError(
+                f"Agent reached max iterations limit ({self._max_iterations})"
+            )
 
         new_turns = messages[n_loaded:]
         await persist_turns(self._context, self.id, session_id, ctx.run_id, new_turns)
 
         ans = final_text(messages)
-        await deliver(ctx, msg, {"text": ans}, sender=self.id, output_topic=self._output_topic)
+        await deliver(
+            ctx, msg, {"text": ans}, sender=self.id, output_topic=self._output_topic
+        )
 
 
 __all__ = ["ReActAgent"]

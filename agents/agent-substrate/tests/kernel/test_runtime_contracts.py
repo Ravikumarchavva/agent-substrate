@@ -543,9 +543,7 @@ class TestAgent:
             def __init__(self) -> None:
                 self.id = _agent_id()
 
-            async def run(
-                self, ctx: AgentRunContext, inbox: list[Message]
-            ) -> None:
+            async def run(self, ctx: AgentRunContext, inbox: list[Message]) -> None:
                 pass
 
         agent = MinimalAgent()

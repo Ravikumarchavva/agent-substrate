@@ -93,6 +93,13 @@ def workflow_started(
     )
 
 
+def job_cancel_requested(run_id: str, thread_id: str, **kw: Any) -> EventEnvelope:
+    return EventEnvelope(
+        event_type="job.cancel_requested",
+        payload={"run_id": run_id, "thread_id": thread_id, **kw},
+    )
+
+
 def workflow_completed(
     run_id: str, thread_id: str, status: str = "completed", **kw: Any
 ) -> EventEnvelope:

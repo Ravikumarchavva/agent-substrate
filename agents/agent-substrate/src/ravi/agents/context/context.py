@@ -46,7 +46,9 @@ class ContextConfig:
     ) -> None:
         self.history = history
         self.retention = retention
-        self.pipeline: CompactionPipeline = pipeline or CompactionPipeline([SlidingWindowCompaction()])
+        self.pipeline: CompactionPipeline = pipeline or CompactionPipeline(
+            [SlidingWindowCompaction()]
+        )
 
     @classmethod
     def default(cls) -> "ContextConfig":

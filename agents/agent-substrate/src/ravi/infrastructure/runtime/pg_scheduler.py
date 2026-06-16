@@ -126,7 +126,11 @@ class PostgresScheduler:
         result: list[tuple[RunId, AgentId, dict]] = []
         for row in rows:
             type_, _, key = row["agent_id"].partition("/")
-            spec = json.loads(row["spec"]) if isinstance(row["spec"], str) else dict(row["spec"])
+            spec = (
+                json.loads(row["spec"])
+                if isinstance(row["spec"], str)
+                else dict(row["spec"])
+            )
             result.append((RunId(row["run_id"]), AgentId(type=type_, key=key), spec))
         return result
 
@@ -390,9 +394,7 @@ class PostgresScheduler:
     ) -> AsyncIterator[RunId]:
         return self._pending_iter(tenant)
 
-    async def _pending_iter(
-        self, tenant: str | None
-    ) -> AsyncIterator[RunId]:  # type: ignore[return]
+    async def _pending_iter(self, tenant: str | None) -> AsyncIterator[RunId]:  # type: ignore[return]
         q = "SELECT run_id FROM ravi_run_queue WHERE status = 'pending'"
         args: list[object] = []
         if tenant is not None:

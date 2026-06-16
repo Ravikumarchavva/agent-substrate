@@ -237,11 +237,13 @@ def rebuild_agent(
 
     ctx = ContextConfig(
         InMemoryHistoryProvider(),
-        pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)]),
+        pipeline=CompactionPipeline(
+            [SlidingWindowCompaction(max_messages=model_context_window)]
+        ),
     )
 
     toolbox = Toolbox()
-    for t in (tools or []):
+    for t in tools or []:
         toolbox.add(t)
 
     return ReActAgent(
@@ -293,7 +295,9 @@ def create_assistant_agent(
     from ravi.agents.tools.toolbox import Toolbox
     from ravi.agents.context import ContextConfig
 
-    pipeline = model_context or CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)])
+    pipeline = model_context or CompactionPipeline(
+        [SlidingWindowCompaction(max_messages=model_context_window)]
+    )
 
     ctx = ContextConfig(
         memory if memory is not None else InMemoryHistoryProvider(),
@@ -301,7 +305,7 @@ def create_assistant_agent(
     )
 
     toolbox = Toolbox()
-    for t in (tools or []):
+    for t in tools or []:
         toolbox.add(t)
 
     return ReActAgent(

@@ -136,7 +136,14 @@ class ToolInvoker:
         finally:
             duration_ms = int(time.monotonic() * 1000) - start_ms
             if self._hooks:
-                await self._hooks.dispatch(HookEvent.TOOL_END, {"tool_name": tool_name, "status": status, "duration_ms": duration_ms})
+                await self._hooks.dispatch(
+                    HookEvent.TOOL_END,
+                    {
+                        "tool_name": tool_name,
+                        "status": status,
+                        "duration_ms": duration_ms,
+                    },
+                )
             args_digest = _digest(call.arguments)
             session._trace.append(
                 ChainCallRecord(

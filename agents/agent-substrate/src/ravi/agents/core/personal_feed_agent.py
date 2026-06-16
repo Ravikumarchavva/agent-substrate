@@ -91,13 +91,14 @@ class PersonalFeedAgent:
         item_text = self._extract_text(msg)
 
         ranking_prompt = (
-            f"User preferences: {self._preferences}\n\n"
-            f"New item:\n{item_text}"
+            f"User preferences: {self._preferences}\n\nNew item:\n{item_text}"
             if self._preferences
             else item_text
         )
 
-        curated = await summarize(ctx, ranking_prompt, instructions=self._system_instructions)
+        curated = await summarize(
+            ctx, ranking_prompt, instructions=self._system_instructions
+        )
 
         # Log the curated entry so it's visible via EventLog.tail()
         await ctx._log(

@@ -63,7 +63,9 @@ class MockLLMClient:
         options: GenerationOptions,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         resp = await self.generate(messages, options=options)
-        text = " ".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
+        text = " ".join(
+            b.text for b in resp.content if isinstance(b, TextBlock) and b.text
+        )
         if text:
             yield TextDelta(text=text)
         yield CompletionEvent(content=resp.content, usage=resp.usage)
@@ -189,7 +191,9 @@ async def test_run_plain_text():
 async def test_run_with_tool_call():
     """Agent executes a tool when the LLM returns a ToolUseBlock."""
     async with Runtime() as rt:
-        tool_use = ToolUseBlock(call_id="c1", tool_name="echo", arguments={"text": "pong"})
+        tool_use = ToolUseBlock(
+            call_id="c1", tool_name="echo", arguments={"text": "pong"}
+        )
         agent = make_agent(
             [
                 [tool_use],
@@ -352,10 +356,12 @@ async def test_agent_context_config():
 async def test_agent_context_config_pipeline():
     """ContextConfig with a CompactionPipeline chains multiple strategies in sequence."""
     async with Runtime() as rt:
-        pipeline = CompactionPipeline([
-            SlidingWindowCompaction(max_messages=20),
-            SlidingWindowCompaction(max_messages=10),
-        ])
+        pipeline = CompactionPipeline(
+            [
+                SlidingWindowCompaction(max_messages=20),
+                SlidingWindowCompaction(max_messages=10),
+            ]
+        )
         ctx = ContextConfig(
             InMemoryHistoryProvider(),
             pipeline,

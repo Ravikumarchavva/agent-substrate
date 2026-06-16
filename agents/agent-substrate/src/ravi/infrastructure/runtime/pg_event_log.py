@@ -120,9 +120,7 @@ class PostgresEventLog:
         lock_key = _lock_key(run_id)
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute(
-                    "SELECT pg_advisory_xact_lock($1)", lock_key
-                )
+                await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
                 current: int = await conn.fetchval(
                     "SELECT COALESCE(MAX(seq), -1) FROM ravi_event_log WHERE run_id = $1",
                     run_id,
@@ -234,7 +232,9 @@ def _row_to_entry(run_id: RunId, row: object) -> RunLogEntry:
     if isinstance(ts_val, datetime) and ts_val.tzinfo is None:
         ts_val = ts_val.replace(tzinfo=timezone.utc)
     raw = row["payload"]  # type: ignore[index]
-    payload: JsonObject = (json.loads(raw) if isinstance(raw, str) else dict(raw)) if raw else {}
+    payload: JsonObject = (
+        (json.loads(raw) if isinstance(raw, str) else dict(raw)) if raw else {}
+    )
     return RunLogEntry(
         run_id=run_id,
         seq=row["seq"],  # type: ignore[index]

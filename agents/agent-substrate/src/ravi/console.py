@@ -178,7 +178,11 @@ class Console:
 
     async def _stream(self, task: str) -> "AsyncIterator[Any]":
         """Submit *task* to the runtime and stream log entries as kernel events."""
-        from ravi.kernel.core.content import TextBlock as _TB, ChatMessage as _CM, Role as _Role
+        from ravi.kernel.core.content import (
+            TextBlock as _TB,
+            ChatMessage as _CM,
+            Role as _Role,
+        )
         from ravi.kernel.messaging.message import ChatPayload as _CP, Message as _Msg
         from ravi.kernel.messaging.stream import (
             AgentProgress,
@@ -252,6 +256,7 @@ class Console:
         async for chunk in self._stream(task):
             if isinstance(chunk, CompletionEvent):
                 from ravi.kernel.core.content import content_blocks_to_str
+
                 final_text = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
             elif isinstance(chunk, StreamDone):
                 break
@@ -345,7 +350,11 @@ class Console:
         try:
             async for chunk in chunk_iter:
                 # Dynamically switch to sequential if any wide/combining characters are detected in incoming text
-                if not use_sequential and isinstance(chunk, (TextDelta, ReasoningDelta)) and _has_wide_or_combining_characters(chunk.text):
+                if (
+                    not use_sequential
+                    and isinstance(chunk, (TextDelta, ReasoningDelta))
+                    and _has_wide_or_combining_characters(chunk.text)
+                ):
                     use_sequential = True
                     if live:
                         text_stream_active = False
@@ -363,7 +372,11 @@ class Console:
                         if active_stream_type == "reasoning":
                             self.console.print()
                         if active_stream_type != "text":
-                            self.console.print(f"\n[agent]🤖 {self.agent.name}:[/agent]\n", end="", style="")
+                            self.console.print(
+                                f"\n[agent]🤖 {self.agent.name}:[/agent]\n",
+                                end="",
+                                style="",
+                            )
                             active_stream_type = "text"
                         self.console.print(chunk.text, end="", style="")
                         if hasattr(self.console.file, "flush"):
@@ -374,7 +387,11 @@ class Console:
                         if active_stream_type == "text":
                             self.console.print()
                         if active_stream_type != "reasoning":
-                            self.console.print(f"\n[thinking]💭 {self.agent.name} thinking...[/thinking]\n", end="", style="")
+                            self.console.print(
+                                f"\n[thinking]💭 {self.agent.name} thinking...[/thinking]\n",
+                                end="",
+                                style="",
+                            )
                             active_stream_type = "reasoning"
                         self.console.print(chunk.text, end="", style="thinking")
                         if hasattr(self.console.file, "flush"):
@@ -384,6 +401,7 @@ class Console:
                     elif isinstance(chunk, CompletionEvent):
                         if hasattr(chunk, "content"):
                             from ravi.kernel.core.content import content_blocks_to_str
+
                             final_message = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
                         if active_stream_type is not None:
                             self.console.print()
@@ -411,8 +429,12 @@ class Console:
 
                         if not live:
                             live = Live(
-                                Panel(Markdown(""), title=f"[agent]🤖 {self.agent.name}[/agent]",
-                                      border_style="cyan", padding=(1, 2)),
+                                Panel(
+                                    Markdown(""),
+                                    title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                    border_style="cyan",
+                                    padding=(1, 2),
+                                ),
                                 console=self.console,
                                 auto_refresh=False,
                             )
@@ -438,8 +460,12 @@ class Console:
 
                         if not live:
                             live = Live(
-                                Panel("", title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
-                                      border_style="dim", padding=(1, 2)),
+                                Panel(
+                                    "",
+                                    title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                    border_style="dim",
+                                    padding=(1, 2),
+                                ),
                                 console=self.console,
                                 auto_refresh=False,
                             )
@@ -456,6 +482,7 @@ class Console:
                     elif isinstance(chunk, CompletionEvent):
                         if hasattr(chunk, "content"):
                             from ravi.kernel.core.content import content_blocks_to_str
+
                             final_message = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
                         if live:
                             if text_stream_active:
@@ -464,9 +491,12 @@ class Console:
                                 if refresh_task:
                                     await refresh_task
                                 live.update(
-                                    Panel(Markdown("".join(text_buffer)),
-                                          title=f"[agent]🤖 {self.agent.name}[/agent]",
-                                          border_style="cyan", padding=(1, 2))
+                                    Panel(
+                                        Markdown("".join(text_buffer)),
+                                        title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                        border_style="cyan",
+                                        padding=(1, 2),
+                                    )
                                 )
                             elif reasoning_stream_active:
                                 reasoning_stream_active = False
@@ -474,9 +504,12 @@ class Console:
                                 if refresh_task:
                                     await refresh_task
                                 live.update(
-                                    Panel("".join(reasoning_buffer),
-                                          title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
-                                          border_style="dim", padding=(1, 2))
+                                    Panel(
+                                        "".join(reasoning_buffer),
+                                        title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                        border_style="dim",
+                                        padding=(1, 2),
+                                    )
                                 )
                             live.stop()
                             live = None
@@ -491,9 +524,12 @@ class Console:
                                     if refresh_task:
                                         await refresh_task
                                     live.update(
-                                        Panel(Markdown("".join(text_buffer)),
-                                              title=f"[agent]🤖 {self.agent.name}[/agent]",
-                                              border_style="cyan", padding=(1, 2))
+                                        Panel(
+                                            Markdown("".join(text_buffer)),
+                                            title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                            border_style="cyan",
+                                            padding=(1, 2),
+                                        )
                                     )
                                 elif reasoning_stream_active:
                                     reasoning_stream_active = False
@@ -501,9 +537,12 @@ class Console:
                                     if refresh_task:
                                         await refresh_task
                                     live.update(
-                                        Panel("".join(reasoning_buffer),
-                                              title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
-                                              border_style="dim", padding=(1, 2))
+                                        Panel(
+                                            "".join(reasoning_buffer),
+                                            title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                            border_style="dim",
+                                            padding=(1, 2),
+                                        )
                                     )
                                 live.stop()
                                 live = None
@@ -527,15 +566,21 @@ class Console:
                 try:
                     if text_buffer:
                         live.update(
-                            Panel(Markdown("".join(text_buffer)),
-                                  title=f"[agent]🤖 {self.agent.name}[/agent]",
-                                  border_style="cyan", padding=(1, 2))
+                            Panel(
+                                Markdown("".join(text_buffer)),
+                                title=f"[agent]🤖 {self.agent.name}[/agent]",
+                                border_style="cyan",
+                                padding=(1, 2),
+                            )
                         )
                     elif reasoning_buffer:
                         live.update(
-                            Panel("".join(reasoning_buffer),
-                                  title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
-                                  border_style="dim", padding=(1, 2))
+                            Panel(
+                                "".join(reasoning_buffer),
+                                title=f"[thinking]💭 {self.agent.name} thinking...[/thinking]",
+                                border_style="dim",
+                                padding=(1, 2),
+                            )
                         )
                 except Exception:
                     pass
@@ -620,7 +665,9 @@ class Console:
         )
 
         skill_summary = (
-            f"[bold]{skill_count} skills available[/bold]" if skill_count else "no skills"
+            f"[bold]{skill_count} skills available[/bold]"
+            if skill_count
+            else "no skills"
         )
         if active_count:
             skill_summary += f" ([skill]{active_count} active[/skill])"
@@ -648,7 +695,9 @@ class Console:
                 self.console.print("👋 Bye!", style="info")
                 break
             if stripped.lower() == "/reset":
-                if hasattr(self.agent, "_context") and hasattr(self.agent._context, "history"):
+                if hasattr(self.agent, "_context") and hasattr(
+                    self.agent._context, "history"
+                ):
                     await self.agent._context.history.clear(
                         self.agent.id, session_id=self._correlation_id
                     )
@@ -665,7 +714,9 @@ class Console:
                 continue
 
             before = (
-                set(self._skill_manager._active.keys()) if self._skill_manager else set()
+                set(self._skill_manager._active.keys())
+                if self._skill_manager
+                else set()
             )
 
             try:
@@ -677,7 +728,9 @@ class Console:
                 self.console.print(f"[error]Error: {exc}[/error]")
 
             after = (
-                set(self._skill_manager._active.keys()) if self._skill_manager else set()
+                set(self._skill_manager._active.keys())
+                if self._skill_manager
+                else set()
             )
             newly_activated = after - before
             if newly_activated:
@@ -703,13 +756,15 @@ class Console:
             if not hasattr(self, "_prompt_session"):
                 commands = ["/tools", "/skills", "/reset", "/help", "/q"]
                 completer = _ConsoleCompleter(commands)
-                style = Style.from_dict({
-                    "prompt": "fg:#4e9a06 bold",
-                    "completion-menu.completion": "bg:#2c2c2c fg:#cccccc",
-                    "completion-menu.completion.current": "bg:#00a0a0 fg:#ffffff bold",
-                    "scrollbar.background": "bg:#1e1e1e",
-                    "scrollbar.button": "bg:#00a0a0",
-                })
+                style = Style.from_dict(
+                    {
+                        "prompt": "fg:#4e9a06 bold",
+                        "completion-menu.completion": "bg:#2c2c2c fg:#cccccc",
+                        "completion-menu.completion.current": "bg:#00a0a0 fg:#ffffff bold",
+                        "scrollbar.background": "bg:#1e1e1e",
+                        "scrollbar.button": "bg:#00a0a0",
+                    }
+                )
                 self._prompt_session = PromptSession(
                     completer=completer,
                     style=style,

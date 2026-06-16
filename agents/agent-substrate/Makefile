@@ -36,22 +36,22 @@ start-reload:
 	uv run start --reload
 
 infra-up:
-	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime up -d postgres redis minio loki promtail tempo grafana mcp-server
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --remove-orphans postgres redis minio loki promtail tempo grafana mcp-server
 
 infra-down:
-	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime stop postgres redis minio loki promtail tempo grafana mcp-server
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime stop postgres redis minio loki promtail tempo grafana mcp-server
 
 docker-up:
-	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime up -d --build backend postgres redis minio loki promtail tempo grafana mcp-server
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml --profile runtime up -d --build --remove-orphans backend postgres redis minio loki promtail tempo grafana mcp-server
 
 docker-down:
-	docker compose -f ./deployment/docker/docker-compose.yml down --remove-orphans
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml down --remove-orphans
 
 observability-up:
-	docker compose -f ./deployment/docker/docker-compose.yml up -d tempo grafana
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml up -d tempo grafana
 
 observability-down:
-	docker compose -f ./deployment/docker/docker-compose.yml stop tempo grafana
+	docker compose --env-file .env -f ./deployment/docker/docker-compose.yml stop tempo grafana
 
 sync:
 	uv python install $(PYTHON_VERSION)

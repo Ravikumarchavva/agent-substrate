@@ -125,7 +125,9 @@ async def test_runner_with_mock_judge_populates_scores(monkeypatch):
         EvalScore(criterion="correctness", score=0.9, passed=True, reasoning="good")
     ]
 
-    async def mock_score(*, input_text, actual_output, expected_output=None, context=None):
+    async def mock_score(
+        *, input_text, actual_output, expected_output=None, context=None
+    ):
         return mock_scores
 
     judge = LLMJudge.__new__(LLMJudge)

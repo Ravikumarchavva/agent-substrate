@@ -1,32 +1,30 @@
-"""Production FastAPI application for the chat server.
-
-Replaces the old ``main.py`` with proper:
-  - Database lifecycle (init / shutdown)
-  - OpenTelemetry setup
-  - Router mounting
-  - CORS middleware
-  - Health endpoint
-  - HITL bridge (tool approval + human input via SSE)
-"""
+"""Production FastAPI application for the chat server."""
 
 from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
 
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from ravi.config import settings
-from ravi.serving.shared.observability.telemetry import (
-    configure_opentelemetry,
-    shutdown_opentelemetry,
+from ravi.infrastructure.serving_factory import (
+    Infrastructure,
+    LLMClients,
+    RuntimeServices,
+    ToolboxResult,
+    init_infrastructure,
+    init_llm_clients,
+    init_runtime_services,
+    init_tool_registry,
+    resume_pending_runs,
 )
-from ravi.serving.monolith.database import close_db, init_db
+from ravi.serving.monolith.database import init_db
 from ravi.serving.monolith.dependencies import ServerDependencies
 from ravi.serving.monolith.routes.admin import router as admin_router
+from ravi.serving.monolith.routes.audio import router as audio_router
 from ravi.serving.monolith.routes.auth import router as auth_router
 from ravi.serving.monolith.routes.cancel import router as cancel_router
 from ravi.serving.monolith.routes.chat import router as chat_router
@@ -34,50 +32,44 @@ from ravi.serving.monolith.routes.code_interpreter import (
     router as code_interpreter_router,
 )
 from ravi.serving.monolith.routes.feedback import router as feedback_router
-from ravi.serving.monolith.routes.audio import router as audio_router
+from ravi.serving.monolith.routes.files import router as files_router
 from ravi.serving.monolith.routes.hitl import router as hitl_router
 from ravi.serving.monolith.routes.mcp_apps import router as mcp_apps_router
-from ravi.serving.monolith.routes.spotify_oauth import router as spotify_oauth_router
-from ravi.serving.monolith.routes.workspace_oauth import (
-    router as workspace_oauth_router,
-)
 from ravi.serving.monolith.routes.pipelines import router as pipelines_router
+from ravi.serving.monolith.routes.rag import router as rag_router
+from ravi.serving.monolith.routes.spotify_oauth import router as spotify_oauth_router
 from ravi.serving.monolith.routes.tasks import router as tasks_router
 from ravi.serving.monolith.routes.threads import router as threads_router
 from ravi.serving.monolith.routes.triggers import router as triggers_router
-from ravi.serving.monolith.routes.rag import router as rag_router
-from ravi.serving.monolith.routes.files import router as files_router
-from ravi.serving.monolith._lifespan import (
-    init_infrastructure,
-    init_llm_clients,
-    init_runtime_services,
-    init_tool_registry,
-    resume_pending_runs,
+from ravi.serving.monolith.routes.workspace_oauth import (
+    router as workspace_oauth_router,
 )
-
+from ravi.serving.shared.observability.telemetry import (
+    configure_opentelemetry,
+    shutdown_opentelemetry,
+)
 from ravi.logger import setup_logging
 
 logger = setup_logging()
-
-# ── Lifespan ─────────────────────────────────────────────────────────────────
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
 
-    # ---------- STARTUP ----------
     # Observability
     configure_opentelemetry(
         service_name="agent-framework",
         otlp_trace_endpoint=settings.OTLP_ENDPOINT,
     )
 
-    # Database
-    await init_db(settings.DATABASE_URL, echo=False)
+    # Database — returns (engine, session_factory), no module globals
+    engine, session_factory = await init_db(settings.DATABASE_URL, echo=False)
+    app.state.engine = engine
+    app.state.session_factory = session_factory
 
     # LLM clients
-    llm = init_llm_clients(settings)
+    llm: LLMClients = init_llm_clients(settings)
     app.state.model_client = llm.model_client
     app.state.model_client_kwargs = llm.model_client_kwargs
     app.state.chat_model = llm.chat_model
@@ -85,12 +77,16 @@ async def lifespan(app: FastAPI):
     app.state.embedding_client = llm.embedding_client
 
     # Infrastructure (Redis, runtime, file store, vector store, RAG, data store)
-    infra = await init_infrastructure(settings, llm.embedding_client)
+    infra: Infrastructure = await init_infrastructure(
+        settings,
+        llm.embedding_client,
+        engine=engine,
+        session_factory=session_factory,
+    )
     app.state.history = infra.history
     app.state.redis_client = infra.redis_client
     app.state.runtime = infra.runtime
     app.state.runtime_stack = infra.runtime_stack
-    app.state.session_factory = infra.session_factory
     app.state.vector_store = infra.vector_store
     app.state.rag_pipeline = infra.rag_pipeline
     app.state.data_store = infra.data_store
@@ -98,13 +94,12 @@ async def lifespan(app: FastAPI):
     app.state.skill_manager = infra.skill_manager
     app.state.file_store = infra.file_store
 
-    # JWT secret for shared auth middleware
     app.state.jwt_secret = settings.JWT_SECRET
 
     # Tool registry
-    tools = await init_tool_registry(
+    tools: ToolboxResult = await init_tool_registry(
         settings,
-        session_factory=infra.session_factory,
+        session_factory=session_factory,
         bridge_registry=infra.bridge_registry,
         redis_client=infra.redis_client,
     )
@@ -112,9 +107,9 @@ async def lifespan(app: FastAPI):
     app.state.task_tool = tools.task_tool
     app.state.ci_client = tools.ci_client
     app.state.tools_requiring_approval = tools.tools_requiring_approval
-    app.state.tool_timeout = 300.0  # match HITL bridge timeout
+    app.state.tool_timeout = 300.0
 
-    # Cold resume — rebuild agents for runs orphaned by a previous process crash.
+    # Cold resume — rebuild agents for runs orphaned by a previous process crash
     resumed = await resume_pending_runs(
         infra.runtime,
         registry=tools.registry,
@@ -128,20 +123,15 @@ async def lifespan(app: FastAPI):
     )
     app.state.system_instructions = _prompt_path.read_text(encoding="utf-8").strip()
 
-    # Cancel registry: maps thread_id → asyncio.Event so running streams can
-    # be aborted from the POST /chat/{thread_id}/cancel endpoint.
-    app.state.cancel_registry = {}  # dict[str, asyncio.Event]
-
-    # MCP server registry: maps server_id → RegistryMcpServer dict.
-    # Populated at runtime via POST /builder/mcp-servers (in-memory, not persisted).
-    app.state.mcp_servers = {}  # dict[str, dict]
+    app.state.cancel_registry = {}
+    app.state.mcp_servers = {}
 
     # Runtime services (chains, pipelines, workflows, triggers)
-    rt = await init_runtime_services(
+    rt: RuntimeServices = await init_runtime_services(
         settings,
         registry=tools.registry,
         data_store=infra.data_store,
-        session_factory=infra.session_factory,
+        session_factory=session_factory,
         runtime=infra.runtime,
         tools_requiring_approval=tools.tools_requiring_approval,
         tool_timeout=app.state.tool_timeout,
@@ -154,7 +144,6 @@ async def lifespan(app: FastAPI):
     app.state.webhook_registry = rt.webhook_registry
     app.state.condition_monitor = rt.condition_monitor
 
-    # Typed context — new code should prefer app.state.ctx over individual attrs.
     app.state.ctx = ServerDependencies(
         model_client=app.state.model_client,
         model_client_kwargs=app.state.model_client_kwargs,
@@ -173,15 +162,12 @@ async def lifespan(app: FastAPI):
         file_store=app.state.file_store,
     )
 
-    # Quiet noisy loggers
     for name in ("httpx", "urllib3", "openai"):
         setup_logging().setLevel(logging.WARNING)
 
     yield
 
-    # ---------- SHUTDOWN ----------
-    # Durable runtime owns a Postgres pool + Redis client via an AsyncExitStack
-    # (which also stops the runtime); the in-memory runtime is stopped directly.
+    # Shutdown
     if getattr(app.state, "runtime_stack", None):
         await app.state.runtime_stack.aclose()
     elif getattr(app.state, "runtime", None):
@@ -206,11 +192,8 @@ async def lifespan(app: FastAPI):
                 await tool.stop()  # type: ignore[union-attr]
             except Exception:
                 pass
-    await close_db()
+    await app.state.engine.dispose()
     shutdown_opentelemetry()
-
-
-# ── App factory ──────────────────────────────────────────────────────────────
 
 
 def create_app() -> FastAPI:
@@ -221,7 +204,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS — origins from settings; in production set CORS_ALLOWED_ORIGINS in .env
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ALLOWED_ORIGINS,
@@ -230,7 +212,6 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Mount routers
     app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(threads_router)
@@ -249,21 +230,16 @@ def create_app() -> FastAPI:
     app.include_router(rag_router)
     app.include_router(files_router)
 
-    # Health check
     @app.get("/health", tags=["infra"])
     async def health():
         return {"status": "ok"}
 
-    # Instrument with OpenTelemetry
     FastAPIInstrumentor.instrument_app(app)
 
     return app
 
 
-# ── Module-level app (for `uvicorn server.app:app`) ──────────────────────────
-
 app = create_app()
-
 
 if __name__ == "__main__":
     import uvicorn

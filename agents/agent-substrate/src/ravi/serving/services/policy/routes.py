@@ -93,7 +93,6 @@ async def get_role(
     return {"user_id": user_id, "role": role, "workspace_id": workspace_id}
 
 
-
 @router.post("/rules", status_code=201)
 async def create_rule(
     body: PolicyRuleCreate,

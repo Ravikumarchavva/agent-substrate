@@ -6,7 +6,11 @@ from ravi.logger import setup_logging
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ravi.agents.runtime import Runtime
+    from ravi.integrations.events.redis_event_bus import EventBus
 
 logger = setup_logging()
 
@@ -53,36 +57,57 @@ class ConditionMonitor:
     via Temporal.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, runtime: Runtime | None = None) -> None:
         self._conditions: dict[str, ConditionDef] = {}
-        self._temporal: Any = None
-        self._event_bus: Any = None
-        self._task: asyncio.Task[None] | None = None
+        self._event_bus: EventBus | None = None
+        self._runtime = runtime
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._running: bool = False
 
-    def set_temporal(self, temporal: Any) -> None:
-        self._temporal = temporal
-
-    def set_event_bus(self, bus: Any) -> None:
+    def set_event_bus(self, bus: EventBus) -> None:
         self._event_bus = bus
 
+    def set_runtime(self, runtime: Runtime) -> None:
+        """Inject active Runtime for trigger dispatch."""
+        self._runtime = runtime
+
     async def start(self) -> None:
-        """Start the background monitoring task."""
+        """Start the background monitoring tasks for registered conditions."""
         if self._event_bus is None:
             logger.warning("ConditionMonitor: no EventBus configured, skipping start")
             return
 
-        self._task = asyncio.create_task(self._monitor_loop())
+        try:
+            await self._event_bus.connect()
+        except Exception as exc:
+            logger.error("ConditionMonitor failed to connect to EventBus: %s", exc)
+            return
+
+        self._running = True
+        # Start subscription task for each unique event type in conditions
+        event_types = {c.event_type for c in self._conditions.values()}
+        for et in event_types:
+            await self._start_monitoring(et)
         logger.info("ConditionMonitor started")
 
     async def stop(self) -> None:
-        """Stop the monitoring task."""
-        if self._task is not None:
-            self._task.cancel()
+        """Stop all background monitoring tasks and disconnect EventBus."""
+        self._running = False
+        for task in self._tasks.values():
+            task.cancel()
             try:
-                await self._task
+                await task
             except asyncio.CancelledError:
                 pass
-            logger.info("ConditionMonitor stopped")
+        self._tasks.clear()
+
+        if self._event_bus is not None:
+            try:
+                await self._event_bus.disconnect()
+            except Exception as exc:
+                logger.warning("ConditionMonitor failed to disconnect EventBus: %s", exc)
+
+        logger.info("ConditionMonitor stopped")
 
     async def add_condition(self, condition: ConditionDef) -> None:
         """Register a new condition trigger."""
@@ -90,6 +115,8 @@ class ConditionMonitor:
         logger.info(
             "Added condition '%s' (event_type=%s)", condition.name, condition.event_type
         )
+        if self._running and self._event_bus is not None:
+            await self._start_monitoring(condition.event_type)
 
     async def remove_condition(self, name: str) -> bool:
         """Remove a condition by name."""
@@ -97,30 +124,42 @@ class ConditionMonitor:
             return False
         del self._conditions[name]
         logger.info("Removed condition '%s'", name)
+        # Note: we keep the subscription loop running even if last condition is removed,
+        # to simplify lifecycle management.
         return True
 
     def list_conditions(self) -> list[ConditionDef]:
         """Return all registered conditions."""
         return list(self._conditions.values())
 
-    async def _monitor_loop(self) -> None:
-        """Subscribe to EventBus and check events against conditions."""
-        channel = "agent-framework:events"
+    async def _start_monitoring(self, event_type: str) -> None:
+        """Spawn a subscription loop for a specific event type if not already monitoring."""
+        if event_type in self._tasks:
+            return
+        self._tasks[event_type] = asyncio.create_task(
+            self._monitor_event_type_loop(event_type)
+        )
 
+    async def _monitor_event_type_loop(self, event_type: str) -> None:
+        """Subscribe to specific event_type stream and match conditions."""
         try:
-            async for event in self._event_bus.subscribe(channel):
-                if not isinstance(event, dict):
-                    continue
-
-                for condition in self._conditions.values():
-                    if not condition.enabled:
+            async for envelope in self._event_bus.subscribe(
+                event_type, "condition-monitor"
+            ):
+                event_dict = {
+                    "type": envelope.event_type,
+                    "data": envelope.payload,
+                }
+                # Create a snapshot copy of conditions to avoid dict mutation during iteration
+                for condition in list(self._conditions.values()):
+                    if not condition.enabled or condition.event_type != event_type:
                         continue
-                    if condition.matches(event):
-                        await self._dispatch(condition, event)
+                    if condition.matches(event_dict):
+                        await self._dispatch(condition, event_dict)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("ConditionMonitor loop error")
+            logger.exception("ConditionMonitor loop error for event type %s", event_type)
 
     async def _dispatch(self, condition: ConditionDef, event: dict[str, Any]) -> None:
         """Dispatch a workflow when condition is met."""
@@ -132,21 +171,33 @@ class ConditionMonitor:
             condition.target_name,
         )
 
-        if self._temporal is None:
-            logger.error("No TemporalClient for condition '%s'", condition.name)
-            return
+        if self._runtime is not None:
+            from ravi.kernel.core.identity import AgentId
+            from ravi.kernel.messaging.message import Message, DataPayload
 
-        try:
-            params = {**condition.target_params, "trigger_event": event}
-            if condition.target_type == "pipeline":
-                await self._temporal.start_pipeline_workflow(
-                    condition.target_name,
-                    params.get("definition", {}),
+            combined_params = {**condition.target_params, "event": event}
+            agent_id = AgentId(type=condition.target_type, key=condition.target_name)
+            msg = Message(
+                target=agent_id,
+                payload=DataPayload(data=combined_params),
+            )
+            try:
+                run_id = await self._runtime.submit(agent_id, msg)
+                logger.info(
+                    "Condition '%s' submitted run %s to native runtime for %s",
+                    condition.name,
+                    run_id,
+                    agent_id,
                 )
-            elif condition.target_type == "chain":
-                await self._temporal.start_chain_workflow(
-                    params.get("code", ""),
-                    params.get("description", ""),
+            except Exception as exc:
+                logger.error(
+                    "Condition '%s' failed to submit run for %s: %s",
+                    condition.name,
+                    agent_id,
+                    exc,
                 )
-        except Exception:
-            logger.exception("Condition dispatch failed for '%s'", condition.name)
+        else:
+            logger.warning(
+                "Condition '%s' triggered, but Temporal is deprecated. Native runtime execution is not configured.",
+                condition.name,
+            )

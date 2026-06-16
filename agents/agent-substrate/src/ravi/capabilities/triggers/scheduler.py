@@ -5,7 +5,11 @@ from ravi.logger import setup_logging
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from apscheduler import AsyncScheduler
+    from ravi.agents.runtime import Runtime
 
 logger = setup_logging()
 
@@ -49,15 +53,19 @@ class TriggerScheduler:
     Manages cron and interval triggers that fire pipelines/chains via Temporal.
     """
 
-    def __init__(self, redis_url: str = "redis://localhost:6379/0") -> None:
+    def __init__(
+        self,
+        redis_url: str = "redis://localhost:6379/0",
+        runtime: Runtime | None = None,
+    ) -> None:
         self._redis_url = redis_url
         self._triggers: dict[str, TriggerDef] = {}
-        self._scheduler: Any = None
-        self._temporal: Any = None  # TemporalClient, set via set_temporal()
+        self._scheduler: AsyncScheduler | None = None
+        self._runtime = runtime
 
-    def set_temporal(self, temporal: Any) -> None:
-        """Inject the TemporalClient for workflow dispatch."""
-        self._temporal = temporal
+    def set_runtime(self, runtime: Runtime) -> None:
+        """Inject active Runtime for trigger dispatch."""
+        self._runtime = runtime
 
     async def start(self) -> None:
         """Start the APScheduler background scheduler."""
@@ -135,26 +143,32 @@ class TriggerScheduler:
             trigger.target_name,
         )
 
-        if self._temporal is None:
-            logger.error(
-                "No TemporalClient — cannot dispatch workflow for trigger '%s'",
-                trigger_name,
-            )
-            return
+        if self._runtime is not None:
+            from ravi.kernel.core.identity import AgentId
+            from ravi.kernel.messaging.message import Message, DataPayload
 
-        try:
-            if trigger.target_type == "pipeline":
-                await self._temporal.start_pipeline_workflow(
-                    trigger.target_name,
-                    trigger.target_params.get("definition", {}),
+            agent_id = AgentId(type=trigger.target_type, key=trigger.target_name)
+            msg = Message(
+                target=agent_id,
+                payload=DataPayload(data=trigger.target_params),
+            )
+            try:
+                run_id = await self._runtime.submit(agent_id, msg)
+                logger.info(
+                    "Trigger '%s' submitted run %s to native runtime for %s",
+                    trigger_name,
+                    run_id,
+                    agent_id,
                 )
-            elif trigger.target_type == "chain":
-                await self._temporal.start_chain_workflow(
-                    trigger.target_params.get("code", ""),
-                    trigger.target_params.get("description", ""),
-                    timeout=trigger.target_params.get("timeout", 120),
+            except Exception as exc:
+                logger.error(
+                    "Trigger '%s' failed to submit run for %s: %s",
+                    trigger_name,
+                    agent_id,
+                    exc,
                 )
-        except Exception:
-            logger.exception(
-                "Failed to dispatch workflow for trigger '%s'", trigger_name
+        else:
+            logger.warning(
+                "Trigger '%s' fired, but Temporal is deprecated. Native runtime execution is not configured.",
+                trigger_name,
             )

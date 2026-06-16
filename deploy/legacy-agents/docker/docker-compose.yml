@@ -66,9 +66,6 @@ services:
       CHAT_MODEL: ${CHAT_MODEL:-groq/llama-3.3-70b-versatile}
       TTS_MODEL: ${TTS_MODEL:-google/gemini-3.1-flash-tts-preview}
       TTS_VOICE: ${TTS_VOICE:-Kore}
-      RESTATE_INGRESS_URL: ${RESTATE_INGRESS_URL:-http://restate:8080}
-      RESTATE_ADMIN_URL: ${RESTATE_ADMIN_URL:-http://restate:9070}
-      NATS_URL: ${NATS_URL:-nats://nats:4222}
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     depends_on:
@@ -190,132 +187,9 @@ services:
     # profiles:
     #   - storage
 
-  # ── Kafka (KRaft mode, no Zookeeper) ──────────────────────────────────
-  # Two listeners:
-  #   PLAINTEXT_INTERNAL  kafka:29092  — services inside Docker network
-  #   PLAINTEXT_EXTERNAL  localhost:9092 — backend on host (dev)
-  # Set KAFKA_BOOTSTRAP_SERVERS=localhost:9092 in .env for local dev.
-  kafka:
-    image: apache/kafka:3.9.0
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_LISTENERS: PLAINTEXT_INTERNAL://:29092,PLAINTEXT_EXTERNAL://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT_INTERNAL://kafka:29092,PLAINTEXT_EXTERNAL://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,PLAINTEXT_EXTERNAL:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
-    volumes:
-      - kafkadata:/var/lib/kafka/data
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-    # profiles:
-    #   - events
-
-  # ── Kafka UI (web console for Kafka) ──────────────────────────────────
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    ports:
-      - "8080:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-    depends_on:
-      kafka:
-        condition: service_healthy
-    restart: unless-stopped
-    # profiles:
-    #   - events
-
-  # ── Temporal (durable workflow engine) ────────────────────────────────
-  temporal:
-    image: temporalio/auto-setup:latest
-    ports:
-      - "7233:7233"   # gRPC frontend
-    environment:
-      - DB=postgresql
-      - DB_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PWD=postgres
-      - POSTGRES_SEEDS=postgres
-      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - temporaldata:/tmp/temporal
-    profiles:
-      - temporal
-    restart: unless-stopped
-
-  temporal-ui:
-    image: temporalio/ui:latest
-    ports:
-      - "8088:8080"
-    environment:
-      - TEMPORAL_ADDRESS=temporal:7233
-    depends_on:
-      - temporal
-    profiles:
-      - temporal
-    restart: unless-stopped
-
-  # ── Restate (durable workflow engine — runtime backend) ────────────────
-  restate:
-    image: docker.io/restatedev/restate:latest
-    ports:
-      - "8080:8080"
-      - "9070:9070"
-      - "9071:9071"
-    volumes:
-      - restatedata:/target/restate-data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9070/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    profiles:
-      - runtime
-    restart: unless-stopped
-
-  # ── NATS (JetStream for event streaming — runtime backend) ────────────
-  nats:
-    image: nats:2.10-alpine
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["--jetstream", "--store_dir=/data", "-m", "8222"]
-    volumes:
-      - natsdata:/data
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    profiles:
-      - runtime
-    restart: unless-stopped
-
 volumes:
   pgdata18:
   redisdata:
   lokidata:
   promtaildata:
   miniodata:
-  kafkadata:
-  temporaldata:
-  restatedata:
-  natsdata:

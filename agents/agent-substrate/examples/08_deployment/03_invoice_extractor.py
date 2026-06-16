@@ -4,7 +4,7 @@ Demonstrates InvoiceExtractorTool for extracting text and tables from invoice fi
 (PDF, TIF, PNG, JPG). Sections cover:
 
   1. Tool setup and direct file extraction
-  2. AssistantAgent integration with structured output
+  2. ReActAgent integration with structured output
   3. Batch extraction with asyncio.gather
   4. Error handling — missing file, unsupported format, out-of-range page
 
@@ -22,10 +22,10 @@ from pathlib import Path
 
 from ravi.capabilities.tools.invoice_extractor.tool import InvoiceExtractorTool
 from ravi.config import settings
-from ravi.agents.reasoning.agents.assistant import AssistantAgent
-from ravi.adapters.llm.factory import create_model_client
+from ravi.agents.core import ReActAgent
+from ravi.integrations.llm.factory import create_model_client
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.memory.unbounded import UnboundedMemory
+from ravi.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: none required for direct tool calls.
 #   For the agent sections, set OPENAI_API_KEY (or another provider key).
@@ -91,8 +91,8 @@ async def section_1_direct_extraction(tool: InvoiceExtractorTool) -> None:
 
 
 async def section_2_agent_extraction(tool: InvoiceExtractorTool) -> None:
-    """Section 2 — AssistantAgent with InvoiceExtractorTool and structured output."""
-    print("=== Section 2: AssistantAgent extraction ===")
+    """Section 2 — ReActAgent with InvoiceExtractorTool and structured output."""
+    print("=== Section 2: ReActAgent extraction ===")
 
     api_keys = {
         "openai": settings.OPENAI_API_KEY,
@@ -127,10 +127,10 @@ async def section_2_agent_extraction(tool: InvoiceExtractorTool) -> None:
         "primary",
         create_model_client(settings.CHAT_MODEL, api_keys=api_keys),
     )
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     catalog.register_tool(tool)
 
-    agent = AssistantAgent(
+    agent = ReActAgent(
         name="InvoiceAgent",
         description="Extracts structured data from invoice files.",
         catalog=catalog,

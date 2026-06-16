@@ -14,9 +14,6 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from ravi.logger import setup_logging
-
-logger = setup_logging()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +54,10 @@ from ravi.serving.monolith._lifespan import (
     init_tool_registry,
     resume_pending_runs,
 )
+
+from ravi.logger import setup_logging
+
+logger = setup_logging()
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 

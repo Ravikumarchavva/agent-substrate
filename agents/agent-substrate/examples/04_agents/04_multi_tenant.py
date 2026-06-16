@@ -6,7 +6,7 @@ another, even when they run in the same event loop.
 
 Key design:
   - One UnboundedMemory (or RedisMemory) instance per user session.
-  - One AssistantAgent instance per session, constructed from a separate catalog.
+  - One ReActAgent instance per session, constructed from a separate catalog.
   - asyncio.gather() for concurrency — Python's event loop interleaves them.
   - No shared mutable state between agent instances.
 
@@ -15,18 +15,18 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from ravi.agents.reasoning.agents.assistant import AssistantAgent
+from ravi.agents.core import ReActAgent
 from ravi.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.memory.unbounded import UnboundedMemory
+from ravi.agents.context import InMemoryHistoryProvider
 
 # Infrastructure:
 # - OPENAI_API_KEY environment variable required
 # - For persistent, cross-process isolation use RedisMemory (see Section 4)
 
 
-def _make_agent(user_id: str) -> AssistantAgent:
+def _make_agent(user_id: str) -> ReActAgent:
     """Create a fully isolated agent for one user session."""
     from ravi.config import settings
 
@@ -36,11 +36,11 @@ def _make_agent(user_id: str) -> AssistantAgent:
     catalog.register_model(
         "primary", OpenAIClient(model=model_name, api_key=settings.OPENAI_API_KEY)
     )
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     for t in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(t)
 
-    return AssistantAgent(
+    return ReActAgent(
         name=f"agent-{user_id}",
         description="Helpful assistant",
         catalog=catalog,
@@ -119,11 +119,11 @@ async def main() -> None:
     # user/session ID and use RedisMemory for persistence across process
     # restarts:
     #
-    #   from ravi.adapters.memory.redis_memory import RedisMemory
+    #   from ravi.capabilities.history import RedisHistoryProvider
     #
     #   REDIS_URL = "redis://localhost:6379/0"
     #
-    #   def make_persistent_agent(user_id: str) -> AssistantAgent:
+    #   def make_persistent_agent(user_id: str) -> ReActAgent:
     #       catalog = AgentCatalog()
     #       catalog.register_model("primary", OpenAIClient(model="gpt-4o"))
     #       # session_id scopes all Redis keys to this user
@@ -132,7 +132,7 @@ async def main() -> None:
     #           RedisMemory(session_id=f"user:{user_id}", redis_url=REDIS_URL),
     #       )
     #       ...
-    #       return AssistantAgent(name=f"agent-{user_id}", ...)
+    #       return ReActAgent(name=f"agent-{user_id}", ...)
     #
     #   # In your FastAPI handler:
     #   async def chat(user_id: str, message: str):

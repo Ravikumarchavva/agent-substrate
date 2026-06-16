@@ -1,7 +1,7 @@
 """Social media content assistant with custom tools.
 
 Demonstrates how to define custom BaseTool subclasses and combine them with
-built-in tools (WebSearchTool) inside a AssistantAgent.  The agent researches a
+built-in tools (WebSearchTool) inside a ReActAgent.  The agent researches a
 topic, extracts hashtags, and formats a platform-specific post.
 
 Run:
@@ -14,11 +14,11 @@ import json
 import re
 from typing import ClassVar
 
-from ravi.agents.reasoning.agents.assistant import AssistantAgent
+from ravi.agents.core import ReActAgent
 from ravi.agents.tools.builtin_tools import WebSearchTool
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.memory.unbounded import UnboundedMemory
+from ravi.agents.context import InMemoryHistoryProvider
 from ravi.kernel.messages.content import TextBlock
 from ravi.kernel.messages._types import TextDeltaChunk
 from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
@@ -130,16 +130,16 @@ class FormatPostTool(BaseTool):
 # ---
 
 
-async def build_agent() -> AssistantAgent:
+async def build_agent() -> ReActAgent:
     """Construct and return the social media assistant agent."""
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o-mini"))
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     catalog.register_tool(WebSearchTool())
     catalog.register_tool(AnalyzeHashtagsTool())
     catalog.register_tool(FormatPostTool())
 
-    return AssistantAgent(
+    return ReActAgent(
         name="social-media-assistant",
         description=(
             "A social media content assistant that researches topics, "

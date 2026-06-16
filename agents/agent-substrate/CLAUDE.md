@@ -24,7 +24,7 @@ Package manager: **`uv`** (never `pip`).
 # Install dependencies (always first)
 uv sync
 
-# Start infrastructure (Postgres, Redis, MinIO, Restate, NATS, observability, MCP server)
+# Start infrastructure (Postgres, Redis, MinIO, observability, MCP server)
 make infra-up
 
 # Start monolith backend (port 8001)

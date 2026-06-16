@@ -8,6 +8,7 @@ from ravi.agents.context import (
     ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
+    CompactionPipeline,
 )
 from ravi.agents.core import ReActAgent
 from ravi.agents.runtime import Runtime
@@ -331,11 +332,12 @@ async def test_hitl_safe_tool_skips_approval():
 
 
 async def test_agent_context_config():
-    """ContextConfig(history, [strategies]) is accepted and used correctly."""
+    """ContextConfig accepts a CompactionPipeline."""
     async with Runtime() as rt:
+        pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
         ctx = ContextConfig(
             InMemoryHistoryProvider(),
-            [SlidingWindowCompaction(max_messages=10)],
+            pipeline,
         )
         agent = ReActAgent(
             "CtxBot",
@@ -345,6 +347,28 @@ async def test_agent_context_config():
         result = await run_agent(rt, agent, "hello")
         assert result["status"] == "success"
         assert result["output"] == "ok"
+
+
+async def test_agent_context_config_pipeline():
+    """ContextConfig with a CompactionPipeline chains multiple strategies in sequence."""
+    async with Runtime() as rt:
+        pipeline = CompactionPipeline([
+            SlidingWindowCompaction(max_messages=20),
+            SlidingWindowCompaction(max_messages=10),
+        ])
+        ctx = ContextConfig(
+            InMemoryHistoryProvider(),
+            pipeline,
+        )
+        assert ctx.pipeline is pipeline
+        agent = ReActAgent(
+            "PipelineBot",
+            model=MockLLMClient([[TextBlock(text="piped")]]),
+            context=ctx,
+        )
+        result = await run_agent(rt, agent, "hi")
+        assert result["status"] == "success"
+        assert result["output"] == "piped"
 
 
 async def test_tool_risk_enum_ordering():

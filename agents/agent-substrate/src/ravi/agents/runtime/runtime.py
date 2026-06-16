@@ -171,7 +171,7 @@ class Runtime:
             scheduler=self._scheduler,  # type: ignore[arg-type]
         )
         self._worker = Worker(
-            worker_id=f"worker-{uuid.uuid4().hex[:8]}",
+            worker_id=f"worker-{uuid.uuid4().hex}",
             event_log=self._event_log,  # type: ignore[arg-type]
             journal=self._journal,  # type: ignore[arg-type]
             inbox=self._inbox,  # type: ignore[arg-type]

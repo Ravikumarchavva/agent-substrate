@@ -13,7 +13,7 @@ import uuid
 
 from ravi.config import settings
 from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
 from ravi.integrations.llm import LLMFactory
 from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool
 from ravi.kernel.core.content import ChatMessage, Role, TextBlock
@@ -53,7 +53,7 @@ async def main() -> None:
         "DemoBot",
         model=model,
         tools=[CalculatorTool(), CurrentTimeTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=40)),
+        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
         max_iterations=5,
     )
 
@@ -106,7 +106,7 @@ async def main() -> None:
             "ConverterBot",
             model=model,
             tools=[CelsiusToFahrenheitTool()],
-            context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=40)),
+            context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
             max_iterations=5,
         )
         await rt.register(agent2)

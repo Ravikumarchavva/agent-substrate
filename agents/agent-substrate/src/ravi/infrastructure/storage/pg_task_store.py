@@ -238,12 +238,13 @@ def _task_to_dict(t: Task) -> dict:
 
 
 def _row_to_task_list(row: object) -> TaskList:
-    tasks_raw = row[3]  # type: ignore[index]
+    m = row._mapping  # type: ignore[union-attr]
+    tasks_raw = m["tasks"]
     tasks_data: list = json.loads(tasks_raw) if isinstance(tasks_raw, str) else (tasks_raw or [])
     return TaskList(
-        id=row[0],  # type: ignore[index]
-        conversation_id=row[1],  # type: ignore[index]
-        max_retries=row[2],  # type: ignore[index]
+        id=m["id"],
+        conversation_id=m["conversation_id"],
+        max_retries=m["max_retries"],
         tasks=[
             Task(
                 id=t["id"],

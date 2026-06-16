@@ -13,7 +13,7 @@ import uuid
 
 from ravi.capabilities.tools.human_input import AskHumanTool, HumanInputResponse
 from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
 from ravi.capabilities.tools import CalculatorTool
 from ravi.integrations.llm import LLMFactory
 from ravi.kernel.core.content import ChatMessage, Role, TextBlock
@@ -69,7 +69,7 @@ async def main() -> None:
         "hitl-assistant",
         model=model,
         tools=[ask_tool, CalculatorTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=40)),
+        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
         system_instructions=(
             "You are a helpful event-planning assistant. Whenever you need the "
             "user's preference or confirmation — such as cuisine, dietary "

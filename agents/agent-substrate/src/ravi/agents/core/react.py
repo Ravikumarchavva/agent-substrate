@@ -21,6 +21,8 @@ from ravi.kernel.tools.tools import ToolRisk
 
 from ravi.agents.context.context import ContextConfig
 from ravi.agents.resources.budget import ExecutionTracker
+from ravi.agents.hooks.manager import HookEvent, HookManager
+from ravi.agents.middleware.pipeline import MiddlewarePipeline
 from ravi.agents.core._loop import (
     deliver,
     final_text,
@@ -54,6 +56,8 @@ class ReActAgent:
         approval_handler: ApprovalHandler | None = None,
         approval_required_risk: ToolRisk | None = None,
         execution_budget: ExecutionTracker | None = None,
+        hooks: HookManager | None = None,
+        middleware: MiddlewarePipeline | None = None,
     ) -> None:
         self.id = AgentId(type="agent", key=name)
         self.name = name
@@ -75,6 +79,8 @@ class ReActAgent:
         self.approval_handler = approval_handler
         self.approval_required_risk = approval_required_risk
         self._execution_budget = execution_budget
+        self.hooks = hooks
+        self.middleware = middleware
 
     @property
     def history(self) -> HistoryProvider:
@@ -110,7 +116,11 @@ class ReActAgent:
 
         for _ in range(self._max_iterations):
             ctx.check()
+            if self.hooks:
+                await self.hooks.dispatch(HookEvent.LLM_START, {"agent_name": self.name, "run_id": ctx.run_id})
             resp = await ctx.llm(messages, options=options)
+            if self.hooks:
+                await self.hooks.dispatch(HookEvent.LLM_END, {"agent_name": self.name, "run_id": ctx.run_id, "usage": resp.usage})
 
             if self._execution_budget is not None:
                 self._execution_budget.consume(

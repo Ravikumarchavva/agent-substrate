@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from ravi.agents.runtime.context import RunContext
     from ravi.kernel.llm.llm import LLMClient
     from ravi.kernel.runtime.agent import Agent
+    from ravi.kernel.storage.history import HistoryProvider
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,10 @@ class OrchestratorAgent:
         self._system_instructions = system_instructions
         self._max_iterations = max_iterations
         self._spawn_budget = spawn_budget or SpawnBudget()
+
+    @property
+    def history(self) -> HistoryProvider:
+        return self._context.history
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import asyncio
 
-from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
 from ravi.agents.core.react import ReActAgent
 from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
 from ravi.agents.runtime import Runtime
@@ -45,8 +45,11 @@ def _model() -> OpenAIClient:
     )
 
 
-def _context() -> AgentContext:
-    return AgentContext(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20))
+def _context() -> ContextConfig:
+    return ContextConfig(
+        InMemoryHistoryProvider(),
+        pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
+    )
 
 
 def build_team(runtime: Runtime) -> OrchestratorAgent:
@@ -55,9 +58,7 @@ def build_team(runtime: Runtime) -> OrchestratorAgent:
     # ── Specialist 1: web researcher ─────────────────────────────────────────
     researcher = ReActAgent(
         "researcher",
-        runtime,
         model=model,
-        description="Searches the web for current facts and news.",
         system_instructions=(
             "You are a research specialist. Use web_search to find accurate, "
             "up-to-date information. Return a concise factual answer."
@@ -70,9 +71,7 @@ def build_team(runtime: Runtime) -> OrchestratorAgent:
     # ── Specialist 2: calculator ──────────────────────────────────────────────
     calculator = ReActAgent(
         "calculator",
-        runtime,
         model=model,
-        description="Performs precise numerical calculations.",
         system_instructions=(
             "You are a calculation specialist. Use the calculator tool for all "
             "arithmetic. Return only the computed result with brief explanation."
@@ -85,9 +84,7 @@ def build_team(runtime: Runtime) -> OrchestratorAgent:
     # ── Specialist 3: clock ───────────────────────────────────────────────────
     clock = ReActAgent(
         "clock",
-        runtime,
         model=model,
-        description="Reports the current date and time.",
         system_instructions=(
             "You are a time specialist. Use current_time to get the exact "
             "current date and time. Return it in a clear, human-readable format."
@@ -100,13 +97,11 @@ def build_team(runtime: Runtime) -> OrchestratorAgent:
     # ── Orchestrator ──────────────────────────────────────────────────────────
     return OrchestratorAgent(
         "coordinator",
-        runtime,
         model=model,
-        description="Breaks compound questions into tasks and delegates to specialists.",
         sub_agents=[
-            SubAgentConfig(researcher, priority=Priority.HIGH),
-            SubAgentConfig(calculator, priority=Priority.NORMAL),
-            SubAgentConfig(clock, priority=Priority.NORMAL),
+            SubAgentConfig(researcher, description="Searches the web for current facts and news.", priority=Priority.HIGH),
+            SubAgentConfig(calculator, description="Performs precise numerical calculations.", priority=Priority.NORMAL),
+            SubAgentConfig(clock, description="Reports the current date and time.", priority=Priority.NORMAL),
         ],
         max_iterations=12,
     )

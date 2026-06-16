@@ -8,6 +8,7 @@ from ravi.agents.context import (
     ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
+    CompactionPipeline,
 )
 from ravi.agents.core import ReActAgent
 from ravi.agents.runtime import Runtime
@@ -139,6 +140,9 @@ async def test_load_session_memory_seeds_chat_messages_without_message_envelopes
         async def clear_run(self, agent_id, *, session_id, run_id) -> None:
             self.seen_message = None
 
+        async def count_messages(self, agent_id, *, session_id) -> int:
+            return 1 if self.seen_message is not None else 0
+
     history = CapturingHistory()
 
     async def fake_steps():
@@ -176,7 +180,7 @@ async def test_standalone_session_accumulates_across_runs():
                     [TextBlock(text="You said hi earlier.")],
                 ]
             ),
-            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=20)),
+            context=ContextConfig(shared_history, pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
             max_iterations=5,
         )
 
@@ -204,7 +208,7 @@ async def test_session_isolation_across_different_sessions():
                     [TextBlock(text="Session B response.")],
                 ]
             ),
-            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=20)),
+            context=ContextConfig(shared_history, pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
             max_iterations=5,
         )
 
@@ -232,7 +236,7 @@ async def test_cross_run_memory_same_session():
                     [TextBlock(text="The answer was 42.")],
                 ]
             ),
-            context=ContextConfig(shared_history, SlidingWindowCompaction(max_messages=40)),
+            context=ContextConfig(shared_history, pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
             max_iterations=3,
         )
 

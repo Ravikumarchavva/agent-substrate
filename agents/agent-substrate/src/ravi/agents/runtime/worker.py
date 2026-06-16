@@ -177,6 +177,7 @@ class Worker:
 
         blob_store = getattr(agent, "blob_store", None)
         policy = getattr(agent, "tool_policy", None) or ChainPolicy()
+        hooks = getattr(agent, "hooks", None)
 
         req_risk = getattr(agent, "approval_required_risk", None)
         if req_risk is not None:
@@ -193,6 +194,7 @@ class Worker:
             approval_handler=approval,
             artifact_store=blob_store,
             policy=policy,
+            hooks=hooks,
         )
 
     async def _run_agent(self, lease, agent: Agent) -> None:
@@ -233,8 +235,17 @@ class Worker:
         # Drain inbox
         inbox_msgs = await self._inbox.drain(agent.id, max=100)
 
+        hooks = getattr(agent, "hooks", None)
+        middleware = getattr(agent, "middleware", None)
+        if hooks:
+            from ravi.agents.hooks.manager import HookEvent
+            await hooks.dispatch(HookEvent.RUN_START, {"agent_name": str(agent.id), "run_id": run_id})
+
         try:
-            await agent.run(ctx, inbox_msgs)
+            if middleware is not None:
+                await middleware.execute(ctx, lambda c: agent.run(c, inbox_msgs))
+            else:
+                await agent.run(ctx, inbox_msgs)
 
             # Ack all processed messages
             for msg in inbox_msgs:
@@ -303,6 +314,9 @@ class Worker:
             await self._scheduler.release(lease, status=RunStatus.FAILED)
             await self._supervisor.record_completion(run_id, RunStatus.FAILED, error=str(exc))
         finally:
+            if hooks:
+                from ravi.agents.hooks.manager import HookEvent
+                await hooks.dispatch(HookEvent.RUN_END, {"agent_name": str(agent.id), "run_id": run_id})
             self._tokens.pop(run_id, None)
             self._tasks.pop(run_id, None)
 

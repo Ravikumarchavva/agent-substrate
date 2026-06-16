@@ -1,15 +1,17 @@
 """Shared agent factory for monolith and distributed execution paths."""
 
 from __future__ import annotations
+
 from ravi.logger import setup_logging
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING
 
 from ravi.agents.context import (
     HistoryProvider,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
+    CompactionPipeline,
 )
 from ravi.kernel.llm import LLMClient
 from ravi.kernel import (
@@ -21,30 +23,32 @@ from ravi.kernel import (
 )
 from ravi.kernel.core.identity import AgentId
 
+if TYPE_CHECKING:
+    from ravi.agents.core import ReActAgent
+
 logger = setup_logging()
 
 
-class GuardrailSpec:
-    def __init__(self, input=None, output=None, tool_call=None):
-        self.input = input or []
-        self.output = output or []
-        self.tool_call = tool_call or []
+# ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
 
-    def is_empty(self) -> bool:
-        return not (self.input or self.output or self.tool_call)
+PersistedStepLoader = Callable[[], Awaitable[list[dict]]]
 
 
-PersistedStepLoader = Callable[[], Awaitable[List[Dict[str, Any]]]]
+# ---------------------------------------------------------------------------
+# Session history loading
+# ---------------------------------------------------------------------------
 
 
 async def rebuild_messages_from_steps(
-    step_rows: List[Dict[str, Any]],
+    step_rows: list[dict],
     system_instructions: str,
     *,
     include_mcp_app_context: bool = False,
-) -> List[ChatMessage]:
+) -> list[ChatMessage]:
     """Rebuild framework messages from persisted step rows using unified ChatMessage."""
-    messages: List[ChatMessage] = []
+    messages: list[ChatMessage] = []
     if system_instructions:
         messages.append(
             ChatMessage(
@@ -145,7 +149,7 @@ async def load_session_memory(
     session_id: str,
     system_instructions: str,
     load_persisted_steps: PersistedStepLoader,
-    history: Optional[HistoryProvider] = None,
+    history: HistoryProvider | None = None,
     include_mcp_app_context: bool = False,
     cold_store_name: str = "persisted store",
 ) -> HistoryProvider:
@@ -185,15 +189,7 @@ async def load_session_memory(
             )
 
     if history is not None:
-        # count_messages exists on RedisHistoryProvider but not on InMemoryHistoryProvider.
-        # Fall back to get_messages length check when the method is absent.
-        if hasattr(history, "count_messages"):
-            hit = await history.count_messages(_aid, session_id=session_id) > 0  # type: ignore[attr-defined]
-        else:
-            hit = (
-                len(await history.get_messages(_aid, session_id=session_id, limit=1))
-                > 0
-            )
+        hit = await history.count_messages(_aid, session_id=session_id) > 0
 
         if hit:
             logger.debug("History hit for %s", session_id)
@@ -210,12 +206,17 @@ async def load_session_memory(
     return fallback
 
 
+# ---------------------------------------------------------------------------
+# Agent construction
+# ---------------------------------------------------------------------------
+
+
 def rebuild_agent(
     spec: dict,
     *,
     model_client: LLMClient,
-    tools: Optional[List[Tool]] = None,
-) -> Any:
+    tools: list[Tool] | None = None,
+) -> ReActAgent:
     """Reconstruct an agent from a persisted spec (used for cold resume).
 
     The spec is the dict saved at submit time:
@@ -236,7 +237,7 @@ def rebuild_agent(
 
     ctx = ContextConfig(
         InMemoryHistoryProvider(),
-        SlidingWindowCompaction(max_messages=model_context_window),
+        pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)]),
     )
 
     toolbox = Toolbox()
@@ -244,7 +245,7 @@ def rebuild_agent(
         toolbox.add(t)
 
     return ReActAgent(
-        f"assistant-{session_id[:8]}",
+        f"assistant-{session_id}",
         model=model_client,
         tools=toolbox if tools else None,
         system_instructions=system_instructions,
@@ -255,45 +256,50 @@ def rebuild_agent(
 
 def create_assistant_agent(
     *,
-    runtime: Any,
     model_client: LLMClient,
-    tools: Optional[List[Tool]] = None,
+    tools: list[Tool] | None = None,
     system_instructions: str = "",
-    memory: Optional[HistoryProvider] = None,
-    model_context: Optional[Any] = None,
+    memory: HistoryProvider | None = None,
+    model_context: CompactionPipeline | None = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
-    tool_timeout: Optional[float] = None,
+    tool_timeout: float | None = None,
     name: str = "ChatBot",
-) -> Any:
-    """Create a configured ``ReActAgent`` for the runtime."""
+) -> ReActAgent:
+    """Create a configured ``ReActAgent``.
+
+    The agent is returned unregistered — callers are responsible for calling
+    ``await runtime.register(agent)`` before submitting work.  This keeps the
+    factory free of runtime coupling and makes the construction path testable
+    without a live runtime.
+
+    Args:
+        model_client: The LLM client to drive the ReAct loop.
+        tools: Optional list of Tool instances to expose.
+        system_instructions: System prompt prepended to every conversation.
+        memory: Shared history provider; an ``InMemoryHistoryProvider`` is used
+            when ``None``.
+        model_context: Explicit compaction pipeline; if ``None`` a
+            ``CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)])`` is
+            created automatically.
+        model_context_window: Window size used when ``model_context`` is not
+            provided.
+        max_iterations: Maximum ReAct loop iterations per run.
+        tool_timeout: Per-tool execution timeout in seconds (unused internally —
+            passed through for caller convenience).
+        name: Agent name / identifier.
+    """
     from ravi.agents.core import ReActAgent
     from ravi.agents.tools.toolbox import Toolbox
-
-    # Resolve compaction: accept SlidingWindowCompaction directly or fall back
-    # to a window derived from model_context_window.
-    compaction: Optional[SlidingWindowCompaction] = None
-    if isinstance(model_context, SlidingWindowCompaction):
-        compaction = model_context
-    elif model_context is None:
-        compaction = SlidingWindowCompaction(max_messages=model_context_window)
-
     from ravi.agents.context import ContextConfig
 
-    if memory is not None:
-        ctx = ContextConfig(
-            memory,
-            compaction or SlidingWindowCompaction(max_messages=model_context_window),
-        )
-    elif compaction is not None:
-        ctx = ContextConfig(InMemoryHistoryProvider(), compaction)
-    else:
-        ctx = ContextConfig(
-            InMemoryHistoryProvider(),
-            SlidingWindowCompaction(max_messages=model_context_window),
-        )
+    pipeline = model_context or CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)])
 
-    # Build tool registry
+    ctx = ContextConfig(
+        memory if memory is not None else InMemoryHistoryProvider(),
+        pipeline=pipeline,
+    )
+
     toolbox = Toolbox()
     for t in (tools or []):
         toolbox.add(t)

@@ -54,7 +54,7 @@ class ConditionMonitor:
     """Monitors the EventBus for events matching registered conditions.
 
     When a matching event is detected, dispatches the configured workflow
-    via Temporal.
+    via native Runtime.
     """
 
     def __init__(self, runtime: Runtime | None = None) -> None:
@@ -198,6 +198,6 @@ class ConditionMonitor:
                 )
         else:
             logger.warning(
-                "Condition '%s' triggered, but Temporal is deprecated. Native runtime execution is not configured.",
+                "Condition '%s' triggered, but no Runtime is configured for dispatch.",
                 condition.name,
             )

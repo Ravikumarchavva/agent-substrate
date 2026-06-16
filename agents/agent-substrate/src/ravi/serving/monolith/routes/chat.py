@@ -749,8 +749,8 @@ async def chat(
     cancel_event: asyncio.Event = asyncio.Event()
     ctx.cancel_registry[str(body.thread_id)] = cancel_event
 
-    # Route tool events (task board etc.) to this thread's bridge.
-    current_thread_id.set(str(body.thread_id))
+    # current_thread_id is set inside sse_generator (with reset) to scope it
+    # to the streaming task and avoid leaking into the request handler scope.
 
     persister = _WirePersister(
         session_factory=ctx.session_factory,
@@ -795,6 +795,7 @@ async def chat(
         lives in `AgentStreamSession`; this only frames events for the transport
         and guarantees the thread lock is released exactly once.
         """
+        _thread_id_token = current_thread_id.set(str(body.thread_id))
         try:
             async for event in session.events():
                 yield f"data: {json.dumps(event.model_dump(mode='json'), default=str)}\n\n"
@@ -802,6 +803,7 @@ async def chat(
             logger.exception("SSE generator error for thread %s", body.thread_id)
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
         finally:
+            current_thread_id.reset(_thread_id_token)
             ctx.cancel_registry.pop(str(body.thread_id), None)
             thread_lock.release()
             ctx.thread_locks.pop(str(body.thread_id), None)

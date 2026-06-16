@@ -46,6 +46,7 @@ from ravi.kernel.tools import (
     is_provider_defined_tool,
 )
 
+from ravi.agents.hooks.manager import HookEvent, HookManager
 from ravi.logger import setup_logging
 
 logger = setup_logging("ravi.agents.tools.invoker")
@@ -82,11 +83,13 @@ class ToolInvoker:
         approval_handler: ApprovalHandler | None = None,
         artifact_store: BlobStore | None = None,
         policy: ChainPolicy | None = None,
+        hooks: HookManager | None = None,
     ) -> None:
         self._registry = registry
         self._approval = approval_handler
         self._store = artifact_store
         self._policy = policy or ChainPolicy()
+        self._hooks = hooks
 
     def open_session(self) -> InvokerSession:
         """Create a fresh per-chain session (call counter, trace, pinned refs)."""
@@ -114,6 +117,9 @@ class ToolInvoker:
         tool_name = call.name
         status: str = "ok"
 
+        if self._hooks:
+            await self._hooks.dispatch(HookEvent.TOOL_START, {"tool_name": tool_name})
+
         try:
             result = await self._invoke_inner(
                 call, session=session, ctx=ctx, progress_sink=progress_sink
@@ -129,6 +135,8 @@ class ToolInvoker:
             )
         finally:
             duration_ms = int(time.monotonic() * 1000) - start_ms
+            if self._hooks:
+                await self._hooks.dispatch(HookEvent.TOOL_END, {"tool_name": tool_name, "status": status, "duration_ms": duration_ms})
             args_digest = _digest(call.arguments)
             session._trace.append(
                 ChainCallRecord(

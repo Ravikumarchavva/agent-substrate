@@ -50,7 +50,7 @@ class TriggerDef:
 class TriggerScheduler:
     """APScheduler-based trigger scheduler with Redis job store.
 
-    Manages cron and interval triggers that fire pipelines/chains via Temporal.
+    Manages cron and interval triggers that fire pipelines/chains via native Runtime.
     """
 
     def __init__(
@@ -169,6 +169,6 @@ class TriggerScheduler:
                 )
         else:
             logger.warning(
-                "Trigger '%s' fired, but Temporal is deprecated. Native runtime execution is not configured.",
+                "Trigger '%s' fired, but no Runtime is configured for dispatch.",
                 trigger_name,
             )

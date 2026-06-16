@@ -75,5 +75,9 @@ class InMemoryHistoryProvider:
                 (rid, m) for rid, m in self._store[key] if rid != run_id
             ]
 
+    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
+        """Return the number of stored messages for *agent_id* in *session_id*."""
+        return len(self._store.get((agent_id, session_id), []))
+
 
 __all__ = ["HistoryProvider", "InMemoryHistoryProvider"]

@@ -98,10 +98,12 @@ class PostgresScheduler:
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """
-                UPDATE ravi_agent_runs SET spec = $1::jsonb WHERE run_id = $2
+                INSERT INTO ravi_agent_runs (run_id, agent_id, spec)
+                VALUES ($1, '', $2::jsonb)
+                ON CONFLICT (run_id) DO UPDATE SET spec = EXCLUDED.spec
                 """,
-                json.dumps(spec),
                 run_id,
+                json.dumps(spec),
             )
 
     async def pending_run_specs(self) -> list[tuple[RunId, AgentId, dict]]:

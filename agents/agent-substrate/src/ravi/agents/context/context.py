@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from ravi.kernel.core.content import ChatMessage
-from ravi.kernel.agent.context import AgentContextProtocol, CompactionStrategy
+from ravi.kernel.agent.context import AgentContextProtocol
 from ravi.kernel.agent.supervision import HistoryRetention
 from ravi.kernel.storage.history import HistoryProvider
 from ravi.kernel.core.identity import AgentId
-from .compaction import SlidingWindowCompaction
+from .compaction import SlidingWindowCompaction, CompactionPipeline
 
 
 class ContextConfig:
     """User-facing config bag — pass to agent constructors via ``context=...``.
 
-    Bundles a ``HistoryProvider``, a ``CompactionStrategy``, and a
+    Bundles a ``HistoryProvider``, a ``CompactionPipeline``, and a
     ``HistoryRetention`` policy together so callers don't have to pass them
     as separate arguments.
 
@@ -22,37 +22,31 @@ class ContextConfig:
     - ``RUN`` — deleted after the run ends; for transient sub-agents.
     - ``NONE`` — never written; stateless workers.
 
-    Usage::
+    Pass a :class:`CompactionPipeline` configured with one or more strategies::
 
-        context = ContextConfig(
+        from ravi.agents.context import CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction
+
+        ctx = ContextConfig(
             InMemoryHistoryProvider(),
-            [SlidingWindowCompaction(max_messages=40)],
+            CompactionPipeline([
+                ToolResultCompactionStrategy(),
+                SlidingWindowCompaction(max_messages=40),
+            ]),
             retention=HistoryRetention.RUN,
         )
-        agent = ReActAgent("bot", runtime, model=client, context=context)
+        agent = ReActAgent("bot", model=client, context=ctx)
     """
 
     def __init__(
         self,
         history: HistoryProvider,
-        compaction_strategies: list[CompactionStrategy]
-        | CompactionStrategy
-        | None = None,
+        pipeline: CompactionPipeline | None = None,
         *,
         retention: HistoryRetention = HistoryRetention.PERMANENT,
     ) -> None:
         self.history = history
         self.retention = retention
-        if isinstance(compaction_strategies, list):
-            self.compaction: CompactionStrategy = (
-                compaction_strategies[0]
-                if compaction_strategies
-                else SlidingWindowCompaction()
-            )
-        elif compaction_strategies is not None:
-            self.compaction = compaction_strategies
-        else:
-            self.compaction = SlidingWindowCompaction()
+        self.pipeline: CompactionPipeline = pipeline or CompactionPipeline([SlidingWindowCompaction()])
 
     @classmethod
     def default(cls) -> "ContextConfig":
@@ -65,7 +59,7 @@ class ContextConfig:
 class AgentContext:
     """Concrete implementation of ``AgentContextProtocol`` for in-process use.
 
-    Wraps a ``HistoryProvider`` and a ``CompactionStrategy`` into the full
+    Wraps a ``HistoryProvider`` and a ``CompactionPipeline`` into the full
     runtime context that agents drive.  All history reads and writes are
     scoped to ``session_id`` so one agent instance can participate in
     multiple sequential runs without history leaking between them.
@@ -75,11 +69,11 @@ class AgentContext:
         self,
         agent_id: AgentId,
         history: HistoryProvider,
-        compaction: CompactionStrategy,
+        pipeline: CompactionPipeline,
     ) -> None:
         self._agent_id = agent_id
         self._history = history
-        self._compaction = compaction
+        self._pipeline = pipeline
 
     @property
     def agent_id(self) -> AgentId:
@@ -92,7 +86,7 @@ class AgentContext:
     async def get_prompt_window(self, session_id: str) -> list[ChatMessage]:
         """Return the compacted history as ChatMessages for LLM generation."""
         raw = await self._history.get_messages(self._agent_id, session_id=session_id)
-        return await self._compaction.compact(raw)
+        return await self._pipeline.compact(raw)
 
 
 __all__ = ["AgentContextProtocol", "AgentContext", "ContextConfig"]

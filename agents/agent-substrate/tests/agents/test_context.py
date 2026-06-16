@@ -8,6 +8,7 @@ from ravi.agents.context import (
     SlidingWindowCompaction,
     SummarizationCompaction,
     TokenBudgetComposedStrategy,
+    CompactionPipeline,
 )
 from ravi.kernel import AgentId
 from ravi.kernel.core.content import ChatMessage, TextBlock
@@ -31,28 +32,29 @@ async def test_sliding_window_compaction():
 @pytest.mark.asyncio
 async def test_context_config():
     history = InMemoryHistoryProvider()
-    compaction = SlidingWindowCompaction(max_messages=10)
-    cfg = ContextConfig(history, compaction)
+    pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
+    cfg = ContextConfig(history, pipeline)
 
     assert cfg.history is history
-    assert cfg.compaction is compaction
+    assert cfg.pipeline is pipeline
 
     default_cfg = ContextConfig.default()
     assert isinstance(default_cfg.history, InMemoryHistoryProvider)
-    assert isinstance(default_cfg.compaction, SlidingWindowCompaction)
+    assert isinstance(default_cfg.pipeline, CompactionPipeline)
+    assert isinstance(default_cfg.pipeline._strategies[0], SlidingWindowCompaction)
 
 
 @pytest.mark.asyncio
 async def test_agent_context():
     history = InMemoryHistoryProvider()
-    compaction = SlidingWindowCompaction(max_messages=10)
+    pipeline = CompactionPipeline([SlidingWindowCompaction(max_messages=10)])
     agent_id = AgentId(type="assistant", key="agent_1")
     session_id = "test-session"
 
     chat_msg = ChatMessage(role="user", content=[TextBlock(text="hi")])
     await history.append(agent_id, chat_msg, session_id=session_id)
 
-    ctx = AgentContext(agent_id, history, compaction)
+    ctx = AgentContext(agent_id, history, pipeline)
     assert ctx.agent_id == agent_id
     assert ctx.history is history
 

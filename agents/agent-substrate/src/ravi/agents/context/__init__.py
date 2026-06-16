@@ -5,6 +5,7 @@ from __future__ import annotations
 from .history import HistoryProvider, InMemoryHistoryProvider
 from .compaction import (
     CompactionStrategy,
+    CompactionPipeline,
     SlidingWindowCompaction,
     SummarizationCompaction,
     ToolResultCompactionStrategy,
@@ -18,6 +19,7 @@ __all__ = [
     "HistoryProvider",
     "InMemoryHistoryProvider",
     "CompactionStrategy",
+    "CompactionPipeline",
     "SlidingWindowCompaction",
     "SummarizationCompaction",
     "ToolResultCompactionStrategy",

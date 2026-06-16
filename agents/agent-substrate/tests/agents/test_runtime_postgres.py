@@ -230,3 +230,148 @@ async def test_pg_redis_fire_and_forget(pg_redis_runtime) -> None:
         if isinstance(m.payload, DataPayload)
     ]
     assert {"hello": "redis-journal"} in payloads
+
+
+# ---------------------------------------------------------------------------
+# 5. Streaming path over the Postgres event log (the served default)
+# ---------------------------------------------------------------------------
+
+
+class _StubBridge:
+    """Mirrors WebHITLBridge: get_event() blocks until signal_done() is called."""
+
+    def __init__(self) -> None:
+        self._done = asyncio.Event()
+
+    async def get_event(self):
+        await self._done.wait()
+        from ravi.serving.monolith.sse.bridge import BRIDGE_DONE
+
+        return BRIDGE_DONE
+
+    async def signal_done(self) -> None:
+        self._done.set()
+
+    def cancel_all_pending(self, reason: str = "") -> int:
+        return 0
+
+
+class StreamingAgent:
+    """Logs the wire-relevant event kinds, exactly as ctx.llm()/ctx.tool() would."""
+
+    def __init__(self, agent_id: AgentId) -> None:
+        self.id = agent_id
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        for _ in inbox:
+            await ctx._log("text.delta", {"text": "Hello "})  # type: ignore[attr-defined]
+            await ctx._log("text.delta", {"text": "world"})  # type: ignore[attr-defined]
+            await ctx._log(  # type: ignore[attr-defined]
+                "tool.call",
+                {"call_id": "c1", "tool_name": "calc", "args": {"x": 2}},
+            )
+            await ctx._log(  # type: ignore[attr-defined]
+                "tool.result",
+                {"call_id": "c1", "tool_name": "calc", "ok": True, "output": "4"},
+            )
+
+
+async def test_pg_streaming_session(pg_runtime) -> None:
+    """A run streamed through AgentStreamSession over the Postgres event log:
+    wire events come out in order AND the entries are persisted in Postgres."""
+    from ravi.kernel.core.content import ChatMessage, Role, TextBlock
+    from ravi.kernel.messaging.message import ChatPayload
+    from ravi.serving.protocol import (
+        HelloEvent,
+        RunCompletedEvent,
+        TextDeltaEvent,
+        ToolCallEvent,
+        ToolResultEvent,
+    )
+    from ravi.serving.stream.session import AgentStreamSession
+
+    agent_id = _agent_id("streamer")
+    agent = StreamingAgent(agent_id)
+    msg = Message(
+        target=agent_id,
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
+        ),
+    )
+    session = AgentStreamSession(
+        runtime=pg_runtime, agent=agent, msg=msg, bridge=_StubBridge()
+    )
+
+    events = await asyncio.wait_for(
+        _collect_events(session), timeout=20.0
+    )
+
+    # Wire events stream out, framed by hello … run.completed
+    assert isinstance(events[0], HelloEvent)
+    assert isinstance(events[-1], RunCompletedEvent)
+    assert any(isinstance(e, ToolCallEvent) for e in events)
+    assert any(isinstance(e, ToolResultEvent) for e in events)
+    streamed_text = "".join(e.text for e in events if isinstance(e, TextDeltaEvent))
+    assert streamed_text == "Hello world"
+
+    # Entries are durably persisted in Postgres (read back from the event log)
+    run_id = session._run_id
+    assert run_id is not None
+    kinds = [entry.kind async for entry in pg_runtime.event_log.read(run_id)]
+    for expected in ("text.delta", "tool.call", "tool.result", "run.completed"):
+        assert expected in kinds, f"{expected} missing from Postgres event log: {kinds}"
+
+
+async def _collect_events(session) -> list:
+    return [ev async for ev in session.events()]
+
+
+# ---------------------------------------------------------------------------
+# 6. Orphan reclamation on startup (run recovery)
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_reclaim_orphans() -> None:
+    """A run left 'running' by a crashed worker is requeued to 'pending'
+    on startup when reclaim_orphans=True (single-worker deployments)."""
+    if not await _pg_reachable():
+        pytest.skip("Postgres not reachable")
+    import asyncpg
+
+    from ravi.infrastructure.runtime.pg_scheduler import PostgresScheduler
+
+    pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
+    try:
+        scheduler = PostgresScheduler(pool)
+        await scheduler.setup()
+
+        run_id = f"orphan-{id(object())}"
+        # Simulate a crash: a row stuck in 'running' with a live (future) lease.
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO ravi_run_queue (run_id, status, worker_id, expires_at)
+                VALUES ($1, 'running', 'dead-worker', now() + interval '30 seconds')
+                """,
+                run_id,
+            )
+
+        # Default (expired-only) must NOT touch a still-future lease.
+        assert await scheduler.reclaim_orphans(all_running=False) == 0
+        async with pool.acquire() as conn:
+            status = await conn.fetchval(
+                "SELECT status FROM ravi_run_queue WHERE run_id = $1", run_id
+            )
+        assert status == "running"
+
+        # Single-worker reclaim requeues it immediately.
+        reclaimed = await scheduler.reclaim_orphans(all_running=True)
+        assert reclaimed >= 1
+        async with pool.acquire() as conn:
+            status = await conn.fetchval(
+                "SELECT status FROM ravi_run_queue WHERE run_id = $1", run_id
+            )
+            await conn.execute("DELETE FROM ravi_run_queue WHERE run_id = $1", run_id)
+        assert status == "pending"
+    finally:
+        await pool.close()

@@ -32,11 +32,22 @@ from ravi.serving.stream.session import AgentStreamSession
 # ---------------------------------------------------------------------------
 
 class _StubBridge:
+    """Mirrors WebHITLBridge: get_event() blocks until signal_done() is called.
+
+    The real bridge's outgoing queue only yields BRIDGE_DONE after the agent's
+    finally block (or a cancel) calls signal_done(); a stub that returns DONE
+    eagerly would race _WORKERS_DONE ahead of the session's cancel check.
+    """
+
+    def __init__(self) -> None:
+        self._done = asyncio.Event()
+
     async def get_event(self) -> Any:
+        await self._done.wait()
         return BRIDGE_DONE
 
     async def signal_done(self) -> None:
-        pass
+        self._done.set()
 
     def cancel_all_pending(self, reason: str = "") -> int:
         return 0

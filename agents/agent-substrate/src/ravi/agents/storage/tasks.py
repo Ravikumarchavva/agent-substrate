@@ -96,10 +96,10 @@ class TaskStore:
     # Read
     # ------------------------------------------------------------------
 
-    def get_task_list(self, task_list_id: str) -> Optional[TaskList]:
+    async def get_task_list(self, task_list_id: str) -> Optional[TaskList]:
         return self._lists.get(task_list_id)
 
-    def get_by_conversation(self, conversation_id: str) -> Optional[TaskList]:
+    async def get_by_conversation(self, conversation_id: str) -> Optional[TaskList]:
         tl_id = self._by_conversation.get(conversation_id)
         if tl_id:
             return self._lists.get(tl_id)
@@ -198,3 +198,7 @@ class GlobalTaskStore:
         if cls._instance is None:
             cls._instance = TaskStore()
         return cls._instance
+
+    @classmethod
+    def set(cls, store: TaskStore) -> None:
+        cls._instance = store

@@ -595,7 +595,7 @@ async def chat(
             from ravi.agents.storage.tasks import GlobalTaskStore
 
             _store = GlobalTaskStore.get()
-            _existing = _store.get_by_conversation(str(body.thread_id))
+            _existing = await _store.get_by_conversation(str(body.thread_id))
             if _existing:
                 has_existing_tasks = True
                 deps["system_instructions"] = (
@@ -769,6 +769,14 @@ async def chat(
         correlation_id=str(body.thread_id),
     )
 
+    _agent_spec = {
+        "mode": "react",
+        "system_instructions": deps["system_instructions"],
+        "tool_names": [getattr(t, "name", "") for t in deps["tools"]],
+        "max_iterations": 30,
+        "session_id": str(body.thread_id),
+        "model_context_window": settings.MODEL_CONTEXT_WINDOW,
+    }
     session = AgentStreamSession(
         runtime=deps["runtime"],
         agent=agent,
@@ -777,6 +785,7 @@ async def chat(
         is_disconnected=request.is_disconnected,
         cancel_event=cancel_event,
         persister=persister,
+        spec=_agent_spec,
     )
 
     async def sse_generator() -> AsyncIterator[str]:

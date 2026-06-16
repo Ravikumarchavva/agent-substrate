@@ -170,7 +170,7 @@ class TaskManagerTool:
         # ── shared guard: need an active task list ────────────────────
         if not task_list_id:
             # Attempt to auto-recover from conversation store
-            existing = store.get_by_conversation(conv_id)
+            existing = await store.get_by_conversation(conv_id)
             if existing:
                 task_list_id = existing.id
                 self._task_lists[conv_id] = task_list_id
@@ -179,7 +179,7 @@ class TaskManagerTool:
 
         # ── start_task ───────────────────────────────────────────────
         if action == "start_task":
-            resolved = self._resolve_task_id(task_id, "todo", store, task_list_id)
+            resolved = await self._resolve_task_id(task_id, "todo", store, task_list_id)
             if not resolved:
                 return _err("No todo tasks left to start.")
 
@@ -188,12 +188,12 @@ class TaskManagerTool:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
             return self._board_result(
-                f"Started: {updated.title}", self._board(store, task_list_id)
+                f"Started: {updated.title}", await self._board(store, task_list_id)
             )
 
         # ── complete_task ─────────────────────────────────────────────
         if action == "complete_task":
-            resolved = self._resolve_task_id(
+            resolved = await self._resolve_task_id(
                 task_id, "in_progress", store, task_list_id
             )
             if not resolved:
@@ -204,16 +204,16 @@ class TaskManagerTool:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
             return self._board_result(
-                f"Completed: {updated.title}", self._board(store, task_list_id)
+                f"Completed: {updated.title}", await self._board(store, task_list_id)
             )
         # ── fail_task ─────────────────────────────────────────────
         if action == "fail_task":
-            resolved = self._resolve_task_id(
+            resolved = await self._resolve_task_id(
                 task_id, "in_progress", store, task_list_id
             )
             if not resolved:
                 # Fall back to any todo task if none is in progress
-                resolved = self._resolve_task_id(task_id, "todo", store, task_list_id)
+                resolved = await self._resolve_task_id(task_id, "todo", store, task_list_id)
             if not resolved:
                 return _err("No in-progress or todo task to mark as failed.")
 
@@ -222,16 +222,16 @@ class TaskManagerTool:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
             return self._board_result(
-                f"Marked as failed: {updated.title}", self._board(store, task_list_id)
+                f"Marked as failed: {updated.title}", await self._board(store, task_list_id)
             )
 
         # ── retry_task ────────────────────────────────────────────────
         if action == "retry_task":
-            resolved = self._resolve_task_id(task_id, "failed", store, task_list_id)
+            resolved = await self._resolve_task_id(task_id, "failed", store, task_list_id)
             if not resolved:
                 return _err("No failed task found to retry.")
 
-            task_list = store.get_task_list(task_list_id)
+            task_list = await store.get_task_list(task_list_id)
             if not task_list:
                 return _err("Task list not found.")
 
@@ -253,7 +253,7 @@ class TaskManagerTool:
             return self._board_result(
                 f"Retrying '{updated.title}' "
                 f"(attempt {updated.retry_count}/{task_list.max_retries}).",
-                self._board(store, task_list_id),
+                await self._board(store, task_list_id),
             )
 
         # ── add_task ─────────────────────────────────────────────────
@@ -263,7 +263,7 @@ class TaskManagerTool:
 
             new_tasks = await store.add_tasks(task_list_id, tasks)
             return self._board_result(
-                f"Added {len(new_tasks)} task(s).", self._board(store, task_list_id)
+                f"Added {len(new_tasks)} task(s).", await self._board(store, task_list_id)
             )
 
         # ── delete_task ───────────────────────────────────────────────
@@ -276,7 +276,7 @@ class TaskManagerTool:
                 return _err(f"Task {task_id!r} not found.")
 
             return self._board_result(
-                f"Deleted task {task_id}.", self._board(store, task_list_id)
+                f"Deleted task {task_id}.", await self._board(store, task_list_id)
             )
 
         # ── update_title ──────────────────────────────────────────────
@@ -289,7 +289,7 @@ class TaskManagerTool:
                 return _err(f"Task {task_id!r} not found.")
 
             return self._board_result(
-                f"Renamed task to: {updated.title}", self._board(store, task_list_id)
+                f"Renamed task to: {updated.title}", await self._board(store, task_list_id)
             )
 
         return _err(f"Unknown action: {action!r}")
@@ -298,13 +298,13 @@ class TaskManagerTool:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _first_with_status(
+    async def _first_with_status(
         self, status: str, store: Any, task_list_id: str | None
     ) -> str | None:
         """Return the first task ID matching the given status."""
         if not task_list_id:
             return None
-        task_list = store.get_task_list(task_list_id)
+        task_list = await store.get_task_list(task_list_id)
         if not task_list:
             return None
         for task in task_list.tasks:
@@ -312,7 +312,7 @@ class TaskManagerTool:
                 return task.id
         return None
 
-    def _resolve_task_id(
+    async def _resolve_task_id(
         self,
         task_id: str | None,
         status: str,
@@ -328,13 +328,13 @@ class TaskManagerTool:
           4. Case-insensitive title match → use that task's real id
           5. Fallback                    → auto-advance regardless of supplied value
         """
-        task_list = store.get_task_list(task_list_id)
+        task_list = await store.get_task_list(task_list_id)
         if not task_list:
             return None
 
         # 1. No hint → auto-advance
         if not task_id:
-            return self._first_with_status(status, store, task_list_id)
+            return await self._first_with_status(status, store, task_list_id)
 
         # 2. Exact UUID
         for task in task_list.tasks:
@@ -360,12 +360,12 @@ class TaskManagerTool:
                 return task.id
 
         # 5. Ultimate fallback: advance to the next task in given status
-        return self._first_with_status(status, store, task_list_id)
+        return await self._first_with_status(status, store, task_list_id)
 
     @staticmethod
-    def _board(store: Any, task_list_id: str) -> Dict[str, Any]:
+    async def _board(store: Any, task_list_id: str) -> Dict[str, Any]:
         """Return the full current board as a dict (empty when missing)."""
-        tl = store.get_task_list(task_list_id)
+        tl = await store.get_task_list(task_list_id)
         return tl.to_dict() if tl else {}
 
     @staticmethod

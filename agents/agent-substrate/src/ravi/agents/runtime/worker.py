@@ -136,8 +136,14 @@ class Worker:
                 for lease in leases:
                     agent = self._registry.get(lease.agent_id)
                     if agent is None:
-                        logger.warning("Agent %s not in registry", lease.agent_id)
-                        await self._scheduler.release(lease, status=RunStatus.FAILED)
+                        # Agent not yet registered (e.g. startup cold-resume race).
+                        # Hold the lease and skip — it expires after 30 s, at which
+                        # point the run is reclaimed as pending and retried once the
+                        # resume hook has registered the agent.
+                        logger.warning(
+                            "Agent %s not in registry — holding lease for resume",
+                            lease.agent_id,
+                        )
                         continue
                     task = asyncio.create_task(
                         self._run_agent(lease, agent),

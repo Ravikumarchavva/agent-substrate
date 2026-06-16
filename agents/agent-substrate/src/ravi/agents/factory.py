@@ -210,6 +210,49 @@ async def load_session_memory(
     return fallback
 
 
+def rebuild_agent(
+    spec: dict,
+    *,
+    model_client: LLMClient,
+    tools: Optional[List[Tool]] = None,
+) -> Any:
+    """Reconstruct an agent from a persisted spec (used for cold resume).
+
+    The spec is the dict saved at submit time:
+    ``{mode, model, system_instructions, tool_names, max_iterations,
+       session_id, model_context_window}``.
+
+    ``tools`` should be the resolved tool objects (caller looks up by name
+    from the live registry); any ``tool_names`` not found are silently dropped.
+    """
+    from ravi.agents.core import ReActAgent
+    from ravi.agents.tools.toolbox import Toolbox
+    from ravi.agents.context import ContextConfig
+
+    session_id = spec.get("session_id", "resumed")
+    max_iterations = spec.get("max_iterations", 30)
+    model_context_window = spec.get("model_context_window", 40)
+    system_instructions = spec.get("system_instructions", "")
+
+    ctx = ContextConfig(
+        InMemoryHistoryProvider(),
+        SlidingWindowCompaction(max_messages=model_context_window),
+    )
+
+    toolbox = Toolbox()
+    for t in (tools or []):
+        toolbox.add(t)
+
+    return ReActAgent(
+        f"assistant-{session_id[:8]}",
+        model=model_client,
+        tools=toolbox if tools else None,
+        system_instructions=system_instructions,
+        context=ctx,
+        max_iterations=max_iterations,
+    )
+
+
 def create_assistant_agent(
     *,
     runtime: Any,

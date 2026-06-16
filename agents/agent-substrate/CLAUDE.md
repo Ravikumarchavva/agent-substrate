@@ -97,8 +97,7 @@ src/ravi/
 │   ├── hooks/            lifecycle hooks (RUN_START/END, STEP, LLM, TOOL, HANDOFF)
 │   ├── resources/        ExecutionTracker (per-agent spend, wired into ReActAgent loop)
 │   ├── supervision/      SpawnTracker (headcount + priority preemption), RetryPolicy
-│   ├── factory.py        create_assistant_agent, load_session_memory, rebuild_messages
-│   └── runner.py         stream_agent_run — dispatch run_stream() chunks via callbacks
+│   └── factory.py        create_assistant_agent, load_session_memory, rebuild_messages
 │
 ├── capabilities/ L2 — everything agents can use: tools, knowledge, memory, history, …
 │   ├── llm/              OpenAIChatCompletionClient — universal /v1/chat/completions client
@@ -123,10 +122,9 @@ src/ravi/
 │   ├── pipeline/         PipelineEngine, DataRef/DataRefArtifactStore, PipelineStore
 │   └── triggers/         TriggerScheduler, WebhookRegistry, ConditionMonitor
 │
-├── fabric/       L3 — how agents are orchestrated: flows, evals, durable execution
+├── fabric/       L3 — how agents are orchestrated: flows + evals
 │   ├── flows/            SequentialFlow, ParallelFlow, ConditionalFlow
-│   ├── evals/            EvalCase, EvalDataset, LLMJudge, EvalRunner, EvalReport
-│   └── durable/          Checkpoint, DurableRunner (skeleton — resumable long-running runs)
+│   └── evals/            EvalCase, EvalDataset, LLMJudge, EvalRunner, EvalReport
 │
 ├── integrations/ external third-party I/O adapters (orthogonal to layers)
 │   ├── llm/              LLMFactory, provider clients (openai/, anthropic/, gemini/), encoders/
@@ -146,8 +144,9 @@ src/ravi/
 │   ├── monolith/         single FastAPI app (app.py, routes/, sse/, security/, services/)
 │   ├── services/         12 independent microservices (one FastAPI app per folder)
 │   ├── shared/           cross-service infra: auth, database, events, contracts, observability
-│   ├── protocol/         engine↔UI SSE wire protocol (WireEvent union, requests, version)
-│   └── stream/           kernel-event → wire-event mapper, RunStreamAdapter, session
+│   ├── protocol/         engine↔UI SSE wire protocol (WireEvent union, requests, version);
+│   │                     `from_log.wire_from_log(kind, payload)` converts log entries to WireEvents
+│   └── stream/           AgentStreamSession — tails EventLog, maps entries via wire_from_log
 │
 ├── config.py     Pydantic Settings (reads .env)
 ├── exceptions.py public exceptions (GuardrailTripwireError, …)
@@ -247,7 +246,7 @@ integrations, infrastructure, serving  =  orthogonal (cross-layer by design)
 | A new graph store | `capabilities/graph/<name>.py` — implement `GraphStore` Protocol from `kernel/storage/graph.py` |
 | A new tool | `capabilities/tools/<name>/tool.py` — implement `Tool` Protocol (auto-scanned, no registration needed) |
 | A new skill | `capabilities/tools/skills/<name>/SKILL.md` — YAML frontmatter + prompt body |
-| A new agent flow | `fabric/flows/` — extend `BaseFlow` (SequentialFlow / ParallelFlow / ConditionalFlow) |
+| A new agent flow | `fabric/flows/` — write a standalone agent (`id` + `run(ctx, inbox)`) using SequentialFlow / ParallelFlow / ConditionalFlow |
 
 ### Tool creation
 
@@ -411,6 +410,9 @@ JWT_SECRET=<32+ char random string — required>
 
 # Code interpreter (optional)
 CODE_INTERPRETER_URL=...
+
+# Agent runtime backend: "postgres" (default, durable) or "memory" (in-process, no infra)
+RUNTIME_BACKEND=postgres
 ```
 
 **Rule:** Never add inline comments after integer values.
@@ -514,7 +516,7 @@ runner.export_markdown()
 |---|---|
 | `serving/monolith/routes/spotify_oauth.py` | `session_id = "default_user"` hardcoded — needs real user identity from auth context |
 | `agents/storage/tasks.py` | `TaskStore` is in-memory only — should be Postgres-backed for persistence across restarts |
-| `agents/core/react.py` | `_react()` is ~300 lines — guardrail checks and tool-concurrency drain could be extracted into helpers |
+| `agents/core/react.py` | `_react()` is ~150 lines — guardrail checks and tool-concurrency drain could be extracted into helpers |
 | Test coverage | Gaps in: guardrails, middleware, MCP adapter, most microservices, fabric/evals |
 
 ---

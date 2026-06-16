@@ -91,7 +91,6 @@ class RuntimeServices:
     chain_bridge_registry: Any
     pipeline_engine: Any
     pipeline_store: Any
-    workflow_client: Any
     trigger_scheduler: Any
     webhook_registry: Any
     condition_monitor: Any
@@ -218,6 +217,17 @@ async def init_infrastructure(
 
     # Agent runtime — in-memory or durable Postgres-backed (see RUNTIME_BACKEND)
     runtime, runtime_stack = await init_runtime(settings)
+
+    # Task store — mirrors RUNTIME_BACKEND: Postgres for durability, in-memory otherwise
+    if settings.RUNTIME_BACKEND.lower() == "postgres":
+        from ravi.agents.storage.tasks import GlobalTaskStore
+        from ravi.infrastructure.storage.pg_task_store import PgTaskStore
+        from ravi.serving.monolith.database import get_session_factory as _sf
+
+        pg_task_store = PgTaskStore(_sf())
+        await pg_task_store.setup()
+        GlobalTaskStore.set(pg_task_store)  # type: ignore[arg-type]
+        logger.info("Task store: durable (Postgres JSONB)")
 
     # Session factory
     session_factory = get_session_factory()
@@ -348,6 +358,47 @@ async def init_tool_registry(
     )
 
 
+async def resume_pending_runs(
+    runtime: Runtime,
+    *,
+    registry: Any,
+    model_client: Any,
+) -> int:
+    """Register rebuilt agents for pending runs that have a persisted spec.
+
+    Called once at startup after the tool registry is ready, so that cold-
+    resumed runs (requeued by reclaim_orphans) have their agent in the registry
+    before the worker leases them.
+
+    Returns the count of runs resumed.
+    """
+    scheduler = getattr(runtime, "_scheduler", None)
+    if scheduler is None or not hasattr(scheduler, "pending_run_specs"):
+        return 0
+
+    from ravi.agents.factory import rebuild_agent
+
+    specs = await scheduler.pending_run_specs()
+    if not specs:
+        return 0
+
+    for _run_id, agent_id, spec in specs:
+        tool_names: list[str] = spec.get("tool_names") or []
+        resolved_tools = [
+            t for t in registry.all()
+            if getattr(t, "name", None) in tool_names
+        ]
+        try:
+            agent = rebuild_agent(spec, model_client=model_client, tools=resolved_tools)
+            agent.id = agent_id  # type: ignore[attr-defined]
+            await runtime.register(agent)
+            logger.info("Resumed agent %s for pending run", agent_id)
+        except Exception as exc:
+            logger.warning("Failed to resume agent %s: %s", agent_id, exc)
+
+    return len(specs)
+
+
 async def init_runtime_services(
     settings: Settings,
     *,
@@ -377,33 +428,10 @@ async def init_runtime_services(
     pipeline_engine = PipelineEngine(registry=registry, data_store=data_store)
     pipeline_store = PipelineStore(session_factory=session_factory)
 
-    # Restate — durable workflow orchestration (optional, graceful if unavailable)
-    restate_ingress = os.environ.get("RESTATE_INGRESS_URL", "http://localhost:8080")
-    restate_admin = os.environ.get("RESTATE_ADMIN_URL", "http://localhost:9070")
-    workflow_client: Any = None
-    try:
-        from ravi.integrations.runtime.restate.client import RestateWorkflowClient
-
-        workflow_client = RestateWorkflowClient(
-            ingress_url=restate_ingress, admin_url=restate_admin
-        )
-        await workflow_client.connect()
-        logger.info(
-            "Restate connected (ingress=%s, admin=%s)", restate_ingress, restate_admin
-        )
-    except Exception as exc:
-        workflow_client = None
-        logger.warning("Restate unavailable (%s) — workflow routes disabled", exc)
-
     # Triggers — autonomous scheduling (cron/interval, webhooks, conditions)
     trigger_scheduler = TriggerScheduler(redis_url=settings.REDIS_URL)
     webhook_registry = WebhookRegistry()
     condition_monitor = ConditionMonitor()
-
-    if workflow_client:
-        trigger_scheduler.set_temporal(workflow_client)
-        webhook_registry.set_temporal(workflow_client)
-        condition_monitor.set_temporal(workflow_client)
 
     try:
         await trigger_scheduler.start()
@@ -448,7 +476,6 @@ async def init_runtime_services(
         chain_bridge_registry=chain_bridge_registry,
         pipeline_engine=pipeline_engine,
         pipeline_store=pipeline_store,
-        workflow_client=workflow_client,
         trigger_scheduler=trigger_scheduler,
         webhook_registry=webhook_registry,
         condition_monitor=condition_monitor,

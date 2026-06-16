@@ -16,6 +16,8 @@ from contextlib import asynccontextmanager
 
 from ravi.logger import setup_logging
 
+logger = setup_logging()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -46,7 +48,6 @@ from ravi.serving.monolith.routes.pipelines import router as pipelines_router
 from ravi.serving.monolith.routes.tasks import router as tasks_router
 from ravi.serving.monolith.routes.threads import router as threads_router
 from ravi.serving.monolith.routes.triggers import router as triggers_router
-from ravi.serving.monolith.routes.workflows import router as workflows_router
 from ravi.serving.monolith.routes.rag import router as rag_router
 from ravi.serving.monolith.routes.files import router as files_router
 from ravi.serving.monolith._lifespan import (
@@ -54,6 +55,7 @@ from ravi.serving.monolith._lifespan import (
     init_llm_clients,
     init_runtime_services,
     init_tool_registry,
+    resume_pending_runs,
 )
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
@@ -111,6 +113,15 @@ async def lifespan(app: FastAPI):
     app.state.tools_requiring_approval = tools.tools_requiring_approval
     app.state.tool_timeout = 300.0  # match HITL bridge timeout
 
+    # Cold resume — rebuild agents for runs orphaned by a previous process crash.
+    resumed = await resume_pending_runs(
+        infra.runtime,
+        registry=tools.registry,
+        model_client=llm.model_client,
+    )
+    if resumed:
+        logger.info("Cold resume: registered %d agent(s) for pending runs", resumed)
+
     _prompt_path = (
         __import__("pathlib").Path(__file__).parent / "prompts" / "default_system.md"
     )
@@ -138,7 +149,6 @@ async def lifespan(app: FastAPI):
     app.state.chain_bridge_registry = rt.chain_bridge_registry
     app.state.pipeline_engine = rt.pipeline_engine
     app.state.pipeline_store = rt.pipeline_store
-    app.state.workflow_client = rt.workflow_client
     app.state.trigger_scheduler = rt.trigger_scheduler
     app.state.webhook_registry = rt.webhook_registry
     app.state.condition_monitor = rt.condition_monitor
@@ -175,8 +185,6 @@ async def lifespan(app: FastAPI):
         await app.state.runtime_stack.aclose()
     elif getattr(app.state, "runtime", None):
         await app.state.runtime.stop()
-    if getattr(app.state, "workflow_client", None):
-        await app.state.workflow_client.disconnect()
     if getattr(app.state, "trigger_scheduler", None):
         await app.state.trigger_scheduler.stop()
     if getattr(app.state, "condition_monitor", None):
@@ -236,7 +244,6 @@ def create_app() -> FastAPI:
     app.include_router(workspace_oauth_router)
     app.include_router(tasks_router)
     app.include_router(pipelines_router)
-    app.include_router(workflows_router)
     app.include_router(triggers_router)
     app.include_router(rag_router)
     app.include_router(files_router)

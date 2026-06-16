@@ -174,7 +174,7 @@ Kernel pub/sub (`TopicId` + `publish_message`) vs Redis `EventBus` in `serving/s
 **Fix**: Versioned kernel `Event` envelope that both systems carry.
 
 **H4 (High) — No state snapshot/checkpoint contract.**
-`fabric/durable/DurableRunner` is a skeleton. Temporal/Ray/LangGraph-style resume needs `save_state/load_state` on the Agent contract plus a `Checkpoint` value type.
+Durable runtime (Postgres EventLog + `build_postgres_runtime`) now persists run history and reclaims orphans, but Temporal/Ray-style full resume still needs `save_state/load_state` on the Agent contract plus a `Checkpoint` value type.
 
 **H5 (Medium) — `ApprovalHandler` referenced normatively** (`tools.py:42`)
 but defined nowhere in the kernel. HITL (a stated future) has no L0 contract.
@@ -222,7 +222,7 @@ but defined nowhere in the kernel. HITL (a stated future) has no L0 contract.
 |---|---|
 | Cancellation token & deadlines | Missing |
 | Agent lifecycle protocol with `save_state/load_state` | Missing |
-| Checkpoint contract | Missing |
+| Checkpoint/save_state contract | Missing (EventLog persists, agent spec rebuild is planned) |
 | Versioned Event envelope | Missing |
 | HITL `ApprovalRequest/ApprovalHandler` | Missing |
 | RunContext (deadline, trace, tenant) | Missing |

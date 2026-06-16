@@ -391,13 +391,20 @@ class PostgresHistoryProvider:
                 session_obj.message_count = 0
             await db.commit()
 
-    async def count_messages(self, session_id: str) -> int:
+    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
+        """Return the number of messages for *agent_id* in *session_id*."""
+        _validate_session_id(session_id)
+        storage_key = self._session_key(agent_id, session_id)
+        return await self._count_by_storage_key(storage_key)
+
+    async def _count_by_storage_key(self, storage_key: str) -> int:
+        """Count messages by internal storage key (used by internal helpers)."""
         factory = self._get_session()
         async with factory() as db:
             stmt = (
                 select(func.count())
                 .select_from(HistoryMessage)
-                .where(HistoryMessage.session_id == session_id)
+                .where(HistoryMessage.session_id == storage_key)
             )
             result = await db.execute(stmt)
             return result.scalar_one()

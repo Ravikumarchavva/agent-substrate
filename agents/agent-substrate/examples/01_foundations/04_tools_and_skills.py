@@ -24,7 +24,7 @@ import random
 
 from ravi.config import settings
 from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
 from ravi.agents.tools.toolbox import Toolbox
 from ravi.integrations.llm import LLMFactory
 from ravi.kernel import TextBlock, ToolExecutionResult
@@ -161,7 +161,7 @@ async def demo_agent_session() -> None:
         "ToolBot",
         model=model,
         tools=registry.all(),
-        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20)),
+        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)])),
         system_instructions="You are a helpful assistant. Use the available tools to answer questions.",
         max_iterations=6,
     )

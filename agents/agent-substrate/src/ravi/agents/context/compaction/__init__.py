@@ -24,9 +24,11 @@ from ravi.agents.context.compaction.truncation import TruncationStrategy
 from ravi.agents.context.compaction.token_budget_composed import (
     TokenBudgetComposedStrategy,
 )
+from ravi.agents.context.compaction.pipeline import CompactionPipeline
 
 __all__ = [
     "CompactionStrategy",
+    "CompactionPipeline",
     "SlidingWindowCompaction",
     "SummarizationCompaction",
     "ToolResultCompactionStrategy",

@@ -18,22 +18,29 @@ logger = setup_logging()
 
 router = APIRouter(prefix="/auth/spotify", tags=["spotify-oauth"])
 
-# In-memory token storage (use Redis/database in production)
-_user_tokens: Dict[str, Dict[str, Any]] = {}
-
-# In-memory CSRF state store keyed by state value (use Redis in production)
-_oauth_states: Dict[str, bool] = {}
-
-# Target origin for postMessage — prevents leaking tokens to other origins
 _FRONTEND_ORIGIN = settings.FRONTEND_URL
+
+# Redis key patterns
+_TOKEN_KEY = "spotify:token:{user_id}"   # EX 86400 (24 h)
+_STATE_KEY  = "spotify:state:{state}"    # EX 600   (10 min CSRF window)
+
+
+def _token_key(user_id: str) -> str:
+    return _TOKEN_KEY.format(user_id=user_id)
+
+
+def _state_key(state: str) -> str:
+    return _STATE_KEY.format(state=state)
+
+
+def _redis(request: Request):
+    return request.app.state.redis_client
 
 
 def get_auth_service() -> SpotifyAuthService:
-    """Get Spotify OAuth service instance."""
     redirect_uri = (
         settings.SPOTIFY_REDIRECT_URI or "http://localhost:8001/auth/spotify/callback"
     )
-
     return SpotifyAuthService(
         client_id=settings.SPOTIFY_CLIENT_ID,
         client_secret=settings.SPOTIFY_CLIENT_SECRET,
@@ -42,21 +49,18 @@ def get_auth_service() -> SpotifyAuthService:
 
 
 @router.get("/login")
-async def spotify_login(request: Request):
-    """Redirect user to Spotify OAuth authorization page.
-
-    Opens Spotify login where user grants permissions for:
-    - Streaming (Web Playback SDK)
-    - Read email & private info
-    - Control playback
-    """
+async def spotify_login(
+    request: Request,
+    current_user: AuthClaims = Depends(get_current_user),
+):
+    """Redirect user to Spotify OAuth authorization page."""
     auth_service = get_auth_service()
     auth_url, state = auth_service.get_authorization_url()
 
-    # Store state for CSRF validation (per-request, not shared across users)
-    _oauth_states[state] = True
+    # Store state → user_id in Redis (10-minute CSRF window)
+    await _redis(request).set(_state_key(state), current_user.sub, ex=600)
 
-    logger.info("Redirecting to Spotify OAuth login")
+    logger.info("Redirecting user %s to Spotify OAuth login", current_user.sub)
     return RedirectResponse(auth_url)
 
 
@@ -67,10 +71,7 @@ async def spotify_callback(
     state: str = Query(..., description="State parameter for CSRF protection"),
     error: Optional[str] = Query(None, description="Error if user declined"),
 ):
-    """Handle OAuth callback from Spotify.
-
-    Exchanges authorization code for access + refresh tokens and closes popup.
-    """
+    """Handle OAuth callback from Spotify."""
     if error:
         safe_error = html.escape(error)
         error_json = json.dumps(error)
@@ -95,63 +96,51 @@ async def spotify_callback(
             status_code=400,
         )
 
-    auth_service = get_auth_service()
+    redis = _redis(request)
 
-    # Validate state to prevent CSRF (consume the state so it can't be replayed)
-    if state not in _oauth_states:
-        logger.error("Invalid OAuth state parameter")
+    # Validate state (consume atomically — prevents replay)
+    user_id: str | None = await redis.getdel(_state_key(state))
+    if not user_id:
+        logger.error("Invalid or expired OAuth state parameter")
         raise HTTPException(status_code=400, detail="Invalid state parameter")
-    del _oauth_states[state]
 
+    auth_service = get_auth_service()
     try:
-        # Exchange code for tokens
         token_data = await auth_service.exchange_code_for_token(code)
 
-        # Store tokens (use session ID or user ID in production)
-        session_id = "default_user"  # TODO: Use actual session management
-        _user_tokens[session_id] = {
+        token_payload = json.dumps({
             "access_token": token_data["access_token"],
             "refresh_token": token_data.get("refresh_token"),
             "expires_in": token_data.get("expires_in", 3600),
             "scope": token_data.get("scope", ""),
-        }
+        })
+        await redis.set(_token_key(user_id), token_payload, ex=86400)
 
-        logger.info("Successfully stored Spotify tokens for session: %s", session_id)
+        logger.info("Stored Spotify tokens for user %s", user_id)
 
-        # Serialize token data safely using json.dumps to prevent XSS
-        safe_tokens = json.dumps(
-            {
-                "access_token": token_data["access_token"],
-                "refresh_token": token_data.get("refresh_token", ""),
-                "expires_in": token_data.get("expires_in", 3600),
-                "scope": token_data.get("scope", ""),
-            }
-        )
+        safe_tokens = json.dumps({
+            "access_token": token_data["access_token"],
+            "refresh_token": token_data.get("refresh_token", ""),
+            "expires_in": token_data.get("expires_in", 3600),
+            "scope": token_data.get("scope", ""),
+        })
         origin_json = json.dumps(_FRONTEND_ORIGIN)
 
-        # Return HTML that sends tokens to parent window and closes popup
         return HTMLResponse(
             content=f"""
             <html>
-                <head>
-                    <title>Spotify Authentication Success</title>
-                </head>
+                <head><title>Spotify Authentication Success</title></head>
                 <body>
                     <h1>Connected to Spotify!</h1>
                     <p>You can close this window...</p>
                     <script>
-                        // Send tokens to parent window (opener)
                         if (window.opener) {{
                             window.opener.postMessage({{
                                 type: 'spotify_auth_success',
                                 tokens: {safe_tokens}
                             }}, {origin_json});
                         }}
-                        
-                        // Auto-close after 2 seconds
-                        setTimeout(() => {{
-                            window.close();
-                        }}, 2000);
+                        setTimeout(() => window.close(), 2000);
                     </script>
                 </body>
             </html>
@@ -169,88 +158,69 @@ async def set_access_token_from_frontend(
     request: Request,
     current_user: AuthClaims = Depends(get_current_user),
 ):
-    """Accept and store an OAuth token pushed from the frontend after user-facing OAuth.
-
-    Called by the Next.js callback route so the backend always has the latest user
-    OAuth token without requiring the user to go through the backend OAuth flow.
-    """
-    session_id = current_user.sub
+    """Accept and store an OAuth token pushed from the frontend after user-facing OAuth."""
     body = await request.json()
-    _user_tokens[session_id] = {
+    token_payload = json.dumps({
         "access_token": body["access_token"],
         "refresh_token": body.get("refresh_token"),
         "expires_in": body.get("expires_in", 3600),
-    }
-    logger.info("Spotify OAuth token stored from frontend push")
+    })
+    await _redis(request).set(_token_key(current_user.sub), token_payload, ex=86400)
+    logger.info("Spotify OAuth token stored from frontend push for user %s", current_user.sub)
     return JSONResponse({"status": "ok"})
+
+
+async def _get_tokens(request: Request, user_id: str) -> Dict[str, Any] | None:
+    raw = await _redis(request).get(_token_key(user_id))
+    if not raw:
+        return None
+    return json.loads(raw)
+
+
+async def _save_tokens(request: Request, user_id: str, tokens: Dict[str, Any]) -> None:
+    await _redis(request).set(_token_key(user_id), json.dumps(tokens), ex=86400)
 
 
 @router.get("/token")
 async def get_access_token(
+    request: Request,
     current_user: AuthClaims = Depends(get_current_user),
 ):
-    """Get current user's Spotify access token.
-
-    Returns:
-        JSON with access_token for Web Playback SDK initialization
-    """
-    session_id = current_user.sub
-
-    tokens = _user_tokens.get(session_id)
+    """Get current user's Spotify access token."""
+    tokens = await _get_tokens(request, current_user.sub)
     if not tokens:
         raise HTTPException(
             status_code=401,
             detail="Not authenticated. Please log in with Spotify first.",
         )
-
-    return JSONResponse(
-        {
-            "access_token": tokens["access_token"],
-            "expires_in": tokens["expires_in"],
-        }
-    )
+    return JSONResponse({"access_token": tokens["access_token"], "expires_in": tokens["expires_in"]})
 
 
 @router.post("/refresh")
 async def refresh_token(
+    request: Request,
     current_user: AuthClaims = Depends(get_current_user),
 ):
-    """Refresh the access token using refresh token.
-
-    Called automatically when access token expires.
-    """
-    session_id = current_user.sub
-
-    tokens = _user_tokens.get(session_id)
+    """Refresh the access token using refresh token."""
+    tokens = await _get_tokens(request, current_user.sub)
     if not tokens or not tokens.get("refresh_token"):
         raise HTTPException(
             status_code=401, detail="No refresh token available. Please log in again."
         )
 
     auth_service = get_auth_service()
-
     try:
-        new_token_data = await auth_service.refresh_access_token(
-            tokens["refresh_token"]
-        )
-
-        # Update stored tokens
-        _user_tokens[session_id].update(
-            {
-                "access_token": new_token_data["access_token"],
-                "expires_in": new_token_data.get("expires_in", 3600),
-            }
-        )
-
-        logger.info("Refreshed access token for session: %s", session_id)
-
-        return JSONResponse(
-            {
-                "access_token": new_token_data["access_token"],
-                "expires_in": new_token_data.get("expires_in", 3600),
-            }
-        )
-
+        new_token_data = await auth_service.refresh_access_token(tokens["refresh_token"])
+        tokens.update({
+            "access_token": new_token_data["access_token"],
+            "expires_in": new_token_data.get("expires_in", 3600),
+        })
+        await _save_tokens(request, current_user.sub, tokens)
+        logger.info("Refreshed Spotify access token for user %s", current_user.sub)
+        return JSONResponse({
+            "access_token": new_token_data["access_token"],
+            "expires_in": new_token_data.get("expires_in", 3600),
+        })
     except Exception as e:
         logger.error("Failed to refresh token: %s", e)
         raise HTTPException(status_code=500, detail="Token refresh failed")
@@ -258,15 +228,12 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     current_user: AuthClaims = Depends(get_current_user),
 ):
     """Log out user and clear tokens."""
-    session_id = current_user.sub
-
-    if session_id in _user_tokens:
-        del _user_tokens[session_id]
-        logger.info("Logged out session: %s", session_id)
-
+    await _redis(request).delete(_token_key(current_user.sub))
+    logger.info("Logged out Spotify session for user %s", current_user.sub)
     return JSONResponse({"message": "Logged out successfully"})
 
 
@@ -275,14 +242,9 @@ async def restore_tokens(
     request: Request,
     current_user: AuthClaims = Depends(get_current_user),
 ):
-    """Restore OAuth tokens from client-side localStorage.
-
-    Called when the Spotify player iframe loads and has tokens saved
-    in localStorage that the server may have lost (e.g., after restart).
-    Uses the refresh_token to obtain a fresh access_token.
-    """
+    """Restore OAuth tokens from client-side localStorage."""
     body = await request.json()
-    session_id = current_user.sub
+    user_id = current_user.sub
 
     access_token_val = body.get("access_token")
     refresh_token_val = body.get("refresh_token")
@@ -290,67 +252,56 @@ async def restore_tokens(
     if not access_token_val and not refresh_token_val:
         raise HTTPException(status_code=400, detail="No tokens provided")
 
-    # If we already have tokens in memory, just return them
-    existing = _user_tokens.get(session_id)
+    existing = await _get_tokens(request, user_id)
     if existing and existing.get("access_token"):
-        return JSONResponse(
-            {
-                "access_token": existing["access_token"],
-                "expires_in": existing.get("expires_in", 3600),
-                "status": "already_active",
-            }
-        )
+        return JSONResponse({
+            "access_token": existing["access_token"],
+            "expires_in": existing.get("expires_in", 3600),
+            "status": "already_active",
+        })
 
-    # Try to refresh using the provided refresh token
     if refresh_token_val:
         try:
             auth_service = get_auth_service()
             new_data = await auth_service.refresh_access_token(refresh_token_val)
-            _user_tokens[session_id] = {
+            await _save_tokens(request, user_id, {
                 "access_token": new_data["access_token"],
                 "refresh_token": refresh_token_val,
                 "expires_in": new_data.get("expires_in", 3600),
                 "scope": body.get("scope", ""),
-            }
-            logger.info("Restored Spotify tokens from client localStorage (refreshed)")
-            return JSONResponse(
-                {
-                    "access_token": new_data["access_token"],
-                    "expires_in": new_data.get("expires_in", 3600),
-                    "status": "refreshed",
-                }
-            )
+            })
+            logger.info("Restored Spotify tokens (refreshed) for user %s", user_id)
+            return JSONResponse({
+                "access_token": new_data["access_token"],
+                "expires_in": new_data.get("expires_in", 3600),
+                "status": "refreshed",
+            })
         except Exception as e:
             logger.warning("Could not refresh during restore: %s", e)
 
-    # Fall back to storing the provided access token as-is
     if access_token_val:
-        _user_tokens[session_id] = {
+        await _save_tokens(request, user_id, {
             "access_token": access_token_val,
             "refresh_token": refresh_token_val,
             "expires_in": body.get("expires_in", 3600),
             "scope": body.get("scope", ""),
-        }
-        logger.info("Restored Spotify tokens from client localStorage (stored as-is)")
-        return JSONResponse(
-            {
-                "access_token": access_token_val,
-                "expires_in": body.get("expires_in", 3600),
-                "status": "stored",
-            }
-        )
+        })
+        logger.info("Restored Spotify tokens (as-is) for user %s", user_id)
+        return JSONResponse({
+            "access_token": access_token_val,
+            "expires_in": body.get("expires_in", 3600),
+            "status": "stored",
+        })
 
     raise HTTPException(status_code=400, detail="Could not restore tokens")
 
 
-def _get_oauth_service_with_token(session_id: str = "default_user"):
-    """Return a SpotifyService initialised with the current user OAuth token, or None."""
+def _get_oauth_service_with_token_sync(tokens: Dict[str, Any] | None):
+    """Return a SpotifyService initialised with the OAuth token, or None."""
     from ravi.integrations.spotify.client import SpotifyService
 
-    tokens = _user_tokens.get(session_id)
     if not tokens or not tokens.get("access_token"):
         return None
-
     return SpotifyService(
         client_id=settings.SPOTIFY_CLIENT_ID,
         client_secret=settings.SPOTIFY_CLIENT_SECRET,
@@ -360,19 +311,16 @@ def _get_oauth_service_with_token(session_id: str = "default_user"):
 
 @router.get("/liked-songs")
 async def get_liked_songs(
+    request: Request,
     limit: int = Query(50, ge=1, le=50),
     offset: int = Query(0, ge=0),
     market: Optional[str] = Query(None),
     current_user: AuthClaims = Depends(get_current_user),
 ):
-    """Fetch the current user's liked (saved) tracks.
-
-    Requires user-library-read scope in the stored OAuth token.
-    """
-    svc = _get_oauth_service_with_token(current_user.sub)
+    """Fetch the current user's liked (saved) tracks."""
+    svc = _get_oauth_service_with_token_sync(await _get_tokens(request, current_user.sub))
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
-
     try:
         result = await svc.get_liked_songs(limit=limit, offset=offset, market=market)
         return JSONResponse(result)
@@ -383,18 +331,15 @@ async def get_liked_songs(
 
 @router.get("/playlists")
 async def get_playlists(
+    request: Request,
     limit: int = Query(50, ge=1, le=50),
     offset: int = Query(0, ge=0),
     current_user: AuthClaims = Depends(get_current_user),
 ):
-    """Fetch the current user's playlists.
-
-    Requires playlist-read-private scope in the stored OAuth token.
-    """
-    svc = _get_oauth_service_with_token(current_user.sub)
+    """Fetch the current user's playlists."""
+    svc = _get_oauth_service_with_token_sync(await _get_tokens(request, current_user.sub))
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
-
     try:
         result = await svc.get_playlists(limit=limit, offset=offset)
         return JSONResponse(result)
@@ -405,6 +350,7 @@ async def get_playlists(
 
 @router.get("/playlists/{playlist_id}/tracks")
 async def get_playlist_tracks(
+    request: Request,
     playlist_id: str,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -412,10 +358,9 @@ async def get_playlist_tracks(
     current_user: AuthClaims = Depends(get_current_user),
 ):
     """Fetch tracks for a specific playlist."""
-    svc = _get_oauth_service_with_token(current_user.sub)
+    svc = _get_oauth_service_with_token_sync(await _get_tokens(request, current_user.sub))
     if svc is None:
         raise HTTPException(status_code=401, detail="Not authenticated with Spotify")
-
     try:
         result = await svc.get_playlist_tracks(
             playlist_id=playlist_id, limit=limit, offset=offset, market=market
@@ -423,6 +368,4 @@ async def get_playlist_tracks(
         return JSONResponse(result)
     except Exception as e:
         logger.error("Failed to fetch playlist tracks for %s: %s", playlist_id, e)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to fetch playlist tracks: {e}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to fetch playlist tracks: {e}")

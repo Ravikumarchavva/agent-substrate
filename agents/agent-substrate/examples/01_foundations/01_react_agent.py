@@ -16,7 +16,7 @@ import asyncio
 
 from ravi.config import settings
 from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
 from ravi.integrations.llm import LLMFactory
 from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool, ReadUrlTool
 from ravi.kernel.core.content import ChatMessage, Role, TextBlock
@@ -52,7 +52,7 @@ async def main() -> None:
         "DemoBot",
         model=model,
         tools=[CalculatorTool(), CurrentTimeTool(), WebSearchTool(), ReadUrlTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=40)),
+        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
         system_instructions=(
             "You are a helpful assistant with access to tools. "
             "When a tool returns data, extract the answer directly from it. "

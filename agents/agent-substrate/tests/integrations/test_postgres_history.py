@@ -32,29 +32,29 @@ async def test_postgres_history_provider():
     except (OperationalError, Exception) as e:
         pytest.skip(f"PostgreSQL database not available: {e}")
 
+    agent_id = AgentId(type="assistant", key="test-agent")
+    session_id = "test-session-456"
+
     try:
-        session_id = "test-session-456"
+        # Write clean state using protocol methods
+        await provider.clear(agent_id, session_id=session_id)
+        assert await provider.count_messages(agent_id, session_id=session_id) == 0
 
-        # Write clean state
-        await provider.clear_session(session_id)
-        assert await provider.count_messages(session_id) == 0
-
-        # Save messages
+        # Save a message via the protocol
         msg = ChatMessage(role="user", content=[TextBlock(text="postgres message")])
-        saved_count = await provider.save_messages(session_id, [msg])
-        assert saved_count == 1
+        await provider.append(agent_id, msg, session_id=session_id, run_id="r1")
 
-        # Load messages
-        loaded = await provider.load_messages(session_id)
+        # Load via the protocol
+        loaded = await provider.get_messages(agent_id, session_id=session_id)
         assert len(loaded) == 1
         assert loaded[0].role == "user"
-        assert loaded[0].content[0].text == "postgres message"
+        assert loaded[0].content[0].text == "postgres message"  # type: ignore[union-attr]
 
-        # Count
-        assert await provider.count_messages(session_id) == 1
+        # Count via the protocol
+        assert await provider.count_messages(agent_id, session_id=session_id) == 1
 
-        # Cleanup
-        await provider.clear_session(session_id)
-        assert await provider.count_messages(session_id) == 0
+        # Cleanup via the protocol
+        await provider.clear(agent_id, session_id=session_id)
+        assert await provider.count_messages(agent_id, session_id=session_id) == 0
     finally:
         await provider.disconnect()

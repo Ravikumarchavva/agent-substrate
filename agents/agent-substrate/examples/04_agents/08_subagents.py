@@ -19,14 +19,26 @@ import uuid
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
-from ravi.agents.core.react import AgentRunResult, ReActAgent
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from ravi.agents.core.react import ReActAgent
 from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
 from ravi.agents.runtime import Runtime
+from ravi.agents.middleware import AgentRunResult
+from ravi.kernel.core.content import Role
+from ravi.kernel.messaging.message import Message, ChatPayload
 from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
-from ravi.kernel import Priority, TextBlock, Tool, ToolUseBlock
-from ravi.kernel.content import ChatMessage, ContentBlock
-from ravi.kernel.stream import CompletionEvent, ReasoningDelta, TextDelta
+from ravi.kernel import (
+    Priority,
+    TextBlock,
+    Tool,
+    ToolUseBlock,
+    ChatMessage,
+    ContentBlock,
+    CompletionEvent,
+    ReasoningDelta,
+    TextDelta,
+    AgentId,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -131,8 +143,11 @@ class StubLLMClient:
 # ---------------------------------------------------------------------------
 
 
-def _context() -> AgentContext:
-    return AgentContext(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20))
+def _context() -> ContextConfig:
+    return ContextConfig(
+        InMemoryHistoryProvider(),
+        pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=20)]),
+    )
 
 
 def build_agents(runtime: Runtime, model: object) -> OrchestratorAgent:
@@ -140,9 +155,7 @@ def build_agents(runtime: Runtime, model: object) -> OrchestratorAgent:
 
     researcher = ReActAgent(
         "researcher",
-        runtime,
         model=model,  # type: ignore[arg-type]
-        description="Searches the web and returns factual information.",
         system_instructions="You are a researcher agent. Search the web and return factual information.",
         tools=[WebSearchTool()],
         context=_context(),
@@ -151,9 +164,7 @@ def build_agents(runtime: Runtime, model: object) -> OrchestratorAgent:
 
     writer = ReActAgent(
         "writer",
-        runtime,
         model=model,  # type: ignore[arg-type]
-        description="Formats and writes clear, concise summaries.",
         system_instructions="You are a writer agent. Format and write clear, concise summaries.",
         tools=[CurrentTimeTool()],
         context=_context(),
@@ -162,9 +173,7 @@ def build_agents(runtime: Runtime, model: object) -> OrchestratorAgent:
 
     calculator = ReActAgent(
         "calculator",
-        runtime,
         model=model,  # type: ignore[arg-type]
-        description="Performs precise numerical calculations.",
         system_instructions="You are a calculator agent. Perform precise numerical calculations.",
         tools=[CalculatorTool()],
         context=_context(),
@@ -173,13 +182,11 @@ def build_agents(runtime: Runtime, model: object) -> OrchestratorAgent:
 
     return OrchestratorAgent(
         "router",
-        runtime,
         model=model,  # type: ignore[arg-type]
-        description="Routes user requests to the right specialist.",
         sub_agents=[
-            SubAgentConfig(researcher, priority=Priority.HIGH),
-            SubAgentConfig(writer, priority=Priority.NORMAL),
-            SubAgentConfig(calculator, priority=Priority.NORMAL),
+            SubAgentConfig(researcher, description="Searches the web and returns factual information.", priority=Priority.HIGH),
+            SubAgentConfig(writer, description="Formats and writes clear, concise summaries.", priority=Priority.NORMAL),
+            SubAgentConfig(calculator, description="Performs precise numerical calculations.", priority=Priority.NORMAL),
         ],
         max_iterations=10,
     )
@@ -191,7 +198,10 @@ def build_agents(runtime: Runtime, model: object) -> OrchestratorAgent:
 
 
 async def run_demo(
-    orchestrator: OrchestratorAgent, query: str, stub: StubLLMClient | None = None
+    runtime: Runtime,
+    orchestrator: OrchestratorAgent,
+    query: str,
+    stub: StubLLMClient | None = None,
 ) -> AgentRunResult:
     """Run the orchestrator on a single query, printing the handoff trace."""
     if stub is not None:
@@ -199,12 +209,84 @@ async def run_demo(
     print(f"\n{'─' * 60}")
     print(f"Query: {query}")
     print(f"{'─' * 60}")
-    result = await orchestrator.run(query)
+
+    await runtime.register(orchestrator)
+    # Register the sub-agents as well
+    for sub_cfg in orchestrator._sub_agents:
+        await runtime.register(sub_cfg.agent)
+
+    session_id = f"demo-{uuid.uuid4().hex[:8]}"
+    msg = Message(
+        target=orchestrator.id,
+        sender=AgentId(type="proxy", key="user"),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=query)])
+        ),
+        correlation_id=session_id,
+    )
+    run_id = await runtime.submit(orchestrator.id, msg)
+
+    status = "success"
+    async for entry in runtime.event_log.tail(run_id):
+        if entry.kind == "run.completed":
+            break
+        elif entry.kind == "run.failed":
+            status = "error"
+            break
+        elif entry.kind == "run.cancelled":
+            status = "cancelled"
+            break
+
+    # Extract output and tool calls from history
+    history = await orchestrator.history.get_messages(orchestrator.id, session_id=session_id)
+    output = ""
+    tool_calls = []
+
+    for m in history:
+        if m.role == Role.ASSISTANT:
+            # Check for text output
+            text_blocks = [b.text for b in m.content if isinstance(b, TextBlock) and b.text]
+            if text_blocks:
+                output = "\n".join(text_blocks)
+            
+            # Check for tool calls
+            for block in m.content:
+                if isinstance(block, ToolUseBlock):
+                    # Find matching result in subsequent messages
+                    result_text = ""
+                    is_error = False
+                    for next_m in history:
+                        if next_m.role == Role.TOOL:
+                            for res_block in next_m.content:
+                                if getattr(res_block, "call_id", None) == block.call_id:
+                                    result_text = getattr(res_block, "output", "")
+                                    is_error = getattr(res_block, "is_error", False)
+                                    break
+                    
+                    from ravi.agents.middleware._contracts import ToolCallRecord
+                    tool_calls.append(
+                        ToolCallRecord(
+                            name=block.tool_name,
+                            call_id=block.call_id,
+                            arguments=block.arguments,
+                            result=result_text,
+                            is_error=is_error,
+                            duration_ms=0.0,
+                        )
+                    )
+
+    result = AgentRunResult(
+        output=output,
+        status=status,
+        tool_calls=tool_calls,
+        run_id=run_id,
+    )
+
     print(f"\nOutput:\n{result.output}")
     print(f"\nStatus: {result.status}")
     for tc in result.tool_calls:
         arrow = "✖" if tc.is_error else "✔"
-        print(f"  {arrow} {tc.name}({tc.arguments.get('input', '')[:60]})")
+        print(f"  {arrow} {tc.name}({tc.arguments.get('input', tc.arguments.get('text', ''))})")
     return result
 
 
@@ -231,6 +313,7 @@ async def main() -> None:
 
         # Demo 1 — research + writing task (orchestrator delegates to researcher → writer)
         await run_demo(
+            rt,
             orchestrator,
             "Tell me about the Python programming language and write a short summary.",
             stub,
@@ -238,6 +321,7 @@ async def main() -> None:
 
         # Demo 2 — calculation task (orchestrator delegates to researcher first in stub mode)
         await run_demo(
+            rt,
             orchestrator,
             "What is 1337 * 42 + the square root of 256?",
             stub,

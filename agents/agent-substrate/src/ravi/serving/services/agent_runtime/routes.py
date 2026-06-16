@@ -71,7 +71,6 @@ async def start_agent_run(body: RunRequest, request: Request):
         system_instructions=system_instructions,
         memory=memory,
         session_id=body.thread_id,
-        runtime=runtime,
     )
 
     # Run asynchronously

@@ -77,3 +77,12 @@ class HistoryProvider(Protocol):
         cross-run context.
         """
         ...
+
+    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int:
+        """Return the number of messages stored for *agent_id* in *session_id*.
+
+        Implementations backed by a durable store (Redis, Postgres) may
+        serve this from a pre-computed counter without loading all messages.
+        The in-memory provider counts directly from the backing list.
+        """
+        ...

@@ -49,7 +49,7 @@ class WebhookRegistry:
     """Registry for webhook-triggered workflows.
 
     Webhooks are registered dynamically. When an HTTP POST arrives at the
-    webhook path, the registry dispatches the configured workflow via Temporal.
+    webhook path, the registry dispatches the configured workflow via native Runtime.
     """
 
     def __init__(self, runtime: Runtime | None = None) -> None:
@@ -163,7 +163,7 @@ class WebhookRegistry:
                 }
         else:
             logger.warning(
-                "Webhook '%s' triggered, but Temporal is deprecated. Native runtime execution is not configured.",
+                "Webhook '%s' triggered, but no Runtime is configured for dispatch.",
                 webhook.name,
             )
             return {"status": "triggered", "dispatched": False}

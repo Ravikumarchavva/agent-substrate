@@ -13,6 +13,7 @@ from ravi.agents.context import (
     HistoryProvider,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
+    CompactionPipeline,
 )
 from ravi.capabilities.tools.human_input import ToolApprovalHandler
 from ravi.kernel.llm import LLMClient
@@ -32,7 +33,7 @@ logger = setup_logging()
 def _make_context(max_messages: int = 20) -> ContextConfig:
     return ContextConfig(
         InMemoryHistoryProvider(),
-        SlidingWindowCompaction(max_messages=max_messages),
+        pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=max_messages)]),
     )
 
 
@@ -161,10 +162,10 @@ async def load_agent_for_thread(
         toolbox.add(t)
 
     agent = ReActAgent(
-        f"assistant-{session_id[:8]}",
+        f"assistant-{session_id}",
         model=model_client,
         tools=toolbox,
-        context=ContextConfig(memory, SlidingWindowCompaction(max_messages=model_context_window)),
+        context=ContextConfig(memory, pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=model_context_window)])),
         system_instructions=system_instructions,
         max_iterations=max_iterations,
     )

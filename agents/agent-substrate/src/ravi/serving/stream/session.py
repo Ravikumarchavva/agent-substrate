@@ -196,7 +196,13 @@ class AgentStreamSession:
             for task in (agent_task, bridge_task):
                 if not task.done():
                     task.cancel()
-            await asyncio.gather(agent_task, bridge_task, return_exceptions=True)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(agent_task, bridge_task, return_exceptions=True),
+                    timeout=5.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Stream tasks did not finish within 5s on cleanup for run %s", self._run_id)
 
         yield terminal
 

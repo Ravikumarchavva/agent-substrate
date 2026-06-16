@@ -66,14 +66,11 @@ function CopyableMarkdownTable({ children, className, ...props }: ComponentProps
   };
 
   return (
-    <div
-      className="relative my-1 overflow-hidden rounded-[22px] border border-(--border) bg-(--card)"
-      style={{ boxShadow: "var(--shadow-sm)" }}
-    >
+    <div className="relative my-4 w-full">
       <button
         type="button"
         onClick={handleCopyTable}
-        className="absolute right-1.5 top-1.5 z-10 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-background/90 text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
+        className="btn-icon absolute right-1.5 top-2.5 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground"
         aria-label={copied ? "Copied" : "Copy table"}
         title={copied ? "Copied" : "Copy table"}
       >
@@ -709,7 +706,7 @@ export function MessageBubble({
             <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
               <button
                 onClick={copyToClipboard}
-                className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
                 title="Copy"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -718,7 +715,7 @@ export function MessageBubble({
               {onRegenerate && (
                 <button
                   onClick={onRegenerate}
-                  className="p-1.5 rounded-lg hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                  className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
                   title="Regenerate"
                 >
                   <RotateCw className="w-3.5 h-3.5" />

@@ -147,20 +147,12 @@ function ChatPageContent() {
       updateLastActiveThreadId(threadId);
       const nextUrl = buildChatPath(threadId);
       if (mode === "push") {
-        const i = document.createElement("iframe");
-        i.style.display = "none";
-        document.body.appendChild(i);
-        i.contentWindow?.history.pushState.call(window.history, null, "", nextUrl);
-        document.body.removeChild(i);
+        router.push(nextUrl, { scroll: false });
       } else {
-        const i = document.createElement("iframe");
-        i.style.display = "none";
-        document.body.appendChild(i);
-        i.contentWindow?.history.replaceState.call(window.history, null, "", nextUrl);
-        document.body.removeChild(i);
+        router.replace(nextUrl, { scroll: false });
       }
     },
-    [updateLastActiveThreadId],
+    [router, updateLastActiveThreadId],
   );
 
   const openSettingsPanel = useCallback(

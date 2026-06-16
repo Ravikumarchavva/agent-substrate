@@ -2,43 +2,43 @@
 
 /* ─── Shared Ravi tokens ─────────────────────────────────────────────────── */
 :root {
-  --background: #fafaf8;
-  --foreground: #0a0a0a;
-  --muted: #6b7280;
-  --muted-foreground: #9ca3af;
-  --border: #e8e5df;
-  --border-hover: #d6d3cd;
+  --background: #ffffff;
+  --foreground: #0d0d0d;
+  --muted: #676767;
+  --muted-foreground: #b4b4b4;
+  --border: #e3e3e3;
+  --border-hover: #cdcdcd;
   --card: #ffffff;
-  --card-hover: #f5f3f0;
-  --accent: #0f0f0f;
-  --accent-hover: #262626;
+  --card-hover: #f4f4f4;
+  --accent: #000000;
+  --accent-hover: #1f1f1f;
   --accent-foreground: #ffffff;
-  --input-bg: #ffffff;
-  --input-border: #e8e5df;
+  --input-bg: #f4f4f4;
+  --input-border: transparent;
   --code-bg: #1a1a1a;
   --code-fg: #e5e5e5;
-  --badge-bg: #f0eeeb;
-  --badge-fg: #333333;
-  --nav-bg: rgba(250, 250, 248, 0.88);
-  --section-alt: #f5f3f0;
-  --gradient-from: #fafaf8;
-  --gradient-to: #f5f3f0;
-  --shadow: rgba(0, 0, 0, 0.04);
-  --ring: rgba(0, 0, 0, 0.08);
-  --sidebar-bg: #f5f3f0;
+  --badge-bg: #f4f4f4;
+  --badge-fg: #0d0d0d;
+  --nav-bg: rgba(255, 255, 255, 0.88);
+  --section-alt: #f9f9f9;
+  --gradient-from: #ffffff;
+  --gradient-to: #f9f9f9;
+  --shadow: rgba(0, 0, 0, 0.03);
+  --ring: rgba(0, 0, 0, 0.05);
+  --sidebar-bg: #f9f9f9;
   --sidebar-item: #ffffff;
-  --user-bubble: #f0eeeb;
-  --step-bg: #f5f3f0;
+  --user-bubble: #f4f4f4;
+  --step-bg: #f4f4f4;
   --panel: #ffffff;
   --panel-elevated: #ffffff;
-  --panel-muted: #f5f3f0;
-  --panel-border: #e8e5df;
-  --panel-shadow: rgba(0, 0, 0, 0.06);
-  --panel-glow: rgba(15, 15, 15, 0.06);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.03);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
-  --radius: 16px;
+  --panel-muted: #f9f9f9;
+  --panel-border: #e3e3e3;
+  --panel-shadow: rgba(0, 0, 0, 0.05);
+  --panel-glow: rgba(0, 0, 0, 0.02);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.06);
+  --radius: 12px;
   --chat-width: 54rem;
 }
 
@@ -230,9 +230,28 @@ select {
 }
 .prose-chat pre code { background:none; border:none; padding:0; font-size:0.84rem; color:inherit; font-family:ui-monospace,Menlo,Monaco,monospace; }
 .prose-chat blockquote { border-left:3px solid var(--muted); padding-left:1em; margin:0.75em 0; opacity:0.7; }
-.prose-chat table { width:100%; border-collapse:collapse; margin:0.75em 0; }
-.prose-chat th,.prose-chat td { border:1px solid var(--border); padding:0.5em 0.75em; font-size:0.875rem; }
-.prose-chat th { background:var(--badge-bg); font-weight:600; }
+.prose-chat table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+.prose-chat th,
+.prose-chat td {
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  text-align: left;
+}
+.prose-chat th {
+  font-weight: 600;
+  color: var(--foreground);
+  background: transparent;
+}
+.prose-chat th:last-child,
+.prose-chat td:last-child {
+  padding-right: 3.5rem;
+}
 .prose-chat a  { text-decoration:underline; text-underline-offset: 2px; }
 
 /* ─── Chainlit shimmer for streaming text ────────────────────────────────── */

@@ -313,8 +313,8 @@ class RunContext:
         """Suspend until a wall-clock time."""
         self.check()
         await self._log("run.suspended", {"until": dt.isoformat()})
-        delay = max(0.0, (dt - datetime.now(tz=timezone.utc)).total_seconds())
-        await asyncio.sleep(delay)
+        await self._signal_bus.timer(self.run_id, dt)
+        await self._signal_bus.wait_for_signal(self.run_id, "__timer__")
         await self._log("run.resumed", {"via": "timer"})
 
     # ------------------------------------------------------------------

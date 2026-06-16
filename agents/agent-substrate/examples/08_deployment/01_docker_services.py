@@ -63,7 +63,7 @@ async def section_2_memory_clients() -> None:
 
     # --- RedisMemory ---
     try:
-        from ravi.adapters.memory.redis_memory import RedisMemory
+        from ravi.capabilities.history import RedisHistoryProvider
 
         mem = RedisMemory(
             session_id="healthcheck",
@@ -84,7 +84,7 @@ async def section_2_memory_clients() -> None:
 
     # --- PostgresMemory ---
     try:
-        from ravi.adapters.memory.postgres_memory import PostgresMemory
+        from ravi.capabilities.history import PostgresHistoryProvider
 
         db_url = (
             settings.DATABASE_URL

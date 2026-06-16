@@ -1,142 +1,70 @@
-"""Example 2-2: Memory System — end-to-end SessionManager integration for multi-turn chat."""
+"""Example 2-2: History Compaction — sliding window and token-based history compression.
 
-import os
-from ravi.adapters.memory.redis_memory import RedisMemory
-from ravi.adapters.memory.postgres_memory import PostgresMemory
-from ravi.reasoning.memory.session import SessionManager
-from ravi.kernel.messages.client_messages import (
-    SystemMessage,
-    UserMessage,
-    AssistantMessage,
-    ToolCallMessage,
-    ToolExecutionResultMessage,
-)
-from ravi.kernel.messages.content import TextBlock
+Demonstrates:
+  • SlidingWindowCompaction: drop old turns beyond N messages.
+  • SummarizationCompaction: condense older turns using an LLM while keeping recent turns verbatim.
+"""
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-DB_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
-)
+from __future__ import annotations
+
+import asyncio
+from typing import AsyncIterator
+
+from ravi.agents.context import SlidingWindowCompaction, SummarizationCompaction
+from ravi.kernel.core.content import ChatMessage, Role, TextBlock
+from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
+from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
+
+
+class MockLLM:
+    """Mock LLM to simulate summarization without an API key."""
+    def __init__(self, reply: str) -> None:
+        self.reply = reply
+
+    async def generate(
+        self,
+        messages: list[ChatMessage],
+        *,
+        options: GenerationOptions = GenerationOptions(),
+    ) -> LLMResponse:
+        return LLMResponse(content=[TextBlock(text=self.reply)], usage=Usage())
 
 
 async def main() -> None:
-    try:
-        # 1. SessionManager Setup (Redis hot tier + Postgres cold tier)
-        print("=== 1. SessionManager setup ===")
-        redis = RedisMemory(redis_url=REDIS_URL, default_ttl=3600, max_messages=500)
-        postgres = PostgresMemory(database_url=DB_URL)
+    # Build a simulated conversation history (12 turns / messages)
+    history: list[ChatMessage] = []
+    for i in range(1, 7):
+        history.append(ChatMessage(role=Role.USER, content=[TextBlock(text=f"User message {i}")]))
+        history.append(ChatMessage(role=Role.ASSISTANT, content=[TextBlock(text=f"Assistant response {i}")]))
 
-        async with SessionManager(redis=redis, postgres=postgres) as mgr:
-            # 2. Create Session
-            print("\n=== 2. Create session ===")
-            session = await mgr.create_session(
-                agent_name="chat-agent",
-                user_id="user-demo",
-                metadata={"channel": "web", "locale": "en-US"},
-            )
-            sid = session.session_id
-            print(f"  session_id : {sid}")
-            print(f"  agent_name : {session.agent_name}")
-            print(f"  status     : {session.status.value}")
-            print(f"  is_hot     : {session.is_hot}")
+    print("=== Original History ===")
+    print(f"Total messages: {len(history)}")
+    for i, msg in enumerate(history):
+        print(f"  {i+1:02d}. [{msg.role}]: {msg.content[0].text}")
 
-            # 3. Add all 5 Message Types
-            print("\n=== 3. Add all 5 message types ===")
-            tool_call = ToolCallMessage(
-                name="web_search",
-                arguments={"query": "current Python version"},
-            )
-            tool_result = ToolExecutionResultMessage(
-                tool_call_id=tool_call.id,
-                name="web_search",
-                content=[TextBlock(text="Python 3.13 was released in October 2024.")],
-            )
+    # 1. Sliding Window Compaction (limit to 6 messages)
+    print("\n=== 1. SlidingWindowCompaction ===")
+    sliding = SlidingWindowCompaction(max_messages=6)
+    compacted_sliding = await sliding.compact(history)
+    print(f"Compacted messages: {len(compacted_sliding)}")
+    for i, msg in enumerate(compacted_sliding):
+        print(f"  {i+1:02d}. [{msg.role}]: {msg.content[0].text}")
 
-            await mgr.add_messages(
-                sid,
-                [
-                    SystemMessage(content="You are a helpful Python assistant."),
-                    UserMessage(content=["What is the latest Python version?"]),
-                    tool_call,
-                    tool_result,
-                    AssistantMessage(
-                        content=["Python 3.13 is the latest stable release."],
-                        finish_reason="stop",
-                    ),
-                ],
-            )
-
-            count = await mgr.get_message_count(sid)
-            print(f"  Messages added: {count}")
-
-            msgs = await mgr.get_messages(sid)
-            for m in msgs:
-                print(f"    {type(m).__name__}")
-
-            # 4. Checkpoint to Postgres (Hot Redis state to Cold Postgres)
-            print("\n=== 4. Checkpoint to Postgres ===")
-            saved = await mgr.checkpoint(sid)
-            print(f"  Messages persisted: {saved}")
-            print("  Redis (hot) → Postgres (cold) flush complete")
-
-            state = await mgr.get_session_state(sid)
-            print(f"  message_count : {state.message_count}")
-            print(f"  is_hot        : {state.is_hot}")
-
-            # 5. Restore Session (Resume from Postgres Cold Storage)
-            print("\n=== 5. Restore session ===")
-
-        # Fresh SessionManager — simulates a new process / cold start
-        redis2 = RedisMemory(redis_url=REDIS_URL, default_ttl=3600, max_messages=500)
-        postgres2 = PostgresMemory(database_url=DB_URL)
-
-        async with SessionManager(redis=redis2, postgres=postgres2) as mgr2:
-            resumed = await mgr2.resume_session(sid)
-            print(f"  Resumed session  : {resumed.session_id}")
-            print(f"  message_count    : {resumed.message_count}")
-            print(f"  is_hot           : {resumed.is_hot}")
-
-            restored_msgs = await mgr2.get_messages(sid)
-            print(f"  Messages visible : {len(restored_msgs)}")
-            for m in restored_msgs:
-                print(f"    {type(m).__name__}")
-
-            # 6. List Sessions
-            print("\n=== 6. List sessions ===")
-            sessions = await mgr2.list_sessions(agent_name="chat-agent", limit=10)
-            print(f"  Found {len(sessions)} session(s) for agent 'chat-agent':")
-            for s in sessions:
-                print(
-                    f"    {s.session_id[:8]}…  "
-                    f"status={s.status.value}  "
-                    f"msgs={s.message_count}  "
-                    f"hot={s.is_hot}"
-                )
-
-            # 7. Session Lifecycle (Close then Delete)
-            print("\n=== 7. Session lifecycle ===")
-            await mgr2.close_session(sid)
-            print(
-                "  close_session() — final checkpoint + status=closed + Redis cleaned"
-            )
-
-            closed_state = await mgr2.get_session_state(sid)
-            print(f"  Status after close : {closed_state.status.value}")
-            print(f"  is_hot after close : {closed_state.is_hot}")
-
-            await mgr2.delete_session(sid)
-            gone = await mgr2.get_session_state(sid)
-            print(f"  After delete_session(): get_session_state() → {gone}")
-
-    except Exception as exc:
-        print(
-            f"\n[SKIP] Redis or Postgres unavailable — start services with `make infra-up`\n"
-            f"       Error: {exc}"
-        )
+    # 2. Summarization Compaction (condense older messages, keep recent budget verbatim)
+    print("\n=== 2. SummarizationCompaction ===")
+    mock_model = MockLLM("The user and assistant had a brief introductory conversation.")
+    # Set a tiny budget to force compaction of old messages
+    summarizer = SummarizationCompaction(
+        model=mock_model,  # type: ignore[arg-type]
+        recent_token_budget=50,
+        min_old_tokens=1,
+        chars_per_token=1.0,
+    )
+    compacted_sum = await summarizer.compact(history)
+    print(f"Compacted messages: {len(compacted_sum)}")
+    for i, msg in enumerate(compacted_sum):
+        print(f"  {i+1:02d}. [{msg.role}]: {msg.content[0].text}")
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())

@@ -13,13 +13,6 @@ SESSION_MAX_MESSAGES=200
 SESSION_AUTO_CHECKPOINT=50
 ```
 
-## Durable runtime
-
-```env
-RESTATE_INGRESS_URL=http://localhost:8080
-RESTATE_ADMIN_URL=http://localhost:9070
-```
-
 ## Frontend
 
 ```env

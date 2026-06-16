@@ -32,7 +32,7 @@
 # | [`03_mcp_tools/`](03_mcp_tools/) | MCP stdio, SSE, native tools, catalog adapter | `01_mcp_stdio`, `02_mcp_sse`, `03_mcp_native_tools`, `04_mcp_catalog_adapter` |
 # | [`04_agents/`](04_agents/) | Combined tools, HITL, web surfer, multi-tenant | `01_combined_tools`, `02_hitl`, `03_web_surfer`, `04_multi_tenant` |
 # | [`05_safety/`](05_safety/) | Guardrails, LLM-as-judge evals | `01_guardrails`, `02_evals` |
-# | [`06_runtime/`](06_runtime/) | Actor runtime, internals, gRPC, Restate | `01_local_runtime`, `02_runtime_internals`, `03_grpc_runtime`, `04_restate_runtime` |
+# | [`06_runtime/`](06_runtime/) | Actor runtime, internals, gRPC | `01_local_runtime`, `02_runtime_internals`, `03_grpc_runtime` |
 # | [`07_observability/`](07_observability/) | OpenTelemetry tracing, EventBus spans | `01_observability` |
 # | [`08_deployment/`](08_deployment/) | Docker Compose, Kind K8s, invoice extractor, K8s code interpreter | `01_docker_services`, `02_kind_k8s`, `03_invoice_extractor`, `04_k8s_code_interpreter` |
 #
@@ -57,19 +57,19 @@
 #
 # ### Build an agent
 # ```python
-# from ravi.reasoning.agents.assistant import AssistantAgent
+# from ravi.reasoning.agents.assistant import ReActAgent
 # from ravi.config import settings
-# from ravi.adapters.llm.factory import create_model_client
+# from ravi.integrations.llm.factory import create_model_client
 # from ravi.kernel.agent_catalog import AgentCatalog
 # from ravi.fabric.memory.unbounded import UnboundedMemory
 # from ravi.reasoning.memory.context.unbounded import UnboundedContext
 # from ravi.fabric.tools.builtin_tools import CalculatorTool
 #
-# agent = AssistantAgent(
+# agent = ReActAgent(
 #     name="MyAgent",
 #     catalog=catalog,         # AgentCatalog with model + memory + tools
 #     tools=[CalculatorTool()],
-#     memory=UnboundedMemory(),
+#     memory=InMemoryHistoryProvider(),
 #     model_context=UnboundedContext(),
 # )
 # result = await agent.run("What is 2 ** 10?")
@@ -97,7 +97,7 @@
 #
 # ### Persist memory in Redis
 # ```python
-# from ravi.adapters.memory.redis_memory import RedisMemory  # ← integrations, not core!
+# from ravi.capabilities.history import RedisHistoryProvider  # ← integrations, not core!
 #
 # mem = RedisMemory(session_id="my-chat", redis_url="redis://localhost:6379/0")
 # await mem.connect()
@@ -108,7 +108,7 @@
 #
 # ### Connect to an MCP server
 # ```python
-# from ravi.adapters.mcp import MCPClient
+# from ravi.integrations.tools.mcp import MCPClient
 #
 # client = MCPClient(url="http://localhost:9000/sse")
 # tools = await client.discover_tools()   # returns list[MCPTool]

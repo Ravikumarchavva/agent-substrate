@@ -16,11 +16,11 @@ Run:
 
 import asyncio
 
-from ravi.agents.reasoning.agents.assistant import AssistantAgent
+from ravi.agents.core import ReActAgent
 from ravi.agents.tools.builtin_tools import CalculatorTool, WebSearchTool
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.memory.unbounded import UnboundedMemory
+from ravi.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable
 
@@ -29,15 +29,15 @@ RESEARCH_TOPIC = "the impact of agentic AI on software engineering workflows in 
 # ---
 
 
-def build_research_agent(step_name: str, instructions: str) -> AssistantAgent:
+def build_research_agent(step_name: str, instructions: str) -> ReActAgent:
     """Build a single-purpose agent for one pipeline step."""
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o-mini"))
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     catalog.register_tool(WebSearchTool())
     catalog.register_tool(CalculatorTool())
 
-    return AssistantAgent(
+    return ReActAgent(
         name=step_name,
         description=f"Research pipeline agent: {step_name}",
         system_instructions=instructions,

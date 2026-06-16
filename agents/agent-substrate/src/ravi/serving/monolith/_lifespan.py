@@ -429,14 +429,23 @@ async def init_runtime_services(
     pipeline_store = PipelineStore(session_factory=session_factory)
 
     # Triggers — autonomous scheduling (cron/interval, webhooks, conditions)
-    trigger_scheduler = TriggerScheduler(redis_url=settings.REDIS_URL)
-    webhook_registry = WebhookRegistry()
-    condition_monitor = ConditionMonitor()
+    trigger_scheduler = TriggerScheduler(redis_url=settings.REDIS_URL, runtime=runtime)
+    webhook_registry = WebhookRegistry(runtime=runtime)
+    condition_monitor = ConditionMonitor(runtime=runtime)
+
+    from ravi.integrations.events.redis_event_bus import EventBus
+    event_bus = EventBus(redis_url=settings.REDIS_URL)
+    condition_monitor.set_event_bus(event_bus)
 
     try:
         await trigger_scheduler.start()
     except Exception as exc:
         logger.warning("TriggerScheduler failed to start: %s", exc)
+
+    try:
+        await condition_monitor.start()
+    except Exception as exc:
+        logger.warning("ConditionMonitor failed to start: %s", exc)
 
     # ToolChainTool — sandboxed code-mode chaining via ToolInvoker + CodeInterpreter
     chain_bridge_registry = ChainBridgeRegistry()

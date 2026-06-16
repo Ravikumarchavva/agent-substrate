@@ -1,6 +1,6 @@
 """Minimal agent bootstrap — the "hello world" of ravi-engine.
 
-This is the absolute minimum needed to get a AssistantAgent running.
+This is the absolute minimum needed to get a ReActAgent running.
 Start here if you are new to ravi-engine.
 
 Run:
@@ -10,10 +10,10 @@ Run:
 
 import asyncio
 
-from ravi.agents.reasoning.agents.assistant import AssistantAgent
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.agents.core import ReActAgent
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.memory.unbounded import UnboundedMemory
+from ravi.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable (read automatically by OpenAIClient)
 
@@ -24,10 +24,10 @@ async def main() -> None:
     # --- 1. Build the catalog (registry of resources the agent can use) ---
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o-mini"))
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
 
     # --- 2. Create the agent ---
-    agent = AssistantAgent(
+    agent = ReActAgent(
         name="hello-agent",
         description="A simple helpful assistant",
         catalog=catalog,

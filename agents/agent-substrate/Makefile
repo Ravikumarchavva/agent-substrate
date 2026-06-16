@@ -16,9 +16,9 @@ help:
 	@echo "  make sync         - install project dependencies"
 	@echo "  make start        - start the backend in foreground via uv run start"
 	@echo "  make start-reload - start the backend with auto-reload (requires make infra-up)"
-	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, MinIO, Restate, NATS, Loki, Promtail, Grafana, Tempo, MCP server)"
+	@echo "  make infra-up     - start host-dev support services (Postgres, Redis, MinIO, Loki, Promtail, Grafana, Tempo, MCP server)"
 	@echo "  make infra-down   - stop the host-dev support services"
-	@echo "  make docker-up    - build and start the Docker backend plus core infra, storage, and Restate runtime"
+	@echo "  make docker-up    - build and start the Docker backend plus core infra and storage"
 	@echo "  make docker-down  - stop the full agent-framework Docker stack"
 	@echo "  make observability-up   - start Tempo and Grafana via Docker Compose"
 	@echo "  make observability-down - stop Tempo and Grafana"
@@ -36,13 +36,13 @@ start-reload:
 	uv run start --reload
 
 infra-up:
-	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime up -d postgres redis minio loki promtail tempo grafana mcp-server restate nats
+	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime up -d postgres redis minio loki promtail tempo grafana mcp-server
 
 infra-down:
-	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime stop postgres redis minio loki promtail tempo grafana mcp-server restate nats
+	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime stop postgres redis minio loki promtail tempo grafana mcp-server
 
 docker-up:
-	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime up -d --build backend postgres redis minio loki promtail tempo grafana mcp-server restate nats
+	docker compose -f ./deployment/docker/docker-compose.yml --profile runtime up -d --build backend postgres redis minio loki promtail tempo grafana mcp-server
 
 docker-down:
 	docker compose -f ./deployment/docker/docker-compose.yml down --remove-orphans

@@ -16,11 +16,11 @@ from pathlib import Path
 # Allow sibling-module imports (social_media_assistant lives in the same folder)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ravi.agents.reasoning.agents.assistant import AssistantAgent
+from ravi.agents.core import ReActAgent
 from ravi.agents.tools.builtin_tools import WebSearchTool
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.memory.unbounded import UnboundedMemory
+from ravi.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable
 
@@ -35,7 +35,7 @@ PLATFORMS = ["twitter", "linkedin"]
 # ---
 
 
-def build_agent() -> AssistantAgent:
+def build_agent() -> ReActAgent:
     """Build a fresh agent (fresh memory per demo session)."""
     # Import here so social_media_assistant.py tool classes can be reused
     from social_media_assistant import (  # noqa: PLC0415
@@ -45,12 +45,12 @@ def build_agent() -> AssistantAgent:
 
     catalog = AgentCatalog()
     catalog.register_model("primary", OpenAIClient(model="gpt-4o-mini"))
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     catalog.register_tool(WebSearchTool())
     catalog.register_tool(AnalyzeHashtagsTool())
     catalog.register_tool(FormatPostTool())
 
-    return AssistantAgent(
+    return ReActAgent(
         name="social-media-demo",
         description="Social media content demo agent",
         system_instructions=(
@@ -65,7 +65,7 @@ def build_agent() -> AssistantAgent:
     )
 
 
-async def run_topic(agent: AssistantAgent, topic: str) -> None:
+async def run_topic(agent: ReActAgent, topic: str) -> None:
     """Run the agent for a single topic across all demo platforms."""
     platforms_str = " and ".join(PLATFORMS)
     query = (

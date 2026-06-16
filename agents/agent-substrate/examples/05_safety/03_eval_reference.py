@@ -18,8 +18,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from ravi.kernel.agent_catalog._catalog import AgentCatalog
-from ravi.agents.reasoning.agents.assistant import AssistantAgent
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.agents.core import ReActAgent
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
 from ravi.kernel.hooks import HookEvent, HookManager, CostTracker
 
@@ -92,7 +92,7 @@ async def main():
     catalog.register_tool(CalculatorTool())
     catalog.register_tool(GetCurrentTimeTool())
 
-    agent = AssistantAgent(
+    agent = ReActAgent(
         name="eval-agent",
         description="Agent under evaluation",
         catalog=catalog,

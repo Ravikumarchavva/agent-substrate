@@ -22,7 +22,7 @@ from typing import AsyncIterator
 from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
 from ravi.agents.core.react import AgentRunResult, ReActAgent
 from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from ravi.agents.runtime.local import LocalRuntime
+from ravi.agents.runtime import Runtime
 from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
 from ravi.kernel import Priority, TextBlock, Tool, ToolUseBlock
 from ravi.kernel.content import ChatMessage, ContentBlock
@@ -135,7 +135,7 @@ def _context() -> AgentContext:
     return AgentContext(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20))
 
 
-def build_agents(runtime: LocalRuntime, model: object) -> OrchestratorAgent:
+def build_agents(runtime: Runtime, model: object) -> OrchestratorAgent:
     """Build orchestrator + two specialist sub-agents."""
 
     researcher = ReActAgent(
@@ -214,7 +214,7 @@ async def main() -> None:
 
     # Use real LLM if key is present; otherwise fall back to the stub
     if settings.OPENAI_API_KEY:
-        from ravi.adapters.llm.openai.openai_client import OpenAIClient
+        from ravi.integrations.llm.openai.openai_client import OpenAIClient
         model: object = OpenAIClient(
             model=settings.CHAT_MODEL.split("/")[-1],
             api_key=settings.OPENAI_API_KEY,
@@ -224,7 +224,7 @@ async def main() -> None:
         model = StubLLMClient()
         print("No OPENAI_API_KEY found — running with StubLLMClient (scripted responses)")
 
-    async with LocalRuntime() as rt:
+    async with Runtime() as rt:
         orchestrator = build_agents(rt, model)
 
         stub = model if isinstance(model, StubLLMClient) else None

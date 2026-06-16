@@ -6,7 +6,10 @@ from ravi.logger import setup_logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ravi.agents.runtime import Runtime
 
 logger = setup_logging()
 
@@ -49,13 +52,13 @@ class WebhookRegistry:
     webhook path, the registry dispatches the configured workflow via Temporal.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, runtime: Runtime | None = None) -> None:
         self._webhooks: dict[str, WebhookDef] = {}  # keyed by path
-        self._temporal: Any = None
+        self._runtime = runtime
 
-    def set_temporal(self, temporal: Any) -> None:
-        """Inject TemporalClient for workflow dispatch."""
-        self._temporal = temporal
+    def set_runtime(self, runtime: Runtime) -> None:
+        """Inject active Runtime for trigger dispatch."""
+        self._runtime = runtime
 
     async def register(
         self,
@@ -121,31 +124,46 @@ class WebhookRegistry:
             webhook.target_name,
         )
 
-        if self._temporal is None:
-            return {"error": "TemporalClient not configured", "dispatched": False}
+        if self._runtime is not None:
+            from ravi.kernel.core.identity import AgentId
+            from ravi.kernel.messaging.message import Message, DataPayload
 
-        try:
-            # Merge incoming payload into target params
-            params = {**webhook.target_params, "webhook_payload": payload}
-
-            if webhook.target_type == "pipeline":
-                wf_id = await self._temporal.start_pipeline_workflow(
-                    webhook.target_name,
-                    params.get("definition", {}),
+            combined_params = {**webhook.target_params, **payload}
+            agent_id = AgentId(type=webhook.target_type, key=webhook.target_name)
+            msg = Message(
+                target=agent_id,
+                payload=DataPayload(data=combined_params),
+            )
+            try:
+                run_id = await self._runtime.submit(agent_id, msg)
+                logger.info(
+                    "Webhook '%s' submitted run %s to native runtime for %s",
+                    webhook.name,
+                    run_id,
+                    agent_id,
                 )
-            elif webhook.target_type == "chain":
-                wf_id = await self._temporal.start_chain_workflow(
-                    params.get("code", ""),
-                    params.get("description", ""),
-                    timeout=params.get("timeout", 120),
-                )
-            else:
                 return {
-                    "error": f"Unknown target_type '{webhook.target_type}'",
-                    "dispatched": False,
+                    "status": "triggered",
+                    "dispatched": True,
+                    "run_id": run_id,
+                    "target_type": webhook.target_type,
+                    "target_name": webhook.target_name,
                 }
-
-            return {"dispatched": True, "workflow_id": wf_id}
-        except Exception as exc:
-            logger.exception("Webhook dispatch failed for '%s'", webhook.name)
-            return {"error": str(exc), "dispatched": False}
+            except Exception as exc:
+                logger.error(
+                    "Webhook '%s' failed to submit run for %s: %s",
+                    webhook.name,
+                    agent_id,
+                    exc,
+                )
+                return {
+                    "status": "failed",
+                    "dispatched": False,
+                    "error": str(exc),
+                }
+        else:
+            logger.warning(
+                "Webhook '%s' triggered, but Temporal is deprecated. Native runtime execution is not configured.",
+                webhook.name,
+            )
+            return {"status": "triggered", "dispatched": False}

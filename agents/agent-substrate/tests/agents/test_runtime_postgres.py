@@ -395,8 +395,6 @@ async def test_pg_cold_resume() -> None:
 
     from ravi.infrastructure.runtime import build_postgres_runtime
     from ravi.infrastructure.runtime.pg_scheduler import PostgresScheduler
-    from ravi.kernel.core.content import ChatMessage, Role, TextBlock
-    from ravi.kernel.messaging.message import ChatPayload
     from ravi.agents.factory import rebuild_agent
 
     done_a = asyncio.Event()
@@ -420,12 +418,10 @@ async def test_pg_cold_resume() -> None:
         "model_context_window": 10,
     }
 
-    saved_run_id: str | None = None
     async with build_postgres_runtime(postgres_url=_PG_URL) as rt_a:
         agent_a = EchoSpecAgent(agent_id_a)
         await rt_a.register(agent_a)
         run_id = await rt_a.submit(agent_id_a, _msg(agent_id_a, {"x": 1}))
-        saved_run_id = run_id
         # Wait for run to complete in runtime A
         await asyncio.wait_for(done_a.wait(), timeout=5.0)
         # Save the spec manually (simulating what AgentStreamSession does)

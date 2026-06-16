@@ -2,7 +2,7 @@
 
 Demonstrates the ravi-engine observability layer:
 - configure_opentelemetry() wires up OTel SDK (console or OTLP to Tempo/Jaeger)
-- AssistantAgent emits spans automatically on every run
+- ReActAgent emits spans automatically on every run
 - EnvelopeSpan wraps arbitrary operations with structured span metadata
 - InMemoryReplayGate gates idempotent replay admissions
 - InMemoryOperatorKillSwitch enables/disables traffic by scope
@@ -14,16 +14,16 @@ import asyncio
 import os
 
 from ravi.config import settings
-from ravi.agents.reasoning.agents.assistant import AssistantAgent
-from ravi.adapters.observability import (
+from ravi.agents.core import ReActAgent
+from ravi.serving.shared.observability import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
     InMemoryReplayGate,
 )
 from ravi.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.adapters.llm.factory import create_model_client
+from ravi.integrations.llm.factory import create_model_client
 from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.memory.unbounded import UnboundedMemory
+from ravi.agents.context import InMemoryHistoryProvider
 from ravi.kernel.observability import (
     EnvelopeSpan,
     KillSwitchRule,
@@ -75,8 +75,8 @@ async def section_1_configure_otel() -> None:
 
 
 async def section_2_agent_with_tracing() -> None:
-    """Section 2 — Run a AssistantAgent; spans are emitted automatically."""
-    print("\n=== Section 2: AssistantAgent with automatic tracing ===")
+    """Section 2 — Run a ReActAgent; spans are emitted automatically."""
+    print("\n=== Section 2: ReActAgent with automatic tracing ===")
 
     api_keys = {
         "openai": settings.OPENAI_API_KEY,
@@ -96,11 +96,11 @@ async def section_2_agent_with_tracing() -> None:
         "primary",
         create_model_client(settings.CHAT_MODEL, api_keys=api_keys),
     )
-    catalog.register_memory("memory", UnboundedMemory())
+    catalog.register_memory("memory", InMemoryHistoryProvider())
     for tool in [CalculatorTool(), GetCurrentTimeTool()]:
         catalog.register_tool(tool)
 
-    agent = AssistantAgent(
+    agent = ReActAgent(
         name="ObservabilityBot",
         description="Demo agent for observability example.",
         catalog=catalog,

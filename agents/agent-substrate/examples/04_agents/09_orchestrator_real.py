@@ -28,8 +28,8 @@ import asyncio
 from ravi.agents.context import AgentContext, InMemoryHistoryProvider, SlidingWindowCompaction
 from ravi.agents.core.react import ReActAgent
 from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from ravi.agents.runtime.local import LocalRuntime
-from ravi.adapters.llm.openai.openai_client import OpenAIClient
+from ravi.agents.runtime import Runtime
+from ravi.integrations.llm.openai.openai_client import OpenAIClient
 from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
 from ravi.console import Console
 from ravi.kernel import Priority
@@ -49,7 +49,7 @@ def _context() -> AgentContext:
     return AgentContext(InMemoryHistoryProvider(), SlidingWindowCompaction(max_messages=20))
 
 
-def build_team(runtime: LocalRuntime) -> OrchestratorAgent:
+def build_team(runtime: Runtime) -> OrchestratorAgent:
     model = _model()
 
     # ── Specialist 1: web researcher ─────────────────────────────────────────
@@ -121,7 +121,7 @@ QUERY = (
 
 
 async def main() -> None:
-    async with LocalRuntime() as rt:
+    async with Runtime() as rt:
         orchestrator = build_team(rt)
         print(f"\nQuery: {QUERY}\n")
         await Console(orchestrator).run_stream(QUERY)

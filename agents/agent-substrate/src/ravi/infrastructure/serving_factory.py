@@ -464,6 +464,7 @@ async def build_agent_for_thread(
     model_context_window: int = 40,
     max_iterations: int = 30,
     runtime: Any = None,
+    initial_tool_choice: str | None = None,
 ) -> Any:
     """Build and register a kernel Agent for this thread.
 
@@ -580,6 +581,7 @@ async def build_agent_for_thread(
         ),
         system_instructions=system_instructions,
         max_iterations=max_iterations,
+        initial_tool_choice=initial_tool_choice,
     )
     await runtime.register(agent)
     return agent

@@ -113,6 +113,12 @@ class WebSurferTool:
                 "type": "number",
                 "description": "Timeout in milliseconds (default: 30000)",
             },
+            "max_chars": {
+                "type": "integer",
+                "description": "Maximum number of characters to return for content extraction actions. Defaults to 12000.",
+                "minimum": 1000,
+                "maximum": 50000,
+            },
         },
         "required": ["action"],
     }
@@ -206,6 +212,7 @@ class WebSurferTool:
         scroll_direction: str | None = None,
         full_page: bool = True,
         timeout: int = 30000,
+        max_chars: int | None = None,
     ) -> ToolExecutionResult:
         """Execute web surfing action.
 
@@ -242,13 +249,13 @@ class WebSurferTool:
                 result = await self._navigate(url, timeout)
 
             elif action == "extract_text":
-                result = await self._extract_text()
+                result = await self._extract_text(max_chars)
 
             elif action == "extract_markdown":
-                result = await self._extract_markdown()
+                result = await self._extract_markdown(max_chars)
 
             elif action == "get_html":
-                result = await self._get_html()
+                result = await self._get_html(max_chars)
 
             elif action == "screenshot":
                 result = await self._screenshot(full_page)
@@ -337,7 +344,7 @@ class WebSurferTool:
             "status_code": response.status if response else None,
         }
 
-    async def _extract_text(self) -> dict[str, Any]:
+    async def _extract_text(self, max_chars: int | None = None) -> dict[str, Any]:
         """Extract visible text from page."""
         page = self._require_page()
         text = await page.evaluate("""
@@ -345,15 +352,23 @@ class WebSurferTool:
                 return document.body.innerText;
             }
         """)
+        limit = max_chars if max_chars is not None else 12000
+        truncated = False
+        original_length = len(text)
+        if len(text) > limit:
+            text = text[:limit] + "\n\n[truncated due to max_chars limit]"
+            truncated = True
         return {
             "status": "success",
             "action": "extract_text",
             "url": page.url,
             "text": text,
             "length": len(text),
+            "original_length": original_length,
+            "truncated": truncated,
         }
 
-    async def _extract_markdown(self) -> dict[str, Any]:
+    async def _extract_markdown(self, max_chars: int | None = None) -> dict[str, Any]:
         """Extract content as markdown (simplified)."""
         # Simple markdown conversion - can be enhanced
         page = self._require_page()
@@ -378,23 +393,39 @@ class WebSurferTool:
                 return md;
             }
         """)
+        limit = max_chars if max_chars is not None else 12000
+        truncated = False
+        original_length = len(markdown)
+        if len(markdown) > limit:
+            markdown = markdown[:limit] + "\n\n[truncated due to max_chars limit]"
+            truncated = True
         return {
             "status": "success",
             "action": "extract_markdown",
             "url": page.url,
             "markdown": markdown,
+            "original_length": original_length,
+            "truncated": truncated,
         }
 
-    async def _get_html(self) -> dict[str, Any]:
+    async def _get_html(self, max_chars: int | None = None) -> dict[str, Any]:
         """Get page HTML source."""
         page = self._require_page()
         html = await page.content()
+        limit = max_chars if max_chars is not None else 12000
+        truncated = False
+        original_length = len(html)
+        if len(html) > limit:
+            html = html[:limit] + "\n\n[truncated due to max_chars limit]"
+            truncated = True
         return {
             "status": "success",
             "action": "get_html",
             "url": page.url,
             "html": html,
             "length": len(html),
+            "original_length": original_length,
+            "truncated": truncated,
         }
 
     async def _screenshot(self, full_page: bool) -> dict[str, Any]:

@@ -37,6 +37,7 @@ from ravi.serving.monolith.routes.hitl import router as hitl_router
 from ravi.serving.monolith.routes.mcp_apps import router as mcp_apps_router
 from ravi.serving.monolith.routes.pipelines import router as pipelines_router
 from ravi.serving.monolith.routes.rag import router as rag_router
+from ravi.serving.monolith.routes.rate_limit import router as rate_limit_router
 from ravi.serving.monolith.routes.spotify_oauth import router as spotify_oauth_router
 from ravi.serving.monolith.routes.tasks import router as tasks_router
 from ravi.serving.monolith.routes.threads import router as threads_router
@@ -48,6 +49,7 @@ from ravi.serving.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
 )
+from ravi.serving.shared.rate_limit import rate_limit_settings
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -125,6 +127,17 @@ async def lifespan(app: FastAPI):
 
     app.state.cancel_registry = {}
     app.state.mcp_servers = {}
+
+    # Rate limiting — Redis sliding window, two-tier (authed by user_id, anon by IP)
+    # The redis client used for rate limiting is the shared infra.redis_client.
+    # `app.state.redis` is the alias rate_limit.py looks for.
+    app.state.redis = infra.redis_client
+    app.state.rate_limit_settings = rate_limit_settings(
+        enabled=settings.RATE_LIMIT_ENABLED,
+        authed_rpm=settings.RATE_LIMIT_AUTHED_RPM,
+        anon_rpm=settings.RATE_LIMIT_ANON_RPM,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
 
     # Runtime services (chains, pipelines, workflows, triggers)
     rt: RuntimeServices = await init_runtime_services(
@@ -229,6 +242,7 @@ def create_app() -> FastAPI:
     app.include_router(triggers_router)
     app.include_router(rag_router)
     app.include_router(files_router)
+    app.include_router(rate_limit_router)
 
     @app.get("/health", tags=["infra"])
     async def health():

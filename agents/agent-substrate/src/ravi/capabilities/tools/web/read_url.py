@@ -41,13 +41,24 @@ class ReadUrlTool:
                 ),
                 "minimum": 0,
             },
+            "max_chars": {
+                "type": "integer",
+                "description": "Maximum number of characters to return. Defaults to 12000.",
+                "minimum": 1000,
+                "maximum": 50000,
+            },
         },
         "required": ["url"],
         "additionalProperties": False,
     }
 
     async def execute(
-        self, *, url: str, offset: int = 0, **_: object
+        self,
+        *,
+        url: str,
+        offset: int = 0,
+        max_chars: int | None = None,
+        **_: object,
     ) -> ToolExecutionResult:
         try:
             from crawl4ai import AsyncWebCrawler, HTTPCrawlerConfig
@@ -86,8 +97,9 @@ class ReadUrlTool:
                     is_error=True,
                 )
 
+            limit = max_chars if max_chars is not None else _MAX_CHARS
             total = len(text)
-            chunk = text[offset : offset + _MAX_CHARS]
+            chunk = text[offset : offset + limit]
             remaining = total - offset - len(chunk)
             if remaining > 0:
                 chunk += f"\n\n[truncated — {remaining} chars remaining, call again with offset={offset + len(chunk)}]"

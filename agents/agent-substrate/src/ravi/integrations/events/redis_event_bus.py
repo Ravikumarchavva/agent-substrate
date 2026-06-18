@@ -100,13 +100,16 @@ class EventBus:
                 if not messages:
                     continue
 
-                for stream, entries in messages:
+                messages_items = (
+                    messages.items() if isinstance(messages, dict) else messages
+                )
+                for stream, entries in messages_items:
                     for msg_id, data in entries:
                         try:
                             envelope = EventEnvelope.model_validate_json(
                                 data["envelope"]
                             )
-                            parent_ctx = extract(envelope.trace_context)
+                            parent_ctx = extract(envelope.trace_context or {})
                             tracer = trace.get_tracer("ravi.events")
                             with tracer.start_as_current_span(
                                 f"consume:{envelope.event_type}",

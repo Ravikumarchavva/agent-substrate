@@ -38,13 +38,24 @@ class WikipediaTool:
                 "type": "boolean",
                 "description": "If true, return the full article extract instead of just the summary. Defaults to false.",
             },
+            "max_chars": {
+                "type": "integer",
+                "description": "Maximum number of characters to return (only applies to full article extracts). Defaults to 6000.",
+                "minimum": 1000,
+                "maximum": 50000,
+            },
         },
         "required": ["query"],
         "additionalProperties": False,
     }
 
     async def execute(
-        self, *, query: str, full_article: bool = False, **_: object
+        self,
+        *,
+        query: str,
+        full_article: bool = False,
+        max_chars: int | None = None,
+        **_: object,
     ) -> ToolExecutionResult:
         try:
             async with httpx.AsyncClient(
@@ -90,8 +101,9 @@ class WikipediaTool:
                     pages = article_resp.json().get("query", {}).get("pages", {})
                     page = next(iter(pages.values()))
                     text = page.get("extract", "").strip()
-                    if len(text) > _MAX_CHARS:
-                        text = text[:_MAX_CHARS] + "\n\n[truncated — article continues]"
+                    limit = max_chars if max_chars is not None else _MAX_CHARS
+                    if len(text) > limit:
+                        text = text[:limit] + "\n\n[truncated — article continues]"
                     output = f"# {title}\n\n{text}"
                 else:
                     # Summary endpoint — short and clean

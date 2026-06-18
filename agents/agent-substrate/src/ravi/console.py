@@ -28,6 +28,7 @@ import logging
 import json
 import time
 from io import UnsupportedOperation
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, List
 
 from rich.console import Console as RichConsole, Group, ConsoleOptions, RenderResult
@@ -106,6 +107,32 @@ def _has_wide_or_combining_characters(text: str) -> bool:
         if 0x0900 <= cp <= 0x0FFF or 0x3000 <= cp <= 0x9FFF:
             return True
     return False
+
+
+@dataclass
+class _TaskBoardUpdate:
+    """Internal event: task board snapshot after a manage_tasks tool call."""
+
+    boards: List[Any] = field(default_factory=list)
+
+
+_STATUS_ICONS: dict[str, tuple[str, str]] = {
+    "planned": ("○", "dim"),
+    "in_progress": ("⟳", "yellow"),
+    "blocked": ("⏸", "dark_orange"),
+    "succeeded": ("✔", "green"),
+    "failed": ("✖", "red"),
+    "abandoned": ("⚫", "dim"),
+}
+
+_STATUS_ORDER = [
+    "planned",
+    "in_progress",
+    "blocked",
+    "failed",
+    "abandoned",
+    "succeeded",
+]
 
 
 _THEME = Theme(
@@ -226,6 +253,14 @@ class Console:
                     content=content,
                     run_id=run_id,
                 )
+                if name == "manage_tasks":
+                    from ravi.agents.storage.tasks import GlobalTaskStore
+
+                    _boards = await GlobalTaskStore.get().get_boards_by_conversation(
+                        self._correlation_id
+                    )
+                    if _boards:
+                        yield _TaskBoardUpdate(boards=_boards)
             elif kind == "run.completed":
                 yield CompletionEvent(
                     content=[_TB(text=final_text)],
@@ -258,6 +293,8 @@ class Console:
                 from ravi.kernel.core.content import content_blocks_to_str
 
                 final_text = content_blocks_to_str(chunk.content)  # type: ignore[arg-type]
+            elif isinstance(chunk, _TaskBoardUpdate):
+                self._print_task_board(chunk.boards)
             elif isinstance(chunk, StreamDone):
                 break
 
@@ -416,6 +453,11 @@ class Console:
                             self._print_tool_call(chunk)
                         elif chunk.step == AgentStep.TOOL_RESULT:
                             self._print_tool_result(chunk)
+                    elif isinstance(chunk, _TaskBoardUpdate):
+                        if active_stream_type is not None:
+                            self.console.print()
+                            active_stream_type = None
+                        self._print_task_board(chunk.boards)
                 else:
                     if isinstance(chunk, TextDelta):
                         if live and reasoning_stream_active:
@@ -551,6 +593,8 @@ class Console:
                             self._print_tool_call(chunk)
                         elif chunk.step == AgentStep.TOOL_RESULT:
                             self._print_tool_result(chunk)
+                    elif isinstance(chunk, _TaskBoardUpdate):
+                        self._print_task_board(chunk.boards)
 
         finally:
             text_stream_active = False
@@ -884,6 +928,58 @@ class Console:
                 allowed = ", ".join(getattr(s, "allowed_tools", [])) or "—"
                 table.add_row(name, allowed)
             self.console.print(table)
+
+    def _print_task_board(self, boards: List[Any]) -> None:
+        """Render per-agent Kanban boards as Rich panels in the terminal."""
+        for board in boards:
+            label = (
+                getattr(board, "agent_label", "")
+                or getattr(board, "agent_id", "")
+                or "Agent"
+            )
+            tasks = getattr(board, "tasks", [])
+            max_retries = getattr(board, "max_retries", 3)
+            total = len(tasks)
+            if total == 0:
+                continue
+            done = sum(1 for t in tasks if getattr(t, "status", "") == "succeeded")
+
+            sorted_tasks = sorted(
+                tasks,
+                key=lambda t: (
+                    _STATUS_ORDER.index(t.status) if t.status in _STATUS_ORDER else 99,
+                    t.order,
+                ),
+            )
+
+            table = Table(show_header=False, box=None, padding=(0, 1), show_edge=False)
+            table.add_column("icon", width=2, no_wrap=True)
+            table.add_column("title")
+            table.add_column("status", width=13, no_wrap=True, style="dim")
+            table.add_column("note", style="dim", no_wrap=True)
+
+            for task in sorted_tasks:
+                icon, style = _STATUS_ICONS.get(task.status, ("?", "dim"))
+                note = task.note or ""
+                retry_count = getattr(task, "retry_count", 0)
+                if retry_count > 0:
+                    retry_str = f"retry {retry_count}/{max_retries}"
+                    note = f"{retry_str} — {note}" if note else retry_str
+                table.add_row(
+                    f"[{style}]{icon}[/{style}]",
+                    task.title,
+                    task.status.replace("_", " "),
+                    note,
+                )
+
+            self.console.print(
+                Panel(
+                    table,
+                    title=f"[bold]Tasks · {label}[/bold]  [dim]{done}/{total}[/dim]",
+                    border_style="cyan",
+                    padding=(0, 1),
+                )
+            )
 
     def _print_help(self) -> None:
         help_text = (

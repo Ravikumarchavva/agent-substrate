@@ -86,7 +86,9 @@ class AgentStreamSession:
         """Register agent, submit message, tail EventLog. Returns terminal reason."""
         try:
             await self._runtime.register(self._agent)
-            run_id = await self._runtime.submit(self._agent.id, self._msg)
+            # max_retries=0: interactive chat runs must not be retried with the
+            # same run_id — retries replay the journal and re-hit journaled errors.
+            run_id = await self._runtime.submit(self._agent.id, self._msg, max_retries=0)
             self._run_id = run_id
 
             # Persist the agent spec so it can be rebuilt on cold resume.
@@ -100,23 +102,40 @@ class AgentStreamSession:
 
             text_acc = ""
             tool_calls_acc: list[ToolCallSummary] = []
+            _saw_tool_result = False  # True after tool.result; flush turn on next text.delta
+
+            async def _flush_turn() -> None:
+                nonlocal text_acc, tool_calls_acc, _saw_tool_result
+                if self._persister and (text_acc or tool_calls_acc):
+                    await self._persister.persist_turn(
+                        TurnCompletedEvent(
+                            text=text_acc,
+                            tool_calls=tool_calls_acc,
+                            finish_reason="stop",
+                        )
+                    )
+                text_acc = ""
+                tool_calls_acc = []
+                _saw_tool_result = False
 
             async for entry in self._runtime.event_log.tail(run_id):
                 kind = entry.kind
                 if kind == "run.completed":
-                    if self._persister and (text_acc or tool_calls_acc):
-                        await self._persister.persist_turn(
-                            TurnCompletedEvent(
-                                text=text_acc,
-                                tool_calls=tool_calls_acc,
-                                finish_reason="stop",
-                            )
-                        )
+                    await _flush_turn()
                     return "success"
                 if kind == "run.failed":
+                    # Persist whatever was accumulated before the failure.
+                    try:
+                        await _flush_turn()
+                    except Exception:
+                        pass
                     self._error = (entry.payload or {}).get("error", "agent run failed")
                     return "error"
                 if kind == "run.cancelled":
+                    try:
+                        await _flush_turn()
+                    except Exception:
+                        pass
                     return "cancelled"
 
                 wire = wire_from_log(kind, entry.payload or {})
@@ -126,7 +145,12 @@ class AgentStreamSession:
                 if self._persister:
                     if isinstance(wire, ToolResultEvent):
                         await self._persister.persist_tool(wire)
+                        _saw_tool_result = True
                     elif isinstance(wire, TextDeltaEvent):
+                        # A new text.delta after tool results means a new LLM turn
+                        # started — flush the completed turn before accumulating.
+                        if _saw_tool_result and (text_acc or tool_calls_acc):
+                            await _flush_turn()
                         text_acc += wire.text
                     elif isinstance(wire, ToolCallEvent):
                         tool_calls_acc.append(

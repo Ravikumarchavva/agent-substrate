@@ -23,6 +23,11 @@ from ravi.agents.context.context import ContextConfig
 from ravi.agents.resources.budget import ExecutionTracker
 from ravi.agents.hooks.manager import HookEvent, HookManager
 from ravi.agents.middleware.pipeline import MiddlewarePipeline
+from ravi.agents.storage.tasks import (
+    current_agent_id as _task_agent_id,
+    current_agent_label as _task_agent_label,
+    current_thread_id as _task_thread_id,
+)
 from ravi.agents.core._loop import (
     deliver,
     final_text,
@@ -58,6 +63,7 @@ class ReActAgent:
         execution_budget: ExecutionTracker | None = None,
         hooks: HookManager | None = None,
         middleware: MiddlewarePipeline | None = None,
+        initial_tool_choice: str | None = None,
     ) -> None:
         self.id = AgentId(type="agent", key=name)
         self.name = name
@@ -82,18 +88,27 @@ class ReActAgent:
         self._execution_budget = execution_budget
         self.hooks = hooks
         self.middleware = middleware
+        self._initial_tool_choice = initial_tool_choice
 
     @property
     def history(self) -> HistoryProvider:
         return self._context.history
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        # Stamp identity ContextVars so TaskManagerTool boards are per-agent.
+        _task_agent_id.set(str(self.id))
+        _task_agent_label.set(self.id.key)
         for msg in inbox:
             ctx.check()
             await self._handle_message(ctx, msg)
 
     async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
         session_id = msg.correlation_id or ctx.run_id
+        # Stamp thread_id so TaskManagerTool scopes boards to this conversation.
+        # Must be set here (inside the Worker task) because the Worker runs in a
+        # different asyncio context from the SSE generator where the ContextVar
+        # was previously attempted.
+        _task_thread_id.set(session_id)
 
         history_messages = await load_history(self._context, self.id, session_id)
         user_turn = message_to_chat(msg)
@@ -110,9 +125,19 @@ class ReActAgent:
         n_loaded: int,
     ) -> None:
         tool_list = self.tools.all() if self.tools else []
-        options = GenerationOptions(
+        base_options = GenerationOptions(
             system_instructions=self._system_instructions,
             tools=tool_list or None,
+        )
+        # Apply initial_tool_choice only to the very first LLM call.
+        options = (
+            GenerationOptions(
+                system_instructions=self._system_instructions,
+                tools=tool_list or None,
+                tool_choice=self._initial_tool_choice,
+            )
+            if self._initial_tool_choice
+            else base_options
         )
 
         for _ in range(self._max_iterations):
@@ -122,6 +147,9 @@ class ReActAgent:
                     HookEvent.LLM_START, {"agent_name": self.name, "run_id": ctx.run_id}
                 )
             resp = await ctx.llm(messages, options=options)
+            # Drop the forced tool_choice after the first call so subsequent
+            # iterations can freely choose to respond with text or more tools.
+            options = base_options
             if self.hooks:
                 await self.hooks.dispatch(
                     HookEvent.LLM_END,

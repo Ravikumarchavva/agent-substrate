@@ -129,15 +129,25 @@ class Runtime:
         *,
         priority: int = 5,
         tenant: str = "default",
+        max_retries: int = 3,
     ) -> RunId:
         """Deliver ``msg`` to ``agent_id`` and enqueue a run.
 
         Returns the new run_id.  The run starts when the Worker next polls.
+        Pass ``max_retries=0`` for interactive runs where the journal-replay
+        retry loop would cause repeated failures on the same journaled error.
         """
+        from ravi.kernel.runtime.scheduler import RunRetryPolicy
+
         run_id = new_run_id()
         self._scheduler.register_run(run_id, agent_id)
         await self._inbox.deliver(agent_id, msg)
-        await self._scheduler.enqueue(run_id, priority=priority, tenant=tenant)
+        await self._scheduler.enqueue(
+            run_id,
+            priority=priority,
+            tenant=tenant,
+            retry_policy=RunRetryPolicy(max_retries=max_retries),
+        )
         return run_id
 
     async def follow(

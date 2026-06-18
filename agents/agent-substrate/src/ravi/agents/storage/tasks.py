@@ -1,80 +1,56 @@
-"""
-Task Store — in-memory store for agent task lists.
-Each conversation gets one active TaskList.
-Design is intentionally simple; swap for Postgres/SQLAlchemy later.
+"""In-memory task store — per-agent Kanban boards, keyed by (conversation_id, agent_id).
+
+The GlobalTaskStore singleton is swapped to PgTaskStore at startup when
+RUNTIME_BACKEND=postgres (see infrastructure/serving_factory.py).
 """
 
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+import contextvars
 from typing import Dict, List, Optional
 from uuid import uuid4
 
+from ravi.kernel.storage.tasks import Task, TaskList, TaskStatus
 
 # ---------------------------------------------------------------------------
-# Data classes
+# Per-request/agent identity ContextVars (set by agent run() entry).
+# Placed here (L1) so both agents/core/* and capabilities/tools/* can import them
+# without violating the layer contracts (capabilities may import agents).
 # ---------------------------------------------------------------------------
 
-
-@dataclass
-class Task:
-    id: str
-    title: str
-    status: str = "todo"  # "todo" | "in_progress" | "done" | "failed"
-    order: int = 0
-    retry_count: int = 0
-
-
-@dataclass
-class TaskList:
-    id: str
-    conversation_id: str
-    tasks: List[Task] = field(default_factory=list)
-    max_retries: int = 3
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "conversation_id": self.conversation_id,
-            "max_retries": self.max_retries,
-            "tasks": [
-                {
-                    "id": t.id,
-                    "title": t.title,
-                    "status": t.status,
-                    "order": t.order,
-                    "retry_count": t.retry_count,
-                    "max_retries": self.max_retries,
-                }
-                for t in self.tasks
-            ],
-        }
-
-
-# ---------------------------------------------------------------------------
-# Store
-# ---------------------------------------------------------------------------
+current_thread_id: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "task_manager_thread_id", default="default"
+)
+current_agent_id: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "task_manager_agent_id", default=""
+)
+current_agent_label: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "task_manager_agent_label", default=""
+)
+current_parent_agent_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "task_manager_parent_agent_id", default=None
+)
 
 
 class TaskStore:
-    """Thread-safe in-memory task store (singleton via GlobalTaskStore)."""
+    """Thread-safe in-memory task store."""
 
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
         # task_list_id -> TaskList
         self._lists: Dict[str, TaskList] = {}
-        # conversation_id -> task_list_id  (one active list per conversation)
-        self._by_conversation: Dict[str, str] = {}
-
-    # ------------------------------------------------------------------
-    # Create
-    # ------------------------------------------------------------------
+        # (conversation_id, agent_id) -> task_list_id
+        self._by_key: Dict[tuple[str, str], str] = {}
 
     async def create_task_list(
         self,
         conversation_id: str,
         task_titles: List[str],
+        *,
+        agent_id: str = "",
+        agent_label: str = "",
+        parent_agent_id: Optional[str] = None,
         max_retries: int = 3,
     ) -> TaskList:
         async with self._lock:
@@ -82,35 +58,49 @@ class TaskStore:
                 id=str(uuid4()),
                 conversation_id=conversation_id,
                 max_retries=max_retries,
+                agent_id=agent_id,
+                agent_label=agent_label,
+                parent_agent_id=parent_agent_id,
                 tasks=[
-                    Task(id=str(uuid4()), title=t.strip(), status="todo", order=i)
+                    Task(
+                        id=str(uuid4()),
+                        title=t.strip(),
+                        status=TaskStatus.PLANNED,
+                        order=i,
+                    )
                     for i, t in enumerate(task_titles)
                     if t.strip()
                 ],
             )
             self._lists[task_list.id] = task_list
-            self._by_conversation[conversation_id] = task_list.id
+            self._by_key[(conversation_id, agent_id)] = task_list.id
             return task_list
-
-    # ------------------------------------------------------------------
-    # Read
-    # ------------------------------------------------------------------
 
     async def get_task_list(self, task_list_id: str) -> Optional[TaskList]:
         return self._lists.get(task_list_id)
 
     async def get_by_conversation(self, conversation_id: str) -> Optional[TaskList]:
-        tl_id = self._by_conversation.get(conversation_id)
+        # Return the "root" board (agent_id="") or the first one found
+        tl_id = self._by_key.get((conversation_id, ""))
         if tl_id:
             return self._lists.get(tl_id)
+        # Fallback: any board for this conversation
+        for (cid, _), tl_id in self._by_key.items():
+            if cid == conversation_id:
+                return self._lists.get(tl_id)
         return None
 
-    # ------------------------------------------------------------------
-    # Update status
-    # ------------------------------------------------------------------
+    async def get_boards_by_conversation(self, conversation_id: str) -> List[TaskList]:
+        results = []
+        for (cid, _), tl_id in self._by_key.items():
+            if cid == conversation_id:
+                tl = self._lists.get(tl_id)
+                if tl:
+                    results.append(tl)
+        return results
 
     async def update_status(
-        self, task_list_id: str, task_id: str, status: str
+        self, task_list_id: str, task_id: str, status: str, note: str = ""
     ) -> Optional[Task]:
         async with self._lock:
             task_list = self._lists.get(task_list_id)
@@ -119,12 +109,10 @@ class TaskStore:
             for task in task_list.tasks:
                 if task.id == task_id:
                     task.status = status
+                    if note:
+                        task.note = note
                     return task
             return None
-
-    # ------------------------------------------------------------------
-    # Add / Delete
-    # ------------------------------------------------------------------
 
     async def add_tasks(self, task_list_id: str, titles: List[str]) -> List[Task]:
         async with self._lock:
@@ -136,7 +124,7 @@ class TaskStore:
                 Task(
                     id=str(uuid4()),
                     title=t.strip(),
-                    status="todo",
+                    status=TaskStatus.PLANNED,
                     order=start_order + i,
                 )
                 for i, t in enumerate(titles)
@@ -155,10 +143,9 @@ class TaskStore:
             return len(task_list.tasks) < before
 
     async def increment_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
-        """Increment retry_count and move task back to in_progress.
+        """Agent bounded retry: increment retry_count, move to in_progress.
 
-        Returns None if the task isn't found or has reached max_retries.
-        Caller is responsible for checking the limit before calling.
+        Returns None if not found or retry_count has reached max_retries.
         """
         async with self._lock:
             task_list = self._lists.get(task_list_id)
@@ -166,8 +153,24 @@ class TaskStore:
                 return None
             for task in task_list.tasks:
                 if task.id == task_id:
+                    if task.retry_count >= task_list.max_retries:
+                        return None
                     task.retry_count += 1
-                    task.status = "in_progress"
+                    task.status = TaskStatus.IN_PROGRESS
+                    return task
+            return None
+
+    async def force_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
+        """User override: reset retry_count to 0 and set in_progress."""
+        async with self._lock:
+            task_list = self._lists.get(task_list_id)
+            if not task_list:
+                return None
+            for task in task_list.tasks:
+                if task.id == task_id:
+                    task.retry_count = 0
+                    task.status = TaskStatus.IN_PROGRESS
+                    task.note = ""
                     return task
             return None
 
@@ -185,11 +188,6 @@ class TaskStore:
             return None
 
 
-# ---------------------------------------------------------------------------
-# Singleton accessor
-# ---------------------------------------------------------------------------
-
-
 class GlobalTaskStore:
     _instance: Optional[TaskStore] = None
 
@@ -201,4 +199,4 @@ class GlobalTaskStore:
 
     @classmethod
     def set(cls, store: TaskStore) -> None:
-        cls._instance = store
+        cls._instance = store  # type: ignore[assignment]

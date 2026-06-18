@@ -26,6 +26,11 @@ from ravi.kernel.tools.tools import ToolExecutionResult
 from ravi.kernel.agent.supervision import Priority, SpawnBudget
 from ravi.agents.context.context import ContextConfig
 from ravi.agents.supervision.budget import SpawnTracker
+from ravi.agents.storage.tasks import (
+    current_agent_id as _task_agent_id,
+    current_agent_label as _task_agent_label,
+    current_parent_agent_id as _task_parent_agent_id,
+)
 from ravi.agents.core._loop import (
     deliver,
     final_text,
@@ -111,6 +116,11 @@ class OrchestratorAgent:
         return self._context.history
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        # Stamp identity so this orchestrator's boards are isolated.
+        # Also set parent so spawned subagents inherit it via ContextVar copy-on-spawn.
+        _task_agent_id.set(str(self.id))
+        _task_agent_label.set(self.id.key)
+        _task_parent_agent_id.set(None)  # orchestrator is the root
         for msg in inbox:
             ctx.check()
             await self._handle_message(ctx, msg)
@@ -159,6 +169,9 @@ class OrchestratorAgent:
                     continue
 
                 spawn_tracker.acquire(cfg.agent.id, priority=cfg.priority)
+                # Let spawned subagent inherit orchestrator id as parent
+                # (ContextVar copy-on-spawn propagates this automatically).
+                _task_parent_agent_id.set(str(self.id))
                 task_text = dispatch.arguments.get("task", str(dispatch.arguments))
                 boot_msg = Message(
                     target=cfg.agent.id,

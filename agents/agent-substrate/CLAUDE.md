@@ -514,7 +514,7 @@ runner.export_markdown()
 
 | Area | Issue |
 |---|---|
-| `serving/monolith/routes/spotify_oauth.py` | `session_id = "default_user"` hardcoded — needs real user identity from auth context |
+| `serving/monolith/routes/spotify_oauth.py` | Uses a single `"spotify:token:default"` Redis key — fine for single-user ravi-ui instances, needs per-user keying for multi-tenant SaaS |
 | `agents/storage/tasks.py` | `TaskStore` is in-memory only — should be Postgres-backed for persistence across restarts |
 | `agents/core/react.py` | `_react()` is ~150 lines — guardrail checks and tool-concurrency drain could be extracted into helpers |
 | Test coverage | Gaps in: guardrails, middleware, MCP adapter, most microservices, fabric/evals |

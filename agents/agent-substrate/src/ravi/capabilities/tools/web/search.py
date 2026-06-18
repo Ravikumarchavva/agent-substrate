@@ -39,13 +39,24 @@ class WebSearchTool:
                 "minimum": 1,
                 "maximum": 10,
             },
+            "max_chars": {
+                "type": "integer",
+                "description": "Maximum number of characters of the combined results string. Defaults to 10000.",
+                "minimum": 1000,
+                "maximum": 50000,
+            },
         },
         "required": ["query"],
         "additionalProperties": False,
     }
 
     async def execute(
-        self, *, query: str, max_results: int = 5, **_: object
+        self,
+        *,
+        query: str,
+        max_results: int = 5,
+        max_chars: int | None = None,
+        **_: object,
     ) -> ToolExecutionResult:
         from ddgs import DDGS
 
@@ -68,7 +79,12 @@ class WebSearchTool:
                 url = r.get("href", "").strip()
                 lines.append(f"{i}. **{title}**\n   {body}\n   {url}")
 
-            return ToolExecutionResult(content=[TextBlock(text="\n\n".join(lines))])
+            limit = max_chars if max_chars is not None else 10000
+            result_str = "\n\n".join(lines)
+            if len(result_str) > limit:
+                result_str = result_str[:limit] + "\n\n[truncated due to max_chars limit]"
+
+            return ToolExecutionResult(content=[TextBlock(text=result_str)])
 
         except Exception as exc:
             return ToolExecutionResult(

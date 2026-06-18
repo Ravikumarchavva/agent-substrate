@@ -115,6 +115,7 @@ async def test_condition_trigger_dispatch(redis_url):
     )
     await monitor.add_condition(condition)
     await monitor.start()
+    await asyncio.sleep(0.2)  # Allow background subscription task to connect to Redis
 
     # Publish matching event
     envelope = EventEnvelope(

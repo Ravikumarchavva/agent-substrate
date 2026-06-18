@@ -85,6 +85,7 @@ class ToolResultEvent(BaseModel):
     error: str | None = None
     agent: str = ""
     depth: int = 0
+    structured_content: dict[str, Any] = Field(default_factory=dict)
 
 
 class HandoffEvent(BaseModel):

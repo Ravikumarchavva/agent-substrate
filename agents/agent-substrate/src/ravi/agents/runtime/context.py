@@ -457,10 +457,16 @@ class RunContext:
         self._step_seq += 1
         cached = await self._journal.lookup(effect_id)
         if cached:
-            if cached.status == "error":
-                raise RuntimeError(cached.value.get("error", "journaled tool error"))
             from ravi.kernel.tools.chain import InvocationResult
 
+            if cached.status == "error":
+                # Soft error: tool returned InvocationResult(status="error"). Return it so
+                # the LLM sees the same result on replay as it did on the first run.
+                # Hard error: tool raised an exception, value is {"error": "..."}. Re-raise.
+                try:
+                    return InvocationResult.model_validate(cached.value)
+                except Exception:
+                    raise RuntimeError(cached.value.get("error", "journaled tool error"))
             return InvocationResult.model_validate(cached.value)
         try:
             await self._log(
@@ -486,6 +492,7 @@ class RunContext:
                     "ok": ok,
                     "output": result.text or "",
                     "error": None if ok else (result.text or "tool error"),
+                    "structured_content": result.structured or {},
                 },
             )
             return result

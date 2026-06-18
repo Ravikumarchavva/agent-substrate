@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     # Cached responses do NOT count against this limit (no LLM cost).
     PORTFOLIO_RATE_LIMIT_RPM: int = 10
 
+    # HTTP rate limiting (sliding window, Redis-backed).
+    # RATE_LIMIT_ENABLED=false disables all rate limiting (useful in dev/CI).
+    # RATE_LIMIT_AUTHED_RPM — max requests per minute per authenticated user_id.
+    # RATE_LIMIT_ANON_RPM  — max requests per minute per IP for anonymous callers.
+    # RATE_LIMIT_WINDOW_SECONDS — window size; change to 3600 for per-hour limits.
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTHED_RPM: int = 60
+    RATE_LIMIT_ANON_RPM: int = 5
+    RATE_LIMIT_WINDOW_SECONDS: int = 86400  # 24 hours — 5 messages per day for anon
+
     # Kubernetes Sandbox Code Interpreter Settings
     CODE_INTERPRETER_URL: str = ""
     CI_NAMESPACE: str = "agent-framework"

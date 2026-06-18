@@ -58,6 +58,7 @@ from ravi.serving.monolith.services.agent_service import (
 )
 from ravi.serving.monolith.security.deps import get_current_user
 from ravi.serving.monolith.sse.bridge import WebHITLBridge
+from ravi.serving.shared.rate_limit import rate_limit
 from ravi.serving.protocol import (
     PROTOCOL_VERSION,
     TurnCompletedEvent,
@@ -78,7 +79,10 @@ class _ImagePayload:
 
 MediaType = str | _ImagePayload
 
-router = APIRouter(tags=["chat"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    tags=["chat"],
+    dependencies=[Depends(rate_limit), Depends(get_current_user)],
+)
 
 ATTACHMENT_ANALYSIS_INSTRUCTIONS = (
     "When the user asks about attached files, images, or documents, inspect the "
@@ -576,10 +580,12 @@ async def chat(
         allow_task_planning = _should_allow_task_planning(display_content)
 
         # Check if an existing task list exists for this thread.
-        # If so, we avoid forcing a hard reset/creation, and instead nudge the model
-        # to update or continue it.
+        # If so, we nudge the model to continue it — UNLESS the user is explicitly
+        # asking to create a new board (e.g. "make a task board"), in which case we
+        # skip the "continue existing" hint and let force_task_planning take over.
         has_existing_tasks = False
-        if allow_task_planning:
+        force_new_board = _should_force_task_planning(display_content)
+        if allow_task_planning and not force_new_board:
             _store = request.app.state.task_tool.store
             _existing = await _store.get_by_conversation(str(body.thread_id))
             if _existing:
@@ -624,8 +630,8 @@ async def chat(
         if (
             not initial_tool_choice
             and allow_task_planning
-            and not has_existing_tasks
-            and _should_force_task_planning(display_content)
+            and (not has_existing_tasks or force_new_board)
+            and force_new_board
         ):
             initial_tool_choice = "manage_tasks"
             deps["system_instructions"] = (
@@ -636,7 +642,9 @@ async def chat(
                 + "that reflect EXACTLY what the user asked for above. "
                 + "Use concrete titles like the real steps someone would do for this request. "
                 + "Do NOT use generic placeholders like 'Identify tasks', 'Complete kanban tasks', or 'Plan approach'. "
-                + "After creating the list, call start_task before each step and complete_task after."
+                + "After creating the list, work through tasks ONE AT A TIME: "
+                + "call start_task for ONE task, do the actual work, call complete_task to mark it done, "
+                + "THEN move to the next task. Never call start_task on multiple tasks simultaneously."
             )
         if initial_tool_choice:
             logger.info(
@@ -678,6 +686,7 @@ async def chat(
             history=ctx.history,
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
             runtime=deps["runtime"],
+            initial_tool_choice=initial_tool_choice or None,
         )
 
         # 4. Extract user content from last message
@@ -755,7 +764,7 @@ async def chat(
         "mode": "react",
         "system_instructions": deps["system_instructions"],
         "tool_names": [getattr(t, "name", "") for t in deps["tools"]],
-        "max_iterations": 30,
+        "max_iterations": 50 if initial_tool_choice else 30,
         "session_id": str(body.thread_id),
         "model_context_window": settings.MODEL_CONTEXT_WINDOW,
     }

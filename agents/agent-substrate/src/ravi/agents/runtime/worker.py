@@ -255,6 +255,20 @@ class Worker:
                 HookEvent.RUN_START, {"agent_name": str(agent.id), "run_id": run_id}
             )
 
+        # Keep the Postgres lease alive for long-running agents (LLM calls can
+        # easily exceed the 30-second default lease).  The heartbeat runs every
+        # _HEARTBEAT_INTERVAL seconds; InMemoryScheduler.heartbeat is a no-op.
+        _HEARTBEAT_INTERVAL = 15
+
+        async def _heartbeat() -> None:
+            while True:
+                await asyncio.sleep(_HEARTBEAT_INTERVAL)
+                try:
+                    await self._scheduler.heartbeat(lease)
+                except Exception:
+                    pass  # never let a missed heartbeat kill the run
+
+        heartbeat_task = asyncio.create_task(_heartbeat(), name=f"hb-{run_id[:8]}")
         try:
             if middleware is not None:
                 await middleware.execute(ctx, lambda c: agent.run(c, inbox_msgs))
@@ -338,6 +352,11 @@ class Worker:
                 run_id, RunStatus.FAILED, error=str(exc)
             )
         finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
             if hooks:
                 from ravi.agents.hooks.manager import HookEvent
 

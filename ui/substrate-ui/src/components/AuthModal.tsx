@@ -77,37 +77,21 @@ export function AuthModal({ isOpen, onClose }: Props) {
             )}
           </div>
 
-          {/* Spotify OAuth */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Music className="w-5 h-5 text-green-500" />
-                <span className="font-medium">Spotify</span>
-              </div>
-              {spotifyAuth ? (
+          {/* Spotify — only shown when already connected so user can see status */}
+          {spotifyAuth && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Music className="w-5 h-5 text-green-500" />
+                  <span className="font-medium">Spotify</span>
+                </div>
                 <div className="flex items-center gap-1 text-emerald-500 text-sm">
                   <Check className="w-4 h-4" />
                   Connected
                 </div>
-              ) : (
-                <span className="text-sm text-zinc-500">Not connected</span>
-              )}
+              </div>
             </div>
-            {!spotifyAuth && (
-              <button
-                onClick={loginWithSpotify}
-                className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Music className="w-4 h-4" />
-                Connect Spotify Premium
-              </button>
-            )}
-            {!spotifyAuth && (
-              <p className="text-xs text-zinc-500 text-center">
-                Required for full track playback
-              </p>
-            )}
-          </div>
+          )}
 
           {/* Logout */}
           {(googleAuth || spotifyAuth) && (

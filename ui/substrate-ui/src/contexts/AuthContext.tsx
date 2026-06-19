@@ -51,22 +51,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const promise = (async () => {
-      setIsLoading(true);
-      let nextUser: AuthUser | null = null;
-      let nextGoogleAuth = false;
+      // Synchronous fast-path: if the user cookie is already present we know the
+      // user is authenticated. Unblock canLoadData immediately (before any await)
+      // so a concurrent SSE stream finishing doesn't wipe the message list when
+      // isLoading flips back to false later.
+      const existingUser = readGoogleUserCookie();
+      if (existingUser) {
+        setUser(existingUser);
+        setGoogleAuth(true);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+
+      let nextUser: AuthUser | null = existingUser;
+      let nextGoogleAuth = existingUser !== null;
       let nextSpotifyAuth = false;
       let nextWorkspaceAuth = false;
 
       try {
-        const googleRes = await fetch("/api/auth/google/token", {
-          credentials: "include",
-        });
+        if (!existingUser) {
+          const googleRes = await fetch("/api/auth/google/token", {
+            credentials: "include",
+          });
 
-        if (googleRes.ok) {
-          const googleData = await googleRes.json();
-          if (googleData.authenticated) {
-            nextGoogleAuth = true;
-            nextUser = readGoogleUserCookie();
+          if (googleRes.ok) {
+            const googleData = await googleRes.json();
+            if (googleData.authenticated) {
+              nextGoogleAuth = true;
+              nextUser = readGoogleUserCookie();
+              setUser(nextUser);
+              setGoogleAuth(true);
+            }
           }
         }
 
@@ -93,11 +109,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error("Auth check failed:", err);
       } finally {
-        setUser(nextUser);
-        setGoogleAuth(nextGoogleAuth);
         setSpotifyAuth(nextSpotifyAuth);
         setWorkspaceAuth(nextWorkspaceAuth);
-        setIsLoading(false);
+        // If we didn't find an existing user we need to update everything here
+        if (!existingUser) {
+          setUser(nextUser);
+          setGoogleAuth(nextGoogleAuth);
+          setIsLoading(false);
+        }
       }
     })().finally(() => {
       checkAuthPromiseRef.current = null;

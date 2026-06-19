@@ -4,103 +4,130 @@ import { useRef, useEffect, useState } from "react";
 import { Task, TaskList, TaskStatus } from "@/types";
 import { api } from "@/lib/api";
 import {
-  Circle, Loader2, CheckCircle2, Plus, X, ListTodo,
+  Circle,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  PauseCircle,
+  AlertCircle,
+  Plus,
+  X,
+  ListTodo,
+  RotateCcw,
 } from "lucide-react";
 import { PanelShell } from "@/components/PanelShell";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface KanbanPanelProps {
-  taskList: TaskList | null;
-  onTaskStatusChange?: (taskListId: string, taskId: string, status: TaskStatus) => void;
-  onTaskDelete?: (taskListId: string, taskId: string) => void;
-  onTaskAdd?: (taskListId: string, title: string) => void;
+  taskList: TaskList;
+  onTaskListChange?: (updated: TaskList) => void;
   onDismiss?: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Status progression (click to advance)
-// ---------------------------------------------------------------------------
-
-const NEXT: Record<TaskStatus, TaskStatus> = {
-  todo: "in_progress",
-  in_progress: "done",
-  done: "todo",
-  failed: "todo",
+// Non-terminal statuses that can be advanced by clicking
+const NEXT: Partial<Record<TaskStatus, TaskStatus>> = {
+  planned: "in_progress",
+  in_progress: "succeeded",
+  blocked: "in_progress",
 };
 
-// ---------------------------------------------------------------------------
-// Single task row
-// ---------------------------------------------------------------------------
+const STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
+  planned: <Circle className="w-4 h-4" style={{ color: "var(--muted)" }} />,
+  in_progress: <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#f59e0b" }} />,
+  blocked: <PauseCircle className="w-4 h-4" style={{ color: "#fb923c" }} />,
+  succeeded: <CheckCircle2 className="w-4 h-4" style={{ color: "#22c55e" }} />,
+  failed: <XCircle className="w-4 h-4" style={{ color: "#ef4444" }} />,
+  abandoned: <AlertCircle className="w-4 h-4" style={{ color: "var(--muted)" }} />,
+};
+
+const STATUS_TEXT_COLOR: Record<TaskStatus, string> = {
+  planned: "var(--foreground)",
+  in_progress: "var(--foreground)",
+  blocked: "#fb923c",
+  succeeded: "var(--muted)",
+  failed: "#f87171",
+  abandoned: "var(--muted)",
+};
 
 function TaskRow({
   task,
   taskListId,
   onStatusChange,
   onDelete,
+  onRetry,
 }: {
   task: Task;
   taskListId: string;
   onStatusChange: (listId: string, taskId: string, status: TaskStatus) => void;
   onDelete: (listId: string, taskId: string) => void;
+  onRetry: (listId: string, taskId: string) => void;
 }) {
-  const done = task.status === "done";
-  const inProgress = task.status === "in_progress";
-  const failed = task.status === "failed";
+  const nextStatus = NEXT[task.status];
+  const isTerminal = !nextStatus;
+  const canRetry = task.status === "failed" || task.status === "abandoned";
+  const isAbandoned = task.status === "abandoned";
 
   return (
     <div
-      className="group flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-(--card-hover)"
-      onClick={() => onStatusChange(taskListId, task.id, NEXT[task.status])}
+      className="group flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors"
+      style={{
+        cursor: nextStatus ? "pointer" : "default",
+        textDecoration: task.status === "succeeded" || task.status === "abandoned" ? "line-through" : "none",
+      }}
+      onClick={() => nextStatus && onStatusChange(taskListId, task.id, nextStatus)}
       title={
-        done ? "Click to reset" : failed ? "Click to retry" : inProgress ? "Click to mark done" : "Click to start"
+        task.note
+          ? task.note
+          : nextStatus
+          ? `Click to mark ${nextStatus.replace("_", " ")}`
+          : undefined
       }
     >
-      {/* Status icon */}
-      <span className="shrink-0">
-        {done ? (
-          <CheckCircle2 className="w-4 h-4" style={{ color: "#22c55e" }} />
-        ) : failed ? (
-          <Circle className="w-4 h-4" style={{ color: "#ef4444" }} />
-        ) : inProgress ? (
-          <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#f59e0b" }} />
-        ) : (
-          <Circle className="w-4 h-4" style={{ color: "var(--muted)" }} />
+      <span className="shrink-0">{STATUS_ICON[task.status]}</span>
+
+      <span
+        className="flex-1 text-sm leading-snug"
+        style={{ color: STATUS_TEXT_COLOR[task.status] }}
+      >
+        {task.title}
+        {task.note && (
+          <span className="ml-1.5 text-[11px]" style={{ color: "var(--muted)" }}>
+            — {task.note}
+          </span>
         )}
       </span>
 
-      {/* Title */}
-      <span
-        className="flex-1 text-sm leading-snug"
-        style={{
-          color: done ? "var(--muted)" : failed ? "#f87171" : "var(--foreground)",
-          textDecoration: done ? "line-through" : "none",
-        }}
-      >
-        {task.title}
-      </span>
-
-      {/* Delete (hover only) */}
-      <button
-        className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all hover:bg-(--card) cursor-pointer"
-        style={{ color: "var(--muted)" }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(taskListId, task.id);
-        }}
-        aria-label="Delete task"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {canRetry && (
+          <button
+            className="p-0.5 rounded transition-colors hover:bg-(--card) cursor-pointer"
+            style={{ color: isAbandoned ? "#f59e0b" : "#ef4444" }}
+            title={isAbandoned ? "Force retry (resets counter)" : "Retry"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isAbandoned && !confirm("This task was abandoned. Force retry will reset the retry counter. Continue?")) return;
+              onRetry(taskListId, task.id);
+            }}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {!isTerminal && (
+          <button
+            className="p-0.5 rounded transition-colors hover:bg-(--card) cursor-pointer"
+            style={{ color: "var(--muted)" }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(taskListId, task.id);
+            }}
+            aria-label="Delete task"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Section divider
-// ---------------------------------------------------------------------------
 
 function SectionHeader({ label, count, color }: { label: string; count: number; color: string }) {
   return (
@@ -119,10 +146,6 @@ function SectionHeader({ label, count, color }: { label: string; count: number; 
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Inline add-task form (shown under Pending section)
-// ---------------------------------------------------------------------------
 
 function AddTaskForm({ taskListId, onAdd }: { taskListId: string; onAdd: (id: string, t: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -162,7 +185,7 @@ function AddTaskForm({ taskListId, onAdd }: { taskListId: string; onAdd: (id: st
           if (e.key === "Enter") submit();
           if (e.key === "Escape") setOpen(false);
         }}
-        placeholder="Task titleâ€¦"
+        placeholder="Task title…"
         className="flex-1 text-xs bg-(--input-bg) border border-(--border) rounded-lg px-2.5 py-1.5 outline-none"
         style={{ color: "var(--foreground)" }}
       />
@@ -184,43 +207,54 @@ function AddTaskForm({ taskListId, onAdd }: { taskListId: string; onAdd: (id: st
   );
 }
 
-// ---------------------------------------------------------------------------
-// KanbanPanel â€” vertical sectioned list
-// ---------------------------------------------------------------------------
-
-export function KanbanPanel({
-  taskList,
-  onTaskStatusChange,
-  onTaskDelete,
-  onTaskAdd,
-  onDismiss,
-}: KanbanPanelProps) {
+export function KanbanPanel({ taskList, onTaskListChange, onDismiss }: KanbanPanelProps) {
   if (!taskList || taskList.tasks.length === 0) return null;
 
   const total = taskList.tasks.length;
-  const done  = taskList.tasks.filter((t) => t.status === "done").length;
-  const allDone = done === total;
+  const doneCount = taskList.tasks.filter((t) => t.status === "succeeded").length;
+  const allDone = doneCount === total;
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  const pending    = taskList.tasks.filter((t) => t.status === "todo").sort((a, b) => a.order - b.order);
-  const inProgress = taskList.tasks.filter((t) => t.status === "in_progress").sort((a, b) => a.order - b.order);
-  const completed  = taskList.tasks.filter((t) => t.status === "done").sort((a, b) => a.order - b.order);
+  const byStatus = (s: TaskStatus) =>
+    taskList.tasks.filter((t) => t.status === s).sort((a, b) => a.order - b.order);
+
+  const planned = byStatus("planned");
+  const inProgress = byStatus("in_progress");
+  const blocked = byStatus("blocked");
+  const succeeded = byStatus("succeeded");
+  const failed = byStatus("failed");
+  const abandoned = byStatus("abandoned");
+
+  const mutate = (updater: (tl: TaskList) => TaskList) => {
+    onTaskListChange?.(updater(taskList));
+  };
 
   const handleStatus = (listId: string, taskId: string, status: TaskStatus) => {
-    onTaskStatusChange?.(listId, taskId, status);
-    api.updateTask(listId, taskId, { status });
+    mutate((tl) => ({
+      ...tl,
+      tasks: tl.tasks.map((t) => (t.id === taskId ? { ...t, status } : t)),
+    }));
+    void api.updateTask(listId, taskId, { status });
   };
 
   const handleDelete = (listId: string, taskId: string) => {
-    onTaskDelete?.(listId, taskId);
-    api.deleteTask(listId, taskId);
+    mutate((tl) => ({ ...tl, tasks: tl.tasks.filter((t) => t.id !== taskId) }));
+    void api.deleteTask(listId, taskId);
   };
 
   const handleAdd = (listId: string, title: string) => {
-    onTaskAdd?.(listId, title);
-    api.addTasks(listId, [title]);
+    void api.addTasks(listId, [title]);
   };
 
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const handleRetry = (listId: string, taskId: string) => {
+    mutate((tl) => ({
+      ...tl,
+      tasks: tl.tasks.map((t) =>
+        t.id === taskId ? { ...t, status: "in_progress" as TaskStatus, retry_count: 0, note: "" } : t
+      ),
+    }));
+    void api.retryTask(listId, taskId);
+  };
 
   const badge = (
     <span
@@ -230,12 +264,12 @@ export function KanbanPanel({
         color: allDone ? "#22c55e" : "var(--muted)",
       }}
     >
-      {done}/{total}
+      {doneCount}/{total}
     </span>
   );
 
   const progressBar = (
-    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)", minWidth: 60 }}>
+    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)", minWidth: 48 }}>
       <div
         className="h-full rounded-full transition-all duration-500"
         style={{ width: `${pct}%`, background: allDone ? "#22c55e" : "var(--accent)" }}
@@ -243,44 +277,71 @@ export function KanbanPanel({
     </div>
   );
 
+  const agentLabel = taskList.agent_label || taskList.agent_id || "Agent";
+
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-3">
-      <PanelShell
-        icon={<ListTodo className="w-4 h-4" />}
-        title="Tasks"
-        badge={badge}
-        headerRight={progressBar}
-        onDismiss={onDismiss}
-      >
-        {/* â”€â”€ Pending â”€â”€ */}
+    <PanelShell
+      icon={<ListTodo className="w-4 h-4" />}
+      title={agentLabel === "Agent" ? "Tasks" : agentLabel}
+      badge={badge}
+      headerRight={progressBar}
+      onDismiss={onDismiss}
+    >
+      {planned.length > 0 && (
         <div>
-          <SectionHeader label="Pending" count={pending.length} color="var(--muted)" />
-          {pending.map((t) => (
-            <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} />
+          <SectionHeader label="Planned" count={planned.length} color="var(--muted)" />
+          {planned.map((t) => (
+            <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} onRetry={handleRetry} />
           ))}
           <AddTaskForm taskListId={taskList.id} onAdd={handleAdd} />
         </div>
+      )}
 
-        {/* â”€â”€ In Progress â”€â”€ */}
-        {inProgress.length > 0 && (
-          <div className="mt-1 pt-2 border-t border-(--border)">
-            <SectionHeader label="In Progress" count={inProgress.length} color="#f59e0b" />
-            {inProgress.map((t) => (
-              <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} />
-            ))}
-          </div>
-        )}
+      {inProgress.length > 0 && (
+        <div className={planned.length > 0 ? "mt-1 pt-2 border-t border-(--border)" : ""}>
+          <SectionHeader label="In Progress" count={inProgress.length} color="#f59e0b" />
+          {inProgress.map((t) => (
+            <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} onRetry={handleRetry} />
+          ))}
+          {planned.length === 0 && <AddTaskForm taskListId={taskList.id} onAdd={handleAdd} />}
+        </div>
+      )}
 
-        {/* â”€â”€ Completed â”€â”€ */}
-        {completed.length > 0 && (
-          <div className="mt-1 pt-2 border-t border-(--border)">
-            <SectionHeader label="Completed" count={completed.length} color="#22c55e" />
-            {completed.map((t) => (
-              <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} />
-            ))}
-          </div>
-        )}
-      </PanelShell>
-    </div>
+      {blocked.length > 0 && (
+        <div className="mt-1 pt-2 border-t border-(--border)">
+          <SectionHeader label="Blocked" count={blocked.length} color="#fb923c" />
+          {blocked.map((t) => (
+            <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} onRetry={handleRetry} />
+          ))}
+        </div>
+      )}
+
+      {failed.length > 0 && (
+        <div className="mt-1 pt-2 border-t border-(--border)">
+          <SectionHeader label="Failed" count={failed.length} color="#ef4444" />
+          {failed.map((t) => (
+            <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} onRetry={handleRetry} />
+          ))}
+        </div>
+      )}
+
+      {abandoned.length > 0 && (
+        <div className="mt-1 pt-2 border-t border-(--border)">
+          <SectionHeader label="Abandoned" count={abandoned.length} color="var(--muted)" />
+          {abandoned.map((t) => (
+            <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} onRetry={handleRetry} />
+          ))}
+        </div>
+      )}
+
+      {succeeded.length > 0 && (
+        <div className="mt-1 pt-2 border-t border-(--border)">
+          <SectionHeader label="Done" count={succeeded.length} color="#22c55e" />
+          {succeeded.map((t) => (
+            <TaskRow key={t.id} task={t} taskListId={taskList.id} onStatusChange={handleStatus} onDelete={handleDelete} onRetry={handleRetry} />
+          ))}
+        </div>
+      )}
+    </PanelShell>
   );
 }

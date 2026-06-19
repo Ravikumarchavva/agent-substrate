@@ -137,6 +137,7 @@ export interface ToolResultEvent {
   error?: Error;
   agent?: Agent1;
   depth?: Depth1;
+  structured_content?: Record<string, unknown>;
 }
 /**
  * An orchestrator delegated to a subagent.

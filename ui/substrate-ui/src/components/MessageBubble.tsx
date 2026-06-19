@@ -46,8 +46,36 @@ function serializeTableToClipboard(table: HTMLTableElement): string {
 
 function preprocessMarkdown(content: string): string {
   if (!content) return "";
-  // Escape currency dollar signs (e.g. $50,000 or $5) so remark-math doesn't treat them as inline math delimiters.
-  return content.replace(/(?<!\$)\$(?=\d)/g, "\\$");
+
+  const mathBlocks: string[] = [];
+
+  // 1. Temporarily extract block math $$...$$
+  let processed = content.replace(/\$\$([\s\S]*?)\$\$/g, (_, match) => {
+    mathBlocks.push(`$$${match}$$`);
+    return `__MATH_BLOCK_${mathBlocks.length - 1}__`;
+  });
+
+  // 2. Temporarily extract inline math \(...\) and map to single $
+  processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, (_, match) => {
+    mathBlocks.push(`$${match}$`);
+    return `__MATH_BLOCK_${mathBlocks.length - 1}__`;
+  });
+
+  // 3. Temporarily extract block math \[...\] and map to $$
+  processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, (_, match) => {
+    mathBlocks.push(`$$${match}$$`);
+    return `__MATH_BLOCK_${mathBlocks.length - 1}__`;
+  });
+
+  // 4. Escape all remaining raw '$' signs (these are guaranteed to be currency)
+  processed = processed.replace(/\$/g, '\\$');
+
+  // 5. Restore the safe math blocks with $ and $$ delimiters
+  processed = processed.replace(/__MATH_BLOCK_(\d+)__/g, (_, index) => {
+    return mathBlocks[parseInt(index, 10)];
+  });
+
+  return processed;
 }
 
 

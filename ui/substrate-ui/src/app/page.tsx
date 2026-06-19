@@ -35,9 +35,10 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useThreads } from "@/hooks/useThreads";
 import type { WireEvent } from "@/protocol";
-import { wireEventToLegacy } from "@/lib/stream/legacyAdapter";
 import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAttachments";
 import { useAppPanel } from "@/hooks/useAppPanel";
+import { useTaskBoards } from "@/hooks/useTaskBoards";
+import { TaskBoardsDock, TaskBoardsMobile } from "@/components/TaskBoards";
 import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "ravi:last-active-thread";
@@ -101,6 +102,10 @@ function ChatPageContent() {
   // Tracks the threadId of the currently active stream, useful for stopping a run
   // on a brand new thread before it has been persisted to the URL state.
   const activeStreamThreadIdRef = useRef<string | null>(null);
+  // After a stream ends, holds the thread that was streamed so loadMessages can
+  // skip overwriting the in-memory messages (which are more current than the DB).
+  // Cleared when the user navigates to a different thread.
+  const streamedThreadRef = useRef<string | null>(null);
   // Prevents the currentThreadId useEffect from wiping the UI when we officially
   // update the URL to the new thread ID at the end of the first message stream.
   const isNavigatingToNewThread = useRef(false);
@@ -155,6 +160,24 @@ function ChatPageContent() {
     [router, updateLastActiveThreadId],
   );
 
+  // Promote a freshly-created thread into the URL at the END of its first stream.
+  // We deliberately use history.replaceState instead of router.replace: a real
+  // Next.js navigation from /chat → /chat/{id} changes the optional-catch-all
+  // slug and REMOUNTS this page, which wipes the in-flight (and not-yet-persisted)
+  // assistant message. history.replaceState updates the URL bar with no remount.
+  const promoteThreadUrl = useCallback(
+    (threadId: string) => {
+      // Mark this thread as owning the current in-memory messages so the
+      // thread-change effect's loadMessages won't overwrite them with a stale
+      // (or empty) DB snapshot before persistence catches up.
+      streamedThreadRef.current = threadId;
+      isNavigatingToNewThread.current = true;
+      updateLastActiveThreadId(threadId);
+      window.history.replaceState(window.history.state, "", buildChatPath(threadId));
+    },
+    [updateLastActiveThreadId],
+  );
+
   const openSettingsPanel = useCallback(
     (tab: SettingsTab = "general") => {
       router.push(buildSettingsPath(tab), { scroll: false });
@@ -191,6 +214,7 @@ function ChatPageContent() {
   });
   const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile } = useFileAttachments(currentThreadId, selectThread, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
+  const { boards, upsertBoard, clearBoards } = useTaskBoards(currentThreadId);
 
   type ManifestEntry = { tool_name: string; http_url: string; resource_uri: string };
   const [mcpManifest, setMcpManifest] = useState<ManifestEntry[]>([]);
@@ -212,6 +236,7 @@ function ChatPageContent() {
       setMessages([]);
       setPanelItems([]);
       setActivePanelId(null);
+      clearBoards();
       setAuthNotice("You were signed out. Sign in again to reopen or start chats.");
       router.replace(buildChatPath(null), { scroll: false });
     }
@@ -226,7 +251,7 @@ function ChatPageContent() {
     }
 
     wasAuthenticatedRef.current = isAuthenticated;
-  }, [authLoading, isAuthenticated, pathname, router, routeState.threadId, setActivePanelId, setPanelItems, settingsPanelOpen, updateLastActiveThreadId]);
+  }, [authLoading, clearBoards, isAuthenticated, pathname, router, routeState.threadId, setActivePanelId, setPanelItems, settingsPanelOpen, updateLastActiveThreadId]);
 
   const renderComposerAttachment = useCallback((file: AttachedFilePreview) => {
     const AttachmentIcon = getAttachmentIcon(file.previewKind);
@@ -305,10 +330,15 @@ function ChatPageContent() {
       return;
     }
 
+    // Navigating to a different thread: clear the stream guard so the next
+    // loadMessages call will fetch from DB rather than skip.
+    if (currentThreadId !== streamedThreadRef.current) {
+      streamedThreadRef.current = null;
+    }
+
     clearAttachedFiles();
     if (currentThreadId && canLoadData) {
-      // loadMessages already guards against overwriting optimistic messages
-      // while a stream is active (it checks wsRef.current internally).
+      // loadMessages guards against overwriting optimistic / just-streamed messages.
       loadMessages(currentThreadId);
       // Only reset the panel when there is no active stream; this preserves
       // the kanban/MCP panel when doSendMessage creates a thread on first send.
@@ -347,11 +377,14 @@ function ChatPageContent() {
   async function loadMessages(threadId: string) {
     try {
       const fetchedMessages = await api.getMessages(threadId);
-      // Guard: don't overwrite optimistic messages while a stream is active.
-      // Race: when doSendMessage creates a new thread and calls setCurrentThreadId,
-      // the currentThreadId useEffect fires loadMessages. By then wsRef is already
-      // set, so we preserve the optimistic user+assistant messages in flight.
-      setMessages((current) => (wsRef.current ? current : fetchedMessages));
+      setMessages((current) => {
+        // Active stream owns the message state — don't touch it.
+        if (wsRef.current) return current;
+        // This thread just finished streaming; in-memory messages are more
+        // current than the DB snapshot (persistence may not have caught up).
+        if (streamedThreadRef.current === threadId) return current;
+        return fetchedMessages;
+      });
     } catch (error) {
       console.error("Failed to load messages:", error);
       setMessages((current) => (wsRef.current ? current : []));
@@ -519,7 +552,8 @@ function ChatPageContent() {
             const contentStr = typeof message.content === "string" ? message.content : "";
             const reasoningStr = typeof message.reasoning === "string" ? message.reasoning : "";
             const hasContent = Boolean(contentStr.trim()) || Boolean(reasoningStr.trim());
-            return hasContent || hasPersistentToolCall(message.toolCalls);
+            const hasVisibleToolCalls = Boolean(message.toolCalls?.length);
+            return hasContent || hasVisibleToolCalls;
           })
       );
     }
@@ -536,10 +570,10 @@ function ChatPageContent() {
       if (wsRef.current !== abortController) return;
 
       // ── Keepalive / end marker ────────────────────────────────────────
-      if (data.type === "pong" || data.type === "done") return;
+      if (data.type === "ping" || data.type === "protocol.hello" || data.type === "done") return;
 
       // ── HITL: Tool Approval Request ─────────────────────────────────
-      if (data.type === "tool_approval_request") {
+      if (data.type === "approval.requested") {
         const hitlId = nanoid();
         setMessages((m) => [
           ...m,
@@ -551,7 +585,7 @@ function ChatPageContent() {
             metadata: {
               requestId: data.request_id,
               toolName: data.tool_name,
-              arguments: data.arguments,
+              arguments: data.args,
               context: data.context,
             },
           },
@@ -560,7 +594,7 @@ function ChatPageContent() {
       }
 
       // ── HITL: Human Input Request ───────────────────────────────────
-      if (data.type === "human_input_request") {
+      if (data.type === "input.requested") {
         const hitlId = nanoid();
         setMessages((m) => [
           ...m,
@@ -582,14 +616,22 @@ function ChatPageContent() {
       }
 
       // ── Tool result ─────────────────────────────────────────────────
-      if (data.type === "tool_result") {
-        // Task management results are shown in the Kanban panel
-        if (data.tool_name === "manage_tasks") return;
+      if (data.type === "tool.result") {
+        // Task management results update the boards map, not the chat
+        if (data.tool_name === "manage_tasks") {
+          const sc = data.structured_content as Record<string, unknown> | undefined;
+          const tl = sc?.task_list as import("@/types").TaskList | undefined;
+          if (tl) upsertBoard(tl);
+          return;
+        }
+
+        const resultText = (data.ok ? data.output : data.error) as string || "";
+        const isError = !data.ok;
 
         // For MCP App tools with app_data, merge the data into
         // the tool_call arguments so the iframe receives it
         if (data.has_app && data.app_data) {
-          const panelId = (data.tool_call_id as string) || nanoid();
+          const panelId = (data.call_id as string) || nanoid();
           const httpUrl = (data.http_url as string) || `/ui/${data.tool_name as string}`;
           openInPanel({
             id: panelId,
@@ -602,7 +644,7 @@ function ChatPageContent() {
             m.map((msg) => {
               if (msg.role !== "assistant" || !msg.toolCalls) return msg;
               const updatedCalls = msg.toolCalls.map((tc) => {
-                const matchById = data.tool_call_id && tc.id === data.tool_call_id;
+                const matchById = data.call_id && tc.id === data.call_id;
                 const matchByName = tc.name === data.tool_name;
                 if (!matchById && !matchByName) return tc;
                 const existingArgs =
@@ -610,7 +652,7 @@ function ChatPageContent() {
                 return {
                   ...tc,
                   arguments: { ...existingArgs, ...(data.app_data as object) },
-                  result: (data.content as string) || tc.result,
+                  result: resultText || tc.result,
                 };
               });
               return { ...msg, toolCalls: updatedCalls };
@@ -620,7 +662,7 @@ function ChatPageContent() {
         }
 
         // Skip rendering if an MCP App UI is already showing this tool's output
-        if (data.has_app && !data.is_error) return;
+        if (data.has_app && !isError) return;
 
         // Attach result to whichever assistant message owns this tool call.
         // Search all assistant messages (not just the current one) so results
@@ -630,15 +672,15 @@ function ChatPageContent() {
             if (msg.role !== "assistant" || !msg.toolCalls) return msg;
             const hasMatch = msg.toolCalls.some(
               (tc) =>
-                (data.tool_call_id && tc.id === data.tool_call_id) ||
+                (data.call_id && tc.id === data.call_id) ||
                 tc.name === data.tool_name
             );
             if (!hasMatch) return msg;
             const updatedCalls = msg.toolCalls.map((tc) => {
-              const matchById = data.tool_call_id && tc.id === data.tool_call_id;
+              const matchById = data.call_id && tc.id === data.call_id;
               const matchByName = tc.name === data.tool_name;
               if (!matchById && !matchByName) return tc;
-              return { ...tc, result: (data.content as string) || "", isError: !!data.is_error };
+              return { ...tc, result: resultText, isError };
             });
             return { ...msg, toolCalls: updatedCalls };
           })
@@ -650,7 +692,7 @@ function ChatPageContent() {
       // ANY rich tool UI (kanban, chart, form, map, …) arrives as one event.
       // Open/update a sandboxed iframe for `uri`, keyed by the resource so
       // repeat events coalesce onto the same panel and stream fresh data in.
-      if (data.type === "ui_resource") {
+      if (data.type === "ui.resource") {
         const uri = data.uri as string;
         const name = uri.replace(/^ui:\/\//, "");
         openInPanel({
@@ -665,9 +707,9 @@ function ChatPageContent() {
       }
 
       // ── Streaming text ──────────────────────────────────────────────
-      if (data.type === "text_delta") {
+      if (data.type === "text.delta") {
         ensureActiveBubble();
-        const textContent = String(data.content || "");
+        const textContent = String(data.text || "");
         setMessages((m) =>
           m.map((msg) =>
             msg.id === msgState.activeAssistantId
@@ -678,9 +720,9 @@ function ChatPageContent() {
         return;
       }
 
-      if (data.type === "reasoning_delta") {
+      if (data.type === "reasoning.delta") {
         ensureActiveBubble();
-        const reasoningContent = String(data.content || "");
+        const reasoningContent = String(data.text || "");
         setMessages((m) =>
           m.map((msg) =>
             msg.id === msgState.activeAssistantId
@@ -691,10 +733,10 @@ function ChatPageContent() {
         return;
       }
 
-      if (data.type === "completion") {
+      if (data.type === "turn.completed") {
         // Handle LLM-level errors (e.g. provider returned no completion)
         if (data.finish_reason === "error") {
-          const errorDetail = typeof data.content === "string" ? data.content : "";
+          const errorDetail = typeof data.text === "string" ? data.text : "";
           const errorMsg = errorDetail || "The AI model failed to generate a response. Please try again.";
           finalizeAssistantMessages((message) => ({
             ...message,
@@ -704,29 +746,18 @@ function ChatPageContent() {
           return;
         }
 
-        const finalContent = Array.isArray(data.content)
-          ? (data.content as Array<string | { text?: unknown }>).map((item) => {
-            if (typeof item === "string") return item;
-            if (
-              item &&
-              typeof item === "object" &&
-              typeof item.text === "string"
-            ) {
-              return item.text;
-            }
-            return "";
-          }).join("")
-          : String(data.content || "");
-        const hasToolCalls = !!data.has_tool_calls;
+        const finalContent = String(data.text || "");
+        const toolCallList = (data.tool_calls as unknown[]) ?? [];
+        const hasToolCalls = toolCallList.length > 0;
 
-        const toolCalls: import("@/types").ToolCall[] = ((data.tool_calls as unknown[]) ?? [])
+        const toolCalls: import("@/types").ToolCall[] = toolCallList
           .filter((tc) => (tc as { name: string }).name !== "manage_tasks")
           .map((tc) => {
-            const t = tc as { id: string; name: string; arguments: unknown; _meta?: import("@/types").ToolCallMeta; risk?: "safe" | "sensitive" | "critical"; color?: "green" | "yellow" | "red" };
+            const t = tc as { id: string; name: string; args: unknown; _meta?: import("@/types").ToolCallMeta; risk?: "safe" | "sensitive" | "critical"; color?: "green" | "yellow" | "red" };
             return {
-              id: t.id,
+              id: t.id || nanoid(),
               name: t.name,
-              arguments: t.arguments as string | Record<string, unknown>,
+              arguments: (t.args ?? {}) as string | Record<string, unknown>,
               result: "Completed",
               _meta: t._meta,
               risk: t.risk,
@@ -759,7 +790,7 @@ function ChatPageContent() {
                     && toolMarkupPattern.test(finalContent || "")
                     ? ""
                     : finalContent || msg.content,
-                role: (data.role as Message["role"]) ?? "assistant",
+                role: "assistant" as Message["role"],
                 toolCalls: toolCalls.length > 0 ? toolCalls : msg.toolCalls,
                 isToolExecuting: hasToolCalls,
                 attachments: attachments.length > 0 ? attachments : msg.attachments,
@@ -776,21 +807,20 @@ function ChatPageContent() {
           setLoading(false);
           void loadThreads();
           if (isNewThread && !currentThreadId) {
-            isNavigatingToNewThread.current = true;
-            selectThread(threadId, "replace");
+            promoteThreadUrl(threadId);
             isNewThread = false;
           }
         }
         return;
       }
 
-      if (data.type === "tool_call") {
+      if (data.type === "tool.call") {
         if (data.tool_name === "manage_tasks") return;
         ensureActiveBubble();
         const toolCall = {
-          id: (data.tool_call_id as string) || nanoid(),
+          id: (data.call_id as string) || nanoid(),
           name: (data.tool_name as string) || "tool",
-          arguments: JSON.stringify(data.arguments || {}),
+          arguments: JSON.stringify(data.args || {}),
           risk: data.risk as "safe" | "sensitive" | "critical" | undefined,
           color: data.color as "green" | "yellow" | "red" | undefined,
         };
@@ -805,37 +835,34 @@ function ChatPageContent() {
       }
 
       // ── Run-level terminal events ───────────────────────────────────
-      if (data.type === "max_iterations") {
-        finalizeAssistantMessages();
-        setLoading(false);
-        void loadThreads();
-        if (isNewThread && !currentThreadId) {
-          isNavigatingToNewThread.current = true;
-          selectThread(threadId, "replace");
-          isNewThread = false;
-        }
-        const cardId = nanoid();
-        setMessages((m) => [
-          ...m,
-          { id: cardId, role: "max_iterations" as const, content: "", timestamp: new Date() },
-        ]);
-        return;
-      }
-
-      if (data.type === "agent.run_completed") {
-        // Safety net: if no completion event fired (e.g. tool-only runs), stop loading.
-        finalizeAssistantMessages();
-        setLoading(false);
-        void loadThreads();
-        if (isNewThread && !currentThreadId) {
-          isNavigatingToNewThread.current = true;
-          selectThread(threadId, "replace");
-          isNewThread = false;
+      if (data.type === "run.completed") {
+        if (data.reason === "max_iterations") {
+          finalizeAssistantMessages();
+          setLoading(false);
+          void loadThreads();
+          if (isNewThread && !currentThreadId) {
+            promoteThreadUrl(threadId);
+            isNewThread = false;
+          }
+          const cardId = nanoid();
+          setMessages((m) => [
+            ...m,
+            { id: cardId, role: "max_iterations" as const, content: "", timestamp: new Date() },
+          ]);
+        } else {
+          // Safety net: if no turn.completed fired (e.g. tool-only runs), stop loading.
+          finalizeAssistantMessages();
+          setLoading(false);
+          void loadThreads();
+          if (isNewThread && !currentThreadId) {
+            promoteThreadUrl(threadId);
+            isNewThread = false;
+          }
         }
         return;
       }
 
-      if (data.type === "agent.run_failed") {
+      if (data.type === "run.failed") {
         const errorMsg = String(data.error || "The agent encountered an error.");
         finalizeAssistantMessages((message) => ({
           ...message,
@@ -843,21 +870,37 @@ function ChatPageContent() {
         }));
         setLoading(false);
         if (isNewThread && !currentThreadId) {
-          isNavigatingToNewThread.current = true;
-          selectThread(threadId, "replace");
+          promoteThreadUrl(threadId);
           isNewThread = false;
         }
         return;
       }
 
-      if (data.type === "cancelled") {
+      if (data.type === "agent.handoff") {
+        ensureActiveBubble();
+        const handoffCall = {
+          id: nanoid(),
+          name: `→ ${data.target_agent as string || "agent"}`,
+          arguments: data.reason ? JSON.stringify({ reason: data.reason }) : "{}",
+        };
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === msgState.activeAssistantId
+              ? { ...msg, toolCalls: [...(msg.toolCalls || []), handoffCall], isToolExecuting: true }
+              : msg
+          )
+        );
+        return;
+      }
+
+      if (data.type === "run.cancelled") {
         finalizeAssistantMessages();
         setLoading(false);
         return;
       }
 
       if (data.type === "error") {
-        const errorMsg = String(data.error || data.message || "Unknown error");
+        const errorMsg = String(data.message || data.error || "Unknown error");
         finalizeAssistantMessages((message) => ({
           ...message,
           content: message.content + "\n\n⚠️ " + errorMsg,
@@ -904,8 +947,7 @@ function ChatPageContent() {
           if (text === "[DONE]") { reader.cancel(); break outer; }
           let parsed: WireEvent;
           try { parsed = JSON.parse(text) as WireEvent; } catch { continue; }
-          // New wire protocol → the UI's existing event shapes (single adapter).
-          for (const legacy of wireEventToLegacy(parsed)) processEvent(legacy);
+          processEvent(parsed as Record<string, unknown>);
         }
       }
     } catch (err: unknown) {
@@ -927,6 +969,9 @@ function ChatPageContent() {
         wsRef.current === abortController || wsRef.current === null;
       if (wsRef.current === abortController) wsRef.current = null;
       if (isOwnerOrStopped) {
+        // Record which thread just finished streaming so loadMessages won't
+        // overwrite the in-memory messages with a potentially stale DB snapshot.
+        streamedThreadRef.current = threadId;
         finalizeAssistantMessages();
         setLoading(false);
       }
@@ -1353,7 +1398,19 @@ function ChatPageContent() {
             onResult={handleMcpAppResult}
           />
         )}
+
+        {!settingsPanelOpen && (
+          <TaskBoardsDock
+            boards={boards}
+            onBoardChange={upsertBoard}
+          />
+        )}
       </div>
+
+      {/* Mobile task boards floating pill + sheet */}
+      {!settingsPanelOpen && (
+        <TaskBoardsMobile boards={boards} onBoardChange={upsertBoard} />
+      )}
 
       {/* Mobile Sidebar Drawer */}
       {mobileSidebarOpen && (

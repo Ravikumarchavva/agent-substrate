@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { RaviMark } from "@/components/RaviMark";
+import { RateLimitBar } from "@/components/RateLimitBar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -345,6 +346,8 @@ export function Sidebar({
             </div>
           </>
         )}
+
+        <RateLimitBar />
 
         <div className="mt-auto px-2 pb-3 pt-2" ref={menuRef}>
           {menuOpen && (

@@ -1,10 +1,9 @@
 /**
  * Spotify Token API
  * GET /api/spotify/token
- *   1. Proxies to backend (which holds the token after frontend OAuth push).
- *   2. Falls back to Prisma DB if backend has lost the token (e.g. restart).
- *      When a DB token is found it is re-pushed to the backend so subsequent
- *      calls skip the fallback.
+ *   Reads from httpOnly cookies first, then Prisma DB (for post-restart recovery).
+ *   When a valid token is found from DB it is pushed to the engine so subsequent
+ *   MCP app calls (playlists, liked-songs) work without re-auth.
  * DELETE /api/spotify/token — clears session cookies only.
  */
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,16 +15,15 @@ const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 export async function GET(req: NextRequest) {
   try {
-    // ── 1. Try backend (fastest path, always works after OAuth push) ──────────
-    const backendRes = await fetch(`${BACKEND_URL}/auth/spotify/token`, {
-      headers: { Accept: 'application/json' },
-    });
-    if (backendRes.ok) {
-      const data = (await backendRes.json()) as { access_token: string };
-      return NextResponse.json({ access_token: data.access_token, authenticated: true });
+    // ── 1. Cookie (fastest — set by /api/spotify/callback) ───────────────────
+    const cookieToken = req.cookies.get('spotify_access_token')?.value;
+    if (cookieToken) {
+      // Silently push to engine so MCP app playlists/liked-songs work
+      pushToEngine(cookieToken, req.cookies.get('spotify_refresh_token')?.value ?? null, 3600);
+      return NextResponse.json({ access_token: cookieToken, authenticated: true });
     }
 
-    // ── 2. Backend has no token (restart?) — try Prisma DB ───────────────────
+    // ── 2. Prisma DB (survives cookie expiry / restart) ──────────────────────
     const userId = await resolveUserId(req);
     if (!userId) {
       return NextResponse.json(
@@ -69,18 +67,13 @@ export async function GET(req: NextRequest) {
       accessToken = refreshed.access_token;
       if (refreshed.refresh_token) refreshToken = refreshed.refresh_token;
       expiresIn = refreshed.expires_in ?? 3600;
-      // Persist updated token
       try {
         await cm.storeCredential(userId, 'spotify', accessToken, refreshToken ?? '', expiresIn);
       } catch { /* non-fatal */ }
     }
 
-    // Re-push to backend so subsequent calls are fast
-    fetch(`${BACKEND_URL}/auth/spotify/set-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn }),
-    }).catch(() => { /* non-fatal */ });
+    // Push to engine so MCP app calls work
+    pushToEngine(accessToken, refreshToken, expiresIn);
 
     return NextResponse.json({ access_token: accessToken, authenticated: true });
   } catch (error) {
@@ -97,6 +90,14 @@ export async function DELETE() {
   res.cookies.delete('spotify_access_token');
   res.cookies.delete('spotify_refresh_token');
   return res;
+}
+
+function pushToEngine(accessToken: string, refreshToken: string | null, expiresIn: number): void {
+  fetch(`${BACKEND_URL}/auth/spotify/set-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn }),
+  }).catch(() => { /* non-fatal — engine may not be running */ });
 }
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {

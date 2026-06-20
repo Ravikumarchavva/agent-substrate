@@ -53,7 +53,9 @@
 }
 
 /* Fix for invisible links caused by --md-primary-fg-color matching the background */
-:root {
+body[data-md-color-scheme="slate"],
+body[data-md-color-scheme="default"],
+body {
   --md-typeset-a-color: var(--md-accent-fg-color) !important;
 }
 /* Base font-size adjustments and letter spacing */

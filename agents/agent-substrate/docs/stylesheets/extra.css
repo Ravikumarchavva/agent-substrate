@@ -1,46 +1,234 @@
-/* ── Custom styles for Ravi docs ── */
+/* ── Custom styles for Solaris docs (Astro Starlight Theme) ── */
 
-/* Logo: remove forced white — SVG now uses orange (#F97316) + white nodes */
-.md-header .md-logo img,
-.md-header .md-logo svg {
-  filter: drop-shadow(0 0 2px rgba(0,0,0,0.4));
+/* Color system overrides for Slate (dark mode) */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0c0d12 !important;
+  --md-default-bg-color--light: #161822 !important;
+  --md-default-fg-color: #eceef2 !important;
+  --md-default-fg-color--light: #9aa1b1 !important;
+  --md-default-fg-color--lighter: #64748b !important;
+  --md-default-fg-color--lightest: #475569 !important;
+  
+  --md-primary-fg-color: #0c0d12 !important;
+  --md-primary-fg-color--dark: #08090d !important;
+  --md-primary-bg-color: #ffffff !important;
+  
+  --md-code-bg-color: #121319 !important;
+  --md-code-fg-color: #e2e8f0 !important;
+  
+  --md-accent-fg-color: #f97316 !important;
 }
 
-/* Hero section on landing page */
-.md-typeset h1 {
-  font-weight: 900;
+/* Base font-size adjustments and line-heights */
+body, input {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  letter-spacing: -0.01em;
 }
 
-/* Card grid — make equal height */
-.md-typeset .grid.cards > * {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Wider content area */
+/* Container limits */
 .md-grid {
-  max-width: 1440px;
+  max-width: 1400px !important;
 }
 
-/* Inline code contrast boost */
+/* ── Header & Tabs ── */
+.md-header {
+  box-shadow: none !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background-color: #0c0d12 !important;
+  height: 3.5rem;
+}
+
+.md-header__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.md-tabs {
+  box-shadow: none !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background-color: #0c0d12 !important;
+}
+
+.md-tabs__link {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--md-default-fg-color--light) !important;
+  transition: color 0.15s ease;
+  padding: 0.6rem 0.8rem;
+}
+
+.md-tabs__link--active,
+.md-tabs__link:hover {
+  color: #ffffff !important;
+}
+
+/* ── Sidebars Navigation ── */
+.md-sidebar {
+  padding-top: 1.5rem;
+}
+
+/* Category header links (non-clickable folder titles) */
+.md-nav__item--nested > .md-nav__link {
+  font-size: 0.72rem !important;
+  text-transform: uppercase !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  color: var(--md-default-fg-color--light) !important;
+  margin-top: 0.8rem;
+  margin-bottom: 0.3rem;
+  pointer-events: none; /* mimic static header */
+}
+
+/* Child page links */
+.md-nav__link {
+  font-size: 0.82rem !important;
+  font-weight: 400;
+  color: var(--md-default-fg-color--light) !important;
+  padding: 0.35rem 0.6rem !important;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.md-nav__link:hover {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Active navigation item pill style */
+.md-nav__link--active,
+.md-nav__item--active > .md-nav__link {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.07) !important;
+  font-weight: 500 !important;
+}
+
+/* Hide navigation item toggle icons for nested headers to simplify */
+.md-nav__item--nested > .md-nav__link > .md-nav__icon {
+  display: none !important;
+}
+
+/* ── Content & Typography ── */
+.md-content {
+  padding-top: 1.5rem;
+}
+
+.md-typeset h1 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #ffffff !important;
+  margin-bottom: 1.5rem;
+}
+
+.md-typeset h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff !important;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+.md-typeset h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #ffffff !important;
+}
+
+.md-typeset p {
+  color: var(--md-default-fg-color);
+  line-height: 1.7;
+}
+
+/* Table styling: border-based and clean */
+.md-typeset table:not([class]) {
+  border-collapse: collapse;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  display: table;
+  width: 100%;
+}
+
+.md-typeset th {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  padding: 10px 16px !important;
+  font-size: 0.8rem;
+}
+
+.md-typeset td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  padding: 12px 16px !important;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* ── Code & Syntax Highlighting ── */
+.md-typeset pre {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
 .md-typeset code {
-  background-color: var(--md-code-bg-color);
-  border-radius: 3px;
-  padding: 0 4px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  font-family: "JetBrains Mono", SFMono-Regular, Consolas, Menlo, monospace;
+  font-size: 0.8em;
+  padding: 2px 5px;
 }
 
-/* Admonition — custom "restate" type */
-.md-typeset .admonition.restate,
-.md-typeset details.restate {
-  border-color: #0d9488;
+.md-typeset pre code {
+  background-color: transparent !important;
+  padding: 0 !important;
 }
-.md-typeset .restate > .admonition-title,
-.md-typeset .restate > summary {
-  background-color: rgba(13, 148, 136, 0.1);
+
+/* ── Admonition cards (Alerts) ── */
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
 }
-.md-typeset .restate > .admonition-title::before,
-.md-typeset .restate > summary::before {
-  background-color: #0d9488;
-  -webkit-mask-image: var(--md-admonition-icon--tip);
-          mask-image: var(--md-admonition-icon--tip);
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  font-weight: 600 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── Search Bar Styling ── */
+.md-search__form {
+  border-radius: 8px !important;
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  transition: all 0.15s ease;
+}
+
+.md-search__form:focus-within {
+  background-color: #0c0d12 !important;
+  border-color: var(--md-accent-fg-color) !important;
+}
+
+/* ── Customized Scrollbars ── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
 }

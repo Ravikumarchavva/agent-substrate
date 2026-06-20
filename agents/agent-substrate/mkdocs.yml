@@ -14,6 +14,9 @@ theme:
   name: material
   logo: sun_logo.png
   favicon: sun_logo.png
+  font:
+    text: Inter
+    code: JetBrains Mono
   palette:
     # System-preference aware
     - media: "(prefers-color-scheme: dark)"

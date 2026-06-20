@@ -69,7 +69,11 @@ def test_extract_relevant_no_query_falls_back_to_slice():
 
 
 def test_extract_relevant_preserves_reading_order():
-    text = "Para A about nothing.\n\n" * 5 + "Para B about asyncio.\n\n" + "Para C about asyncio.\n\n"
+    text = (
+        "Para A about nothing.\n\n" * 5
+        + "Para B about asyncio.\n\n"
+        + "Para C about asyncio.\n\n"
+    )
     result = _extract_relevant(text, query="asyncio", max_chars=200)
     # Both asyncio paras should be present and B before C.
     assert result.index("Para B") < result.index("Para C")
@@ -84,7 +88,12 @@ def test_extract_relevant_preserves_reading_order():
 async def test_read_url_tool_tavily_path():
     mock_client = AsyncMock()
     mock_client.extract.return_value = {
-        "results": [{"url": "http://example.com", "raw_content": "Asyncio event loop manages coroutines. Tasks and futures are core primitives."}],
+        "results": [
+            {
+                "url": "http://example.com",
+                "raw_content": "Asyncio event loop manages coroutines. Tasks and futures are core primitives.",
+            }
+        ],
         "failed_results": [],
     }
 
@@ -121,7 +130,10 @@ async def test_read_url_tool_tavily_takes_priority_over_exa():
 @pytest.mark.asyncio
 async def test_read_url_tool_exa_path():
     mock_result = MagicMock()
-    mock_result.highlights = ["Asyncio event loop manages coroutines.", "Tasks and futures."]
+    mock_result.highlights = [
+        "Asyncio event loop manages coroutines.",
+        "Tasks and futures.",
+    ]
     mock_result.text = ""
 
     mock_response = MagicMock()
@@ -174,7 +186,9 @@ async def test_wikipedia_tool_capping(mock_client_class):
     assert "P" * 6001 not in text
 
     mock_client.get.side_effect = [mock_search_resp, mock_article_resp]
-    result_custom = await tool.execute(query="python", full_article=True, max_chars=1500)
+    result_custom = await tool.execute(
+        query="python", full_article=True, max_chars=1500
+    )
     assert not result_custom.is_error
     text_custom = result_custom.content[0].text
     assert "[truncated" in text_custom
@@ -224,7 +238,10 @@ async def test_web_search_tool_exa_path():
     mock_result = MagicMock()
     mock_result.title = "Asyncio Guide"
     mock_result.url = "https://docs.python.org/asyncio"
-    mock_result.highlights = ["Event loop runs coroutines.", "Use asyncio.run() as entry point."]
+    mock_result.highlights = [
+        "Event loop runs coroutines.",
+        "Use asyncio.run() as entry point.",
+    ]
 
     mock_response = MagicMock()
     mock_response.results = [mock_result]
@@ -321,6 +338,7 @@ async def test_web_surfer_tool_capping():
         result_text = await tool.execute(action="extract_text", max_chars=5000)
         assert not result_text.is_error
         import json
+
         data_text = json.loads(result_text.content[0].text)
         assert data_text["truncated"] is True
         assert len(data_text["text"]) > 5000

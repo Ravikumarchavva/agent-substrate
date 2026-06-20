@@ -21,8 +21,9 @@ class SchemaValidatorMiddleware:
         if schema is None or context.result is None:
             return
 
-        parsed = getattr(context.result, "parsed", None)
-        if parsed is not None:
+        # LLMResponse is a frozen, slotted dataclass — it cannot carry a
+        # ``parsed`` attribute. The validated object lives in context.metadata.
+        if context.metadata.get("parsed") is not None:
             context.metadata["schema_valid"] = True
             return
 
@@ -33,7 +34,7 @@ class SchemaValidatorMiddleware:
             if text:
                 try:
                     obj = schema.model_validate_json(text)
-                    context.result.parsed = obj
+                    context.metadata["parsed"] = obj
                     context.metadata["schema_valid"] = True
                 except Exception as exc:
                     logger.warning("SchemaValidator: validation failed: %s", exc)

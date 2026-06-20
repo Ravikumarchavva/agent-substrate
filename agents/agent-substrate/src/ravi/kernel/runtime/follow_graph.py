@@ -68,15 +68,18 @@ class FollowGraph(Protocol):
         """
         ...
 
-    async def followers_of(self, topic: TopicId) -> AsyncIterator[AgentId]:
+    def followers_of(self, topic: TopicId) -> AsyncIterator[AgentId]:
         """Yield all agents currently subscribed to ``topic``.
+
+        Returns an async iterator directly (not a coroutine), matching
+        ``EventLog.read``/``tail`` — callers use ``async for`` without awaiting.
 
         Used by ``FanoutStrategy`` to enumerate delivery targets.
         Order is unspecified; duplicates will not appear.
         """
         ...
 
-    async def following(self, agent: AgentId) -> AsyncIterator[TopicId]:
+    def following(self, agent: AgentId) -> AsyncIterator[TopicId]:
         """Yield all topics that ``agent`` is currently subscribed to."""
         ...
 

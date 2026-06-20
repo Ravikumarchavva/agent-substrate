@@ -21,6 +21,7 @@ from ravi.kernel.core.content import (
 from ravi.kernel.core.identity import AgentId
 from ravi.kernel.llm.llm import GenerationOptions
 from ravi.kernel.messaging.message import ChatPayload, DataPayload, Message
+from ravi.kernel.tools import AnyTool
 from ravi.kernel.tools.tools import ToolExecutionResult
 
 from ravi.kernel.agent.supervision import Priority, SpawnBudget
@@ -46,7 +47,7 @@ if TYPE_CHECKING:
     from ravi.kernel.storage.history import HistoryProvider
 
 
-@dataclass(frozen=True)
+@dataclass
 class _DelegateTool:
     """Minimal Tool-protocol stub for sub-agent delegation.
 
@@ -233,8 +234,8 @@ class OrchestratorAgent:
         ans = final_text(messages)
         await deliver(ctx, msg, {"text": ans}, sender=self.id)
 
-    def _build_tools(self) -> list[_DelegateTool]:
-        return [
+    def _build_tools(self) -> list[AnyTool]:
+        tools: list[AnyTool] = [
             _DelegateTool(
                 name=f"handoff_{cfg.agent.id.key}",
                 description=cfg.description
@@ -242,6 +243,7 @@ class OrchestratorAgent:
             )
             for cfg in self._sub_agents
         ]
+        return tools
 
     def _find_sub_agent_config(self, name: str) -> SubAgentConfig | None:
         for cfg in self._sub_agents:

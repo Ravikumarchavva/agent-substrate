@@ -142,63 +142,42 @@ extra:
 nav:
   - Welcome: index.md
 
-  - Getting Started:
-    - Overview: getting-started/index.md
-    - Installation: getting-started/installation.md
-    - Quickstart: getting-started/quickstart.md
-    - First Durable Run: getting-started/first-runtime.md
-    - Troubleshooting: getting-started/troubleshooting.md
-
-  - Core Architecture:
+  - Core Concepts:
     - Overview: concepts/index.md
-    - Agent Lifecycle: concepts/agent-lifecycle.md
-    - Durable Runtime: concepts/durable-runtime.md
-    - Streaming & Events: concepts/streaming-and-events.md
-    - Memory & Context: concepts/memory-and-context.md
-    - Tools & HITL: concepts/tools-and-hitl.md
+    - The Agent Model: concepts/agent-model.md
+    - Durability: concepts/durability.md
+    - Tools: concepts/tools.md
+    - Memory & Context: concepts/memory.md
+    - Human-in-the-Loop: concepts/human-in-the-loop.md
+    - Middleware: concepts/middleware.md
+    - Guardrails: concepts/guardrails.md
+    - Supervision & Budgets: concepts/supervision.md
+    - Hooks: concepts/hooks.md
 
-  - How-To Guides:
-    - Overview: tutorials/index.md
-    - Create a Tool: tutorials/create-tool.md
-    - Add HITL Approval: tutorials/hitl-approval.md
-    - Connect MCP Tools: tutorials/mcp-tools.md
-    - Examples: examples/index.md
+  - Advanced Memory:
+    - Vector Memory: concepts/vector-memory.md
+    - Graph Memory: concepts/graph-memory.md
+    - Paged Memory: concepts/paged-memory.md
 
-  - SDK Components:
-    - The Runtime: core/runtime/index.md
-    - Agents: core/agents/index.md
-    - Tools: core/tools/index.md
-    - Memory: core/memory/index.md
-    - Context: core/context/index.md
-    - LLM Client: core/llm/index.md
-    - Guardrails: core/guardrails/index.md
-    - Messages: core/messages/index.md
-    - Scaling Out: core/runtime/scaling.md
-
-  - Kernel Reference:
+  - Kernel Reference (L0):
     - Overview: kernel/index.md
-    - Core — Content & Identity: kernel/01-core.md
-    - LLM Client Protocol: kernel/02-llm.md
-    - Messaging: kernel/03-messaging.md
-    - Tools & Skills: kernel/04-tools.md
-    - Agent & Supervision: kernel/05-agent.md
-    - Storage: kernel/06-storage.md
-    - Runtime: kernel/07-runtime.md
+    - 1 · Core — Content & Identity: kernel/01-core.md
+    - 2 · The LLM Contract: kernel/02-llm.md
+    - 3 · Messaging & Streaming: kernel/03-messaging.md
+    - 4 · Tools, Skills & Approval: kernel/04-tools.md
+    - 5 · Storage Contracts: kernel/05-storage.md
+    - 6 · Agent Policy: kernel/06-agent.md
+    - 7 · The Durable Runtime: kernel/07-runtime.md
 
-  - Deploy & Operate:
-    - Deploy Overview: deploy/index.md
-    - Local & Kind: deploy/local-and-kind.md
-    - Microservices: deploy/microservices.md
-    - Observability: operate/observability.md
-    - Runbook: operate/runbook.md
-
-  - Reference:
-    - Overview: reference/index.md
-    - Configuration: reference/configuration.md
-    - Events: reference/events.md
-    - Message Model: reference/message-model.md
-    - System Architecture: architecture/index.md
-    - Diagrams: architecture/diagrams.md
+  - Agents Layer (L1):
+    - Overview: agents/index.md
+    - 1 · Agent Types: agents/01-agent-types.md
+    - 2 · The In-Process Runtime: agents/02-runtime.md
+    - 3 · Context, Compaction & Memory: agents/03-context-and-memory.md
+    - 4 · The LLM Stack: agents/04-llm-stack.md
+    - 5 · Middleware & Guardrails: agents/05-middleware-and-guardrails.md
+    - 6 · Tools — Toolbox & Invoker: agents/06-tools.md
+    - 7 · Supervision, Budgets & Hooks: agents/07-supervision-and-hooks.md
 
   - Archive: archive/index.md
 

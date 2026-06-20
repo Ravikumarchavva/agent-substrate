@@ -25,7 +25,9 @@ def _extract_relevant(text: str, query: str | None, max_chars: int) -> str:
         return len(query_words & set(p.lower().split()))
 
     # Pick highest-scoring paragraphs greedily, then restore reading order.
-    order = sorted(range(len(paragraphs)), key=lambda i: _score(paragraphs[i]), reverse=True)
+    order = sorted(
+        range(len(paragraphs)), key=lambda i: _score(paragraphs[i]), reverse=True
+    )
     selected: list[int] = []
     total = 0
     for i in order:
@@ -142,7 +144,9 @@ class ReadUrlTool:
             results = response.get("results", [])
             if not results:
                 failed = response.get("failed_results", [])
-                reason = failed[0].get("error", "no content") if failed else "no content"
+                reason = (
+                    failed[0].get("error", "no content") if failed else "no content"
+                )
                 return ToolExecutionResult(
                     content=[TextBlock(text=f"Failed to extract {url}: {reason}")],
                     is_error=True,
@@ -158,7 +162,10 @@ class ReadUrlTool:
             if query:
                 text = _extract_relevant(text, query, limit)
             elif len(text) > limit:
-                text = text[:limit] + "\n\n[truncated — call again with a more specific query]"
+                text = (
+                    text[:limit]
+                    + "\n\n[truncated — call again with a more specific query]"
+                )
 
             return ToolExecutionResult(content=[TextBlock(text=text)])
 
@@ -180,9 +187,7 @@ class ReadUrlTool:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: Exa(api_key=self._exa_key).get_contents(
-                    [url], highlights=True
-                ),
+                lambda: Exa(api_key=self._exa_key).get_contents([url], highlights=True),
             )
 
             results = response.results if response.results else []
@@ -207,7 +212,10 @@ class ReadUrlTool:
                 )
 
             if len(text) > limit:
-                text = text[:limit] + "\n\n[truncated — call again with a more specific query]"
+                text = (
+                    text[:limit]
+                    + "\n\n[truncated — call again with a more specific query]"
+                )
 
             return ToolExecutionResult(content=[TextBlock(text=text)])
 

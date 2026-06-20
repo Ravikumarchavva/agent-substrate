@@ -773,6 +773,7 @@ async def chat(
         "session_id": str(body.thread_id),
         "model_context_window": settings.MODEL_CONTEXT_WINDOW,
     }
+
     async def _settle_boards() -> list[dict]:
         """On clean run completion, settle this conversation's plan boards so
         lingering in-progress tasks stop spinning. Returns the updated board

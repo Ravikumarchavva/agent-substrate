@@ -95,12 +95,27 @@ class FallbackClient:
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
+            yielded = False
             try:
-                async for chunk in client.generate_stream(messages, options=options, ctx=ctx):
+                async for chunk in client.generate_stream(
+                    messages, options=options, ctx=ctx
+                ):
+                    yielded = True
                     yield chunk
                 return
             except Exception as exc:
                 last_exc = exc
+                # Once chunks have reached the consumer we cannot fail over —
+                # a second client's output would corrupt the already-emitted
+                # partial stream. Re-raise instead of silently concatenating.
+                if yielded:
+                    logger.warning(
+                        "FallbackClient: stream from client %d (%s) failed after "
+                        "emitting output — cannot fail over",
+                        i,
+                        client.model,
+                    )
+                    raise
                 logger.warning(
                     "FallbackClient: stream from client %d (%s) failed: %s",
                     i,

@@ -103,7 +103,10 @@ class SemanticCache:
                 continue
             cached_emb_bytes = data.get(b"embedding")
             cached_response = data.get(b"response")
-            if not cached_emb_bytes or not cached_response:
+            # decode_responses=False ⇒ values are bytes; guard narrows the type.
+            if not isinstance(cached_emb_bytes, bytes) or not isinstance(
+                cached_response, bytes
+            ):
                 continue
             cached_embedding = _unpack_embedding(cached_emb_bytes)
             score = _cosine_similarity(query_embedding, cached_embedding)

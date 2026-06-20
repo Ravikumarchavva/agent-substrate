@@ -22,14 +22,14 @@ from ravi.kernel.core.errors import CancellationError
 
 if TYPE_CHECKING:
     from ravi.agents.runtime.backends._event_log import InMemoryEventLog
-    from ravi.agents.runtime.backends._fanout import PushAllFanout
-    from ravi.agents.runtime.backends._follow_graph import InMemoryFollowGraph
     from ravi.agents.runtime.backends._inbox import InMemoryInbox
     from ravi.agents.runtime.backends._journal import InMemoryJournal
     from ravi.agents.runtime.backends._scheduler import InMemoryScheduler
     from ravi.agents.runtime.backends._signal_bus import InMemorySignalBus
     from ravi.agents.runtime.backends._supervisor import InMemorySupervisor
     from ravi.kernel.runtime.agent import Agent
+    from ravi.kernel.runtime.fanout import FanoutStrategy
+    from ravi.kernel.runtime.follow_graph import FollowGraph
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,8 @@ class Worker:
         event_log: InMemoryEventLog,
         journal: InMemoryJournal,
         inbox: InMemoryInbox,
-        follow_graph: InMemoryFollowGraph,
-        fanout: PushAllFanout,
+        follow_graph: FollowGraph,
+        fanout: FanoutStrategy,
         scheduler: InMemoryScheduler,
         supervisor: InMemorySupervisor,
         signal_bus: InMemorySignalBus,

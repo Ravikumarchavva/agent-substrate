@@ -16,6 +16,7 @@ from ravi.agents.context import (
 from ravi.kernel.llm import LLMClient
 from ravi.kernel import (
     ChatMessage,
+    ContentBlock,
     TextBlock,
     ToolUseBlock,
     ToolResultBlock,
@@ -108,19 +109,15 @@ async def rebuild_messages_from_steps(
             tool_name = row.get("name") or ""
             output_text = row.get("output") or ""
             is_error = row.get("is_error") or False
-            messages.append(
-                ChatMessage(
-                    role="tool",
-                    content=[
-                        ToolResultBlock(
-                            call_id=call_id,
-                            tool_name=tool_name,
-                            content=[TextBlock(text=output_text)],
-                            is_error=is_error,
-                        )
-                    ],
+            tool_content: list[ContentBlock] = [
+                ToolResultBlock(
+                    call_id=call_id,
+                    name=tool_name,
+                    content=[TextBlock(text=output_text)],
+                    is_error=is_error,
                 )
-            )
+            ]
+            messages.append(ChatMessage(role="tool", content=tool_content))
             continue
 
         if step_type == "tool_call":

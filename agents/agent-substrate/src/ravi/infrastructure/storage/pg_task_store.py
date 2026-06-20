@@ -213,7 +213,9 @@ class PgTaskStore:
             mutated = False
             for task in task_list.tasks:
                 if task.status == TaskStatus.IN_PROGRESS:
-                    new_tasks.append(dataclasses.replace(task, status=TaskStatus.SUCCEEDED))
+                    new_tasks.append(
+                        dataclasses.replace(task, status=TaskStatus.SUCCEEDED)
+                    )
                     mutated = True
                 else:
                     new_tasks.append(task)
@@ -294,7 +296,9 @@ class PgTaskStore:
                 if task.retry_count >= task_list.max_retries:
                     return None
                 updated = dataclasses.replace(
-                    task, retry_count=task.retry_count + 1, status=TaskStatus.IN_PROGRESS
+                    task,
+                    retry_count=task.retry_count + 1,
+                    status=TaskStatus.IN_PROGRESS,
                 )
                 break
         if updated is None:

@@ -1,136 +1,297 @@
-# messaging/ — Agent Communication
+# Messaging
 
-> **Source:** `kernel/messaging/message.py` · `kernel/messaging/stream.py` · `kernel/messaging/events.py`
+## The one-line version
 
-Three distinct communication channels — messages between agents, stream events to the UI, and generic events to the event bus. They look similar but serve different purposes.
+**Messaging is how agents talk to each other and to the user.** Everything an agent sends — a chat turn, a tool request, a "please pause" signal — is wrapped in a single **envelope** called a `Message`, handed to the runtime, and delivered to a target. Separately, while an agent is *working*, it leaks a live feed of tiny updates (**stream deltas**) so the UI can show typing in real time.
 
----
+!!! note "Analogy"
+    A `Message` is a **postal envelope**: it has an address (`target`), a return address (`sender`), the letter inside (`payload`), and a tracking sticker (`correlation_id`) so every envelope in the same back-and-forth can be grouped together. **Stream deltas** are a **live news ticker** — a fast trickle of half-sentences scrolling by while the full story is still being written, ending with a "— END —" card (`StreamDone`).
 
-## The Message — Agent-to-Agent Envelope
+This page covers three things, all pure data types with **zero I/O**:
 
-A `Message` wraps any `Payload` and routes it to a specific agent or topic. Every agent-to-agent send goes through a `Message`.
-
-## The Message — Agent-to-Agent Envelope
-
-A `Message` wraps any `Payload` and routes it to a specific agent or topic. Every agent-to-agent send goes through a `Message`.
-
-### Message Envelope Fields
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | `str` | Unique message ID (UUID hex string). |
-| `target` | `AgentId \| TopicId` | Routing target: point-to-point (`AgentId`) or pub/sub fan-out (`TopicId`). |
-| `sender` | `AgentId \| None` | Address of the sending agent, or `None` if system-initiated. |
-| `correlation_id`| `str` | Links all messages within the same logical conversation/run tree. |
-| `causation_id` | `str \| None` | References the specific message ID that triggered this one. |
-| `reply_to` | `str \| None` | The run ID of the asking supervisor (used for response routing). |
-| `is_broadcast` | `bool` | Flag set to `True` when the target is a `TopicId`. |
-
-### Built-in Payload Types
-
-| Payload Class | Discriminator (`kind`) | Fields | Description |
-|---|---|---|---|
-| `ChatPayload` | `'chat'` | `message: ChatMessage` | Wraps standard turn history messages. |
-| `DataPayload` | `'data'` | `data: dict` | Carries raw structured dictionary payloads. |
-| `ControlPayload` | `'control'` | `signal: str`, `data: dict` | Passes lifecycle control signals (e.g. abort, resume). |
-| `ProgressPayload` | `'progress'` | `progress: AgentProgress` | Streams step-by-step progress metrics. |
-| `ToolCallRequest` | `'tool_call'` | `name: str`, `arguments: dict`, `call_id: str` | Represents tool invocation requests. |
-| `ToolExecutionResult`| `'tool_result'`| `call_id: str`, `content: list[ContentBlock]`, `is_error: bool` | Represents tool outcomes (supports multimodal outputs). |
-
-**`register_payload_type(cls)`** — add custom payload kinds. `cls` must subclass `PayloadBase` and have a `kind: Literal[...]` field. Call once at module load time.
+1. The **Message envelope** and its **payloads** — durable, routable, one per turn.
+2. **Streaming deltas** — ephemeral, real-time, many per turn.
+3. The **Event envelope** — the versioned wire format both buses share.
 
 ---
 
-## Two Parallel Visibility Streams
+## 1. The Message envelope
 
-While agents run, two independent channels stream to the UI. They share `seq` for ordering but serve different consumers.
+A **Message** is the unit of agent-to-agent communication. Every send or publish wraps a payload in one. The runtime reads the address, delivers it, and (for a direct send) returns the recipient's reply.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant Root as Root Agent
-    participant Sub as Sub-Agent
-    participant UI as ravi-ui Client
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
+flowchart TB
+    classDef agent   fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
+    classDef runtime fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
+    classDef tool    fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef external fill:#FFF3E0,stroke:#E65100,color:#BF360C
 
-    Note over Root,UI: One run, one progress topic: TopicId("agent.progress", run_id)
-    Note over Root,UI: Each agent has its own token stream: TopicId("agent.stream", agent_id.key)
+    MSG["Message — the envelope"]:::agent
 
-    Root->>UI: AgentProgress(step=started, depth=0)
-    Root->>UI: AgentProgress(step=thinking, depth=0)
-
-    Root->>Sub: spawn child
-    Sub->>UI: AgentProgress(step=started, parent_id=root, depth=1)
-
-    loop Sub-agent token stream
-        Sub->>UI: TextDelta(text, agent_id=sub, seq)
-    end
-
-    Sub->>UI: CompletionEvent(content, usage, seq)
-    Sub->>UI: AgentProgress(step=done, depth=1)
-
-    Root->>UI: AgentProgress(step=done, depth=0)
-
-    Note over UI: UI subscribes ONCE to agent.progress/run_id<br/>Reconstructs tree from agent_id+parent_id+depth
+    MSG --> T["target<br/>(AgentId or TopicId)<br/>where it goes"]:::runtime
+    MSG --> S["sender<br/>(AgentId or None)<br/>return address"]:::runtime
+    MSG --> P["payload<br/>(PayloadBase)<br/>the letter inside"]:::tool
+    MSG --> C["correlation_id<br/>conversation tracking sticker"]:::external
+    MSG --> CA["causation_id<br/>which message caused this one"]:::external
+    MSG --> R["reply_to<br/>run_id of the asker"]:::external
+    MSG --> M["metadata<br/>(dict of strings)<br/>extra notes"]:::runtime
+    MSG --> ID["id + created_at + schema_version<br/>dedup and versioning"]:::runtime
 ```
 
-### Stream event types
+Here is the actual type, trimmed to the fields you'll touch:
 
-**Token stream** — `TopicId("agent.stream", agent_id.key)` — one topic per agent:
+```python
+class Message(BaseModel):
+    target: AgentId | TopicId          # required — no destination, no delivery
+    payload: Payload                   # the letter (any PayloadBase subclass)
+    sender: AgentId | None = None      # return address; None = anonymous/bootstrap
 
-| Type | When | Key fields |
-|---|---|---|
-| `TextDelta` | Each text token from the LLM | `text`, `seq`, `agent_id`, `run_id` |
-| `ReasoningDelta` | Each thinking token (extended-thinking only) | `text`, `seq` |
-| `CompletionEvent` | End of LLM call | `content: list[ContentBlock]`, `usage`, `seq` |
-| `StreamDone` | End sentinel | `reason: str` |
+    correlation_id: str = ...          # ties one logical conversation together
+    causation_id: str | None = None    # the exact message that triggered this one
+    reply_to: str | None = None        # run_id of the asker; set by RunContext.ask()
 
-**Progress stream** — `TopicId("agent.progress", run_id)` — ONE topic for the whole run:
+    metadata: dict[str, str] = {}      # free-form string notes for transports
+    id: str = ...                      # time-sortable hex id — dedup / idempotency
+    created_at: datetime = ...
+    schema_version: int = 1
 
-| `AgentStep` | Meaning |
-|---|---|
-| `started` | Agent woke up, beginning `run()` |
-| `thinking` | Agent made an LLM call |
-| `tool_call` | Agent invoked a tool |
-| `tool_result` | Tool returned a result |
-| `handoff` | Orchestrator delegated to a sub-agent |
-| `paused` | Agent suspended (waiting for signal/timer/child) |
-| `done` | Agent completed |
-| `error` | Agent failed |
+    @property
+    def is_broadcast(self) -> bool:    # True when target is a TopicId (fan-out)
+        ...
+```
 
-`AgentProgress.depth` is used by the UI to indent sub-agents correctly in the tree view.
+**Addressing** uses two routing keys from `kernel/core/identity.py` (covered in the identity page; here they are just addresses):
+
+- `AgentId(type, key, namespace)` — a **direct** address to one agent instance. `str` form: `"researcher/abc123"`.
+- `TopicId(type, source, namespace)` — a **broadcast** address to a topic, for pub/sub fan-out. When `target` is a `TopicId`, `message.is_broadcast` is `True`.
+
+!!! tip "Direct send vs. broadcast"
+    Send to an `AgentId` for a one-to-one request that expects a reply. Publish to a `TopicId` to fan a message out to *every* subscriber, like a radio broadcast — nobody is obliged to reply.
 
 ---
 
-## Event — The Generic Bus Envelope
+### Payload types — the letter inside
 
-Separate from `Message`. `Event` is the envelope for the Redis pub/sub event bus (`integrations/events/`). It carries infrastructure-level events like `workflow.started`, `agent.crashed`, `hitl.approved`.
+The envelope is dumb; the **payload** is the meaning. Every payload subclasses `PayloadBase` and carries a `kind` string so the runtime can deserialize it safely. These are the built-ins:
 
-### Event Envelope Fields
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | `str` | Unique event ID (UUID hex). |
-| `type` | `str` | Event topic/type (e.g. `workflow.started`). |
-| `source` | `str` | Identifier of the originating component or process. |
-| `schema_version`| `int` | Integer schema version to handle backwards compatibility. |
-| `correlation_id`| `str` | Associated run or execution context ID. |
-| `ts` | `datetime` | Creation timestamp. |
-| `data` | `dict` | Raw dictionary payload matching the event type's schema. |
-
-### Event Bus Protocols
-
-| Protocol | Method | Description |
-|---|---|---|
-| **`EventPublisher`** | `publish(event, topic)` | Send a serialized Event onto the designated bus topic. |
-| **`EventSubscriber`**| `subscribe(topic, handler)` | Register a handler callback to consume events on a topic. |
-| | `unsubscribe(id)` | Deregister a subscription by ID. |
-| | `stream(topic)` | Return an async iterator streaming events on a topic. |
-
-**Always use factory functions** from `serving/shared/events/types.py` — never construct `Event` dicts manually:
+| Payload | `kind` | Carries | Used for |
+|---|---|---|---|
+| `ChatPayload` | `"chat"` | a `ChatMessage` (role + content blocks) | a normal conversation turn |
+| `DataPayload` | `"data"` | a `JsonObject` (a `dict`) | arbitrary structured data between agents |
+| `ControlPayload` | `"control"` | a `signal` string + `data` dict | runtime signals — pause, cancel, handoff |
+| `ProgressPayload` | `"progress"` | an `AgentProgress` event | wrapping a progress step as a message |
+| `ToolCallRequest` | `"tool_call"` | a request to run a tool | asking for a tool execution (defined in `tools.py`) |
+| `ToolExecutionResult` | `"tool_result"` | the result of a tool run | returning a tool's output (defined in `tools.py`) |
 
 ```python
-from ravi.serving.shared.events.types import workflow_started
-await bus.publish(workflow_started(run_id=run.id, thread_id=thread.id, user_content=text))
+class ChatPayload(PayloadBase):
+    kind: Literal["chat"] = "chat"
+    message: ChatMessage               # role-tagged turn of ContentBlocks
+
+class DataPayload(PayloadBase):
+    kind: Literal["data"] = "data"
+    data: JsonObject                   # any JSON-serializable dict
+
+class ControlPayload(PayloadBase):
+    kind: Literal["control"] = "control"
+    signal: str                        # e.g. "pause", "cancel", "handoff"
+    data: JsonObject = {}
 ```
 
-`Event.create()` is the kernel-level convenience constructor for when factory functions don't exist yet.
+!!! note "Extending payloads"
+    Need a new kind of letter? Subclass `PayloadBase`, give it a `kind` literal, and call `register_payload_type(YourPayload)` once at import time. Registration is enforced — an unregistered payload is rejected on the way in, so deserialization is always safe. (You almost never need this; the built-ins cover most cases.)
+
+---
+
+### Subscriptions — who's listening on a topic
+
+A **Subscription** is a tiny record that says "this agent is listening to this topic." The runtime keeps these so a `TopicId` broadcast knows where to fan out.
+
+```python
+class Subscription(BaseModel):
+    id: str = ...              # unique subscription id
+    topic: TopicId            # the topic being listened to
+    agent_id: AgentId         # the agent that subscribed
+```
+
+---
+
+## 2. correlation_id and reply_to — how a conversation hangs together
+
+Two fields do the relationship work. They are easy to mix up, so define them once:
+
+- **`correlation_id`** — the **conversation id**. Every message in one logical back-and-forth shares the *same* `correlation_id`. It's the tracking sticker that says "all these envelopes belong to the same story."
+- **`reply_to`** — the **return-run address**. When an agent *asks* and wants the answer routed straight back to its own run, `RunContext.ask()` stamps the asker's `run_id` here. The reply travels back to exactly that run.
+- **`causation_id`** — the **direct parent**. It names the single message that *caused* this one. `correlation_id` groups the whole tree; `causation_id` is the one edge up.
+
+### Ask → reply, step by step
+
+This is the request/response pattern: agent A asks agent B a question and waits for the answer.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','noteBkgColor': '#FFFDE7','noteBorderColor': '#F57F17','signalColor': '#546E7A','fontSize': '12px'}}}%%
+sequenceDiagram
+    autonumber
+    participant A as Agent A (asker)
+    participant RT as Runtime
+    participant B as Agent B (answerer)
+
+    Note over A: ask() builds a Message —<br/>reply_to = A's run_id,<br/>correlation_id = "conv-42"
+    A->>RT: Message(target=B, payload=ChatPayload, reply_to="A-run", correlation_id="conv-42")
+    RT->>B: deliver to B's inbox
+    Note over B: B answers — keeps the same<br/>correlation_id, sets causation_id<br/>to the question's id
+    B->>RT: Message(target=A-run via reply_to, payload=ChatPayload, correlation_id="conv-42")
+    RT->>A: reply routed back to the waiting run
+    Note over A,B: Both envelopes share correlation_id "conv-42" —<br/>the whole exchange is one conversation.
+```
+
+!!! tip "Why two ids instead of one"
+    `correlation_id` lets a log viewer pull up *every* message in a conversation. `reply_to` lets the runtime deliver a single answer back to the exact run that's blocked waiting for it — without it, the reply would have nowhere specific to go.
+
+---
+
+## 3. Streaming deltas — the live ticker
+
+The `Message` envelope is for *finished* turns. But an LLM produces its answer **token by token**, and users want to watch it happen. That's what `stream.py` is for: small, frozen, fire-and-forth events emitted *during* a run.
+
+There are **two independent channels**:
+
+1. **Token stream** — the words and thoughts of the agent currently speaking.
+2. **Progress stream** — structured "what step am I on" events from *every* agent in the supervision tree.
+
+### Token stream events
+
+| Event | What it is | When it fires |
+|---|---|---|
+| `TextDelta` | a chunk of visible answer text | every few tokens, as the model writes |
+| `ReasoningDelta` | a chunk of the model's thinking trace | every few tokens, as the model *thinks* |
+| `CompletionEvent` | the fully assembled final response + `Usage` | once, at the end of the turn |
+| `StreamDone` | the "stream is over" sentinel | last — consumers stop reading on receipt |
+
+```python
+class TextDelta(BaseModel):          # incremental visible text
+    text: str
+    agent_id: AgentId | None = None
+    run_id: str = ""
+    seq: int = 0                     # strictly increasing within a run
+
+class CompletionEvent(BaseModel):    # the final, whole response
+    content: list[ContentBlock]
+    usage: Usage = ...               # tokens / cost for this turn
+    agent_id: AgentId | None = None
+    run_id: str = ""
+    seq: int = 0
+
+class StreamDone(BaseModel):         # the END card
+    reason: str = "complete"
+```
+
+!!! warning "Order by `seq`, not arrival"
+    Over a transport that can reorder (Redis, NATS), deltas may arrive out of order. Every event carries a strictly-increasing `seq` *within one run*. Consumers reassemble emission order from `seq` — never trust raw arrival order. The `agent_id` / `run_id` fields let one subscription demultiplex several concurrent agent streams.
+
+### What a streaming turn looks like
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','noteBkgColor': '#FFFDE7','noteBorderColor': '#F57F17','signalColor': '#546E7A','fontSize': '12px'}}}%%
+sequenceDiagram
+    autonumber
+    participant LLM as Agent + LLM
+    participant Topic as agent.stream topic
+    participant UI as UI consumer
+
+    Note over LLM: model starts generating
+    LLM->>Topic: ReasoningDelta(seq=0, "let me check...")
+    Topic->>UI: render thinking trace
+    LLM->>Topic: TextDelta(seq=1, "The")
+    LLM->>Topic: TextDelta(seq=2, " answer")
+    LLM->>Topic: TextDelta(seq=3, " is 42.")
+    Topic->>UI: append each chunk live
+    LLM->>Topic: CompletionEvent(seq=4, full content + usage)
+    Note over UI: replace the live buffer<br/>with the authoritative final text
+    LLM->>Topic: StreamDone(reason="complete")
+    Topic->>UI: stop reading — turn over
+```
+
+### Progress stream — the supervision-tree heartbeat
+
+While the token stream is *one speaker*, the **progress stream** is *everybody*. Every agent in a run — parent and children — publishes `AgentProgress` events to **one shared topic**, `TopicId("agent.progress", run_id)`. The UI subscribes once and rebuilds the whole tree from each event's `agent_id`, `parent_id`, and `depth`.
+
+```python
+class AgentStep(StrEnum):            # the standard step names
+    STARTED = "started"
+    THINKING = "thinking"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+    HANDOFF = "handoff"
+    PAUSED = "paused"
+    DONE = "done"
+    ERROR = "error"
+
+class AgentProgress(BaseModel):
+    agent_id: AgentId                # who emitted it
+    step: AgentStep                  # which standard step
+    content: str                     # human-readable detail
+    run_id: str = ""
+    parent_id: AgentId | None = None # who spawned this agent
+    depth: int = 0                   # nesting level in the tree
+    seq: int = 0                     # ordering within the run
+    ts: datetime = ...               # wall-clock — for display only
+```
+
+!!! note "Topic conventions (set by the agents layer, not the kernel)"
+    `token stream  → TopicId("agent.stream",   agent_id.key)` — one per speaker.<br/>
+    `progress      → TopicId("agent.progress", run_id)` — **one per run**, shared by the whole tree.
+
+---
+
+## 4. The Event envelope
+
+Underneath both buses sits one shared wire contract: the **`Event`**. The in-process kernel pub/sub and the distributed infrastructure bus (Redis, NATS, Kafka) all carry `Event` objects, so there is exactly one event format across every transport.
+
+```python
+class Event(BaseModel):
+    id: str = ...                    # unique — enables consumer dedup
+    type: str                        # e.g. "agent.started", "tool.called"
+    source: str                      # str(AgentId(...)) or a service name
+    correlation_id: str = ""         # ties all events in one run together
+    schema_version: int = 1          # bump when `data` shape changes
+    data: JsonObject = {}            # event-specific payload
+    ts: datetime = ...
+
+    @classmethod
+    def create(cls, event_type, *, source, data=None, correlation_id="", ...):
+        ...                          # source accepts an AgentId or a string
+```
+
+Two Protocols abstract the transport so the same producer code works in-process or over Redis:
+
+```python
+class EventPublisher(Protocol):
+    async def publish(self, event: Event, *, topic: str = "") -> None: ...
+
+class EventSubscriber(Protocol):
+    async def subscribe(self, topic: str, handler: EventHandler) -> str: ...
+    async def unsubscribe(self, subscription_id: str) -> None: ...
+    def stream(self, topic: str) -> AsyncIterator[Event]: ...
+```
+
+!!! tip "Message vs. Event — don't confuse them"
+    A **`Message`** is *addressed to a specific target* and is the thing an agent *runs on* (it lands in an inbox). An **`Event`** is a *fact that happened*, broadcast to whoever subscribes (it lands in a log or a UI). Both share `correlation_id` so you can stitch a run's messages and events into one timeline.
+
+---
+
+## Where this lives
+
+| Piece | Location |
+|---|---|
+| `Message`, `Subscription`, payload registry | `kernel/messaging/message.py` |
+| `ChatPayload`, `DataPayload`, `ControlPayload`, `ProgressPayload` | `kernel/messaging/message.py` |
+| `ToolCallRequest`, `ToolExecutionResult`, `PayloadBase` | `kernel/tools/tools.py` (re-exported by `message.py`) |
+| `TextDelta`, `ReasoningDelta`, `CompletionEvent`, `StreamDone` | `kernel/messaging/stream.py` |
+| `AgentProgress`, `AgentStep` | `kernel/messaging/stream.py` |
+| `Event`, `EventPublisher`, `EventSubscriber`, `EventHandler` | `kernel/messaging/events.py` |
+| `AgentId`, `TopicId` (addressing) | `kernel/core/identity.py` |
+| `ChatMessage`, `ContentBlock`, `JsonObject` | `kernel/core/content.py` |
+
+**Next:** [Tools, Skills & Approval](04-tools.md) — what an agent can actually *do* once it has decided to act, and how a risky action gets a human's sign-off.

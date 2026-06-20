@@ -4,6 +4,7 @@ from typing import Callable, Awaitable
 
 from ravi.agents.middleware._contracts import ChatContext
 from ravi.exceptions import MiddlewareTermination
+from ravi.kernel.core.content import TextBlock
 
 
 class MaxTokenMiddleware:
@@ -45,7 +46,7 @@ class MaxTokenMiddleware:
         total_text = ""
         for msg in context.messages:
             total_text += (
-                " ".join(b.text for b in msg.content if getattr(b, "text", None)) + " "
+                " ".join(b.text for b in msg.content if isinstance(b, TextBlock)) + " "
             )
 
         token_count = self._count_tokens(total_text.strip())

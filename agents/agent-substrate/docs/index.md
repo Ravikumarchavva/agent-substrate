@@ -57,19 +57,9 @@ That is what Ravi is for.
 
 ## The story in one picture
 
-Every request follows the same path — from a human typing a message to an agent reasoning, calling tools, and streaming the response back.
+Every request follows the same path — from a client request, through the durable runtime queue, executing the ReAct loop, calling tools, and returning the result.
 
-```mermaid
-graph LR
-    Human["🧑 Human\nor external caller"] -->|asks| Proxy["UserProxyAgent\nfabric entry point"]
-    Proxy -->|runtime.send_message| Runtime["LocalRuntime\nor DistributedRuntime"]
-    Runtime -->|on_message| Agent["AssistantAgent\nReAct loop"]
-    Agent -->|LLM call| LLM["OpenAI / Gemini\nor any BaseModelClient"]
-    Agent -->|tool call| Tools["catalog/tools/\nCustom or MCP"]
-    Tools -->|result| Agent
-    Agent -->|stream events| Channel["StreamChannel\nSSE → browser"]
-    Agent -->|store turn| Memory["Redis / Postgres\nor UnboundedMemory"]
-```
+![Agent Architecture Diagram](agent_architecture.png)
 
 The key insight: the caller never holds a reference to the agent. It sends a message to an address (`AgentId`). The runtime delivers it. Whether the agent is in the same process, a remote gRPC node, or a Kubernetes pod does not change the call site.
 
@@ -115,42 +105,38 @@ The key insight: the caller never holds a reference to the agent. It sends a mes
 
 ```python
 import asyncio
-from ravi.fabric.runtime.local import LocalRuntime
-from ravi.fabric.actors.actor import ActorAgent
-from ravi.fabric.catalog import AgentCatalogRegistry
-from ravi.fabric.memory.unbounded import UnboundedMemory
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
-from ravi.orchestration.agents.proxy.agent import UserProxyAgent
-from ravi.integrations.llm.factory import LLMFactory
+from ravi.config import settings
+from ravi.agents import ReActAgent, Runtime
+from ravi.agents.context import ContextConfig, InMemoryHistoryProvider
+from ravi.integrations.llm import LLMFactory
+from ravi.capabilities.tools import CalculatorTool
 
 
-async def main():
-    # 1. A runtime — the message bus that connects every agent.
-    runtime = LocalRuntime()
-    await runtime.start()
+async def main() -> None:
+    # 1. Initialize the LLM client
+    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
 
-    # 2. Wire the agent's capabilities into a catalog.
-    llm = LLMFactory(model="gpt-4o", api_key="sk-...").build()
-    catalog = AgentCatalogRegistry()
-    catalog.register_model("primary", llm)
-    catalog.register_memory("memory", UnboundedMemory())
+    # 2. Construct the agent with custom capabilities and tools
+    agent = ReActAgent(
+        "helper",
+        model=model,
+        tools=[CalculatorTool()],
+        context=ContextConfig(InMemoryHistoryProvider()),
+        system_instructions="You are a helpful assistant.",
+    )
 
-    # 3. Start the agent — it registers with the runtime and waits for messages.
-    agent = AssistantAgent(name="helper", runtime=runtime, catalog=catalog)
-    await agent.start()
-
-    # 4. A UserProxyAgent bridges the outside world into the fabric.
-    proxy = UserProxyAgent(name="user", runtime=runtime)
-    await proxy.start()
-
-    # 5. Ask — the proxy sends a message, the runtime delivers it, the agent replies.
-    reply = await proxy.ask("What is 17 * 23?", recipient=agent.id)
-    print(reply)
-
-    await runtime.stop()
+    # 3. Start the runtime, register the agent, and run the interactive console
+    async with Runtime() as rt:
+        await rt.register(agent)
+        
+        # 4. Use the built-in Console REPL to talk to the agent
+        from ravi.console import Console
+        console = Console(agent, runtime=rt)
+        await console.interactive(stream=True)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 The shape stays the same whether you add tools, guardrails, streaming, HITL approvals, or swap in a distributed runtime. The call site does not change — only the configuration does.

@@ -100,8 +100,11 @@ class OrchestratorAgent:
         ),
         max_iterations: int = 10,
         spawn_budget: SpawnBudget | None = None,
+        session_id: str | None = None,
     ) -> None:
-        self.id = AgentId(type="agent", key=name)
+        self.id = AgentId(
+            type="agent", key=f"{name}-{session_id}" if session_id else name
+        )
         self.name = name
         self.model = model
         self.tools = None  # built dynamically from sub-agents
@@ -116,10 +119,8 @@ class OrchestratorAgent:
         return self._context.history
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        # Stamp identity so this orchestrator's boards are isolated.
-        # Also set parent so spawned subagents inherit it via ContextVar copy-on-spawn.
         _task_agent_id.set(str(self.id))
-        _task_agent_label.set(self.id.key)
+        _task_agent_label.set(self.name)
         _task_parent_agent_id.set(None)  # orchestrator is the root
         for msg in inbox:
             ctx.check()
@@ -169,9 +170,6 @@ class OrchestratorAgent:
                     continue
 
                 spawn_tracker.acquire(cfg.agent.id, priority=cfg.priority)
-                # Let spawned subagent inherit orchestrator id as parent
-                # (ContextVar copy-on-spawn propagates this automatically).
-                _task_parent_agent_id.set(str(self.id))
                 task_text = dispatch.arguments.get("task", str(dispatch.arguments))
                 boot_msg = Message(
                     target=cfg.agent.id,
@@ -183,6 +181,10 @@ class OrchestratorAgent:
                         )
                     ),
                     correlation_id=session_id,
+                    # The subagent Worker runs in its own ContextVar context, so
+                    # pass the parent id explicitly; the subagent stamps it as
+                    # current_parent_agent_id so its board nests under this one.
+                    metadata={"parent_agent_id": str(self.id)},
                 )
                 try:
                     handle = await ctx.spawn(cfg.agent.id, boot=boot_msg)

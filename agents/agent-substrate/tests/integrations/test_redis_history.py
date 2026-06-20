@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import pytest
 import redis.exceptions
+
 from ravi.capabilities.history import RedisHistoryProvider
 from ravi.kernel import AgentId
 from ravi.kernel.core.content import ChatMessage, TextBlock
+
+pytestmark = [pytest.mark.requires_redis]
 
 
 @pytest.mark.asyncio

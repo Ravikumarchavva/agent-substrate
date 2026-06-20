@@ -247,7 +247,8 @@ def rebuild_agent(
         toolbox.add(t)
 
     return ReActAgent(
-        f"assistant-{session_id}",
+        "assistant",
+        session_id=session_id,
         model=model_client,
         tools=toolbox if tools else None,
         system_instructions=system_instructions,
@@ -267,6 +268,7 @@ def create_assistant_agent(
     max_iterations: int = 30,
     tool_timeout: float | None = None,
     name: str = "ChatBot",
+    session_id: str | None = None,
 ) -> ReActAgent:
     """Create a configured ``ReActAgent``.
 
@@ -315,4 +317,5 @@ def create_assistant_agent(
         system_instructions=system_instructions or "",
         context=ctx,
         max_iterations=max_iterations,
+        session_id=session_id,
     )

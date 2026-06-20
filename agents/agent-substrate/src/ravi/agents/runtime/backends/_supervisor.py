@@ -75,9 +75,11 @@ class InMemorySupervisor:
                     value={"child_run_id": child_run_id},
                 )
             )
-            # Deliver boot message to child inbox
+            # Deliver boot message to child inbox. notify=False: we enqueue the
+            # child run explicitly below, so the deliver-hook must not also spawn
+            # a duplicate run (same race as Runtime.submit).
             boot_with_reply = boot.model_copy(update={"reply_to": parent})
-            await self._inbox.deliver(child_agent, boot_with_reply)
+            await self._inbox.deliver(child_agent, boot_with_reply, notify=False)
             # Register and enqueue the child run
             self._scheduler.register_run(child_run_id, child_agent)
             await self._scheduler.enqueue(child_run_id, priority=5, tenant="default")

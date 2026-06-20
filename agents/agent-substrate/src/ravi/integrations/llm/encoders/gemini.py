@@ -243,7 +243,7 @@ def _encode_tool_result(block: ToolResultBlock) -> genai_types.Content:
                     )
 
     content_str = "\n".join(parts_text)
-    tool_name = block.tool_name or "unknown_tool"
+    tool_name = block.name or "unknown_tool"
 
     parts = [
         genai_types.Part(

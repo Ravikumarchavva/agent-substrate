@@ -99,6 +99,31 @@ class TaskStore:
                     results.append(tl)
         return results
 
+    async def settle_conversation(self, conversation_id: str) -> List[TaskList]:
+        """Settle a conversation's boards when its run ends.
+
+        Flips any lingering ``in_progress`` task to ``succeeded`` so the UI
+        board stops spinning after the agent has produced its final answer.
+        Planned/blocked/failed/abandoned tasks are left untouched. Returns the
+        boards that changed.
+        """
+        async with self._lock:
+            changed: List[TaskList] = []
+            for (cid, _), tl_id in self._by_key.items():
+                if cid != conversation_id:
+                    continue
+                task_list = self._lists.get(tl_id)
+                if not task_list:
+                    continue
+                mutated = False
+                for task in task_list.tasks:
+                    if task.status == TaskStatus.IN_PROGRESS:
+                        task.status = TaskStatus.SUCCEEDED
+                        mutated = True
+                if mutated:
+                    changed.append(task_list)
+            return changed
+
     async def update_status(
         self, task_list_id: str, task_id: str, status: str, note: str = ""
     ) -> Optional[Task]:

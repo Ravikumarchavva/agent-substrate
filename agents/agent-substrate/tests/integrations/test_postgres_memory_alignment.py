@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import pytest
 from sqlalchemy.exc import OperationalError
+
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ravi.kernel import AgentId, ChatMessage
@@ -14,6 +15,8 @@ from ravi.capabilities.memory import PostgresMemoryStore
 from ravi.capabilities.history import PostgresHistoryProvider
 from ravi.capabilities.vector import PgVectorStore
 from ravi.capabilities.graph import AGEGraphStore
+
+pytestmark = [pytest.mark.requires_postgres]
 
 
 def get_db_url() -> str:

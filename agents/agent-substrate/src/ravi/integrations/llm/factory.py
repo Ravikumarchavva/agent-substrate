@@ -365,8 +365,10 @@ class LLMFactory:
 # that logic on top of LLMFactory.
 
 CHAT_MODEL_FALLBACKS: tuple[str, ...] = (
-    "openai/gpt-5.4-mini",
+    "google/gemini-3.1-flash-lite",
     "google/gemini-2.5-flash",
+    "openai/gpt-5.4-mini",
+    "nvidia/moonshotai/kimi-k2.6",
     "groq/llama-3.3-70b-versatile",
     "openrouter/liquid/lfm-2.5-1.2b-thinking:free",
     "anthropic/claude-sonnet-4-20250514",

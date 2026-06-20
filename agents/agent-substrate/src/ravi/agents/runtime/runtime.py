@@ -32,7 +32,14 @@ import uuid
 from ravi.kernel.core.identity import AgentId
 from ravi.kernel.messaging.message import Message
 from ravi.kernel.runtime.agent import Agent
+from ravi.kernel.runtime.effects import Journal
+from ravi.kernel.runtime.fanout import FanoutStrategy
+from ravi.kernel.runtime.follow_graph import FollowGraph
 from ravi.kernel.runtime.ids import RunId, RunStatus, new_run_id
+from ravi.kernel.runtime.inbox import Inbox
+from ravi.kernel.runtime.log_entry import EventLog
+from ravi.kernel.runtime.scheduler import Scheduler
+from ravi.kernel.runtime.wakeup import SignalBus
 
 from ravi.agents.runtime.backends._event_log import InMemoryEventLog
 from ravi.agents.runtime.backends._fanout import PushAllFanout
@@ -57,24 +64,24 @@ class Runtime:
     def __init__(
         self,
         *,
-        event_log: object | None = None,
-        inbox: object | None = None,
-        journal: object | None = None,
-        scheduler: object | None = None,
-        signal_bus: object | None = None,
-        follow_graph: object | None = None,
-        fanout: object | None = None,
+        event_log: EventLog | None = None,
+        inbox: Inbox | None = None,
+        journal: Journal | None = None,
+        scheduler: Scheduler | None = None,
+        signal_bus: SignalBus | None = None,
+        follow_graph: FollowGraph | None = None,
+        fanout: FanoutStrategy | None = None,
     ) -> None:
-        self._event_log: object = event_log or InMemoryEventLog()
-        self._journal: object = journal or InMemoryJournal()
-        self._scheduler: object = scheduler or InMemoryScheduler()
-        self._inbox: object = inbox or InMemoryInbox()
+        self._event_log: EventLog = event_log or InMemoryEventLog()
+        self._journal: Journal = journal or InMemoryJournal()
+        self._scheduler: Scheduler = scheduler or InMemoryScheduler()
+        self._inbox: Inbox = inbox or InMemoryInbox()
         # The inbox→runtime wakeup hook is a runtime concern; wire it on whatever
         # inbox was injected (or the default).
         self._inbox.set_deliver_hook(self._on_inbox_deliver)  # type: ignore[attr-defined]
-        self._follow_graph = follow_graph or InMemoryFollowGraph()
-        self._fanout = fanout or PushAllFanout()
-        self._signal_bus = signal_bus or InMemorySignalBus()
+        self._follow_graph: FollowGraph = follow_graph or InMemoryFollowGraph()
+        self._fanout: FanoutStrategy = fanout or PushAllFanout()
+        self._signal_bus: SignalBus = signal_bus or InMemorySignalBus()
         self._registry: dict[AgentId, Agent] = {}
         self._worker: Worker | None = None
 
@@ -141,7 +148,13 @@ class Runtime:
 
         run_id = new_run_id()
         self._scheduler.register_run(run_id, agent_id)
-        await self._inbox.deliver(agent_id, msg)
+        # Deliver with notify=False: this submit() explicitly enqueues its own
+        # run below, so the inbox deliver-hook (_handle_inbox_delivery) must NOT
+        # fire. If it did, it would race against our enqueue() — finding no
+        # active run yet via find_run_for_agent() and spawning a DUPLICATE run
+        # for this same message. The hook is only for unsolicited deliveries
+        # (publish/fanout/inter-agent ask) that have no accompanying submit.
+        await self._inbox.deliver(agent_id, msg, notify=False)
         await self._scheduler.enqueue(
             run_id,
             priority=priority,

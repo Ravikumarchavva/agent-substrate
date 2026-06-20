@@ -19,6 +19,8 @@ from ravi.kernel.core.identity import AgentId
 from ravi.kernel.messaging.message import DataPayload, Message
 from ravi.kernel.runtime.communication import AskOutcome
 
+pytestmark = [pytest.mark.requires_postgres]
+
 _PG_URL = os.environ.get(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb"
 ).replace("+asyncpg", "")

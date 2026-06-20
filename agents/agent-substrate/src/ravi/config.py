@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    NVIDIA_API_KEY: str = ""
     OPENROUTER_SITE_URL: str = "http://localhost:3000"
     OPENROUTER_APP_NAME: str = "Ravi UI"
     ASYNC_DATABASE_URL: str = ""
@@ -41,7 +42,7 @@ class Settings(BaseSettings):
     # Override these in .env to switch globally, or let the frontend per-request
     # override take precedence (Settings → General → Model).
     AGENT_MODE: str = "react"  # "react" | "orchestrator"
-    CHAT_MODEL: str = "openai/gpt-5.4-mini"
+    CHAT_MODEL: str = "google/gemini-3.1-flash-lite"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     STT_MODEL: str = "whisper-1"
     TTS_MODEL: str = "google/gemini-3.1-flash-tts-preview"
@@ -60,6 +61,13 @@ class Settings(BaseSettings):
     SEMANTIC_CACHE_ENABLED: bool = False
     SEMANTIC_CACHE_THRESHOLD: float = 0.95
     SEMANTIC_CACHE_TTL: int = 3600
+
+    # Web search providers (Exa → Tavily → DuckDuckGo, first key found wins)
+    EXA_API_KEY: str = ""
+    TAVILY_API_KEY: str = ""
+    WEB_SEARCH_MAX_RESULTS: int = 3
+    WEB_SEARCH_MAX_CHARS: int = 5000
+    WEB_READ_MAX_CHARS: int = 6000
 
     # Spotify API credentials
     SPOTIFY_CLIENT_ID: str = ""

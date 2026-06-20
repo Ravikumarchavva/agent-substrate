@@ -66,9 +66,21 @@ def bridge_event_to_wire(data: dict) -> "WireEvent | None":
     adaptation point absorbs the field aliasing.  Rich tool UIs (kanban, …) flow
     inline as ``ui.resource`` via the tool result, not through here.
     """
-    from ravi.serving.protocol import ApprovalRequestedEvent, InputRequestedEvent
+    from ravi.serving.protocol import (
+        ApprovalRequestedEvent,
+        InputRequestedEvent,
+        ToolResultEvent,
+    )
 
     kind = data.get("type")
+    if kind == "tool.result":
+        # Subagent plan-board updates: a subagent runs as a separate run, so its
+        # manage_tasks results never reach the parent run's event-log tail. The
+        # tool pushes them onto this thread's bridge instead, to stream live.
+        return ToolResultEvent(
+            tool_name=data.get("tool_name", ""),
+            structured_content=data.get("structured_content") or {},
+        )
     if kind == "tool_approval_request":
         return ApprovalRequestedEvent(
             request_id=data.get("request_id") or data.get("requestId", ""),

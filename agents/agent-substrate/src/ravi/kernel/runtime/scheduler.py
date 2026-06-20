@@ -168,5 +168,44 @@ class Scheduler(Protocol):
         """Yield run_ids currently in the pending queue (for monitoring)."""
         ...
 
+    def register_run(self, run_id: RunId, agent_id: AgentId) -> None:
+        """Associate ``run_id`` with ``agent_id`` before enqueuing.
+
+        Must be called before ``enqueue`` so the scheduler can map a lease
+        back to its agent when the worker picks it up.
+        """
+        ...
+
+    def agent_for(self, run_id: RunId) -> AgentId | None:
+        """Return the agent that owns ``run_id``, or ``None`` if unknown."""
+        ...
+
+    def wakeup_for(self, run_id: RunId) -> Wakeup | None:
+        """Return the pending wakeup trigger for ``run_id``, or ``None``."""
+        ...
+
+    async def get_status(self, run_id: RunId) -> RunStatus | None:
+        """Return the current status of ``run_id``, or ``None`` if not found."""
+        ...
+
+    async def find_run_for_agent(
+        self, agent_id: AgentId
+    ) -> tuple[RunId, RunStatus] | None:
+        """Return ``(run_id, status)`` for any active run owned by ``agent_id``.
+
+        Returns ``None`` when no PENDING, RUNNING, or SUSPENDED run exists.
+        Used by the inbox-delivery hook to decide whether to spawn a fresh run
+        or wake an existing one.
+        """
+        ...
+
+    async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:
+        """Transition a SUSPENDED run back to PENDING so a worker re-leases it."""
+        ...
+
+    async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
+        """Enqueue a wakeup for any suspended run owned by ``agent_id``."""
+        ...
+
 
 __all__ = ["RunRetryPolicy", "Lease", "Scheduler"]

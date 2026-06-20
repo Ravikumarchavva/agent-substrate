@@ -35,8 +35,9 @@ def message_to_chat(msg: Message) -> ChatMessage:
 async def load_history(
     ctx_cfg: ContextConfig, agent_id: AgentId, session_id: str
 ) -> list[ChatMessage]:
-    """Load session history using ContextConfig."""
-    return list(await ctx_cfg.history.get_messages(agent_id, session_id=session_id))
+    """Load session history and apply the compaction pipeline."""
+    raw = await ctx_cfg.history.get_messages(agent_id, session_id=session_id)
+    return list(await ctx_cfg.pipeline.compact(list(raw)))
 
 
 async def persist_turns(

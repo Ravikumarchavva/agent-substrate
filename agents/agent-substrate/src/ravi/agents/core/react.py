@@ -26,6 +26,7 @@ from ravi.agents.middleware.pipeline import MiddlewarePipeline
 from ravi.agents.storage.tasks import (
     current_agent_id as _task_agent_id,
     current_agent_label as _task_agent_label,
+    current_parent_agent_id as _task_parent_agent_id,
     current_thread_id as _task_thread_id,
 )
 from ravi.agents.core._loop import (
@@ -64,8 +65,11 @@ class ReActAgent:
         hooks: HookManager | None = None,
         middleware: MiddlewarePipeline | None = None,
         initial_tool_choice: str | None = None,
+        session_id: str | None = None,
     ) -> None:
-        self.id = AgentId(type="agent", key=name)
+        self.id = AgentId(
+            type="agent", key=f"{name}-{session_id}" if session_id else name
+        )
         self.name = name
         self.model = model
 
@@ -95,9 +99,8 @@ class ReActAgent:
         return self._context.history
 
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
-        # Stamp identity ContextVars so TaskManagerTool boards are per-agent.
         _task_agent_id.set(str(self.id))
-        _task_agent_label.set(self.id.key)
+        _task_agent_label.set(self.name)
         for msg in inbox:
             ctx.check()
             await self._handle_message(ctx, msg)
@@ -109,6 +112,11 @@ class ReActAgent:
         # different asyncio context from the SSE generator where the ContextVar
         # was previously attempted.
         _task_thread_id.set(session_id)
+        # When spawned as a subagent, the orchestrator passes its own id in the
+        # boot message metadata. Stamp it here (the spawning ContextVar does not
+        # cross into this Worker task) so this agent's board nests under its
+        # parent in the UI. Absent metadata ⇒ root agent.
+        _task_parent_agent_id.set(msg.metadata.get("parent_agent_id") or None)
 
         history_messages = await load_history(self._context, self.id, session_id)
         user_turn = message_to_chat(msg)
@@ -146,7 +154,11 @@ class ReActAgent:
                 await self.hooks.dispatch(
                     HookEvent.LLM_START, {"agent_name": self.name, "run_id": ctx.run_id}
                 )
-            resp = await ctx.llm(messages, options=options)
+            # Compact before each LLM call so tool results don't inflate the
+            # context unboundedly across iterations.  We compact a *view* of
+            # messages here and keep the full list intact for persistence.
+            llm_messages = await self._context.pipeline.compact(messages)
+            resp = await ctx.llm(llm_messages, options=options)
             # Drop the forced tool_choice after the first call so subsequent
             # iterations can freely choose to respond with text or more tools.
             options = base_options

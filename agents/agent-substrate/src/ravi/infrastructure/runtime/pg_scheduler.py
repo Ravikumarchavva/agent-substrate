@@ -357,11 +357,14 @@ class PostgresScheduler:
                         lease.run_id,
                     )
                     if row:
-                        policy = (
-                            RunRetryPolicy.model_validate(dict(row["retry_policy"]))
-                            if row["retry_policy"]
-                            else RunRetryPolicy()
-                        )
+                        import json
+
+                        raw = row["retry_policy"]
+                        if raw:
+                            policy_data = json.loads(raw) if isinstance(raw, str) else dict(raw)
+                            policy = RunRetryPolicy.model_validate(policy_data)
+                        else:
+                            policy = RunRetryPolicy()
                         if row["retry_count"] <= policy.max_retries:
                             await conn.execute(
                                 """

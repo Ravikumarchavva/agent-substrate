@@ -88,7 +88,9 @@ class PostgresInbox:
         async with self._pool.acquire() as conn:
             await conn.execute(_CREATE_TABLES)
 
-    async def deliver(self, agent_id: AgentId, msg: Message) -> bool:
+    async def deliver(
+        self, agent_id: AgentId, msg: Message, *, notify: bool = True
+    ) -> bool:
         sender_key = str(msg.sender) if msg.sender else "__anon__"
         payload_json = msg.model_dump_json()
         async with self._pool.acquire() as conn:
@@ -106,7 +108,7 @@ class PostgresInbox:
             )
         if result is None:
             return False  # duplicate
-        if self._on_deliver:
+        if notify and self._on_deliver:
             self._on_deliver(agent_id)
         return True
 

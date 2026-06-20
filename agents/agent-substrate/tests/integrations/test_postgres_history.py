@@ -3,9 +3,12 @@ from __future__ import annotations
 import os
 import pytest
 from sqlalchemy.exc import OperationalError
+
 from ravi.capabilities.history import PostgresHistoryProvider
 from ravi.kernel import AgentId, ChatMessage
 from ravi.kernel.core.content import TextBlock
+
+pytestmark = [pytest.mark.requires_postgres]
 
 
 def test_postgres_history_internal_key_fits_legacy_column() -> None:

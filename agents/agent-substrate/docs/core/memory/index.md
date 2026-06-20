@@ -1,8 +1,8 @@
-# Memory
+# History & Memory Providers
 
-Memory is where an agent stores and retrieves its conversation history.
+Memory in Ravi is managed by implementations of the `HistoryProvider` protocol. They store and retrieve chronological conversation transcripts, tagged by `agent_id`, `session_id`, and `run_id`.
 
-There are three tiers — pick the one that fits your durability needs. All implement the same `BaseMemory` interface, so you can swap them without changing agent code.
+There are three concrete implementations of `HistoryProvider` available depending on your durability and storage needs.
 
 ---
 
@@ -11,162 +11,144 @@ There are three tiers — pick the one that fits your durability needs. All impl
 ```mermaid
 graph TB
     subgraph "In-process (no infra)"
-        UM["UnboundedMemory\nPython list\nLost on restart"]
+        UM["InMemoryHistoryProvider\nPython list in RAM\nLost on restart"]
     end
     subgraph "Hot tier (Redis)"
-        RM["RedisMemory\nFast reads / writes\nTTL-backed\nLost if TTL expires"]
+        RM["RedisHistoryProvider\nFast reads / writes\nShared cache\nSurvives process restarts"]
     end
     subgraph "Cold tier (Postgres)"
-        PM["PostgresMemory\nDurable\nFull history\nSlower reads"]
+        PM["PostgresHistoryProvider\nDurable SQL database\nFull conversation audit trail"]
     end
 
-    UM -.->|"upgrade for persistence"| RM
-    RM -.->|"checkpoint (flush)"| PM
-    PM -.->|"restore (reload)"| RM
-
-    style UM fill:#1a1a1a,stroke:#94a3b8,color:#e2ecff
-    style RM fill:#0d2b2b,stroke:#2dd4bf,color:#e2ecff
-    style PM fill:#1a1a2e,stroke:#818cf8,color:#e2ecff
+    UM -.-->|"upgrade for persistence"| RM
+    RM -.-->|"upgrade for relational DB"| PM
 ```
 
 ---
 
-## UnboundedMemory — in-process
+## HistoryProvider Protocol
 
-The simplest choice: a Python list in RAM. Returns instantly. Use it for scripts, notebooks, and unit tests where crash recovery is not needed.
+All memory providers implement the same `HistoryProvider` interface:
 
 ```python
-from ravi.core.memory.unbounded_memory import UnboundedMemory
-from ravi.core.messages import SystemMessage, UserMessage
+class HistoryProvider(Protocol):
+    async def append(
+        self,
+        agent_id: AgentId,
+        message: ChatMessage,
+        *,
+        session_id: str,
+        run_id: str = "",
+    ) -> None: ...
 
-mem = UnboundedMemory()
+    async def append_many(
+        self,
+        agent_id: AgentId,
+        messages: list[ChatMessage],
+        *,
+        session_id: str,
+        run_id: str = "",
+    ) -> None: ...
 
-await mem.add_message(SystemMessage("You are a helpful assistant."))
-await mem.add_message(UserMessage(content=["Hello!"]))
+    async def get_messages(
+        self,
+        agent_id: AgentId,
+        *,
+        session_id: str,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[ChatMessage]: ...
 
-msgs  = await mem.get_messages()        # all messages
-msgs5 = await mem.get_messages(limit=5) # last 5 only
-count = await mem.size()
-tokens = await mem.get_token_count()    # heuristic: 4 chars ≈ 1 token
+    async def clear(self, agent_id: AgentId, *, session_id: str) -> None: ...
 
-await mem.clear()
+    async def clear_run(
+        self, agent_id: AgentId, *, session_id: str, run_id: str
+    ) -> None: ...
+
+    async def count_messages(self, agent_id: AgentId, *, session_id: str) -> int: ...
 ```
 
 ---
 
-## RedisMemory — hot tier
+## InMemoryHistoryProvider — in-process
 
-Conversation history lives in Redis with a TTL. Survives process restarts as long as the TTL has not expired. All methods are async — always `await` them.
+The simplest choice: an in-memory list stored in RAM. Use it for scripts, notebooks, and unit tests where crash recovery is not needed.
 
 ```python
-from ravi.integrations.memory.redis_memory import RedisMemory
+from ravi.agents.context import InMemoryHistoryProvider
+from ravi.kernel import ChatMessage, Role, TextBlock
+from ravi.kernel.core.identity import AgentId
 
-mem = RedisMemory(
-    session_id="conv-abc-123",
-    redis_url="redis://localhost:6379",
+mem = InMemoryHistoryProvider()
+agent_id = AgentId(type="assistant", key="helper")
+
+# Add message
+await mem.append(
+    agent_id=agent_id,
+    message=ChatMessage(role=Role.USER, content=[TextBlock(text="Hello")]),
+    session_id="session-123",
+    run_id="run-456",
 )
 
-# Lifecycle: connect → use → disconnect  (no close() method)
-await mem.connect()
-await mem.restore()           # reload existing history from Redis
-
-await mem.add_message(msg)
-msgs = await mem.get_messages()
-
-await mem.disconnect()        # ← correct; there is no close()
+# Retrieve messages
+msgs = await mem.get_messages(agent_id, session_id="session-123")
 ```
-
-> **Critical rules:**
-> All `Memory` methods are `async def`. Always `await` them.
-> Lifecycle is `connect()` → use → `disconnect()`. There is no `close()` method.
 
 ---
 
-## SessionManager — two-tier lifecycle
+## RedisHistoryProvider — hot tier
 
-`SessionManager` manages a Redis hot tier and a Postgres cold tier together. It auto-checkpoints (flushes Redis → Postgres) when message count crosses a threshold.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant A as Agent
-    participant SM as SessionManager
-    participant R as Redis (hot)
-    participant P as Postgres (cold)
-
-    A->>SM: create_session(agent_name, user_id)
-    SM->>R: create empty namespace
-    SM-->>A: SessionState {session_id, status=ACTIVE}
-
-    loop Every message
-        A->>SM: add_message(session_id, msg)
-        SM->>R: RPUSH (fast path)
-        SM->>SM: message_count++
-        alt count % threshold == 0
-            SM->>P: checkpoint (flush Redis → Postgres)
-        end
-    end
-
-    A->>SM: close_session(session_id)
-    SM->>P: final checkpoint
-    SM->>R: clear namespace
-    SM-->>A: status=CLOSED
-```
+Conversation history lives in Redis. This allows multiple workers to share the same history pool, and history survives agent worker process restarts.
 
 ```python
-from ravi.core.memory.session_manager import SessionManager
-from ravi.integrations.memory.redis_memory import RedisMemory
-from ravi.integrations.memory.postgres_memory import PostgresMemory
+from ravi.capabilities.history.redis_history import RedisHistoryProvider
+from ravi.kernel.core.identity import AgentId
 
-sm = SessionManager(
-    redis=RedisMemory(session_id="mgr", redis_url=REDIS_URL),
-    postgres=PostgresMemory(session_id="mgr", db_url=DATABASE_URL),
-    auto_checkpoint_threshold=50,   # flush every 50 messages
+mem = RedisHistoryProvider(
+    redis_url="redis://localhost:6379/0",
 )
-await sm.connect()
 
-# Create
-state = await sm.create_session(agent_name="researcher", user_id="user-1")
+agent_id = AgentId(type="assistant", key="helper")
 
-# Add messages
-await sm.add_message(state.session_id, user_msg)
-
-# Retrieve (Redis if hot, else Postgres fallback)
-msgs = await sm.get_messages(state.session_id)
-
-# Resume a session after restart
-state = await sm.resume_session(session_id)   # raises ValueError if missing
-
-# Close (final checkpoint + clear Redis)
-await sm.close_session(state.session_id)
-
-await sm.disconnect()
-```
-
-### Checkpoint flow
-
-```mermaid
-flowchart LR
-    ADD["add_message()"] --> CNT["message_count++"]
-    CNT --> CHK{count %\nthreshold == 0?}
-    CHK -->|yes| LOCK["Acquire per-session lock\n(no concurrent checkpoints)"]
-    LOCK --> FLUSH["Write Redis messages\n→ Postgres (bulk upsert)"]
-    FLUSH --> REL["Release lock"]
-    CHK -->|no| DONE(["Done"])
-    REL --> DONE
-
-    style FLUSH fill:#1a1a2e,stroke:#818cf8,color:#e2ecff
-    style LOCK  fill:#2b1a0d,stroke:#fb923c,color:#e2ecff
+# Appends and reads are executed directly against Redis keys
+await mem.append(
+    agent_id=agent_id,
+    message=msg,
+    session_id="session-123",
+)
 ```
 
 ---
 
-## Source
+## PostgresHistoryProvider — cold tier
+
+A fully durable relational database history provider using SQLAlchemy/asyncpg. It compiles conversation steps and audits into PostgreSQL records.
+
+```python
+from ravi.capabilities.history.postgres_history import PostgresHistoryProvider
+from ravi.kernel.core.identity import AgentId
+
+mem = PostgresHistoryProvider(
+    db_url="postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",
+)
+
+agent_id = AgentId(type="assistant", key="helper")
+
+# Appends and reads are executed via async PostgreSQL queries
+await mem.append(
+    agent_id=agent_id,
+    message=msg,
+    session_id="session-123",
+)
+```
+
+---
+
+## Sources
 
 | File | What it owns |
 |---|---|
-| [`core/memory/base_memory.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/memory/base_memory.py) | `BaseMemory` ABC |
-| [`core/memory/unbounded_memory.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/memory/unbounded_memory.py) | `UnboundedMemory` — in-process list |
-| [`core/memory/session_manager.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/core/memory/session_manager.py) | `SessionManager`, `SessionState`, `SessionStatus` |
-| [`integrations/memory/redis_memory.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/memory/redis_memory.py) | `RedisMemory` — hot tier |
-| [`integrations/memory/postgres_memory.py`](https://github.com/Ravikumarchavva/ravi/blob/main/src/ravi/integrations/memory/postgres_memory.py) | `PostgresMemory` — cold tier |
+| [`kernel/storage/history.py`](https://github.com/Ravikumarchavva/ravi-engine/blob/main/src/ravi/kernel/storage/history.py) | `HistoryProvider` Protocol |
+| [`agents/context/history.py`](https://github.com/Ravikumarchavva/ravi-engine/blob/main/src/ravi/agents/context/history.py) | `InMemoryHistoryProvider` |
+| [`capabilities/history/redis_history.py`](https://github.com/Ravikumarchavva/ravi-engine/blob/main/src/ravi/capabilities/history/redis_history.py) | `RedisHistoryProvider` |
+| [`capabilities/history/postgres_history.py`](https://github.com/Ravikumarchavva/ravi-engine/blob/main/src/ravi/capabilities/history/postgres_history.py) | `PostgresHistoryProvider` |

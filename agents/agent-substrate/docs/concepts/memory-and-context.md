@@ -4,13 +4,13 @@ Memory stores the conversation history. Context decides what subset of that hist
 
 ## Memory backends
 
-- `UnboundedMemory` for simple in-process sessions
-- `SlidingWindowMemory` for bounded local sessions
-- `RedisMemory` for durable or resumable sessions
+- `InMemoryHistoryProvider` for simple in-process sessions
+- `RedisHistoryProvider` for Redis-backed session memory
+- `PostgresHistoryProvider` for Postgres-backed persistent session memory
 
 ## Context builders
 
-Context builders shape the final prompt by applying ordering, truncation, and strategy rules.
+Context builders shape the final prompt by applying ordering, compaction (e.g. sliding window, summarization), and truncation rules.
 
 ## Important design point
 

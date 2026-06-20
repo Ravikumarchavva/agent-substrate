@@ -11,7 +11,7 @@ docker compose -f deployment/docker/docker-compose.yml up -d postgres redis
 ## Start the backend
 
 ```bash
-uv run uvicorn ravi.server.app:app --port 8000 --reload
+uv run start --reload
 ```
 
 ## What this starts

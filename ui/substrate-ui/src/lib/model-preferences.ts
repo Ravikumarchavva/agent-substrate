@@ -16,7 +16,7 @@ export const REALTIME_MODEL_STORAGE_KEY = "realtime_model";
 export const REALTIME_VOICE_STORAGE_KEY = "realtime_voice";
 export const MODEL_PREFERENCES_UPDATED_EVENT = "ravi:model-preferences-updated";
 
-export const DEFAULT_CHAT_MODEL = "openai/gpt-5.4-mini";
+export const DEFAULT_CHAT_MODEL = "google/gemini-3.1-flash-lite";
 export const DEFAULT_STT_MODEL = "openai/gpt-4o-mini-transcribe";
 export const DEFAULT_TTS_MODEL = "google/gemini-3.1-flash-tts-preview";
 export const DEFAULT_TTS_VOICE: TTSVoice = "Kore";
@@ -31,9 +31,17 @@ const PROVIDER_LABELS: Record<ModelProvider, string> = {
   groq: "Groq",
   google: "Google",
   openrouter: "OpenRouter Free",
+  nvidia: "NVIDIA NIM",
 };
 
 export const CHAT_MODEL_OPTIONS: ModelOption[] = [
+  {
+    id: "google/gemini-3.1-flash-lite",
+    label: "Gemini 3.1 Flash Lite",
+    provider: "google",
+    description: "Default — fast and cost-efficient Gemini model.",
+    thinkingLevels: ["off"],
+  },
   {
     id: "openai/gpt-5.4-mini",
     label: "GPT-5.4 Mini",
@@ -42,11 +50,11 @@ export const CHAT_MODEL_OPTIONS: ModelOption[] = [
     thinkingLevels: ["off", "low", "medium", "high", "xhigh"],
   },
   {
-    id: "google/gemini-2.5-flash",
-    label: "Gemini 2.5 Flash",
-    provider: "google",
-    description: "Fast Google workhorse model.",
-    thinkingLevels: ["off", "low", "medium", "high"],
+    id: "nvidia/moonshotai/kimi-k2.6",
+    label: "Kimi K2.6",
+    provider: "nvidia",
+    description: "Multimodal Kimi K2.6 by Moonshot AI via NVIDIA NIM.",
+    thinkingLevels: ["off"],
   },
   {
     id: "openrouter/qwen/qwen3-coder:free",

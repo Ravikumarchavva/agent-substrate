@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ravi – AI Assistant",
-  description: "Chat with Ravi, your personal AI assistant.",
+  title: "Assistant",
+  description: "Chat with your personal AI assistant.",
   other: {
     "darkreader-lock": "",
   },

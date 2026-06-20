@@ -38,5 +38,26 @@ export function useTaskBoards(conversationId: string | null) {
 
   const clearBoards = useCallback(() => setBoards(new Map()), []);
 
-  return { boards, upsertBoard, clearBoards };
+  // On run completion, stop any spinning tasks immediately (the engine also
+  // persists this, but the local flip gives instant feedback).
+  const settleBoards = useCallback(() => {
+    setBoards((prev) => {
+      let dirty = false;
+      const next = new Map(prev);
+      for (const [key, tl] of prev) {
+        if (tl.tasks.some((t) => t.status === "in_progress")) {
+          dirty = true;
+          next.set(key, {
+            ...tl,
+            tasks: tl.tasks.map((t) =>
+              t.status === "in_progress" ? { ...t, status: "succeeded" } : t
+            ),
+          });
+        }
+      }
+      return dirty ? next : prev;
+    });
+  }, []);
+
+  return { boards, upsertBoard, clearBoards, settleBoards };
 }

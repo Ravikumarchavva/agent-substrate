@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useState, useRef, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { nanoid } from "nanoid";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -17,8 +17,9 @@ import { ModelEffortPicker } from "@/components/ModelEffortPicker";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { RealtimeVoicePanel } from "@/components/RealtimeVoicePanel";
-import { Message, UploadedFile } from "@/types";
+import { Message, UploadedFile, TaskList } from "@/types";
 import { api } from "@/lib/api";
+import { ChatConflictError } from "@/lib/api/chat";
 import {
   getPreferredChatModel,
   CHAT_MODEL_OPTIONS,
@@ -38,7 +39,7 @@ import type { WireEvent } from "@/protocol";
 import { useFileAttachments, type AttachedFilePreview } from "@/hooks/useFileAttachments";
 import { useAppPanel } from "@/hooks/useAppPanel";
 import { useTaskBoards } from "@/hooks/useTaskBoards";
-import { TaskBoardsDock, TaskBoardsMobile } from "@/components/TaskBoards";
+import { PlanCardStack } from "@/components/PlanCard";
 import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, type LucideIcon } from "lucide-react";
 
 const LAST_ACTIVE_THREAD_STORAGE_KEY = "ravi:last-active-thread";
@@ -62,10 +63,6 @@ function writeLastActiveThreadId(threadId: string | null): void {
   }
 
   window.sessionStorage.removeItem(LAST_ACTIVE_THREAD_STORAGE_KEY);
-}
-
-function hasPersistentToolCall(toolCalls: Message["toolCalls"]): boolean {
-  return Boolean(toolCalls?.some((tool) => tool._meta?.ui?.httpUrl));
 }
 
 function ChatPageContent() {
@@ -99,6 +96,7 @@ function ChatPageContent() {
   // Tracks the active AbortController for the current SSE fetch so we can
   // cancel the stream when the user clicks Stop.
   const wsRef = useRef<AbortController | null>(null);
+  const isSubmittingRef = useRef(false);
   // Tracks the threadId of the currently active stream, useful for stopping a run
   // on a brand new thread before it has been persisted to the URL state.
   const activeStreamThreadIdRef = useRef<string | null>(null);
@@ -214,7 +212,30 @@ function ChatPageContent() {
   });
   const { attachedFiles, uploadingFile, fileInputRef, clearAttachedFiles, handleFileSelected, handleRemoveFile } = useFileAttachments(currentThreadId, selectThread, setThreads);
   const { panelItems, setPanelItems, activePanelId, setActivePanelId, panelCollapsed, setPanelCollapsed, openInPanel, closePanelItem, closeAllPanels } = useAppPanel();
-  const { boards, upsertBoard, clearBoards } = useTaskBoards(currentThreadId);
+  const { boards, upsertBoard, clearBoards, settleBoards } = useTaskBoards(currentThreadId);
+  // agentId → id of the user message whose turn created the plan, so the inline
+  // PlanCard renders in flow beneath that turn.
+  const [boardAnchors, setBoardAnchors] = useState<Map<string, string>>(new Map());
+  // Anchors are per-thread (message ids); drop them when the thread changes.
+  useEffect(() => {
+    setBoardAnchors(new Map());
+  }, [currentThreadId]);
+
+  // Group plan boards by the message they render beneath. Boards with no live
+  // anchor (e.g. seeded after a reload) attach to the most recent user message.
+  const boardsByAnchor = useMemo(() => {
+    const result = new Map<string, TaskList[]>();
+    if (boards.size === 0) return result;
+    const lastUserId = [...messages].reverse().find((m) => m.role === "user")?.id;
+    for (const tl of boards.values()) {
+      const anchor = boardAnchors.get(tl.agent_id) ?? lastUserId;
+      if (!anchor) continue;
+      const arr = result.get(anchor) ?? [];
+      arr.push(tl);
+      result.set(anchor, arr);
+    }
+    return result;
+  }, [boards, boardAnchors, messages]);
 
   type ManifestEntry = { tool_name: string; http_url: string; resource_uri: string };
   const [mcpManifest, setMcpManifest] = useState<ManifestEntry[]>([]);
@@ -423,6 +444,7 @@ function ChatPageContent() {
 
   /** Abort the active SSE stream and signal the backend to stop the agent. */
   function handleStop() {
+    isSubmittingRef.current = false;
     if (wsRef.current) {
       wsRef.current.abort();
       wsRef.current = null;
@@ -436,7 +458,8 @@ function ChatPageContent() {
   }
 
   async function doSendMessage(text: string) {
-    if (!text.trim() || loading) return;
+    if (!text.trim() || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     const currentInput = text;
     const currentFileIds = attachedFiles.map((f) => f.id);
@@ -458,6 +481,7 @@ function ChatPageContent() {
     const msgState = {
       activeAssistantId: nanoid() as string,
       needsNewBubble: false,
+      userMsgId: nanoid() as string,
     };
 
     // Clear input and show user message AND assistant placeholder immediately!
@@ -466,7 +490,7 @@ function ChatPageContent() {
     setMessages((prev) => [
       ...prev,
       {
-        id: nanoid(),
+        id: msgState.userMsgId,
         role: "user" as const,
         content: currentInput,
         timestamp: new Date(),
@@ -504,6 +528,7 @@ function ChatPageContent() {
             timestamp: new Date(),
           },
         ]);
+        isSubmittingRef.current = false;
         setLoading(false);
         return;
       }
@@ -621,7 +646,17 @@ function ChatPageContent() {
         if (data.tool_name === "manage_tasks") {
           const sc = data.structured_content as Record<string, unknown> | undefined;
           const tl = sc?.task_list as import("@/types").TaskList | undefined;
-          if (tl) upsertBoard(tl);
+          if (tl) {
+            upsertBoard(tl);
+            // Anchor this board to the current turn's user message the first
+            // time we see it, so the inline plan card renders beneath it.
+            setBoardAnchors((prev) => {
+              if (prev.has(tl.agent_id)) return prev;
+              const next = new Map(prev);
+              next.set(tl.agent_id, msgState.userMsgId);
+              return next;
+            });
+          }
           return;
         }
 
@@ -850,6 +885,8 @@ function ChatPageContent() {
             { id: cardId, role: "max_iterations" as const, content: "", timestamp: new Date() },
           ]);
         } else {
+          // Clean completion: stop any still-spinning plan tasks immediately.
+          settleBoards();
           // Safety net: if no turn.completed fired (e.g. tool-only runs), stop loading.
           finalizeAssistantMessages();
           setLoading(false);
@@ -951,7 +988,16 @@ function ChatPageContent() {
         }
       }
     } catch (err: unknown) {
-      if ((err as { name?: string }).name !== "AbortError") {
+      const name = (err as { name?: string }).name;
+      if (name === "AbortError") {
+        // intentional cancel — no UI update needed
+      } else if (err instanceof ChatConflictError) {
+        // 409: a stream is already running for this thread — silently drop
+        // the duplicate request; the active stream will complete normally.
+        setMessages((m) =>
+          m.filter((msg) => msg.id !== msgState.activeAssistantId)
+        );
+      } else {
         setMessages((m) =>
           m.map((msg) =>
             msg.id === msgState.activeAssistantId
@@ -969,6 +1015,7 @@ function ChatPageContent() {
         wsRef.current === abortController || wsRef.current === null;
       if (wsRef.current === abortController) wsRef.current = null;
       if (isOwnerOrStopped) {
+        isSubmittingRef.current = false;
         // Record which thread just finished streaming so loadMessages won't
         // overwrite the in-memory messages with a potentially stale DB snapshot.
         streamedThreadRef.current = threadId;
@@ -1221,30 +1268,43 @@ function ChatPageContent() {
                       }
 
                       if (m.role === "user" || m.role === "assistant") {
+                        const anchoredBoards = boardsByAnchor.get(m.id);
                         return (
-                          <MessageBubble
-                            key={m.id}
-                            role={m.role}
-                            content={m.content}
-                            attachments={m.attachments}
-                            reasoning={m.reasoning}
-                            timestamp={m.timestamp}
-                            toolCalls={m.toolCalls}
-                            isToolExecuting={m.isToolExecuting}
-                            isContinuation={m.isContinuation}
-                            onOpenInPanel={(tool) => {
-                              const args = typeof tool.arguments === "string"
-                                ? JSON.parse(tool.arguments)
-                                : tool.arguments;
-                              openInPanel({
-                                id: tool.id,
-                                httpUrl: tool._meta?.ui?.httpUrl || `/ui/${tool.name}`,
-                                toolName: tool.name,
-                                toolArguments: args,
-                                timestamp: Date.now(),
-                              });
-                            }}
-                          />
+                          <React.Fragment key={m.id}>
+                            <MessageBubble
+                              role={m.role}
+                              content={m.content}
+                              attachments={m.attachments}
+                              reasoning={m.reasoning}
+                              timestamp={m.timestamp}
+                              toolCalls={m.toolCalls}
+                              isToolExecuting={m.isToolExecuting}
+                              isContinuation={m.isContinuation}
+                              onOpenInPanel={(tool) => {
+                                const args = typeof tool.arguments === "string"
+                                  ? JSON.parse(tool.arguments)
+                                  : tool.arguments;
+                                openInPanel({
+                                  id: tool.id,
+                                  httpUrl: tool._meta?.ui?.httpUrl || `/ui/${tool.name}`,
+                                  toolName: tool.name,
+                                  toolArguments: args,
+                                  timestamp: Date.now(),
+                                });
+                              }}
+                            />
+                            {anchoredBoards && anchoredBoards.length > 0 && (
+                              <div className="px-4 sm:px-6">
+                                <div className="mx-auto max-w-(--chat-width)">
+                                  <PlanCardStack
+                                    boards={anchoredBoards}
+                                    runActive={loading}
+                                    onChange={upsertBoard}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </React.Fragment>
                         );
                       }
 
@@ -1399,18 +1459,7 @@ function ChatPageContent() {
           />
         )}
 
-        {!settingsPanelOpen && (
-          <TaskBoardsDock
-            boards={boards}
-            onBoardChange={upsertBoard}
-          />
-        )}
       </div>
-
-      {/* Mobile task boards floating pill + sheet */}
-      {!settingsPanelOpen && (
-        <TaskBoardsMobile boards={boards} onBoardChange={upsertBoard} />
-      )}
 
       {/* Mobile Sidebar Drawer */}
       {mobileSidebarOpen && (

@@ -1,6 +1,6 @@
 import type { TTSVoice } from "./audio";
 
-export type ModelProvider = "openai" | "google" | "openrouter" | "groq";
+export type ModelProvider = "openai" | "google" | "openrouter" | "groq" | "nvidia";
 
 export type ModelOption = {
   id: string;

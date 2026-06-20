@@ -2,6 +2,13 @@ import { getPreferredChatModel } from "@/lib/model-preferences";
 import { API_BASE, getErrorMessage } from "./_client";
 import type { ChatStreamRequest } from "./_client";
 
+export class ChatConflictError extends Error {
+  constructor() {
+    super("A response is already being generated for this thread.");
+    this.name = "ChatConflictError";
+  }
+}
+
 export const chatApi = {
   async updateMcpContext(
     threadId: string,
@@ -50,6 +57,9 @@ export const chatApi = {
       body: JSON.stringify({ ...payload, model: payload.model ?? getPreferredChatModel() }),
       signal,
     });
+    if (res.status === 409) {
+      throw new ChatConflictError();
+    }
     if (!res.ok || !res.body) {
       throw new Error(await getErrorMessage(res, `HTTP ${res.status}`));
     }

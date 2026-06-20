@@ -18,31 +18,19 @@
 
 ## Subpackage Map
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','secondaryColor': '#E3F2FD','background': '#FAFAFA','fontSize': '14px'}}}%%
-graph TB
-    classDef foundation fill:#E3F2FD,stroke:#1565C0,stroke-width:2.5px,color:#0D47A1,font-weight:bold
-    classDef pkg fill:#E8EAF6,stroke:#3949AB,stroke-width:1.5px,color:#1A237E,font-weight:bold
+We structure the kernel into logical packages defining distinct interfaces:
 
-    CORE["core/\nContentBlock · ChatMessage\nAgentId · TopicId\nUsage · KernelErrors"]:::foundation
+![Kernel Components](../kernel_components.png)
 
-    LLM["llm/\nLLMClient · EmbeddingClient\nLLMResponse · GenerationOptions"]:::pkg
-    MSG["messaging/\nMessage · Payload types\nStream events · Event envelope"]:::pkg
-    TOOLS["tools/\nTool · HostedTool\nProviderDefinedTool\nApproval · Chain · Skill"]:::pkg
-    AGENT["agent/\nAgent Protocol · Supervision\nRunMeta · Middleware\nCancellationToken"]:::pkg
-    STORE["storage/\nHistoryProvider · Memory\nVectorStore · GraphStore\nBlobStore · TaskStore"]:::pkg
-    RT["runtime/\nEventLog · Inbox · Scheduler\nSupervisor · Journal\nFollowGraph · Wakeup"]:::pkg
-
-    CORE --> LLM
-    CORE --> MSG
-    CORE --> TOOLS
-    CORE --> AGENT
-    CORE --> STORE
-    CORE --> RT
-    TOOLS --> MSG
-    MSG --> RT
-    AGENT --> RT
-```
+| Package | Description | Core Components |
+|---|---|---|
+| `core/` | Universal primitives | `ContentBlock`, `ChatMessage`, `AgentId`, `TopicId`, `Usage`, `KernelErrors` |
+| `llm/` | Model API contracts | `LLMClient`, `EmbeddingClient`, `GenerationOptions`, `LLMResponse` |
+| `messaging/` | Agent communication | `Message` envelope, stream events, `Event` bus |
+| `tools/` | Tool & skill execution | `BaseTool`, `HostedTool`, `ToolRisk`, `HitlMode` |
+| `agent/` | Identity & supervision | `Agent` protocol, `Supervision`, `RunMeta`, `CancellationToken`, `Middleware` |
+| `storage/` | State & memory providers | `HistoryProvider`, `ShortTermMemory`, `LongTermMemory`, `VectorStore`, `GraphStore`, `TaskStore` |
+| `runtime/` | Durable execution machinery | `EventLog`, `Inbox`, `Scheduler`, `Journal`, `Wakeup`, `Supervisor` |
 
 ---
 
@@ -51,34 +39,18 @@ graph TB
 Imports within the kernel flow in one direction only:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph LR
-    classDef dep fill:#E8EAF6,stroke:#3949AB,color:#1A237E
-    classDef root fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-
-    CORE["core/\n(no intra-kernel deps)"]:::root
-
-    TOOLS["tools/"]:::dep
-    STREAM["messaging/stream.py"]:::dep
-    MSG["messaging/message.py"]:::dep
-    LLM["llm/"]:::dep
-    STORE["storage/"]:::dep
-    SV["agent/supervision.py"]:::dep
-    RM["agent/runtime_context.py"]:::dep
-    RID["runtime/ids.py"]:::dep
-    RT["runtime/ (rest)"]:::dep
-
-    CORE --> TOOLS
-    CORE --> STREAM
-    CORE --> STORE
-    CORE --> SV
-    CORE --> RID
-    TOOLS --> MSG
+graph TD
+    CORE["core/"] --> TOOLS["tools/"]
+    CORE --> STREAM["messaging/stream.py"]
+    CORE --> STORE["storage/"]
+    CORE --> SV["agent/supervision.py"]
+    CORE --> RID["runtime/ids.py"]
+    TOOLS --> MSG["messaging/message.py"]
     STREAM --> MSG
-    MSG --> LLM
-    SV --> RM
+    MSG --> LLM["llm/"]
+    SV --> RM["agent/runtime_context.py"]
     RID --> RM
-    MSG --> RT
+    MSG --> RT["runtime/"]
     SV --> RT
     RID --> RT
 ```

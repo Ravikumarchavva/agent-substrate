@@ -8,42 +8,28 @@ Defines two Protocols: one for text generation, one for embeddings. Every LLM ad
 
 ## Protocol Overview
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph TB
-    classDef protocol fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-    classDef dataobj fill:#E8EAF6,stroke:#3949AB,stroke-width:1.5px,color:#1A237E
-    classDef stream fill:#E8F5E9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20
-    classDef impl fill:#FFF3E0,stroke:#E65100,stroke-width:1px,color:#BF360C,stroke-dasharray:4 2
+## Protocol Overview
 
-    LC["LLMClient\n(Protocol)\nmodel: str"]:::protocol
-    EC["EmbeddingClient\n(Protocol)"]:::protocol
+The LLM subpackage defines the contracts for communicating with foundation models:
 
-    GO["GenerationOptions (frozen)\ntools: list[AnyTool] | None\nsystem_instructions: str\ntemperature: float | None\nmax_tokens: int | None\ntool_choice: str | dict | None\nresponse_format: type[BaseModel] | None\nstop: list[str] | None"]:::dataobj
+### Protocols & Core Methods
 
-    LR["LLMResponse (frozen)\ncontent: list[ContentBlock]\nusage: Usage"]:::dataobj
+| Protocol | Method / Property | Description | Return Type |
+|---|---|---|---|
+| **`LLMClient`** | `model: str` (Property) | Model identifier (e.g. `gpt-4o`). | `str` |
+| | `generate(messages, options, ctx)` | Synchronously await the model completion. | `LLMResponse` |
+| | `generate_stream(messages, options, ctx)` | Stream response tokens (text or reasoning chunks). | `AsyncIterator[TokenStreamEvent]` |
+| | `count_tokens(messages)` | Count the tokens for a set of messages. | `int` |
+| **`EmbeddingClient`** | `embed(texts)` | Generate embeddings for a list of texts in bulk. | `EmbeddingResult` |
+| | `embed_single(text)` | Generate an embedding vector for a single text. | `list[float]` |
 
-    ER["EmbeddingResult (frozen)\nembeddings: list[list[float]]\nmodel: str\nusage_tokens: int"]:::dataobj
+### Data Structures
 
-    TD["TextDelta\ntoken-by-token text"]:::stream
-    RD["ReasoningDelta\nchain-of-thought chunks"]:::stream
-    CE["CompletionEvent\nfull response + usage"]:::stream
-
-    OAI["OpenAIChatCompletionClient\n(L2 — capabilities/llm/)"]:::impl
-    FALL["FallbackClient\n(L1 — agents/llm/)"]:::impl
-
-    LC -->|"generate(messages, options, ctx)"| LR
-    LC -->|"generate_stream(messages, options, ctx)"| TD
-    LC -->|"generate_stream(messages, options, ctx)"| RD
-    LC -->|"generate_stream(messages, options, ctx)"| CE
-    LC -->|"count_tokens(messages)"| CNT["int"]:::dataobj
-    LC --> GO
-    EC -->|"embed(texts)"| ER
-    EC -->|"embed_single(text)"| EMB["list[float]"]:::dataobj
-
-    OAI -.->|"implements"| LC
-    FALL -.->|"implements"| LC
-```
+| Class | Fields | Purpose |
+|---|---|---|
+| `GenerationOptions` | `tools: list[AnyTool] \| None`<br>`system_instructions: str`<br>`temperature: float \| None`<br>`max_tokens: int \| None`<br>`tool_choice: str \| dict \| None`<br>`response_format: type[BaseModel] \| None`<br>`stop: list[str] \| None` | Strongly-typed configuration options for text generation. Replaces generic `**kwargs`. |
+| `LLMResponse` | `content: list[ContentBlock]`<br>`usage: Usage` | Successful text generation output holding content blocks and token usage stats. |
+| `EmbeddingResult` | `embeddings: list[list[float]]`<br>`model: str`<br>`usage_tokens: int` | Embedding generation outputs mapping input texts to vectors with model details. |
 
 ---
 
@@ -52,15 +38,14 @@ graph TB
 When `generate_stream` is called, it returns an `AsyncIterator` that yields events in this order:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','activationBkgColor': '#E3F2FD','activationBorderColor': '#1565C0','noteBkgColor': '#FFFDE7','noteBorderColor': '#F57F17','signalColor': '#546E7A','signalTextColor': '#263238','fontSize': '13px'}}}%%
 sequenceDiagram
     autonumber
     participant Agent
     participant LLMClient
-    participant Provider as "LLM Provider API"
+    participant Provider as LLM Provider API
 
-    Agent->>+LLMClient: generate_stream(messages, options)
-    LLMClient->>+Provider: HTTP POST /v1/chat/completions (stream=true)
+    Agent->>LLMClient: generate_stream(messages, options)
+    LLMClient->>Provider: HTTP POST /v1/chat/completions (stream=true)
 
     loop Token streaming
         Provider-->>LLMClient: SSE chunk
@@ -71,10 +56,10 @@ sequenceDiagram
         end
     end
 
-    Provider-->>-LLMClient: [DONE]
-    LLMClient-->>-Agent: CompletionEvent(content, usage, seq)
+    Provider-->>LLMClient: [DONE]
+    LLMClient-->>Agent: CompletionEvent(content, usage, seq)
 
-    Note over Agent: Agent assembles final content<br/>from CompletionEvent.content
+    Note over Agent: Agent assembles final content from CompletionEvent.content
 ```
 
 ### Event types

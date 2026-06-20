@@ -10,45 +10,20 @@ Every agent message, every tool result, and every event payload in the entire sy
 
 Every list of data passed between agents, to the LLM, and back from tools is a `list[ContentBlock]`. There is no other payload type. The `type` literal field is the discriminator — Pydantic routes deserialization automatically.
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','secondaryColor': '#E3F2FD','tertiaryColor': '#FFF3E0','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph TB
-    classDef msg fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-    classDef union fill:#F3E5F5,stroke:#6A1B9A,stroke-width:2px,color:#4A148C,font-weight:bold
-    classDef textblk fill:#E8F5E9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20
-    classDef mediablk fill:#FFF3E0,stroke:#E65100,stroke-width:1px,color:#BF360C
-    classDef agblk fill:#FCE4EC,stroke:#880E4F,stroke-width:1px,color:#880E4F
-
-    CHAT["ChatMessage\nrole: str\ncontent: list[ContentBlock]\nname: str | None"]:::msg
-    CB["ContentBlock\ndiscriminated union\n12 types · all frozen"]:::union
-
-    CHAT -->|"wraps"| CB
-
-    subgraph TextData["Text & Data"]
-        T["TextBlock\ntype='text'\ntext: str"]:::textblk
-        CO["CodeBlock\ntype='code'\ncode · language"]:::textblk
-        DA["DataBlock\ntype='data'\ndata: dict · schema_id"]:::textblk
-        ER["ErrorBlock\ntype='error'\nerror_type · recoverable: bool"]:::textblk
-    end
-
-    subgraph MediaBlocks["Media — URL or bytes or file_id"]
-        IM["ImageBlock\ntype='image'\nurl | data | file_id"]:::mediablk
-        AU["AudioBlock\ntype='audio'\ntranscript: str | None"]:::mediablk
-        VI["VideoBlock\ntype='video'"]:::mediablk
-        DO["DocumentBlock\ntype='document'\nfilename: str | None"]:::mediablk
-    end
-
-    subgraph AgentBlocks["Agentic"]
-        TU["ToolUseBlock\ntype='tool_use'\ncall_id · tool_name · args"]:::agblk
-        TR["ToolResultBlock\ntype='tool_result'\ncall_id · content · is_error"]:::agblk
-        TH["ThinkingBlock\ntype='thinking'\nredacted: bool"]:::agblk
-        UI["UIResourceBlock\ntype='ui_resource'\nuri · render: inline|panel|fullscreen"]:::agblk
-    end
-
-    CB --> TextData
-    CB --> MediaBlocks
-    CB --> AgentBlocks
-```
+| Category | Block Type | Discriminator (`type`) | Core Fields | Description |
+|---|---|---|---|---|
+| **Text & Data** | `TextBlock` | `'text'` | `text: str` | Plain text message contents. |
+| | `CodeBlock` | `'code'` | `code: str`, `language: str \| None` | Program code snippets with optional syntax highlighter hint. |
+| | `DataBlock` | `'data'` | `data: dict`, `schema_id: str \| None` | Structured JSON data payload tied to a specific schema. |
+| | `ErrorBlock` | `'error'` | `error_type: str`, `message: str`, `recoverable: bool` | Standardized execution/system error blocks. |
+| **Media** | `ImageBlock` | `'image'` | `url: str \| None`, `data: bytes \| None`, `file_id: str \| None` | Image reference, inline bytes, or storage file ID. |
+| | `AudioBlock` | `'audio'` | `url: str \| None`, `data: bytes \| None`, `transcript: str \| None` | Audio data and optional speech-to-text transcript. |
+| | `VideoBlock` | `'video'` | `url: str \| None`, `data: bytes \| None` | Video files or URLs. |
+| | `DocumentBlock` | `'document'` | `url: str \| None`, `data: bytes \| None`, `filename: str \| None` | Documents (e.g. PDF/DOCX) attached to context. |
+| **Agentic** | `ToolUseBlock` | `'tool_use'` | `call_id: str`, `tool_name: str`, `arguments: dict` | Model request to execute a specific tool with arguments. |
+| | `ToolResultBlock`| `'tool_result'`| `call_id: str`, `content: list[ContentBlock]`, `is_error: bool` | Tool output payload (can be nested multimodal blocks). |
+| | `ThinkingBlock` | `'thinking'` | `content: str`, `redacted: bool` | Internal model chain-of-thought/reasoning trace. |
+| | `UIResourceBlock`| `'ui_resource'`| `uri: str`, `render_mode: str` | Sandbox visual interface metadata for frontend rendering. |
 
 ### Key points
 
@@ -64,21 +39,10 @@ graph TB
 
 ## AgentId and TopicId — Routing Addresses
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph LR
-    classDef id fill:#E8EAF6,stroke:#3949AB,stroke-width:1.5px,color:#1A237E,font-weight:bold
-    classDef example fill:#E3F2FD,stroke:#1565C0,stroke-width:1px,color:#0D47A1,font-style:italic
-
-    AID["AgentId\ntype: str\nkey: str\nnamespace: str = 'default'\n\nstr → type/key\nor namespace/type/key"]:::id
-    TID["TopicId\ntype: str\nsource: str = 'default'\nnamespace: str = 'default'\n\nstr → type/source\nor namespace/type/source"]:::id
-
-    AIDEX["AgentId('react', 'sess-123')\n→ react/sess-123"]:::example
-    TIDEX["TopicId('agent.progress', run_id)\n→ agent.progress/run-abc"]:::example
-
-    AID --- AIDEX
-    TID --- TIDEX
-```
+| Class | Fields | Purpose & String Format | Example |
+|---|---|---|---|
+| `AgentId` | `type: str`<br>`key: str`<br>`namespace: str = 'default'` | Point-to-point routing address.<br>`[namespace/]type/key` | `AgentId("react", "sess-123")`<br>&rarr; `react/sess-123` |
+| `TopicId` | `type: str`<br>`source: str = 'default'`<br>`namespace: str = 'default'` | Pub/sub channel address.<br>`[namespace/]type/source` | `TopicId("agent.progress", run_id)`<br>&rarr; `agent.progress/run-abc` |
 
 `AgentId` is the **point-to-point** routing key — send a message to one specific agent instance.
 
@@ -95,22 +59,13 @@ Standard topic conventions (enforced at L1, not kernel):
 
 ## Usage — Token Accounting
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph LR
-    classDef field fill:#E8EAF6,stroke:#3949AB,stroke-width:1px,color:#1A237E
-    classDef note fill:#FFFDE7,stroke:#F57F17,stroke-width:1px,color:#E65100,font-style:italic
-
-    U["Usage (frozen dataclass)\ninput_tokens: int\ncached_tokens: int\noutput_tokens: int\nreasoning_tokens: int\ntotal_tokens: int (property)"]:::field
-
-    N1["cached_tokens ⊂ input_tokens\nbilled at a lower rate"]:::note
-    N2["reasoning_tokens ⊂ output_tokens\nextended thinking only"]:::note
-    N3["Usage + Usage = Usage\nadditive across LLM calls"]:::note
-
-    U --- N1
-    U --- N2
-    U --- N3
-```
+| Field | Type | Description |
+|---|---|---|
+| `input_tokens` | `int` | Total input/prompt tokens sent to the LLM. |
+| `cached_tokens` | `int` | Input tokens resolved from cache (subset of `input_tokens`, billed lower). |
+| `output_tokens` | `int` | Total completion/output tokens generated by the LLM. |
+| `reasoning_tokens`| `int` | Output tokens spent on internal reasoning/thinking (subset of `output_tokens`). |
+| `total_tokens` | `int` | (Property) Sum of `input_tokens` + `output_tokens`. |
 
 `Usage` is additive (`a + b` works). Every `LLMResponse` carries one. The L1 `ExecutionTracker` accumulates them to enforce `ExecutionBudget.max_tokens`.
 
@@ -118,34 +73,17 @@ graph LR
 
 ## KernelErrors — Typed Runtime Failures
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#FFEBEE','primaryBorderColor': '#C62828','primaryTextColor': '#B71C1C','lineColor': '#C62828','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph TB
-    classDef base fill:#FFEBEE,stroke:#C62828,stroke-width:2px,color:#B71C1C,font-weight:bold
-    classDef err fill:#FFF3E0,stroke:#E65100,stroke-width:1px,color:#BF360C
-    classDef policy fill:#FCE4EC,stroke:#880E4F,stroke-width:1px,color:#880E4F
-    classDef concur fill:#F3E5F5,stroke:#6A1B9A,stroke-width:1px,color:#4A148C
+The kernel error system uses a structured hierarchy for deterministic error handling:
 
-    KE["KernelError\n(base — catch-all)"]:::base
-
-    ANF["AgentNotFoundError\nSent to unregistered AgentId\n+ agent_id: AgentId"]:::err
-    HE["HandlerError\nMessage handler raised internally\n+ cause: Exception"]:::err
-    ACE["AgentCrashError\nUnexpected run failure\n+ run_id · agent_id"]:::err
-    BEE["BudgetExhaustedError\nHeadcount or token limit hit"]:::policy
-    MT["MiddlewareTermination\nIntentional policy halt\n(guardrail, rate limit)\n+ message: str"]:::policy
-    CE["CancellationError\nCooperative cancel or deadline"]:::policy
-    CAE["ConcurrentAppendError\nTwo workers wrote same run\n+ expected_seq · actual_seq"]:::concur
-    SD["SpawnDenied\nSpawnBudget exhausted\n+ parent_run · budget"]:::concur
-
-    KE --> ANF
-    KE --> HE
-    KE --> ACE
-    KE --> BEE
-    KE --> MT
-    KE --> CE
-    KE --> CAE
-    KE --> SD
-```
+* **`KernelError`** (Base exception for all framework errors)
+    * **`AgentNotFoundError`**: Sent when a message is routed to an unregistered `AgentId`.
+    * **`HandlerError`**: Raised when an agent message handler (`on_message`) crashes internally.
+    * **`AgentCrashError`**: Raised when the worker runner crashes or loses its lease unexpectedly.
+    * **`BudgetExhaustedError`**: Raised when token counts, monetary cost, or turn budgets are hit.
+    * **`MiddlewareTermination`**: Raised to abort execution from a middleware guard (e.g. rate limit, content warning).
+    * **`CancellationError`**: Raised when cooperative cancellation triggers or a deadline passes.
+    * **`ConcurrentAppendError`**: Raised when sequence mismatch occurs while appending to an agent's `EventLog`.
+    * **`SpawnDenied`**: Raised when enqueuing a child run exceeds the tree's configured `SpawnBudget`.
 
 `AgentCrashError` — the orchestrator catches this, consults the retry policy, and re-dispatches the crashed agent from the last checkpoint.
 

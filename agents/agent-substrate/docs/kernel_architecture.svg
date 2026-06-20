@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800" width="100%" height="100%">
+    <!-- Definitions for gradients and shadows -->
+    <defs>
+        <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0f172a" />
+            <stop offset="100%" stop-color="#1e293b" />
+        </linearGradient>
+        
+        <linearGradient id="primary-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#3b82f6" />
+            <stop offset="100%" stop-color="#8b5cf6" />
+        </linearGradient>
+
+        <linearGradient id="box-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#1e293b" />
+            <stop offset="100%" stop-color="#334155" />
+        </linearGradient>
+
+        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+
+        <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5"
+            markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+        </marker>
+    </defs>
+
+    <!-- Background -->
+    <rect width="1000" height="800" fill="url(#bg-grad)" />
+
+    <!-- Title -->
+    <text x="500" y="60" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="bold" fill="#ffffff" text-anchor="middle" filter="url(#glow)">Ravi Engine Kernel Architecture</text>
+    <text x="500" y="90" font-family="system-ui, -apple-system, sans-serif" font-size="16" fill="#94a3b8" text-anchor="middle">L0 — Pure Contracts, Protocols, Dataclasses, and Enums</text>
+
+    <!-- Core Primitives Box -->
+    <g transform="translate(50, 150)">
+        <rect width="250" height="200" rx="10" fill="url(#box-grad)" stroke="#3b82f6" stroke-width="2" />
+        <rect width="250" height="40" rx="10" fill="#3b82f6" fill-opacity="0.2" />
+        <text x="125" y="26" font-family="sans-serif" font-size="18" font-weight="bold" fill="#60a5fa" text-anchor="middle">Core Primitives</text>
+        
+        <text x="20" y="70" font-family="monospace" font-size="14" fill="#cbd5e1">• content.py</text>
+        <text x="20" y="100" font-family="monospace" font-size="14" fill="#cbd5e1">• message.py</text>
+        <text x="20" y="130" font-family="monospace" font-size="14" fill="#cbd5e1">• history.py</text>
+        <text x="20" y="160" font-family="monospace" font-size="14" fill="#cbd5e1">• context.py</text>
+    </g>
+
+    <!-- Agents & Execution Box -->
+    <g transform="translate(350, 150)">
+        <rect width="600" height="200" rx="10" fill="url(#box-grad)" stroke="#8b5cf6" stroke-width="2" />
+        <rect width="600" height="40" rx="10" fill="#8b5cf6" fill-opacity="0.2" />
+        <text x="300" y="26" font-family="sans-serif" font-size="18" font-weight="bold" fill="#a78bfa" text-anchor="middle">Execution &amp; Agents</text>
+        
+        <g transform="translate(20, 70)">
+            <text x="0" y="0" font-family="monospace" font-size="14" fill="#cbd5e1">• agent.py</text>
+            <text x="0" y="30" font-family="monospace" font-size="14" fill="#cbd5e1">• chain.py</text>
+            <text x="0" y="60" font-family="monospace" font-size="14" fill="#cbd5e1">• runtime_context.py</text>
+        </g>
+        <g transform="translate(250, 70)">
+            <text x="0" y="0" font-family="monospace" font-size="14" fill="#cbd5e1">• middleware.py</text>
+            <text x="0" y="30" font-family="monospace" font-size="14" fill="#cbd5e1">• events.py</text>
+        </g>
+        <g transform="translate(450, 70)">
+            <text x="0" y="0" font-family="monospace" font-size="14" fill="#cbd5e1">• supervision.py</text>
+            <text x="0" y="30" font-family="monospace" font-size="14" fill="#cbd5e1">• approval.py</text>
+        </g>
+    </g>
+
+    <!-- LLM Interface Box -->
+    <g transform="translate(50, 400)">
+        <rect width="250" height="150" rx="10" fill="url(#box-grad)" stroke="#10b981" stroke-width="2" />
+        <rect width="250" height="40" rx="10" fill="#10b981" fill-opacity="0.2" />
+        <text x="125" y="26" font-family="sans-serif" font-size="18" font-weight="bold" fill="#34d399" text-anchor="middle">LLM Interface</text>
+        
+        <text x="20" y="70" font-family="monospace" font-size="14" fill="#cbd5e1">• llm.py</text>
+        <text x="20" y="100" font-family="monospace" font-size="14" fill="#cbd5e1">• stream.py</text>
+        <text x="20" y="130" font-family="monospace" font-size="14" fill="#cbd5e1">• usage.py</text>
+    </g>
+
+    <!-- Tools & Skills Box -->
+    <g transform="translate(350, 400)">
+        <rect width="250" height="150" rx="10" fill="url(#box-grad)" stroke="#f59e0b" stroke-width="2" />
+        <rect width="250" height="40" rx="10" fill="#f59e0b" fill-opacity="0.2" />
+        <text x="125" y="26" font-family="sans-serif" font-size="18" font-weight="bold" fill="#fbbf24" text-anchor="middle">Tools &amp; Skills</text>
+        
+        <text x="20" y="70" font-family="monospace" font-size="14" fill="#cbd5e1">• tools.py</text>
+        <text x="20" y="100" font-family="monospace" font-size="14" fill="#cbd5e1">• skills.py</text>
+    </g>
+
+    <!-- Knowledge & Memory Box -->
+    <g transform="translate(650, 400)">
+        <rect width="300" height="150" rx="10" fill="url(#box-grad)" stroke="#ec4899" stroke-width="2" />
+        <rect width="300" height="40" rx="10" fill="#ec4899" fill-opacity="0.2" />
+        <text x="150" y="26" font-family="sans-serif" font-size="18" font-weight="bold" fill="#f472b6" text-anchor="middle">Knowledge &amp; Memory</text>
+        
+        <text x="20" y="70" font-family="monospace" font-size="14" fill="#cbd5e1">• memory.py (Chat Store)</text>
+        <text x="20" y="100" font-family="monospace" font-size="14" fill="#cbd5e1">• vector.py (Vector Store)</text>
+        <text x="20" y="130" font-family="monospace" font-size="14" fill="#cbd5e1">• graph.py (Graph Store)</text>
+    </g>
+
+    <!-- Shared Contracts -->
+    <g transform="translate(350, 600)">
+        <rect width="300" height="150" rx="10" fill="url(#box-grad)" stroke="#0ea5e9" stroke-width="2" />
+        <rect width="300" height="40" rx="10" fill="#0ea5e9" fill-opacity="0.2" />
+        <text x="150" y="26" font-family="sans-serif" font-size="18" font-weight="bold" fill="#38bdf8" text-anchor="middle">Shared Contracts</text>
+        
+        <text x="20" y="70" font-family="monospace" font-size="14" fill="#cbd5e1">• protocol.py</text>
+        <text x="20" y="100" font-family="monospace" font-size="14" fill="#cbd5e1">• errors.py</text>
+        <text x="20" y="130" font-family="monospace" font-size="14" fill="#cbd5e1">• identity.py</text>
+    </g>
+
+    <!-- Connecting Lines (Arrows) -->
+    <g stroke="#475569" stroke-width="2" fill="none" marker-end="url(#arrow)">
+        <!-- Lines from core primitives to execution -->
+        <path d="M 300 250 L 340 250" />
+        
+        <!-- Lines between components -->
+        <!-- LLM to execution -->
+        <path d="M 175 400 L 175 375 L 450 375 L 450 355" />
+        <!-- Tools to execution -->
+        <path d="M 475 400 L 475 355" />
+        <!-- Memory to execution -->
+        <path d="M 800 400 L 800 375 L 650 375 L 650 355" />
+    </g>
+</svg>

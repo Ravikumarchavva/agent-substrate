@@ -8,37 +8,17 @@ Six storage Protocols, each with a specific scope and purpose. All are swappable
 
 ## Storage Roles at a Glance
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph TB
-    classDef proto fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-    classDef impl fill:#FFF3E0,stroke:#E65100,stroke-width:1px,color:#BF360C,stroke-dasharray:4 2
-    classDef question fill:#E8F5E9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20,font-style:italic
+## Storage Roles at a Glance
 
-    HP["HistoryProvider\nWhat was SAID\nOrdered conversation transcript\nkey: (agent_id, session_id)"]:::proto
-    STM["ShortTermMemory\nWhat was LEARNED this session\nKey-value session state\nkey: session_id"]:::proto
-    LTM["LongTermMemory\nWhat was LEARNED forever\nExtracted cross-session facts\nkey: (agent_id, namespace)"]:::proto
-    VS["VectorStore\nSemantic search corpus\nRAG document chunks\nkey: (id, collection)"]:::proto
-    GS["GraphStore\nKnowledge graph\nEntities + relationships\nCypher queries optional"]:::proto
-    BS["BlobStore\nBinary objects\nS3/MinIO abstraction\npin/unpin TTL control"]:::proto
-    TS["TaskStore\nPer-agent Kanban boards\n6-state task lifecycle\nkey: (conversation_id, agent_id)"]:::proto
-
-    IMP1["InMemoryHistoryProvider (L1)\nRedisHistoryProvider (L2)\nPostgresHistoryProvider (L2)"]:::impl
-    IMP2["RedisSessionStore (L2)\nPostgresMemoryStore (L2)"]:::impl
-    IMP3["RedisSessionStore (L2)\nPgVectorStore for semantic (L2)"]:::impl
-    IMP4["PgVectorStore (L2)"]:::impl
-    IMP5["AGEGraphStore (L2)"]:::impl
-    IMP6["S3FileStore (L2)"]:::impl
-    IMP7["TaskStore in-memory (L1)\nPgTaskStore (infrastructure/)"]:::impl
-
-    HP -.-> IMP1
-    STM -.-> IMP2
-    LTM -.-> IMP3
-    VS -.-> IMP4
-    GS -.-> IMP5
-    BS -.-> IMP6
-    TS -.-> IMP7
-```
+| Storage Protocol | Responsibility | Primary Scope Keys | Concrete Implementations |
+|---|---|---|---|
+| **`HistoryProvider`** | Ordered conversation transcript (what was said). | `(agent_id, session_id)` | `InMemoryHistoryProvider` (L1), `RedisHistoryProvider` (L2), `PostgresHistoryProvider` (L2) |
+| **`ShortTermMemory`** | Key-value state inside a session (what was learned this session). | `session_id` | `RedisSessionStore` (L2), `PostgresMemoryStore` (L2) |
+| **`LongTermMemory`** | Extracted cross-session facts (what was learned forever). | `(agent_id, namespace)` | `RedisSessionStore` (L2), `PgVectorStore` (L2) |
+| **`VectorStore`** | Semantic RAG search corpus. | `(id, collection)` | `PgVectorStore` (L2) |
+| **`GraphStore`** | Knowledge graph structure (entities + relationships). | Global | `AGEGraphStore` (L2) |
+| **`BlobStore`** | Binary file storage (with TTL control). | Global | `S3FileStore` (L2) |
+| **`TaskStore`** | Kanban task boards. | `(conversation_id, agent_id)` | `InMemoryTaskStore` (L1), `PgTaskStore` (infrastructure) |
 
 ---
 
@@ -46,32 +26,19 @@ graph TB
 
 The raw ordered log of `ChatMessage` turns. Does not summarize or compact — that's `CompactionStrategy`'s job.
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph LR
-    classDef proto fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-    classDef method fill:#E8EAF6,stroke:#3949AB,stroke-width:1px,color:#1A237E
-    classDef note fill:#FFFDE7,stroke:#F57F17,stroke-width:1px,color:#E65100,font-style:italic
+### HistoryProvider Methods
 
-    HP["HistoryProvider"]:::proto
+| Method | Parameters | Description |
+|---|---|---|
+| `append` | `agent_id, msg, session_id, run_id` | Append a single chat turn. |
+| `append_many` | `agent_id, messages, session_id, run_id` | Bulk-append a list of chat turns. |
+| `get_messages` | `agent_id, session_id, limit, offset` | Retrieve ordered messages for a session. |
+| `clear` | `agent_id, session_id` | Delete all history for a session. |
+| `clear_run` | `agent_id, session_id, run_id` | Delete only messages from a specific run (supports `HistoryRetention.RUN`). |
+| `count_messages` | `agent_id, session_id` | Return message count in a session. |
 
-    APP["append(agent_id, msg, session_id, run_id)"]:::method
-    APPN["append_many(agent_id, messages, session_id, run_id)"]:::method
-    GET["get_messages(agent_id, session_id, limit, offset)"]:::method
-    CLR["clear(agent_id, session_id)\nDelete ALL history for this session"]:::method
-    CLRR["clear_run(agent_id, session_id, run_id)\nDelete ONLY messages from one run"]:::method
-    CNT["count_messages(agent_id, session_id)"]:::method
-
-    HP --> APP
-    HP --> APPN
-    HP --> GET
-    HP --> CLR
-    HP --> CLRR
-    HP --> CNT
-
-    N1["run_id tags each message\nclear_run() supports HistoryRetention.RUN\nwithout destroying cross-run context"]:::note
-    CLRR -.- N1
-```
+> [!NOTE]
+> `run_id` tags each message so `clear_run()` can cleanly purge temporary sub-agent steps without destroying parent context.
 
 ---
 
@@ -79,81 +46,57 @@ graph LR
 
 Two distinct memory scopes — session-local vs. permanent across all sessions.
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph TB
-    classDef stm fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-    classDef ltm fill:#E8EAF6,stroke:#3949AB,stroke-width:2px,color:#1A237E,font-weight:bold
-    classDef method fill:#E8F5E9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20
-    classDef mem fill:#FFF3E0,stroke:#E65100,stroke-width:1px,color:#BF360C
+### API Methods
 
-    STM["ShortTermMemory\nKey-value state within one session\nsurvives across runs in same session\nValues: JSON-serializable dict"]:::stm
-    LTM["LongTermMemory\nExtracted facts across ALL sessions\nscoped by (agent_id, namespace)"]:::ltm
+| Memory Store | Method | Description |
+|---|---|---|
+| **`ShortTermMemory`** | `get_state(session_id)` | Retrieve JSON-serializable session state dict. |
+| | `set_state(session_id, state)` | Overwrite session state dict. |
+| | `update_state(session_id, patch)`| Atomically merge keys. Prefer for concurrent agents. |
+| | `clear(session_id)` | Delete session state. |
+| **`LongTermMemory`** | `save(agent_id, content, namespace, ttl)` | Persist a fact memory (returns unique ID). |
+| | `search(agent_id, query, namespace, limit)` | Query facts semantically (returns list of `Memory` items). |
+| | `get(agent_id, memory_id, namespace)` | Fetch a specific fact memory. |
+| | `delete(agent_id, memory_id, namespace)` | Delete a specific fact memory. |
+| | `clear(agent_id, namespace)` | Delete all memories in a namespace. |
 
-    STMM1["get_state(session_id) → dict"]:::method
-    STMM2["set_state(session_id, state)"]:::method
-    STMM3["update_state(session_id, patch)\nAtomic merge — other keys preserved\nPrefer over get+set for concurrent agents"]:::method
-    STMM4["clear(session_id)"]:::method
+### Memory Value Objects
 
-    LTMM1["save(agent_id, content, namespace, ttl_seconds) → id"]:::method
-    LTMM2["search(agent_id, query, namespace, limit) → list[Memory]"]:::method
-    LTMM3["get(agent_id, memory_id, namespace) → Memory | None"]:::method
-    LTMM4["delete(agent_id, memory_id, namespace) → bool"]:::method
-    LTMM5["clear(agent_id, namespace)"]:::method
-
-    MEM["Memory (frozen)\ncontent: str\nscore: float\nid: str\nmetadata: dict"]:::mem
-
-    STM --> STMM1
-    STM --> STMM2
-    STM --> STMM3
-    STM --> STMM4
-
-    LTM --> LTMM1
-    LTM --> LTMM2
-    LTM --> LTMM3
-    LTM --> LTMM4
-    LTM --> LTMM5
-    LTMM2 --> MEM
-```
-
-**Three memory types — how they differ:**
-
-| Type | Answers | Scope | Example use |
-|---|---|---|---|
-| `HistoryProvider` | *What was said?* | Per (agent, session) | Conversation replay, compaction |
-| `ShortTermMemory` | *What was learned this session?* | Per session | Cart state, user preferences this session |
-| `LongTermMemory` | *What is known permanently?* | Per (agent, namespace) | "User's name is Ravi", "Prefers Python" |
+`Memory` represents an extracted fact:
+* `content: str`: The fact/text.
+* `score: float`: Search similarity score.
+* `id: str`: Unique identifier.
+* `metadata: dict`: Extra descriptive fields.
 
 ---
 
 ## VectorStore and GraphStore — RAG
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph LR
-    classDef proto fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-    classDef doc fill:#E8EAF6,stroke:#3949AB,stroke-width:1.5px,color:#1A237E
-    classDef warn fill:#FFEBEE,stroke:#C62828,stroke-width:1px,color:#B71C1C,font-weight:bold
+### API Methods
 
-    VS["VectorStore\nadd(documents, collection)\nsearch(query_embedding, collection, limit, filter)\nget(ids, collection)\nupsert(documents, collection)\ndelete(ids, collection)\nlist_collections()\ndelete_collection(collection)"]:::proto
+| Store Protocol | Method | Description |
+|---|---|---|
+| **`VectorStore`** | `add(documents, collection)` | Add a batch of `Document` items. |
+| | `search(query_embedding, collection, limit, filter)` | Query document vectors (returns `SearchResult` list). |
+| | `get(ids, collection)` | Fetch documents by ID. |
+| | `upsert(documents, collection)` | Upsert documents in a collection. |
+| | `delete(ids, collection)` | Delete documents by ID. |
+| | `list_collections()` | List all active vector collections. |
+| | `delete_collection(collection)` | Drop a collection. |
+| **`GraphStore`** | `add_entities(entities)` | Insert entity nodes into the graph. |
+| | `add_relationships(relationships)` | Insert relationship edges into the graph. |
+| | `get_neighbors(entity_id, depth, types)` | Get connected graph nodes. |
+| | `delete_entity(entity_id)` | Delete entity node. |
+| | `delete_relationship(relationship_id)` | Delete relationship edge. |
+| **`CypherCapable`** | `query_cypher(query, params)` | (Optional) Execute raw Cypher queries. |
 
-    GS["GraphStore\nadd_entities(entities)\nadd_relationships(relationships)\nget_neighbors(entity_id, depth, types)\ndelete_entity(entity_id)\ndelete_relationship(relationship_id)"]:::proto
+### Core RAG Types
 
-    CYPH["CypherCapable (optional)\nquery_cypher(query, params)\n\nCheck: isinstance(store, CypherCapable)\nbefore calling"]:::proto
+* **`Document`**: Represents raw chunks. Fields: `content: list[ContentBlock]`, `id: str`, `embedding: list[float] \| None`, `metadata: dict`.
+* **`SearchResult`**: Match outcome. Fields: `id: str`, `content: list[ContentBlock]`, `score: float`, `metadata: dict`.
 
-    DOC["Document (frozen)\ncontent: list[ContentBlock]\nid: str\nembedding: list[float] | None\nmetadata: dict\n\nDocument.from_text(s) → quick text doc"]:::doc
-
-    SR["SearchResult (frozen)\nid: str\ncontent: list[ContentBlock]\nscore: float\nmetadata: dict"]:::doc
-
-    WARN["Document ≠ DocumentBlock\nDocument = RAG text chunk (VectorStore)\nDocumentBlock = ContentBlock carrying a PDF file\nNever conflate them"]:::warn
-
-    VS --> DOC
-    VS --> SR
-    GS --> CYPH
-    DOC -.- WARN
-```
-
-`Document.content` is `list[ContentBlock]` — RAG documents can contain images, audio, or structured data, not just text. `Document.from_text(s)` is the shortcut for plain-text chunks.
+> [!WARNING]
+> Do not conflate `Document` (chunk in vector search) with `DocumentBlock` (a block within a chat message carrying an uploaded file).
 
 ---
 

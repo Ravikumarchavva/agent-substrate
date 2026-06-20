@@ -4,15 +4,15 @@
 
 ## What Lives Here
 
-| File | What it answers |
-|---|---|
-| [01 — core](01-core.md) | What data flows everywhere? (ContentBlock, identity, errors) |
-| [02 — llm](02-llm.md) | How do we talk to an AI model? |
-| [03 — messaging](03-messaging.md) | How do agents communicate? |
-| [04 — tools](04-tools.md) | What can an agent do? |
-| [05 — agent](05-agent.md) | What IS an agent? How is it supervised? |
-| [06 — storage](06-storage.md) | What does an agent remember? |
-| [07 — runtime](07-runtime.md) | How does a run stay alive across crashes? |
+| Subpackage Module | Core Concern & Focus | What it answers |
+|---|---|---|
+| [`core/` &mdash; Universal Primitives](01-core.md) | Content blocks, identities, and errors | What data flows everywhere? (ContentBlock, identity, errors) |
+| [`llm/` &mdash; LLM Clients](02-llm.md) | Standard client and embedding protocols | How do we talk to an AI model? |
+| [`messaging/` &mdash; Conversation Wire](03-messaging.md) | Messages, stream events, envelopes | How do agents communicate? |
+| [`tools/` &mdash; Capability Dispatch](04-tools.md) | Standard/hosted tools, approvals, chains | What can an agent do? |
+| [`agent/` &mdash; Execution Loop](05-agent.md) | Agent interfaces and supervisions | What IS an agent? How is it supervised? |
+| [`storage/` &mdash; Persistence Interfaces](06-storage.md) | Inboxes, logs, history, and store protocols | What does an agent remember? |
+| [`runtime/` &mdash; Execution Engines](07-runtime.md) | Priority schedulers, journals, and lifecycles | How does a run stay alive across crashes? |
 
 ---
 

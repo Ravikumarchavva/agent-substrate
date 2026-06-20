@@ -153,27 +153,101 @@ The shape stays the same whether you add tools, guardrails, streaming, HITL appr
 
 ## Architecture at a glance
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#334155", "lineColor": "#64748b"}}}%%
-flowchart TD
-    P0["🔵 L0 · Kernel<br/>Pure types · ABCs · Protocols<br/>Zero behaviour · Zero I/O"]:::l0
-    P1["🟢 L1 · Fabric<br/>Message routing · Dispatch<br/>Runtime · Supervision · Saga"]:::l1
-    P2["🟡 L2 · Reasoning<br/>ReAct loop · Memory · Guardrails<br/>Middleware · Hooks · Extraction"]:::l2
-    P3["🟠 L3 · Orchestration<br/>Multi-agent workflows<br/>Handoffs · Shared memory"]:::l3
-    P4["🔴 L4 · Guardrails<br/>Mutation gates · Governance<br/>Budget limits · Kill-switch"]:::l4
-    P5["🟣 L5 · Platform<br/>Observability · Scheduling<br/>Batch · Evals · RAG"]:::l5
+<div class="architecture-flow" markdown>
+  <div class="arch-box l0">
+    <div class="arch-layer-header">
+      <span class="arch-num">L0</span>
+      <h4 class="arch-title">Kernel Contracts</h4>
+    </div>
+    <p class="arch-desc">Universal primitives and interface definitions. Pure contracts with absolutely zero external I/O, forming the foundational type system of the engine.</p>
+    <div class="arch-tags">
+      <span class="arch-tag">Protocols</span>
+      <span class="arch-tag">ContentBlock</span>
+      <span class="arch-tag">AgentId</span>
+      <span class="arch-tag">SignalBus</span>
+    </div>
+  </div>
 
-    P0 --> P1 --> P2 --> P3 --> P4 --> P5
+  <div class="arch-connector"></div>
 
-    classDef l0 fill:#1e3a5f,stroke:#60a5fa,color:#eff6ff
-    classDef l1 fill:#14532d,stroke:#4ade80,color:#f0fdf4
-    classDef l2 fill:#713f12,stroke:#fbbf24,color:#fffbeb
-    classDef l3 fill:#7c2d12,stroke:#fb923c,color:#fff7ed
-    classDef l4 fill:#7f1d1d,stroke:#f87171,color:#fff1f2
-    classDef l5 fill:#4c1d95,stroke:#c084fc,color:#faf5ff
-```
+  <div class="arch-box l1">
+    <div class="arch-layer-header">
+      <span class="arch-num">L1</span>
+      <h4 class="arch-title">Fabric Layer</h4>
+    </div>
+    <p class="arch-desc">Durable actor execution and message routing. Coordinates prioritize-scheduling, agent inboxes, supervision tree topology, and Saga-based rollbacks.</p>
+    <div class="arch-tags">
+      <span class="arch-tag">Inbox</span>
+      <span class="arch-tag">Scheduler</span>
+      <span class="arch-tag">EventLog</span>
+      <span class="arch-tag">Sagas</span>
+    </div>
+  </div>
 
-Higher layers may import from lower ones. The reverse is never allowed. `uv run lint-imports` enforces this in CI.
+  <div class="arch-connector"></div>
+
+  <div class="arch-box l2">
+    <div class="arch-layer-header">
+      <span class="arch-num">L2</span>
+      <h4 class="arch-title">Reasoning & Agents</h4>
+    </div>
+    <p class="arch-desc">Autonomous reasoning core. Drives the central ReAct step execution loops, context history providers, model routing, and safety middleware hooks.</p>
+    <div class="arch-tags">
+      <span class="arch-tag">ReActAgent</span>
+      <span class="arch-tag">Memory</span>
+      <span class="arch-tag">LLMRouter</span>
+      <span class="arch-tag">Hooks</span>
+    </div>
+  </div>
+
+  <div class="arch-connector"></div>
+
+  <div class="arch-box l3">
+    <div class="arch-layer-header">
+      <span class="arch-num">L3</span>
+      <h4 class="arch-title">Orchestration Workflows</h4>
+    </div>
+    <p class="arch-desc">Multi-agent orchestrations. Manages agent-to-agent handoffs, parallel execution graphs, collaborative state, and team sub-routing.</p>
+    <div class="arch-tags">
+      <span class="arch-tag">Workflows</span>
+      <span class="arch-tag">Handoffs</span>
+      <span class="arch-tag">Orchestrator</span>
+    </div>
+  </div>
+
+  <div class="arch-connector"></div>
+
+  <div class="arch-box l4">
+    <div class="arch-layer-header">
+      <span class="arch-num">L4</span>
+      <h4 class="arch-title">Guardrails & Governance</h4>
+    </div>
+    <p class="arch-desc">System safety gates. Enforces runtime execution budget limits, structural input/output mutations, policies, and global kill-switches.</p>
+    <div class="arch-tags">
+      <span class="arch-tag">Budgets</span>
+      <span class="arch-tag">MutationGates</span>
+      <span class="arch-tag">Kill-Switch</span>
+    </div>
+  </div>
+
+  <div class="arch-connector"></div>
+
+  <div class="arch-box l5">
+    <div class="arch-layer-header">
+      <span class="arch-num">L5</span>
+      <h4 class="arch-title">Platform & Operations</h4>
+    </div>
+    <p class="arch-desc">Scaling and deployment utilities. Supports persistent DB backends (Postgres/Redis), telemetry (OTel), benchmarks, and cron triggers.</p>
+    <div class="arch-tags">
+      <span class="arch-tag">PostgresRT</span>
+      <span class="arch-tag">OTel Tracing</span>
+      <span class="arch-tag">Evals</span>
+      <span class="arch-tag">RAG Pipelines</span>
+    </div>
+  </div>
+</div>
+
+Higher layers may import from lower ones. The reverse is never allowed. `uv run lint-imports` enforces this structural integrity in CI.
 
 ---
 

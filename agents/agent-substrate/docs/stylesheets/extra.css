@@ -133,8 +133,7 @@ body, input {
 }
 
 /* Active navigation item pill style */
-.md-nav__link--active,
-.md-nav__item--active > .md-nav__link {
+.md-nav__link--active {
   color: var(--text-heading) !important;
   background-color: var(--nav-active-bg) !important;
   font-weight: 500 !important;
@@ -345,3 +344,126 @@ body, input {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(128, 128, 128, 0.4);
 }
+
+/* ── Architecture at a Glance Card System ── */
+.architecture-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0px; /* Connectors fill the space */
+  margin: 2rem auto;
+  max-width: 820px;
+}
+
+.arch-box {
+  padding: 1.25rem 1.5rem;
+  background-color: var(--md-default-bg-color--light) !important;
+  border: 1px solid var(--border-color) !important;
+  border-left: 4px solid var(--layer-color) !important;
+  border-radius: 8px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.arch-layer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.arch-num {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #ffffff !important;
+  background-color: var(--layer-color) !important;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 6px var(--layer-glow);
+}
+
+.arch-title {
+  margin: 0 !important;
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  color: var(--text-heading) !important;
+  letter-spacing: -0.01em;
+}
+
+.arch-desc {
+  margin: 0 0 0.8rem 0 !important;
+  font-size: 0.82rem !important;
+  line-height: 1.6 !important;
+  color: var(--md-default-fg-color) !important;
+}
+
+.arch-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.arch-tag {
+  font-size: 0.68rem !important;
+  font-family: "JetBrains Mono", monospace;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: var(--nav-hover-bg);
+  border: 1px solid var(--border-color-light);
+  color: var(--md-default-fg-color--light) !important;
+  letter-spacing: -0.01em;
+}
+
+/* Hover effects with colored scale and subtle glow */
+.arch-box:hover {
+  transform: translateY(-2px);
+  border-color: var(--layer-color) !important;
+}
+
+[data-md-color-scheme="slate"] .arch-box:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 10px var(--layer-glow);
+}
+
+[data-md-color-scheme="default"] .arch-box:hover {
+  box-shadow: 0 8px 20px var(--layer-glow);
+}
+
+/* Flow connector arrows */
+.arch-connector {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 1.2rem;
+  position: relative;
+}
+
+.arch-connector::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--border-color);
+}
+
+.arch-connector::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 6px;
+  height: 6px;
+  border-bottom: 2px solid var(--border-color);
+  border-right: 2px solid var(--border-color);
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+}
+
+/* Layer specific colors */
+.arch-box.l0 { --layer-color: #3b82f6; --layer-glow: rgba(59, 130, 246, 0.2); }
+.arch-box.l1 { --layer-color: #10b981; --layer-glow: rgba(16, 185, 129, 0.2); }
+.arch-box.l2 { --layer-color: #eab308; --layer-glow: rgba(234, 179, 8, 0.2); }
+.arch-box.l3 { --layer-color: #f97316; --layer-glow: rgba(249, 115, 22, 0.2); }
+.arch-box.l4 { --layer-color: #ef4444; --layer-glow: rgba(239, 68, 68, 0.2); }
+.arch-box.l5 { --layer-color: #a855f7; --layer-glow: rgba(168, 85, 247, 0.2); }

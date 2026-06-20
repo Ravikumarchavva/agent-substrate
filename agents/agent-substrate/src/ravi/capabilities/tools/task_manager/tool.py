@@ -207,9 +207,7 @@ class TaskManagerTool:
                 TaskStatus.IN_PROGRESS, store, task_list_id
             )
             while stale:
-                await store.update_status(
-                    task_list_id, stale, TaskStatus.SUCCEEDED
-                )
+                await store.update_status(task_list_id, stale, TaskStatus.SUCCEEDED)
                 stale = await self._first_with_status(
                     TaskStatus.IN_PROGRESS, store, task_list_id
                 )
@@ -333,9 +331,7 @@ class TaskManagerTool:
                 {t.title.strip().lower() for t in board.tasks} if board else set()
             )
             fresh = [
-                t
-                for t in _dedupe_titles(tasks)
-                if t.strip().lower() not in existing
+                t for t in _dedupe_titles(tasks) if t.strip().lower() not in existing
             ]
             if not fresh:
                 return await self._board_result(

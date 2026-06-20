@@ -361,7 +361,9 @@ class PostgresScheduler:
 
                         raw = row["retry_policy"]
                         if raw:
-                            policy_data = json.loads(raw) if isinstance(raw, str) else dict(raw)
+                            policy_data = (
+                                json.loads(raw) if isinstance(raw, str) else dict(raw)
+                            )
                             policy = RunRetryPolicy.model_validate(policy_data)
                         else:
                             policy = RunRetryPolicy()

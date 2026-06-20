@@ -10,7 +10,7 @@ from ravi.kernel.core.content import (
     TextBlock,
     content_blocks_to_str,
 )
-from ravi.kernel.core.identity import AgentId
+from ravi.kernel.core.identity import AgentId, TopicId
 from ravi.kernel.messaging.message import ChatPayload, DataPayload, Message
 from ravi.kernel.llm.llm import GenerationOptions
 
@@ -67,7 +67,7 @@ async def deliver(
     result: dict[str, Any],
     *,
     sender: AgentId,
-    output_topic: Any = None,
+    output_topic: TopicId | None = None,
 ) -> None:
     """Deliver a result back to the sender or emit it to a topic."""
     session_id = src_msg.correlation_id or ctx.run_id

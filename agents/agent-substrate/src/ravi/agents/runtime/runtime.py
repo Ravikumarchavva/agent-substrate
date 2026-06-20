@@ -28,6 +28,7 @@ needs to know which backend is active.
 from __future__ import annotations
 
 import uuid
+from typing import cast
 
 from ravi.kernel.core.identity import AgentId
 from ravi.kernel.messaging.message import Message
@@ -202,7 +203,7 @@ class Runtime:
             fanout=self._fanout,
             scheduler=self._scheduler,  # type: ignore[arg-type]
             supervisor=supervisor,
-            signal_bus=self._signal_bus,
+            signal_bus=self._signal_bus,  # type: ignore[arg-type]
             registry=self._registry,
         )
         await self._worker.start()
@@ -228,13 +229,16 @@ class Runtime:
     # ------------------------------------------------------------------
 
     @property
-    def event_log(self) -> InMemoryEventLog:
+    def event_log(self) -> EventLog:
         return self._event_log
 
     @property
-    def inbox(self) -> InMemoryInbox:
+    def inbox(self) -> Inbox:
         return self._inbox
 
     @property
     def signal_bus(self) -> InMemorySignalBus:
-        return self._signal_bus
+        # The in-process Runtime always uses the in-memory signal bus, whose
+        # wait_for_signal() helper (not part of the kernel SignalBus Protocol)
+        # is needed by tests and RunContext.ask().
+        return cast("InMemorySignalBus", self._signal_bus)

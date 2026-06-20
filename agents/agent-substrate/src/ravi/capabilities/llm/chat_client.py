@@ -141,7 +141,9 @@ class OpenAIChatCompletionClient:
     # Providers that support OpenAI's ``strict: true`` tool-call mode.
     _STRICT_PROVIDERS: frozenset[str] = frozenset({"openai"})
     # Providers that support ``stream_options: {include_usage: true}``.
-    _STREAM_USAGE_PROVIDERS: frozenset[str] = frozenset({"openai", "groq", "openrouter", "together", "fireworks"})
+    _STREAM_USAGE_PROVIDERS: frozenset[str] = frozenset(
+        {"openai", "groq", "openrouter", "together", "fireworks"}
+    )
 
     def __init__(
         self,

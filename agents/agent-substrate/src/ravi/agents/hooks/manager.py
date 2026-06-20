@@ -207,8 +207,10 @@ class CostTracker:
         """Track cost after each LLM call."""
         usage = ctx.get("usage")
         if usage:
-            prompt_tokens = getattr(usage, "prompt_tokens", 0)
-            completion_tokens = getattr(usage, "completion_tokens", 0)
+            # kernel Usage exposes input_tokens / output_tokens (not the
+            # prompt_/completion_ names used by some provider SDKs).
+            prompt_tokens = getattr(usage, "input_tokens", 0)
+            completion_tokens = getattr(usage, "output_tokens", 0)
             cost = (prompt_tokens / 1000) * self.cost_per_1k_prompt + (
                 completion_tokens / 1000
             ) * self.cost_per_1k_completion

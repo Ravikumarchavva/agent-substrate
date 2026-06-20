@@ -320,17 +320,21 @@ async def init_tool_registry(
     registry.add(task_tool)
     _exa_key = settings.EXA_API_KEY or None
     _tavily_key = settings.TAVILY_API_KEY or None
-    registry.add(WebSearchTool(
-        exa_api_key=_exa_key,
-        tavily_api_key=_tavily_key,
-        max_results=settings.WEB_SEARCH_MAX_RESULTS,
-        max_chars=settings.WEB_SEARCH_MAX_CHARS,
-    ))
-    registry.add(ReadUrlTool(
-        tavily_api_key=_tavily_key,
-        exa_api_key=_exa_key,
-        max_chars=settings.WEB_READ_MAX_CHARS,
-    ))
+    registry.add(
+        WebSearchTool(
+            exa_api_key=_exa_key,
+            tavily_api_key=_tavily_key,
+            max_results=settings.WEB_SEARCH_MAX_RESULTS,
+            max_chars=settings.WEB_SEARCH_MAX_CHARS,
+        )
+    )
+    registry.add(
+        ReadUrlTool(
+            tavily_api_key=_tavily_key,
+            exa_api_key=_exa_key,
+            max_chars=settings.WEB_READ_MAX_CHARS,
+        )
+    )
     registry.add(CalculatorTool())
     registry.add(CurrentTimeTool())
     if code_interpreter_tool:
@@ -522,16 +526,18 @@ async def build_agent_for_thread(
         raise ValueError("build_agent_for_thread() requires a runtime.")
 
     def _make_token_pipeline() -> CompactionPipeline:
-        return CompactionPipeline([
-            TokenBudgetComposedStrategy(
-                strategies=[
-                    ToolResultCompactionStrategy(max_chars=1500),
-                    SelectiveToolCallCompactionStrategy(keep_recent_groups=5),
-                    TruncationStrategy(max_chars=200_000),
-                ],
-                token_budget=50_000,
-            )
-        ])
+        return CompactionPipeline(
+            [
+                TokenBudgetComposedStrategy(
+                    strategies=[
+                        ToolResultCompactionStrategy(max_chars=1500),
+                        SelectiveToolCallCompactionStrategy(keep_recent_groups=5),
+                        TruncationStrategy(max_chars=200_000),
+                    ],
+                    token_budget=50_000,
+                )
+            ]
+        )
 
     def _make_context() -> ContextConfig:
         return ContextConfig(

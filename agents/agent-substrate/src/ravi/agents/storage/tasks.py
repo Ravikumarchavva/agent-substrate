@@ -120,7 +120,9 @@ class TaskStore:
                 mutated = False
                 for task in task_list.tasks:
                     if task.status == TaskStatus.IN_PROGRESS:
-                        new_tasks.append(dataclasses.replace(task, status=TaskStatus.SUCCEEDED))
+                        new_tasks.append(
+                            dataclasses.replace(task, status=TaskStatus.SUCCEEDED)
+                        )
                         mutated = True
                     else:
                         new_tasks.append(task)
@@ -144,7 +146,9 @@ class TaskStore:
                     )
                     self._lists[task_list_id] = dataclasses.replace(
                         task_list,
-                        tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+                        tasks=[
+                            new_task if t.id == task_id else t for t in task_list.tasks
+                        ],
                     )
                     return new_task
             return None
@@ -200,7 +204,9 @@ class TaskStore:
                     )
                     self._lists[task_list_id] = dataclasses.replace(
                         task_list,
-                        tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+                        tasks=[
+                            new_task if t.id == task_id else t for t in task_list.tasks
+                        ],
                     )
                     return new_task
             return None
@@ -218,7 +224,9 @@ class TaskStore:
                     )
                     self._lists[task_list_id] = dataclasses.replace(
                         task_list,
-                        tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+                        tasks=[
+                            new_task if t.id == task_id else t for t in task_list.tasks
+                        ],
                     )
                     return new_task
             return None
@@ -235,7 +243,9 @@ class TaskStore:
                     new_task = dataclasses.replace(task, title=title.strip())
                     self._lists[task_list_id] = dataclasses.replace(
                         task_list,
-                        tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+                        tasks=[
+                            new_task if t.id == task_id else t for t in task_list.tasks
+                        ],
                     )
                     return new_task
             return None

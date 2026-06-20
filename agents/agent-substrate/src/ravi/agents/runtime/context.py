@@ -26,10 +26,10 @@ import asyncio
 import random as _random
 import uuid as _uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from ravi.kernel.agent.runtime_context import RunMeta
-from ravi.kernel.core.content import JsonObject, content_block_from_dict
+from ravi.kernel.core.content import ContentBlock, JsonObject, content_block_from_dict
 from ravi.kernel.core.identity import AgentId, TopicId
 from ravi.kernel.core.usage import Usage
 from ravi.kernel.llm.llm import GenerationOptions, LLMResponse
@@ -44,15 +44,16 @@ from ravi.kernel.tools.chain import InvocationResult
 
 if TYPE_CHECKING:
     from ravi.agents.runtime.backends._event_log import InMemoryEventLog
-    from ravi.agents.runtime.backends._fanout import PushAllFanout
-    from ravi.agents.runtime.backends._follow_graph import InMemoryFollowGraph
     from ravi.agents.runtime.backends._inbox import InMemoryInbox
     from ravi.agents.runtime.backends._journal import InMemoryJournal
     from ravi.agents.runtime.backends._scheduler import InMemoryScheduler
     from ravi.agents.runtime.backends._signal_bus import InMemorySignalBus
     from ravi.agents.runtime.backends._supervisor import InMemorySupervisor
     from ravi.kernel.llm.llm import LLMClient
-    from ravi.agents.tools.invoker import ToolInvoker
+    from ravi.kernel.runtime.fanout import FanoutStrategy
+    from ravi.kernel.runtime.follow_graph import FollowGraph
+    from ravi.kernel.runtime.agent import Agent
+    from ravi.agents.tools.invoker import InvokerSession, ToolInvoker
 
 
 class RunContext:
@@ -70,14 +71,14 @@ class RunContext:
         event_log: InMemoryEventLog,
         journal: InMemoryJournal,
         inbox: InMemoryInbox,
-        follow_graph: InMemoryFollowGraph,
-        fanout: PushAllFanout,
+        follow_graph: FollowGraph,
+        fanout: FanoutStrategy,
         scheduler: InMemoryScheduler,
         supervisor: InMemorySupervisor,
         signal_bus: InMemorySignalBus,
         llm_client: LLMClient | None = None,
         tool_invoker: ToolInvoker | None = None,
-        agent: Any = None,
+        agent: Agent | None = None,
     ) -> None:
         self.run_id = meta.run_id
         self.tenant_id = meta.tenant_id
@@ -94,7 +95,9 @@ class RunContext:
         self._llm_client = llm_client
         self._tool_invoker = tool_invoker
         self.agent = agent
-        self._invoker_session: Any = None  # opened lazily when tool() is first called
+        self._invoker_session: InvokerSession | None = (
+            None  # opened lazily when tool() is first called
+        )
 
     @property
     def meta(self) -> RunMeta:
@@ -117,7 +120,7 @@ class RunContext:
         self,
         kind: str,
         args: JsonObject,
-        fn: Any,
+        fn: Callable[[], Awaitable[Any]],
     ) -> Any:
         """Run fn() with at-most-once semantics via the Journal."""
         effect_id = Effect.make_id(self.run_id, self._step_seq, kind, args)
@@ -257,7 +260,9 @@ class RunContext:
 
     async def status(self, handle: RunHandle) -> RunStatusSummary:
         """Opt-in batched peek at a run's progress.  Not a stream."""
-        run_status = self._scheduler.get_status(handle.run_id) or RunStatus.PENDING
+        run_status = (
+            await self._scheduler.get_status(handle.run_id) or RunStatus.PENDING
+        )
         last_seq = await self._event_log.last_seq(handle.run_id)
         last_milestone: str | None = None
         if last_seq >= 0:
@@ -362,7 +367,12 @@ class RunContext:
             }
 
         def _deserialize(v: JsonObject) -> LLMResponse:
-            blocks = [content_block_from_dict(d) for d in v["content"]]  # type: ignore[arg-type]
+            # LLM responses only ever carry known ContentBlock variants; the
+            # UnknownBlock fallback from content_block_from_dict never appears here.
+            blocks: list[ContentBlock] = [
+                content_block_from_dict(d)  # type: ignore[misc]
+                for d in v["content"]  # type: ignore[union-attr]
+            ]
             u = v["usage"]  # type: ignore[index]
             usage = Usage(
                 input_tokens=u["input_tokens"],
@@ -388,10 +398,10 @@ class RunContext:
             )
             from ravi.kernel.core.content import TextBlock
 
-            text_chunks = []
-            reasoning_chunks = []
-            final_content = None
-            final_usage = None
+            text_chunks: list[str] = []
+            reasoning_chunks: list[str] = []
+            final_content: list[ContentBlock] | None = None
+            final_usage: Usage | None = None
 
             try:
                 stream = self._llm_client.generate_stream(

@@ -160,9 +160,7 @@ class WebSearchTool:
 
     # ── DuckDuckGo (fallback) ─────────────────────────────────────────────────
 
-    async def _search_ddgs(
-        self, query: str, n: int, limit: int
-    ) -> ToolExecutionResult:
+    async def _search_ddgs(self, query: str, n: int, limit: int) -> ToolExecutionResult:
         try:
             from ddgs import DDGS
 

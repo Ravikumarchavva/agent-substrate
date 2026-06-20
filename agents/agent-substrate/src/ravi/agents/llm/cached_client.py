@@ -94,7 +94,9 @@ class CachedModelClient:
                 if isinstance(content, str):
                     return content
                 if isinstance(content, list):
-                    text_parts = [p for p in content if isinstance(p, str)]
+                    # ChatMessage.content is a list of ContentBlock objects, not
+                    # plain strings — pull the text out of every TextBlock.
+                    text_parts = [b.text for b in content if isinstance(b, TextBlock)]
                     if text_parts:
                         return " ".join(text_parts)
         return ""

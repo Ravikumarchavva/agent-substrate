@@ -5,11 +5,14 @@ from __future__ import annotations
 from typing import Generic, TypeVar, Protocol, Callable, Awaitable, Sequence
 
 ContextT = TypeVar("ContextT")
+# Middleware only consumes its context (parameter position), so the Protocol's
+# type var is contravariant — a Middleware[BaseCtx] is usable as Middleware[SubCtx].
+ContextT_contra = TypeVar("ContextT_contra", contravariant=True)
 
 
-class MiddlewareProtocol(Protocol[ContextT]):
+class MiddlewareProtocol(Protocol[ContextT_contra]):
     async def process(
-        self, context: ContextT, call_next: Callable[[], Awaitable[None]]
+        self, context: ContextT_contra, call_next: Callable[[], Awaitable[None]]
     ) -> None: ...
 
 

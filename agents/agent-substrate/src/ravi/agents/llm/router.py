@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Any
 
 from ravi.agents.llm.models import ModelProfile, list_models
+from ravi.kernel.core.content import TextBlock
 from ravi.logger import setup_logging
 
 logger = setup_logging()
@@ -84,9 +85,11 @@ class ModelRouter:
             if isinstance(content, str):
                 total_chars += len(content)
             elif isinstance(content, list):
+                # ChatMessage.content holds ContentBlock objects, not strings;
+                # measure the text carried by each TextBlock.
                 for part in content:
-                    if isinstance(part, str):
-                        total_chars += len(part)
+                    if isinstance(part, TextBlock):
+                        total_chars += len(part.text)
 
         has_tools = bool(tools)
         if total_chars > 10_000 or (has_tools and total_chars > 2_000):

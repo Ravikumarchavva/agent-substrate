@@ -22,7 +22,7 @@ import asyncio
 import hashlib
 import json
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from ravi.kernel.tools.approval import (
     ApprovalDecision,
@@ -49,6 +49,10 @@ from ravi.kernel.tools import (
 
 from ravi.agents.hooks.manager import HookEvent, HookManager
 from ravi.logger import setup_logging
+
+if TYPE_CHECKING:
+    from ravi.agents.runtime.context import RunContext
+    from ravi.kernel.tools.tools import ToolExecutionResult
 
 logger = setup_logging("ravi.agents.tools.invoker")
 
@@ -105,8 +109,8 @@ class ToolInvoker:
         call: ToolCallRequest,
         *,
         session: InvokerSession,
-        ctx: Any | None = None,
-        progress_sink: Any | None = None,
+        ctx: RunContext | None = None,
+        progress_sink: Callable[[AgentProgress], object] | None = None,
     ) -> InvocationResult:
         """Invoke a single tool call with full enforcement.
 
@@ -170,7 +174,11 @@ class ToolInvoker:
         agent_id = None
         run_id = ""
         if ctx is not None:
-            if hasattr(ctx, "agent") and ctx.agent is not None and hasattr(ctx.agent, "id"):
+            if (
+                hasattr(ctx, "agent")
+                and ctx.agent is not None
+                and hasattr(ctx.agent, "id")
+            ):
                 agent_id = ctx.agent.id
             elif hasattr(ctx, "agent_id") and ctx.agent_id is not None:
                 agent_id = ctx.agent_id
@@ -316,7 +324,7 @@ class ToolInvoker:
 
     async def _shape_result(
         self,
-        exec_result: Any,
+        exec_result: ToolExecutionResult,
         *,
         tool_name: str,
         session: InvokerSession,
@@ -334,6 +342,8 @@ class ToolInvoker:
         # Offload media blocks to artifact store
         if media_blocks and self._store is not None:
             for block in media_blocks:
+                if block.data is None:
+                    continue  # url/file_id-only image — nothing to offload
                 raw: bytes = (
                     block.data if isinstance(block.data, bytes) else block.data.encode()
                 )
@@ -430,7 +440,7 @@ def _digest(arguments: JsonObject) -> str:
 
 
 def _emit_progress(
-    sink: Any,
+    sink: Callable[[AgentProgress], object],
     step: AgentStep,
     content: str,
     seq: int,

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from ravi.agents.middleware._contracts import ChatContext
 from ravi.kernel.core.errors import MiddlewareTermination
 from ravi.logger import setup_logging
+
+if TYPE_CHECKING:
+    from ravi.kernel.llm.llm import LLMClient
 
 logger = setup_logging()
 
@@ -24,10 +27,10 @@ class LLMJudgeMiddleware:
     def __init__(
         self,
         *,
-        model_client: Any,
+        model_client: LLMClient,
         judge_prompt: str | None = None,
     ):
-        self._model_client = model_client
+        self._model_client: LLMClient = model_client
         self._judge_prompt = judge_prompt or self._DEFAULT_JUDGE_PROMPT
 
     async def process(
@@ -38,14 +41,18 @@ class LLMJudgeMiddleware:
         if not context.result:
             return
 
-        text = " ".join(b.text for b in context.result.content if hasattr(b, "text"))
+        from ravi.kernel import TextBlock
+
+        text = " ".join(
+            b.text for b in context.result.content if isinstance(b, TextBlock)
+        )
         if not text:
             return
 
         logger.debug("[LLMJudge] checking %r (agent=%s)", text[:80], context.agent_name)
 
         try:
-            from ravi.kernel import ChatMessage, TextBlock
+            from ravi.kernel import ChatMessage
 
             classify_request = f'Classify this message:\n"""\n{text}\n"""'
             messages = [
@@ -57,7 +64,9 @@ class LLMJudgeMiddleware:
                 messages,
                 options=GenerationOptions(system_instructions=self._judge_prompt),
             )
-            response_text = " ".join(b.text for b in resp.content if hasattr(b, "text"))
+            response_text = " ".join(
+                b.text for b in resp.content if isinstance(b, TextBlock)
+            )
             judgment = self._parse_judgment(response_text)
             safe = judgment.get("safe", True)
             reason = judgment.get("reason", "")

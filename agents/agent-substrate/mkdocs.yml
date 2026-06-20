@@ -172,22 +172,30 @@ nav:
     - Messages: core/messages/index.md
     - Scaling Out: core/runtime/scaling.md
 
-  - Deployment & Operations:
+  - Kernel Reference:
+    - Overview: kernel/index.md
+    - Core — Content & Identity: kernel/01-core.md
+    - LLM Client Protocol: kernel/02-llm.md
+    - Messaging: kernel/03-messaging.md
+    - Tools & Skills: kernel/04-tools.md
+    - Agent & Supervision: kernel/05-agent.md
+    - Storage: kernel/06-storage.md
+    - Runtime: kernel/07-runtime.md
+
+  - Deploy & Operate:
     - Deploy Overview: deploy/index.md
     - Local & Kind: deploy/local-and-kind.md
     - Microservices: deploy/microservices.md
-    - Operate Overview: operate/index.md
     - Observability: operate/observability.md
     - Runbook: operate/runbook.md
 
-  - API & System Reference:
-    - Reference Overview: reference/index.md
+  - Reference:
+    - Overview: reference/index.md
     - Configuration: reference/configuration.md
     - Events: reference/events.md
     - Message Model: reference/message-model.md
     - System Architecture: architecture/index.md
     - Diagrams: architecture/diagrams.md
-    - Legacy Deep Dives: architecture/legacy-deep-dives.md
 
   - Archive: archive/index.md
 

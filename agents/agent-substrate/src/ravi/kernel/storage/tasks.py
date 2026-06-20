@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import List, Optional, Protocol
+from typing import Protocol
 
 
 class TaskStatus(StrEnum):
@@ -32,7 +32,7 @@ class TaskStatus(StrEnum):
 class Task:
     id: str
     title: str
-    status: str = TaskStatus.PLANNED
+    status: TaskStatus = TaskStatus.PLANNED
     order: int = 0
     retry_count: int = 0
     note: str = ""
@@ -44,11 +44,11 @@ class TaskList:
 
     id: str
     conversation_id: str
-    tasks: List[Task] = field(default_factory=list)
+    tasks: list[Task] = field(default_factory=list)
     max_retries: int = 3
     agent_id: str = ""
     agent_label: str = ""
-    parent_agent_id: Optional[str] = None
+    parent_agent_id: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -79,35 +79,35 @@ class TaskStore(Protocol):
     async def create_task_list(
         self,
         conversation_id: str,
-        task_titles: List[str],
+        task_titles: list[str],
         *,
         agent_id: str = "",
         agent_label: str = "",
-        parent_agent_id: Optional[str] = None,
+        parent_agent_id: str | None = None,
         max_retries: int = 3,
     ) -> TaskList:
         """Create (or replace) the board for (conversation_id, agent_id)."""
         ...
 
-    async def get_task_list(self, task_list_id: str) -> Optional[TaskList]:
+    async def get_task_list(self, task_list_id: str) -> TaskList | None:
         """Fetch a board by its own id."""
         ...
 
-    async def get_by_conversation(self, conversation_id: str) -> Optional[TaskList]:
+    async def get_by_conversation(self, conversation_id: str) -> TaskList | None:
         """Return the first/primary board for a conversation (backwards compat)."""
         ...
 
-    async def get_boards_by_conversation(self, conversation_id: str) -> List[TaskList]:
+    async def get_boards_by_conversation(self, conversation_id: str) -> list[TaskList]:
         """Return all agent boards for a conversation (including subagents)."""
         ...
 
     async def update_status(
-        self, task_list_id: str, task_id: str, status: str, note: str = ""
-    ) -> Optional[Task]:
+        self, task_list_id: str, task_id: str, status: TaskStatus | str, note: str = ""
+    ) -> Task | None:
         """Update a task's status (and optional note)."""
         ...
 
-    async def add_tasks(self, task_list_id: str, titles: List[str]) -> List[Task]:
+    async def add_tasks(self, task_list_id: str, titles: list[str]) -> list[Task]:
         """Append new tasks to a board."""
         ...
 
@@ -115,7 +115,7 @@ class TaskStore(Protocol):
         """Remove a task; returns True if found and deleted."""
         ...
 
-    async def increment_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
+    async def increment_retry(self, task_list_id: str, task_id: str) -> Task | None:
         """Agent retry: increment retry_count, move to in_progress.
 
         Returns None when the task is not found OR retry_count has reached
@@ -123,7 +123,7 @@ class TaskStore(Protocol):
         """
         ...
 
-    async def force_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
+    async def force_retry(self, task_list_id: str, task_id: str) -> Task | None:
         """User override: reset retry_count to 0 and set in_progress.
 
         Works on both failed and abandoned tasks.
@@ -132,6 +132,6 @@ class TaskStore(Protocol):
 
     async def update_task_title(
         self, task_list_id: str, task_id: str, title: str
-    ) -> Optional[Task]:
+    ) -> Task | None:
         """Rename a task."""
         ...

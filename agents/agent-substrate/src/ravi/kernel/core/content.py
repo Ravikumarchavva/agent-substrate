@@ -24,7 +24,7 @@ for each LLM API.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -104,7 +104,7 @@ class DataBlock(BaseModel):
 
     type: Literal["data"] = "data"
     data: JsonObject
-    schema_id: Optional[str] = None
+    schema_id: str | None = None
 
     model_config = {"frozen": True}
 
@@ -124,7 +124,7 @@ class ErrorBlock(BaseModel):
     type: Literal["error"] = "error"
     error_type: str
     message: str
-    details: Optional[JsonObject] = None
+    details: JsonObject | None = None
     recoverable: bool = True
 
     model_config = {"frozen": True}
@@ -152,9 +152,9 @@ class ImageBlock(BaseModel):
     """
 
     type: Literal["image"] = "image"
-    url: Optional[str] = None
-    data: Optional[bytes] = None
-    file_id: Optional[str] = None
+    url: str | None = None
+    data: bytes | None = None
+    file_id: str | None = None
     media_type: str = "image/jpeg"
 
     model_config = _MEDIA_CONFIG  # type: ignore[assignment]
@@ -177,10 +177,10 @@ class AudioBlock(BaseModel):
     """
 
     type: Literal["audio"] = "audio"
-    url: Optional[str] = None
-    data: Optional[bytes] = None
+    url: str | None = None
+    data: bytes | None = None
     media_type: str = "audio/wav"
-    transcript: Optional[str] = None
+    transcript: str | None = None
 
     model_config = _MEDIA_CONFIG  # type: ignore[assignment]
 
@@ -203,8 +203,8 @@ class VideoBlock(BaseModel):
     """
 
     type: Literal["video"] = "video"
-    url: Optional[str] = None
-    data: Optional[bytes] = None
+    url: str | None = None
+    data: bytes | None = None
     media_type: str = "video/mp4"
 
     model_config = _MEDIA_CONFIG  # type: ignore[assignment]
@@ -226,11 +226,11 @@ class DocumentBlock(BaseModel):
     """
 
     type: Literal["document"] = "document"
-    url: Optional[str] = None
-    data: Optional[bytes] = None
-    file_id: Optional[str] = None
+    url: str | None = None
+    data: bytes | None = None
+    file_id: str | None = None
     media_type: str = "application/pdf"
-    filename: Optional[str] = None
+    filename: str | None = None
 
     model_config = _MEDIA_CONFIG  # type: ignore[assignment]
 
@@ -368,7 +368,7 @@ class ChatMessage(BaseModel):
 
     role: str
     content: list["ContentBlock"] = Field(default_factory=list)
-    name: Optional[str] = None
+    name: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"frozen": True}
@@ -379,20 +379,18 @@ class ChatMessage(BaseModel):
 # ---------------------------------------------------------------------------
 
 ContentBlock = Annotated[
-    Union[
-        TextBlock,
-        ImageBlock,
-        AudioBlock,
-        VideoBlock,
-        DocumentBlock,
-        DataBlock,
-        CodeBlock,
-        ErrorBlock,
-        ToolUseBlock,
-        ToolResultBlock,
-        ThinkingBlock,
-        UIResourceBlock,
-    ],
+    TextBlock
+    | ImageBlock
+    | AudioBlock
+    | VideoBlock
+    | DocumentBlock
+    | DataBlock
+    | CodeBlock
+    | ErrorBlock
+    | ToolUseBlock
+    | ToolResultBlock
+    | ThinkingBlock
+    | UIResourceBlock,
     Field(discriminator="type"),
 ]
 """Universal multimodal payload primitive.

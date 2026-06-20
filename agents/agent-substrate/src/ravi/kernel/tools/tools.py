@@ -54,7 +54,6 @@ from typing import (
     Literal,
     Protocol,
     TypeGuard,
-    Union,
 )
 
 from pydantic import BaseModel, Field
@@ -247,7 +246,7 @@ class ProviderSpec(BaseModel):
     model_config = {"frozen": True}
 
 
-ToolSpec = Annotated[Union[FunctionSpec, ProviderSpec], Field(discriminator="kind")]
+ToolSpec = Annotated[FunctionSpec | ProviderSpec, Field(discriminator="kind")]
 """Discriminated union of all tool wire declarations."""
 
 

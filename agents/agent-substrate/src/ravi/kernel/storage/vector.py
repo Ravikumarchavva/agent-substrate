@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 from ravi.kernel.core.content import ContentBlock, TextBlock, content_blocks_to_str
 
@@ -34,7 +34,7 @@ class Document:
 
     content: list[ContentBlock] = field(default_factory=list)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    embedding: Optional[list[float]] = None
+    embedding: list[float] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     # ── Convenience constructors ───────────────────────────────────────────
@@ -108,7 +108,7 @@ class VectorStore(Protocol):
         *,
         collection: str = "default",
         limit: int = 5,
-        filter: Optional[dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
     ) -> list[SearchResult]: ...
 
     async def get(

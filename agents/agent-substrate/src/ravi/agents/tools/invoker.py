@@ -37,6 +37,7 @@ from ravi.kernel.tools.chain import (
     InvocationResult,
 )
 from ravi.kernel.core.content import ImageBlock, JsonObject
+from ravi.kernel.core.identity import AgentId
 from ravi.kernel.messaging.stream import AgentProgress, AgentStep
 from ravi.kernel.tools import (
     ToolCallRequest,
@@ -165,6 +166,17 @@ class ToolInvoker:
         policy = self._policy
         tool_name = call.name
 
+        # Resolve agent_id and run_id for progress reporting
+        agent_id = None
+        run_id = ""
+        if ctx is not None:
+            if hasattr(ctx, "agent") and ctx.agent is not None and hasattr(ctx.agent, "id"):
+                agent_id = ctx.agent.id
+            elif hasattr(ctx, "agent_id") and ctx.agent_id is not None:
+                agent_id = ctx.agent_id
+            if hasattr(ctx, "run_id"):
+                run_id = ctx.run_id
+
         # 1. Budget check
         if session._call_count >= policy.max_tool_calls:
             return InvocationResult(
@@ -248,7 +260,12 @@ class ToolInvoker:
         # 6. Emit progress: TOOL_CALL
         if progress_sink is not None:
             _emit_progress(
-                progress_sink, AgentStep.TOOL_CALL, tool_name, session._call_count
+                progress_sink,
+                AgentStep.TOOL_CALL,
+                f"Executing tool {tool_name}",
+                session._call_count,
+                agent_id=agent_id,
+                run_id=run_id,
             )
 
         # 7. Execute with per-call timeout
@@ -266,7 +283,12 @@ class ToolInvoker:
         # 8. Emit progress: TOOL_RESULT
         if progress_sink is not None:
             _emit_progress(
-                progress_sink, AgentStep.TOOL_RESULT, tool_name, session._call_count
+                progress_sink,
+                AgentStep.TOOL_RESULT,
+                f"Tool {tool_name} finished",
+                session._call_count,
+                agent_id=agent_id,
+                run_id=run_id,
             )
 
         # 9. Result shaping
@@ -407,15 +429,29 @@ def _digest(arguments: JsonObject) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-def _emit_progress(sink: Any, step: AgentStep, tool_name: str, seq: int) -> None:
+def _emit_progress(
+    sink: Any,
+    step: AgentStep,
+    content: str,
+    seq: int,
+    agent_id: AgentId | None = None,
+    run_id: str = "",
+) -> None:
     try:
-        progress = AgentProgress(step=step, data={"tool": tool_name, "seq": seq})
+        aid = agent_id or AgentId(type="chain", key="tool_invoker")
+        progress = AgentProgress(
+            agent_id=aid,
+            step=step,
+            content=content,
+            run_id=run_id,
+            seq=seq,
+        )
         if asyncio.iscoroutinefunction(sink):
             asyncio.ensure_future(sink(progress))
         elif callable(sink):
             sink(progress)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to emit progress: %s", exc)
 
 
 __all__ = ["ToolInvoker", "InvokerSession"]

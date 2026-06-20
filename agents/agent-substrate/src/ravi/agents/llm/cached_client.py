@@ -26,6 +26,7 @@ from ravi.logger import setup_logging
 
 if TYPE_CHECKING:
     from ravi.agents.llm.cache import SemanticCache
+    from ravi.kernel.agent.runtime_context import RunMeta
 
 logger = setup_logging()
 
@@ -50,6 +51,7 @@ class CachedModelClient:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
     ) -> LLMResponse:
         cacheable = not options.tools
 
@@ -60,7 +62,7 @@ class CachedModelClient:
                 if cached is not None:
                     return LLMResponse(content=[TextBlock(text=cached)], usage=Usage())
 
-        result = await self._inner.generate(messages, options=options)
+        result = await self._inner.generate(messages, options=options, ctx=ctx)
 
         if cacheable and result.content:
             query_text = self._extract_query(messages)
@@ -77,8 +79,9 @@ class CachedModelClient:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
-        return self._inner.generate_stream(messages, options=options)
+        return self._inner.generate_stream(messages, options=options, ctx=ctx)
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
         return await self._inner.count_tokens(messages)

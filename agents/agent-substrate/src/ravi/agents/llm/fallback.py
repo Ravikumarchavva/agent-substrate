@@ -17,12 +17,15 @@ Usage::
 
 from __future__ import annotations
 
-from typing import AsyncIterator
+from typing import TYPE_CHECKING, AsyncIterator
 
 from ravi.kernel.llm import GenerationOptions, LLMClient, LLMResponse
 from ravi.kernel import ChatMessage
 from ravi.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from ravi.logger import setup_logging
+
+if TYPE_CHECKING:
+    from ravi.kernel.agent.runtime_context import RunMeta
 
 logger = setup_logging()
 
@@ -52,11 +55,12 @@ class FallbackClient:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
     ) -> LLMResponse:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
-                return await client.generate(messages, options=options)
+                return await client.generate(messages, options=options, ctx=ctx)
             except Exception as exc:
                 last_exc = exc
                 next_msg = (
@@ -78,19 +82,21 @@ class FallbackClient:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
-        return self._do_stream(messages, options=options)
+        return self._do_stream(messages, options=options, ctx=ctx)
 
     async def _do_stream(
         self,
         messages: list[ChatMessage],
         *,
         options: GenerationOptions,
+        ctx: RunMeta | None = None,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
-                async for chunk in client.generate_stream(messages, options=options):
+                async for chunk in client.generate_stream(messages, options=options, ctx=ctx):
                     yield chunk
                 return
             except Exception as exc:

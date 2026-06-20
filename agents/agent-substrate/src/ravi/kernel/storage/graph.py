@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ class GraphStore(Protocol):
         entity_id: str,
         *,
         depth: int = 1,
-        relationship_types: Optional[list[str]] = None,
+        relationship_types: list[str] | None = None,
     ) -> SubGraph: ...
 
     async def delete_entity(self, entity_id: str) -> bool: ...
@@ -74,7 +74,7 @@ class CypherCapable(Protocol):
     """
 
     async def query_cypher(
-        self, query: str, params: Optional[dict[str, Any]] = None
+        self, query: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]: ...
 
 

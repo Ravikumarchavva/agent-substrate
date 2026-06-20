@@ -20,6 +20,7 @@ before starting — there is no migration framework; schema is declarative.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from typing import TYPE_CHECKING, List, Optional
 from uuid import uuid4
@@ -208,14 +209,18 @@ class PgTaskStore:
         boards = await self.get_boards_by_conversation(conversation_id)
         changed: List[TaskList] = []
         for task_list in boards:
+            new_tasks = []
             mutated = False
             for task in task_list.tasks:
                 if task.status == TaskStatus.IN_PROGRESS:
-                    task.status = TaskStatus.SUCCEEDED
+                    new_tasks.append(dataclasses.replace(task, status=TaskStatus.SUCCEEDED))
                     mutated = True
+                else:
+                    new_tasks.append(task)
             if mutated:
-                await self._save_tasks(task_list)
-                changed.append(task_list)
+                updated = dataclasses.replace(task_list, tasks=new_tasks)
+                await self._save_tasks(updated)
+                changed.append(updated)
         return changed
 
     # ------------------------------------------------------------------
@@ -228,18 +233,21 @@ class PgTaskStore:
         task_list = await self.get_task_list(task_list_id)
         if not task_list:
             return None
-        updated: Task | None = None
+        new_task: Task | None = None
         for task in task_list.tasks:
             if task.id == task_id:
-                task.status = status
-                if note:
-                    task.note = note
-                updated = task
+                new_task = dataclasses.replace(
+                    task, status=status, note=note if note else task.note
+                )
                 break
-        if updated is None:
+        if new_task is None:
             return None
-        await self._save_tasks(task_list)
-        return updated
+        updated_list = dataclasses.replace(
+            task_list,
+            tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+        )
+        await self._save_tasks(updated_list)
+        return new_task
 
     # ------------------------------------------------------------------
     # Add / Delete
@@ -260,8 +268,8 @@ class PgTaskStore:
             for i, t in enumerate(titles)
             if t.strip()
         ]
-        task_list.tasks.extend(new_tasks)
-        await self._save_tasks(task_list)
+        updated_list = dataclasses.replace(task_list, tasks=task_list.tasks + new_tasks)
+        await self._save_tasks(updated_list)
         return new_tasks
 
     async def delete_task(self, task_list_id: str, task_id: str) -> bool:
@@ -269,10 +277,10 @@ class PgTaskStore:
         if not task_list:
             return False
         before = len(task_list.tasks)
-        task_list.tasks = [t for t in task_list.tasks if t.id != task_id]
-        if len(task_list.tasks) == before:
+        new_tasks = [t for t in task_list.tasks if t.id != task_id]
+        if len(new_tasks) == before:
             return False
-        await self._save_tasks(task_list)
+        await self._save_tasks(dataclasses.replace(task_list, tasks=new_tasks))
         return True
 
     async def increment_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
@@ -285,13 +293,17 @@ class PgTaskStore:
             if task.id == task_id:
                 if task.retry_count >= task_list.max_retries:
                     return None
-                task.retry_count += 1
-                task.status = TaskStatus.IN_PROGRESS
-                updated = task
+                updated = dataclasses.replace(
+                    task, retry_count=task.retry_count + 1, status=TaskStatus.IN_PROGRESS
+                )
                 break
         if updated is None:
             return None
-        await self._save_tasks(task_list)
+        new_list = dataclasses.replace(
+            task_list,
+            tasks=[updated if t.id == task_id else t for t in task_list.tasks],
+        )
+        await self._save_tasks(new_list)
         return updated
 
     async def force_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
@@ -302,14 +314,17 @@ class PgTaskStore:
         updated: Task | None = None
         for task in task_list.tasks:
             if task.id == task_id:
-                task.retry_count = 0
-                task.status = TaskStatus.IN_PROGRESS
-                task.note = ""
-                updated = task
+                updated = dataclasses.replace(
+                    task, retry_count=0, status=TaskStatus.IN_PROGRESS, note=""
+                )
                 break
         if updated is None:
             return None
-        await self._save_tasks(task_list)
+        new_list = dataclasses.replace(
+            task_list,
+            tasks=[updated if t.id == task_id else t for t in task_list.tasks],
+        )
+        await self._save_tasks(new_list)
         return updated
 
     async def update_task_title(
@@ -321,12 +336,15 @@ class PgTaskStore:
         updated: Task | None = None
         for task in task_list.tasks:
             if task.id == task_id:
-                task.title = title.strip()
-                updated = task
+                updated = dataclasses.replace(task, title=title.strip())
                 break
         if updated is None:
             return None
-        await self._save_tasks(task_list)
+        new_list = dataclasses.replace(
+            task_list,
+            tasks=[updated if t.id == task_id else t for t in task_list.tasks],
+        )
+        await self._save_tasks(new_list)
         return updated
 
     # ------------------------------------------------------------------

@@ -4,7 +4,7 @@
 [data-md-color-scheme="slate"] {
   --md-default-bg-color: #0c0d12 !important;
   --md-default-bg-color--light: #161822 !important;
-  --md-default-fg-color: #eceef2 !important;
+  --md-default-fg-color: #d1d5db !important; /* Silver-grey body text */
   --md-default-fg-color--light: #9aa1b1 !important;
   --md-default-fg-color--lighter: #64748b !important;
   --md-default-fg-color--lightest: #475569 !important;
@@ -17,9 +17,42 @@
   --md-code-fg-color: #e2e8f0 !important;
   
   --md-accent-fg-color: #f97316 !important;
+  
+  /* Starlight Variable Mapping */
+  --border-color: rgba(255, 255, 255, 0.08) !important;
+  --border-color-light: rgba(255, 255, 255, 0.05) !important;
+  --nav-hover-bg: rgba(255, 255, 255, 0.04) !important;
+  --nav-active-bg: rgba(255, 255, 255, 0.07) !important;
+  --text-heading: #ffffff !important;
 }
 
-/* Base font-size adjustments and line-heights */
+/* Color system overrides for Default (light mode) */
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #ffffff !important;
+  --md-default-bg-color--light: #f8fafc !important;
+  --md-default-fg-color: #1e293b !important; /* Dark slate text */
+  --md-default-fg-color--light: #475569 !important;
+  --md-default-fg-color--lighter: #64748b !important;
+  --md-default-fg-color--lightest: #94a3b8 !important;
+  
+  --md-primary-fg-color: #ffffff !important;
+  --md-primary-fg-color--dark: #f1f5f9 !important;
+  --md-primary-bg-color: #0f172a !important;
+  
+  --md-code-bg-color: #f8fafc !important;
+  --md-code-fg-color: #0f172a !important;
+  
+  --md-accent-fg-color: #f97316 !important;
+  
+  /* Starlight Variable Mapping */
+  --border-color: rgba(0, 0, 0, 0.08) !important;
+  --border-color-light: rgba(0, 0, 0, 0.04) !important;
+  --nav-hover-bg: rgba(0, 0, 0, 0.03) !important;
+  --nav-active-bg: rgba(0, 0, 0, 0.06) !important;
+  --text-heading: #0f172a !important;
+}
+
+/* Base font-size adjustments and letter spacing */
 body, input {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
   letter-spacing: -0.01em;
@@ -33,20 +66,25 @@ body, input {
 /* ── Header & Tabs ── */
 .md-header {
   box-shadow: none !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  background-color: #0c0d12 !important;
-  height: 3.5rem;
+  border-bottom: 1px solid var(--border-color) !important;
+  background-color: var(--md-primary-fg-color) !important;
+  height: 3.8rem;
 }
 
 .md-header__title {
   font-size: 0.95rem;
   font-weight: 600;
+  color: var(--text-heading) !important;
+}
+
+.md-header__button {
+  color: var(--text-heading) !important;
 }
 
 .md-tabs {
   box-shadow: none !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  background-color: #0c0d12 !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  background-color: var(--md-primary-fg-color) !important;
 }
 
 .md-tabs__link {
@@ -59,12 +97,12 @@ body, input {
 
 .md-tabs__link--active,
 .md-tabs__link:hover {
-  color: #ffffff !important;
+  color: var(--text-heading) !important;
 }
 
 /* ── Sidebars Navigation ── */
 .md-sidebar {
-  padding-top: 1.5rem;
+  padding-top: 2rem;
 }
 
 /* Category header links (non-clickable folder titles) */
@@ -90,15 +128,15 @@ body, input {
 }
 
 .md-nav__link:hover {
-  color: #ffffff !important;
-  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: var(--text-heading) !important;
+  background-color: var(--nav-hover-bg) !important;
 }
 
 /* Active navigation item pill style */
 .md-nav__link--active,
 .md-nav__item--active > .md-nav__link {
-  color: #ffffff !important;
-  background-color: rgba(255, 255, 255, 0.07) !important;
+  color: var(--text-heading) !important;
+  background-color: var(--nav-active-bg) !important;
   font-weight: 500 !important;
 }
 
@@ -107,16 +145,21 @@ body, input {
   display: none !important;
 }
 
-/* ── Content & Typography ── */
+/* ── Center Content Area (React Markdown / Starlight style) ── */
 .md-content {
-  padding-top: 1.5rem;
+  padding-top: 2rem;
+}
+
+.md-typeset {
+  font-size: 0.88rem !important;
+  line-height: 1.75 !important;
 }
 
 .md-typeset h1 {
   font-size: 2.2rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  color: #ffffff !important;
+  color: var(--text-heading) !important;
   margin-bottom: 1.5rem;
 }
 
@@ -124,93 +167,163 @@ body, input {
   font-size: 1.4rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #ffffff !important;
-  margin-top: 2rem;
+  color: var(--text-heading) !important;
+  margin-top: 2.5rem;
   margin-bottom: 1rem;
+  border-bottom: none !important; /* flat look like Starlight */
 }
 
 .md-typeset h3 {
   font-size: 1.1rem;
   font-weight: 600;
   letter-spacing: -0.015em;
-  color: #ffffff !important;
+  color: var(--text-heading) !important;
+  margin-top: 1.8rem;
+  margin-bottom: 0.8rem;
 }
 
 .md-typeset p {
-  color: var(--md-default-fg-color);
+  color: var(--md-default-fg-color) !important;
+  margin-top: 1rem;
+  margin-bottom: 1.2rem;
+  line-height: 1.75;
+}
+
+/* Lists styling */
+.md-typeset ol, 
+.md-typeset ul {
+  margin-top: 0.8rem;
+  margin-bottom: 1.2rem;
+  padding-left: 1.5rem;
+}
+
+.md-typeset li {
+  margin-bottom: 0.5rem;
   line-height: 1.7;
+  color: var(--md-default-fg-color) !important;
+}
+
+.md-typeset li p {
+  margin: 0 !important;
+  display: inline;
+}
+
+.md-typeset strong {
+  color: var(--text-heading) !important; /* High contrast bold text */
+  font-weight: 600;
 }
 
 /* Table styling: border-based and clean */
 .md-typeset table:not([class]) {
   border-collapse: collapse;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--border-color) !important;
   border-radius: 8px !important;
   overflow: hidden;
   display: table;
   width: 100%;
+  margin: 1.5rem 0;
 }
 
 .md-typeset th {
-  background-color: rgba(255, 255, 255, 0.02) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  color: #ffffff !important;
+  background-color: var(--nav-hover-bg) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  color: var(--text-heading) !important;
   font-weight: 600;
   padding: 10px 16px !important;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
 }
 
 .md-typeset td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-bottom: 1px solid var(--border-color-light) !important;
   padding: 12px 16px !important;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   line-height: 1.5;
 }
 
-/* ── Code & Syntax Highlighting ── */
+/* ── Code & Syntax Highlighting (Astro/Shiki style) ── */
 .md-typeset pre {
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--border-color) !important;
   border-radius: 8px !important;
   box-shadow: none !important;
+  margin: 1.5rem 0 !important;
+  background-color: var(--md-code-bg-color) !important;
 }
 
 .md-typeset code {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--nav-hover-bg);
   border-radius: 4px;
   font-family: "JetBrains Mono", SFMono-Regular, Consolas, Menlo, monospace;
-  font-size: 0.8em;
+  font-size: 0.82em;
   padding: 2px 5px;
+  color: var(--md-code-fg-color) !important;
 }
 
 .md-typeset pre code {
   background-color: transparent !important;
-  padding: 0 !important;
+  padding: 0.8rem 1rem !important;
+  display: block;
+  overflow-x: auto;
+}
+
+/* Code block titles / filenames headers */
+.md-code__title,
+.highlight .filename {
+  background-color: var(--md-default-bg-color--light) !important;
+  border: 1px solid var(--border-color) !important;
+  border-bottom: none !important;
+  border-top-left-radius: 8px !important;
+  border-top-right-radius: 8px !important;
+  color: var(--md-code-fg-color) !important;
+  font-family: "Inter", sans-serif !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  padding: 6px 16px !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 0 !important;
+  display: inline-block;
+  width: 100%;
+}
+
+/* Merge code box seamlessly with its top title header if present */
+.md-code__title + .highlight pre,
+.md-code__title + pre,
+.highlight .filename + pre {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+  margin-top: 0 !important;
 }
 
 /* ── Admonition cards (Alerts) ── */
 .md-typeset .admonition,
 .md-typeset details {
   border-radius: 8px !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--border-color) !important;
   box-shadow: none !important;
+  margin: 1.5rem 0 !important;
 }
 
 .md-typeset .admonition-title,
 .md-typeset summary {
   font-weight: 600 !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  font-size: 0.82rem !important;
+  padding: 10px 16px !important;
+}
+
+.md-typeset .admonition > :last-child {
+  padding: 12px 16px !important;
 }
 
 /* ── Search Bar Styling ── */
 .md-search__form {
   border-radius: 8px !important;
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background-color: var(--nav-hover-bg) !important;
+  border: 1px solid var(--border-color) !important;
   transition: all 0.15s ease;
 }
 
 .md-search__form:focus-within {
-  background-color: #0c0d12 !important;
+  background-color: var(--md-default-bg-color) !important;
   border-color: var(--md-accent-fg-color) !important;
 }
 
@@ -225,10 +338,10 @@ body, input {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(128, 128, 128, 0.2);
   border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(128, 128, 128, 0.4);
 }

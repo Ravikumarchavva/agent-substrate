@@ -153,7 +153,7 @@ The shape stays the same whether you add tools, guardrails, streaming, HITL appr
 
 ## Architecture at a glance
 
-<div class="architecture-flow" markdown>
+<div class="architecture-flow">
   <div class="arch-box l0">
     <div class="arch-layer-header">
       <span class="arch-num">L0</span>

@@ -73,14 +73,18 @@ class Inbox(Protocol):
     consumer group (Stage 2+).
     """
 
-    async def deliver(self, agent_id: AgentId, msg: Message) -> bool:
+    async def deliver(
+        self, agent_id: AgentId, msg: Message, *, notify: bool = True
+    ) -> bool:
         """Deliver ``msg`` to ``agent_id``'s inbox.
 
         Returns ``True`` when the message was appended.  Returns ``False``
         when ``msg.id`` was already in the inbox (idempotent re-delivery).
 
-        Implementations MUST trigger the Scheduler to enqueue a wakeup for
-        ``agent_id`` when returning ``True`` on a dormant agent.
+        When ``notify`` is ``True`` (the default), implementations MUST trigger
+        the deliver-hook so a dormant agent gets a run spawned. Callers that
+        enqueue their own run (e.g. ``Runtime.submit``) pass ``notify=False`` to
+        suppress the hook and avoid spawning a duplicate run.
         """
         ...
 

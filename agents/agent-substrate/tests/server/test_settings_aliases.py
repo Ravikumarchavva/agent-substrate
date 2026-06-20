@@ -5,7 +5,10 @@ from pathlib import Path
 from ravi.config import Settings
 
 
-def test_settings_accepts_common_provider_env_aliases(tmp_path: Path) -> None:
+def test_settings_accepts_common_provider_env_aliases(tmp_path: Path, monkeypatch) -> None:
+    # Clear any real env vars so they don't shadow the test .env file.
+    for key in ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text(
         (

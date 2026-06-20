@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+pytestmark = [pytest.mark.requires_postgres]
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -311,7 +313,9 @@ async def test_pg_scheduler_release_completed(pg_pool) -> None:
     sched.register_run(run_id, agent_id)
     await sched.enqueue(run_id, priority=5, tenant="test")
     leases = await sched.lease(worker_id="w1", capacity=100)
-    target = next(lease for lease in leases if lease.run_id == run_id)
+    matching = [lease for lease in leases if lease.run_id == run_id]
+    assert matching, f"run_id {run_id} not found in leases"
+    target = matching[0]
 
     await sched.release(target, status=RunStatus.COMPLETED)
     assert await sched.get_status(run_id) == RunStatus.COMPLETED

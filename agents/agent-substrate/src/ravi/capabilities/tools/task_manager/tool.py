@@ -18,7 +18,7 @@ Usage pattern:
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Awaitable, Callable, Dict
 
 from ravi.kernel.storage.tasks import TaskStatus
 from ravi.kernel.tools import ToolExecutionResult, ToolUI
@@ -59,7 +59,10 @@ class TaskManagerTool:
     description: str = (
         "Create and update a visible task-board for complex, multi-step work. "
         "ALWAYS call action=create_list FIRST with all planned steps. "
-        "Then call start_task before each step and complete_task after. "
+        "Work strictly ONE step at a time: call start_task, do the actual work, "
+        "then call complete_task BEFORE you start the next step. "
+        "Never leave a step in progress — you MUST complete (or fail) the final "
+        "step before writing your final answer to the user. "
         "Call fail_task (with an optional note explaining why) when a step cannot complete. "
         "Call block_task when a step is waiting on something external. "
         "Call retry_task on failed tasks — it auto-advances to 'abandoned' when retries are exhausted. "
@@ -109,19 +112,23 @@ class TaskManagerTool:
                 "description": "Max retry attempts per failed task (default 3). Only used with create_list.",
                 "default": 3,
             },
-            "thread_id": {
-                "type": "string",
-                "description": "Conversation / thread ID (injected by the framework).",
-            },
         },
         "required": ["action"],
         "additionalProperties": False,
     }
 
-    def __init__(self, store: Any) -> None:
+    def __init__(
+        self,
+        store: Any,
+        *,
+        event_sink: Callable[[str, dict], Awaitable[None]] | None = None,
+    ) -> None:
         self._store = store
         # (conv_id, agent_id) -> task_list_id
         self._task_lists: Dict[tuple[str, str], str | None] = {}
+        # Optional (conversation_id, board_dict) sink used to stream subagent
+        # board updates live — their run's events don't reach the parent stream.
+        self._event_sink = event_sink
 
     @property
     def store(self) -> Any:
@@ -164,6 +171,8 @@ class TaskManagerTool:
             if not tasks:
                 return _err("tasks[] is required for create_list")
 
+            tasks = _dedupe_titles(tasks)
+
             task_list = await store.create_task_list(
                 conv_id,
                 tasks,
@@ -175,7 +184,7 @@ class TaskManagerTool:
             self._task_lists[cache_key] = task_list.id
 
             names = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(tasks))
-            return self._board_result(
+            return await self._board_result(
                 f"Task board created ({len(tasks)} tasks):\n{names}\n\n"
                 f"Now call start_task before each step and complete_task after.",
                 task_list.to_dict(),
@@ -192,6 +201,19 @@ class TaskManagerTool:
 
         # ── start_task ───────────────────────────────────────────────
         if action == "start_task":
+            # Enforce one-at-a-time: auto-complete any task left in_progress so
+            # the board always advances even if the model forgot complete_task.
+            stale = await self._first_with_status(
+                TaskStatus.IN_PROGRESS, store, task_list_id
+            )
+            while stale:
+                await store.update_status(
+                    task_list_id, stale, TaskStatus.SUCCEEDED
+                )
+                stale = await self._first_with_status(
+                    TaskStatus.IN_PROGRESS, store, task_list_id
+                )
+
             # Accept planned or blocked tasks
             resolved = await self._resolve_task_id(
                 task_id, TaskStatus.PLANNED, store, task_list_id
@@ -209,7 +231,7 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            return self._board_result(
+            return await self._board_result(
                 f"Started: {updated.title}", await self._board(store, task_list_id)
             )
 
@@ -227,7 +249,7 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            return self._board_result(
+            return await self._board_result(
                 f"Completed: {updated.title}", await self._board(store, task_list_id)
             )
 
@@ -249,7 +271,7 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            return self._board_result(
+            return await self._board_result(
                 f"Marked as failed: {updated.title}",
                 await self._board(store, task_list_id),
             )
@@ -268,7 +290,7 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task not found after resolution (id={resolved!r}).")
 
-            return self._board_result(
+            return await self._board_result(
                 f"Blocked: {updated.title}", await self._board(store, task_list_id)
             )
 
@@ -287,14 +309,14 @@ class TaskManagerTool:
                     task_list_id, resolved, TaskStatus.ABANDONED
                 )
                 title = abandoned.title if abandoned else resolved
-                return self._board_result(
+                return await self._board_result(
                     f"Task '{title}' has exhausted all retries and is now abandoned.",
                     await self._board(store, task_list_id),
                 )
 
             task_list = await store.get_task_list(task_list_id)
             max_r = task_list.max_retries if task_list else max_retries
-            return self._board_result(
+            return await self._board_result(
                 f"Retrying '{updated.title}' (attempt {updated.retry_count}/{max_r}).",
                 await self._board(store, task_list_id),
             )
@@ -304,8 +326,25 @@ class TaskManagerTool:
             if not tasks:
                 return _err("tasks[] is required for add_task")
 
-            new_tasks = await store.add_tasks(task_list_id, tasks)
-            return self._board_result(
+            # Skip titles already on the board so repeated or confused calls
+            # can't pile up phantom duplicate steps.
+            board = await store.get_task_list(task_list_id)
+            existing = (
+                {t.title.strip().lower() for t in board.tasks} if board else set()
+            )
+            fresh = [
+                t
+                for t in _dedupe_titles(tasks)
+                if t.strip().lower() not in existing
+            ]
+            if not fresh:
+                return await self._board_result(
+                    "No new tasks added — all titles already exist on the board.",
+                    await self._board(store, task_list_id),
+                )
+
+            new_tasks = await store.add_tasks(task_list_id, fresh)
+            return await self._board_result(
                 f"Added {len(new_tasks)} task(s).",
                 await self._board(store, task_list_id),
             )
@@ -319,7 +358,7 @@ class TaskManagerTool:
             if not deleted:
                 return _err(f"Task {task_id!r} not found.")
 
-            return self._board_result(
+            return await self._board_result(
                 f"Deleted task {task_id}.", await self._board(store, task_list_id)
             )
 
@@ -332,7 +371,7 @@ class TaskManagerTool:
             if not updated:
                 return _err(f"Task {task_id!r} not found.")
 
-            return self._board_result(
+            return await self._board_result(
                 f"Renamed task to: {updated.title}",
                 await self._board(store, task_list_id),
             )
@@ -396,13 +435,35 @@ class TaskManagerTool:
         tl = await store.get_task_list(task_list_id)
         return tl.to_dict() if tl else {}
 
-    @staticmethod
-    def _board_result(message: str, task_list: Dict[str, Any]) -> ToolExecutionResult:
+    async def _board_result(
+        self, message: str, task_list: Dict[str, Any]
+    ) -> ToolExecutionResult:
+        # Stream subagent board updates onto the thread bridge so they appear
+        # live; root-agent boards already flow via the run's event-log tail.
+        if self._event_sink and task_list.get("parent_agent_id"):
+            conv_id = task_list.get("conversation_id")
+            if conv_id:
+                try:
+                    await self._event_sink(str(conv_id), task_list)
+                except Exception:
+                    logger.debug("board event sink failed", exc_info=True)
         return ToolExecutionResult(
             content=[TextBlock(text=message)],
             is_error=False,
             structured_content={"task_list": task_list},
         )
+
+
+def _dedupe_titles(titles: list[str]) -> list[str]:
+    """Drop blank and case-insensitively duplicate titles, preserving order."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for title in titles:
+        key = title.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            result.append(title)
+    return result
 
 
 def _err(message: str) -> ToolExecutionResult:

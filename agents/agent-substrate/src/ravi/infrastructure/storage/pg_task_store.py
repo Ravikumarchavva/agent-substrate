@@ -197,6 +197,27 @@ class PgTaskStore:
             rows = result.fetchall()
         return [_row_to_task_list(r) for r in rows]
 
+    async def settle_conversation(self, conversation_id: str) -> List[TaskList]:
+        """Settle a conversation's boards when its run ends.
+
+        Flips any lingering ``in_progress`` task to ``succeeded`` so the UI
+        board stops spinning after the agent has produced its final answer.
+        Planned/blocked/failed/abandoned tasks are left untouched. Returns the
+        boards that changed.
+        """
+        boards = await self.get_boards_by_conversation(conversation_id)
+        changed: List[TaskList] = []
+        for task_list in boards:
+            mutated = False
+            for task in task_list.tasks:
+                if task.status == TaskStatus.IN_PROGRESS:
+                    task.status = TaskStatus.SUCCEEDED
+                    mutated = True
+            if mutated:
+                await self._save_tasks(task_list)
+                changed.append(task_list)
+        return changed
+
     # ------------------------------------------------------------------
     # Update status
     # ------------------------------------------------------------------

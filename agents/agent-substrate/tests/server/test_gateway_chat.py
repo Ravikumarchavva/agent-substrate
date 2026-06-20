@@ -13,6 +13,8 @@ import pytest
 # Use a test client for the gateway app
 from ravi.serving.services.gateway.app import app
 
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_redis]
+
 
 @pytest.fixture
 def test_client():

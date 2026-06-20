@@ -63,6 +63,7 @@ class AgentStreamSession:
         is_disconnected: DisconnectCheck | None = None,
         cancel_event: asyncio.Event | None = None,
         persister: Persister | None = None,
+        on_complete: Callable[[], Awaitable[list[dict]]] | None = None,
         poll_interval: float = 0.2,
         spec: dict | None = None,
     ) -> None:
@@ -73,6 +74,7 @@ class AgentStreamSession:
         self._is_disconnected = is_disconnected
         self._cancel = cancel_event or asyncio.Event()
         self._persister = persister
+        self._on_complete = on_complete
         self._poll = poll_interval
         self._spec = spec
         self._queue: asyncio.Queue[WireEvent | object] = asyncio.Queue()
@@ -88,7 +90,9 @@ class AgentStreamSession:
             await self._runtime.register(self._agent)
             # max_retries=0: interactive chat runs must not be retried with the
             # same run_id — retries replay the journal and re-hit journaled errors.
-            run_id = await self._runtime.submit(self._agent.id, self._msg, max_retries=0)
+            run_id = await self._runtime.submit(
+                self._agent.id, self._msg, max_retries=0
+            )
             self._run_id = run_id
 
             # Persist the agent spec so it can be rebuilt on cold resume.
@@ -102,7 +106,9 @@ class AgentStreamSession:
 
             text_acc = ""
             tool_calls_acc: list[ToolCallSummary] = []
-            _saw_tool_result = False  # True after tool.result; flush turn on next text.delta
+            _saw_tool_result = (
+                False  # True after tool.result; flush turn on next text.delta
+            )
 
             async def _flush_turn() -> None:
                 nonlocal text_acc, tool_calls_acc, _saw_tool_result
@@ -122,6 +128,7 @@ class AgentStreamSession:
                 kind = entry.kind
                 if kind == "run.completed":
                     await _flush_turn()
+                    await self._settle_task_boards()
                     return "success"
                 if kind == "run.failed":
                     # Persist whatever was accumulated before the failure.
@@ -169,6 +176,25 @@ class AgentStreamSession:
                 self._bridge_signaled = True
                 await self._bridge.signal_done()
         return "success"
+
+    async def _settle_task_boards(self) -> None:
+        """On clean run completion, settle the conversation's plan boards (flip
+        lingering in-progress tasks to succeeded so they stop spinning) and push
+        the updated board(s) to the client. The store mutation persists so
+        reloads stay settled. The settle is injected by the route as a callback
+        to keep the serving layer free of an ``agents`` import."""
+        if self._on_complete is None:
+            return
+        try:
+            for board in await self._on_complete():
+                await self._queue.put(
+                    ToolResultEvent(
+                        tool_name="manage_tasks",
+                        structured_content={"task_list": board},
+                    )
+                )
+        except Exception:
+            logger.debug("task-board settle skipped", exc_info=True)
 
     async def _bridge_worker(self) -> None:
         """Forward HITL / task-board events until the bridge signals done."""

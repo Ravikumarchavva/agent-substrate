@@ -38,13 +38,10 @@ from ravi.serving.monolith.routes.mcp_apps import router as mcp_apps_router
 from ravi.serving.monolith.routes.pipelines import router as pipelines_router
 from ravi.serving.monolith.routes.rag import router as rag_router
 from ravi.serving.monolith.routes.rate_limit import router as rate_limit_router
-from ravi.serving.monolith.routes.spotify_oauth import router as spotify_oauth_router
+from ravi.serving.monolith.routes.connector_tokens import router as connector_tokens_router
 from ravi.serving.monolith.routes.tasks import router as tasks_router
 from ravi.serving.monolith.routes.threads import router as threads_router
 from ravi.serving.monolith.routes.triggers import router as triggers_router
-from ravi.serving.monolith.routes.workspace_oauth import (
-    router as workspace_oauth_router,
-)
 from ravi.serving.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
@@ -235,8 +232,7 @@ def create_app() -> FastAPI:
     app.include_router(feedback_router)
     app.include_router(audio_router)
     app.include_router(mcp_apps_router)
-    app.include_router(spotify_oauth_router)
-    app.include_router(workspace_oauth_router)
+    app.include_router(connector_tokens_router)
     app.include_router(tasks_router)
     app.include_router(pipelines_router)
     app.include_router(triggers_router)

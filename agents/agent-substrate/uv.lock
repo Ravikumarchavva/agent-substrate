@@ -1371,6 +1371,24 @@ wheels = [
 ]
 
 [[package]]
+name = "exa-py"
+version = "2.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpcore" },
+    { name = "httpx" },
+    { name = "openai" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/ef/22dd14f748ce4410df01997f452a39ace65bb7fc48d181e017d675a17f06/exa_py-2.14.0.tar.gz", hash = "sha256:19ea93e143b58753eb27b417e5a584a373913689449d3fa48562089a93777795", size = 62697, upload-time = "2026-06-16T13:54:19.989Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/3c/d1e7e9cdd5445c4e97875bc8ae8a82089b47ee66444df63653233f104740/exa_py-2.14.0-py3-none-any.whl", hash = "sha256:7704cdad1eb2d0eeb5830fbdcc2597c18f30995beb92f8c193954af99c239985", size = 85698, upload-time = "2026-06-16T13:54:23.344Z" },
+]
+
+[[package]]
 name = "executing"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -5271,6 +5289,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "ddgs" },
     { name = "docling" },
+    { name = "exa-py" },
     { name = "fastapi" },
     { name = "google-genai" },
     { name = "httpx" },
@@ -5300,6 +5319,7 @@ dependencies = [
     { name = "redis", extra = ["hiredis"] },
     { name = "rich" },
     { name = "sqlalchemy" },
+    { name = "tavily-python" },
     { name = "tiktoken" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -5324,6 +5344,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=46.0.6" },
     { name = "ddgs", specifier = ">=9.14.4" },
     { name = "docling", specifier = ">=2.0.0" },
+    { name = "exa-py", specifier = ">=2.14.0" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "google-genai", specifier = ">=1.73.0" },
     { name = "httpx", specifier = ">=0.27.0" },
@@ -5353,6 +5374,7 @@ requires-dist = [
     { name = "redis", extras = ["hiredis"], specifier = ">=5.0.0" },
     { name = "rich", specifier = ">=14.3.2" },
     { name = "sqlalchemy", specifier = ">=2.0.46" },
+    { name = "tavily-python", specifier = ">=0.7.26" },
     { name = "tiktoken", specifier = ">=0.12.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
@@ -6182,6 +6204,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/46/58/8c37dea7bbf769b20d58e7ace7e5edfe65b849442b00ffcdd56be88697c6/tabulate-0.10.0.tar.gz", hash = "sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d", size = 91754, upload-time = "2026-03-04T18:55:34.402Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl", hash = "sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3", size = 39814, upload-time = "2026-03-04T18:55:31.284Z" },
+]
+
+[[package]]
+name = "tavily-python"
+version = "0.7.26"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "requests" },
+    { name = "tiktoken" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/29/c2d5056dbf45a80484df5a1bf0d0ae59c611aa9680372c400a278fbf0c50/tavily_python-0.7.26.tar.gz", hash = "sha256:36202728144fce1ef0cece33800f98e3cdeb5f600e6678c50b1232b866a2f509", size = 29647, upload-time = "2026-06-10T18:38:45.231Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/c2/616ebcd49561d74c93099efa45fd5a4af2e528415f01351575980be0ba9e/tavily_python-0.7.26-py3-none-any.whl", hash = "sha256:9b9e7f2d10b3572444e13e9a3bf4f5341975d591cbc1306be04ef89a363e42a7", size = 21940, upload-time = "2026-06-10T18:38:44.127Z" },
 ]
 
 [[package]]

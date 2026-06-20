@@ -92,6 +92,7 @@ def init_llm_clients(settings: Settings) -> LLMClients:
         "anthropic": settings.ANTHROPIC_API_KEY,
         "google": settings.GEMINI_API_KEY,
         "openrouter": settings.OPENROUTER_API_KEY,
+        "nvidia": settings.NVIDIA_API_KEY,
     }
     model_client_kwargs = {
         "openai_base_url": settings.OPENAI_BASE_URL or None,
@@ -276,11 +277,25 @@ async def init_tool_registry(
     from ravi.capabilities.tools import (
         CalculatorTool,
         CurrentTimeTool,
-        ReadUrlTool,
-        WebSearchTool,
     )
+    from ravi.capabilities.tools.web.read_url import ReadUrlTool
+    from ravi.capabilities.tools.web.search import WebSearchTool
 
-    task_tool = TaskManagerTool(store=GlobalTaskStore.get())
+    async def _board_event_sink(conversation_id: str, board: dict) -> None:
+        # Subagent boards run in a separate run whose events never reach the
+        # parent stream; push them onto the thread bridge so they stream live.
+        await bridge_registry.emit(
+            conversation_id,
+            {
+                "type": "tool.result",
+                "tool_name": "manage_tasks",
+                "structured_content": {"task_list": board},
+            },
+        )
+
+    task_tool = TaskManagerTool(
+        store=GlobalTaskStore.get(), event_sink=_board_event_sink
+    )
     ask_tool = AskHumanTool(handler=None, max_requests_per_run=5)  # type: ignore[arg-type]
 
     code_interpreter_tool: Tool | None = None
@@ -303,8 +318,19 @@ async def init_tool_registry(
     registry = Toolbox()
     registry.add(ask_tool)
     registry.add(task_tool)
-    registry.add(WebSearchTool())
-    registry.add(ReadUrlTool())
+    _exa_key = settings.EXA_API_KEY or None
+    _tavily_key = settings.TAVILY_API_KEY or None
+    registry.add(WebSearchTool(
+        exa_api_key=_exa_key,
+        tavily_api_key=_tavily_key,
+        max_results=settings.WEB_SEARCH_MAX_RESULTS,
+        max_chars=settings.WEB_SEARCH_MAX_CHARS,
+    ))
+    registry.add(ReadUrlTool(
+        tavily_api_key=_tavily_key,
+        exa_api_key=_exa_key,
+        max_chars=settings.WEB_READ_MAX_CHARS,
+    ))
     registry.add(CalculatorTool())
     registry.add(CurrentTimeTool())
     if code_interpreter_tool:
@@ -476,7 +502,10 @@ async def build_agent_for_thread(
         CompactionPipeline,
         ContextConfig,
         InMemoryHistoryProvider,
-        SlidingWindowCompaction,
+        SelectiveToolCallCompactionStrategy,
+        TokenBudgetComposedStrategy,
+        ToolResultCompactionStrategy,
+        TruncationStrategy,
     )
     from ravi.agents.core import OrchestratorAgent, ReActAgent, SubAgentConfig
     from ravi.agents.factory import load_session_memory
@@ -484,20 +513,30 @@ async def build_agent_for_thread(
     from ravi.capabilities.tools import (
         CalculatorTool,
         CurrentTimeTool,
-        ReadUrlTool,
-        WebSearchTool,
     )
+    from ravi.capabilities.tools.web.read_url import ReadUrlTool
+    from ravi.capabilities.tools.web.search import WebSearchTool
     from ravi.config import settings as _settings
 
     if runtime is None:
         raise ValueError("build_agent_for_thread() requires a runtime.")
 
-    def _make_context(max_messages: int = 20) -> ContextConfig:
+    def _make_token_pipeline() -> CompactionPipeline:
+        return CompactionPipeline([
+            TokenBudgetComposedStrategy(
+                strategies=[
+                    ToolResultCompactionStrategy(max_chars=1500),
+                    SelectiveToolCallCompactionStrategy(keep_recent_groups=5),
+                    TruncationStrategy(max_chars=200_000),
+                ],
+                token_budget=50_000,
+            )
+        ])
+
+    def _make_context() -> ContextConfig:
         return ContextConfig(
             InMemoryHistoryProvider(),
-            pipeline=CompactionPipeline(
-                [SlidingWindowCompaction(max_messages=max_messages)]
-            ),
+            pipeline=_make_token_pipeline(),
         )
 
     from ravi.serving.monolith.services import load_messages_for_memory
@@ -523,7 +562,16 @@ async def build_agent_for_thread(
         researcher = ReActAgent(
             "researcher",
             model=model_client,
-            tools=_registry(WebSearchTool(), ReadUrlTool()),
+            tools=_registry(
+                WebSearchTool(
+                    exa_api_key=_settings.EXA_API_KEY or None,
+                    tavily_api_key=_settings.TAVILY_API_KEY or None,
+                ),
+                ReadUrlTool(
+                    tavily_api_key=_settings.TAVILY_API_KEY or None,
+                    exa_api_key=_settings.EXA_API_KEY or None,
+                ),
+            ),
             context=_make_context(model_context_window),
             system_instructions="You are a research specialist.",
             max_iterations=5,
@@ -561,6 +609,10 @@ async def build_agent_for_thread(
             max_iterations=15,
             context=_make_context(model_context_window),
         )
+        researcher.name = "Researcher"
+        calculator.name = "Calculator"
+        clock.name = "Clock"
+        orchestrator.name = "Coordinator"
         for agent in [researcher, calculator, clock, orchestrator]:
             await runtime.register(agent)
         return orchestrator
@@ -570,15 +622,11 @@ async def build_agent_for_thread(
         toolbox.add(t)
 
     agent = ReActAgent(
-        f"assistant-{session_id}",
+        "assistant",
+        session_id=session_id,
         model=model_client,
         tools=toolbox,
-        context=ContextConfig(
-            memory,
-            pipeline=CompactionPipeline(
-                [SlidingWindowCompaction(max_messages=model_context_window)]
-            ),
-        ),
+        context=ContextConfig(memory, pipeline=_make_token_pipeline()),
         system_instructions=system_instructions,
         max_iterations=max_iterations,
         initial_tool_choice=initial_tool_choice,
@@ -659,5 +707,6 @@ def build_agent_for_run(
             [SlidingWindowCompaction(max_messages=model_context_window)]
         ),
         max_iterations=max_iterations,
-        name=f"assistant-{session_id}" if session_id else "ChatBot",
+        name="assistant",
+        session_id=session_id,
     )

@@ -466,7 +466,9 @@ class RunContext:
                 try:
                     return InvocationResult.model_validate(cached.value)
                 except Exception:
-                    raise RuntimeError(cached.value.get("error", "journaled tool error"))
+                    raise RuntimeError(
+                        cached.value.get("error", "journaled tool error")
+                    )
             return InvocationResult.model_validate(cached.value)
         try:
             await self._log(

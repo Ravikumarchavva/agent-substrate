@@ -496,7 +496,9 @@ async def chat(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    # 2. Single-flight: only one active stream per thread at a time
+    # 2. Single-flight: only one active stream per thread at a time.
+    # asyncio is single-threaded and cooperative: no await between the locked()
+    # check and acquire(), so no other coroutine can slip in between — no TOCTOU.
     thread_lock = ctx.thread_locks.setdefault(str(body.thread_id), asyncio.Lock())
     if thread_lock.locked():
         raise HTTPException(
@@ -638,13 +640,16 @@ async def chat(
                 deps["system_instructions"]
                 + "\n\n---\n**Task Planning — call manage_tasks NOW:**\n"
                 + f'The user said: "{display_content}"\n'
-                + "Call manage_tasks action=create_list with 5-8 specific, actionable task titles "
+                + "Call manage_tasks action=create_list EXACTLY ONCE with 2-5 specific, actionable task titles "
                 + "that reflect EXACTLY what the user asked for above. "
                 + "Use concrete titles like the real steps someone would do for this request. "
                 + "Do NOT use generic placeholders like 'Identify tasks', 'Complete kanban tasks', or 'Plan approach'. "
+                + "Do NOT call create_list more than once — never re-create or update the task list after starting work. "
                 + "After creating the list, work through tasks ONE AT A TIME: "
                 + "call start_task for ONE task, do the actual work, call complete_task to mark it done, "
-                + "THEN move to the next task. Never call start_task on multiple tasks simultaneously."
+                + "THEN move to the next task. Never call start_task on multiple tasks simultaneously. "
+                + "Before you write your final answer, every task must be completed (or failed) — "
+                + "do NOT end your turn with any task still in progress."
             )
         if initial_tool_choice:
             logger.info(
@@ -768,6 +773,14 @@ async def chat(
         "session_id": str(body.thread_id),
         "model_context_window": settings.MODEL_CONTEXT_WINDOW,
     }
+    async def _settle_boards() -> list[dict]:
+        """On clean run completion, settle this conversation's plan boards so
+        lingering in-progress tasks stop spinning. Returns the updated board
+        dicts for the session to push to the client."""
+        store = request.app.state.task_tool.store
+        settled = await store.settle_conversation(str(body.thread_id))
+        return [tl.to_dict() for tl in settled]
+
     session = AgentStreamSession(
         runtime=deps["runtime"],
         agent=agent,
@@ -776,6 +789,7 @@ async def chat(
         is_disconnected=request.is_disconnected,
         cancel_event=cancel_event,
         persister=persister,
+        on_complete=_settle_boards,
         spec=_agent_spec,
     )
 

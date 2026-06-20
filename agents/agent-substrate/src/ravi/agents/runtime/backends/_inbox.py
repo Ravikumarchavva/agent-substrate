@@ -48,12 +48,14 @@ class InMemoryInbox:
     def _sender_key(self, msg: Message) -> str:
         return str(msg.sender) if msg.sender else "__anon__"
 
-    async def deliver(self, agent_id: AgentId, msg: Message) -> bool:
+    async def deliver(
+        self, agent_id: AgentId, msg: Message, *, notify: bool = True
+    ) -> bool:
         if msg.id in self._messages[agent_id]:
             return False  # duplicate
         self._messages[agent_id][msg.id] = msg
         self._order[agent_id][self._sender_key(msg)].append(msg.id)
-        if self._on_deliver:
+        if notify and self._on_deliver:
             self._on_deliver(agent_id)
         return True
 

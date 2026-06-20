@@ -52,6 +52,10 @@
   --text-heading: #0f172a !important;
 }
 
+/* Fix for invisible links caused by --md-primary-fg-color matching the background */
+:root {
+  --md-typeset-a-color: var(--md-accent-fg-color) !important;
+}
 /* Base font-size adjustments and letter spacing */
 body, input {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;

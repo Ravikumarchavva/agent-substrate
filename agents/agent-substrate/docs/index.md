@@ -70,7 +70,7 @@ The key insight: the caller never holds a reference to the agent. It sends a mes
 1. Read [Installation](getting-started/installation.md) and run [Quickstart](getting-started/quickstart.md) — you will have a working agent in under ten minutes.
 2. Understand why the actor model matters in [Agent Lifecycle](concepts/agent-lifecycle.md) and [Streaming and Events](concepts/streaming-and-events.md).
 3. Extend the system with [Create a Tool](tutorials/create-tool.md) and [Connect MCP Tools](tutorials/mcp-tools.md).
-4. Read [The Kernel](framework/kernel.md) when you are ready to understand the contracts everything is built on.
+4. Read [The Kernel](kernel/index.md) when you are ready to understand the contracts everything is built on.
 5. Move to the durable flow in [First Durable Run](getting-started/first-runtime.md) and [Local and Kind](deploy/local-and-kind.md).
 6. Use [Observability](operate/observability.md) and [Runbook](operate/runbook.md) when debugging in production.
 
@@ -186,4 +186,4 @@ Higher layers may import from lower ones. The reverse is never allowed. `uv run 
 
 Explore the [`examples/`](https://github.com/Ravikumarchavva/ravi/tree/main/ravi-engine/examples) folder for notebooks covering everything from a single-tool agent to Kubernetes deployments.
 
-For architecture deep-dives and the full kernel contract reference, see [The Kernel](framework/kernel.md) and [Layered Architecture](framework/layered-architecture.md).
+For architecture deep-dives and the full kernel contract reference, see [The Kernel](kernel/index.md) and [Layered Architecture](framework/layered-architecture.md).

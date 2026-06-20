@@ -9,7 +9,6 @@ The deepest part of the kernel. These contracts make agent runs survive crashes,
 ## Run Lifecycle
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
 stateDiagram-v2
     [*] --> PENDING : enqueue()
     PENDING --> RUNNING : lease(worker_id)
@@ -33,51 +32,9 @@ stateDiagram-v2
 
 ## The Full Execution Flow
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','activationBkgColor': '#E3F2FD','activationBorderColor': '#1565C0','noteBkgColor': '#FFFDE7','noteBorderColor': '#F57F17','signalColor': '#546E7A','signalTextColor': '#263238','fontSize': '13px'}}}%%
-sequenceDiagram
-    autonumber
-    participant Client
-    participant Runtime as "Runtime (L1 facade)"
-    participant Inbox
-    participant Scheduler
-    participant Worker
-    participant EventLog
-    participant Agent
-    participant Journal
+Every agent execution follows a structured, durable execution flow managed by the runtime:
 
-    Client->>+Runtime: submit(agent_id, message)
-    Runtime->>Inbox: deliver(agent_id, msg, notify=False)
-    Runtime->>+Scheduler: register_run(run_id, agent_id)
-    Runtime->>Scheduler: enqueue(run_id, priority)
-    Scheduler-->>-Runtime: queued
-
-    Runtime-->>-Client: run_id
-
-    note over Scheduler,Worker: Worker polls for leases
-    Scheduler->>+Worker: lease(run_id, agent_id)
-    Worker->>+EventLog: append("run.started", seq=0)
-
-    Worker->>Inbox: drain(agent_id)
-    Inbox-->>Worker: list[Message]
-
-    Worker->>+Agent: run(ctx, inbox)
-
-    rect rgb(232, 234, 246)
-        note over Agent,Journal: At-most-once effect via Journal
-        Agent->>Journal: lookup(effect_id)
-        Journal-->>Agent: None (miss)
-        Agent->>Agent: execute tool / LLM call
-        Agent->>Journal: record(EffectResult)
-        Agent->>EventLog: append("tool.result", seq=N)
-    end
-
-    Agent->>EventLog: append("run.completed", seq=N+1)
-    Agent-->>-Worker: returns None
-
-    Worker->>Inbox: ack(msg_id) for each message
-    Worker->>-Scheduler: release(lease, status=COMPLETED)
-```
+![Kernel Runtime](../kernel_runtime.png)
 
 ---
 
@@ -85,27 +42,24 @@ sequenceDiagram
 
 A run's state is always `fold(all entries from seq=0)`. There is no separate state table. On crash, any worker can pick up the run, replay the log, and continue from exactly where it left off.
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph LR
-    classDef entry fill:#E8EAF6,stroke:#3949AB,stroke-width:1.5px,color:#1A237E
-    classDef proto fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-    classDef guard fill:#FFEBEE,stroke:#C62828,stroke-width:1px,color:#B71C1C
+### EventLog Protocol
 
-    EL["EventLog (Protocol)\nappend(run_id, entry, expected_seq) → int\nread(run_id, from_seq) → AsyncIterator\ntail(run_id, from_seq) → AsyncIterator\nlast_seq(run_id) → int"]:::proto
+| Method | Parameters | Description |
+|---|---|---|
+| `append` | `run_id, entry, expected_seq` | Append a new log entry (throws `ConcurrentAppendError` on mismatch). |
+| `read` | `run_id, from_seq` | Read log entries sequentially. |
+| `tail` | `run_id, from_seq` | Live-stream log entries. |
+| `last_seq` | `run_id` | Retrieve the latest sequence ID. |
 
-    RLE["RunLogEntry (frozen)\nrun_id: RunId\nseq: int\nkind: str\npayload: dict\nts: datetime"]:::entry
+### RunLogEntry Schema
 
-    KINDS["Standard kind values\nrun.started\nmsg.received\ntool.called\ntool.result\nchild.spawned\nchild.completed\nrun.suspended\nrun.completed\nrun.failed\nrun.cancelled"]:::entry
-
-    OCC["ConcurrentAppendError\nTwo workers wrote same run\nCaller reloads last_seq and retries\nFences concurrent writes without lock"]:::guard
-
-    EL --> RLE
-    RLE --> KINDS
-    EL -.- OCC
-```
-
-**`tail()`** — live-streaming view. Never completes on its own. Used by the gateway for real-time "watch this agent" streaming and for VOD replay (`from_seq=0` replays from the beginning). Cancel the enclosing async task to stop.
+| Field | Type | Description |
+|---|---|---|
+| `run_id` | `RunId` | Target run execution ID. |
+| `seq` | `int` | Sequential log index. |
+| `kind` | `str` | Event type (e.g., `run.started`, `msg.received`, `tool.called`, `run.completed`). |
+| `payload` | `dict` | Metadata dictionary payload. |
+| `ts` | `datetime` | Log timestamp. |
 
 ---
 
@@ -114,26 +68,23 @@ graph LR
 Prevents executing the same side-effect twice when a worker crashes mid-tool.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','activationBkgColor': '#E3F2FD','activationBorderColor': '#1565C0','noteBkgColor': '#FFEBEE','noteBorderColor': '#C62828','signalColor': '#546E7A','signalTextColor': '#263238','fontSize': '13px'}}}%%
 sequenceDiagram
     autonumber
     participant Agent
     participant Journal
-    participant External as "External Service"
+    participant External as External Service
 
     Agent->>Agent: effect_id = Effect.make_id(run_id, step_seq, "email.send", args)
-    Agent->>+Journal: lookup(effect_id)
+    Agent->>Journal: lookup(effect_id)
 
     alt Cache HIT (replay path)
         Journal-->>Agent: EffectResult (cached)
         Note over Agent: Return cached result<br/>Do NOT re-execute
     else Cache MISS (first execution)
-        Journal-->>-Agent: None
-        Agent->>+External: send_email(to, subject, body)
-        External-->>-Agent: 200 OK
-
+        Journal-->>Agent: None
+        Agent->>External: send_email(to, subject, body)
+        External-->>Agent: 200 OK
         Agent->>Journal: record(EffectResult(effect_id, "ok", {msgId: ...}))
-        Note over Agent,Journal: Write-once — duplicate record() is a no-op
     end
 ```
 
@@ -146,7 +97,6 @@ sequenceDiagram
 ## Inbox — Per-Agent Mailbox
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','activationBkgColor': '#E3F2FD','activationBorderColor': '#1565C0','noteBkgColor': '#FFFDE7','noteBorderColor': '#F57F17','signalColor': '#546E7A','signalTextColor': '#263238','fontSize': '13px'}}}%%
 sequenceDiagram
     autonumber
     participant Sender
@@ -154,29 +104,22 @@ sequenceDiagram
     participant Scheduler
     participant Worker
 
-    Sender->>+Inbox: deliver(agent_id, msg, notify=True)
-    Note over Inbox: Idempotent — same msg.id is a no-op
+    Sender->>Inbox: deliver(agent_id, msg, notify=True)
     Inbox->>Scheduler: trigger wakeup for agent
-    Inbox-->>-Sender: True (delivered) / False (duplicate)
+    Inbox-->>Sender: True (delivered) / False (duplicate)
 
-    Scheduler->>+Worker: lease(run_id)
-    Worker->>+Inbox: drain(agent_id, max=100)
-    Inbox-->>-Worker: list[Message] (FIFO per sender)
-    Note over Worker: Process each message
+    Scheduler->>Worker: lease(run_id)
+    Worker->>Inbox: drain(agent_id, max=100)
+    Inbox-->>Worker: list[Message]
 
     alt Success
         Worker->>Inbox: ack(agent_id, msg_id)
     else Failure
         Worker->>Inbox: nack(agent_id, msg_id, error)
-        Note over Inbox: Increment retry counter
-        alt retry_count < max_retries
-            Inbox->>Inbox: keep in inbox
-        else max_retries hit
-            Inbox->>Inbox: move to dead_letters
-        end
+        Note over Inbox: Retry or dead-letter
     end
 
-    Worker-->>-Scheduler: release(lease)
+    Worker-->>Scheduler: release(lease)
 ```
 
 Three robustness guarantees every implementation must honour:
@@ -190,42 +133,25 @@ Three robustness guarantees every implementation must honour:
 
 ## Scheduler — Work Queue and Admission Control
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph TB
-    classDef src fill:#E8EAF6,stroke:#3949AB,stroke-width:1.5px,color:#1A237E
-    classDef sched fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1,font-weight:bold
-    classDef worker fill:#E8F5E9,stroke:#2E7D32,stroke-width:1.5px,color:#1B5E20,font-weight:bold
-    classDef lease fill:#FFF3E0,stroke:#E65100,stroke-width:1px,color:#BF360C
-    classDef dead fill:#FFEBEE,stroke:#C62828,stroke-width:1px,color:#B71C1C
+### Scheduler Protocol
 
-    INBOX_EV["Inbox delivery"]:::src
-    TIMER_EV["Timer fire"]:::src
-    SIGNAL_EV["Signal fire"]:::src
-    CHILD_EV["Child completion"]:::src
+| Method | Parameters | Description |
+|---|---|---|
+| `enqueue` | `run_id, priority, tenant, wake` | Enqueue a run. |
+| `lease` | `worker_id, capacity` | Acquire active leases (returns `list[Lease]`). |
+| `heartbeat` | `lease` | Keep active lease alive. |
+| `release` | `lease, status, wake_on` | Complete execution and schedule any future wakeups. |
+| `find_run_for_agent`| `agent_id` | Return active run ID for agent. |
+| `wake_suspended` | `run_id` | Force wake a suspended run. |
+| `wake_agent` | `agent_id` | Wake agent. |
 
-    SCHED["Scheduler\nenqueue(run_id, priority, tenant, wake)\nlease(worker_id, capacity)\nheartbeat(lease)\nrelease(lease, status, wake_on)\nfind_run_for_agent(agent_id)\nwake_suspended(run_id)\nwake_agent(agent_id)"]:::sched
+### Lease Fields
 
-    LEASE["Lease\nrun_id · agent_id\nworker_id · expires_at\nattempt: int\n\nMust heartbeat every\n(expires_at - now) / 2"]:::lease
-
-    W1["Worker 1"]:::worker
-    W2["Worker 2"]:::worker
-
-    DEAD["Dead-run storage\n(FAILED + retries exhausted)"]:::dead
-    RETRY["Re-enqueue\n(FAILED + retries remaining)"]:::sched
-
-    INBOX_EV & TIMER_EV & SIGNAL_EV & CHILD_EV -->|"enqueue (coalesced)"| SCHED
-    SCHED -->|"lease()"| W1
-    SCHED -->|"lease()"| W2
-    W1 -->|"heartbeat()"| SCHED
-    W1 -->|"release(SUSPENDED)"| SCHED
-    W2 -->|"release(COMPLETED)"| SCHED
-    W2 -->|"release(FAILED)"| SCHED
-    SCHED -->|"retries exhausted"| DEAD
-    SCHED -->|"retries remain"| RETRY
-
-    SCHED --> LEASE
-```
+* `run_id: str`: Targeted run execution ID.
+* `agent_id: AgentId`: Target agent address.
+* `worker_id: str`: Active worker lease holder.
+* `expires_at: datetime`: Expiration deadline (must heartbeat before expiry).
+* `attempt: int`: Integer attempt/retry counter.
 
 **Coalescing guarantee** — if a timer fires AND a message arrives while a run is already pending, the Scheduler merges them into one entry. Workers receive a run at most once per wake-cycle regardless of how many sources fired.
 
@@ -233,68 +159,52 @@ graph TB
 
 ## Wakeup — What Resumes a Suspended Run
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph LR
-    classDef wakeup fill:#E8EAF6,stroke:#3949AB,stroke-width:1.5px,color:#1A237E,font-weight:bold
-    classDef kind fill:#E8F5E9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20
-    classDef bus fill:#FFF3E0,stroke:#E65100,stroke-width:1px,color:#BF360C
+### Wakeup Fields
 
-    WU["Wakeup (frozen)\nkind: message|timer|signal|child_done\nat: datetime | None\nsignal: str | None\npayload: dict\nsource_run: RunId | None\nchild_run: RunId | None\nresult_ref: str | None"]:::wakeup
+| Field | Type | Description |
+|---|---|---|
+| `kind` | `str` | Wakeup trigger category: `message`, `timer`, `signal`, or `child_done`. |
+| `at` | `datetime \| None` | Scheduled timer expiration threshold. |
+| `signal` | `str \| None` | Buffered signal identifier name. |
+| `payload` | `dict` | Signal context data. |
+| `source_run` | `RunId \| None` | Associated parent or sender run context ID. |
+| `child_run` | `RunId \| None` | Spawned child run identifier. |
+| `result_ref` | `str \| None` | Location reference in the ArtifactStore. |
 
-    MSG["message\nsource_run identifies sender"]:::kind
-    TMR["timer\nat: the datetime that expired"]:::kind
-    SIG["signal\nsignal: name + payload"]:::kind
-    CD["child_done\nchild_run + result_ref (ArtifactStore ref)"]:::kind
+### SignalBus Protocol
 
-    SB["SignalBus (Protocol)\nsignal(run_id, name, payload)\ntimer(run_id, at: datetime)\n\nA signal fired before suspend\nis buffered for next wake"]:::bus
-
-    WU --> MSG
-    WU --> TMR
-    WU --> SIG
-    WU --> CD
-    SB --> WU
-```
-
-`Wakeup` is both the trigger carried by the Scheduler and the payload of the `run.suspended` log entry. Every suspension is replayable — you can always know exactly why a run went dormant.
+* `signal(run_id, name, payload)`: Fire a user signal.
+* `timer(run_id, at)`: Set a future wakeup timer.
 
 ---
 
 ## Supervisor — Spawn, Join, Cancel
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','activationBkgColor': '#E3F2FD','activationBorderColor': '#1565C0','noteBkgColor': '#FFFDE7','noteBorderColor': '#F57F17','signalColor': '#546E7A','signalTextColor': '#263238','fontSize': '13px'}}}%%
 sequenceDiagram
     autonumber
-    participant Parent as "Parent Run"
+    participant Parent as Parent Run
     participant Supervisor
-    participant ParentLog as "Parent EventLog"
+    participant ParentLog as Parent EventLog
     participant Scheduler
-    participant Child as "Child Run"
+    participant Child as Child Run
 
-    Parent->>+Supervisor: spawn(child_agent, boot=msg, supervision=child_sv)
-
-    rect rgb(232, 234, 246)
-        note over Supervisor,ParentLog: Replay-deterministic: journal before enqueue
-        Supervisor->>ParentLog: append("child.spawned", child_run_id)
-    end
-
+    Parent->>Supervisor: spawn(child_agent, boot=msg, supervision=child_sv)
+    Supervisor->>ParentLog: append("child.spawned", child_run_id)
     Supervisor->>Scheduler: enqueue(child_run_id)
-    Supervisor-->>-Parent: RunHandle(child_run_id)
+    Supervisor-->>Parent: RunHandle(child_run_id)
 
-    Parent->>+Supervisor: join(handle)
+    Parent->>Supervisor: join(handle)
     Supervisor->>ParentLog: append("run.suspended", wake=child_done)
-    Supervisor->>-Scheduler: release(parent_lease, SUSPENDED)
+    Supervisor->>Scheduler: release(parent_lease, SUSPENDED)
 
-    note over Child: Child runs on any available worker
-
+    note over Child: Child runs on any worker
     Child-->>Supervisor: _complete(child_run_id, RunResult)
     Supervisor->>ParentLog: append("child.completed")
     Supervisor->>Scheduler: wake_suspended(parent_run_id)
 
-    note over Parent: Parent resumes on next lease
-    Parent->>+Supervisor: join returns
-    Supervisor-->>-Parent: RunResult(status, output)
+    Parent->>Supervisor: join returns
+    Supervisor-->>Parent: RunResult(status, output)
 ```
 
 **Four hard properties:**
@@ -308,29 +218,21 @@ sequenceDiagram
 ## FollowGraph and FanoutStrategy — The Social Layer
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','activationBkgColor': '#E3F2FD','activationBorderColor': '#1565C0','noteBkgColor': '#FFFDE7','noteBorderColor': '#F57F17','signalColor': '#546E7A','signalTextColor': '#263238','fontSize': '13px'}}}%%
 sequenceDiagram
     autonumber
-    participant InfoAgent as "trades-watcher"
-    participant RunCtx as "RunContext (L1)"
-    participant Fanout as "FanoutStrategy"
-    participant Graph as "FollowGraph"
-    participant InboxA as "Inbox (alice)"
-    participant InboxB as "Inbox (bob)"
+    participant Watcher as trades-watcher
+    participant RunCtx as RunContext (L1)
+    participant Fanout as FanoutStrategy
+    participant Graph as FollowGraph
+    participant InboxA as Inbox (alice)
+    participant InboxB as Inbox (bob)
 
-    InfoAgent->>+RunCtx: ctx.emit(TopicId("market.trades", run_id), msg)
-    RunCtx->>+Fanout: publish(topic, msg, graph, inbox)
-
-    Fanout->>+Graph: followers_of(topic)
-    Graph-->>-Fanout: [alice_id, bob_id]
-
-    Fanout->>InboxA: deliver(alice_id, msg)
-    Fanout->>InboxB: deliver(bob_id, msg)
-
-    Fanout-->>-RunCtx: done
-    RunCtx-->>-InfoAgent: emitted
-
-    note over InboxA,InboxB: Alice and Bob wake on next\nScheduler poll cycle
+    Watcher->>RunCtx: ctx.emit(topic, msg)
+    RunCtx->>Fanout: publish(topic, msg, graph, inbox)
+    Fanout->>Graph: followers_of(topic)
+    Graph-->>Fanout: [alice, bob]
+    Fanout->>InboxA: deliver(alice, msg)
+    Fanout->>InboxB: deliver(bob, msg)
 ```
 
 `FollowGraph` is durable — subscriptions survive restarts. `FanoutStrategy` is swappable — Stage 0 does synchronous push to every follower; Stage 3 uses a push/pull hybrid for viral agents with millions of followers.
@@ -339,30 +241,14 @@ sequenceDiagram
 
 ## AskOutcome — The Four Cases
 
-`RunContext.ask()` sends a message to a target agent and awaits its reply. The result is always one of four distinct outcomes — **never collapse them**:
+`RunContext.ask()` sends a message to a target agent and awaits its reply. The result is always one of four distinct outcomes:
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','background': '#FAFAFA','fontSize': '13px'}}}%%
-graph TB
-    classDef ok fill:#E8F5E9,stroke:#2E7D32,stroke-width:1.5px,color:#1B5E20,font-weight:bold
-    classDef warn fill:#FFF3E0,stroke:#E65100,stroke-width:1.5px,color:#BF360C
-    classDef err fill:#FFEBEE,stroke:#C62828,stroke-width:1.5px,color:#B71C1C
-    classDef bug fill:#FCE4EC,stroke:#880E4F,stroke-width:2px,color:#880E4F,font-weight:bold
+| Outcome Case | Condition | Status of Target |
+|---|---|---|
+| **`replied`** | Target completed execution successfully. | COMPLETED |
+| **`timed_out`**| Specified timeout elapsed before reply was ready. | RUNNING (still active; returns `RunHandle`) |
+| **`target_failed`**| Worker executing target died or lease expired. | FAILED (safe to retry/respawn) |
+| **`target_cancelled`**| Target run was explicitly cancelled. | CANCELLED (do not retry) |
 
-    ASK["ctx.ask(target_agent, msg, timeout)"]:::ok
-
-    REPLIED["replied\nTarget finished within timeout\nresult: RunResult"]:::ok
-    TIMEDOUT["timed_out\nCaller's patience expired\nTarget is still RUNNING\nhandle: RunHandle (still alive)"]:::warn
-    FAILED["target_failed\nTarget's lease expired (worker died)\nSafe to retry — spawn a new run"]:::err
-    CANCELLED["target_cancelled\nTarget was explicitly cancelled\nDo not retry — caller or parent cancelled it"]:::err
-
-    BUG["DANGER: Collapsing timed_out + target_failed\nis the canonical duplicate-agent bug\ntimed_out = still alive, do NOT respawn\ntarget_failed = dead, safe to respawn"]:::bug
-
-    ASK --> REPLIED
-    ASK --> TIMEDOUT
-    ASK --> FAILED
-    ASK --> CANCELLED
-
-    TIMEDOUT -.- BUG
-    FAILED -.- BUG
-```
+> [!CAUTION]
+> Collapsing `timed_out` (target is still running, do not respawn) and `target_failed` (target is dead, safe to respawn) results in duplicate executions. Always distinguish these cases cleanly.

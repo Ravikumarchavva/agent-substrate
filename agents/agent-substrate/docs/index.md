@@ -65,6 +65,14 @@ The key insight: the caller never holds a reference to the agent. It sends a mes
 
 ---
 
+## Kernel Architecture
+
+The kernel defines the core protocols, messages, tools, memory, and guardrails, all building upon a durable **Runtime** substrate:
+
+![Kernel Modular Architecture](kernel_components.png)
+
+---
+
 ## Developer journey
 
 1. Read [Installation](getting-started/installation.md) and run [Quickstart](getting-started/quickstart.md) — you will have a working agent in under ten minutes.

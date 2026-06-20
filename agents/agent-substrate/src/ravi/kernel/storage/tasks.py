@@ -28,7 +28,7 @@ class TaskStatus(StrEnum):
     ABANDONED = "abandoned"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Task:
     id: str
     title: str
@@ -38,7 +38,7 @@ class Task:
     note: str = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class TaskList:
     """One agent's Kanban board within a conversation."""
 

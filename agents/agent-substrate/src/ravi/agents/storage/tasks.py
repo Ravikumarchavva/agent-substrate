@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import dataclasses
 from typing import Dict, List, Optional
 from uuid import uuid4
 
@@ -115,13 +116,18 @@ class TaskStore:
                 task_list = self._lists.get(tl_id)
                 if not task_list:
                     continue
+                new_tasks = []
                 mutated = False
                 for task in task_list.tasks:
                     if task.status == TaskStatus.IN_PROGRESS:
-                        task.status = TaskStatus.SUCCEEDED
+                        new_tasks.append(dataclasses.replace(task, status=TaskStatus.SUCCEEDED))
                         mutated = True
+                    else:
+                        new_tasks.append(task)
                 if mutated:
-                    changed.append(task_list)
+                    updated = dataclasses.replace(task_list, tasks=new_tasks)
+                    self._lists[tl_id] = updated
+                    changed.append(updated)
             return changed
 
     async def update_status(
@@ -133,10 +139,14 @@ class TaskStore:
                 return None
             for task in task_list.tasks:
                 if task.id == task_id:
-                    task.status = status
-                    if note:
-                        task.note = note
-                    return task
+                    new_task = dataclasses.replace(
+                        task, status=status, note=note if note else task.note
+                    )
+                    self._lists[task_list_id] = dataclasses.replace(
+                        task_list,
+                        tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+                    )
+                    return new_task
             return None
 
     async def add_tasks(self, task_list_id: str, titles: List[str]) -> List[Task]:
@@ -155,7 +165,9 @@ class TaskStore:
                 for i, t in enumerate(titles)
                 if t.strip()
             ]
-            task_list.tasks.extend(new_tasks)
+            self._lists[task_list_id] = dataclasses.replace(
+                task_list, tasks=task_list.tasks + new_tasks
+            )
             return new_tasks
 
     async def delete_task(self, task_list_id: str, task_id: str) -> bool:
@@ -164,8 +176,9 @@ class TaskStore:
             if not task_list:
                 return False
             before = len(task_list.tasks)
-            task_list.tasks = [t for t in task_list.tasks if t.id != task_id]
-            return len(task_list.tasks) < before
+            new_tasks = [t for t in task_list.tasks if t.id != task_id]
+            self._lists[task_list_id] = dataclasses.replace(task_list, tasks=new_tasks)
+            return len(new_tasks) < before
 
     async def increment_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
         """Agent bounded retry: increment retry_count, move to in_progress.
@@ -180,9 +193,16 @@ class TaskStore:
                 if task.id == task_id:
                     if task.retry_count >= task_list.max_retries:
                         return None
-                    task.retry_count += 1
-                    task.status = TaskStatus.IN_PROGRESS
-                    return task
+                    new_task = dataclasses.replace(
+                        task,
+                        retry_count=task.retry_count + 1,
+                        status=TaskStatus.IN_PROGRESS,
+                    )
+                    self._lists[task_list_id] = dataclasses.replace(
+                        task_list,
+                        tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+                    )
+                    return new_task
             return None
 
     async def force_retry(self, task_list_id: str, task_id: str) -> Optional[Task]:
@@ -193,10 +213,14 @@ class TaskStore:
                 return None
             for task in task_list.tasks:
                 if task.id == task_id:
-                    task.retry_count = 0
-                    task.status = TaskStatus.IN_PROGRESS
-                    task.note = ""
-                    return task
+                    new_task = dataclasses.replace(
+                        task, retry_count=0, status=TaskStatus.IN_PROGRESS, note=""
+                    )
+                    self._lists[task_list_id] = dataclasses.replace(
+                        task_list,
+                        tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+                    )
+                    return new_task
             return None
 
     async def update_task_title(
@@ -208,8 +232,12 @@ class TaskStore:
                 return None
             for task in task_list.tasks:
                 if task.id == task_id:
-                    task.title = title.strip()
-                    return task
+                    new_task = dataclasses.replace(task, title=title.strip())
+                    self._lists[task_list_id] = dataclasses.replace(
+                        task_list,
+                        tasks=[new_task if t.id == task_id else t for t in task_list.tasks],
+                    )
+                    return new_task
             return None
 
 

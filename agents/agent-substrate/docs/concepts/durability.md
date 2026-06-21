@@ -15,7 +15,7 @@ Durability is the machinery that avoids both: a crashed run **resumes where it l
 
 ## Two structures do all the work
 
-Ravi achieves this with two append-only structures, both defined as kernel Protocols so they can be backed by memory (dev) or Postgres + Redis (production) without changing agent code.
+Agent Substrate achieves this with two append-only structures, both defined as kernel Protocols so they can be backed by memory (dev) or Postgres + Redis (production) without changing agent code.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
@@ -101,7 +101,7 @@ Completed effects are free on replay (journal hits). Only the work that hadn't f
 
 There is one unavoidable window: if the worker dies **after** executing an effect but **before** recording it, the journal has no entry. On replay that step is a MISS and runs again.
 
-Ravi chooses **at-most-once**, not at-least-once: it does *not* retry on that uncertainty, so you never double-charge — but in that rare window an effect can be silently lost rather than repeated. Tools that are genuinely idempotent (a `GET`, a Stripe charge with an idempotency key) can be safely retried and should say so in their `description` so callers know they get effectively exactly-once.
+Agent Substrate chooses **at-most-once**, not at-least-once: it does *not* retry on that uncertainty, so you never double-charge — but in that rare window an effect can be silently lost rather than repeated. Tools that are genuinely idempotent (a `GET`, a Stripe charge with an idempotency key) can be safely retried and should say so in their `description` so callers know they get effectively exactly-once.
 
 ---
 

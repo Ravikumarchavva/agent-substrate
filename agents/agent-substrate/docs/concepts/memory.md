@@ -7,7 +7,7 @@ An agent needs to remember the conversation — but a model's context window is 
 1. **Persistence** — where do past turns live, so the agent can recall them across runs and restarts?
 2. **Context assembly** — how do you fit a long history into a small window before each model call, without losing what matters?
 
-Ravi splits these cleanly: a **HistoryProvider** owns persistence; a **CompactionPipeline** owns context assembly. They meet in the `ContextConfig` you pass to an agent.
+Agent Substrate splits these cleanly: a **HistoryProvider** owns persistence; a **CompactionPipeline** owns context assembly. They meet in the `ContextConfig` you pass to an agent.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
@@ -115,7 +115,7 @@ An empty pipeline is a valid no-op (returns history unchanged). Pass a single st
 
 ## When trimming isn't enough
 
-Sliding windows and summaries are *lossy by recency* — they assume old means irrelevant. That assumption breaks for long-running agents that must recall a specific fact or decision from far back. For those, Ravi has three **orthogonal** advanced strategies that recall by *relevance* or *structure* instead of recency. They are not mutually exclusive — you can layer them with the basic pipeline above.
+Sliding windows and summaries are *lossy by recency* — they assume old means irrelevant. That assumption breaks for long-running agents that must recall a specific fact or decision from far back. For those, Agent Substrate has three **orthogonal** advanced strategies that recall by *relevance* or *structure* instead of recency. They are not mutually exclusive — you can layer them with the basic pipeline above.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%

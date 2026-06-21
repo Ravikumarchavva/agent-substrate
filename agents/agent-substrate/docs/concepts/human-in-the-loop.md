@@ -9,7 +9,7 @@ Two things make this hard:
 1. **Waiting is expensive.** A human might take three hours to click "approve." You can't hold a worker thread (or a database connection) hostage that whole time.
 2. **The wait must survive a restart.** If the server redeploys while the request is pending, the approval can't be lost.
 
-Ravi solves both by combining a small approval contract with the [durable runtime](durability.md).
+Agent Substrate solves both by combining a small approval contract with the [durable runtime](durability.md).
 
 ---
 

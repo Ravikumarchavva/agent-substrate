@@ -36,7 +36,7 @@ Example subgraph rendered into context:
 
 ```
 Known facts:
-  User.name      = "Ravi"
+  User.name      = "Alice"
   User.budget    = "$5k/month"
   Project.stack  = ["Python", "FastAPI"]
   Project.deploy = "AWS Fargate (not Kubernetes)"

@@ -12,7 +12,7 @@ This breaks the moment anything real happens. If the agent needs to wait three h
 
 ## The idea: agents are addresses, not objects
 
-In Ravi, you never hold a reference to a running agent. You hold its **address** — an `AgentId` — and you send it a **message**. The runtime is responsible for delivering that message, starting a run, and routing the reply back.
+In Agent Substrate, you never hold a reference to a running agent. You hold its **address** — an `AgentId` — and you send it a **message**. The runtime is responsible for delivering that message, starting a run, and routing the reply back.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '14px'}}}%%
@@ -35,7 +35,7 @@ Because the caller talks to an address, **the call site never changes**. Whether
 
 ## The three identities
 
-Ravi separates three things that beginners often conflate:
+Agent Substrate separates three things that beginners often conflate:
 
 | Identity | What it is | Lifetime |
 |---|---|---|

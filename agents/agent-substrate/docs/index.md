@@ -3,11 +3,11 @@ hide:
     - navigation
     - toc
 ---
-# Ravi Agent Framework
+# Agent Substrate
 
 **An async-first Python framework for building production AI agents that call tools, remember across sessions, pause for human approval, survive crashes, and scale from a single process to a Kubernetes fleet — without changing your agent code.**
 
-Most "agent" libraries help you wrap a model call in a loop. Ravi is built for the part that comes after the demo: durability, supervision, governance, memory, and multi-agent orchestration — the things you need when an agent has to run unattended, handle real users, and not lose state when a worker dies.
+Most "agent" libraries help you wrap a model call in a loop. Agent Substrate is built for the part that comes after the demo: durability, supervision, governance, memory, and multi-agent orchestration — the things you need when an agent has to run unattended, handle real users, and not lose state when a worker dies.
 
 [Understand the framework :material-arrow-right:](concepts/index.md){ .md-button .md-button--primary }
 [The agent model :material-arrow-right:](concepts/agent-model.md){ .md-button }
@@ -46,7 +46,7 @@ Most "agent" libraries help you wrap a model call in a loop. Ravi is built for t
 
 ---
 
-## Why Ravi
+## Why Agent Substrate
 
 | Capability | What it means for you |
 |---|---|
@@ -106,8 +106,8 @@ The shape never changes. Adding tools, guardrails, streaming, HITL approvals, or
 === "uv (recommended)"
 
     ```bash
-    git clone https://github.com/Ravikumarchavva/agent_substrategit
-    cd ravi/ravi-engine
+    git clone https://github.com/Ravikumarchavva/agent-substrate.git
+    cd agent-substrate
     uv sync
     ```
 
@@ -130,7 +130,7 @@ uv run start         # Monolith on port 8001
 
 ## How it's built
 
-Ravi is organised into **four strictly-layered modules** plus three orthogonal concerns. Each layer imports only from the layers below it — enforced in CI by `uv run lint-imports`.
+Agent Substrate is organised into **four strictly-layered modules** plus three orthogonal concerns. Each layer imports only from the layers below it — enforced in CI by `uv run lint-imports`.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
@@ -194,4 +194,4 @@ graph TB
 
 ## Examples
 
-The [`examples/`](https://github.com/Ravikumarchavva/ravi/tree/main/ravi-engine/examples) folder has runnable notebooks covering foundations, memory, MCP tools, safety, the durable runtime, and observability — from a single-tool agent to a Kubernetes deployment.
+The [`examples/`](https://github.com/Ravikumarchavva/agent-substrate/tree/main/examples) folder has runnable notebooks covering foundations, memory, MCP tools, safety, the durable runtime, and observability — from a single-tool agent to a Kubernetes deployment.

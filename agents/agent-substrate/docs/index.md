@@ -64,11 +64,11 @@ Most "agent" libraries help you wrap a model call in a loop. Agent Substrate is 
 
 ```python
 import asyncio
-from agent_substrate.config import settings
-from agent_substrate.agents import ReActAgent, Runtime
-from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider
-from agent_substrate.integrations.llm import LLMFactory
-from agent_substrate.capabilities.tools import CalculatorTool
+from substrate.config import settings
+from substrate.agents import ReActAgent, Runtime
+from substrate.agents.context import ContextConfig, InMemoryHistoryProvider
+from substrate.integrations.llm import LLMFactory
+from substrate.capabilities.tools import CalculatorTool
 
 
 async def main() -> None:
@@ -88,7 +88,7 @@ async def main() -> None:
     async with Runtime() as rt:
         await rt.register(agent)
 
-        from agent_substrate.console import Console
+        from substrate.console import Console
         console = Console(agent, runtime=rt)
         await console.interactive(stream=True)
 

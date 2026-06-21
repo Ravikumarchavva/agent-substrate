@@ -65,9 +65,9 @@ async def redis_client():
 
 
 async def test_pg_event_log_append_and_read(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresEventLog
-    from agent_substrate.kernel.runtime.log_entry import RunLogEntry
-    from agent_substrate.kernel.runtime.ids import new_run_id
+    from substrate.infrastructure.runtime import PostgresEventLog
+    from substrate.kernel.runtime.log_entry import RunLogEntry
+    from substrate.kernel.runtime.ids import new_run_id
 
     log = PostgresEventLog(pg_pool)
     await log.setup()
@@ -84,10 +84,10 @@ async def test_pg_event_log_append_and_read(pg_pool) -> None:
 
 
 async def test_pg_event_log_occ_raises(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresEventLog
-    from agent_substrate.kernel.runtime.log_entry import RunLogEntry
-    from agent_substrate.kernel.core.errors import ConcurrentAppendError
-    from agent_substrate.kernel.runtime.ids import new_run_id
+    from substrate.infrastructure.runtime import PostgresEventLog
+    from substrate.kernel.runtime.log_entry import RunLogEntry
+    from substrate.kernel.core.errors import ConcurrentAppendError
+    from substrate.kernel.runtime.ids import new_run_id
 
     log = PostgresEventLog(pg_pool)
     await log.setup()
@@ -102,9 +102,9 @@ async def test_pg_event_log_occ_raises(pg_pool) -> None:
 
 
 async def test_pg_event_log_last_seq(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresEventLog
-    from agent_substrate.kernel.runtime.log_entry import RunLogEntry
-    from agent_substrate.kernel.runtime.ids import new_run_id
+    from substrate.infrastructure.runtime import PostgresEventLog
+    from substrate.kernel.runtime.log_entry import RunLogEntry
+    from substrate.kernel.runtime.ids import new_run_id
 
     log = PostgresEventLog(pg_pool)
     await log.setup()
@@ -118,9 +118,9 @@ async def test_pg_event_log_last_seq(pg_pool) -> None:
 
 
 async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresEventLog
-    from agent_substrate.kernel.runtime.log_entry import RunLogEntry
-    from agent_substrate.kernel.runtime.ids import new_run_id
+    from substrate.infrastructure.runtime import PostgresEventLog
+    from substrate.kernel.runtime.log_entry import RunLogEntry
+    from substrate.kernel.runtime.ids import new_run_id
 
     log = PostgresEventLog(pg_pool)
     await log.setup()
@@ -148,12 +148,12 @@ async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
 
 
 async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresInbox
-    from agent_substrate.kernel.core.identity import AgentId
-    from agent_substrate.kernel.messaging.message import Message
-    from agent_substrate.kernel.core.content import TextBlock
-    from agent_substrate.kernel.core.content import ChatMessage, Role
-    from agent_substrate.kernel.messaging.message import ChatPayload
+    from substrate.infrastructure.runtime import PostgresInbox
+    from substrate.kernel.core.identity import AgentId
+    from substrate.kernel.messaging.message import Message
+    from substrate.kernel.core.content import TextBlock
+    from substrate.kernel.core.content import ChatMessage, Role
+    from substrate.kernel.messaging.message import ChatPayload
 
     inbox = PostgresInbox(pg_pool)
     await inbox.setup()
@@ -181,12 +181,12 @@ async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
 
 
 async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresInbox
-    from agent_substrate.kernel.core.identity import AgentId
-    from agent_substrate.kernel.messaging.message import Message
-    from agent_substrate.kernel.core.content import TextBlock
-    from agent_substrate.kernel.core.content import ChatMessage, Role
-    from agent_substrate.kernel.messaging.message import ChatPayload
+    from substrate.infrastructure.runtime import PostgresInbox
+    from substrate.kernel.core.identity import AgentId
+    from substrate.kernel.messaging.message import Message
+    from substrate.kernel.core.content import TextBlock
+    from substrate.kernel.core.content import ChatMessage, Role
+    from substrate.kernel.messaging.message import ChatPayload
 
     inbox = PostgresInbox(pg_pool, max_retries=2)
     await inbox.setup()
@@ -216,7 +216,7 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
 
 
 async def test_redis_journal_lookup_miss(redis_client) -> None:
-    from agent_substrate.infrastructure.runtime import RedisJournal
+    from substrate.infrastructure.runtime import RedisJournal
 
     journal = RedisJournal(redis_client, ttl_seconds=10)
     result = await journal.lookup("nonexistent-effect-id")
@@ -224,8 +224,8 @@ async def test_redis_journal_lookup_miss(redis_client) -> None:
 
 
 async def test_redis_journal_record_and_lookup(redis_client) -> None:
-    from agent_substrate.infrastructure.runtime import RedisJournal
-    from agent_substrate.kernel.runtime.effects import EffectResult
+    from substrate.infrastructure.runtime import RedisJournal
+    from substrate.kernel.runtime.effects import EffectResult
 
     journal = RedisJournal(redis_client, ttl_seconds=10)
     effect_id = f"test-effect-{id(object())}"
@@ -239,8 +239,8 @@ async def test_redis_journal_record_and_lookup(redis_client) -> None:
 
 
 async def test_redis_journal_at_most_once(redis_client) -> None:
-    from agent_substrate.infrastructure.runtime import RedisJournal
-    from agent_substrate.kernel.runtime.effects import EffectResult
+    from substrate.infrastructure.runtime import RedisJournal
+    from substrate.kernel.runtime.effects import EffectResult
 
     journal = RedisJournal(redis_client, ttl_seconds=10)
     effect_id = f"test-amo-{id(object())}"
@@ -261,9 +261,9 @@ async def test_redis_journal_at_most_once(redis_client) -> None:
 
 
 async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresScheduler
-    from agent_substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from agent_substrate.kernel.core.identity import AgentId
+    from substrate.infrastructure.runtime import PostgresScheduler
+    from substrate.kernel.runtime.ids import new_run_id, RunStatus
+    from substrate.kernel.core.identity import AgentId
 
     sched = PostgresScheduler(pg_pool)
     await sched.setup()
@@ -282,9 +282,9 @@ async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
 
 
 async def test_pg_scheduler_coalescing(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresScheduler
-    from agent_substrate.kernel.runtime.ids import new_run_id
-    from agent_substrate.kernel.core.identity import AgentId
+    from substrate.infrastructure.runtime import PostgresScheduler
+    from substrate.kernel.runtime.ids import new_run_id
+    from substrate.kernel.core.identity import AgentId
 
     sched = PostgresScheduler(pg_pool)
     await sched.setup()
@@ -301,9 +301,9 @@ async def test_pg_scheduler_coalescing(pg_pool) -> None:
 
 
 async def test_pg_scheduler_release_completed(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresScheduler
-    from agent_substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from agent_substrate.kernel.core.identity import AgentId
+    from substrate.infrastructure.runtime import PostgresScheduler
+    from substrate.kernel.runtime.ids import new_run_id, RunStatus
+    from substrate.kernel.core.identity import AgentId
 
     sched = PostgresScheduler(pg_pool)
     await sched.setup()
@@ -357,7 +357,7 @@ async def test_pg_task_store_persist_and_reload() -> None:
     if factory is None:
         pytest.skip("Postgres not reachable")
 
-    from agent_substrate.infrastructure.storage.pg_task_store import PgTaskStore
+    from substrate.infrastructure.storage.pg_task_store import PgTaskStore
 
     conv_id = f"conv-{id(object())}"
 
@@ -390,7 +390,7 @@ async def test_pg_task_store_add_and_delete() -> None:
     if factory is None:
         pytest.skip("Postgres not reachable")
 
-    from agent_substrate.infrastructure.storage.pg_task_store import PgTaskStore
+    from substrate.infrastructure.storage.pg_task_store import PgTaskStore
 
     conv_id = f"conv-add-{id(object())}"
     store = PgTaskStore(factory)
@@ -414,9 +414,9 @@ async def test_pg_task_store_add_and_delete() -> None:
 
 
 async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
-    from agent_substrate.infrastructure.runtime import PostgresScheduler
-    from agent_substrate.kernel.runtime.ids import new_run_id, RunStatus
-    from agent_substrate.kernel.core.identity import AgentId
+    from substrate.infrastructure.runtime import PostgresScheduler
+    from substrate.kernel.runtime.ids import new_run_id, RunStatus
+    from substrate.kernel.core.identity import AgentId
 
     sched = PostgresScheduler(pg_pool)
     await sched.setup()

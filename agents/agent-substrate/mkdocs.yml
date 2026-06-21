@@ -1,11 +1,12 @@
 site_name: Agent Substrate
 site_description: Production-ready Python framework for building autonomous AI agents with tool calling, memory management, and durable execution.
-site_url: https://agent-substrate.pages.dev
+site_url: https://docs.agent-substrate.com
 repo_url: https://github.com/Ravikumarchavva/agent-substrate
 repo_name: Ravikumarchavva/agent-substrate
 edit_uri: edit/main/docs/
 exclude_docs: |
   includes/
+  archive/
 
 copyright: Copyright &copy; 2025–2026 Ravikumar Chavva
 
@@ -38,11 +39,8 @@ theme:
     - navigation.instant        # SPA-style page loads
     - navigation.instant.progress
     - navigation.tracking       # URL updates on scroll
-    - navigation.tabs           # top-level tabs
-    - navigation.tabs.sticky
-    - navigation.sections       # collapse-able sidebar sections
-    - navigation.expand
-    - navigation.indexes        # section header links to its overview (works on mobile too)
+    - navigation.sections       # collapsible sidebar sections
+    - navigation.indexes        # section title links to its overview page
     - navigation.top            # back-to-top button
     - search.suggest
     - search.highlight
@@ -154,11 +152,6 @@ nav:
     - Supervision & Budgets: concepts/supervision.md
     - Hooks: concepts/hooks.md
 
-  - Advanced Memory:
-    - Vector Memory: concepts/vector-memory.md
-    - Graph Memory: concepts/graph-memory.md
-    - Paged Memory: concepts/paged-memory.md
-
   - Kernel Reference (L0):
     - Overview: kernel/index.md
     - 1 · Core — Content & Identity: kernel/01-core.md
@@ -174,6 +167,11 @@ nav:
     - 1 · Agent Types: agents/01-agent-types.md
     - 2 · The In-Process Runtime: agents/02-runtime.md
     - 3 · Context, Compaction & Memory: agents/03-context-and-memory.md
+    - Advanced Memory:
+      - Overview: concepts/advanced-memory.md
+      - Vector Memory: concepts/vector-memory.md
+      - Graph Memory: concepts/graph-memory.md
+      - Paged Memory: concepts/paged-memory.md
     - 4 · The LLM Stack: agents/04-llm-stack.md
     - 5 · Middleware & Guardrails: agents/05-middleware-and-guardrails.md
     - 6 · Tools — Toolbox & Invoker: agents/06-tools.md
@@ -188,7 +186,5 @@ nav:
     - 5 · Memory & History: capabilities/05-memory-and-history.md
     - 6 · Storage & Pipeline: capabilities/06-storage-and-pipeline.md
     - 7 · Triggers: capabilities/07-triggers.md
-
-  - Archive: archive/index.md
 
   - GitHub: https://github.com/Ravikumarchavva/agent-substrate

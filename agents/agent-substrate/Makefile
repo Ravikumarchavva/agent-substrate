@@ -61,7 +61,7 @@ lint-apply:
 	uv run ruff check . --fix
 
 protocol-schema:
-	uv run python -m agent_substrateserving.protocol.export
+	uv run python -m substrate.serving.protocol.export
 
 lint:
 	uv run ruff check .
@@ -71,7 +71,7 @@ format-check:
 	uv run ruff format --check .
 
 typecheck:
-	uv run --group browser --group files --group storage --with pyright pyright src/
+	uv run --with pyright pyright src/
 
 typecheck-soft:
 	@$(MAKE) typecheck || echo "Non-blocking: typecheck failures ignored by ci target"

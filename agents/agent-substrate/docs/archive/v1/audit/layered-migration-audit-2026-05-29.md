@@ -35,11 +35,11 @@ The migration **copied** code into the new layers but never **deleted** the old 
 $ uv run python -c "import agent_substrateextensions.pipelines"
 ModuleNotFoundError: No module named 'agent_substrateextensions.pipelines.middleware'
 
-$ uv run python -c "from agent_substrateextensions.agents.assistant.agent import AssistantAgent"
-ModuleNotFoundError: No module named 'agent_substrate.kernel.agents.actor'
+$ uv run python -c "from substrateextensions.agents.assistant.agent import AssistantAgent"
+ModuleNotFoundError: No module named 'substrate.kernel.agents.actor'
 ```
 
-`extensions/agents/assistant/agent.py` still does `from agent_substrate.kernel.agents.actor import ActorAgent` — but `ActorAgent` moved to `agent_substrate.fabric.actors.actor`. The files that survive in `extensions/` reference siblings that were never copied (`extensions.pipelines.middleware`, `extensions.pipelines._expr_eval`, `extensions.resilience.policies`, `extensions.agents.flow`, `extensions.structured`, `extensions.tools`).
+`extensions/agents/assistant/agent.py` still does `from substrate.kernel.agents.actor import ActorAgent` — but `ActorAgent` moved to `substrate.fabric.actors.actor`. The files that survive in `extensions/` reference siblings that were never copied (`extensions.pipelines.middleware`, `extensions.pipelines._expr_eval`, `extensions.resilience.policies`, `extensions.agents.flow`, `extensions.structured`, `extensions.tools`).
 
 It is also **dead**: nothing in `src/ravi/` outside `extensions/` itself imports `agent_substrateextensions` (0 references). It is a 9-file, ~3,900-LOC stale duplicate of `reasoning/` and `orchestration/`.
 
@@ -62,14 +62,14 @@ Delete the entire `src/ravi/extensions/` directory. Then remove every remaining 
 
 ### Problem
 
-This is the single biggest "patch rather than fix." To keep old import paths like `from agent_substrate.kernel.agents import ActorAgent` working after the code moved up to `fabric/`, the migration left **module-level re-export shims inside the kernel that import upward** from L1–L5:
+This is the single biggest "patch rather than fix." To keep old import paths like `from substrate.kernel.agents import ActorAgent` working after the code moved up to `fabric/`, the migration left **module-level re-export shims inside the kernel that import upward** from L1–L5:
 
 | Kernel file (L0) | Imports upward from | Layer |
 |---|---|---|
-| `kernel/agents/__init__.py` | `agent_substrate.fabric.actors.actor` | L1 |
-| `kernel/memory/__init__.py` | `agent_substrate.fabric.memory.unbounded` | L1 |
-| `kernel/storage/__init__.py` | `agent_substrate.fabric.storage.local` | L1 |
-| `kernel/plugin/registry.py` | `agent_substrate.fabric.actors.actor` | L1 |
+| `kernel/agents/__init__.py` | `substrate.fabric.actors.actor` | L1 |
+| `kernel/memory/__init__.py` | `substrate.fabric.memory.unbounded` | L1 |
+| `kernel/storage/__init__.py` | `substrate.fabric.storage.local` | L1 |
+| `kernel/plugin/registry.py` | `substrate.fabric.actors.actor` | L1 |
 | `kernel/middleware/runner.py` | `agent_substratereasoning.middleware.pipeline` | L2 |
 | `kernel/execution/__init__.py` | `agent_substratereasoning.middleware.pipeline` | L2 |
 | `kernel/observability/__init__.py` | `agent_substrateguardrails.killswitch`, `agent_substrateplatform.observability.*` | L4 + L5 |
@@ -82,7 +82,7 @@ The frozen, independent L0 kernel that the whole refactor exists to create is no
 
 Re-exports for backwards compatibility must point **downward or sideways**, never up. Two clean options:
 
-1. **Preferred** — update call sites to import from the real home (`from agent_substrate.fabric.actors.actor import ActorAgent`) and delete the kernel shim entirely. The kernel `__init__.py` files should export only what physically lives in the kernel.
+1. **Preferred** — update call sites to import from the real home (`from substrate.fabric.actors.actor import ActorAgent`) and delete the kernel shim entirely. The kernel `__init__.py` files should export only what physically lives in the kernel.
 2. **If a transition shim is truly needed**, put it in the layer that *owns* the symbol (e.g. a `fabric/__init__.py` convenience export), not in the kernel. The lower layer must never name a higher one.
 
 For `kernel/plugin/registry.py`, restore the lazy import inside `_bind()` (the comment already describes the correct design) so the registry module does not import `fabric` at module load.
@@ -99,11 +99,11 @@ For `kernel/plugin/registry.py`, restore the lazy import inside `_bind()` (the c
 [[tool.importlinter.contracts]]
 name = "kernel is independent"
 type = "forbidden"
-source_modules = ["agent_substrate.kernel"]
+source_modules = ["substrate.kernel"]
 forbidden_modules = [
     "agent_substrateextensions",      # ← now a dead tree
-    "agent_substrate.integrations", "agent_substratecatalog", "agent_substrateserver",
-    "agent_substrateservices", "agent_substrateshared", "agent_substrate.configs", "agent_substrate.logger",
+    "substrate.integrations", "agent_substratecatalog", "agent_substrateserver",
+    "agent_substrateservices", "agent_substrateshared", "substrate.configs", "substrate.logger",
 ]
 # fabric / reasoning / orchestration / guardrails / platform are NOT listed
 ```
@@ -123,18 +123,18 @@ layers = [
     "agent_substrateguardrails",     # L4
     "agent_substrateorchestration",  # L3
     "agent_substratereasoning",      # L2
-    "agent_substrate.fabric",         # L1
-    "agent_substrate.kernel",         # L0 (lowest)
+    "substrate.fabric",         # L1
+    "substrate.kernel",         # L0 (lowest)
 ]
 
 [[tool.importlinter.contracts]]
 name = "kernel imports nothing in the app"
 type = "forbidden"
-source_modules = ["agent_substrate.kernel"]
+source_modules = ["substrate.kernel"]
 forbidden_modules = [
-    "agent_substrate.fabric", "agent_substratereasoning", "agent_substrateorchestration",
+    "substrate.fabric", "agent_substratereasoning", "agent_substrateorchestration",
     "agent_substrateguardrails", "agent_substrateplatform",
-    "agent_substrateextensions", "agent_substrate.integrations", "agent_substratecatalog",
+    "agent_substrateextensions", "substrate.integrations", "agent_substratecatalog",
     "agent_substrateserver", "agent_substrateservices",
 ]
 ```
@@ -157,7 +157,7 @@ Two modules were assigned to layers *above* the code that uses them, creating ba
 
 So L2/L3 depend on L4 — the inversion the layering was meant to kill.
 
-**`platform/batch/` (L5) → used by L2.** `reasoning/extraction/extractor.py` (L2) imports `from agent_substrateplatform.batch.processor import BatchProcessor`. L2 depends on L5.
+**`platform/batch/` (L5) → used by L2.** `reasoning/extraction/extractor.py` (L2) imports `from substrateplatform.batch.processor import BatchProcessor`. L2 depends on L5.
 
 ### Fix (real, not a patch)
 
@@ -176,14 +176,14 @@ These are design errors, not import-path errors — fix placement, not the impor
 
 ```python
 # fabric/runtime/_middleware.py
-from agent_substrateguardrails.mutation._breaker import CircuitOpen  # local to avoid kernel→extensions
+from substrateguardrails.mutation._breaker import CircuitOpen  # local to avoid kernel→extensions
 ```
 
 A "local import to avoid a cycle" is the canonical symptom of a layer boundary fighting the real call graph. But several are genuine **module-level** upward imports:
 
 ```python
 # fabric/runtime/_distributed.py
-from agent_substrateplatform.scheduling._contracts import ResourceClaim, SlotGrantStatus, SchedulerContract
+from substrateplatform.scheduling._contracts import ResourceClaim, SlotGrantStatus, SchedulerContract
 ```
 
 The fabric runtime needs scheduler **contracts**, governance **contracts**, kill-switch **contracts**, span **contracts** — but those contracts currently live in L4/L5 *implementation* packages.

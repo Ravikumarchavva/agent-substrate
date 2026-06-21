@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import logging
 import pytest
-from agent_substrate.kernel.core.content import ChatMessage, TextBlock
-from agent_substrate.agents.middleware import (
+from substrate.kernel.core.content import ChatMessage, TextBlock
+from substrate.agents.middleware import (
     MiddlewarePipeline,
     AuditLoggerMiddleware,
     AgentCallContext,
     AgentRunResult,
 )
-from agent_substrate.exceptions import MiddlewareTermination
+from substrate.exceptions import MiddlewareTermination
 
 
 def _ctx(text: str = "hello") -> AgentCallContext:
@@ -111,7 +111,7 @@ async def test_pipeline_middleware_can_mutate_context():
 
 @pytest.mark.asyncio
 async def test_audit_logger_logs_run(caplog):
-    substrate_logger = logging.getLogger("agent_substrate")
+    substrate_logger = logging.getLogger("substrate")
     substrate_logger.addHandler(caplog.handler)
 
     mw = AuditLoggerMiddleware(log_level=logging.INFO)
@@ -123,7 +123,7 @@ async def test_audit_logger_logs_run(caplog):
         c.result = AgentRunResult(output="done", status="success", run_id="r1")
         result_holder.append(c.result)
 
-    with caplog.at_level(logging.INFO, logger="agent_substrate"):
+    with caplog.at_level(logging.INFO, logger="substrate"):
         await MiddlewarePipeline([mw]).execute(ctx, final)
 
     assert "RUN START" in caplog.text

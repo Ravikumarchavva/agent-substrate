@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 
-from agent_substrate.serving.shared.rate_limit import (
+from substrate.serving.shared.rate_limit import (
     _client_ip,
     _sliding_window_check,
     rate_limit,

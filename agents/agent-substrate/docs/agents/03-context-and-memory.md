@@ -60,11 +60,11 @@ three into one pouch and hand over the pouch.
 You pass it to any agent via the `context=` keyword argument:
 
 ```python
-from agent_substrate.agents.context import (
+from substrate.agents.context import (
     ContextConfig, InMemoryHistoryProvider,
     CompactionPipeline, ToolResultCompactionStrategy, SlidingWindowCompaction,
 )
-from agent_substrate.kernel.agent.supervision import HistoryRetention
+from substrate.kernel.agent.supervision import HistoryRetention
 
 ctx = ContextConfig(
     InMemoryHistoryProvider(),

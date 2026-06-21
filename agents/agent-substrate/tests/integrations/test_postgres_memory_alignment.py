@@ -6,15 +6,15 @@ from sqlalchemy.exc import OperationalError
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from agent_substrate.kernel import AgentId, ChatMessage
-from agent_substrate.kernel.core.content import TextBlock
-from agent_substrate.kernel.storage.vector import Document
-from agent_substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
+from substrate.kernel import AgentId, ChatMessage
+from substrate.kernel.core.content import TextBlock
+from substrate.kernel.storage.vector import Document
+from substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
 
-from agent_substrate.capabilities.memory import PostgresMemoryStore
-from agent_substrate.capabilities.history import PostgresHistoryProvider
-from agent_substrate.capabilities.vector import PgVectorStore
-from agent_substrate.capabilities.graph import AGEGraphStore
+from substrate.capabilities.memory import PostgresMemoryStore
+from substrate.capabilities.history import PostgresHistoryProvider
+from substrate.capabilities.vector import PgVectorStore
+from substrate.capabilities.graph import AGEGraphStore
 
 pytestmark = [pytest.mark.requires_postgres]
 

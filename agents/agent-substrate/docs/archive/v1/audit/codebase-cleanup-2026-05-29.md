@@ -137,7 +137,7 @@ There are three different "context" concepts in the codebase, and two of them sh
 
 ### Fix
 
-Rename `server/context.py` → `server/dependencies.py` and rename the class `ServerContext` → `ServerDependencies` (or `AppState`). Update all `from agent_substrateserver.context import ServerContext` imports in routes and lifespan.
+Rename `server/context.py` → `server/dependencies.py` and rename the class `ServerContext` → `ServerDependencies` (or `AppState`). Update all `from substrateserver.context import ServerContext` imports in routes and lifespan.
 
 ---
 

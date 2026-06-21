@@ -6,12 +6,12 @@ import asyncio
 from typing import Any
 
 
-from agent_substrate.agents.tools.invoker import ToolInvoker
-from agent_substrate.agents.tools.toolbox import Toolbox
-from agent_substrate.kernel.tools.approval import ApprovalDecision, ApprovalRequest
-from agent_substrate.kernel.tools.chain import ChainPolicy
-from agent_substrate.kernel.core.content import ImageBlock, TextBlock
-from agent_substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
+from substrate.agents.tools.invoker import ToolInvoker
+from substrate.agents.tools.toolbox import Toolbox
+from substrate.kernel.tools.approval import ApprovalDecision, ApprovalRequest
+from substrate.kernel.tools.chain import ChainPolicy
+from substrate.kernel.core.content import ImageBlock, TextBlock
+from substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
 
 
 # ---------------------------------------------------------------------------

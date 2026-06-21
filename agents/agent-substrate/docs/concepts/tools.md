@@ -13,8 +13,8 @@ The hard parts are the edges: some tools run on *your* server, some run inside t
 A tool is anything matching the `Tool` Protocol — a name, a description, a JSON-schema for its arguments, and an async `execute`:
 
 ```python
-from agent_substrate.kernel.tools import ToolExecutionResult
-from agent_substrate.kernel.core.content import TextBlock
+from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.core.content import TextBlock
 
 class CalculatorTool:
     name = "calculator"
@@ -127,7 +127,7 @@ Sometimes the model wants to call several tools and combine their results — fe
 The [Model Context Protocol](https://modelcontextprotocol.io) lets you attach an external tool server and expose its tools to the agent as if they were native:
 
 ```python
-from agent_substrate.integrations.tools.mcp import MCPClient, MCPTool
+from substrate.integrations.tools.mcp import MCPClient, MCPTool
 
 client = MCPClient(url="http://localhost:9000/sse")
 tools = await MCPTool.from_mcp_client(client)   # list[MCPTool]

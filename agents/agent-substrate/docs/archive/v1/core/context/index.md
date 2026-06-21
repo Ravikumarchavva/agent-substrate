@@ -50,7 +50,7 @@ flowchart LR
 Pass-through. Every message in memory is sent to the LLM unchanged. The `SystemMessage` at index 0 is always preserved.
 
 ```python
-from agent_substratecore.context.implementations import UnboundedContext
+from substratecore.context.implementations import UnboundedContext
 
 ctx = UnboundedContext()   # default — no arguments
 ```
@@ -64,7 +64,7 @@ ctx = UnboundedContext()   # default — no arguments
 Keeps `SystemMessage` + the **last `max_messages`** non-system messages. Oldest messages are silently dropped.
 
 ```python
-from agent_substratecore.context.implementations import SlidingWindowContext
+from substratecore.context.implementations import SlidingWindowContext
 
 ctx = SlidingWindowContext(max_messages=20)
 ```
@@ -86,7 +86,7 @@ graph LR
 Drops the oldest non-system messages until total token count is under `max_tokens`. Uses `model_client.count_tokens()` if provided, else falls back to the 4-chars-per-token heuristic.
 
 ```python
-from agent_substratecore.context.implementations import TokenBudgetContext
+from substratecore.context.implementations import TokenBudgetContext
 
 ctx = TokenBudgetContext(max_tokens=8_000)
 
@@ -121,7 +121,7 @@ sequenceDiagram
 ```
 
 ```python
-from agent_substratecore.context.implementations import HybridContext
+from substratecore.context.implementations import HybridContext
 
 ctx = HybridContext(
     session_manager=sm,
@@ -151,7 +151,7 @@ flowchart LR
 ```
 
 ```python
-from agent_substratecore.context.implementations import SummarizingContext
+from substratecore.context.implementations import SummarizingContext
 
 ctx = SummarizingContext(
     model_client=client,

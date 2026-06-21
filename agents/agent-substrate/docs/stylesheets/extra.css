@@ -124,7 +124,7 @@ body, input {
   padding-top: 2rem;
 }
 
-/* Category header links (non-clickable folder titles) */
+/* Category header links (clickable folder titles) */
 .md-nav__item--nested > .md-nav__link {
   font-size: 0.72rem !important;
   text-transform: uppercase !important;
@@ -133,7 +133,6 @@ body, input {
   color: var(--md-default-fg-color--light) !important;
   margin-top: 0.8rem;
   margin-bottom: 0.3rem;
-  pointer-events: none; /* mimic static header */
 }
 
 /* Child page links */

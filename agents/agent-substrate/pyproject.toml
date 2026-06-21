@@ -1,10 +1,24 @@
 [project]
 name = "agent-substrate"
 version = "0.1.0"
-description = "Add your description here"
+description = "Production-ready async Python framework for building autonomous AI agents with tool calling, memory, and durable execution."
 readme = "README.md"
+license = { text = "MIT" }
 authors = [
     { name = "Ravikumar Chavva", email = "chavvaravikumarreddy2004@gmail.com" },
+]
+keywords = ["ai", "agents", "llm", "multi-agent", "autonomous", "fastapi", "async"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
 ]
 requires-python = ">=3.11"
 dependencies = [
@@ -52,13 +66,22 @@ dependencies = [
     "tavily-python>=0.7.26",
 ]
 
+[project.urls]
+Homepage = "https://docs.agent-substrate.com"
+Documentation = "https://docs.agent-substrate.com"
+Repository = "https://github.com/Ravikumarchavva/agent-substrate"
+Issues = "https://github.com/Ravikumarchavva/agent-substrate/issues"
+
 [project.scripts]
-agent-substrate = "agent_substrate.cli:main"
-start = "agent_substrate.cli:start_main"
+agent-substrate = "substrate.cli:main"
+start = "substrate.cli:start_main"
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "substrate"
 
 [dependency-groups]
 dev = [
@@ -87,87 +110,87 @@ exclude = ["notebooks/", "examples/", ".venv"]
 # E701/E702: single-line if/semicolons are intentional in dispatch tables
 # E402: mid-file imports are intentional in some route files
 [tool.ruff.lint.per-file-ignores]
-"src/agent_substrate/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
-"src/agent_substrate/services/conversation/routes.py" = ["E402"]
+"src/substrate/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
+"src/substrate/services/conversation/routes.py" = ["E402"]
 # plugin/registry.py deliberately imports base classes at the bottom of the
 # module to avoid circular imports with kernel.{agents,guardrails,...}.
-"src/agent_substrate/kernel/plugin/registry.py" = ["E402"]
+"src/substrate/kernel/plugin/registry.py" = ["E402"]
 
 # ---------------------------------------------------------------------------
 # import-linter — enforce the layered architecture so the kernel stays frozen.
 # Layers (strictly downward dependencies only):
-#   server | services  ← catalog  ← integrations  ← extensions  ← kernel
+#   fabric (L3)  ←  capabilities (L2)  ←  agents (L1)  ←  kernel (L0)
 # Run with: uv run lint-imports
 # ---------------------------------------------------------------------------
 [tool.importlinter]
-root_packages = ["agent_substrate"]
+root_packages = ["substrate"]
 
 [[tool.importlinter.contracts]]
 name = "four stack layers"
 type = "layers"
 layers = [
-    "agent_substrate.fabric",        # L3 — orchestration programs (flows, evals, durable)
-    "agent_substrate.capabilities",  # L2 — tools, skills, knowledge, connectors
-    "agent_substrate.agents",        # L1 — core intelligence, LLM, guardrails, middleware
-    "agent_substrate.kernel",        # L0 — pure contracts: Protocols, dataclasses, enums
+    "substrate.fabric",        # L3 — orchestration programs (flows, evals, durable)
+    "substrate.capabilities",  # L2 — tools, skills, knowledge, connectors
+    "substrate.agents",        # L1 — core intelligence, LLM, guardrails, middleware
+    "substrate.kernel",        # L0 — pure contracts: Protocols, dataclasses, enums
 ]
 
 [[tool.importlinter.contracts]]
 name = "agents cannot import capabilities or fabric"
 type = "forbidden"
-source_modules = ["agent_substrate.agents"]
-forbidden_modules = ["agent_substrate.capabilities", "agent_substrate.fabric"]
+source_modules = ["substrate.agents"]
+forbidden_modules = ["substrate.capabilities", "substrate.fabric"]
 
 [[tool.importlinter.contracts]]
 name = "capabilities cannot import fabric"
 type = "forbidden"
-source_modules = ["agent_substrate.capabilities"]
-forbidden_modules = ["agent_substrate.fabric"]
+source_modules = ["substrate.capabilities"]
+forbidden_modules = ["substrate.fabric"]
 
 [[tool.importlinter.contracts]]
 name = "kernel is independent"
 type = "forbidden"
-source_modules = ["agent_substrate.kernel"]
+source_modules = ["substrate.kernel"]
 forbidden_modules = [
-    "agent_substrate.agents",
-    "agent_substrate.capabilities",
-    "agent_substrate.fabric",
-    "agent_substrate.integrations",
-    "agent_substrate.serving",
-    "agent_substrate.config",
-    "agent_substrate.logger",
+    "substrate.agents",
+    "substrate.capabilities",
+    "substrate.fabric",
+    "substrate.integrations",
+    "substrate.serving",
+    "substrate.config",
+    "substrate.logger",
 ]
 
 [[tool.importlinter.contracts]]
 name = "serving cannot import agents or capabilities"
 type = "forbidden"
-source_modules = ["agent_substrate.serving"]
-forbidden_modules = ["agent_substrate.agents", "agent_substrate.capabilities", "agent_substrate.fabric"]
+source_modules = ["substrate.serving"]
+forbidden_modules = ["substrate.agents", "substrate.capabilities", "substrate.fabric"]
 # infrastructure/ is orthogonal — it may cross-cut to agents/capabilities by design.
 # We only want to catch DIRECT imports from serving/ to agents/capabilities.
 allow_indirect_imports = "true"
 ignore_imports = [
     # current_thread_id ContextVar spans both chat.py and capabilities/task_manager
-    "agent_substrate.serving.monolith.routes.chat -> agent_substrate.capabilities.tools.task_manager.tool",
+    "substrate.serving.monolith.routes.chat -> substrate.capabilities.tools.task_manager.tool",
     # WebHITLBridge delivers human-input events; must know the capability type
-    "agent_substrate.serving.monolith.sse.bridge -> agent_substrate.capabilities.tools.human_input",
+    "substrate.serving.monolith.sse.bridge -> substrate.capabilities.tools.human_input",
     # pipelines/triggers routes need DTOs defined in capabilities (PipelineDef, TriggerDef, ConditionDef)
-    "agent_substrate.serving.monolith.routes.pipelines -> agent_substrate.capabilities.pipeline.engine",
-    "agent_substrate.serving.monolith.routes.triggers -> agent_substrate.capabilities.triggers.conditions",
-    "agent_substrate.serving.monolith.routes.triggers -> agent_substrate.capabilities.triggers.scheduler",
+    "substrate.serving.monolith.routes.pipelines -> substrate.capabilities.pipeline.engine",
+    "substrate.serving.monolith.routes.triggers -> substrate.capabilities.triggers.conditions",
+    "substrate.serving.monolith.routes.triggers -> substrate.capabilities.triggers.scheduler",
     # agent_runtime: in-memory fallback Runtime (for RUNTIME_BACKEND=memory env)
-    "agent_substrate.serving.services.agent_runtime.app -> agent_substrate.agents.runtime",
+    "substrate.serving.services.agent_runtime.app -> substrate.agents.runtime",
     # agent_runtime service: load_session_memory is an L1 concern with no kernel protocol yet
-    "agent_substrate.serving.services.agent_runtime.service -> agent_substrate.agents.factory",
+    "substrate.serving.services.agent_runtime.service -> substrate.agents.factory",
     # tool_executor and code_interpreter ARE capability executors by design
-    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.agents.storage.tasks",
-    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.capabilities.tools.code_interpreter.http_client",
-    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.capabilities.tools.code_interpreter.tool",
-    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.capabilities.tools.task_manager.tool",
-    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.capabilities.tools.web.surfer",
-    "agent_substrate.serving.services.code_interpreter.app -> agent_substrate.capabilities.tools.code_interpreter.config",
-    "agent_substrate.serving.services.code_interpreter.app -> agent_substrate.capabilities.tools.code_interpreter.session_manager",
-    "agent_substrate.serving.services.code_interpreter.schemas -> agent_substrate.capabilities.tools.code_interpreter.schemas",
+    "substrate.serving.services.tool_executor.app -> substrate.agents.storage.tasks",
+    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter.http_client",
+    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter.tool",
+    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.task_manager.tool",
+    "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.web.surfer",
+    "substrate.serving.services.code_interpreter.app -> substrate.capabilities.tools.code_interpreter.config",
+    "substrate.serving.services.code_interpreter.app -> substrate.capabilities.tools.code_interpreter.session_manager",
+    "substrate.serving.services.code_interpreter.schemas -> substrate.capabilities.tools.code_interpreter.schemas",
 ]
 
 [tool.uv.sources]

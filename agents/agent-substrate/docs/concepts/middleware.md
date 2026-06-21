@@ -118,7 +118,7 @@ These live in `agents/middleware/` and follow the contract above:
 Compose them in the order you want them to wrap:
 
 ```python
-from agent_substrate.agents.middleware import MiddlewarePipeline
+from substrate.agents.middleware import MiddlewarePipeline
 
 pipeline = MiddlewarePipeline([
     RateLimiter(...),

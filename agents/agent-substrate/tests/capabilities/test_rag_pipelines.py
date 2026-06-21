@@ -2,14 +2,14 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from agent_substrate.kernel import ChatMessage, TextBlock
-from agent_substrate.kernel.llm import LLMResponse, EmbeddingResult, GenerationOptions
-from agent_substrate.kernel.storage.vector import Document, SearchResult
-from agent_substrate.kernel.storage.graph import Entity, Relationship, SubGraph
-from agent_substrate.capabilities.llm.openai_embedding_client import OpenAIEmbeddingClient
-from agent_substrate.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
-from agent_substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
-from agent_substrate.capabilities.knowledge.pipeline import RAGPipeline
+from substrate.kernel import ChatMessage, TextBlock
+from substrate.kernel.llm import LLMResponse, EmbeddingResult, GenerationOptions
+from substrate.kernel.storage.vector import Document, SearchResult
+from substrate.kernel.storage.graph import Entity, Relationship, SubGraph
+from substrate.capabilities.llm.openai_embedding_client import OpenAIEmbeddingClient
+from substrate.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
+from substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
+from substrate.capabilities.knowledge.pipeline import RAGPipeline
 
 
 class StubLLMClient:
@@ -27,7 +27,7 @@ class StubLLMClient:
     ) -> LLMResponse:
         self.calls.append((messages, options))
         text = self.responses.pop(0) if self.responses else "stub response"
-        from agent_substrate.kernel.core.usage import Usage
+        from substrate.kernel.core.usage import Usage
 
         return LLMResponse(content=[TextBlock(text=text)], usage=Usage())
 

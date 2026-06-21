@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from agent_substrate.exceptions import MiddlewareTermination
-from agent_substrate.agents.middleware import (
+from substrate.exceptions import MiddlewareTermination
+from substrate.agents.middleware import (
     ContentFilterMiddleware,
     MaxTokenMiddleware,
     PromptInjectionMiddleware,
@@ -12,7 +12,7 @@ from agent_substrate.agents.middleware import (
     ChatContext,
     MiddlewarePipeline,
 )
-from agent_substrate.kernel.core.content import ChatMessage, TextBlock
+from substrate.kernel.core.content import ChatMessage, TextBlock
 
 
 def _agent_ctx(text: str) -> AgentCallContext:

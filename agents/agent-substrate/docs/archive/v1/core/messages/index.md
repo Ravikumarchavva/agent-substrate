@@ -54,7 +54,7 @@ sequenceDiagram
 ### SystemMessage
 
 ```python
-from agent_substratecore.messages import SystemMessage
+from substratecore.messages import SystemMessage
 
 msg = SystemMessage("You are a precise research assistant.")
 # content is a plain string
@@ -63,7 +63,7 @@ msg = SystemMessage("You are a precise research assistant.")
 ### UserMessage — text and multi-modal
 
 ```python
-from agent_substratecore.messages import UserMessage, ImageContent, AudioContent
+from substratecore.messages import UserMessage, ImageContent, AudioContent
 
 # Text only
 msg = UserMessage(content=["What year is it?"])
@@ -99,7 +99,7 @@ for tc in assistant_msg.tool_calls:
 ### ToolCallMessage + ToolExecutionResultMessage
 
 ```python
-from agent_substratecore.messages import ToolCallMessage, ToolExecutionResultMessage
+from substratecore.messages import ToolCallMessage, ToolExecutionResultMessage
 
 # Reading a tool call
 call = ToolCallMessage(id="call-123", name="web_search", arguments={"query": "LLMs"})
@@ -154,7 +154,7 @@ All messages support `to_dict()` / `from_dict()` for storage and transport.
 data = msg.to_dict()    # {"role": "user", "content": [...]}
 
 # Deserialise
-from agent_substratecore.messages import UserMessage
+from substratecore.messages import UserMessage
 msg = UserMessage.from_dict(data)
 ```
 
@@ -172,7 +172,7 @@ When an agent streams (`run_stream()`), it yields these chunk types:
 | `StructuredOutputChunk` | `"structured_output"` | `.result.parsed` — validated Pydantic model |
 
 ```python
-from agent_substratecore.messages import (
+from substratecore.messages import (
     TextDeltaChunk, ReasoningDeltaChunk,
     CompletionChunk, StructuredOutputChunk,
 )

@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
-from agent_substrate.capabilities.tools.chain.bridge import BridgeSession, ChainBridgeRegistry
-from agent_substrate.capabilities.tools.chain.prelude import build_prelude
-from agent_substrate.agents.tools.invoker import ToolInvoker
-from agent_substrate.agents.tools.toolbox import Toolbox
-from agent_substrate.kernel.core.content import TextBlock
-from agent_substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
+from substrate.capabilities.tools.chain.bridge import BridgeSession, ChainBridgeRegistry
+from substrate.capabilities.tools.chain.prelude import build_prelude
+from substrate.agents.tools.invoker import ToolInvoker
+from substrate.agents.tools.toolbox import Toolbox
+from substrate.kernel.core.content import TextBlock
+from substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
 
 
 # ---------------------------------------------------------------------------
@@ -173,8 +173,8 @@ def test_bridge_registry_deregister_missing():
 
 
 async def test_tool_chain_tool_registers_and_deregisters_session():
-    from agent_substrate.capabilities.tools.chain.tool import ToolChainTool
-    from agent_substrate.capabilities.tools.chain.bridge import ChainBridgeRegistry
+    from substrate.capabilities.tools.chain.tool import ToolChainTool
+    from substrate.capabilities.tools.chain.bridge import ChainBridgeRegistry
 
     registry = make_registry(EchoTool())
     invoker = ToolInvoker(registry=registry)
@@ -197,7 +197,7 @@ async def test_tool_chain_tool_registers_and_deregisters_session():
 
 
 async def test_tool_chain_tool_error_propagates():
-    from agent_substrate.capabilities.tools.chain.tool import ToolChainTool
+    from substrate.capabilities.tools.chain.tool import ToolChainTool
 
     registry = make_registry(EchoTool())
     invoker = ToolInvoker(registry=registry)
@@ -215,7 +215,7 @@ async def test_tool_chain_tool_error_propagates():
 
 
 def test_tool_chain_tool_raises_without_interpreter():
-    from agent_substrate.capabilities.tools.chain.tool import ToolChainTool
+    from substrate.capabilities.tools.chain.tool import ToolChainTool
 
     registry = make_registry()
     invoker = ToolInvoker(registry=registry)
@@ -224,7 +224,7 @@ def test_tool_chain_tool_raises_without_interpreter():
 
 
 async def test_tool_chain_tool_prelude_includes_registry_names():
-    from agent_substrate.capabilities.tools.chain.tool import ToolChainTool
+    from substrate.capabilities.tools.chain.tool import ToolChainTool
 
     registry = make_registry(EchoTool())
     invoker = ToolInvoker(registry=registry)

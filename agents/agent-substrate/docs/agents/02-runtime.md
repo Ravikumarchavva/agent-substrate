@@ -37,7 +37,7 @@ async with Runtime() as rt:
     run_id = await rt.submit(my_agent.id, boot_msg)
 
 # Production (Stage 1) — durable backends injected by the infra factory
-from agent_substrate.infrastructure.runtime import build_postgres_runtime
+from substrate.infrastructure.runtime import build_postgres_runtime
 async with build_postgres_runtime(postgres_url=..., redis_url=...) as rt:
     await rt.register(my_agent)
     run_id = await rt.submit(my_agent.id, boot_msg)   # identical

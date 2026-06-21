@@ -1,0 +1,52 @@
+"""capabilities — the authoritative home for everything agents can use.
+
+Directory layout::
+
+    capabilities/
+    ├── tools/          ← all tool implementations + skills + connectors + discovery
+    │   ├── skills/     ← SKILL.md prompt-skill packages
+    │   ├── connectors/ ← stateful service connectors
+    │   ├── chain/      ← sandboxed code-mode tool chaining (bridge, prelude, ToolChainTool)
+    │   └── web/, files/, ai/, compute/, utils/, communication/, …
+    ├── knowledge/    ← RAG pipeline, chunkers, loaders, reranker
+    ├── pipeline/     ← declarative pipeline execution engine + DataRefStore/ArtifactStore
+    ├── memory/       ← ShortTermMemory + LongTermMemory implementations
+    ├── history/      ← HistoryProvider implementations
+    ├── vector/       ← VectorStore implementations
+    ├── graph/        ← GraphStore implementations
+    └── triggers/     ← trigger monitors (scheduled, webhooks, events)
+"""
+
+from __future__ import annotations
+
+from substrate.capabilities.pipeline.data_ref import (
+    DataRef,
+    DataRefStore,
+    DataRefArtifactStore,
+)
+from substrate.capabilities.pipeline.engine import (
+    PipelineDef,
+    PipelineEngine,
+    PipelineResult,
+)
+from substrate.capabilities.pipeline.store import PipelineStore
+from substrate.capabilities.tools.discovery import CatalogPackage, CapabilityDiscovery
+from substrate.capabilities.tools.skills._manager import SkillManager
+from substrate.capabilities.tools.skills._loader import SkillLoader
+from substrate.capabilities.tools.skills._models import SkillPackage, SkillMetadata
+
+__all__ = [
+    "CatalogPackage",
+    "CapabilityDiscovery",
+    "DataRef",
+    "DataRefStore",
+    "DataRefArtifactStore",
+    "PipelineDef",
+    "PipelineEngine",
+    "PipelineResult",
+    "PipelineStore",
+    "SkillLoader",
+    "SkillManager",
+    "SkillMetadata",
+    "SkillPackage",
+]

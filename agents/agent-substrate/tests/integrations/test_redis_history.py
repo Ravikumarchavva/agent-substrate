@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 import redis.exceptions
 
-from agent_substrate.capabilities.history import RedisHistoryProvider
-from agent_substrate.kernel import AgentId
-from agent_substrate.kernel.core.content import ChatMessage, TextBlock
+from substrate.capabilities.history import RedisHistoryProvider
+from substrate.kernel import AgentId
+from substrate.kernel.core.content import ChatMessage, TextBlock
 
 pytestmark = [pytest.mark.requires_redis]
 

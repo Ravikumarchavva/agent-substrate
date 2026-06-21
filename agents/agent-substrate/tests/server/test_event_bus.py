@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from agent_substrate.serving.monolith.sse.bridge import BRIDGE_DONE, WebHITLBridge, _DONE
+from substrate.serving.monolith.sse.bridge import BRIDGE_DONE, WebHITLBridge, _DONE
 
 
 def test_bridge_done_is_internal_sentinel():

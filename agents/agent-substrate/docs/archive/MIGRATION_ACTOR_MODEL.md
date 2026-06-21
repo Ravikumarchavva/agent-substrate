@@ -23,13 +23,13 @@ The framework has one agent hierarchy now instead of two.
 
 ```python
 # Old
-from agent_substrateextensions.agents.react.agent import ReActAgent
-from agent_substrate.kernel.agents.base_agent import BaseAgent
+from substrateextensions.agents.react.agent import ReActAgent
+from substrate.kernel.agents.base_agent import BaseAgent
 
 # New
-from agent_substrateextensions.agents.assistant.agent import AssistantAgent
-from agent_substrateextensions.agents.user_proxy.agent import UserProxyAgent
-from agent_substrate.kernel.agents.actor import ActorAgent
+from substrateextensions.agents.assistant.agent import AssistantAgent
+from substrateextensions.agents.user_proxy.agent import UserProxyAgent
+from substrate.kernel.agents.actor import ActorAgent
 ```
 
 ---
@@ -47,7 +47,7 @@ agent = ReActAgent(
 )
 
 # New
-from agent_substrate.kernel.runtime._local import LocalRuntime
+from substrate.kernel.runtime._local import LocalRuntime
 
 runtime = LocalRuntime()
 await runtime.start()
@@ -315,7 +315,7 @@ All examples that import `ReActAgent` or `Agent` need updating. Here is the migr
 
 ```python
 # OLD (at top of any notebook cell)
-from agent_substrateextensions.agents.react.agent import ReActAgent
+from substrateextensions.agents.react.agent import ReActAgent
 # or
 from ravi import Agent
 
@@ -329,9 +329,9 @@ result = await agent.run("task")
 # ─────────────────────────────────────────────
 
 # NEW
-from agent_substrateextensions.agents.assistant.agent import AssistantAgent
-from agent_substrateextensions.agents.user_proxy.agent import UserProxyAgent
-from agent_substrate.kernel.runtime._local import LocalRuntime
+from substrateextensions.agents.assistant.agent import AssistantAgent
+from substrateextensions.agents.user_proxy.agent import UserProxyAgent
+from substrate.kernel.runtime._local import LocalRuntime
 
 # Option A: one-shot (context manager)
 async with LocalRuntime() as runtime:
@@ -353,7 +353,7 @@ async with LocalRuntime() as runtime:
 ### Notebooks that need updating
 
 Check every `.ipynb` in `examples/` for cells containing:
-- `from agent_substrateextensions.agents.react.agent import ReActAgent` → replace with `AssistantAgent`
+- `from substrateextensions.agents.react.agent import ReActAgent` → replace with `AssistantAgent`
 - `from ravi import Agent` → replace with actor pattern above
 - `ReActAgent(name=..., description=..., catalog=..., ...)` → `AssistantAgent(name, runtime, catalog=...)`
 - `agent.run(...)` → still works via compat shim, but wrap in `async with LocalRuntime() as runtime:`

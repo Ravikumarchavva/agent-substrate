@@ -5,11 +5,11 @@ This is the shortest useful Ravi program.
 ```python
 import asyncio
 
-from agent_substrate.agents import ReActAgent, Runtime
-from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider
-from agent_substrate.integrations.llm.openai import OpenAIClient
-from agent_substrate.kernel import Message, ChatPayload, ChatMessage, Role, TextBlock
-from agent_substrate.kernel.core.identity import AgentId
+from substrate.agents import ReActAgent, Runtime
+from substrate.agents.context import ContextConfig, InMemoryHistoryProvider
+from substrate.integrations.llm.openai import OpenAIClient
+from substrate.kernel import Message, ChatPayload, ChatMessage, Role, TextBlock
+from substrate.kernel.core.identity import AgentId
 
 
 async def main() -> None:

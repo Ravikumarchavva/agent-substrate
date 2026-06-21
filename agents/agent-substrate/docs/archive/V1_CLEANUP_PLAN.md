@@ -28,8 +28,8 @@ src/ravi/
 ```
 
 Import-linter enforces two contracts (already passing):
-1. `agent_substrate.agents` → `agent_substrate.kernel` (stack flows downward)
-2. `agent_substrate.kernel` imports nothing from any other ravi package
+1. `substrate.agents` → `substrate.kernel` (stack flows downward)
+2. `substrate.kernel` imports nothing from any other ravi package
 
 ---
 
@@ -37,7 +37,7 @@ Import-linter enforces two contracts (already passing):
 
 ### 1.1 Delete two parked event adapter files
 
-These files import `agent_substrate.kernel.events._fabric` which does not exist and was never created.
+These files import `substrate.kernel.events._fabric` which does not exist and was never created.
 They are explicitly marked as parked in `adapters/events/__init__.py` and are unreachable.
 
 **Delete:**
@@ -60,12 +60,12 @@ Inspect both `agent.py` files and determine if they are the same.
 
 ## Section 2 — Add missing `serving/__init__.py`
 
-`src/ravi/serving/` is a directory with no `__init__.py`. This means `import agent_substrate.serving` fails with `ModuleNotFoundError`, even though three sub-packages (`monolith`, `services`, `shared`) exist inside it.
+`src/ravi/serving/` is a directory with no `__init__.py`. This means `import substrate.serving` fails with `ModuleNotFoundError`, even though three sub-packages (`monolith`, `services`, `shared`) exist inside it.
 
 **Create** `src/ravi/serving/__init__.py` with this content:
 
 ```python
-"""agent_substrate.serving — deployment shells for the agent framework.
+"""substrate.serving — deployment shells for the agent framework.
 
 Three sub-packages:
   monolith/   — single FastAPI application
@@ -263,7 +263,7 @@ Apply to:
 ### 4.4 Connector packages — add docstring only
 
 ```python
-"""agent_substrate.capabilities.connectors.<name> — <connector> connector."""
+"""substrate.capabilities.connectors.<name> — <connector> connector."""
 
 from __future__ import annotations
 ```
@@ -280,7 +280,7 @@ These are imported through `agents/__init__.py` (which already re-exports everyt
 The sub-package `__init__.py` files should have just a docstring:
 
 ```python
-"""agent_substrate.agents.<subpackage> — one-line description."""
+"""substrate.agents.<subpackage> — one-line description."""
 
 from __future__ import annotations
 ```
@@ -301,7 +301,7 @@ Apply to:
 These are never imported as packages directly — always their sub-modules.
 
 ```python
-"""agent_substrate.serving.<subpackage> — one-line description."""
+"""substrate.serving.<subpackage> — one-line description."""
 
 from __future__ import annotations
 ```
@@ -416,8 +416,8 @@ Replace all references to `BaseTool`, `BaseModelClient`, `ReActAgent`, `extensio
 
 **Tool creation** (replace the BaseTool example):
 ```python
-from agent_substrate.kernel.tools import ToolExecutionResult, Tool
-from agent_substrate.kernel.content import TextBlock
+from substrate.kernel.tools import ToolExecutionResult, Tool
+from substrate.kernel.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -432,20 +432,20 @@ Tools are auto-discovered by `capabilities/internal/scanner.py` when placed in `
 
 **LLM client** (replace wrong import path):
 ```python
-from agent_substrateadapters.llm.factory import create_model_client
+from substrateadapters.llm.factory import create_model_client
 client = create_model_client("gpt-4o", api_keys={"openai": "..."})
 ```
 
 **Memory / history** (replace RedisMemory references):
 ```python
 # In-memory (default, for testing)
-from agent_substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.context import InMemoryHistoryProvider
 
 # Redis-backed
-from agent_substrateadapters.memory.redis_history import RedisHistoryProvider
+from substrateadapters.memory.redis_history import RedisHistoryProvider
 
 # Postgres-backed
-from agent_substrateadapters.memory.postgres_history import PostgresHistoryProvider
+from substrateadapters.memory.postgres_history import PostgresHistoryProvider
 ```
 
 **Adding a new capability** (replace the old @register_* table):
@@ -477,10 +477,10 @@ Verify each entry in `_LAZY` dict actually resolves:
 ```python
 import importlib
 _LAZY = {
-    "AssistantAgent":   ("agent_substrate.agents.assistant.agent", "AssistantAgent"),
-    "AgentRunResult":   ("agent_substrate.agents.assistant.agent", "AgentRunResult"),
-    "LocalRuntime":     ("agent_substrate.agents.runtime",         "LocalRuntime"),
-    "Skill":            ("agent_substrate.agents.skills",          "Skill"),  # ← verify this module exists
+    "AssistantAgent":   ("substrate.agents.assistant.agent", "AssistantAgent"),
+    "AgentRunResult":   ("substrate.agents.assistant.agent", "AgentRunResult"),
+    "LocalRuntime":     ("substrate.agents.runtime",         "LocalRuntime"),
+    "Skill":            ("substrate.agents.skills",          "Skill"),  # ← verify this module exists
     ...
 }
 for name, (mod, attr) in _LAZY.items():
@@ -488,19 +488,19 @@ for name, (mod, attr) in _LAZY.items():
     assert obj is not None, f"Missing: {mod}.{attr}"
 ```
 
-If `agent_substrate.agents.skills` does not exist, fix the import path (likely `agent_substrate.capabilities.skills` or `agent_substrate.capabilities.internal.skill_models`).
+If `substrate.agents.skills` does not exist, fix the import path (likely `substrate.capabilities.skills` or `substrate.capabilities.internal.skill_models`).
 
 Also add the following to `__all__` and `_LAZY` — these are commonly needed but missing from the top-level API:
 
 ```python
 # history providers
-"InMemoryHistoryProvider": ("agent_substrate.agents.context", "InMemoryHistoryProvider"),
-"AgentContext":            ("agent_substrate.agents.context", "AgentContext"),
-"SlidingWindowCompaction": ("agent_substrate.agents.context", "SlidingWindowCompaction"),
-# kernel types (already importable from agent_substrate.kernel but convenient at top level)
-"ChatMessage":             ("agent_substrate.kernel.content",  "ChatMessage"),
-"TextBlock":               ("agent_substrate.kernel.content",  "TextBlock"),
-"ToolExecutionResult":     ("agent_substrate.kernel.tools",    "ToolExecutionResult"),
+"InMemoryHistoryProvider": ("substrate.agents.context", "InMemoryHistoryProvider"),
+"AgentContext":            ("substrate.agents.context", "AgentContext"),
+"SlidingWindowCompaction": ("substrate.agents.context", "SlidingWindowCompaction"),
+# kernel types (already importable from substrate.kernel but convenient at top level)
+"ChatMessage":             ("substrate.kernel.content",  "ChatMessage"),
+"TextBlock":               ("substrate.kernel.content",  "TextBlock"),
+"ToolExecutionResult":     ("substrate.kernel.tools",    "ToolExecutionResult"),
 ```
 
 ---
@@ -568,16 +568,16 @@ uv run lint-imports
 # 5. Critical import smoke test
 uv run python -c "
 import ravi
-import agent_substrate.kernel
-import agent_substrate.agents
+import substrate.kernel
+import substrate.agents
 import agent_substrateadapters
 import agent_substrateadapters.llm
 import agent_substrateadapters.memory
 import agent_substrateadapters.mcp
 import agent_substrateadapters.events
-import agent_substrate.capabilities.internal.scanner
-import agent_substrate.serving.monolith.app
-import agent_substrate.serving.services.tool_executor.executor
+import substrate.capabilities.internal.scanner
+import substrate.serving.monolith.app
+import substrate.serving.services.tool_executor.executor
 print('All imports OK')
 "
 

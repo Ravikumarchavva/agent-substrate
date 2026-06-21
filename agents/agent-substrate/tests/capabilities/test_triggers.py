@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 import pytest
 
-from agent_substrate.kernel.core.identity import AgentId
-from agent_substrate.kernel.messaging.message import Message, DataPayload
-from agent_substrate.capabilities.triggers.scheduler import TriggerScheduler, TriggerDef
-from agent_substrate.capabilities.triggers.webhooks import WebhookRegistry
-from agent_substrate.capabilities.triggers.conditions import ConditionMonitor, ConditionDef
-from agent_substrate.integrations.events.redis_event_bus import EventBus
-from agent_substrate.integrations.events.envelope import EventEnvelope
+from substrate.kernel.core.identity import AgentId
+from substrate.kernel.messaging.message import Message, DataPayload
+from substrate.capabilities.triggers.scheduler import TriggerScheduler, TriggerDef
+from substrate.capabilities.triggers.webhooks import WebhookRegistry
+from substrate.capabilities.triggers.conditions import ConditionMonitor, ConditionDef
+from substrate.integrations.events.redis_event_bus import EventBus
+from substrate.integrations.events.envelope import EventEnvelope
 
 
 class MockRuntime:

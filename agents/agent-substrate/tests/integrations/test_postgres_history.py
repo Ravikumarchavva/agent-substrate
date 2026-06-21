@@ -4,9 +4,9 @@ import os
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from agent_substrate.capabilities.history import PostgresHistoryProvider
-from agent_substrate.kernel import AgentId, ChatMessage
-from agent_substrate.kernel.core.content import TextBlock
+from substrate.capabilities.history import PostgresHistoryProvider
+from substrate.kernel import AgentId, ChatMessage
+from substrate.kernel.core.content import TextBlock
 
 pytestmark = [pytest.mark.requires_postgres]
 

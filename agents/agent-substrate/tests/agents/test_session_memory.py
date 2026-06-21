@@ -4,21 +4,21 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from agent_substrate.agents.context import (
+from substrate.agents.context import (
     ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
     CompactionPipeline,
 )
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.agents.runtime import Runtime
-from agent_substrate.kernel import ChatMessage, ContentBlock, TextBlock
-from agent_substrate.kernel.core.content import Role
-from agent_substrate.kernel.core.identity import AgentId
-from agent_substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
-from agent_substrate.kernel.messaging.message import ChatPayload, Message
-from agent_substrate.kernel.messaging.stream import CompletionEvent, TextDelta
-from agent_substrate.agents.factory import load_session_memory
+from substrate.agents.core import ReActAgent
+from substrate.agents.runtime import Runtime
+from substrate.kernel import ChatMessage, ContentBlock, TextBlock
+from substrate.kernel.core.content import Role
+from substrate.kernel.core.identity import AgentId
+from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
+from substrate.kernel.messaging.message import ChatPayload, Message
+from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from substrate.agents.factory import load_session_memory
 
 
 # ---------------------------------------------------------------------------

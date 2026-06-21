@@ -31,10 +31,10 @@ graph TB
 
 ```python
 # Abstract base (no external deps — safe to import anywhere)
-from agent_substratecore.llm.base_client import BaseModelClient
+from substratecore.llm.base_client import BaseModelClient
 
 # Concrete implementation
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
 ```
 
 ---
@@ -44,8 +44,8 @@ from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
 ### Blocking
 
 ```python
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substratecore.messages import SystemMessage, UserMessage
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substratecore.messages import SystemMessage, UserMessage
 
 client = OpenAIClient(model="gpt-4o", temperature=0.7)
 
@@ -159,7 +159,7 @@ if result:
 Pass `ImageContent` objects in a `UserMessage` to feed images to the LLM.
 
 ```python
-from agent_substratecore.messages import UserMessage, ImageContent
+from substratecore.messages import UserMessage, ImageContent
 
 msg = UserMessage(content=[
     "Describe what you see in this image.",

@@ -4,7 +4,7 @@
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docs](https://img.shields.io/badge/docs-agent--substrate.pages.dev-teal)](https://agent-substrate.pages.dev)
+[![Docs](https://img.shields.io/badge/docs-docs.agent-substrate.com-teal)](https://docs.agent-substrate.com)
 
 ---
 
@@ -53,9 +53,9 @@ make infra-up
 
 ```python
 import asyncio
-from agent_substrate.agents import ReActAgent, Runtime
-from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider
-from agent_substrate.integrations.llm import LLMFactory
+from substrate.agents import ReActAgent, Runtime
+from substrate.agents.context import ContextConfig, InMemoryHistoryProvider
+from substrate.integrations.llm import LLMFactory
 
 async def main():
     runtime = Runtime()
@@ -83,10 +83,10 @@ if __name__ == "__main__":
 
 ```python
 import asyncio
-from agent_substrate.agents import ReActAgent, Runtime
-from agent_substrate.integrations.llm import LLMFactory
-from agent_substrate.kernel.tools import ToolExecutionResult
-from agent_substrate.kernel.core.content import TextBlock
+from substrate.agents import ReActAgent, Runtime
+from substrate.integrations.llm import LLMFactory
+from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.core.content import TextBlock
 
 class CalculatorTool:
     name = "calculator"
@@ -153,11 +153,11 @@ Import-linter enforces the layer contract on every CI run (`uv run lint-imports`
 
 ### Adding a Tool
 
-Drop a file at `src/agent_substrate/capabilities/tools/<name>/tool.py` — `CatalogScanner` discovers it automatically, no registration needed:
+Drop a file at `src/substrate/capabilities/tools/<name>/tool.py` — `CatalogScanner` discovers it automatically, no registration needed:
 
 ```python
-from agent_substrate.kernel.tools import ToolExecutionResult
-from agent_substrate.kernel.core.content import TextBlock
+from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.core.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -171,7 +171,7 @@ class MyTool:
 ### LLM Client
 
 ```python
-from agent_substrate.integrations.llm import LLMFactory
+from substrate.integrations.llm import LLMFactory
 
 # Provider auto-detected from model name prefix
 client = LLMFactory("gpt-4o", api_key).build()
@@ -183,7 +183,7 @@ client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
 ### MCP Tools
 
 ```python
-from agent_substrate.integrations.tools.mcp import MCPClient, MCPTool
+from substrate.integrations.tools.mcp import MCPClient, MCPTool
 
 client = MCPClient(url="http://localhost:9000/sse")
 tools = await MCPTool.from_mcp_client(client)   # list[MCPTool]
@@ -192,8 +192,8 @@ tools = await MCPTool.from_mcp_client(client)   # list[MCPTool]
 ### Knowledge / RAG
 
 ```python
-from agent_substrate.capabilities.vector import PgVectorStore
-from agent_substrate.capabilities.knowledge import RAGPipeline
+from substrate.capabilities.vector import PgVectorStore
+from substrate.capabilities.knowledge import RAGPipeline
 
 pipeline = RAGPipeline(embedding_client=embed_client, vector_store=PgVectorStore(...))
 await pipeline.ingest("Long document …", collection="kb")
@@ -207,7 +207,7 @@ results = await pipeline.query("What is X?", collection="kb")
 ### OrchestratorAgent — Hub & Spoke
 
 ```python
-from agent_substrate.agents import OrchestratorAgent, SubAgentConfig
+from substrate.agents import OrchestratorAgent, SubAgentConfig
 
 orchestrator = OrchestratorAgent(
     id="coordinator",
@@ -222,7 +222,7 @@ orchestrator = OrchestratorAgent(
 ### SequentialFlow — Linear Pipeline
 
 ```python
-from agent_substrate.fabric.flows import SequentialFlow
+from substrate.fabric.flows import SequentialFlow
 
 pipeline = SequentialFlow(steps=[fetcher_agent, parser_agent, formatter_agent])
 result = await runtime.run(pipeline, "Process this document.")
@@ -231,7 +231,7 @@ result = await runtime.run(pipeline, "Process this document.")
 ### ParallelFlow — Concurrent Execution
 
 ```python
-from agent_substrate.fabric.flows import ParallelFlow
+from substrate.fabric.flows import ParallelFlow
 
 evaluator = ParallelFlow(
     branches=[security_auditor, legal_checker, grammar_advisor],
@@ -242,7 +242,7 @@ evaluator = ParallelFlow(
 ### ConditionalFlow — Dynamic Routing
 
 ```python
-from agent_substrate.fabric.flows import ConditionalFlow
+from substrate.fabric.flows import ConditionalFlow
 
 router = ConditionalFlow(
     predicate=lambda text: "bug" in text.lower(),
@@ -297,7 +297,7 @@ make ci
 
 ## 📖 Documentation
 
-Full architecture reference, layer guides, and API docs at **[agent-substrate.pages.dev](https://agent-substrate.pages.dev)**.
+Full architecture reference, layer guides, and API docs at **[agent-substrate.pages.dev](https://docs.agent-substrate.com)**.
 
 ---
 

@@ -10,23 +10,23 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-from agent_substrate.agents.context import (
+from substrate.agents.context import (
     CompactionPipeline,
     ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.agents.hooks.manager import HookEvent, HookManager
-from agent_substrate.agents.runtime import Runtime
-from agent_substrate.agents.tools.invoker import ToolInvoker
-from agent_substrate.agents.tools.toolbox import Toolbox
-from agent_substrate.kernel import TextBlock, ToolExecutionResult, ToolRisk
-from agent_substrate.kernel.core.identity import AgentId
-from agent_substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
-from agent_substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
-from agent_substrate.kernel.messaging.stream import CompletionEvent, TextDelta
-from agent_substrate.kernel.core.content import ChatMessage, Role
+from substrate.agents.core import ReActAgent
+from substrate.agents.hooks.manager import HookEvent, HookManager
+from substrate.agents.runtime import Runtime
+from substrate.agents.tools.invoker import ToolInvoker
+from substrate.agents.tools.toolbox import Toolbox
+from substrate.kernel import TextBlock, ToolExecutionResult, ToolRisk
+from substrate.kernel.core.identity import AgentId
+from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
+from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
+from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from substrate.kernel.core.content import ChatMessage, Role
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
 
 async def test_tool_start_end_fire() -> None:
     """TOOL_START and TOOL_END are dispatched by ToolInvoker around every tool call."""
-    from agent_substrate.kernel.tools import ToolCallRequest
+    from substrate.kernel.tools import ToolCallRequest
 
     hooks, log = _recording_hooks(HookEvent.TOOL_START, HookEvent.TOOL_END)
 

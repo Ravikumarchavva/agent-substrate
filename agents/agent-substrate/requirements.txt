@@ -1,3 +1,6 @@
+# Docs build dependencies (used by Cloudflare Pages / `mkdocs build`)
+# Install with: pip install -r requirements.txt
+# For local dev use the uv docs group instead: uv sync --group docs
 mkdocs-material
 mkdocs-minify-plugin
 mkdocstrings[python]

@@ -95,8 +95,8 @@ First-occurrence wins — earlier directories take priority if the same package 
 Drop a `tool.py` in any subdirectory under `capabilities/tools/`:
 
 ```python
-from agent_substrate.kernel.tools import ToolExecutionResult
-from agent_substrate.kernel.core.content import TextBlock
+from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.core.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -119,7 +119,7 @@ class MyTool:
 Tag tools that modify state or call external APIs:
 
 ```python
-from agent_substrate.kernel.tools import ToolRisk
+from substrate.kernel.tools import ToolRisk
 
 class DangerousTool:
     risk: ToolRisk = ToolRisk.HIGH   # SAFE | LOW | MEDIUM | HIGH | CRITICAL

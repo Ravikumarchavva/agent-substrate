@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_substrate.capabilities.tools.skills._loader import SkillLoader
+from substrate.capabilities.tools.skills._loader import SkillLoader
 
 
 def test_skill_loader_parsing(tmp_path):

@@ -9,13 +9,13 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Any
-from agent_substrate.agents.runtime.context import RunContext
-from agent_substrate.agents.runtime.runtime import Runtime
-from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from agent_substrate.kernel.core.identity import AgentId
-from agent_substrate.kernel.messaging.message import ChatPayload, Message
-from agent_substrate.serving.monolith.sse.bridge import BRIDGE_DONE
-from agent_substrate.serving.protocol import (
+from substrate.agents.runtime.context import RunContext
+from substrate.agents.runtime.runtime import Runtime
+from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.core.identity import AgentId
+from substrate.kernel.messaging.message import ChatPayload, Message
+from substrate.serving.monolith.sse.bridge import BRIDGE_DONE
+from substrate.serving.protocol import (
     HelloEvent,
     RunCompletedEvent,
     RunFailedEvent,
@@ -24,7 +24,7 @@ from agent_substrate.serving.protocol import (
     WireEvent,
     RunCancelledEvent,
 )
-from agent_substrate.serving.stream.session import AgentStreamSession
+from substrate.serving.stream.session import AgentStreamSession
 
 
 # ---------------------------------------------------------------------------

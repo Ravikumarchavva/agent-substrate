@@ -9,8 +9,8 @@ Trust it as the primary reference; only search the codebase if something here is
 
 Python async AI-agent framework with two deployment modes:
 
-1. **Monolith** — single FastAPI server at `src/agent_substrate/serving/monolith/`
-2. **Microservices** — 12 independent FastAPI services at `src/agent_substrate/serving/services/`
+1. **Monolith** — single FastAPI server at `src/substrate/serving/monolith/`
+2. **Microservices** — 12 independent FastAPI services at `src/substrate/serving/services/`
 
 Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 18, Redis 7, OpenTelemetry → Tempo.
 
@@ -47,7 +47,7 @@ uv run python -m ruff format .
 
 ```
 agent-substrate/                         ← repo root
-├── src/agent_substrate/                 ← Python package (all application code)
+├── src/substrate/                 ← Python package (all application code)
 ├── deployment/                  ← All deployment artefacts
 │   ├── docker/                  ← Dockerfiles + Compose files
 │   │   ├── backend.Dockerfile
@@ -64,7 +64,7 @@ agent-substrate/                         ← repo root
 ```
 
 ```
-src/agent_substrate/
+src/substrate/
 ├── kernel/       L0 — FROZEN. Pure contracts: Protocols, dataclasses, enums. No I/O.
 │   ├── core/             content.py (ContentBlock, TextBlock, ChatMessage, ToolUseBlock, …),
 │   │                     identity.py (AgentId, TopicId), usage.py (Usage), errors.py
@@ -228,7 +228,7 @@ integrations, infrastructure, serving  =  orthogonal (cross-layer by design)
 - LOC ceiling (6k) and file-count ceiling (45) — catch accidental feature drift
 - No concrete implementations — only Protocols, ABCs, dataclasses, enums
 
-`src/agent_substrate/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New capabilities go in `capabilities/`, new agent behaviour in `agents/`, new orchestration in `fabric/`.
+`src/substrate/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New capabilities go in `capabilities/`, new agent behaviour in `agents/`, new orchestration in `fabric/`.
 
 ---
 
@@ -251,8 +251,8 @@ integrations, infrastructure, serving  =  orthogonal (cross-layer by design)
 ### Tool creation
 
 ```python
-from agent_substrate.kernel.tools import ToolExecutionResult
-from agent_substrate.kernel.core.content import TextBlock
+from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.core.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -263,7 +263,7 @@ class MyTool:
         return ToolExecutionResult(content=[TextBlock(text="result")])
 ```
 
-`agent_substrate.kernel.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
+`substrate.kernel.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
 `HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
 (provider call-shape + local `handle_call()`), plus `ToolSpec`/`spec_of` for
 encoders. Use `is_hosted_tool` / `is_provider_defined_tool` to branch at dispatch.
@@ -273,7 +273,7 @@ Placed at `capabilities/tools/my_tool/tool.py` — `CatalogScanner` discovers it
 ### LLM client
 
 ```python
-from agent_substrate.integrations.llm import LLMFactory
+from substrate.integrations.llm import LLMFactory
 
 # Auto-detects provider from model name prefix
 client = LLMFactory("gpt-4o", api_key).build()
@@ -281,7 +281,7 @@ client = LLMFactory("groq/llama-3.3-70b-versatile", api_key).build()
 client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
 
 # Or construct the universal client directly
-from agent_substrate.capabilities.llm import OpenAIChatCompletionClient
+from substrate.capabilities.llm import OpenAIChatCompletionClient
 client = OpenAIChatCompletionClient(model="llama3.2", api_key="ollama",
                                     base_url="http://localhost:11434/v1")
 ```
@@ -289,7 +289,7 @@ client = OpenAIChatCompletionClient(model="llama3.2", api_key="ollama",
 ### MCP tools
 
 ```python
-from agent_substrate.integrations.tools.mcp import MCPClient, MCPTool
+from substrate.integrations.tools.mcp import MCPClient, MCPTool
 
 client = MCPClient(url="http://localhost:9000/sse")
 tools = await MCPTool.from_mcp_client(client)   # returns list[MCPTool]
@@ -298,8 +298,8 @@ tools = await MCPTool.from_mcp_client(client)   # returns list[MCPTool]
 ### Event bus — always use factory functions
 
 ```python
-from agent_substrate.integrations.events import EventBus
-from agent_substrate.serving.shared.events.types import workflow_started
+from substrate.integrations.events import EventBus
+from substrate.serving.shared.events.types import workflow_started
 
 bus: EventBus = app.state.bus
 await bus.publish(workflow_started(run_id=run.id, thread_id=thread.id, user_content=text))
@@ -313,7 +313,7 @@ Never construct event dicts manually — always use the factory functions from `
 ### SSE event bus (monolith only)
 
 ```python
-from agent_substrate.serving.monolith.sse.bridge import WebHITLBridge
+from substrate.serving.monolith.sse.bridge import WebHITLBridge
 
 bridge: WebHITLBridge = request.app.state.bridge
 await bridge.put_event({"type": "my_event", "data": {...}})
@@ -334,13 +334,13 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 
 ```python
 # In-memory (default, for testing)
-from agent_substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.context import InMemoryHistoryProvider
 
 # Redis-backed
-from agent_substrate.capabilities.history import RedisHistoryProvider
+from substrate.capabilities.history import RedisHistoryProvider
 
 # Postgres-backed
-from agent_substrate.capabilities.history import PostgresHistoryProvider
+from substrate.capabilities.history import PostgresHistoryProvider
 ```
 
 All `HistoryProvider` methods are `async def`. Always `await` them.
@@ -351,15 +351,15 @@ Vector and graph store contracts live in the kernel. Concrete implementations li
 
 ```python
 # Contracts (kernel)
-from agent_substrate.kernel.storage.vector import VectorStore, Document, SearchResult
-from agent_substrate.kernel.storage.graph import GraphStore, Entity, Relationship, SubGraph
+from substrate.kernel.storage.vector import VectorStore, Document, SearchResult
+from substrate.kernel.storage.graph import GraphStore, Entity, Relationship, SubGraph
 
 # Concrete implementations
-from agent_substrate.capabilities.vector import PgVectorStore
-from agent_substrate.capabilities.graph import AGEGraphStore
+from substrate.capabilities.vector import PgVectorStore
+from substrate.capabilities.graph import AGEGraphStore
 
 # High-level RAG pipeline
-from agent_substrate.capabilities.knowledge import RAGPipeline, GraphRAGPipeline
+from substrate.capabilities.knowledge import RAGPipeline, GraphRAGPipeline
 
 pipeline = RAGPipeline(embedding_client=embed_client, vector_store=pg_store)
 await pipeline.ingest("Long document …", collection="kb")
@@ -449,8 +449,8 @@ All observability services start via `make infra-up`.
 
 Logging convention in Python modules:
 ```python
-from agent_substrate.logger import setup_logging
-logger = setup_logging("agent_substrate.my_module")
+from substrate.logger import setup_logging
+logger = setup_logging("substrate.my_module")
 ```
 Do not call `logging.getLogger(...)` directly.
 
@@ -475,7 +475,7 @@ make ci
 ## Evaluation Framework (`fabric/evals/`)
 
 ```python
-from agent_substrate.fabric.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+from substrate.fabric.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
 
 runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
 report = await runner.run(dataset)
@@ -503,7 +503,7 @@ runner.export_markdown()
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **snake_case** — files, modules, functions, variables
 - New DB models → service-local `models.py` (microservices) or `serving/monolith/` (monolith)
-- New skills → `src/agent_substrate/capabilities/tools/skills/<name>/SKILL.md` with YAML frontmatter
+- New skills → `src/substrate/capabilities/tools/skills/<name>/SKILL.md` with YAML frontmatter
 - **DB session dependency** — all microservice routes use `get_db_session` from `serving/shared/database/`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: write `async def test_*` directly, no `@pytest.mark.asyncio` needed.
 - **Interactive Console** — `/q` is the sole quit/exit command. Interactive session uses `prompt_toolkit` for async-compatible autocomplete of slash commands (`/tools`, `/skills`, `/reset`, `/help`, `/q`) and input history.

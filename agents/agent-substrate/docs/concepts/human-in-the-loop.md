@@ -110,7 +110,7 @@ In the simple in-process runtime the `await` just suspends the coroutine instead
 ## Putting it together
 
 ```python
-from agent_substrate.kernel.tools.tools import ToolRisk
+from substrate.kernel.tools.tools import ToolRisk
 
 agent = ReActAgent(
     "ops-bot",

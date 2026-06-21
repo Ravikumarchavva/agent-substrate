@@ -7,8 +7,8 @@ two stay aligned (a drift in field names would surface here).
 
 from __future__ import annotations
 
-from agent_substrate.serving.monolith.sse.bridge import bridge_event_to_wire
-from agent_substrate.serving.protocol import (
+from substrate.serving.monolith.sse.bridge import bridge_event_to_wire
+from substrate.serving.protocol import (
     ApprovalRequestedEvent,
     InputRequestedEvent,
     ReasoningDeltaEvent,

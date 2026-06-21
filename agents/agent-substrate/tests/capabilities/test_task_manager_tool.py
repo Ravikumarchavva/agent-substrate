@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from agent_substrate.agents.storage.tasks import (
+from substrate.agents.storage.tasks import (
     TaskStore,
     current_agent_id,
     current_parent_agent_id,
     current_thread_id,
 )
-from agent_substrate.capabilities.tools.task_manager.tool import TaskManagerTool
-from agent_substrate.kernel.storage.tasks import TaskStatus
+from substrate.capabilities.tools.task_manager.tool import TaskManagerTool
+from substrate.kernel.storage.tasks import TaskStatus
 
 
 def _board(result):

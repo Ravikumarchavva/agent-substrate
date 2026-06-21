@@ -96,7 +96,7 @@ graph LR
 ### Setting it up
 
 ```python
-from agent_substrate.integrations.runtime.grpc import GrpcRuntime
+from substrate.integrations.runtime.grpc import GrpcRuntime
 
 # Node A (runs in Pod A)
 runtime_a = GrpcRuntime(
@@ -197,7 +197,7 @@ sequenceDiagram
 ### Setting it up
 
 ```python
-from agent_substrate.integrations.runtime.restate import RestateWorkflowClient
+from substrate.integrations.runtime.restate import RestateWorkflowClient
 
 client = RestateWorkflowClient(settings)
 await client.connect()

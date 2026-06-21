@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from agent_substrate.agents.resources.budget import ExecutionTracker
-from agent_substrate.agents.supervision.budget import SpawnTracker
-from agent_substrate.kernel.agent.supervision import Priority, SpawnBudget
-from agent_substrate.kernel.core.errors import BudgetExhaustedError
-from agent_substrate.kernel.core.identity import AgentId
+from substrate.agents.resources.budget import ExecutionTracker
+from substrate.agents.supervision.budget import SpawnTracker
+from substrate.kernel.agent.supervision import Priority, SpawnBudget
+from substrate.kernel.core.errors import BudgetExhaustedError
+from substrate.kernel.core.identity import AgentId
 
 
 # ---------------------------------------------------------------------------
@@ -114,13 +114,13 @@ def test_spawn_tracker_reprioritize_lifts_pause() -> None:
 
 
 async def test_react_agent_respects_execution_budget() -> None:
-    from agent_substrate.agents.core.react import ReActAgent
-    from agent_substrate.agents.runtime import Runtime
-    from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
-    from agent_substrate.kernel.core.identity import AgentId
-    from agent_substrate.kernel.core.usage import Usage
-    from agent_substrate.kernel.messaging.message import Message, ChatPayload
-    from agent_substrate.kernel.messaging.stream import CompletionEvent
+    from substrate.agents.core.react import ReActAgent
+    from substrate.agents.runtime import Runtime
+    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.core.identity import AgentId
+    from substrate.kernel.core.usage import Usage
+    from substrate.kernel.messaging.message import Message, ChatPayload
+    from substrate.kernel.messaging.stream import CompletionEvent
 
     class MockLLMClient:
         model = "mock-model"

@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from agent_substrate.capabilities.tools.web.read_url import ReadUrlTool, _extract_relevant
-from agent_substrate.capabilities.tools.web.wikipedia import WikipediaTool
-from agent_substrate.capabilities.tools.web.search import WebSearchTool
-from agent_substrate.capabilities.tools.web.surfer import WebSurferTool
+from substrate.capabilities.tools.web.read_url import ReadUrlTool, _extract_relevant
+from substrate.capabilities.tools.web.wikipedia import WikipediaTool
+from substrate.capabilities.tools.web.search import WebSearchTool
+from substrate.capabilities.tools.web.surfer import WebSurferTool
 
 
 # ---------------------------------------------------------------------------
@@ -323,8 +323,8 @@ async def test_web_search_tool_exa_priority_over_tavily():
 @pytest.mark.asyncio
 async def test_web_surfer_tool_capping():
     with (
-        patch("agent_substrate.capabilities.tools.web.surfer.PLAYWRIGHT_AVAILABLE", True),
-        patch("agent_substrate.capabilities.tools.web.surfer.async_playwright"),
+        patch("substrate.capabilities.tools.web.surfer.PLAYWRIGHT_AVAILABLE", True),
+        patch("substrate.capabilities.tools.web.surfer.async_playwright"),
     ):
         tool = WebSurferTool()
 

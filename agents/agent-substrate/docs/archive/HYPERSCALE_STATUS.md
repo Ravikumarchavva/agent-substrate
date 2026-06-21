@@ -1,12 +1,12 @@
 # Hyperscale Kernel — Implementation Status
 
-Single source of truth for the 16-section plan that takes `agent_substrate.kernel` from
+Single source of truth for the 16-section plan that takes `substrate.kernel` from
 "in-process contracts" to "planet-scale distributed agent fabric." Updated
 at the end of every section.
 
 ## Architecture rules (frozen — do not break)
 
-1. **`kernel is independent`** — `agent_substrate.kernel` may not import from
+1. **`kernel is independent`** — `substrate.kernel` may not import from
    `agent_substrate{extensions, integrations, catalog, server, services, shared,
    configs, logger}`. Enforced by `tool.importlinter` in `pyproject.toml`
    and by `tests/kernel/test_hardening_pass.py::TestB1KernelIndependence`.

@@ -54,7 +54,7 @@ flowchart TB
 Backed by APScheduler (`AsyncScheduler` with `MemoryDataStore`). The Runtime is injected via `set_runtime()` so the scheduler can be instantiated before the runtime is ready.
 
 ```python
-from agent_substrate.capabilities.triggers import TriggerScheduler, TriggerDef
+from substrate.capabilities.triggers import TriggerScheduler, TriggerDef
 
 scheduler = TriggerScheduler(redis_url=settings.REDIS_URL)
 scheduler.set_runtime(runtime)
@@ -99,7 +99,7 @@ await scheduler.stop()
 Webhooks are registered dynamically and each gets a `secret` (16-char hex, auto-generated). HTTP callers include the secret in the request body to authenticate.
 
 ```python
-from agent_substrate.capabilities.triggers import WebhookRegistry
+from substrate.capabilities.triggers import WebhookRegistry
 
 registry = WebhookRegistry(runtime=runtime)
 
@@ -130,7 +130,7 @@ The incoming HTTP payload is merged with `target_params` and passed as `DataPayl
 Subscribes to the Redis EventBus. One asyncio Task per distinct `event_type`. When an event is received and matches a condition's `filters` dict (key-value exact match on `event.data`), the configured pipeline is dispatched.
 
 ```python
-from agent_substrate.capabilities.triggers import ConditionMonitor, ConditionDef
+from substrate.capabilities.triggers import ConditionMonitor, ConditionDef
 
 monitor = ConditionMonitor(runtime=runtime)
 monitor.set_event_bus(event_bus)

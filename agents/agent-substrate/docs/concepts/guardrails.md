@@ -108,8 +108,8 @@ Choose per guardrail based on whether a false negative (letting bad content thro
 Guardrails are middleware, so they compose in a `MiddlewarePipeline` like anything else — order them outermost-first:
 
 ```python
-from agent_substrate.agents.middleware import MiddlewarePipeline
-from agent_substrate.agents.middleware.guardrails import (
+from substrate.agents.middleware import MiddlewarePipeline
+from substrate.agents.middleware.guardrails import (
     PromptInjectionMiddleware, MaxTokenMiddleware, PIIDetectionMiddleware,
 )
 

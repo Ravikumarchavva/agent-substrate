@@ -73,8 +73,8 @@ It lives in `agents/supervision/budget.py` and is created once per run from the
 kernel's `SpawnBudget`:
 
 ```python
-from agent_substrate.kernel.agent.supervision import Supervision, SpawnBudget, Priority
-from agent_substrate.agents.supervision.budget import SpawnTracker
+from substrate.kernel.agent.supervision import Supervision, SpawnBudget, Priority
+from substrate.agents.supervision.budget import SpawnTracker
 
 supervision = Supervision.root(orchestrator_id, spawn_budget=SpawnBudget(max_agents=20))
 tracker = SpawnTracker(supervision.spawn_budget)
@@ -371,7 +371,7 @@ Use the `on()` decorator or `register()` for programmatic wiring, then hand the
 manager to the agent:
 
 ```python
-from agent_substrate.agents.hooks import HookManager, HookEvent
+from substrate.agents.hooks import HookManager, HookEvent
 
 hooks = HookManager()
 
@@ -430,9 +430,9 @@ The module also ships two ready-made hook implementations: `CostTracker`
 A single orchestrated run uses all three at once:
 
 ```python
-from agent_substrate.kernel.agent.supervision import SpawnBudget, ExecutionBudget, Priority
-from agent_substrate.agents.resources.budget import ExecutionTracker
-from agent_substrate.agents.hooks import HookManager, HookEvent
+from substrate.kernel.agent.supervision import SpawnBudget, ExecutionBudget, Priority
+from substrate.agents.resources.budget import ExecutionTracker
+from substrate.agents.hooks import HookManager, HookEvent
 
 hooks = HookManager()
 

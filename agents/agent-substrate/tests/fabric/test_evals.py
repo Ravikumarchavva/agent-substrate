@@ -6,17 +6,17 @@ import asyncio
 import pytest
 from dataclasses import dataclass
 
-from agent_substrate.agents.runtime.context import RunContext
-from agent_substrate.fabric.evals import (
+from substrate.agents.runtime.context import RunContext
+from substrate.fabric.evals import (
     EvalCase,
     EvalDataset,
     EvalRunner,
     EvalScore,
     CORRECTNESS,
 )
-from agent_substrate.fabric.evals.judge import LLMJudge
-from agent_substrate.kernel.core.identity import AgentId
-from agent_substrate.kernel.messaging.message import Message
+from substrate.fabric.evals.judge import LLMJudge
+from substrate.kernel.core.identity import AgentId
+from substrate.kernel.messaging.message import Message
 
 
 # ---------------------------------------------------------------------------
@@ -33,8 +33,8 @@ class OKAgent:
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
             # Extract input text from the message payload
-            from agent_substrate.kernel.messaging.message import ChatPayload, DataPayload
-            from agent_substrate.kernel.core.content import content_blocks_to_str
+            from substrate.kernel.messaging.message import ChatPayload, DataPayload
+            from substrate.kernel.core.content import content_blocks_to_str
 
             p = msg.payload
             if isinstance(p, ChatPayload):

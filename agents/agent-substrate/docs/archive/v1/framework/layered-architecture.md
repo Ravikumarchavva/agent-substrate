@@ -536,16 +536,16 @@ There is no backward compatibility. Old `kernel.runtime._local.LocalRuntime` sty
 
 | What you need | Current import |
 |---|---|
-| `LocalRuntime` | `from agent_substrate.fabric.runtime.local import LocalRuntime` |
-| `ActorAgent` | `from agent_substrate.fabric.actors.actor import ActorAgent` |
-| `StreamChannel`, `StreamEnvelope` | `from agent_substrate.fabric.actors.actor import StreamChannel, StreamEnvelope` |
-| `AgentCatalogRegistry` | `from agent_substrate.fabric.catalog import AgentCatalogRegistry` |
-| `UnboundedMemory` | `from agent_substrate.fabric.memory.unbounded import UnboundedMemory` |
-| `AssistantAgent` | `from agent_substratereasoning.agents.assistant.agent import AssistantAgent` |
-| `UserProxyAgent` | `from agent_substrateorchestration.agents.proxy.agent import UserProxyAgent` |
-| `AgentId`, `TopicId` | `from agent_substrate.kernel.runtime._identity import AgentId, TopicId` |
-| `AgentRuntime` (protocol) | `from agent_substrate.kernel.runtime._protocol import AgentRuntime` |
-| `BaseTool`, `ToolResult` | `from agent_substrate.kernel.tools.base_tool import BaseTool, ToolResult` |
-| `BaseMemory` | `from agent_substrate.kernel.memory.base_memory import BaseMemory` |
-| `BaseGuardrail` | `from agent_substrate.kernel.guardrails.base_guardrail import BaseGuardrail` |
+| `LocalRuntime` | `from substrate.fabric.runtime.local import LocalRuntime` |
+| `ActorAgent` | `from substrate.fabric.actors.actor import ActorAgent` |
+| `StreamChannel`, `StreamEnvelope` | `from substrate.fabric.actors.actor import StreamChannel, StreamEnvelope` |
+| `AgentCatalogRegistry` | `from substrate.fabric.catalog import AgentCatalogRegistry` |
+| `UnboundedMemory` | `from substrate.fabric.memory.unbounded import UnboundedMemory` |
+| `AssistantAgent` | `from substratereasoning.agents.assistant.agent import AssistantAgent` |
+| `UserProxyAgent` | `from substrateorchestration.agents.proxy.agent import UserProxyAgent` |
+| `AgentId`, `TopicId` | `from substrate.kernel.runtime._identity import AgentId, TopicId` |
+| `AgentRuntime` (protocol) | `from substrate.kernel.runtime._protocol import AgentRuntime` |
+| `BaseTool`, `ToolResult` | `from substrate.kernel.tools.base_tool import BaseTool, ToolResult` |
+| `BaseMemory` | `from substrate.kernel.memory.base_memory import BaseMemory` |
+| `BaseGuardrail` | `from substrate.kernel.guardrails.base_guardrail import BaseGuardrail` |
 

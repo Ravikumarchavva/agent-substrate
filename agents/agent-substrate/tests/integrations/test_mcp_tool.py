@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 from unittest.mock import AsyncMock, Mock
-from agent_substrate.integrations.tools.mcp.tool import MCPTool
-from agent_substrate.kernel.core.content import TextBlock
+from substrate.integrations.tools.mcp.tool import MCPTool
+from substrate.kernel.core.content import TextBlock
 
 
 @pytest.mark.asyncio

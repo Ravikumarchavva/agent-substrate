@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from agent_substrate.kernel.tools import (
+from substrate.kernel.tools import (
     ToolCallRequest,
     ToolExecutionResult,
     ToolRisk,
 )
-from agent_substrate.agents.tools.toolbox import Toolbox
-from agent_substrate.kernel.core.content import TextBlock
+from substrate.agents.tools.toolbox import Toolbox
+from substrate.kernel.core.content import TextBlock
 
 
 class MockToolImpl:

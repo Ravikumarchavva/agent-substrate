@@ -149,7 +149,7 @@ async with Runtime() as rt:
     ...
 
 # Production — durable backends injected by the infrastructure factory
-from agent_substrate.infrastructure.runtime import build_postgres_runtime
+from substrate.infrastructure.runtime import build_postgres_runtime
 async with build_postgres_runtime(postgres_url=..., redis_url=...) as rt:
     ...
 ```

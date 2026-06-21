@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from agent_substrate.kernel.core.identity import AgentId, TopicId
-from agent_substrate.kernel.messaging.stream import AgentProgress, AgentStep
-from agent_substrate.kernel.messaging.message import Message, ProgressPayload, _PAYLOAD_REGISTRY
-from agent_substrate.integrations.events.envelope import EventEnvelope
+from substrate.kernel.core.identity import AgentId, TopicId
+from substrate.kernel.messaging.stream import AgentProgress, AgentStep
+from substrate.kernel.messaging.message import (
+    Message,
+    ProgressPayload,
+    _PAYLOAD_REGISTRY,
+)
+from substrate.integrations.events.envelope import EventEnvelope
 
 
 def test_progress_payload_pydantic_serialization():
@@ -75,9 +79,9 @@ def test_event_envelope_translation():
 @pytest.mark.asyncio
 async def test_runtime_agent_registration():
     """Runtime: register + submit routes message to the agent inbox."""
-    from agent_substrate.agents.runtime import Runtime
-    from agent_substrate.kernel.core.identity import AgentId
-    from agent_substrate.kernel.messaging.message import Message, DataPayload
+    from substrate.agents.runtime import Runtime
+    from substrate.kernel.core.identity import AgentId
+    from substrate.kernel.messaging.message import Message, DataPayload
 
     received: list = []
 

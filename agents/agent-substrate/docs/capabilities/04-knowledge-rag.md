@@ -162,7 +162,7 @@ results = await pipeline.query("Who works at Acme?", collection="kb")
 | `SentenceChunker` | Sentence-boundary split | `max_chunk_size` |
 
 ```python
-from agent_substrate.capabilities.knowledge.chunking import get_chunker
+from substrate.capabilities.knowledge.chunking import get_chunker
 
 chunker = get_chunker("text", chunk_size=512, overlap=128)
 docs = chunker.chunk("Long text …", metadata={"source": "readme.md"})
@@ -198,7 +198,7 @@ The `KnowledgeSearchTool` (`capabilities/tools/ai/knowledge_search.py`) accepts 
 `capabilities/knowledge/reranker.py` provides a cross-encoder reranker that can post-process `VectorStore.search()` results before they are passed to the LLM. It is optional — use it when recall quality matters more than latency.
 
 ```python
-from agent_substrate.capabilities.knowledge.reranker import Reranker
+from substrate.capabilities.knowledge.reranker import Reranker
 
 reranker = Reranker(model="cross-encoder/ms-marco-MiniLM-L-6-v2")
 reranked = await reranker.rerank(query, results, top_k=3)

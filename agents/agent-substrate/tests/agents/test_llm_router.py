@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_substrate.agents.llm.router import ModelRouter, ComplexityTier, RouteConstraints
+from substrate.agents.llm.router import ModelRouter, ComplexityTier, RouteConstraints
 
 
 class DummyMessage:

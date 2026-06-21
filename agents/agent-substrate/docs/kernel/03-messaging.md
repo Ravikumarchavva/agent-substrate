@@ -20,23 +20,23 @@ This page covers three things, all pure data types with **zero I/O**:
 A **Message** is the unit of agent-to-agent communication. Every send or publish wraps a payload in one. The runtime reads the address, delivers it, and (for a direct send) returns the recipient's reply.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart TB
-    classDef agent   fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
-    classDef runtime fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
-    classDef tool    fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
-    classDef external fill:#FFF3E0,stroke:#E65100,color:#BF360C
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '14px'}}}%%
+flowchart LR
+    classDef agent    fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold,font-size:15px
+    classDef routing  fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
+    classDef payload  fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef tracking fill:#FFF3E0,stroke:#E65100,color:#BF360C
 
-    MSG["Message — the envelope"]:::agent
+    MSG["Message<br/><i>the envelope</i>"]:::agent
 
-    MSG --> T["target<br/>(AgentId or TopicId)<br/>where it goes"]:::runtime
-    MSG --> S["sender<br/>(AgentId or None)<br/>return address"]:::runtime
-    MSG --> P["payload<br/>(PayloadBase)<br/>the letter inside"]:::tool
-    MSG --> C["correlation_id<br/>conversation tracking sticker"]:::external
-    MSG --> CA["causation_id<br/>which message caused this one"]:::external
-    MSG --> R["reply_to<br/>run_id of the asker"]:::external
-    MSG --> M["metadata<br/>(dict of strings)<br/>extra notes"]:::runtime
-    MSG --> ID["id + created_at + schema_version<br/>dedup and versioning"]:::runtime
+    MSG --> T["target — AgentId or TopicId<br/>where it goes"]:::routing
+    MSG --> S["sender — AgentId or None<br/>return address"]:::routing
+    MSG --> P["payload — PayloadBase<br/>the letter inside"]:::payload
+    MSG --> C["correlation_id<br/>ties one whole conversation together"]:::tracking
+    MSG --> CA["causation_id<br/>which message caused this one"]:::tracking
+    MSG --> R["reply_to<br/>run_id of the asker (for ask/reply pairs)"]:::tracking
+    MSG --> M["metadata — dict of strings<br/>extra notes, extensible"]:::routing
+    MSG --> ID["id + created_at + schema_version<br/>dedup and wire versioning"]:::routing
 ```
 
 Here is the actual type, trimmed to the fields you'll touch:

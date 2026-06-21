@@ -41,6 +41,9 @@ flowchart LR
         ET["ExecutionTracker<br/>running tab per agent"]:::agent
     end
 
+    style K0 fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
+    style L1 fill:#e8eaf6,stroke:#3949ab,color:#1a237e
+
     SBp -->|"read by"| ST
     EBp -->|"read by"| ET
     note1["A frozen dataclass cannot count.<br/>The tracker holds the live numbers."]:::note

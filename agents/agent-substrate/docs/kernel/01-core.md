@@ -278,6 +278,9 @@ flowchart TB
         T2 --> TS
         T3 --> TS
     end
+
+    style AID fill:#e8eaf6,stroke:#3949ab,color:#1a237e
+    style TID fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
 ```
 
 ### AgentId — addressing one agent
@@ -398,20 +401,21 @@ exactly the failure they care about.
 descendant to handle just that one case.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart TB
-    classDef base    fill:#FFF3E0,stroke:#E65100,color:#BF360C,font-weight:bold
-    classDef err     fill:#E8EAF6,stroke:#3949AB,color:#1A237E
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '14px'}}}%%
+flowchart LR
+    classDef base fill:#FFF3E0,stroke:#E65100,color:#BF360C,font-weight:bold,font-size:15px
+    classDef err  fill:#E8EAF6,stroke:#3949AB,color:#1A237E
 
-    KE["KernelError<br/>(base — catch this for any kernel error)"]:::base
-    KE --> ANF["AgentNotFoundError<br/>(no handler for an AgentId)"]:::err
-    KE --> HE["HandlerError<br/>(a message handler raised — wraps cause)"]:::err
-    KE --> ACE["AgentCrashError<br/>(unexpected run failure — has run_id, agent_id)"]:::err
-    KE --> BEE["BudgetExhaustedError<br/>(token/cost/turn/headcount budget hit)"]:::err
-    KE --> MT["MiddlewareTermination<br/>(intentional policy halt — guardrail blocked)"]:::err
-    KE --> CE["CancellationError<br/>(cancelled via CancellationToken)"]:::err
-    KE --> CAE["ConcurrentAppendError<br/>(two workers wrote one run — has seqs)"]:::err
-    KE --> SD["SpawnDenied<br/>(SpawnBudget exhausted — has parent_run, budget)"]:::err
+    KE["KernelError<br/><i>base — catch this<br/>for any kernel error</i>"]:::base
+
+    KE --> ANF["AgentNotFoundError<br/>no handler registered for that AgentId"]:::err
+    KE --> HE["HandlerError<br/>a message handler raised — wraps the cause"]:::err
+    KE --> ACE["AgentCrashError<br/>unexpected run failure — carries run_id, agent_id"]:::err
+    KE --> BEE["BudgetExhaustedError<br/>token / cost / turn / headcount budget hit"]:::err
+    KE --> MT["MiddlewareTermination<br/>intentional policy halt — guardrail blocked"]:::err
+    KE --> CE["CancellationError<br/>cancelled via CancellationToken — propagate, don't swallow"]:::err
+    KE --> CAE["ConcurrentAppendError<br/>two workers wrote the same run — reload and retry"]:::err
+    KE --> SD["SpawnDenied<br/>SpawnBudget exhausted — carries parent_run, budget"]:::err
 ```
 
 | Error | Raised when | Carries |

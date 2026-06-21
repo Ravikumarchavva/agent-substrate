@@ -35,24 +35,26 @@ This page walks through six filing cabinets, each with its own analogy:
 | Per-agent to-do board | `TaskStore` | a **Kanban board** on the wall |
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart TB
-    classDef store fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C,font-weight:bold
-    classDef agent fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '14px'}}}%%
+flowchart LR
+    classDef store    fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C,font-weight:bold
+    classDef agent    fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
     classDef external fill:#FFF3E0,stroke:#E65100,color:#BF360C
 
-    AG["Agent code<br/>(talks to Protocols only)"]:::agent
+    AG["Agent code<br/><i>talks to Protocols only</i>"]:::agent
 
     subgraph Contracts["Kernel L0 — Protocols (no I/O)"]
-        BS["BlobStore<br/>store / resolve / pin"]:::store
-        HP["HistoryProvider<br/>append / get_messages"]:::store
-        VS["VectorStore<br/>add / search"]:::store
-        GS["GraphStore<br/>add_entities / get_neighbors"]:::store
-        SM["ShortTermMemory + LongTermMemory<br/>state + facts"]:::store
-        TS["TaskStore<br/>Kanban board"]:::store
+        direction TB
+        BS["BlobStore — store / resolve / pin"]:::store
+        HP["HistoryProvider — append / get_messages"]:::store
+        VS["VectorStore — add / search"]:::store
+        GS["GraphStore — add_entities / get_neighbors"]:::store
+        SM["ShortTermMemory + LongTermMemory — state + facts"]:::store
+        TS["TaskStore — Kanban board"]:::store
     end
 
     subgraph Backends["Concrete backends (capabilities / infrastructure)"]
+        direction TB
         B1["MinIO / S3"]:::external
         B2["Redis — Postgres"]:::external
         B3["pgvector"]:::external
@@ -60,6 +62,9 @@ flowchart TB
         B5["Redis HASH — Postgres JSONB"]:::external
         B6["in-memory — Postgres"]:::external
     end
+
+    style Contracts fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
+    style Backends  fill:#fff3e0,stroke:#e65100,color:#bf360c
 
     AG --> BS --> B1
     AG --> HP --> B2

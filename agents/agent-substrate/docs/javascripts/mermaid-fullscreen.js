@@ -126,13 +126,14 @@
       }
     });
     wrap.appendChild(fsBtn);
-    document.addEventListener("fullscreenchange", function () {
+    /* Attach to wrap, not document — prevents closure leak on SPA navigation */
+    wrap.addEventListener("fullscreenchange", function () {
       var on = document.fullscreenElement === wrap;
       fsBtn.innerHTML = icon(on ? IC.collapse : IC.expand);
       fsBtn.title = on ? "Exit fullscreen" : "Open fullscreen";
     });
 
-    /* Drag-to-pan (mouse) + pinch-to-zoom (touch) via Pointer Events */
+    /* Drag-to-pan (mouse + touch-in-fullscreen) + pinch-to-zoom via Pointer Events */
     var pts = {},
       pinchDist = 0,
       mid = null,
@@ -141,7 +142,9 @@
     view.addEventListener("pointerdown", function (e) {
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
       var ids = Object.keys(pts);
-      if (e.pointerType === "mouse" && ids.length === 1) {
+      var inFullscreen = document.fullscreenElement === wrap;
+      var canDrag = (e.pointerType === "mouse" || (e.pointerType === "touch" && inFullscreen)) && ids.length === 1;
+      if (canDrag) {
         view.setPointerCapture(e.pointerId);
         dragStart = { x: e.clientX - tx, y: e.clientY - ty };
         view.classList.add("grabbing");

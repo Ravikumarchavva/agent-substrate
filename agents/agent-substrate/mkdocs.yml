@@ -1,6 +1,6 @@
 site_name: Agent Substrate
 site_description: Production-ready Python framework for building autonomous AI agents with tool calling, memory management, and durable execution.
-site_url: https://ravikumarchavva.github.io/agent-substrate
+site_url: https://agent-substrate.pages.dev
 repo_url: https://github.com/Ravikumarchavva/agent-substrate
 repo_name: Ravikumarchavva/agent-substrate
 edit_uri: edit/main/docs/
@@ -100,7 +100,7 @@ markdown_extensions:
       normalize_issue_symbols: true
       repo_url_shorthand: true
       user: Ravikumarchavva
-      repo: ravi
+      repo: agent-substrate
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.snippets:
@@ -133,9 +133,7 @@ extra:
     default: latest
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/Ravikumarchavva/ravi
-    - icon: fontawesome/brands/python
-      link: https://pypi.org/project/ravi/
+      link: https://github.com/Ravikumarchavva/agent-substrate
   analytics:
     provider: google
     property: !ENV [GOOGLE_ANALYTICS_ID, ""]
@@ -193,7 +191,4 @@ nav:
 
   - Archive: archive/index.md
 
-  - GitHub:
-    - Repository: https://github.com/Ravikumarchavva/ravi
-    - Notebooks: https://github.com/Ravikumarchavva/ravi/tree/main/examples
-    - Frontend UI: https://github.com/Ravikumarchavva/ravi-ui
+  - GitHub: https://github.com/Ravikumarchavva/agent-substrate

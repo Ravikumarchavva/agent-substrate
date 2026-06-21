@@ -473,3 +473,54 @@ body, input {
 .arch-box.l3 { --layer-color: #f97316; --layer-glow: rgba(249, 115, 22, 0.2); }
 .arch-box.l4 { --layer-color: #ef4444; --layer-glow: rgba(239, 68, 68, 0.2); }
 .arch-box.l5 { --layer-color: #a855f7; --layer-glow: rgba(168, 85, 247, 0.2); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Mermaid diagrams — dark-mode readability
+   Our diagrams hardcode light node fills (#E8EAF6 …) with dark text (#1A237E …).
+   In the slate (dark) scheme, Material recolours diagram label text to a light
+   colour, so dark-on-light labels disappear. We render every diagram on a fixed
+   light canvas and pin label/edge text dark so both schemes look identical and
+   the colour-coding stays intact.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* A light card for every diagram, in both colour schemes */
+.md-typeset .mermaid {
+  background-color: #ffffff;
+  border: 1px solid rgba(57, 73, 171, 0.15);
+  border-radius: 0.5rem;
+  padding: 1rem 0.75rem;
+}
+
+/* In dark mode, force diagram text back to dark so it reads on the light canvas */
+[data-md-color-scheme="slate"] .md-typeset .mermaid .nodeLabel,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .nodeLabel *,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .cluster-label,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .cluster-label *,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .label,
+[data-md-color-scheme="slate"] .md-typeset .mermaid foreignObject div,
+[data-md-color-scheme="slate"] .md-typeset .mermaid foreignObject span {
+  color: #1A237E !important;
+}
+
+/* SVG-rendered text (sequence, state, class diagrams) */
+[data-md-color-scheme="slate"] .md-typeset .mermaid text,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .messageText,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .loopText,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .loopText tspan,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .noteText,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .actor > tspan,
+[data-md-color-scheme="slate"] .md-typeset .mermaid text.actor,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .titleText,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .stateLabel,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .classText {
+  fill: #1A237E !important;
+}
+
+/* Edge labels sit on the canvas — keep their pill background light */
+[data-md-color-scheme="slate"] .md-typeset .mermaid .edgeLabel,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .edgeLabel rect,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .edgeLabel foreignObject div,
+[data-md-color-scheme="slate"] .md-typeset .mermaid .edgeLabel span {
+  background-color: #ffffff !important;
+  color: #1A237E !important;
+}

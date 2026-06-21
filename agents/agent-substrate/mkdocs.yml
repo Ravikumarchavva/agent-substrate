@@ -12,7 +12,8 @@ copyright: Copyright &copy; 2025–2026 Ravikumar Chavva
 # ── Theme ────────────────────────────────────────────────────────────────────
 theme:
   name: material
-  logo: sun_logo.png
+  icon:
+    logo: material/white-balance-sunny
   favicon: sun_logo.png
   font:
     text: Inter

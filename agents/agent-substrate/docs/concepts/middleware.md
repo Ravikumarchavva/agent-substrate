@@ -13,9 +13,8 @@ Middleware pulls these cross-cutting concerns out into composable layers that wr
 Middleware forms an onion around the real work. Each layer can act **before** the call (inspect/modify the request), pass control inward with `call_next()`, then act **after** (inspect/modify the result) as control unwinds.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px','clusterBkg': '#f0f4ff','clusterBorder': '#9fa8da'}}}%%
 graph TB
-    classDef mw   fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
     classDef core fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20,font-weight:bold
 
     subgraph M1["RateLimiter"]
@@ -27,6 +26,11 @@ graph TB
             end
         end
     end
+
+    style M1 fill:#fce4ec,stroke:#e91e63,color:#880e4f
+    style M2 fill:#f3e5f5,stroke:#9c27b0,color:#4a148c
+    style M3 fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
+    style M4 fill:#e3f2fd,stroke:#42a5f5,color:#0d47a1
 ```
 
 A request travels **inward** through every layer to the core, and the response travels **outward** back through them in reverse. Any layer can short-circuit (the cache returns a hit without calling inward) or abort (a guardrail raises and the inner layers never run).

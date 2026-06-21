@@ -455,6 +455,10 @@ flowchart TB
             end
         end
     end
+
+    style L1 fill:#fce4ec,stroke:#e91e63,color:#880e4f
+    style L2 fill:#f3e5f5,stroke:#9c27b0,color:#4a148c
+    style L3 fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
 ```
 
 The kernel also defines three **minimal context protocols** — one per level —

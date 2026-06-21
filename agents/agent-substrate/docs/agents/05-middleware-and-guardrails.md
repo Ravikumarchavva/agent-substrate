@@ -55,6 +55,11 @@ graph TB
             end
         end
     end
+
+    style M1 fill:#fce4ec,stroke:#e91e63,color:#880e4f
+    style M2 fill:#f3e5f5,stroke:#9c27b0,color:#4a148c
+    style M3 fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
+    style M4 fill:#e3f2fd,stroke:#42a5f5,color:#0d47a1
 ```
 
 The request travels **inward** to the core, the response travels **outward** in
@@ -307,6 +312,10 @@ flowchart TD
     end
     IN --> AG
     AG --> OUT(["AgentRunResult"]):::runtime
+
+    style AG fill:#fce4ec,stroke:#e91e63,color:#880e4f
+    style CH fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
+    style FN fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
 ```
 
 | Level | Context | Runs | Good home for |

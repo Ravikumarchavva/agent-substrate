@@ -35,6 +35,9 @@ graph TB
         J1["effect_id abc123 → {ok, value}"]:::store
         J2["effect_id def456 → {ok, value}"]:::store
     end
+
+    style EL fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    style JN fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
 ```
 
 **Event Log** — the ordered, append-only history of a run. Every meaningful step appends a `RunLogEntry` with a monotonic `seq` and a `kind` (`run.started`, `tool.called`, `tool.result`, `child.spawned`, `run.suspended`, `run.completed`, …). The truth of a run is `fold(entries from seq 0)`. A checkpoint is just a compaction snapshot — never the source of authority.

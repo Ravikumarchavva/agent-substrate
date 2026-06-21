@@ -75,6 +75,9 @@ flowchart TB
         SIG["InMemorySignalBus"]:::runtime
     end
 
+    style RT fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    style BK fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
+
     AG["agent.run(ctx, inbox)"]:::agent
 
     C -->|"deliver - enqueue"| INB

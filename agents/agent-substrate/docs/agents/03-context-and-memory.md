@@ -359,6 +359,9 @@ flowchart TB
         P4["PgTaskStore (Postgres, planned)"]:::external
     end
 
+    style L1 fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
+    style L2 fill:#fff3e0,stroke:#e65100,color:#bf360c
+
     AG --> FS --> P1
     AG --> VS --> P2
     AG --> GS --> P3

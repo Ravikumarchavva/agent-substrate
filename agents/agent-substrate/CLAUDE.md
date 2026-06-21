@@ -9,8 +9,8 @@ Trust it as the primary reference; only search the codebase if something here is
 
 Python async AI-agent framework with two deployment modes:
 
-1. **Monolith** — single FastAPI server at `src/ravi/serving/monolith/`
-2. **Microservices** — 12 independent FastAPI services at `src/ravi/serving/services/`
+1. **Monolith** — single FastAPI server at `src/agent_substrate/serving/monolith/`
+2. **Microservices** — 12 independent FastAPI services at `src/agent_substrate/serving/services/`
 
 Stack: Python 3.13, FastAPI, SQLAlchemy 2 async, asyncpg, PostgreSQL 18, Redis 7, OpenTelemetry → Tempo.
 
@@ -46,8 +46,8 @@ uv run python -m ruff format .
 ## Full Directory Map
 
 ```
-ravi-engine/                     ← repo root
-├── src/ravi/                    ← Python package (all application code)
+agent-substrate/                         ← repo root
+├── src/agent_substrate/                 ← Python package (all application code)
 ├── deployment/                  ← All deployment artefacts
 │   ├── docker/                  ← Dockerfiles + Compose files
 │   │   ├── backend.Dockerfile
@@ -64,7 +64,7 @@ ravi-engine/                     ← repo root
 ```
 
 ```
-src/ravi/
+src/agent_substrate/
 ├── kernel/       L0 — FROZEN. Pure contracts: Protocols, dataclasses, enums. No I/O.
 │   ├── core/             content.py (ContentBlock, TextBlock, ChatMessage, ToolUseBlock, …),
 │   │                     identity.py (AgentId, TopicId), usage.py (Usage), errors.py
@@ -228,7 +228,7 @@ integrations, infrastructure, serving  =  orthogonal (cross-layer by design)
 - LOC ceiling (6k) and file-count ceiling (45) — catch accidental feature drift
 - No concrete implementations — only Protocols, ABCs, dataclasses, enums
 
-`src/ravi/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New capabilities go in `capabilities/`, new agent behaviour in `agents/`, new orchestration in `fabric/`.
+`src/agent_substrate/kernel/` is **frozen** — new contracts belong there only if they have zero external dependencies and are needed by multiple layers. New capabilities go in `capabilities/`, new agent behaviour in `agents/`, new orchestration in `fabric/`.
 
 ---
 
@@ -450,7 +450,7 @@ All observability services start via `make infra-up`.
 Logging convention in Python modules:
 ```python
 from agent_substrate.logger import setup_logging
-logger = setup_logging("agent_substratemy_module")
+logger = setup_logging("agent_substrate.my_module")
 ```
 Do not call `logging.getLogger(...)` directly.
 
@@ -503,7 +503,7 @@ runner.export_markdown()
 - **`uv` only** — never `pip install` or `pip uninstall`
 - **snake_case** — files, modules, functions, variables
 - New DB models → service-local `models.py` (microservices) or `serving/monolith/` (monolith)
-- New skills → `src/ravi/capabilities/tools/skills/<name>/SKILL.md` with YAML frontmatter
+- New skills → `src/agent_substrate/capabilities/tools/skills/<name>/SKILL.md` with YAML frontmatter
 - **DB session dependency** — all microservice routes use `get_db_session` from `serving/shared/database/`. Never define a local `_get_db` helper.
 - **Testing** — `asyncio_mode = "auto"` in `pyproject.toml`: write `async def test_*` directly, no `@pytest.mark.asyncio` needed.
 - **Interactive Console** — `/q` is the sole quit/exit command. Interactive session uses `prompt_toolkit` for async-compatible autocomplete of slash commands (`/tools`, `/skills`, `/reset`, `/help`, `/q`) and input history.

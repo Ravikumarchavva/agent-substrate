@@ -13,38 +13,35 @@ Large data never re-enters the sandbox as text either — it is passed **by refe
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
+flowchart TB
     classDef llm   fill:#E3F2FD,stroke:#1565C0,color:#0D47A1,font-weight:bold
     classDef l2    fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
     classDef l1    fill:#E8EAF6,stroke:#3949AB,color:#1A237E
     classDef infra fill:#FFF3E0,stroke:#E65100,color:#BF360C,stroke-dasharray:4 2
+    classDef data  fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
 
-    LLM["LLM\nwrites Python script"]:::llm
+    LLM["LLM — writes Python script<br/>using tools.name(...) calls"]:::llm
 
-    subgraph CHAIN["ToolChainTool  (L2 — capabilities/tools/chain/)"]
-        style CHAIN fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
-        TCT["ToolChainTool.execute()\ntool.py"]:::l2
-        PRE["build_prelude()\nprelude.py\ninjects tools namespace\nToolResult, artifacts"]:::l2
-        BRIDGE["BridgeSession\nbridge.py\nper-chain token\ndispatches to ToolInvoker"]:::l2
-        REG["ChainBridgeRegistry\nbridge.py\nactive sessions map"]:::l2
+    subgraph CHAIN["ToolChainTool (L2 — capabilities/tools/chain/)"]
+        direction TB
+        TCT["ToolChainTool · tool.py<br/>name = 'tool_chain'<br/>execute(code, timeout?) → ToolExecutionResult<br/>requires CodeInterpreterTool + ToolInvoker"]:::l2
+        PRE["build_prelude() · prelude.py<br/>stdlib-only Python preamble<br/>injects tools namespace, ToolResult, artifacts.put()"]:::l2
+        BRIDGE["BridgeSession · bridge.py<br/>per-chain token (32-byte, single-use)<br/>invoke(ToolCallRequest) → InvocationResult<br/>deregister() invalidates token"]:::l2
+        REG["ChainBridgeRegistry · bridge.py<br/>sessions: dict[chain_id, BridgeSession]"]:::l2
+        TCT ~~~ PRE ~~~ BRIDGE ~~~ REG
     end
 
-    subgraph L1["L1 agents layer"]
-        style L1 fill:#E8EAF6,stroke:#3949AB,color:#1A237E
-        INV["ToolInvoker\nagents/tools/invoker.py\nrisk + approval + ctx"]:::l1
-    end
+    VM["CodeInterpreter — Firecracker VM / K8s sandbox<br/>POST /execute {code, timeout}<br/>returns stdout, exit_code, media_blocks"]:::infra
+    INV["ToolInvoker (L1) · agents/tools/invoker.py<br/>invoke(call, session, ctx)<br/>risk check → approval gate (HIGH/CRITICAL)"]:::l1
+    DRS["DataRefStore · pipeline/data_ref.py<br/>< 1MB → Redis · ≥ 1MB → S3/MinIO<br/>returns DataRef.ref_id"]:::data
 
-    VM["CodeInterpreter\nFirecracker / K8s sandbox"]:::infra
-
-    LLM -->|"tool_chain(code=script)"| TCT
-    TCT --> PRE
-    TCT --> BRIDGE
-    BRIDGE --> REG
-    TCT -->|"execute(prelude + user_code)"| VM
-    VM -->|"tools.query_db(...)"| BRIDGE
+    LLM -->|"tool_chain(code=script)"| CHAIN
+    TCT -->|"execute(prelude + user code)"| VM
+    VM -->|"POST /internal/chain/{id}/invoke (Bearer)"| BRIDGE
     BRIDGE -->|"invoke(ToolCallRequest)"| INV
+    INV -->|"offload large results"| DRS
     INV -->|"ToolExecutionResult"| BRIDGE
-    BRIDGE -->|"ToolResult handle"| VM
+    BRIDGE -->|"InvocationResult (text, structured, ref)"| VM
     VM -->|"exec result"| TCT
 ```
 
@@ -56,34 +53,42 @@ sequenceDiagram
     autonumber
     participant LLM
     participant TCT as ToolChainTool
-    participant PRE as build_prelude()
     participant BRIDGE as BridgeSession
-    participant INV as ToolInvoker
+    participant INV as ToolInvoker (L1)
+    participant DRS as DataRefStore
     participant VM as Sandbox VM
 
-    LLM->>TCT: execute(code="data=tools.query_db(...)")
+    LLM->>TCT: tool_chain(code="data=query_db(...) → send_email(...)")
 
-    TCT->>PRE: build_prelude(tool_names, bridge_url, chain_id, token)
-    PRE-->>TCT: prelude source (stdlib only, injects tools namespace)
+    TCT->>TCT: build_prelude(tool_names, bridge_url, chain_id, token)
+    TCT->>BRIDGE: BridgeSession(chain_id, invoker, token) + registry.register
+    TCT->>VM: execute(prelude + user code, timeout=policy.total_timeout_s)
+    VM->>VM: run prelude — set up tools namespace + bridge token
 
-    TCT->>BRIDGE: BridgeSession(chain_id, invoker, token)
-    TCT->>VM: execute(prelude + wrapped_user_code)
-
-    VM->>VM: run prelude — set up tools namespace
-
-    loop user script calls
-        VM->>BRIDGE: POST /internal/chain/{id}/invoke  Bearer {token}
-        Note over VM,BRIDGE: ToolCallRequest{name, arguments, call_id}
+    rect rgb(232, 234, 246)
+        Note over VM,INV: First tool call — query_db
+        VM->>BRIDGE: POST /chain/{id}/invoke (Bearer) ToolCallRequest{name, args, call_id}
         BRIDGE->>INV: invoke(call, session, ctx)
-        Note over BRIDGE,INV: risk check, approval gate if HIGH/CRITICAL
-        INV-->>BRIDGE: ToolExecutionResult
-        BRIDGE-->>VM: InvocationResult {text, structured, artifact_ref}
-        VM->>VM: ToolResult handle — .text / .structured / .ref
+        Note over BRIDGE,INV: risk check → SAFE proceeds<br/>HIGH/CRITICAL: approval gate (HITL)
+        INV->>INV: tool.execute(**kwargs)
+        INV->>DRS: result > 1MB → store(bytes) → DataRef
+        INV-->>BRIDGE: ToolExecutionResult(content, structured, artifact_ref)
+        BRIDGE-->>VM: InvocationResult{text, structured, ref:"ref_abc123"}
+        VM->>VM: data = ToolResult(text, ref="ref_abc123")
     end
 
-    VM-->>TCT: exec_result (text output + media blocks)
-    TCT->>BRIDGE: deregister(chain_id)  — invalidates token
-    TCT-->>LLM: ToolExecutionResult (summary + ChainRunResult)
+    rect rgb(232, 244, 232)
+        Note over VM,INV: Second call — pass-by-reference
+        VM->>BRIDGE: POST /chain/{id}/invoke → send_email(body={"$artifact":ref})
+        BRIDGE->>DRS: resolve(ref) → bytes
+        BRIDGE->>INV: invoke(call with resolved payload)
+        INV-->>BRIDGE: ToolExecutionResult
+        BRIDGE-->>VM: InvocationResult
+    end
+
+    VM-->>TCT: exec_result (stdout + media_blocks)
+    TCT->>BRIDGE: deregister(chain_id) — token invalidated in finally
+    TCT-->>LLM: ToolExecutionResult(summary + ChainRunResult)
 ```
 
 ## The `tools` namespace in the sandbox

@@ -35,54 +35,59 @@ The YAML frontmatter is loaded at startup (cheap — metadata only). The Markdow
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
 sequenceDiagram
     autonumber
-    participant Boot as App lifespan
     participant SM as SkillManager
     participant SL as SkillLoader
     participant Sys as System prompt
     participant LLM as LLM
     participant ST as SkillTool
 
-    Boot->>SM: SkillManager(auto_discover=True)
-    SM->>SL: discover_all()
-    SL->>SL: scan skills/ directory<br/>parse YAML frontmatter only
-    SL-->>SM: list[SkillMetadata]
-    SM->>Sys: inject available_skills_xml()<br/>into system prompt
+    Note over SM,SL: Phase 1 — startup (cheap)
+    SM->>SL: discover_all(skills_dir)
+    loop each skill package
+        SL->>SL: walk dir + _parse_frontmatter(SKILL.md)
+        SL-->>SM: SkillMetadata(name, description, allowed_tools, …)
+    end
+    SM->>Sys: inject available_skills_xml() — names + descriptions only
+    Note over Sys,LLM: Body NOT loaded yet — keeps prompt small
 
-    Note over Sys,LLM: Only name + description in prompt (low token cost)
-
+    Note over LLM,ST: Phase 2 — on demand (lazy)
     LLM->>ST: skills(action="list")
+    ST->>SM: list_skills()
+    SM-->>ST: list[SkillMetadata]
     ST-->>LLM: names + descriptions
 
     LLM->>ST: skills(action="activate", name="code-review")
     ST->>SM: activate("code-review")
     SM->>SL: load_skill("code-review")
-    SL->>SL: read full SKILL.md body
-    SL-->>SM: SkillPackage (metadata + body + scripts + references)
+    SL-->>SM: SkillPackage(metadata, body, scripts, references)
     SM-->>ST: SkillPackage
-    ST-->>LLM: full Markdown body injected into context
+    ST-->>LLM: full SKILL.md body (to_context_block) + allowed_tools
 
-    Note over LLM: LLM follows the skill's procedure
+    Note over LLM: LLM follows the procedure —<br/>tool calls limited to allowed_tools
 ```
 
 ## Three classes
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
-    classDef cls fill:#E8EAF6,stroke:#3949AB,color:#1A237E
+flowchart TB
+    classDef cls  fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
     classDef data fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
+    classDef tool fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef fs   fill:#FFF3E0,stroke:#E65100,color:#BF360C,stroke-dasharray:4 2
 
-    SM["SkillManager\n_manager.py\nDiscover, activate,\ndeactivate, XML injection"]:::cls
-    SL["SkillLoader\n_loader.py\nFilesystem scanner\nYAML parser"]:::cls
-    ST["SkillTool\ntool.py\nLLM-callable interface\naction=list|activate"]:::cls
+    ST["SkillTool · tool.py (in Toolbox) — name='skills'<br/>execute(action, name?) → ToolExecutionResult<br/>action=list → names+desc · activate → full body"]:::tool
+    SM["SkillManager · _manager.py (app.state.skill_manager)<br/>discover · activate(name) → SkillPackage | None<br/>deactivate_all · inject_into_prompt · list_skills"]:::cls
+    SL["SkillLoader · _loader.py<br/>discover_all(dir) → list[SkillMetadata]<br/>load_skill(name) → SkillPackage · _parse_frontmatter"]:::cls
+    FS["capabilities/tools/skills/ — 10 SKILL.md packages<br/>code-review · api-testing · web-research · …"]:::fs
+    META["SkillMetadata<br/>name · description · version · license<br/>allowed_tools · category · tags · aliases · path"]:::data
+    PKG["SkillPackage<br/>metadata · body · scripts · references<br/>to_context_block · list_scripts · read_reference"]:::data
 
-    META["SkillMetadata\n_models.py\nname, description, version,\nallowed_tools, path"]:::data
-    PKG["SkillPackage\n_models.py\nmetadata + body\n+ scripts + references"]:::data
-
-    SM --> SL
-    SM --> META
-    SM --> PKG
-    ST --> SM
+    ST -->|"calls"| SM
+    SM -->|"delegates scan"| SL
+    SL -->|"reads SKILL.md"| FS
+    SM -->|"caches"| META
+    META --> PKG
 ```
 
 ### `SkillManager`

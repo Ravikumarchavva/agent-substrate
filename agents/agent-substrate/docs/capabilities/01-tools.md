@@ -6,32 +6,25 @@ The kernel defines three concrete types in `kernel/tools/tools.py`. Everything i
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
+flowchart TB
     classDef base    fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
     classDef local   fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
     classDef hosted  fill:#FFF3E0,stroke:#E65100,color:#BF360C
     classDef provdef fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
+    classDef result  fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
 
-    ROOT["Tool Protocol\nkernel/tools/tools.py"]:::base
+    ROOT["Tool Protocol · kernel/tools/tools.py<br/>name · description · input_schema · risk: ToolRisk"]:::base
 
-    subgraph LOCAL["LOCAL — runs in engine process"]
-        style LOCAL fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
-        T1["name, description\ninput_schema\nexecute(**kwargs) → ToolExecutionResult"]:::local
-    end
+    T1["Tool (LOCAL) — ToolInvoker runs execute() in-process<br/>execute(**kwargs, ctx) → ToolExecutionResult<br/>WebSearchTool · CalculatorTool · PostgresQueryTool · …"]:::local
+    RES["ToolExecutionResult<br/>content: list[ContentBlock] · is_error<br/>structured_content: dict|None · app_data: dict|None"]:::result
+    T2["HostedTool — provider executes (no local execute())<br/>provider_specs: list[ToolSpec], sent in LLM tools= array<br/>e.g. OpenAI code_interpreter · web_search"]:::hosted
+    T3["ProviderDefinedTool — hybrid shape<br/>provider_specs → LLM call shape<br/>handle_call(**kwargs) → local side-effect<br/>e.g. ComputerUseTool · BashTool"]:::provdef
 
-    subgraph HOSTED["HOSTED — provider executes"]
-        style HOSTED fill:#FFF3E0,stroke:#E65100,color:#BF360C
-        T2["provider_specs: list[ToolSpec]\n(sent in tools= array, never execute())"]:::hosted
-    end
-
-    subgraph PROVDEF["PROVIDER_DEFINED — hybrid"]
-        style PROVDEF fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
-        T3["provider_specs → LLM calls it\nhandle_call(**kwargs) → local side-effect"]:::provdef
-    end
-
-    ROOT --> LOCAL
-    ROOT --> HOSTED
-    ROOT --> PROVDEF
+    ROOT --> T1
+    ROOT --> T2
+    ROOT --> T3
+    T1 -->|"returns"| RES
+    T2 ~~~ T3
 ```
 
 | Type | Dispatch | Example |
@@ -57,26 +50,19 @@ flowchart TD
     classDef dec  fill:#FFF3E0,stroke:#E65100,color:#BF360C,font-weight:bold
     classDef out  fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
 
-    START(["App lifespan starts"]):::out
-    CD["CapabilityDiscovery()\n.discover()"]:::proc
-    ITER["iterate subdirectories\nskip _ and __pycache__"]:::proc
-    CHK_T{"tool.py\npresent?"}:::dec
-    CHK_S{"SKILL.md\npresent?"}:::dec
-    CHK_C{"connector.py\npresent?"}:::dec
-    LOAD_T["importlib.import_module()\nfind class with\n{name,description,\ninput_schema,execute}"]:::proc
-    LOAD_S["SkillLoader._load_metadata()\nparse YAML frontmatter"]:::proc
-    LOAD_C["find class ending\nin *Connector"]:::proc
-    PKG["CatalogPackage\n(name, path, components,\ntool_class, skill_metadata)"]:::out
-    TOOLBOX["Toolbox.add(tool_class)\nfor each discovered tool"]:::out
+    START(["App lifespan — create_app()"]):::out
+    SCAN["CapabilityDiscovery.discover() · discovery.py<br/>walk 3 dirs (sorted, skip names starting with _):<br/>tools/ · tools/skills/ · tools/connectors/"]:::proc
+    CHK{"per subdir — which marker file?<br/>tool.py · SKILL.md · connector.py"}:::dec
+    LOAD["Load by type:<br/>tool.py → import_module + first class with<br/>{name, description, input_schema, execute}<br/>SKILL.md → SkillLoader._load_metadata (YAML only)<br/>connector.py → class named *Connector"]:::proc
+    PKG["CatalogPackage<br/>name · path · components (tool · skill · connector)<br/>tool_class? · skill_metadata? · connector_class?"]:::out
+    DEDUP{"name already found?<br/>first occurrence wins"}:::dec
+    TOOLBOX["Toolbox<br/>add(tool_class) per tool · SkillManager.discover()<br/>registry.names() → list[str]"]:::out
 
-    START --> CD --> ITER
-    ITER --> CHK_T
-    CHK_T -->|yes| LOAD_T --> PKG
-    CHK_T -->|no| CHK_S
-    CHK_S -->|yes| LOAD_S --> PKG
-    CHK_S -->|no| CHK_C
-    CHK_C -->|yes| LOAD_C --> PKG
-    PKG --> TOOLBOX
+    START --> SCAN --> CHK
+    CHK -->|"matches"| LOAD --> PKG --> DEDUP
+    CHK -->|"none → skip"| SCAN
+    DEDUP -->|"new"| TOOLBOX
+    DEDUP -->|"duplicate → skip"| SCAN
 ```
 
 First-occurrence wins — earlier directories take priority if the same package name appears in multiple locations.

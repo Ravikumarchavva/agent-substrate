@@ -26,33 +26,30 @@ flowchart TB
     classDef layer fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
     classDef cap   fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
     classDef ext   fill:#FFF3E0,stroke:#E65100,color:#BF360C,stroke-dasharray:4 2
+    classDef proto fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
 
-    L3["fabric (L3)\nflows, evals"]:::layer
-    L1["agents (L1)\nReActAgent, Runtime, middleware"]:::layer
-    L0["kernel (L0)\nProtocols, contracts"]:::layer
+    L3["fabric (L3)<br/>SequentialFlow · ParallelFlow · ConditionalFlow · EvalRunner"]:::layer
 
-    subgraph L2["capabilities (L2)"]
-        style L2 fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
-        T["tools/\nLocal + Hosted + Skills + Chain"]:::cap
-        K["knowledge/\nRAG + GraphRAG"]:::cap
-        M["memory/ + history/\nSession state + chat logs"]:::cap
-        S["vector/ + graph/ + storage/\nStore implementations"]:::cap
-        P["pipeline/\nPipelineEngine + DataRefStore"]:::cap
-        TR["triggers/\nScheduler + Webhooks + Conditions"]:::cap
+    subgraph L2["capabilities (L2) — concrete implementations of kernel Protocols"]
+        direction TB
+        T["tools/ · skills/ · chain/<br/>CapabilityDiscovery · 18 built-in tools<br/>SkillManager · ToolChainTool + BridgeSession"]:::cap
+        K["knowledge/<br/>RAGPipeline · GraphRAGPipeline<br/>chunkers · loaders · reranker"]:::cap
+        MH["memory/ + history/<br/>RedisSessionStore · PostgresMemoryStore<br/>Redis / Postgres HistoryProvider"]:::cap
+        SS["vector/ · graph/ · storage/<br/>PgVectorStore · AGEGraphStore · S3FileStore"]:::cap
+        PE["pipeline/ + llm/<br/>PipelineEngine · DataRefStore<br/>OpenAIChatCompletionClient · embeddings"]:::cap
+        TR["triggers/<br/>TriggerScheduler · WebhookRegistry · ConditionMonitor"]:::cap
+        T ~~~ K ~~~ MH ~~~ SS ~~~ PE ~~~ TR
     end
 
-    PG["PostgreSQL"]:::ext
-    RD["Redis"]:::ext
-    S3["MinIO / S3"]:::ext
-    OAI["OpenAI / LLM APIs"]:::ext
+    L1["agents (L1)<br/>ReActAgent · OrchestratorAgent · Runtime · ToolInvoker"]:::layer
+    L0["kernel (L0) — Protocols<br/>Tool · VectorStore · GraphStore<br/>BlobStore · HistoryProvider · SessionStore"]:::proto
+    EXT["External systems<br/>PostgreSQL · Redis · MinIO / S3<br/>OpenAI · Anthropic · Gemini · Ollama"]:::ext
 
-    L3 --> L2
-    L1 --> L2
-    L2 --> L0
-    S --> PG
-    M --> RD
-    S --> S3
-    T --> OAI
+    L3 -->|"imports"| L2
+    L2 -->|"imports"| L1
+    L1 -->|"imports"| L0
+    L2 -.->|"implements Protocols"| L0
+    L2 -.->|"network / SQL I/O"| EXT
 ```
 
 ## Design rules

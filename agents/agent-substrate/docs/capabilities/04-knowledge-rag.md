@@ -6,34 +6,38 @@ The knowledge sub-package wires together embedding clients, vector stores, chunk
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
-    classDef pipe fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
-    classDef comp fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+flowchart TB
+    classDef pipe  fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
+    classDef comp  fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
     classDef store fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
     classDef llm   fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
+    classDef proto fill:#FFF3E0,stroke:#E65100,color:#BF360C
+
+    LOADERS["Document Loaders (knowledge/loaders/)<br/>TextLoader · PDFLoader · CSVLoader<br/>JSONLoader · DoclingLoader → list[Document]"]:::comp
 
     subgraph RAG["RAGPipeline — pipeline.py"]
-        style RAG fill:#E8EAF6,stroke:#3949AB,color:#1A237E
-        EMB["EmbeddingClient\n(kernel Protocol)"]:::llm
-        CHUNK["Chunker\n(TextChunker | SentenceChunker)"]:::comp
-        VS["VectorStore\n(PgVectorStore)"]:::store
-        RNK["Reranker\n(optional)"]:::comp
+        direction TB
+        CHUNK["Chunker · chunking.py<br/>TextChunker(chunk_size, overlap) · SentenceChunker<br/>chunk(text, metadata) → list[Document]"]:::comp
+        EMB["EmbeddingClient (kernel Protocol)<br/>embed(texts) → list[list[float]]<br/>embed_single(text) → list[float]"]:::llm
+        VS["VectorStore (kernel Protocol)<br/>add(docs, collection) · delete(ids)<br/>search(vec, limit, filter) → list[SearchResult]"]:::store
+        RNK["Reranker · reranker.py (optional)<br/>cross-encoder rerank(query, results, top_k)"]:::comp
+        CHUNK ~~~ EMB ~~~ VS ~~~ RNK
     end
 
     subgraph GRAG["GraphRAGPipeline — graph_rag.py"]
-        style GRAG fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
-        RAG2["RAGPipeline\n(embedded)"]:::pipe
-        GS["GraphStore\n(AGEGraphStore)"]:::store
-        GLLM["LLMClient\nentity extraction"]:::llm
+        direction TB
+        RAG2["embeds a RAGPipeline (same vector path)"]:::pipe
+        GLLM["LLMClient — entity + relationship extraction<br/>prompt → {entities:[...], relationships:[...]}"]:::llm
+        GS["GraphStore (kernel Protocol)<br/>add_entities · add_relationships<br/>get_subgraph(entities, depth) · query_cypher"]:::store
+        RAG2 ~~~ GLLM ~~~ GS
     end
 
-    DOC["Document loaders\npdf, csv, json, text, docling"]:::comp
+    PROTO["RAGProvider Protocol · knowledge/protocol.py<br/>ingest · query · query_with_context<br/>satisfied by both pipelines"]:::proto
 
-    DOC -->|"raw text"| RAG
-    DOC -->|"raw text"| GRAG
-    RAG2 --> GRAG
-    GLLM --> GRAG
-    GS --> GRAG
+    LOADERS -->|"list[Document]"| RAG
+    RAG -->|"embedded by"| GRAG
+    RAG -.->|"implements"| PROTO
+    GRAG -.->|"implements"| PROTO
 ```
 
 ## Ingest flow
@@ -41,21 +45,32 @@ flowchart LR
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
 flowchart TD
-    classDef proc fill:#E8EAF6,stroke:#3949AB,color:#1A237E
+    classDef proc  fill:#E8EAF6,stroke:#3949AB,color:#1A237E
     classDef store fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
-    classDef io fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef io    fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef gcls fill:#fce4ec,stroke:#880E4F,color:#880E4F
 
-    IN(["content: str | list[str]"]):::io
-    CHUNK["Chunker.chunk()\n→ list[Document]"]:::proc
-    EMBED["EmbeddingClient.embed(chunk_texts)\nbatch — one API call"]:::proc
-    MERGE["dataclasses.replace(doc, embedding=emb)\nfor each doc"]:::proc
-    STORE["VectorStore.add(docs, collection=collection)"]:::store
-    OUT(["returns: int (chunk count)"]):::io
+    IN(["content: str | list[str]<br/>collection: str = 'default'<br/>chunker: 'text' | 'sentence'"]):::io
+
+    CHUNK["Chunker.chunk(text, metadata)<br/>──────────────────<br/>Document(id=uuid4, text=chunk,<br/>  metadata: dict, embedding: None)<br/>for TextChunker: fixed-size split by chars<br/>for SentenceChunker: sentence boundary split<br/>→ list[Document]"]:::proc
+
+    EMBED["EmbeddingClient.embed(chunk_texts)<br/>──────────────────<br/>sends all chunk texts in one API call<br/>(batch to minimise round-trips)<br/>→ list[list[float]]  (one vector per chunk)"]:::proc
+
+    MERGE["zip(documents, embeddings)<br/>──────────────────<br/>dataclasses.replace(doc, embedding=emb)<br/>→ list[Document]  (embedding filled in)"]:::proc
+
+    STORE["VectorStore.add(docs, collection)<br/>──────────────────<br/>PgVectorStore: INSERT INTO vector_store_{collection}<br/>  (id, text, content_json, metadata, embedding)<br/>creates HNSW index on first add<br/>→ list[str]  (inserted IDs)"]:::store
+
+    OUT(["returns: int  (chunk count inserted)"]):::io
+
+    subgraph GRAPHONLY["GraphRAGPipeline only (extract_graph=True)"]
+        style GRAPHONLY fill:#fce4ec,stroke:#880E4F,color:#880E4F
+        LLM_EXT["LLMClient.generate(prompt)<br/>extract entities + relationships<br/>from chunk text as JSON"]:::gcls
+        GS_ADD["GraphStore.add_entities(list[Entity])<br/>GraphStore.add_relationships(list[Relationship])<br/>AGEGraphStore: openCypher via Apache AGE"]:::gcls
+        LLM_EXT --> GS_ADD
+    end
 
     IN --> CHUNK --> EMBED --> MERGE --> STORE --> OUT
-
-    GRAPH["GraphRAGPipeline only:\nLLM extracts entities + relationships\n→ GraphStore.add_entities() + add_relationships()"]:::proc
-    STORE -.-> GRAPH
+    STORE -.->|"for each chunk"| LLM_EXT
 ```
 
 ## Query flow
@@ -63,19 +78,37 @@ flowchart TD
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
 flowchart TD
-    classDef proc fill:#E8EAF6,stroke:#3949AB,color:#1A237E
+    classDef proc  fill:#E8EAF6,stroke:#3949AB,color:#1A237E
     classDef store fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
-    classDef io fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef io    fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef gcls fill:#fce4ec,stroke:#880E4F,color:#880E4F
+    classDef dec   fill:#FFF3E0,stroke:#E65100,color:#BF360C,font-weight:bold
 
-    Q(["question: str"]):::io
-    EMBS["EmbeddingClient.embed_single(question)"]:::proc
-    SEARCH["VectorStore.search(vec, collection, limit, filter)\n→ list[SearchResult]"]:::store
-    GRAPH2["GraphRAGPipeline only:\nGraphStore.get_subgraph(entities)\nenrich SearchResults with graph context"]:::store
-    GEN["LLMClient.generate(messages)\n(only in query_with_context)"]:::proc
-    OUT(["list[SearchResult] | str (generated answer)"]):::io
+    Q(["question: str<br/>collection: str<br/>limit: int = 5"]):::io
 
-    Q --> EMBS --> SEARCH --> OUT
-    SEARCH -.->|GraphRAG| GRAPH2 --> GEN --> OUT
+    EMBS["EmbeddingClient.embed_single(question)<br/>──────────────────<br/>→ list[float]  (query vector)"]:::proc
+
+    SEARCH["VectorStore.search(query_vec, collection, limit, filter)<br/>──────────────────<br/>PgVectorStore: SELECT ... ORDER BY<br/>  embedding <=> $query_vec LIMIT $limit<br/>→ list[SearchResult(id, text, score, metadata)]"]:::store
+
+    RERANK{"Reranker<br/>configured?"}:::dec
+
+    RNK["Reranker.rerank(question, results, top_k)<br/>──────────────────<br/>cross-encoder model scores each (question, chunk)<br/>pair → re-sorted list[SearchResult]"]:::proc
+
+    GRAPHONLY["GraphRAGPipeline only:<br/>GraphStore.get_subgraph(entities, depth=2)<br/>──────────────────<br/>extracts entity names from search results<br/>openCypher: MATCH (n)-[*1..{depth}]-(m)<br/>returns SubGraph{entities, relationships}<br/>appended to context window"]:::gcls
+
+    MODE{"query_with_context<br/>called?"}:::dec
+
+    GEN["LLMClient.generate(messages)<br/>──────────────────<br/>system: 'Answer using context below'<br/>user: question + retrieved chunks<br/>→ str  (generated answer)"]:::proc
+
+    OUT1(["list[SearchResult]<br/>— from query()"]):::io
+    OUT2(["str  (generated answer)<br/>— from query_with_context()"]):::io
+
+    Q --> EMBS --> SEARCH --> RERANK
+    RERANK -->|"yes"| RNK --> MODE
+    RERANK -->|"no"| MODE
+    SEARCH -.->|"GraphRAG path"| GRAPHONLY --> MODE
+    MODE -->|"yes"| GEN --> OUT2
+    MODE -->|"no"| OUT1
 ```
 
 ## `RAGPipeline` API

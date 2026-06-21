@@ -5,7 +5,7 @@ formatted posts for both Twitter and LinkedIn.  Swap `DEMO_TOPICS` for your
 own list, or replace it with `input("Enter topic: ")` for live interaction.
 
 Run:
-    cd ravi-engine
+    cd agent-substrate
     uv run python examples/experiments/social_media_demo.py
 """
 
@@ -16,11 +16,11 @@ from pathlib import Path
 # Allow sibling-module imports (social_media_assistant lives in the same folder)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.agents.tools.builtin_tools import WebSearchTool
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.kernel.agent_catalog import AgentCatalog
-from agent_substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.core import ReActAgent
+from substrate.agents.tools.builtin_tools import WebSearchTool
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.kernel.agent_catalog import AgentCatalog
+from substrate.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable
 

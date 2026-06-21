@@ -7,27 +7,34 @@ Demonstrates:
   • StubLLMClient — run this example with no API key at all
 
 Run:
-    cd ravi-engine
+    cd agent-substrate
     uv run examples/04_agents/08_subagents.py            # no API key needed
     OPENAI_API_KEY=sk-... uv run examples/04_agents/08_subagents.py  # real LLM
 """
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
+
 import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from agent_substrate.agents.core.react import ReActAgent
-from agent_substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from agent_substrate.agents.runtime import Runtime
-from agent_substrate.agents.middleware import AgentRunResult
-from agent_substrate.kernel.core.content import Role
-from agent_substrate.kernel.messaging.message import Message, ChatPayload
-from agent_substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
-from agent_substrate.kernel import (
+from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.core.react import ReActAgent
+from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+from substrate.agents.runtime import Runtime
+from substrate.agents.middleware import AgentRunResult
+from substrate.kernel.core.content import Role
+from substrate.kernel.messaging.message import Message, ChatPayload
+from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
+from substrate.kernel import (
     Priority,
     TextBlock,
     Tool,
@@ -263,7 +270,7 @@ async def run_demo(
                                     is_error = getattr(res_block, "is_error", False)
                                     break
                     
-                    from agent_substrate.agents.middleware._contracts import ToolCallRecord
+                    from substrate.agents.middleware._contracts import ToolCallRecord
                     tool_calls.append(
                         ToolCallRecord(
                             name=block.tool_name,
@@ -292,11 +299,9 @@ async def run_demo(
 
 async def main() -> None:
     import os
-    from agent_substrate.config import settings
-
     # Use real LLM if key is present; otherwise fall back to the stub
     if settings.OPENAI_API_KEY:
-        from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+        from substrate.integrations.llm.openai.openai_client import OpenAIClient
         model: object = OpenAIClient(
             model=settings.CHAT_MODEL.split("/")[-1],
             api_key=settings.OPENAI_API_KEY,

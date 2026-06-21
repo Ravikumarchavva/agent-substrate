@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from typing import Any
 
-from agent_substrate.logger import setup_logging
+from substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")
 

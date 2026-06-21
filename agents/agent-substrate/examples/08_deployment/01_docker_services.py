@@ -1,4 +1,10 @@
-"""Example 08-1: Docker services health check for ravi-engine.
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
+"""Example 08-1: Docker services health check for agent-substrate.
 
 Verifies that the required Docker services are reachable before starting the engine.
 Run this script after `make infra-up` to confirm all services are UP.
@@ -12,10 +18,7 @@ Services checked:
 import asyncio
 import socket
 import sys
-
-from agent_substrate.config import settings
-
-# Infrastructure: requires `make infra-up` in ravi-engine/
+# Infrastructure: requires `make infra-up` in agent-substrate/
 #   docker compose -f docker/docker-compose.yml up -d
 
 SERVICES = [
@@ -63,7 +66,7 @@ async def section_2_memory_clients() -> None:
 
     # --- RedisMemory ---
     try:
-        from agent_substrate.capabilities.history import RedisHistoryProvider
+        from substrate.capabilities.history import RedisHistoryProvider
 
         mem = RedisMemory(
             session_id="healthcheck",
@@ -84,7 +87,7 @@ async def section_2_memory_clients() -> None:
 
     # --- PostgresMemory ---
     try:
-        from agent_substrate.capabilities.history import PostgresHistoryProvider
+        from substrate.capabilities.history import PostgresHistoryProvider
 
         db_url = (
             settings.DATABASE_URL
@@ -111,12 +114,12 @@ async def section_3_summary(down: list[str]) -> None:
     print(f"  {up_count}/{total} services reachable")
 
     if not down:
-        print("  All services UP — ravi-engine is ready to start.")
-        print("  Run: cd ravi-engine && uv run start")
+        print("  All services UP — agent-substrate is ready to start.")
+        print("  Run: cd agent-substrate && uv run start")
     else:
         print(f"  Services DOWN: {down}")
         print("\n  To start all services:")
-        print("    cd ravi-engine")
+        print("    cd agent-substrate")
         print("    docker compose -f docker/docker-compose.yml up -d")
         print("\n  Or start specific services only:")
         svc_args = " ".join(

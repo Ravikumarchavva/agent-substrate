@@ -8,7 +8,7 @@ from typing import Optional
 
 from bus import bus
 from tools import catalog
-from agent_substrate.logger import setup_logging
+from substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")
 

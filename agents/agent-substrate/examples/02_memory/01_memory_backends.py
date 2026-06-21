@@ -11,10 +11,10 @@ from __future__ import annotations
 import asyncio
 import os
 
-from agent_substrate.agents.context import InMemoryHistoryProvider
-from agent_substrate.capabilities.history import RedisHistoryProvider, PostgresHistoryProvider
-from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from agent_substrate.kernel.core.identity import AgentId
+from substrate.agents.context import InMemoryHistoryProvider
+from substrate.capabilities.history import RedisHistoryProvider, PostgresHistoryProvider
+from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.core.identity import AgentId
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 DB_URL = os.getenv(

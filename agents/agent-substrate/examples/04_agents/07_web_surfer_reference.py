@@ -1,7 +1,7 @@
 """Example demonstrating WebSurferTool for agentic web browsing."""
 
 import asyncio
-from agent_substrate.capabilities.tools.web_surfer.tool import WebSurferTool
+from substrate.capabilities.tools.web_surfer.tool import WebSurferTool
 import time
 
 

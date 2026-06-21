@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from bus import bus
 from pipeline import run_pipeline
 from tools import catalog, EMBEDDINGS_DIR
-from agent_substrate.logger import setup_logging
+from substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")
 

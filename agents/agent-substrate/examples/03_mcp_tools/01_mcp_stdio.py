@@ -1,3 +1,9 @@
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
 """03-1 — MCP Tools via stdio transport
 
 Connects to an MCP filesystem server launched as a subprocess (stdio transport),
@@ -11,16 +17,14 @@ Prerequisites:
 
 import asyncio
 import json
-
-from agent_substrate.config import settings
-from agent_substrate.integrations.llm.factory import create_model_client
-from agent_substrate.integrations.tools.mcp.client import MCPClient
-from agent_substrate.kernel.messages.client_messages import (
+from substrate.integrations.llm.factory import create_model_client
+from substrate.integrations.tools.mcp.client import MCPClient
+from substrate.kernel.messages.client_messages import (
     SystemMessage,
     ToolExecutionResultMessage,
     UserMessage,
 )
-from agent_substrate.kernel.messages.content import TextBlock
+from substrate.kernel.messages.content import TextBlock
 
 # Infrastructure: Node.js / npx required to launch the MCP filesystem server.
 

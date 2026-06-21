@@ -1,3 +1,9 @@
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
 # %%
 # # Ravi Engine — Examples Overview
 #
@@ -57,13 +63,12 @@
 #
 # ### Build an agent
 # ```python
-# from agent_substratereasoning.agents.assistant import ReActAgent
-# from agent_substrate.config import settings
-# from agent_substrate.integrations.llm.factory import create_model_client
-# from agent_substrate.kernel.agent_catalog import AgentCatalog
-# from agent_substrate.fabric.memory.unbounded import UnboundedMemory
-# from agent_substratereasoning.memory.context.unbounded import UnboundedContext
-# from agent_substrate.fabric.tools.builtin_tools import CalculatorTool
+# from substratereasoning.agents.assistant import ReActAgent
+## from substrate.integrations.llm.factory import create_model_client
+# from substrate.kernel.agent_catalog import AgentCatalog
+# from substrate.fabric.memory.unbounded import UnboundedMemory
+# from substratereasoning.memory.context.unbounded import UnboundedContext
+# from substrate.fabric.tools.builtin_tools import CalculatorTool
 #
 # agent = ReActAgent(
 #     name="MyAgent",
@@ -77,8 +82,8 @@
 #
 # ### Write a custom tool
 # ```python
-# from agent_substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
-# from agent_substrate.kernel.messages.content import TextBlock
+# from substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
+# from substrate.kernel.messages.content import TextBlock
 #
 # class MyTool(BaseTool):
 #     risk = ToolRisk.SAFE
@@ -97,7 +102,7 @@
 #
 # ### Persist memory in Redis
 # ```python
-# from agent_substrate.capabilities.history import RedisHistoryProvider  # ← integrations, not core!
+# from substrate.capabilities.history import RedisHistoryProvider  # ← integrations, not core!
 #
 # mem = RedisMemory(session_id="my-chat", redis_url="redis://localhost:6379/0")
 # await mem.connect()
@@ -108,7 +113,7 @@
 #
 # ### Connect to an MCP server
 # ```python
-# from agent_substrate.integrations.tools.mcp import MCPClient
+# from substrate.integrations.tools.mcp import MCPClient
 #
 # client = MCPClient(url="http://localhost:9000/sse")
 # tools = await client.discover_tools()   # returns list[MCPTool]
@@ -116,7 +121,7 @@
 #
 # ### Register in the AgentCatalog
 # ```python
-# from agent_substrate.kernel.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
+# from substrate.kernel.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
 #
 # catalog = AgentCatalog()
 # spec = ResourceSpec(name="my_tool", namespace="main.default", resource_type=ResourceType.TOOL)

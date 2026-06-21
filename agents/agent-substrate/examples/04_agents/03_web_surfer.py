@@ -1,11 +1,17 @@
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
 """04-3 — Web Research Agent with Streaming Output
 
 Demonstrates a ReActAgent that uses WebSearchTool for multi-step web research
 and streams partial output tokens to the console in real time.
 
-WebSearchTool (agent_substrateextensions.tools.builtin_tools) is the built-in search
+WebSearchTool (substrate.capabilities.tools.web) is the built-in search
 integration. For full browser automation (click, screenshot, JS execution),
-swap it for WebSurferTool from agent_substratecatalog.tools.web_surfer.tool — which
+swap it for WebSurferTool from substrate.capabilities.tools.web_surfer.tool — which
 requires Playwright: uv run playwright install chromium.
 
 Prerequisites: OPENAI_API_KEY set.
@@ -13,12 +19,12 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.agents.tools.builtin_tools import WebSearchTool
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.kernel.agent_catalog import AgentCatalog
-from agent_substrate.agents.context import InMemoryHistoryProvider
-from agent_substrate.kernel.messages._types import TextDeltaChunk
+from substrate.agents.core import ReActAgent
+from substrate.agents.tools.builtin_tools import WebSearchTool
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.kernel.agent_catalog import AgentCatalog
+from substrate.agents.context import InMemoryHistoryProvider
+from substrate.kernel.messages._types import TextDeltaChunk
 
 # Infrastructure:
 # - OPENAI_API_KEY environment variable required
@@ -32,9 +38,6 @@ async def main() -> None:
 
     # ---
     # Section 1: Create agent with WebSearchTool
-
-    from agent_substrate.config import settings
-
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
     catalog.register_model(
@@ -74,7 +77,7 @@ async def main() -> None:
     # ---
     # To use WebSurferTool instead (requires playwright):
     #
-    #   from agent_substratecatalog.tools.web_surfer.tool import WebSurferTool
+    #   from substratecatalog.tools.web_surfer.tool import WebSurferTool
     #   catalog.register_tool(WebSurferTool(headless=True))
     #
     # WebSurferTool drives a real Chromium browser — it can navigate, click,

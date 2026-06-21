@@ -1,3 +1,9 @@
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
 """Example 08-3: Production-grade invoice extraction using InvoiceExtractorTool.
 
 Demonstrates InvoiceExtractorTool for extracting text and tables from invoice files
@@ -20,12 +26,11 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from agent_substrate.capabilities.tools.invoice_extractor.tool import InvoiceExtractorTool
-from agent_substrate.config import settings
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.integrations.llm.factory import create_model_client
-from agent_substrate.kernel.agent_catalog import AgentCatalog
-from agent_substrate.agents.context import InMemoryHistoryProvider
+from substrate.capabilities.tools.invoice_extractor.tool import InvoiceExtractorTool
+from substrate.agents.core import ReActAgent
+from substrate.integrations.llm.factory import create_model_client
+from substrate.kernel.agent_catalog import AgentCatalog
+from substrate.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: none required for direct tool calls.
 #   For the agent sections, set OPENAI_API_KEY (or another provider key).
@@ -68,7 +73,7 @@ async def section_1_direct_extraction(tool: InvoiceExtractorTool) -> None:
 
     if not all_files:
         print(f"  No invoice files found in {PUBLIC_DIR}")
-        print("  Expected: *.tif / *.png files in ravi-engine/public/")
+        print("  Expected: *.tif / *.png files in agent-substrate/public/")
         return
 
     print(f"  Found {len(all_files)} file(s): {[f.name for f in all_files]}")

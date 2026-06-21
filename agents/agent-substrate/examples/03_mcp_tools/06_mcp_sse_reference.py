@@ -1,3 +1,9 @@
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
 """Example: Using MCP with SSE (Server-Sent Events) transport.
 
 This example demonstrates how to connect to an MCP server via HTTP/SSE
@@ -8,11 +14,11 @@ instead of stdio. This is useful for:
 """
 
 import asyncio
-from agent_substrate.integrations.tools.mcp.client import MCPClient
-from agent_substrate.integrations.tools.mcp.tool import MCPTool
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.agents.context import InMemoryHistoryProvider
-from agent_substrate.kernel.messages.client_messages import UserMessage, SystemMessage
+from substrate.integrations.tools.mcp.client import MCPClient
+from substrate.integrations.tools.mcp.tool import MCPTool
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.agents.context import InMemoryHistoryProvider
+from substrate.kernel.messages.client_messages import UserMessage, SystemMessage
 
 
 async def main():
@@ -48,9 +54,6 @@ async def main():
 
         # Use with agent
         print("🤖 Using MCP tools with agent...\n")
-
-        from agent_substrate.config import settings
-
         client = OpenAIClient(
             model=settings.CHAT_MODEL.split("/")[-1], api_key=settings.OPENAI_API_KEY
         )

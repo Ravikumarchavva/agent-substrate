@@ -1,5 +1,5 @@
 """Example 1-4: Tools — Complete Guide
-Module: agent_substrate.agents.tools.toolbox.Toolbox, agent_substrate.kernel.tools.ToolRisk
+Module: substrate.agents.tools.toolbox.Toolbox, substrate.kernel.tools.ToolRisk
 
 Covers the tools system:
 
@@ -13,25 +13,34 @@ Covers the tools system:
     5. Run a question through it
 
 Run:
-    cd ravi-engine
+    cd agent-substrate
     uv run examples/01_foundations/04_tools_and_skills.py
 """
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
+
 import asyncio
 import random
-
-from agent_substrate.config import settings
-from agent_substrate.agents import ReActAgent, Runtime
-from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from agent_substrate.agents.tools.toolbox import Toolbox
-from agent_substrate.integrations.llm import LLMFactory
-from agent_substrate.kernel import TextBlock, ToolExecutionResult
-from agent_substrate.kernel.core.content import ChatMessage, Role
-from agent_substrate.kernel.core.identity import AgentId
-from agent_substrate.kernel.messaging.message import Message, ChatPayload
-from agent_substrate.kernel.tools import ToolRisk
+from substrate.agents import ReActAgent, Runtime
+from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.tools.toolbox import Toolbox
+from substrate.integrations.llm import (
+    create_model_client,
+    detect_provider,
+    has_provider_api_key,
+)
+from substrate.kernel import TextBlock, ToolExecutionResult
+from substrate.kernel.core.content import ChatMessage, Role
+from substrate.kernel.core.identity import AgentId
+from substrate.kernel.messaging.message import Message, ChatPayload
+from substrate.kernel.tools import ToolRisk
 
 
 # ===========================================================================
@@ -147,16 +156,17 @@ async def demo_agent_session() -> None:
     print("PART B — Full agent session")
     print("=" * 60)
 
-    if not settings.OPENAI_API_KEY:
-        print("  OPENAI_API_KEY not set — skipping agent demo.")
-        print("  Set it in ravi-engine/.env to run the full session.")
+    provider = detect_provider(settings.CHAT_MODEL)
+    if not has_provider_api_key(provider, settings.provider_keys):
+        print(f"  No API key for provider {provider!r} — skipping agent demo.")
+        print("  Set the matching key in agent-substrate/.env to run the full session.")
         return
 
     registry = Toolbox()
     registry.add(WeatherTool())
     registry.add(SendEmailTool())
 
-    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    model = create_model_client(settings.CHAT_MODEL, api_keys=settings.provider_keys)
     agent = ReActAgent(
         "ToolBot",
         model=model,

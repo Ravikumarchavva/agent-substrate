@@ -112,3 +112,19 @@ class SubstrateConfig(BaseSettings):
         extra="ignore",
         case_sensitive=True,
     )
+
+    @property
+    def provider_keys(self) -> dict[str, str]:
+        """Provider → API-key map for ``create_model_client(..., api_keys=...)``.
+
+        Lets a caller build a client for *any* configured model without knowing
+        which provider it routes to — the factory picks the matching key.
+        """
+        return {
+            "openai": self.OPENAI_API_KEY,
+            "groq": self.GROQ_API_KEY,
+            "anthropic": self.ANTHROPIC_API_KEY,
+            "google": self.GEMINI_API_KEY,
+            "openrouter": self.OPENROUTER_API_KEY,
+            "nvidia": self.NVIDIA_API_KEY,
+        }

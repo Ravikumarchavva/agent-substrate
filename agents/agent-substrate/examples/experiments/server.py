@@ -1,6 +1,6 @@
 """Real-World Agent Mimics — Document Intelligence Pipeline
 
-Demonstrates ravi-engine framework patterns in a realistic scenario:
+Demonstrates agent-substrate framework patterns in a realistic scenario:
 
     Upload → ProxyAgent → OCRAgent → ┬─ PIIAgent
                                      ├─ ClassifierAgent
@@ -10,7 +10,7 @@ Framework features showcased:
   • BaseTool subclasses for each agent's capability
   • AgentCatalog for tool registration and discovery
   • Pub/sub via async EventBus (fan-out to parallel subscribers)
-  • PIIDetectionGuardrail reused from agent_substrate.kernel.guardrails
+  • PIIDetectionGuardrail reused from substrate.kernel.guardrails
   • LazyTool for optional heavy deps (sentence-transformers)
 """
 
@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import tools as _tools
 from routes import router
-from agent_substrate.logger import setup_logging
+from substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")
 

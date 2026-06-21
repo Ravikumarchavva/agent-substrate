@@ -8,24 +8,33 @@ Demonstrates:
   5. Interactive REPL with OrchestratorAgent
 
 Run:
-    cd ravi-engine
+    cd agent-substrate
     OPENAI_API_KEY=sk-... uv run examples/01_foundations/03_react_agent_reference.py
 """
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
+
 import asyncio
 import datetime
 import math
-
-from agent_substrate.config import settings
-from agent_substrate.agents import ReActAgent, OrchestratorAgent, SubAgentConfig, UserProxyAgent, Runtime
-from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from agent_substrate.integrations.llm import LLMFactory
-from agent_substrate.kernel import TextBlock, ToolExecutionResult
-from agent_substrate.kernel.core.content import ChatMessage, Role
-from agent_substrate.kernel.core.identity import AgentId
-from agent_substrate.kernel.messaging.message import Message, ChatPayload
+from substrate.agents import ReActAgent, OrchestratorAgent, SubAgentConfig, UserProxyAgent, Runtime
+from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.integrations.llm import (
+    create_model_client,
+    detect_provider,
+    has_provider_api_key,
+)
+from substrate.kernel import TextBlock, ToolExecutionResult
+from substrate.kernel.core.content import ChatMessage, Role
+from substrate.kernel.core.identity import AgentId
+from substrate.kernel.messaging.message import Message, ChatPayload
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +101,7 @@ class ClockTool:
 async def demo_basic_run() -> None:
     print("=== 1. Basic single-turn run ===")
 
-    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    model = create_model_client(settings.CHAT_MODEL, api_keys=settings.provider_keys)
     agent = ReActAgent(
         "Calculator",
         model=model,
@@ -116,7 +125,7 @@ async def demo_basic_run() -> None:
 async def demo_multi_turn() -> None:
     print("\n=== 2. Multi-turn conversation ===")
 
-    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    model = create_model_client(settings.CHAT_MODEL, api_keys=settings.provider_keys)
     agent = ReActAgent(
         "Tutor",
         model=model,
@@ -147,7 +156,7 @@ async def demo_multi_turn() -> None:
 async def demo_proxy() -> None:
     print("\n=== 3. UserProxyAgent → ReActAgent ===")
 
-    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    model = create_model_client(settings.CHAT_MODEL, api_keys=settings.provider_keys)
     backend = ReActAgent(
         "Backend",
         model=model,
@@ -171,7 +180,7 @@ async def demo_proxy() -> None:
 async def demo_orchestrator() -> None:
     print("\n=== 4. OrchestratorAgent ===")
 
-    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    model = create_model_client(settings.CHAT_MODEL, api_keys=settings.provider_keys)
 
     math_agent = ReActAgent(
         "MathSpecialist",
@@ -216,7 +225,7 @@ async def demo_interactive() -> None:
     print("\n=== 5. Interactive REPL (OrchestratorAgent) ===")
     print("Type 'exit' to quit.\n")
 
-    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    model = create_model_client(settings.CHAT_MODEL, api_keys=settings.provider_keys)
     math_agent = ReActAgent(
         "MathSpecialist",
         model=model,
@@ -267,8 +276,12 @@ async def demo_interactive() -> None:
 
 
 async def main() -> None:
-    if not settings.OPENAI_API_KEY:
-        raise SystemExit("OPENAI_API_KEY not set — add it to ravi-engine/.env")
+    provider = detect_provider(settings.CHAT_MODEL)
+    if not has_provider_api_key(provider, settings.provider_keys):
+        raise SystemExit(
+            f"No API key for provider {provider!r} (model {settings.CHAT_MODEL!r}). "
+            f"Add the matching key to agent-substrate/.env."
+        )
 
     print("\n" + "=" * 50)
     print("      Ravi Agent Framework Reference Demos      ")

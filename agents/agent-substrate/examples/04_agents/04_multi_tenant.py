@@ -1,3 +1,9 @@
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
 """04-4 — Multi-Tenant Agent Sessions: Isolation with asyncio.gather()
 
 Demonstrates running multiple fully isolated agent instances concurrently.
@@ -15,11 +21,11 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.kernel.agent_catalog import AgentCatalog
-from agent_substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.core import ReActAgent
+from substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.kernel.agent_catalog import AgentCatalog
+from substrate.agents.context import InMemoryHistoryProvider
 
 # Infrastructure:
 # - OPENAI_API_KEY environment variable required
@@ -28,8 +34,6 @@ from agent_substrate.agents.context import InMemoryHistoryProvider
 
 def _make_agent(user_id: str) -> ReActAgent:
     """Create a fully isolated agent for one user session."""
-    from agent_substrate.config import settings
-
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
     # Each agent gets its own model client and its own memory instance
@@ -119,7 +123,7 @@ async def main() -> None:
     # user/session ID and use RedisMemory for persistence across process
     # restarts:
     #
-    #   from agent_substrate.capabilities.history import RedisHistoryProvider
+    #   from substrate.capabilities.history import RedisHistoryProvider
     #
     #   REDIS_URL = "redis://localhost:6379/0"
     #

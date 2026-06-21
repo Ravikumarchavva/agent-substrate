@@ -253,7 +253,7 @@ settled on an answer), the `for/else` fires:
 for _ in range(self._max_iterations):
     ...
 else:
-    from ravi.kernel.core.errors import BudgetExhaustedError
+    from agent_substrate.kernel.core.errors import BudgetExhaustedError
     raise BudgetExhaustedError(
         f"Agent reached max iterations limit ({self._max_iterations})"
     )

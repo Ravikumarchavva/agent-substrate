@@ -8,7 +8,7 @@ from typing import Optional
 
 from bus import bus
 from tools import catalog
-from ravi.logger import setup_logging
+from agent_substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")
 

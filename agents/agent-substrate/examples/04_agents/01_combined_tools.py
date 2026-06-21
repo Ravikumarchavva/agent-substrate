@@ -11,15 +11,15 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from ravi.config import settings
-from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from ravi.integrations.llm import LLMFactory
-from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool
-from ravi.kernel.core.content import ChatMessage, Role, TextBlock
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import Message, ChatPayload
-from ravi.kernel.tools import ToolExecutionResult
+from agent_substrate.config import settings
+from agent_substrate.agents import ReActAgent, Runtime
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from agent_substrate.integrations.llm import LLMFactory
+from agent_substrate.capabilities.tools import CalculatorTool, CurrentTimeTool
+from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import Message, ChatPayload
+from agent_substrate.kernel.tools import ToolExecutionResult
 
 
 async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: str) -> str:

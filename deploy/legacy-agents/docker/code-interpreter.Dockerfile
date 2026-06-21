@@ -35,5 +35,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=3 \
     CMD curl -f http://localhost:8080/v1/health || exit 1
 
-ENTRYPOINT ["uvicorn", "ravi.services.code_interpreter.app:app"]
+ENTRYPOINT ["uvicorn", "agent_substrateservices.code_interpreter.app:app"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--log-level", "info"]

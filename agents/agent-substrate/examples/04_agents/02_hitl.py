@@ -11,14 +11,14 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from ravi.capabilities.tools.human_input import AskHumanTool, HumanInputResponse
-from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from ravi.capabilities.tools import CalculatorTool
-from ravi.integrations.llm import LLMFactory
-from ravi.kernel.core.content import ChatMessage, Role, TextBlock
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import Message, ChatPayload
+from agent_substrate.capabilities.tools.human_input import AskHumanTool, HumanInputResponse
+from agent_substrate.agents import ReActAgent, Runtime
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from agent_substrate.capabilities.tools import CalculatorTool
+from agent_substrate.integrations.llm import LLMFactory
+from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import Message, ChatPayload
 
 
 async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: str) -> str:
@@ -57,7 +57,7 @@ async def main() -> None:
     # ---
     # Section 2: Build ReActAgent with AskHumanTool + CalculatorTool
 
-    from ravi.config import settings
+    from agent_substrate.config import settings
 
     if not settings.OPENAI_API_KEY:
         raise SystemExit("OPENAI_API_KEY not set — add it to ravi-engine/.env")

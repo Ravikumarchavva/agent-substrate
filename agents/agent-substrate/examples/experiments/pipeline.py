@@ -8,7 +8,7 @@ from pathlib import Path
 from bus import bus
 from agents import proxy_agent, ocr_agent, pii_agent, classifier_agent, embedding_agent
 from tools import catalog
-from ravi.logger import setup_logging
+from agent_substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")
 

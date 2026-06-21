@@ -23,13 +23,13 @@ The framework has one agent hierarchy now instead of two.
 
 ```python
 # Old
-from ravi.extensions.agents.react.agent import ReActAgent
-from ravi.kernel.agents.base_agent import BaseAgent
+from agent_substrateextensions.agents.react.agent import ReActAgent
+from agent_substrate.kernel.agents.base_agent import BaseAgent
 
 # New
-from ravi.extensions.agents.assistant.agent import AssistantAgent
-from ravi.extensions.agents.user_proxy.agent import UserProxyAgent
-from ravi.kernel.agents.actor import ActorAgent
+from agent_substrateextensions.agents.assistant.agent import AssistantAgent
+from agent_substrateextensions.agents.user_proxy.agent import UserProxyAgent
+from agent_substrate.kernel.agents.actor import ActorAgent
 ```
 
 ---
@@ -47,7 +47,7 @@ agent = ReActAgent(
 )
 
 # New
-from ravi.kernel.runtime._local import LocalRuntime
+from agent_substrate.kernel.runtime._local import LocalRuntime
 
 runtime = LocalRuntime()
 await runtime.start()
@@ -144,7 +144,7 @@ agent = await load_agent_for_thread(
 )
 ```
 
-Tests that mock this function: patch `ravi.server.services.agent_service.create_assistant_agent`
+Tests that mock this function: patch `agent_substrateserver.services.agent_service.create_assistant_agent`
 (was `create_react_agent` before).
 
 ---
@@ -302,7 +302,7 @@ async def test_direct_assignment_raises():
 **Error**: Tests patch `create_react_agent` (deleted) and don't pass `runtime`.
 
 **Fix**:
-1. Change mock patch target: `"ravi.server.services.agent_service.create_react_agent"` → `"ravi.server.services.agent_service.create_assistant_agent"`
+1. Change mock patch target: `"agent_substrateserver.services.agent_service.create_react_agent"` → `"agent_substrateserver.services.agent_service.create_assistant_agent"`
 2. Add `runtime=MagicMock()` to `load_agent_for_thread()` calls
 
 ---
@@ -315,7 +315,7 @@ All examples that import `ReActAgent` or `Agent` need updating. Here is the migr
 
 ```python
 # OLD (at top of any notebook cell)
-from ravi.extensions.agents.react.agent import ReActAgent
+from agent_substrateextensions.agents.react.agent import ReActAgent
 # or
 from ravi import Agent
 
@@ -329,9 +329,9 @@ result = await agent.run("task")
 # ─────────────────────────────────────────────
 
 # NEW
-from ravi.extensions.agents.assistant.agent import AssistantAgent
-from ravi.extensions.agents.user_proxy.agent import UserProxyAgent
-from ravi.kernel.runtime._local import LocalRuntime
+from agent_substrateextensions.agents.assistant.agent import AssistantAgent
+from agent_substrateextensions.agents.user_proxy.agent import UserProxyAgent
+from agent_substrate.kernel.runtime._local import LocalRuntime
 
 # Option A: one-shot (context manager)
 async with LocalRuntime() as runtime:
@@ -353,7 +353,7 @@ async with LocalRuntime() as runtime:
 ### Notebooks that need updating
 
 Check every `.ipynb` in `examples/` for cells containing:
-- `from ravi.extensions.agents.react.agent import ReActAgent` → replace with `AssistantAgent`
+- `from agent_substrateextensions.agents.react.agent import ReActAgent` → replace with `AssistantAgent`
 - `from ravi import Agent` → replace with actor pattern above
 - `ReActAgent(name=..., description=..., catalog=..., ...)` → `AssistantAgent(name, runtime, catalog=...)`
 - `agent.run(...)` → still works via compat shim, but wrap in `async with LocalRuntime() as runtime:`

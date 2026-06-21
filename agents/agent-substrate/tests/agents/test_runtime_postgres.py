@@ -15,9 +15,9 @@ import os
 
 import pytest
 
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import DataPayload, Message
-from ravi.kernel.runtime.communication import AskOutcome
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import DataPayload, Message
+from agent_substrate.kernel.runtime.communication import AskOutcome
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -55,7 +55,7 @@ async def pg_runtime():
     """Runtime backed by Postgres only (in-memory journal)."""
     if not await _pg_reachable():
         pytest.skip("Postgres not reachable")
-    from ravi.infrastructure.runtime import build_postgres_runtime
+    from agent_substrate.infrastructure.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(postgres_url=_PG_URL) as rt:
         yield rt
@@ -68,7 +68,7 @@ async def pg_redis_runtime():
         pytest.skip("Postgres not reachable")
     if not await _redis_reachable():
         pytest.skip("Redis not reachable")
-    from ravi.infrastructure.runtime import build_postgres_runtime
+    from agent_substrate.infrastructure.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(
         postgres_url=_PG_URL,
@@ -247,7 +247,7 @@ class _StubBridge:
 
     async def get_event(self):
         await self._done.wait()
-        from ravi.serving.monolith.sse.bridge import BRIDGE_DONE
+        from agent_substrate.serving.monolith.sse.bridge import BRIDGE_DONE
 
         return BRIDGE_DONE
 
@@ -281,16 +281,16 @@ class StreamingAgent:
 async def test_pg_streaming_session(pg_runtime) -> None:
     """A run streamed through AgentStreamSession over the Postgres event log:
     wire events come out in order AND the entries are persisted in Postgres."""
-    from ravi.kernel.core.content import ChatMessage, Role, TextBlock
-    from ravi.kernel.messaging.message import ChatPayload
-    from ravi.serving.protocol import (
+    from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
+    from agent_substrate.kernel.messaging.message import ChatPayload
+    from agent_substrate.serving.protocol import (
         HelloEvent,
         RunCompletedEvent,
         TextDeltaEvent,
         ToolCallEvent,
         ToolResultEvent,
     )
-    from ravi.serving.stream.session import AgentStreamSession
+    from agent_substrate.serving.stream.session import AgentStreamSession
 
     agent_id = _agent_id("streamer")
     agent = StreamingAgent(agent_id)
@@ -338,7 +338,7 @@ async def test_pg_reclaim_orphans() -> None:
         pytest.skip("Postgres not reachable")
     import asyncpg
 
-    from ravi.infrastructure.runtime.pg_scheduler import PostgresScheduler
+    from agent_substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:
@@ -393,9 +393,9 @@ async def test_pg_cold_resume() -> None:
     if not await _pg_reachable():
         pytest.skip("Postgres not reachable")
 
-    from ravi.infrastructure.runtime import build_postgres_runtime
-    from ravi.infrastructure.runtime.pg_scheduler import PostgresScheduler
-    from ravi.agents.factory import rebuild_agent
+    from agent_substrate.infrastructure.runtime import build_postgres_runtime
+    from agent_substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
+    from agent_substrate.agents.factory import rebuild_agent
 
     done_a = asyncio.Event()
 

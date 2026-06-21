@@ -16,11 +16,11 @@ from pathlib import Path
 # Allow sibling-module imports (social_media_assistant lives in the same folder)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ravi.agents.core import ReActAgent
-from ravi.agents.tools.builtin_tools import WebSearchTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.context import InMemoryHistoryProvider
+from agent_substrate.agents.core import ReActAgent
+from agent_substrate.agents.tools.builtin_tools import WebSearchTool
+from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrate.kernel.agent_catalog import AgentCatalog
+from agent_substrate.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable
 

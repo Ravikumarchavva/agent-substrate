@@ -129,7 +129,7 @@ Separate from `Message`. `Event` is the envelope for the Redis pub/sub event bus
 **Always use factory functions** from `serving/shared/events/types.py` — never construct `Event` dicts manually:
 
 ```python
-from ravi.serving.shared.events.types import workflow_started
+from agent_substrate.serving.shared.events.types import workflow_started
 await bus.publish(workflow_started(run_id=run.id, thread_id=thread.id, user_content=text))
 ```
 

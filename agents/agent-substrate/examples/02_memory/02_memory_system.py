@@ -10,10 +10,10 @@ from __future__ import annotations
 import asyncio
 from typing import AsyncIterator
 
-from ravi.agents.context import SlidingWindowCompaction, SummarizationCompaction
-from ravi.kernel.core.content import ChatMessage, Role, TextBlock
-from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
-from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
+from agent_substrate.agents.context import SlidingWindowCompaction, SummarizationCompaction
+from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from agent_substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
+from agent_substrate.kernel.messaging.stream import CompletionEvent, TextDelta
 
 
 class MockLLM:

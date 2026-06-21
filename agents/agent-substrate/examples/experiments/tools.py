@@ -26,11 +26,11 @@ def _to_md(extract_result: list) -> str:
     return json2md(extract_result)
 
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.kernel.messages.content import TextBlock
-from ravi.agents.reasoning.guardrails.pii import _PII_PATTERNS
-from ravi.logger import setup_logging
+from agent_substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from agent_substrate.kernel.agent_catalog import AgentCatalog
+from agent_substrate.kernel.messages.content import TextBlock
+from agent_substrate.agents.reasoning.guardrails.pii import _PII_PATTERNS
+from agent_substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")
 

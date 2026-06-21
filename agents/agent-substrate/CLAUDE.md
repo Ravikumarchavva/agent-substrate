@@ -251,8 +251,8 @@ integrations, infrastructure, serving  =  orthogonal (cross-layer by design)
 ### Tool creation
 
 ```python
-from ravi.kernel.tools import ToolExecutionResult
-from ravi.kernel.core.content import TextBlock
+from agent_substrate.kernel.tools import ToolExecutionResult
+from agent_substrate.kernel.core.content import TextBlock
 
 class MyTool:
     name = "my_tool"
@@ -263,7 +263,7 @@ class MyTool:
         return ToolExecutionResult(content=[TextBlock(text="result")])
 ```
 
-`ravi.kernel.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
+`agent_substrate.kernel.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
 `HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
 (provider call-shape + local `handle_call()`), plus `ToolSpec`/`spec_of` for
 encoders. Use `is_hosted_tool` / `is_provider_defined_tool` to branch at dispatch.
@@ -273,7 +273,7 @@ Placed at `capabilities/tools/my_tool/tool.py` — `CatalogScanner` discovers it
 ### LLM client
 
 ```python
-from ravi.integrations.llm import LLMFactory
+from agent_substrate.integrations.llm import LLMFactory
 
 # Auto-detects provider from model name prefix
 client = LLMFactory("gpt-4o", api_key).build()
@@ -281,7 +281,7 @@ client = LLMFactory("groq/llama-3.3-70b-versatile", api_key).build()
 client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
 
 # Or construct the universal client directly
-from ravi.capabilities.llm import OpenAIChatCompletionClient
+from agent_substrate.capabilities.llm import OpenAIChatCompletionClient
 client = OpenAIChatCompletionClient(model="llama3.2", api_key="ollama",
                                     base_url="http://localhost:11434/v1")
 ```
@@ -289,7 +289,7 @@ client = OpenAIChatCompletionClient(model="llama3.2", api_key="ollama",
 ### MCP tools
 
 ```python
-from ravi.integrations.tools.mcp import MCPClient, MCPTool
+from agent_substrate.integrations.tools.mcp import MCPClient, MCPTool
 
 client = MCPClient(url="http://localhost:9000/sse")
 tools = await MCPTool.from_mcp_client(client)   # returns list[MCPTool]
@@ -298,8 +298,8 @@ tools = await MCPTool.from_mcp_client(client)   # returns list[MCPTool]
 ### Event bus — always use factory functions
 
 ```python
-from ravi.integrations.events import EventBus
-from ravi.serving.shared.events.types import workflow_started
+from agent_substrate.integrations.events import EventBus
+from agent_substrate.serving.shared.events.types import workflow_started
 
 bus: EventBus = app.state.bus
 await bus.publish(workflow_started(run_id=run.id, thread_id=thread.id, user_content=text))
@@ -313,7 +313,7 @@ Never construct event dicts manually — always use the factory functions from `
 ### SSE event bus (monolith only)
 
 ```python
-from ravi.serving.monolith.sse.bridge import WebHITLBridge
+from agent_substrate.serving.monolith.sse.bridge import WebHITLBridge
 
 bridge: WebHITLBridge = request.app.state.bridge
 await bridge.put_event({"type": "my_event", "data": {...}})
@@ -334,13 +334,13 @@ All shared objects (LLM clients, tool registry, event bus, HITL bridge) are wire
 
 ```python
 # In-memory (default, for testing)
-from ravi.agents.context import InMemoryHistoryProvider
+from agent_substrate.agents.context import InMemoryHistoryProvider
 
 # Redis-backed
-from ravi.capabilities.history import RedisHistoryProvider
+from agent_substrate.capabilities.history import RedisHistoryProvider
 
 # Postgres-backed
-from ravi.capabilities.history import PostgresHistoryProvider
+from agent_substrate.capabilities.history import PostgresHistoryProvider
 ```
 
 All `HistoryProvider` methods are `async def`. Always `await` them.
@@ -351,15 +351,15 @@ Vector and graph store contracts live in the kernel. Concrete implementations li
 
 ```python
 # Contracts (kernel)
-from ravi.kernel.storage.vector import VectorStore, Document, SearchResult
-from ravi.kernel.storage.graph import GraphStore, Entity, Relationship, SubGraph
+from agent_substrate.kernel.storage.vector import VectorStore, Document, SearchResult
+from agent_substrate.kernel.storage.graph import GraphStore, Entity, Relationship, SubGraph
 
 # Concrete implementations
-from ravi.capabilities.vector import PgVectorStore
-from ravi.capabilities.graph import AGEGraphStore
+from agent_substrate.capabilities.vector import PgVectorStore
+from agent_substrate.capabilities.graph import AGEGraphStore
 
 # High-level RAG pipeline
-from ravi.capabilities.knowledge import RAGPipeline, GraphRAGPipeline
+from agent_substrate.capabilities.knowledge import RAGPipeline, GraphRAGPipeline
 
 pipeline = RAGPipeline(embedding_client=embed_client, vector_store=pg_store)
 await pipeline.ingest("Long document …", collection="kb")
@@ -449,8 +449,8 @@ All observability services start via `make infra-up`.
 
 Logging convention in Python modules:
 ```python
-from ravi.logger import setup_logging
-logger = setup_logging("ravi.my_module")
+from agent_substrate.logger import setup_logging
+logger = setup_logging("agent_substratemy_module")
 ```
 Do not call `logging.getLogger(...)` directly.
 
@@ -475,7 +475,7 @@ make ci
 ## Evaluation Framework (`fabric/evals/`)
 
 ```python
-from ravi.fabric.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
+from agent_substrate.fabric.evals import EvalCase, EvalDataset, LLMJudge, EvalRunner, CORRECTNESS
 
 runner = EvalRunner(agent=my_agent, judge=LLMJudge(criteria=[CORRECTNESS]))
 report = await runner.run(dataset)

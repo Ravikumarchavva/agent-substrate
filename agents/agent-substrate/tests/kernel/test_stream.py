@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from ravi.kernel.messaging.stream import (
+from agent_substrate.kernel.messaging.stream import (
     TextDelta,
     ReasoningDelta,
     CompletionEvent,
     StreamDone,
 )
-from ravi.kernel.core.content import TextBlock
+from agent_substrate.kernel.core.content import TextBlock
 
 
 def test_text_delta():

@@ -14,12 +14,12 @@ from __future__ import annotations
 import asyncio
 
 
-from ravi.kernel.core.identity import AgentId, TopicId
-from ravi.kernel.messaging.message import DataPayload, Message
-from ravi.kernel.runtime.communication import AskOutcome
-from ravi.kernel.runtime.effects import Effect, EffectResult
-from ravi.agents.runtime import Runtime, RunContext
-from ravi.agents.runtime.backends import InMemoryJournal
+from agent_substrate.kernel.core.identity import AgentId, TopicId
+from agent_substrate.kernel.messaging.message import DataPayload, Message
+from agent_substrate.kernel.runtime.communication import AskOutcome
+from agent_substrate.kernel.runtime.effects import Effect, EffectResult
+from agent_substrate.agents.runtime import Runtime, RunContext
+from agent_substrate.agents.runtime.backends import InMemoryJournal
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +336,7 @@ async def test_journal_dedup_via_context() -> None:
 
 async def test_supervisor_join() -> None:
     """A parent agent can spawn a child and await its completion via ctx.join()."""
-    from ravi.kernel.runtime.ids import RunStatus
+    from agent_substrate.kernel.runtime.ids import RunStatus
 
     class ChildJoinAgent:
         def __init__(self, agent_id: AgentId) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-from ravi.kernel.tools import (
+from agent_substrate.kernel.tools import (
     AnyTool,
     FunctionSpec,
     ProviderSpec,
@@ -15,7 +15,7 @@ from ravi.kernel.tools import (
     is_provider_defined_tool,
     spec_of,
 )
-from ravi.kernel.core.content import TextBlock
+from agent_substrate.kernel.core.content import TextBlock
 
 
 # ---------------------------------------------------------------------------

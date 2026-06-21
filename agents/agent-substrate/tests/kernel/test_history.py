@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from ravi.agents.context import InMemoryHistoryProvider
-from ravi.kernel import AgentId
-from ravi.kernel.core.content import ChatMessage, TextBlock
+from agent_substrate.agents.context import InMemoryHistoryProvider
+from agent_substrate.kernel import AgentId
+from agent_substrate.kernel.core.content import ChatMessage, TextBlock
 
 
 @pytest.mark.asyncio

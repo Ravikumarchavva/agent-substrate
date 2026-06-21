@@ -75,9 +75,9 @@ class HistoryProvider(Protocol):
 The simplest choice: an in-memory list stored in RAM. Use it for scripts, notebooks, and unit tests where crash recovery is not needed.
 
 ```python
-from ravi.agents.context import InMemoryHistoryProvider
-from ravi.kernel import ChatMessage, Role, TextBlock
-from ravi.kernel.core.identity import AgentId
+from agent_substrate.agents.context import InMemoryHistoryProvider
+from agent_substrate.kernel import ChatMessage, Role, TextBlock
+from agent_substrate.kernel.core.identity import AgentId
 
 mem = InMemoryHistoryProvider()
 agent_id = AgentId(type="assistant", key="helper")
@@ -101,8 +101,8 @@ msgs = await mem.get_messages(agent_id, session_id="session-123")
 Conversation history lives in Redis. This allows multiple workers to share the same history pool, and history survives agent worker process restarts.
 
 ```python
-from ravi.capabilities.history.redis_history import RedisHistoryProvider
-from ravi.kernel.core.identity import AgentId
+from agent_substrate.capabilities.history.redis_history import RedisHistoryProvider
+from agent_substrate.kernel.core.identity import AgentId
 
 mem = RedisHistoryProvider(
     redis_url="redis://localhost:6379/0",
@@ -125,8 +125,8 @@ await mem.append(
 A fully durable relational database history provider using SQLAlchemy/asyncpg. It compiles conversation steps and audits into PostgreSQL records.
 
 ```python
-from ravi.capabilities.history.postgres_history import PostgresHistoryProvider
-from ravi.kernel.core.identity import AgentId
+from agent_substrate.capabilities.history.postgres_history import PostgresHistoryProvider
+from agent_substrate.kernel.core.identity import AgentId
 
 mem = PostgresHistoryProvider(
     db_url="postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb",

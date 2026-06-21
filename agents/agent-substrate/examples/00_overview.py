@@ -57,13 +57,13 @@
 #
 # ### Build an agent
 # ```python
-# from ravi.reasoning.agents.assistant import ReActAgent
-# from ravi.config import settings
-# from ravi.integrations.llm.factory import create_model_client
-# from ravi.kernel.agent_catalog import AgentCatalog
-# from ravi.fabric.memory.unbounded import UnboundedMemory
-# from ravi.reasoning.memory.context.unbounded import UnboundedContext
-# from ravi.fabric.tools.builtin_tools import CalculatorTool
+# from agent_substratereasoning.agents.assistant import ReActAgent
+# from agent_substrate.config import settings
+# from agent_substrate.integrations.llm.factory import create_model_client
+# from agent_substrate.kernel.agent_catalog import AgentCatalog
+# from agent_substrate.fabric.memory.unbounded import UnboundedMemory
+# from agent_substratereasoning.memory.context.unbounded import UnboundedContext
+# from agent_substrate.fabric.tools.builtin_tools import CalculatorTool
 #
 # agent = ReActAgent(
 #     name="MyAgent",
@@ -77,8 +77,8 @@
 #
 # ### Write a custom tool
 # ```python
-# from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
-# from ravi.kernel.messages.content import TextBlock
+# from agent_substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
+# from agent_substrate.kernel.messages.content import TextBlock
 #
 # class MyTool(BaseTool):
 #     risk = ToolRisk.SAFE
@@ -97,7 +97,7 @@
 #
 # ### Persist memory in Redis
 # ```python
-# from ravi.capabilities.history import RedisHistoryProvider  # ← integrations, not core!
+# from agent_substrate.capabilities.history import RedisHistoryProvider  # ← integrations, not core!
 #
 # mem = RedisMemory(session_id="my-chat", redis_url="redis://localhost:6379/0")
 # await mem.connect()
@@ -108,7 +108,7 @@
 #
 # ### Connect to an MCP server
 # ```python
-# from ravi.integrations.tools.mcp import MCPClient
+# from agent_substrate.integrations.tools.mcp import MCPClient
 #
 # client = MCPClient(url="http://localhost:9000/sse")
 # tools = await client.discover_tools()   # returns list[MCPTool]
@@ -116,7 +116,7 @@
 #
 # ### Register in the AgentCatalog
 # ```python
-# from ravi.kernel.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
+# from agent_substrate.kernel.agent_catalog import AgentCatalog, ResourceSpec, ResourceType
 #
 # catalog = AgentCatalog()
 # spec = ResourceSpec(name="my_tool", namespace="main.default", resource_type=ResourceType.TOOL)

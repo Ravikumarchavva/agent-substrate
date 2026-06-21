@@ -25,15 +25,15 @@ from __future__ import annotations
 
 import asyncio
 
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from ravi.agents.core.react import ReActAgent
-from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from ravi.agents.runtime import Runtime
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
-from ravi.console import Console
-from ravi.kernel import Priority
-from ravi.config import settings
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from agent_substrate.agents.core.react import ReActAgent
+from agent_substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+from agent_substrate.agents.runtime import Runtime
+from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
+from agent_substrate.console import Console
+from agent_substrate.kernel import Priority
+from agent_substrate.config import settings
 
 
 def _model() -> OpenAIClient:

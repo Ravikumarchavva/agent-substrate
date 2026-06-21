@@ -64,14 +64,14 @@ REDIS_SESSION_TTL=3600
 
 ```python
 # LLM client — file is openai_client.py, not client.py
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrateintegrations.llm.openai.openai_client import OpenAIClient
 
 # MCP tools — no loader module exists; use MCPClient directly
-from ravi.integrations.mcp import MCPClient
+from agent_substrateintegrations.mcp import MCPClient
 tools = await MCPClient(url=...).discover_tools()
 
 # Event bus — always use factory functions, never hand-build event dicts
-from ravi.shared.events.types import workflow_started, workflow_failed
+from agent_substrateshared.events.types import workflow_started, workflow_failed
 ```
 
 ## Test Structure

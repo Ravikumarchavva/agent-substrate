@@ -354,11 +354,11 @@ flowchart TD
 Because all three wrappers are `LLMClient`s that *accept* an `LLMClient`, you build the stack by nesting constructors. A common production wiring is **Router decides the model, then Cache, then Fallback, then the provider client**:
 
 ```python
-from ravi.agents.llm.router import ModelRouter
-from ravi.agents.llm.cache import SemanticCache
-from ravi.agents.llm.cached_client import CachedModelClient
-from ravi.agents.llm.fallback import FallbackClient
-from ravi.integrations.llm import LLMFactory
+from agent_substrate.agents.llm.router import ModelRouter
+from agent_substrate.agents.llm.cache import SemanticCache
+from agent_substrate.agents.llm.cached_client import CachedModelClient
+from agent_substrate.agents.llm.fallback import FallbackClient
+from agent_substrate.integrations.llm import LLMFactory
 
 # 1) Router picks a model name for this request (a decision, not a client)
 router = ModelRouter()

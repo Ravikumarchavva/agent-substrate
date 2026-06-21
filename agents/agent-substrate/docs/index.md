@@ -64,11 +64,11 @@ Most "agent" libraries help you wrap a model call in a loop. Ravi is built for t
 
 ```python
 import asyncio
-from ravi.config import settings
-from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider
-from ravi.integrations.llm import LLMFactory
-from ravi.capabilities.tools import CalculatorTool
+from agent_substrate.config import settings
+from agent_substrate.agents import ReActAgent, Runtime
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider
+from agent_substrate.integrations.llm import LLMFactory
+from agent_substrate.capabilities.tools import CalculatorTool
 
 
 async def main() -> None:
@@ -88,7 +88,7 @@ async def main() -> None:
     async with Runtime() as rt:
         await rt.register(agent)
 
-        from ravi.console import Console
+        from agent_substrate.console import Console
         console = Console(agent, runtime=rt)
         await console.interactive(stream=True)
 
@@ -106,7 +106,7 @@ The shape never changes. Adding tools, guardrails, streaming, HITL approvals, or
 === "uv (recommended)"
 
     ```bash
-    git clone https://github.com/Ravikumarchavva/ravi.git
+    git clone https://github.com/Ravikumarchavva/agent_substrategit
     cd ravi/ravi-engine
     uv sync
     ```

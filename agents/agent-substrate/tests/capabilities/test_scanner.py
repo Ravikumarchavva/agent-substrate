@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ravi.capabilities.tools.discovery import CapabilityDiscovery
+from agent_substrate.capabilities.tools.discovery import CapabilityDiscovery
 
 
 def test_catalog_scanner_discovery(tmp_path, monkeypatch):

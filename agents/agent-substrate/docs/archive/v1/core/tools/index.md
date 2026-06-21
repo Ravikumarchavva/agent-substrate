@@ -34,7 +34,7 @@ flowchart LR
 Every tool subclasses `BaseTool`. Set `risk` and `hitl_mode` as **class-level attributes** — the agent reads them before executing.
 
 ```python
-from ravi.core.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
+from agent_substratecore.tools.base_tool import BaseTool, ToolResult, ToolRisk, HitlMode
 
 class SendEmailTool(BaseTool):
     risk      = ToolRisk.CRITICAL       # Strategy: class-level
@@ -141,7 +141,7 @@ graph TD
 ```
 
 ```python
-from ravi.core.tools.catalog import CapabilityRegistry
+from agent_substratecore.tools.catalog import CapabilityRegistry
 
 registry = CapabilityRegistry()
 

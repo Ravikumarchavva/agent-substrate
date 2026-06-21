@@ -61,7 +61,7 @@ lint-apply:
 	uv run ruff check . --fix
 
 protocol-schema:
-	uv run python -m ravi.serving.protocol.export
+	uv run python -m agent_substrateserving.protocol.export
 
 lint:
 	uv run ruff check .

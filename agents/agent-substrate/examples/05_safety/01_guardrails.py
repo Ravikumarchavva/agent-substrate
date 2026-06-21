@@ -9,15 +9,15 @@ No LLM API key required — all guardrails in this file use pattern matching.
 
 import asyncio
 
-from ravi.exceptions import GuardrailTripwireError
-from ravi.agents.reasoning.guardrails import (
+from agent_substrate.exceptions import GuardrailTripwireError
+from agent_substrate.agents.reasoning.guardrails import (
     ContentFilterGuardrail,
     MaxTokenGuardrail,
     PIIDetectionGuardrail,
     PromptInjectionGuardrail,
     run_guardrails,
 )
-from ravi.kernel.guardrails.base_guardrail import (
+from agent_substrate.kernel.guardrails.base_guardrail import (
     BaseGuardrail,
     GuardrailContext,
     GuardrailResult,

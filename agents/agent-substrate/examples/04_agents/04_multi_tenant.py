@@ -15,11 +15,11 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from ravi.agents.core import ReActAgent
-from ravi.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.context import InMemoryHistoryProvider
+from agent_substrate.agents.core import ReActAgent
+from agent_substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrate.kernel.agent_catalog import AgentCatalog
+from agent_substrate.agents.context import InMemoryHistoryProvider
 
 # Infrastructure:
 # - OPENAI_API_KEY environment variable required
@@ -28,7 +28,7 @@ from ravi.agents.context import InMemoryHistoryProvider
 
 def _make_agent(user_id: str) -> ReActAgent:
     """Create a fully isolated agent for one user session."""
-    from ravi.config import settings
+    from agent_substrate.config import settings
 
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
@@ -119,7 +119,7 @@ async def main() -> None:
     # user/session ID and use RedisMemory for persistence across process
     # restarts:
     #
-    #   from ravi.capabilities.history import RedisHistoryProvider
+    #   from agent_substrate.capabilities.history import RedisHistoryProvider
     #
     #   REDIS_URL = "redis://localhost:6379/0"
     #

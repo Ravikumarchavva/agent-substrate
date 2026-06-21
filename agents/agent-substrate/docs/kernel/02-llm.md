@@ -138,7 +138,7 @@ class LLMResponse:
     usage: Usage                  # tokens consumed by this call
 ```
 
-- **`content`** is a `list[ContentBlock]` — the same universal block type used everywhere else in Ravi. The reply may be plain text (`TextBlock`), a reasoning trace (`ThinkingBlock`), a tool request (`ToolUseBlock`), or a mix.
+- **`content`** is a `list[ContentBlock]` — the same universal block type used everywhere else in agent_substrate The reply may be plain text (`TextBlock`), a reasoning trace (`ThinkingBlock`), a tool request (`ToolUseBlock`), or a mix.
 - **`usage`** is a `Usage` record: `input_tokens`, `cached_tokens`, `output_tokens`, and `reasoning_tokens`, plus a `total_tokens` property. Cached and reasoning counts are *broken out* so you can attribute cost accurately (cached prompt tokens are billed cheaper, reasoning tokens come from extended thinking).
 
 !!! warning "`LLMResponse` is frozen AND slotted — you cannot tack on attributes"

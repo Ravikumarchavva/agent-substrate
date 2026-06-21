@@ -117,7 +117,7 @@ There is also one special non-union brick:
     image. Always narrow the type first with `isinstance`:
 
     ```python
-    from ravi.kernel.core.content import TextBlock
+    from agent_substrate.kernel.core.content import TextBlock
 
     texts = [b.text for b in message.content if isinstance(b, TextBlock)]
     ```

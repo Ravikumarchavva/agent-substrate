@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.agents.resources.budget import ExecutionTracker
-from ravi.agents.supervision.budget import SpawnTracker
-from ravi.kernel.agent.supervision import Priority, SpawnBudget
-from ravi.kernel.core.errors import BudgetExhaustedError
-from ravi.kernel.core.identity import AgentId
+from agent_substrate.agents.resources.budget import ExecutionTracker
+from agent_substrate.agents.supervision.budget import SpawnTracker
+from agent_substrate.kernel.agent.supervision import Priority, SpawnBudget
+from agent_substrate.kernel.core.errors import BudgetExhaustedError
+from agent_substrate.kernel.core.identity import AgentId
 
 
 # ---------------------------------------------------------------------------
@@ -114,13 +114,13 @@ def test_spawn_tracker_reprioritize_lifts_pause() -> None:
 
 
 async def test_react_agent_respects_execution_budget() -> None:
-    from ravi.agents.core.react import ReActAgent
-    from ravi.agents.runtime import Runtime
-    from ravi.kernel.core.content import ChatMessage, Role, TextBlock
-    from ravi.kernel.core.identity import AgentId
-    from ravi.kernel.core.usage import Usage
-    from ravi.kernel.messaging.message import Message, ChatPayload
-    from ravi.kernel.messaging.stream import CompletionEvent
+    from agent_substrate.agents.core.react import ReActAgent
+    from agent_substrate.agents.runtime import Runtime
+    from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
+    from agent_substrate.kernel.core.identity import AgentId
+    from agent_substrate.kernel.core.usage import Usage
+    from agent_substrate.kernel.messaging.message import Message, ChatPayload
+    from agent_substrate.kernel.messaging.stream import CompletionEvent
 
     class MockLLMClient:
         model = "mock-model"

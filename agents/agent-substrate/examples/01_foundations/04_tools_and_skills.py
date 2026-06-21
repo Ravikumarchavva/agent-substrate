@@ -1,5 +1,5 @@
 """Example 1-4: Tools — Complete Guide
-Module: ravi.agents.tools.toolbox.Toolbox, ravi.kernel.tools.ToolRisk
+Module: agent_substrate.agents.tools.toolbox.Toolbox, agent_substrate.kernel.tools.ToolRisk
 
 Covers the tools system:
 
@@ -22,16 +22,16 @@ from __future__ import annotations
 import asyncio
 import random
 
-from ravi.config import settings
-from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from ravi.agents.tools.toolbox import Toolbox
-from ravi.integrations.llm import LLMFactory
-from ravi.kernel import TextBlock, ToolExecutionResult
-from ravi.kernel.core.content import ChatMessage, Role
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import Message, ChatPayload
-from ravi.kernel.tools import ToolRisk
+from agent_substrate.config import settings
+from agent_substrate.agents import ReActAgent, Runtime
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from agent_substrate.agents.tools.toolbox import Toolbox
+from agent_substrate.integrations.llm import LLMFactory
+from agent_substrate.kernel import TextBlock, ToolExecutionResult
+from agent_substrate.kernel.core.content import ChatMessage, Role
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import Message, ChatPayload
+from agent_substrate.kernel.tools import ToolRisk
 
 
 # ===========================================================================

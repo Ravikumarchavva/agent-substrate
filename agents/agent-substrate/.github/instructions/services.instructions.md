@@ -29,8 +29,8 @@ Services intentionally omitting `models.py`/`service.py` by design:
 from __future__ import annotations
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from ravi.configs.settings import get_settings
-from ravi.shared.events.bus import EventBus
+from agent_substrateconfigs.settings import get_settings
+from agent_substrateshared.events.bus import EventBus
 from .routes import router
 
 settings = get_settings()
@@ -51,8 +51,8 @@ app.include_router(router)
 Always emit events via `EventBus` after committed DB writes:
 
 ```python
-from ravi.shared.events.bus import EventBus
-from ravi.shared.events.types import workflow_started, workflow_failed
+from agent_substrateshared.events.bus import EventBus
+from agent_substrateshared.events.types import workflow_started, workflow_failed
 
 bus: EventBus = request.app.state.bus
 await bus.publish(workflow_started(job_id=job.id, run_id=run.id))
@@ -65,9 +65,9 @@ Use factory functions from `shared/events/types.py` — **never** build event di
 All cross-service DTOs live in `shared/contracts/<service_name>.py`:
 
 ```python
-from ravi.shared.contracts.job_controller import JobRunRequest
-from ravi.shared.contracts.human_gate import HITLResponse
-from ravi.shared.contracts.file_store import FileUploadResponse
+from agent_substrateshared.contracts.job_controller import JobRunRequest
+from agent_substrateshared.contracts.human_gate import HITLResponse
+from agent_substrateshared.contracts.file_store import FileUploadResponse
 ```
 
 ## Database Access

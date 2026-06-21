@@ -3,9 +3,9 @@
 Demonstrates a ReActAgent that uses WebSearchTool for multi-step web research
 and streams partial output tokens to the console in real time.
 
-WebSearchTool (ravi.extensions.tools.builtin_tools) is the built-in search
+WebSearchTool (agent_substrateextensions.tools.builtin_tools) is the built-in search
 integration. For full browser automation (click, screenshot, JS execution),
-swap it for WebSurferTool from ravi.catalog.tools.web_surfer.tool — which
+swap it for WebSurferTool from agent_substratecatalog.tools.web_surfer.tool — which
 requires Playwright: uv run playwright install chromium.
 
 Prerequisites: OPENAI_API_KEY set.
@@ -13,12 +13,12 @@ Prerequisites: OPENAI_API_KEY set.
 
 import asyncio
 
-from ravi.agents.core import ReActAgent
-from ravi.agents.tools.builtin_tools import WebSearchTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.context import InMemoryHistoryProvider
-from ravi.kernel.messages._types import TextDeltaChunk
+from agent_substrate.agents.core import ReActAgent
+from agent_substrate.agents.tools.builtin_tools import WebSearchTool
+from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrate.kernel.agent_catalog import AgentCatalog
+from agent_substrate.agents.context import InMemoryHistoryProvider
+from agent_substrate.kernel.messages._types import TextDeltaChunk
 
 # Infrastructure:
 # - OPENAI_API_KEY environment variable required
@@ -33,7 +33,7 @@ async def main() -> None:
     # ---
     # Section 1: Create agent with WebSearchTool
 
-    from ravi.config import settings
+    from agent_substrate.config import settings
 
     catalog = AgentCatalog()
     model_name = settings.CHAT_MODEL.split("/")[-1]
@@ -74,7 +74,7 @@ async def main() -> None:
     # ---
     # To use WebSurferTool instead (requires playwright):
     #
-    #   from ravi.catalog.tools.web_surfer.tool import WebSurferTool
+    #   from agent_substratecatalog.tools.web_surfer.tool import WebSurferTool
     #   catalog.register_tool(WebSurferTool(headless=True))
     #
     # WebSurferTool drives a real Chromium browser — it can navigate, click,

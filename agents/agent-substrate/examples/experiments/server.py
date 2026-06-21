@@ -10,7 +10,7 @@ Framework features showcased:
   • BaseTool subclasses for each agent's capability
   • AgentCatalog for tool registration and discovery
   • Pub/sub via async EventBus (fan-out to parallel subscribers)
-  • PIIDetectionGuardrail reused from ravi.kernel.guardrails
+  • PIIDetectionGuardrail reused from agent_substrate.kernel.guardrails
   • LazyTool for optional heavy deps (sentence-transformers)
 """
 
@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import tools as _tools
 from routes import router
-from ravi.logger import setup_logging
+from agent_substrate.logger import setup_logging
 
 logger = setup_logging(mode="pretty", handler="console")
 

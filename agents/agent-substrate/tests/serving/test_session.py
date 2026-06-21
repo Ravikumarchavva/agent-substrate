@@ -9,13 +9,13 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Any
-from ravi.agents.runtime.context import RunContext
-from ravi.agents.runtime.runtime import Runtime
-from ravi.kernel.core.content import ChatMessage, Role, TextBlock
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import ChatPayload, Message
-from ravi.serving.monolith.sse.bridge import BRIDGE_DONE
-from ravi.serving.protocol import (
+from agent_substrate.agents.runtime.context import RunContext
+from agent_substrate.agents.runtime.runtime import Runtime
+from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import ChatPayload, Message
+from agent_substrate.serving.monolith.sse.bridge import BRIDGE_DONE
+from agent_substrate.serving.protocol import (
     HelloEvent,
     RunCompletedEvent,
     RunFailedEvent,
@@ -24,7 +24,7 @@ from ravi.serving.protocol import (
     WireEvent,
     RunCancelledEvent,
 )
-from ravi.serving.stream.session import AgentStreamSession
+from agent_substrate.serving.stream.session import AgentStreamSession
 
 
 # ---------------------------------------------------------------------------

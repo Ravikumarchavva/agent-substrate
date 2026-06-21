@@ -34,7 +34,7 @@ flowchart TD
 
 `shared/` and `configs/` sit beside the layers and can be imported by anything above the kernel. `integrations/` and `catalog/` live between fabric and server — they are concrete adapters (LLM clients, memory backends, tool implementations) that plug into the fabric and reasoning contracts.
 
-**Enforcement**: `uv run lint-imports` (import-linter) fails CI if anything in `ravi.kernel` imports from `ravi.fabric`, `ravi.reasoning`, `ravi.orchestration`, `ravi.guardrails`, `ravi.platform`, `ravi.integrations`, `ravi.catalog`, `ravi.server`, or `ravi.services`. The architecture tests in `tests/architecture/test_kernel_invariants.py` add a hard ceiling on LOC (14k) and file count (115) so the kernel cannot silently balloon.
+**Enforcement**: `uv run lint-imports` (import-linter) fails CI if anything in `agent_substrate.kernel` imports from `agent_substrate.fabric`, `agent_substratereasoning`, `agent_substrateorchestration`, `agent_substrateguardrails`, `agent_substrateplatform`, `agent_substrate.integrations`, `agent_substratecatalog`, `agent_substrateserver`, or `agent_substrateservices`. The architecture tests in `tests/architecture/test_kernel_invariants.py` add a hard ceiling on LOC (14k) and file count (115) so the kernel cannot silently balloon.
 
 ---
 

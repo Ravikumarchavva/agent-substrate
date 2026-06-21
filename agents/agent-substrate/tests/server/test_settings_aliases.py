@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ravi.config import Settings
+from agent_substrate.config import Settings
 
 
 def test_settings_accepts_common_provider_env_aliases(

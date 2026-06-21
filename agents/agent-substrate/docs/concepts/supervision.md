@@ -109,7 +109,7 @@ Meanwhile each agent's `ExecutionTracker` is wired into its ReAct loop, calling 
 ## Putting it together
 
 ```python
-from ravi.kernel.agent.supervision import SpawnBudget, ExecutionBudget, Priority
+from agent_substrate.kernel.agent.supervision import SpawnBudget, ExecutionBudget, Priority
 
 orchestrator = OrchestratorAgent(
     "lead",

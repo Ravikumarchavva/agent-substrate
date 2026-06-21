@@ -13,7 +13,7 @@ import asyncio
 import socket
 import sys
 
-from ravi.config import settings
+from agent_substrate.config import settings
 
 # Infrastructure: requires `make infra-up` in ravi-engine/
 #   docker compose -f docker/docker-compose.yml up -d
@@ -63,7 +63,7 @@ async def section_2_memory_clients() -> None:
 
     # --- RedisMemory ---
     try:
-        from ravi.capabilities.history import RedisHistoryProvider
+        from agent_substrate.capabilities.history import RedisHistoryProvider
 
         mem = RedisMemory(
             session_id="healthcheck",
@@ -84,7 +84,7 @@ async def section_2_memory_clients() -> None:
 
     # --- PostgresMemory ---
     try:
-        from ravi.capabilities.history import PostgresHistoryProvider
+        from agent_substrate.capabilities.history import PostgresHistoryProvider
 
         db_url = (
             settings.DATABASE_URL

@@ -181,6 +181,16 @@ nav:
     - 6 · Tools — Toolbox & Invoker: agents/06-tools.md
     - 7 · Supervision, Budgets & Hooks: agents/07-supervision-and-hooks.md
 
+  - Capabilities Layer (L2):
+    - Overview: capabilities/index.md
+    - 1 · Tools: capabilities/01-tools.md
+    - 2 · Skills: capabilities/02-skills.md
+    - 3 · Tool Chain: capabilities/03-tool-chain.md
+    - 4 · Knowledge & RAG: capabilities/04-knowledge-rag.md
+    - 5 · Memory & History: capabilities/05-memory-and-history.md
+    - 6 · Storage & Pipeline: capabilities/06-storage-and-pipeline.md
+    - 7 · Triggers: capabilities/07-triggers.md
+
   - Archive: archive/index.md
 
   - GitHub:

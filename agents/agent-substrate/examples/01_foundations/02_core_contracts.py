@@ -1,12 +1,12 @@
 """Example 1-2: Core Contracts
-Module: agent_substrate.kernel, agent_substrate.kernel.stream, agent_substrate.kernel.content
+Module: substrate.kernel, substrate.kernel.stream, substrate.kernel.content
 
 Demonstrates the new kernel data model — all offline, no external services
 required. Covers: ChatMessage, ContentBlock subtypes, Tool Protocol, stream
 event types, and how the ReAct history loop is shaped.
 
 Run:
-    cd ravi-engine
+    cd agent-substrate
     uv run examples/01_foundations/02_core_contracts.py
 """
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 
-from agent_substrate.kernel import (
+from substrate.kernel import (
     AgentId,
     ChatMessage,
     TextBlock,
@@ -22,7 +22,7 @@ from agent_substrate.kernel import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from agent_substrate.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+from substrate.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ async def demo_content_blocks() -> None:
     )
     tool_result = ToolResultBlock(
         call_id="abc-123",
-        content=[TextBlock(text="ravi-engine is a Python async AI-agent framework")],
+        content=[TextBlock(text="agent-substrate is a Python async AI-agent framework")],
         is_error=False,
     )
     error_result = ToolResultBlock(

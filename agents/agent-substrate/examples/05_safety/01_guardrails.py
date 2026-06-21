@@ -9,15 +9,15 @@ No LLM API key required — all guardrails in this file use pattern matching.
 
 import asyncio
 
-from agent_substrate.exceptions import GuardrailTripwireError
-from agent_substrate.agents.reasoning.guardrails import (
+from substrate.exceptions import GuardrailTripwireError
+from substrate.agents.reasoning.guardrails import (
     ContentFilterGuardrail,
     MaxTokenGuardrail,
     PIIDetectionGuardrail,
     PromptInjectionGuardrail,
     run_guardrails,
 )
-from agent_substrate.kernel.guardrails.base_guardrail import (
+from substrate.kernel.guardrails.base_guardrail import (
     BaseGuardrail,
     GuardrailContext,
     GuardrailResult,

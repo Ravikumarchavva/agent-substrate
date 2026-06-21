@@ -1,6 +1,6 @@
-"""Example 08-2: Kind cluster verification for ravi-engine deployment.
+"""Example 08-2: Kind cluster verification for agent-substrate deployment.
 
-Checks that a Kind (Kubernetes in Docker) cluster is ready to receive ravi-engine
+Checks that a Kind (Kubernetes in Docker) cluster is ready to receive agent-substrate
 manifests. This is an informational/verification script — it does not apply any
 manifests itself.
 
@@ -11,7 +11,7 @@ Steps verified:
   2. Current context is a Kind cluster
   3. Required namespaces exist
   4. Expected deployments are present
-  5. Prints the command to apply ravi-engine manifests
+  5. Prints the command to apply agent-substrate manifests
 """
 
 import asyncio
@@ -165,7 +165,7 @@ def section_4_deployments() -> list[str]:
 
 
 def section_5_apply_command() -> None:
-    """Section 5 — Show the command to deploy ravi-engine."""
+    """Section 5 — Show the command to deploy agent-substrate."""
     print("\n=== Section 5: Deploy command ===")
 
     manifests_exist = MANIFESTS_DIR.exists()
@@ -174,7 +174,7 @@ def section_5_apply_command() -> None:
     print()
 
     if manifests_exist:
-        print("  To deploy ravi-engine to the Kind cluster:")
+        print("  To deploy agent-substrate to the Kind cluster:")
         print()
         print("    # Apply base manifests")
         print(f"    kubectl apply -k {MANIFESTS_DIR}/overlays/local")
@@ -210,7 +210,7 @@ async def main() -> None:
 
     print("\n--- Summary ---")
     if not missing_ns and not missing_deploys:
-        print("  Cluster is ready for ravi-engine.")
+        print("  Cluster is ready for agent-substrate.")
     else:
         if missing_ns:
             print(f"  Missing namespaces: {missing_ns}")

@@ -1,6 +1,12 @@
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
 """Example 07-1: Observability — OpenTelemetry tracing, EnvelopeSpan, ReplayGate, OperatorKillSwitch.
 
-Demonstrates the ravi-engine observability layer:
+Demonstrates the agent-substrate observability layer:
 - configure_opentelemetry() wires up OTel SDK (console or OTLP to Tempo/Jaeger)
 - ReActAgent emits spans automatically on every run
 - EnvelopeSpan wraps arbitrary operations with structured span metadata
@@ -12,19 +18,17 @@ In production, set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT to ship spans to Grafana T
 
 import asyncio
 import os
-
-from agent_substrate.config import settings
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.serving.shared.observability import (
+from substrate.agents.core import ReActAgent
+from substrate.serving.shared.observability import (
     InMemoryEnvelopeSpanRecorder,
     InMemoryOperatorKillSwitch,
     InMemoryReplayGate,
 )
-from agent_substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_substrate.integrations.llm.factory import create_model_client
-from agent_substrate.kernel.agent_catalog import AgentCatalog
-from agent_substrate.agents.context import InMemoryHistoryProvider
-from agent_substrate.kernel.observability import (
+from substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from substrate.integrations.llm.factory import create_model_client
+from substrate.kernel.agent_catalog import AgentCatalog
+from substrate.agents.context import InMemoryHistoryProvider
+from substrate.kernel.observability import (
     EnvelopeSpan,
     KillSwitchRule,
     KillSwitchScope,
@@ -33,12 +37,12 @@ from agent_substrate.kernel.observability import (
     ReplayRequest,
     SpanStatus,
 )
-from agent_substrate.serving.shared.observability import configure_opentelemetry
+from substrate.serving.shared.observability import configure_opentelemetry
 
 # Infrastructure: none required — all sections use in-memory implementations.
 #   For OTLP export to Grafana Tempo or Jaeger, set:
 #     OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318
-#   Then start the stack: cd ravi-engine && make infra-up
+#   Then start the stack: cd agent-substrate && make infra-up
 
 OTLP_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
 
@@ -264,7 +268,7 @@ async def main() -> None:
     print(
         "Set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://tempo:4318 to ship spans to Grafana Tempo."
     )
-    print("Start the full stack: cd ravi-engine && make infra-up")
+    print("Start the full stack: cd agent-substrate && make infra-up")
 
 
 if __name__ == "__main__":

@@ -1,19 +1,19 @@
-"""Minimal agent bootstrap — the "hello world" of ravi-engine.
+"""Minimal agent bootstrap — the "hello world" of agent-substrate.
 
 This is the absolute minimum needed to get a ReActAgent running.
-Start here if you are new to ravi-engine.
+Start here if you are new to agent-substrate.
 
 Run:
-    cd ravi-engine
+    cd agent-substrate
     uv run python examples/experiments/base_start.py
 """
 
 import asyncio
 
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.kernel.agent_catalog import AgentCatalog
-from agent_substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.core import ReActAgent
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.kernel.agent_catalog import AgentCatalog
+from substrate.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable (read automatically by OpenAIClient)
 

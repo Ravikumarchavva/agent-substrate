@@ -1,3 +1,9 @@
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
 """03-2 — MCP Tools via SSE (HTTP) transport
 
 Connects to a running MCP server over HTTP/SSE instead of launching a subprocess.
@@ -12,16 +18,14 @@ Prerequisites:
 
 import asyncio
 import json
-
-from agent_substrate.config import settings
-from agent_substrate.integrations.llm.factory import create_model_client
-from agent_substrate.integrations.tools.mcp.client import MCPClient
-from agent_substrate.kernel.messages.client_messages import (
+from substrate.integrations.llm.factory import create_model_client
+from substrate.integrations.tools.mcp.client import MCPClient
+from substrate.kernel.messages.client_messages import (
     SystemMessage,
     ToolExecutionResultMessage,
     UserMessage,
 )
-from agent_substrate.kernel.messages.content import TextBlock
+from substrate.kernel.messages.content import TextBlock
 
 # Infrastructure: MCP server must be running at SSE_URL before this script runs.
 

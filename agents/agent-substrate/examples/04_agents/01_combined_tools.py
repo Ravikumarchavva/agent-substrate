@@ -8,18 +8,27 @@ Prerequisites: OPENAI_API_KEY set.
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
+
 import asyncio
 import uuid
-
-from agent_substrate.config import settings
-from agent_substrate.agents import ReActAgent, Runtime
-from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from agent_substrate.integrations.llm import LLMFactory
-from agent_substrate.capabilities.tools import CalculatorTool, CurrentTimeTool
-from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from agent_substrate.kernel.core.identity import AgentId
-from agent_substrate.kernel.messaging.message import Message, ChatPayload
-from agent_substrate.kernel.tools import ToolExecutionResult
+from substrate.agents import ReActAgent, Runtime
+from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.integrations.llm import (
+    create_model_client,
+    detect_provider,
+    has_provider_api_key,
+)
+from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool
+from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from substrate.kernel.core.identity import AgentId
+from substrate.kernel.messaging.message import Message, ChatPayload
+from substrate.kernel.tools import ToolExecutionResult
 
 
 async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: str) -> str:
@@ -41,10 +50,14 @@ async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: st
 
 
 async def main() -> None:
-    if not settings.OPENAI_API_KEY:
-        raise SystemExit("OPENAI_API_KEY not set — add it to ravi-engine/.env")
+    provider = detect_provider(settings.CHAT_MODEL)
+    if not has_provider_api_key(provider, settings.provider_keys):
+        raise SystemExit(
+            f"No API key for provider {provider!r} (model {settings.CHAT_MODEL!r}). "
+            f"Add the matching key to agent-substrate/.env."
+        )
 
-    model = LLMFactory(settings.CHAT_MODEL, settings.OPENAI_API_KEY).build()
+    model = create_model_client(settings.CHAT_MODEL, api_keys=settings.provider_keys)
     session_id = uuid.uuid4().hex
 
     # ---

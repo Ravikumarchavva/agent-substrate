@@ -17,14 +17,14 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agent_substrate.kernel.agent_catalog._catalog import AgentCatalog
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from agent_substrate.kernel.hooks import HookEvent, HookManager, CostTracker
+from substrate.kernel.agent_catalog._catalog import AgentCatalog
+from substrate.agents.core import ReActAgent
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
+from substrate.kernel.hooks import HookEvent, HookManager, CostTracker
 
 # Evals
-from agent_substrateevals import (
+from substrateevals import (
     EvalCase,
     EvalDataset,
     EvalRunner,

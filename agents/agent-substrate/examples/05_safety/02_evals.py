@@ -16,11 +16,11 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from agent_substratereasoning.structured import LLMJudge, parse
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.kernel.guardrails.base_guardrail import GuardrailContext, GuardrailType
-from agent_substrate.kernel.messages.client_messages import UserMessage
-from agent_substrate.kernel.messages.content import TextBlock
+from substratereasoning.structured import LLMJudge, parse
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.kernel.guardrails.base_guardrail import GuardrailContext, GuardrailType
+from substrate.kernel.messages.client_messages import UserMessage
+from substrate.kernel.messages.content import TextBlock
 
 
 # ---

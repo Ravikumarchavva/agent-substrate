@@ -14,31 +14,36 @@ Compound query used:
    and who is the current CEO of OpenAI?"
 
 Prerequisites:
-    OPENAI_API_KEY set in ravi-engine/.env
+    OPENAI_API_KEY set in agent-substrate/.env
 
 Run:
-    cd ravi-engine
+    cd agent-substrate
     uv run examples/04_agents/09_orchestrator_real.py
 """
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+from substrate.config import SubstrateConfig
+
+load_dotenv()  # walks up to find the repo-root .env
+settings = SubstrateConfig()
+
+
 import asyncio
 
-from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from agent_substrate.agents.core.react import ReActAgent
-from agent_substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from agent_substrate.agents.runtime import Runtime
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
-from agent_substrate.console import Console
-from agent_substrate.kernel import Priority
-from agent_substrate.config import settings
-
+from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.core.react import ReActAgent
+from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+from substrate.agents.runtime import Runtime
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
+from substrate.console import Console
+from substrate.kernel import Priority
 
 def _model() -> OpenAIClient:
     if not settings.OPENAI_API_KEY:
-        raise SystemExit("OPENAI_API_KEY not set — add it to ravi-engine/.env")
+        raise SystemExit("OPENAI_API_KEY not set — add it to agent-substrate/.env")
     return OpenAIClient(
         model=settings.CHAT_MODEL.split("/")[-1],
         api_key=settings.OPENAI_API_KEY,

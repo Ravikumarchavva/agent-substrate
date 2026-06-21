@@ -10,17 +10,17 @@ research pipeline:
     Step 4 — Format: produce a structured research summary
 
 Run:
-    cd ravi-engine
+    cd agent-substrate
     uv run python examples/real-world-agent-mimics/experiment.py
 """
 
 import asyncio
 
-from agent_substrate.agents.core import ReActAgent
-from agent_substrate.agents.tools.builtin_tools import CalculatorTool, WebSearchTool
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.kernel.agent_catalog import AgentCatalog
-from agent_substrate.agents.context import InMemoryHistoryProvider
+from substrate.agents.core import ReActAgent
+from substrate.agents.tools.builtin_tools import CalculatorTool, WebSearchTool
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.kernel.agent_catalog import AgentCatalog
+from substrate.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: OPENAI_API_KEY environment variable
 

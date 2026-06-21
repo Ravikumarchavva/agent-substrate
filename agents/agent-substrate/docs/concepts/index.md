@@ -1,6 +1,6 @@
 # Core Concepts
 
-This section explains **how Ravi works** — not the API surface, but the ideas behind it. Read it like a map: each page takes one concept, shows the problem it solves, and walks through how the framework implements it.
+This section explains **how Agent Substrate works** — not the API surface, but the ideas behind it. Read it like a map: each page takes one concept, shows the problem it solves, and walks through how the framework implements it.
 
 If you only read one page, read [The Agent Model](agent-model.md). Everything else builds on it.
 
@@ -8,7 +8,7 @@ If you only read one page, read [The Agent Model](agent-model.md). Everything el
 
 ## The one-paragraph mental model
 
-In Ravi, an **agent** is not an object you call. It is an address you send messages to. The **runtime** receives the message, schedules a **run**, and drives the agent's reasoning loop. Every step the agent takes — calling the model, invoking a tool, spawning a sub-agent — is written to an append-only **event log** and guarded by a **journal**, so a crashed run can be replayed without repeating side-effects. Along the way, **middleware** wraps each model call, **guardrails** can block unsafe content, and risky tools can **pause for human approval** and resume later. Old conversation turns are kept by a **history provider** and trimmed by a **compaction pipeline** before they reach the model.
+In Agent Substrate, an **agent** is not an object you call. It is an address you send messages to. The **runtime** receives the message, schedules a **run**, and drives the agent's reasoning loop. Every step the agent takes — calling the model, invoking a tool, spawning a sub-agent — is written to an append-only **event log** and guarded by a **journal**, so a crashed run can be replayed without repeating side-effects. Along the way, **middleware** wraps each model call, **guardrails** can block unsafe content, and risky tools can **pause for human approval** and resume later. Old conversation turns are kept by a **history provider** and trimmed by a **compaction pipeline** before they reach the model.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '14px'}}}%%

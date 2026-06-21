@@ -11,7 +11,7 @@ that shape with intelligence** — the concrete agents that live at layer L1
 Every agent here is a normal Python class that *satisfies* the kernel `Agent`
 Protocol. There is no base class to inherit, no `@agent` decorator. If your class
 has an `id` attribute and an `async def run(self, ctx, inbox)`, the runtime will
-happily run it. The classes on this page are the batteries-included ones Ravi
+happily run it. The classes on this page are the batteries-included ones Agent Substrate
 ships with.
 
 !!! note "This page is the *implementation*, the kernel page is the *contract*"
@@ -19,7 +19,7 @@ ships with.
     and the `ctx` your `run()` receives. [The Agent Model](../concepts/agent-model.md)
     tells the *story* — why agents are addresses, not objects. This page is the
     concrete middle: the real classes, real method names, real code. Read those
-    two for the "why" and the "rules"; read this for "what Ravi actually gives
+    two for the "why" and the "rules"; read this for "what Agent Substrate actually gives
     you and how each one works."
 
 These classes may import from `kernel` (the layer below) but **never** from

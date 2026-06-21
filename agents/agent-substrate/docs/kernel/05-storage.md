@@ -269,9 +269,9 @@ production. See [Vector Memory](../concepts/vector-memory.md).
 (`Entity`) connected by labelled edges (`Relationship`) — and lets you walk
 outward from any node to its neighbours.
 
-**Analogy:** a detective's pinboard. Photos are entities ("Ravi", "Project X"),
-strings of yarn are relationships ("Ravi → *works_on* → Project X"). Ask "who's
-two hops from Ravi?" and you pull the connected cluster — a `SubGraph`.
+**Analogy:** a detective's pinboard. Photos are entities ("Alice", "Project X"),
+strings of yarn are relationships ("Alice → *works_on* → Project X"). Ask "who's
+two hops from Alice?" and you pull the connected cluster — a `SubGraph`.
 
 Three frozen value types plus the Protocol:
 
@@ -390,7 +390,7 @@ They sit *alongside* `HistoryProvider` (the raw transcript), capturing distilled
 
 **`LongTermMemory`** — extracted facts that persist across sessions, forever.
 
-> **Analogy:** your rolodex — "User's name is Ravi", "prefers Python". You still
+> **Analogy:** your rolodex — "User's name is Alice", "prefers Python". You still
 > have it next year. Scoped by `(namespace, agent_id)` so one tenant's facts
 > never leak into another's.
 

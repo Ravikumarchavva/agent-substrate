@@ -10,7 +10,7 @@ Supervision is the org-chart that keeps a multi-agent run accountable: who repor
 
 ## Two orthogonal budgets
 
-Ravi separates "how many agents" from "how much each agent spends." They are enforced independently.
+Agent Substrate separates "how many agents" from "how much each agent spends." They are enforced independently.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%

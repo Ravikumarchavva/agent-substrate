@@ -32,7 +32,7 @@
     <rect width="1000" height="800" fill="url(#bg-grad)" />
 
     <!-- Title -->
-    <text x="500" y="60" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="bold" fill="#ffffff" text-anchor="middle" filter="url(#glow)">Ravi Engine Kernel Architecture</text>
+    <text x="500" y="60" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="bold" fill="#ffffff" text-anchor="middle" filter="url(#glow)">Agent Substrate Kernel Architecture</text>
     <text x="500" y="90" font-family="system-ui, -apple-system, sans-serif" font-size="16" fill="#94a3b8" text-anchor="middle">L0 — Pure Contracts, Protocols, Dataclasses, and Enums</text>
 
     <!-- Core Primitives Box -->

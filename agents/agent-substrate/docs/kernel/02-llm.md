@@ -7,7 +7,7 @@ This is the kernel's promise about **how an agent talks to a language model** �
 !!! note "The analogy: a universal remote"
     `LLMClient` is a **universal remote control**. The buttons are always the same — *play*, *volume*, *power*. It does not care whether the TV behind it is a Sony, an LG, or a Samsung. Swap the TV, keep the remote.
 
-    In Ravi, the "buttons" are `generate()` and `generate_stream()`. The "TV brand" is the provider. Your agent only ever presses the buttons — it never learns which brand is plugged in. That is why you can switch from GPT to Claude to a local Llama without touching a single line of agent code.
+    In Agent Substrate, the "buttons" are `generate()` and `generate_stream()`. The "TV brand" is the provider. Your agent only ever presses the buttons — it never learns which brand is plugged in. That is why you can switch from GPT to Claude to a local Llama without touching a single line of agent code.
 
 Everything on this page lives in `kernel/llm/llm.py`. The kernel is **frozen**: it defines *only* the contract (Python `Protocol`s and `dataclass`es), with **zero I/O**. The real network calls live one layer down, in adapters that *implement* this contract.
 
@@ -38,7 +38,7 @@ flowchart LR
     CLI --> RESP
 ```
 
-The adapter does the dirty work of translating Ravi's neutral types into each vendor's wire format and back. The agent above it never sees that translation.
+The adapter does the dirty work of translating Agent Substrate's neutral types into each vendor's wire format and back. The agent above it never sees that translation.
 
 ---
 
@@ -121,7 +121,7 @@ Everything that tunes a call — beyond the messages themselves — lives in one
 | `extra` | `dict` | Escape hatch for provider-specific knobs not modelled above. |
 
 !!! note "`tools` are kernel tools, not vendor JSON"
-    You pass plain Ravi `Tool` objects. The adapter is responsible for rewriting them into whatever shape OpenAI / Anthropic / Gemini expects. Same input, every provider.
+    You pass plain Agent Substrate `Tool` objects. The adapter is responsible for rewriting them into whatever shape OpenAI / Anthropic / Gemini expects. Same input, every provider.
 
 A call with no options is valid — the default `GenerationOptions()` is a sensible empty bag, which is why the Protocol can use it as a default argument.
 

@@ -75,7 +75,7 @@ flowchart TB
 
 ## The Agent Protocol
 
-**What & why:** Every agent in Ravi — a chatbot, an orchestrator, a workflow
+**What & why:** Every agent in Agent Substrate — a chatbot, an orchestrator, a workflow
 node — is *one object that satisfies one Protocol*. There is no base class to
 inherit, no lifecycle method soup. Just an `id` (the address) and one async
 method `run(ctx, inbox)` that the runtime calls each time the agent wakes.
@@ -324,7 +324,7 @@ flowchart TD
 !!! warning "At-most-once, not at-least-once"
     There is one unavoidable window: if the worker dies *after* executing the
     effect but *before* `record`, the journal has no receipt — and on replay that
-    step is a MISS and runs again. Ravi chooses **at-most-once**: it does *not*
+    step is a MISS and runs again. Agent Substrate chooses **at-most-once**: it does *not*
     retry on that uncertainty, so you never double-charge — but in that rare
     window an effect can be silently lost. Genuinely idempotent tools (a `GET`, a
     Stripe charge with an idempotency key) are safe to retry and should say so in

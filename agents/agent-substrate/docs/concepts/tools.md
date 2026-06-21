@@ -4,7 +4,7 @@
 
 A language model can only produce text. To *do* anything — search the web, query a database, send an email, run code — it needs tools. The framework's job is to: describe the available tools to the model, let the model choose one and supply arguments, run it safely, and feed the result back so the model can continue reasoning.
 
-The hard parts are the edges: some tools run on *your* server, some run inside the *LLM provider*, some are dangerous, some return 200 MB of data, and the model sometimes wants to chain several together. Ravi's tool model handles each of these explicitly.
+The hard parts are the edges: some tools run on *your* server, some run inside the *LLM provider*, some are dangerous, some return 200 MB of data, and the model sometimes wants to chain several together. Agent Substrate's tool model handles each of these explicitly.
 
 ---
 
@@ -118,7 +118,7 @@ The invoker is the single chokepoint for programmatic tool calls. Around every `
 
 ## Chaining: code-mode tool use
 
-Sometimes the model wants to call several tools and combine their results — fetch rows, transform them, then post them somewhere. Doing that as separate round-trips is slow and leaks intermediate data through the context. Ravi supports **code-mode chaining**: the model writes a small script that calls tools as functions, and the script runs in a sandbox with every tool call still flowing through the same `ToolInvoker` (so all the policy above still applies). Big intermediate values stay in the blob store as refs and never round-trip through the model.
+Sometimes the model wants to call several tools and combine their results — fetch rows, transform them, then post them somewhere. Doing that as separate round-trips is slow and leaks intermediate data through the context. Agent Substrate supports **code-mode chaining**: the model writes a small script that calls tools as functions, and the script runs in a sandbox with every tool call still flowing through the same `ToolInvoker` (so all the policy above still applies). Big intermediate values stay in the blob store as refs and never round-trip through the model.
 
 ---
 

@@ -343,7 +343,7 @@ accurately.
 matters, but the line items (cached, reasoning) are billed at different rates.
 
 !!! warning "The fields are input/output — NOT prompt/completion"
-    Many SDKs say `prompt_tokens` / `completion_tokens`. Ravi does **not**. The
+    Many SDKs say `prompt_tokens` / `completion_tokens`. Agent Substrate does **not**. The
     kernel names are `input_tokens` and `output_tokens`. Code expecting
     `prompt_tokens` will not find it here.
 
@@ -438,7 +438,7 @@ flowchart LR
 
 ```python
 class KernelError(Exception):
-    """Base class for all ravi kernel errors."""
+    """Base class for all agent substrate kernel errors."""
 
 class AgentCrashError(KernelError):
     def __init__(self, message: str, *, run_id: str, agent_id: AgentId) -> None:

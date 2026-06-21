@@ -142,7 +142,7 @@ A child created by `spawn_child()` inherits:
 
 ## Two orthogonal budgets
 
-Ravi deliberately separates **"how many agents may exist"** from **"how much
+Agent Substrate deliberately separates **"how many agents may exist"** from **"how much
 each agent may spend."** They are different questions enforced by different
 trackers, so they live in two different dataclasses.
 

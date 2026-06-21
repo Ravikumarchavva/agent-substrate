@@ -69,6 +69,19 @@ body, input {
   max-width: 1400px !important;
 }
 
+/* ── Primary Button Customization ── */
+.md-typeset .md-button--primary {
+  background-color: var(--md-accent-fg-color) !important;
+  color: #ffffff !important;
+  border-color: var(--md-accent-fg-color) !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+.md-typeset .md-button--primary:hover {
+  background-color: var(--md-accent-fg-color) !important;
+  border-color: var(--md-accent-fg-color) !important;
+  opacity: 0.85;
+}
+
 /* ── Header & Tabs ── */
 .md-header {
   box-shadow: none !important;

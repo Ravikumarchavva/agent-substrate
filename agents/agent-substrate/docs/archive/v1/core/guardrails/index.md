@@ -57,7 +57,7 @@ flowchart LR
 Blocks 13 patterns: DAN prompts, role-override attempts, jailbreaks, "ignore previous instructions", etc.
 
 ```python
-from ravi.core.guardrails.prebuilt import PromptInjectionGuardrail
+from agent_substratecore.guardrails.prebuilt import PromptInjectionGuardrail
 
 guard = PromptInjectionGuardrail(
     tripwire=True,               # raise on detection
@@ -70,7 +70,7 @@ guard = PromptInjectionGuardrail(
 Detects email, US phone, SSN, credit card, and IP address by default. `pii_types=None` activates all patterns.
 
 ```python
-from ravi.core.guardrails.prebuilt import PIIDetectionGuardrail
+from agent_substratecore.guardrails.prebuilt import PIIDetectionGuardrail
 
 guard = PIIDetectionGuardrail(
     pii_types=["email", "credit_card"],  # None = all
@@ -84,8 +84,8 @@ guard = PIIDetectionGuardrail(
 Blocks messages matching regex patterns or keyword lists. Works at INPUT or OUTPUT.
 
 ```python
-from ravi.core.guardrails.prebuilt import ContentFilterGuardrail
-from ravi.core.guardrails.base_guardrail import GuardrailType
+from agent_substratecore.guardrails.prebuilt import ContentFilterGuardrail
+from agent_substratecore.guardrails.base_guardrail import GuardrailType
 
 # As output filter
 guard = ContentFilterGuardrail(
@@ -101,7 +101,7 @@ guard = ContentFilterGuardrail(
 Rejects input that's too long before it ever reaches the LLM. Uses `tiktoken` when available.
 
 ```python
-from ravi.core.guardrails.prebuilt import MaxTokenGuardrail
+from agent_substratecore.guardrails.prebuilt import MaxTokenGuardrail
 
 guard = MaxTokenGuardrail(
     max_tokens=4096,
@@ -115,7 +115,7 @@ guard = MaxTokenGuardrail(
 Checks which tools the LLM is allowed to call and validates argument patterns before execution.
 
 ```python
-from ravi.core.guardrails.prebuilt import ToolCallValidationGuardrail
+from agent_substratecore.guardrails.prebuilt import ToolCallValidationGuardrail
 
 guard = ToolCallValidationGuardrail(
     allowed_tools=["web_search", "code_interpreter"],  # None = all allowed
@@ -134,8 +134,8 @@ guard = ToolCallValidationGuardrail(
 Uses a second LLM call to evaluate the content. The judge must respond with `{"safe": bool, "reason": str}`.
 
 ```python
-from ravi.core.guardrails.prebuilt import LLMJudgeGuardrail
-from ravi.core.guardrails.base_guardrail import GuardrailType
+from agent_substratecore.guardrails.prebuilt import LLMJudgeGuardrail
+from agent_substratecore.guardrails.base_guardrail import GuardrailType
 
 guard = LLMJudgeGuardrail(
     model_client=client,
@@ -167,15 +167,15 @@ graph TB
 ```
 
 ```python
-from ravi.core.agents.react_agent import ReActAgent
-from ravi.core.guardrails.prebuilt import (
+from agent_substratecore.agents.react_agent import ReActAgent
+from agent_substratecore.guardrails.prebuilt import (
     PromptInjectionGuardrail,
     PIIDetectionGuardrail,
     MaxTokenGuardrail,
     ToolCallValidationGuardrail,
     ContentFilterGuardrail,
 )
-from ravi.core.guardrails.base_guardrail import GuardrailType
+from agent_substratecore.guardrails.base_guardrail import GuardrailType
 
 agent = ReActAgent(
     name="safe_agent",
@@ -205,7 +205,7 @@ agent = ReActAgent(
 Subclass `BaseGuardrail`, set `name` and `guardrail_type` at the class level, implement `check()`.
 
 ```python
-from ravi.core.guardrails.base_guardrail import (
+from agent_substratecore.guardrails.base_guardrail import (
     BaseGuardrail, GuardrailContext, GuardrailResult, GuardrailType
 )
 

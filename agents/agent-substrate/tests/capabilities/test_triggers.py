@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 import pytest
 
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import Message, DataPayload
-from ravi.capabilities.triggers.scheduler import TriggerScheduler, TriggerDef
-from ravi.capabilities.triggers.webhooks import WebhookRegistry
-from ravi.capabilities.triggers.conditions import ConditionMonitor, ConditionDef
-from ravi.integrations.events.redis_event_bus import EventBus
-from ravi.integrations.events.envelope import EventEnvelope
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import Message, DataPayload
+from agent_substrate.capabilities.triggers.scheduler import TriggerScheduler, TriggerDef
+from agent_substrate.capabilities.triggers.webhooks import WebhookRegistry
+from agent_substrate.capabilities.triggers.conditions import ConditionMonitor, ConditionDef
+from agent_substrate.integrations.events.redis_event_bus import EventBus
+from agent_substrate.integrations.events.envelope import EventEnvelope
 
 
 class MockRuntime:

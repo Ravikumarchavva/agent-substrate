@@ -94,7 +94,7 @@ sequenceDiagram
 Build via `LLMFactory`:
 
 ```python
-from ravi.integrations.llm import LLMFactory
+from agent_substrate.integrations.llm import LLMFactory
 
 client = LLMFactory("gpt-4o", api_key).build()                        # OpenAI
 client = LLMFactory("anthropic/claude-opus-4-8", api_key).build()     # Anthropic

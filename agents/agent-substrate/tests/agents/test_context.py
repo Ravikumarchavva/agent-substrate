@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from ravi.agents.context import (
+from agent_substrate.agents.context import (
     AgentContext,
     ContextConfig,
     InMemoryHistoryProvider,
@@ -10,9 +10,9 @@ from ravi.agents.context import (
     TokenBudgetComposedStrategy,
     CompactionPipeline,
 )
-from ravi.kernel import AgentId
-from ravi.kernel.core.content import ChatMessage, TextBlock
-from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
+from agent_substrate.kernel import AgentId
+from agent_substrate.kernel.core.content import ChatMessage, TextBlock
+from agent_substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 
 
 @pytest.mark.asyncio
@@ -143,7 +143,7 @@ async def test_summarization_incremental_update():
         chars_per_token=4.0,
     )
 
-    from ravi.agents.context.compaction.summarization import _make_summary_message
+    from agent_substrate.agents.context.compaction.summarization import _make_summary_message
 
     existing_summary_msg = _make_summary_message("Previous summary of early turns.")
     new_msgs = [_make_msg("user", "b" * 100) for _ in range(5)]

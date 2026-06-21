@@ -15,7 +15,7 @@ The current docs are organized around the developer journey. The original archit
 ## Archived visual assets
 
 - [Interactive architecture explorer](../archive/legacy/architecture_interactive.html)
-- [Legacy HTML export](../archive/legacy/ravi.html)
+- [Legacy HTML export](../archive/legacy/agent_substratehtml)
 
 ## Why archive instead of delete
 

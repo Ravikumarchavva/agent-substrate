@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from ravi.agents.storage.tasks import (
+from agent_substrate.agents.storage.tasks import (
     TaskStore,
     current_agent_id,
     current_parent_agent_id,
     current_thread_id,
 )
-from ravi.capabilities.tools.task_manager.tool import TaskManagerTool
-from ravi.kernel.storage.tasks import TaskStatus
+from agent_substrate.capabilities.tools.task_manager.tool import TaskManagerTool
+from agent_substrate.kernel.storage.tasks import TaskStatus
 
 
 def _board(result):

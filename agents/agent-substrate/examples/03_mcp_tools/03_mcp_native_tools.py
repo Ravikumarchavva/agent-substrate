@@ -12,7 +12,7 @@ Prerequisites:
 import asyncio
 import json
 
-from ravi.integrations.tools.mcp.client import MCPClient
+from agent_substrate.integrations.tools.mcp.client import MCPClient
 
 # Infrastructure: Node.js / npx required to launch the MCP filesystem server.
 

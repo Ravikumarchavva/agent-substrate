@@ -6,12 +6,12 @@ import asyncio
 from typing import Any
 
 
-from ravi.agents.tools.invoker import ToolInvoker
-from ravi.agents.tools.toolbox import Toolbox
-from ravi.kernel.tools.approval import ApprovalDecision, ApprovalRequest
-from ravi.kernel.tools.chain import ChainPolicy
-from ravi.kernel.core.content import ImageBlock, TextBlock
-from ravi.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
+from agent_substrate.agents.tools.invoker import ToolInvoker
+from agent_substrate.agents.tools.toolbox import Toolbox
+from agent_substrate.kernel.tools.approval import ApprovalDecision, ApprovalRequest
+from agent_substrate.kernel.tools.chain import ChainPolicy
+from agent_substrate.kernel.core.content import ImageBlock, TextBlock
+from agent_substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
 
 
 # ---------------------------------------------------------------------------

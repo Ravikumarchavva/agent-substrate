@@ -19,7 +19,7 @@
 | 5 | `fabric/` (L1) imports up into `guardrails/` (L4) & `platform/` (L5) | **High** | Workaround |
 | 6 | Architecture-invariant tests stale (ceilings raised, point to dead `extensions/`) | **Medium** | Not updated |
 | 7 | Test tree not reorganized to match layers | **Medium** | Incomplete |
-| 8 | Stale docstrings reference dead `ravi.extensions.*` | **Low** | Cosmetic |
+| 8 | Stale docstrings reference dead `agent_substrateextensions.*` | **Low** | Cosmetic |
 
 What went **right**: kernel LOC dropped from ~16,900 → ~10,000; the concrete runtime (`LocalRuntime`, `SagaCoordinator`, dispatcher, mailbox, supervisor) genuinely moved to `fabric/`; the new-layer files are larger and more complete than the originals; the contract/impl split for routing middleware (`kernel/runtime/_middleware.py` = ABC, `fabric/runtime/_middleware.py` = built-ins) is exactly right.
 
@@ -32,16 +32,16 @@ What went **right**: kernel LOC dropped from ~16,900 → ~10,000; the concrete r
 The migration **copied** code into the new layers but never **deleted** the old tree. Worse, `extensions/` is no longer even importable — its modules import things that were moved out from under them:
 
 ```
-$ uv run python -c "import ravi.extensions.pipelines"
-ModuleNotFoundError: No module named 'ravi.extensions.pipelines.middleware'
+$ uv run python -c "import agent_substrateextensions.pipelines"
+ModuleNotFoundError: No module named 'agent_substrateextensions.pipelines.middleware'
 
-$ uv run python -c "from ravi.extensions.agents.assistant.agent import AssistantAgent"
-ModuleNotFoundError: No module named 'ravi.kernel.agents.actor'
+$ uv run python -c "from agent_substrateextensions.agents.assistant.agent import AssistantAgent"
+ModuleNotFoundError: No module named 'agent_substrate.kernel.agents.actor'
 ```
 
-`extensions/agents/assistant/agent.py` still does `from ravi.kernel.agents.actor import ActorAgent` — but `ActorAgent` moved to `ravi.fabric.actors.actor`. The files that survive in `extensions/` reference siblings that were never copied (`extensions.pipelines.middleware`, `extensions.pipelines._expr_eval`, `extensions.resilience.policies`, `extensions.agents.flow`, `extensions.structured`, `extensions.tools`).
+`extensions/agents/assistant/agent.py` still does `from agent_substrate.kernel.agents.actor import ActorAgent` — but `ActorAgent` moved to `agent_substrate.fabric.actors.actor`. The files that survive in `extensions/` reference siblings that were never copied (`extensions.pipelines.middleware`, `extensions.pipelines._expr_eval`, `extensions.resilience.policies`, `extensions.agents.flow`, `extensions.structured`, `extensions.tools`).
 
-It is also **dead**: nothing in `src/ravi/` outside `extensions/` itself imports `ravi.extensions` (0 references). It is a 9-file, ~3,900-LOC stale duplicate of `reasoning/` and `orchestration/`.
+It is also **dead**: nothing in `src/ravi/` outside `extensions/` itself imports `agent_substrateextensions` (0 references). It is a 9-file, ~3,900-LOC stale duplicate of `reasoning/` and `orchestration/`.
 
 ```
 src/ravi/extensions/
@@ -54,7 +54,7 @@ src/ravi/extensions/
 
 ### Fix (real, not a patch)
 
-Delete the entire `src/ravi/extensions/` directory. Then remove every remaining reference to `ravi.extensions` (import-linter config, architecture tests, docstrings — see findings 3, 6, 8). This is safe: the tree cannot be imported and nothing depends on it.
+Delete the entire `src/ravi/extensions/` directory. Then remove every remaining reference to `agent_substrateextensions` (import-linter config, architecture tests, docstrings — see findings 3, 6, 8). This is safe: the tree cannot be imported and nothing depends on it.
 
 ---
 
@@ -62,17 +62,17 @@ Delete the entire `src/ravi/extensions/` directory. Then remove every remaining 
 
 ### Problem
 
-This is the single biggest "patch rather than fix." To keep old import paths like `from ravi.kernel.agents import ActorAgent` working after the code moved up to `fabric/`, the migration left **module-level re-export shims inside the kernel that import upward** from L1–L5:
+This is the single biggest "patch rather than fix." To keep old import paths like `from agent_substrate.kernel.agents import ActorAgent` working after the code moved up to `fabric/`, the migration left **module-level re-export shims inside the kernel that import upward** from L1–L5:
 
 | Kernel file (L0) | Imports upward from | Layer |
 |---|---|---|
-| `kernel/agents/__init__.py` | `ravi.fabric.actors.actor` | L1 |
-| `kernel/memory/__init__.py` | `ravi.fabric.memory.unbounded` | L1 |
-| `kernel/storage/__init__.py` | `ravi.fabric.storage.local` | L1 |
-| `kernel/plugin/registry.py` | `ravi.fabric.actors.actor` | L1 |
-| `kernel/middleware/runner.py` | `ravi.reasoning.middleware.pipeline` | L2 |
-| `kernel/execution/__init__.py` | `ravi.reasoning.middleware.pipeline` | L2 |
-| `kernel/observability/__init__.py` | `ravi.guardrails.killswitch`, `ravi.platform.observability.*` | L4 + L5 |
+| `kernel/agents/__init__.py` | `agent_substrate.fabric.actors.actor` | L1 |
+| `kernel/memory/__init__.py` | `agent_substrate.fabric.memory.unbounded` | L1 |
+| `kernel/storage/__init__.py` | `agent_substrate.fabric.storage.local` | L1 |
+| `kernel/plugin/registry.py` | `agent_substrate.fabric.actors.actor` | L1 |
+| `kernel/middleware/runner.py` | `agent_substratereasoning.middleware.pipeline` | L2 |
+| `kernel/execution/__init__.py` | `agent_substratereasoning.middleware.pipeline` | L2 |
+| `kernel/observability/__init__.py` | `agent_substrateguardrails.killswitch`, `agent_substrateplatform.observability.*` | L4 + L5 |
 
 The frozen, independent L0 kernel that the whole refactor exists to create is now the **apex** of the dependency graph — it transitively depends on fabric, reasoning, guardrails, and platform. And because `fabric/actors/actor.py` imports right back into `kernel` (`kernel.messages.content`, `kernel.runtime._identity`, `kernel.runtime._protocol`, …), there is a genuine **circular dependency `kernel ↔ fabric`**. It happens to not deadlock at import time today, but it is exactly the architecture the layering was meant to eliminate.
 
@@ -82,7 +82,7 @@ The frozen, independent L0 kernel that the whole refactor exists to create is no
 
 Re-exports for backwards compatibility must point **downward or sideways**, never up. Two clean options:
 
-1. **Preferred** — update call sites to import from the real home (`from ravi.fabric.actors.actor import ActorAgent`) and delete the kernel shim entirely. The kernel `__init__.py` files should export only what physically lives in the kernel.
+1. **Preferred** — update call sites to import from the real home (`from agent_substrate.fabric.actors.actor import ActorAgent`) and delete the kernel shim entirely. The kernel `__init__.py` files should export only what physically lives in the kernel.
 2. **If a transition shim is truly needed**, put it in the layer that *owns* the symbol (e.g. a `fabric/__init__.py` convenience export), not in the kernel. The lower layer must never name a higher one.
 
 For `kernel/plugin/registry.py`, restore the lazy import inside `_bind()` (the comment already describes the correct design) so the registry module does not import `fabric` at module load.
@@ -99,11 +99,11 @@ For `kernel/plugin/registry.py`, restore the lazy import inside `_bind()` (the c
 [[tool.importlinter.contracts]]
 name = "kernel is independent"
 type = "forbidden"
-source_modules = ["ravi.kernel"]
+source_modules = ["agent_substrate.kernel"]
 forbidden_modules = [
-    "ravi.extensions",      # ← now a dead tree
-    "ravi.integrations", "ravi.catalog", "ravi.server",
-    "ravi.services", "ravi.shared", "ravi.configs", "ravi.logger",
+    "agent_substrateextensions",      # ← now a dead tree
+    "agent_substrate.integrations", "agent_substratecatalog", "agent_substrateserver",
+    "agent_substrateservices", "agent_substrateshared", "agent_substrate.configs", "agent_substrate.logger",
 ]
 # fabric / reasoning / orchestration / guardrails / platform are NOT listed
 ```
@@ -119,23 +119,23 @@ Replace the single forbidden contract with a **layered contract** that encodes t
 name = "ravi layers"
 type = "layers"
 layers = [
-    "ravi.platform",       # L5 (highest)
-    "ravi.guardrails",     # L4
-    "ravi.orchestration",  # L3
-    "ravi.reasoning",      # L2
-    "ravi.fabric",         # L1
-    "ravi.kernel",         # L0 (lowest)
+    "agent_substrateplatform",       # L5 (highest)
+    "agent_substrateguardrails",     # L4
+    "agent_substrateorchestration",  # L3
+    "agent_substratereasoning",      # L2
+    "agent_substrate.fabric",         # L1
+    "agent_substrate.kernel",         # L0 (lowest)
 ]
 
 [[tool.importlinter.contracts]]
 name = "kernel imports nothing in the app"
 type = "forbidden"
-source_modules = ["ravi.kernel"]
+source_modules = ["agent_substrate.kernel"]
 forbidden_modules = [
-    "ravi.fabric", "ravi.reasoning", "ravi.orchestration",
-    "ravi.guardrails", "ravi.platform",
-    "ravi.extensions", "ravi.integrations", "ravi.catalog",
-    "ravi.server", "ravi.services",
+    "agent_substrate.fabric", "agent_substratereasoning", "agent_substrateorchestration",
+    "agent_substrateguardrails", "agent_substrateplatform",
+    "agent_substrateextensions", "agent_substrate.integrations", "agent_substratecatalog",
+    "agent_substrateserver", "agent_substrateservices",
 ]
 ```
 
@@ -157,7 +157,7 @@ Two modules were assigned to layers *above* the code that uses them, creating ba
 
 So L2/L3 depend on L4 — the inversion the layering was meant to kill.
 
-**`platform/batch/` (L5) → used by L2.** `reasoning/extraction/extractor.py` (L2) imports `from ravi.platform.batch.processor import BatchProcessor`. L2 depends on L5.
+**`platform/batch/` (L5) → used by L2.** `reasoning/extraction/extractor.py` (L2) imports `from agent_substrateplatform.batch.processor import BatchProcessor`. L2 depends on L5.
 
 ### Fix (real, not a patch)
 
@@ -176,14 +176,14 @@ These are design errors, not import-path errors — fix placement, not the impor
 
 ```python
 # fabric/runtime/_middleware.py
-from ravi.guardrails.mutation._breaker import CircuitOpen  # local to avoid kernel→extensions
+from agent_substrateguardrails.mutation._breaker import CircuitOpen  # local to avoid kernel→extensions
 ```
 
 A "local import to avoid a cycle" is the canonical symptom of a layer boundary fighting the real call graph. But several are genuine **module-level** upward imports:
 
 ```python
 # fabric/runtime/_distributed.py
-from ravi.platform.scheduling._contracts import ResourceClaim, SlotGrantStatus, SchedulerContract
+from agent_substrateplatform.scheduling._contracts import ResourceClaim, SlotGrantStatus, SchedulerContract
 ```
 
 The fabric runtime needs scheduler **contracts**, governance **contracts**, kill-switch **contracts**, span **contracts** — but those contracts currently live in L4/L5 *implementation* packages.
@@ -233,19 +233,19 @@ Mirror the new layer layout under `tests/` and update imports to the real homes.
 
 ---
 
-## Finding 8 — Stale docstrings reference dead `ravi.extensions.*`
+## Finding 8 — Stale docstrings reference dead `agent_substrateextensions.*`
 
 ### Problem
 
 Kernel `__init__.py` docstrings still describe the old world, e.g. `kernel/agents/__init__.py`:
 
-> *Concrete agent implementations (`AssistantAgent`, …) live in `ravi.extensions.agents`.*
+> *Concrete agent implementations (`AssistantAgent`, …) live in `agent_substrateextensions.agents`.*
 
-They now live in `ravi.reasoning.agents` / `ravi.orchestration.agents`. Same stale pointer in `kernel/observability/__init__.py` and others.
+They now live in `agent_substratereasoning.agents` / `agent_substrateorchestration.agents`. Same stale pointer in `kernel/observability/__init__.py` and others.
 
 ### Fix
 
-Sweep kernel docstrings and the architecture-test messages, repointing `ravi.extensions.*` to the correct layer. Low effort; do it alongside finding 1's deletion.
+Sweep kernel docstrings and the architecture-test messages, repointing `agent_substrateextensions.*` to the correct layer. Low effort; do it alongside finding 1's deletion.
 
 ---
 

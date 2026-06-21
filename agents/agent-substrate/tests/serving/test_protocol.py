@@ -6,7 +6,7 @@ import json
 
 from pydantic import TypeAdapter
 
-from ravi.serving.protocol import (
+from agent_substrate.serving.protocol import (
     PROTOCOL_VERSION,
     WireEvent,
     HelloEvent,
@@ -20,7 +20,7 @@ from ravi.serving.protocol import (
     RunFailedEvent,
     ErrorEvent,
 )
-from ravi.serving.protocol.export import build_schema
+from agent_substrate.serving.protocol.export import build_schema
 
 _ADAPTER = TypeAdapter(WireEvent)
 

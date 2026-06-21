@@ -37,7 +37,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/Ravikumarchavva/ravi.git
+git clone https://github.com/Ravikumarchavva/agent_substrategit
 cd ravi/ravi-engine
 
 # Sync dependencies using uv
@@ -53,9 +53,9 @@ Ravi utilizes `AssistantAgent` to execute the **ReAct (Reasoning and Action)** l
 
 ```python
 import asyncio
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.fabric.runtime.local import LocalRuntime
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
+from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrate.fabric.runtime.local import LocalRuntime
+from agent_substratereasoning.agents.assistant.agent import AssistantAgent
 
 async def main():
     # 1. Initialize and start the Local Runtime fabric
@@ -86,11 +86,11 @@ You can register custom tools matching the `Tool` Protocol. Here's a complete ma
 
 ```python
 import asyncio
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.fabric.runtime.local import LocalRuntime
-from ravi.reasoning.agents.assistant.agent import AssistantAgent
-from ravi.kernel.tools import ToolExecutionResult
-from ravi.kernel.content import TextBlock
+from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrate.fabric.runtime.local import LocalRuntime
+from agent_substratereasoning.agents.assistant.agent import AssistantAgent
+from agent_substrate.kernel.tools import ToolExecutionResult
+from agent_substrate.kernel.content import TextBlock
 
 # Create a custom tool satisfying the Tool Protocol
 class CalculatorTool:
@@ -177,7 +177,7 @@ We have compiled extensive architectural guides for each of our key layers. Read
 ### 1. Identity & Routing Keys
 All actors in the mesh are addressed using decoupled value identifiers:
 ```python
-from ravi.kernel import AgentId, TopicId
+from agent_substrate.kernel import AgentId, TopicId
 
 # Address a specific actor instance
 target_agent = AgentId(type="assistant", key="math_expert")
@@ -189,7 +189,7 @@ audit_topic = TopicId(source="security", key="pii_alerts")
 ### 2. Envelope Messaging
 Under the hood, all routed data is wrapped in a transport `Message` payload:
 ```python
-from ravi.kernel.message import Message
+from agent_substrate.kernel.message import Message
 
 message = Message(
     target=target_agent,
@@ -201,7 +201,7 @@ message = Message(
 ### 3. Modular Memory & Compaction
 Avoid context overflow using active compaction. Register memory contexts to automatically prune prompts:
 ```python
-from ravi.fabric.context import SlidingWindowCompaction
+from agent_substrate.fabric.context import SlidingWindowCompaction
 
 # Keeps only the last 20 messages in active prompting
 compactor = SlidingWindowCompaction(max_messages=20)
@@ -217,7 +217,7 @@ Ravi supports powerful linear, parallel, and routing compositions. Since flows i
 An `OrchestratorAgent` registers sub-specialists as individual handoff tools. It analyzes user requests and routes tasks dynamically, synthesizing their results back to the caller.
 
 ```python
-from ravi.orchestration.agents.orchestrator.agent import OrchestratorAgent
+from agent_substrateorchestration.agents.orchestrator.agent import OrchestratorAgent
 
 orchestrator = OrchestratorAgent(
     name="coordinator",
@@ -232,7 +232,7 @@ orchestrator = OrchestratorAgent(
 Steps execute sequentially in pipeline order. Each step receives the accumulated transcript of previous runs.
 
 ```python
-from ravi.orchestration.agents.flow import SequentialFlow
+from agent_substrateorchestration.agents.flow import SequentialFlow
 
 pipeline = SequentialFlow(
     name="etl_pipeline",
@@ -245,7 +245,7 @@ result = await pipeline.run("Load invoice dataset.")
 Runs all branch agents in parallel concurrently and merges their outputs using standard (`concat`, `vote`) or custom callables.
 
 ```python
-from ravi.orchestration.agents.flow import ParallelFlow
+from agent_substrateorchestration.agents.flow import ParallelFlow
 
 evaluator = ParallelFlow(
     name="peer_review",
@@ -258,7 +258,7 @@ evaluator = ParallelFlow(
 Evaluates a synchronous predicate function at runtime, dynamically branching execution to either `if_true` or `if_false` nodes.
 
 ```python
-from ravi.orchestration.agents.flow import ConditionalFlow
+from agent_substrateorchestration.agents.flow import ConditionalFlow
 
 smart_router = ConditionalFlow(
     name="inbound_gate",

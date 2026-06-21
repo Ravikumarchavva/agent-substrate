@@ -145,7 +145,7 @@ spec:
             - uv
             - run
             - uvicorn
-            - ravi.services.code_interpreter.app:app
+            - agent_substrateservices.code_interpreter.app:app
             - --host
             - "0.0.0.0"
             - --port

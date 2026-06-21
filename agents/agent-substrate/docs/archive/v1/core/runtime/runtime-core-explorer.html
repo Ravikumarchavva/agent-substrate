@@ -439,7 +439,7 @@ const actors = {
     receives:["start_agent_workflow(thread_id, user_content, claims, model, ...)","start_pipeline_workflow(name, definition, thread_id)","start_chain_workflow(code, timeout)","query_workflow(workflow_id)","cancel_workflow(workflow_id)","resolve_promise(workflow_id, promise_name, value)"],
     sends:["HTTP POST → Restate ingress /run or /send","HTTP calls → admin API for deployment registration","Blocking HTTP result when get_result() is awaited"],
     methods:["connect() / disconnect()","start_agent_workflow(...) → str","start_pipeline_workflow(...)","start_chain_workflow(...)","query_workflow(wf_id) → dict","cancel_workflow(wf_id)","resolve_promise(wf_id, name, value)","register_deployment(endpoint_url)"],
-    code:`<span class="kw">from</span> ravi.integrations.runtime.restate.client <span class="kw">import</span> <span class="cl">RestateWorkflowClient</span>
+    code:`<span class="kw">from</span> agent_substrateintegrations.runtime.restate.client <span class="kw">import</span> <span class="cl">RestateWorkflowClient</span>
 
 client = <span class="cl">RestateWorkflowClient</span>(settings)
 <span class="kw">await</span> client.<span class="fn">connect</span>()
@@ -468,7 +468,7 @@ wf_id = <span class="kw">await</span> client.<span class="fn">start_agent_workfl
     receives:["send_message(payload, sender, recipient)","resolve_promise(workflow_id, promise_name, value)","cancel_workflow(workflow_id)","start() / stop()"],
     sends:["HTTP POST to virtual-object endpoints via _remote_send","Promise resolution to workflow endpoints","Deployment registration to admin API on startup"],
     methods:["start()","stop()","_remote_send(endpoint, payload)","resolve_promise(wf_id, name, value)","cancel_workflow(wf_id)"],
-    code:`<span class="kw">from</span> ravi.integrations.runtime.restate.runtime <span class="kw">import</span> <span class="cl">RestateRuntime</span>
+    code:`<span class="kw">from</span> agent_substrateintegrations.runtime.restate.runtime <span class="kw">import</span> <span class="cl">RestateRuntime</span>
 
 runtime = <span class="cl">RestateRuntime</span>(settings)
 <span class="kw">await</span> runtime.<span class="fn">start</span>()
@@ -576,7 +576,7 @@ return resp.json()
     receives:["CLI host and port args","Settings: OPENAI_API_KEY, REDIS_URL, NATS_URL, RESTATE_ADMIN_URL"],
     sends:["Configured DI globals into activities module","Deployment registration to Restate admin API","uvicorn hosting of the Restate ASGI app"],
     methods:["main() — CLI entry-point","_setup() — build services and wire DI","_scan_tools() — discover catalog tools","_register_with_restate(endpoint_url)","_teardown() — graceful shutdown"],
-    code:`<span class="cm"># uv run python -m ravi.integrations.runtime.restate.worker</span>
+    code:`<span class="cm"># uv run python -m agent_substrateintegrations.runtime.restate.worker</span>
 <span class="cm">#   --host 0.0.0.0 --port 9080</span>
 
 <span class="kw">async def</span> <span class="fn">_setup</span>(self):
@@ -628,7 +628,7 @@ result = <span class="kw">await</span> ctx.<span class="fn">run</span>(
     receives:["tool name via get_policy(tool_name)","BaseTool instance via derive_policy_from_tool(tool)"],
     sends:["ToolPolicy(timeout, retries, requires_approval, is_hitl_input, idempotent)"],
     methods:["ToolPolicy — dataclass","TOOL_POLICIES — registry dict","derive_policy_from_tool(tool) → ToolPolicy","get_policy(tool_name) → ToolPolicy"],
-    code:`<span class="kw">from</span> ravi.integrations.runtime.restate.policies <span class="kw">import</span> <span class="cl">ToolPolicy</span>, get_policy
+    code:`<span class="kw">from</span> agent_substrateintegrations.runtime.restate.policies <span class="kw">import</span> <span class="cl">ToolPolicy</span>, get_policy
 
 <span class="cm"># Derives from BaseTool.risk attribute</span>
 policy = <span class="fn">get_policy</span>(<span class="st">"send_email"</span>)

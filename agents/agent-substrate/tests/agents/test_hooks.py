@@ -10,23 +10,23 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-from ravi.agents.context import (
+from agent_substrate.agents.context import (
     CompactionPipeline,
     ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
 )
-from ravi.agents.core import ReActAgent
-from ravi.agents.hooks.manager import HookEvent, HookManager
-from ravi.agents.runtime import Runtime
-from ravi.agents.tools.invoker import ToolInvoker
-from ravi.agents.tools.toolbox import Toolbox
-from ravi.kernel import TextBlock, ToolExecutionResult, ToolRisk
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
-from ravi.kernel.messaging.message import ChatPayload, DataPayload, Message
-from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
-from ravi.kernel.core.content import ChatMessage, Role
+from agent_substrate.agents.core import ReActAgent
+from agent_substrate.agents.hooks.manager import HookEvent, HookManager
+from agent_substrate.agents.runtime import Runtime
+from agent_substrate.agents.tools.invoker import ToolInvoker
+from agent_substrate.agents.tools.toolbox import Toolbox
+from agent_substrate.kernel import TextBlock, ToolExecutionResult, ToolRisk
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
+from agent_substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
+from agent_substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from agent_substrate.kernel.core.content import ChatMessage, Role
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
 
 async def test_tool_start_end_fire() -> None:
     """TOOL_START and TOOL_END are dispatched by ToolInvoker around every tool call."""
-    from ravi.kernel.tools import ToolCallRequest
+    from agent_substrate.kernel.tools import ToolCallRequest
 
     hooks, log = _recording_hooks(HookEvent.TOOL_START, HookEvent.TOOL_END)
 

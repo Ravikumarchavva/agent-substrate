@@ -36,10 +36,10 @@ flowchart TD
 `ReActAgent` is the concrete implementation you use in practice. You configure it with an LLM client, optional tools, a context manager configuration, and system instructions.
 
 ```python
-from ravi.agents import ReActAgent
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider
-from ravi.integrations.llm.openai import OpenAIClient
-from ravi.capabilities.tools import CalculatorTool
+from agent_substrate.agents import ReActAgent
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider
+from agent_substrate.integrations.llm.openai import OpenAIClient
+from agent_substrate.capabilities.tools import CalculatorTool
 
 client = OpenAIClient(model="gpt-4o", api_key="sk-...")
 
@@ -74,8 +74,8 @@ Agents in Ravi do not run in isolation; they are registered with a `Runtime` whi
 ### Async Execution
 
 ```python
-from ravi.agents import Runtime, ReActAgent
-from ravi.kernel import Message, ChatPayload, ChatMessage, Role, TextBlock
+from agent_substrate.agents import Runtime, ReActAgent
+from agent_substrate.kernel import Message, ChatPayload, ChatMessage, Role, TextBlock
 
 async with Runtime() as rt:
     await rt.register(agent)

@@ -98,10 +98,10 @@ A few details that matter in practice:
 ## A minimal agent
 
 ```python
-from ravi.agents import ReActAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider
-from ravi.integrations.llm import LLMFactory
-from ravi.capabilities.tools import CalculatorTool
+from agent_substrate.agents import ReActAgent, Runtime
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider
+from agent_substrate.integrations.llm import LLMFactory
+from agent_substrate.capabilities.tools import CalculatorTool
 
 model = LLMFactory("gpt-4o", api_key).build()
 

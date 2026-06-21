@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from ravi.exceptions import MiddlewareTermination
-from ravi.agents.middleware import (
+from agent_substrate.exceptions import MiddlewareTermination
+from agent_substrate.agents.middleware import (
     ContentFilterMiddleware,
     MaxTokenMiddleware,
     PromptInjectionMiddleware,
@@ -12,7 +12,7 @@ from ravi.agents.middleware import (
     ChatContext,
     MiddlewarePipeline,
 )
-from ravi.kernel.core.content import ChatMessage, TextBlock
+from agent_substrate.kernel.core.content import ChatMessage, TextBlock
 
 
 def _agent_ctx(text: str) -> AgentCallContext:

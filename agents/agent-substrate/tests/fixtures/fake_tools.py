@@ -9,8 +9,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
-from ravi.kernel.messages.content import TextBlock
+from agent_substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from agent_substrate.kernel.messages.content import TextBlock
 
 
 class EchoTool(BaseTool):

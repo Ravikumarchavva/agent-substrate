@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from ravi.kernel.tools import (
+from agent_substrate.kernel.tools import (
     ToolCallRequest,
     ToolExecutionResult,
     ToolRisk,
 )
-from ravi.agents.tools.toolbox import Toolbox
-from ravi.kernel.core.content import TextBlock
+from agent_substrate.agents.tools.toolbox import Toolbox
+from agent_substrate.kernel.core.content import TextBlock
 
 
 class MockToolImpl:

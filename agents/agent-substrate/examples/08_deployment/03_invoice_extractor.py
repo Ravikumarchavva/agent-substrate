@@ -20,12 +20,12 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from ravi.capabilities.tools.invoice_extractor.tool import InvoiceExtractorTool
-from ravi.config import settings
-from ravi.agents.core import ReActAgent
-from ravi.integrations.llm.factory import create_model_client
-from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.context import InMemoryHistoryProvider
+from agent_substrate.capabilities.tools.invoice_extractor.tool import InvoiceExtractorTool
+from agent_substrate.config import settings
+from agent_substrate.agents.core import ReActAgent
+from agent_substrate.integrations.llm.factory import create_model_client
+from agent_substrate.kernel.agent_catalog import AgentCatalog
+from agent_substrate.agents.context import InMemoryHistoryProvider
 
 # Infrastructure: none required for direct tool calls.
 #   For the agent sections, set OPENAI_API_KEY (or another provider key).

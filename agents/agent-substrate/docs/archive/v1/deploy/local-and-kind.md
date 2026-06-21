@@ -6,7 +6,7 @@ This is the best development path for backend iteration.
 
 ```bash
 docker compose -f deployment/docker/docker-compose.yml up -d postgres redis
-uv run uvicorn ravi.server.app:app --port 8000 --reload
+uv run uvicorn agent_substrateserver.app:app --port 8000 --reload
 ```
 
 ## Why use it

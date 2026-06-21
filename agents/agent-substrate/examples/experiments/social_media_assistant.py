@@ -14,14 +14,14 @@ import json
 import re
 from typing import ClassVar
 
-from ravi.agents.core import ReActAgent
-from ravi.agents.tools.builtin_tools import WebSearchTool
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.kernel.agent_catalog import AgentCatalog
-from ravi.agents.context import InMemoryHistoryProvider
-from ravi.kernel.messages.content import TextBlock
-from ravi.kernel.messages._types import TextDeltaChunk
-from ravi.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
+from agent_substrate.agents.core import ReActAgent
+from agent_substrate.agents.tools.builtin_tools import WebSearchTool
+from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrate.kernel.agent_catalog import AgentCatalog
+from agent_substrate.agents.context import InMemoryHistoryProvider
+from agent_substrate.kernel.messages.content import TextBlock
+from agent_substrate.kernel.messages._types import TextDeltaChunk
+from agent_substrate.kernel.tools.base_tool import BaseTool, ToolResult, ToolRisk
 
 # Infrastructure: OPENAI_API_KEY environment variable
 

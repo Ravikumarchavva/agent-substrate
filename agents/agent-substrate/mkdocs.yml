@@ -1,8 +1,8 @@
-site_name: Ravi Agent Framework
+site_name: Agent Substrate
 site_description: Production-ready Python framework for building autonomous AI agents with tool calling, memory management, and durable execution.
-site_url: https://ravikumarchavva.github.io/ravi
-repo_url: https://github.com/Ravikumarchavva/ravi
-repo_name: Ravikumarchavva/ravi
+site_url: https://ravikumarchavva.github.io/agent-substrate
+repo_url: https://github.com/Ravikumarchavva/agent-substrate
+repo_name: Ravikumarchavva/agent-substrate
 edit_uri: edit/main/docs/
 exclude_docs: |
   includes/

@@ -4,21 +4,21 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from ravi.agents.context import (
+from agent_substrate.agents.context import (
     ContextConfig,
     InMemoryHistoryProvider,
     SlidingWindowCompaction,
     CompactionPipeline,
 )
-from ravi.agents.core import ReActAgent
-from ravi.agents.runtime import Runtime
-from ravi.kernel import ChatMessage, ContentBlock, TextBlock
-from ravi.kernel.core.content import Role
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.llm import GenerationOptions, LLMResponse, Usage
-from ravi.kernel.messaging.message import ChatPayload, Message
-from ravi.kernel.messaging.stream import CompletionEvent, TextDelta
-from ravi.agents.factory import load_session_memory
+from agent_substrate.agents.core import ReActAgent
+from agent_substrate.agents.runtime import Runtime
+from agent_substrate.kernel import ChatMessage, ContentBlock, TextBlock
+from agent_substrate.kernel.core.content import Role
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
+from agent_substrate.kernel.messaging.message import ChatPayload, Message
+from agent_substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+from agent_substrate.agents.factory import load_session_memory
 
 
 # ---------------------------------------------------------------------------

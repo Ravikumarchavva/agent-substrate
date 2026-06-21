@@ -6,13 +6,13 @@ import asyncio
 import pytest
 from dataclasses import dataclass
 
-from ravi.agents.runtime.context import RunContext
-from ravi.agents.runtime.runtime import Runtime
-from ravi.fabric.flows import ConditionalFlow, ParallelFlow, SequentialFlow
-from ravi.kernel.core.content import ChatMessage, Role, TextBlock
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import ChatPayload, Message
-from ravi.kernel.runtime.ids import new_run_id
+from agent_substrate.agents.runtime.context import RunContext
+from agent_substrate.agents.runtime.runtime import Runtime
+from agent_substrate.fabric.flows import ConditionalFlow, ParallelFlow, SequentialFlow
+from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import ChatPayload, Message
+from agent_substrate.kernel.runtime.ids import new_run_id
 
 
 # ---------------------------------------------------------------------------

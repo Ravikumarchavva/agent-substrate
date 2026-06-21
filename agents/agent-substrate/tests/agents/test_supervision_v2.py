@@ -12,10 +12,10 @@ from __future__ import annotations
 import asyncio
 
 
-from ravi.agents.runtime import Runtime
-from ravi.kernel.agent.supervision import HistoryRetention
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import DataPayload, Message
+from agent_substrate.agents.runtime import Runtime
+from agent_substrate.kernel.agent.supervision import HistoryRetention
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import DataPayload, Message
 
 
 def _agent_id(name: str) -> AgentId:
@@ -55,7 +55,7 @@ async def test_crash_records_agent_crashed_status() -> None:
 
 async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
     """MiddlewareTermination is recorded as guardrail_tripped, not agent_crashed."""
-    from ravi.kernel.core.errors import MiddlewareTermination
+    from agent_substrate.kernel.core.errors import MiddlewareTermination
 
     class GuardrailAgent:
         id = _agent_id("guardrail")
@@ -77,7 +77,7 @@ async def test_guardrail_trip_records_guardrail_tripped_status() -> None:
 
 async def test_budget_exhausted_records_budget_exhausted_status() -> None:
     """BudgetExhaustedError is recorded as budget_exhausted."""
-    from ravi.kernel.core.errors import BudgetExhaustedError
+    from agent_substrate.kernel.core.errors import BudgetExhaustedError
 
     class BudgetAgent:
         id = _agent_id("budgeter")
@@ -104,10 +104,10 @@ async def test_budget_exhausted_records_budget_exhausted_status() -> None:
 
 async def test_history_retention_run_clears_after_completion() -> None:
     """Agents with HistoryRetention.RUN have run-scoped history cleared on completion."""
-    from ravi.agents.context.context import ContextConfig
-    from ravi.agents.context.history import InMemoryHistoryProvider
-    from ravi.agents.core._loop import persist_turns
-    from ravi.kernel.core.content import ChatMessage, Role, TextBlock
+    from agent_substrate.agents.context.context import ContextConfig
+    from agent_substrate.agents.context.history import InMemoryHistoryProvider
+    from agent_substrate.agents.core._loop import persist_turns
+    from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
 
     history = InMemoryHistoryProvider()
     ctx_cfg = ContextConfig(history, retention=HistoryRetention.RUN)
@@ -159,10 +159,10 @@ async def test_history_retention_run_clears_after_completion() -> None:
 
 async def test_history_retention_permanent_survives_completion() -> None:
     """Agents with HistoryRetention.PERMANENT (default) keep history after run ends."""
-    from ravi.agents.context.context import ContextConfig
-    from ravi.agents.context.history import InMemoryHistoryProvider
-    from ravi.agents.core._loop import persist_turns
-    from ravi.kernel.core.content import ChatMessage, Role, TextBlock
+    from agent_substrate.agents.context.context import ContextConfig
+    from agent_substrate.agents.context.history import InMemoryHistoryProvider
+    from agent_substrate.agents.core._loop import persist_turns
+    from agent_substrate.kernel.core.content import ChatMessage, Role, TextBlock
 
     history = InMemoryHistoryProvider()
     ctx_cfg = ContextConfig(history, retention=HistoryRetention.PERMANENT)

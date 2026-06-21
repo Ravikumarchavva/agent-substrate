@@ -18,14 +18,14 @@ import asyncio
 import datetime
 import math
 
-from ravi.config import settings
-from ravi.agents import ReActAgent, OrchestratorAgent, SubAgentConfig, UserProxyAgent, Runtime
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from ravi.integrations.llm import LLMFactory
-from ravi.kernel import TextBlock, ToolExecutionResult
-from ravi.kernel.core.content import ChatMessage, Role
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import Message, ChatPayload
+from agent_substrate.config import settings
+from agent_substrate.agents import ReActAgent, OrchestratorAgent, SubAgentConfig, UserProxyAgent, Runtime
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from agent_substrate.integrations.llm import LLMFactory
+from agent_substrate.kernel import TextBlock, ToolExecutionResult
+from agent_substrate.kernel.core.content import ChatMessage, Role
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import Message, ChatPayload
 
 
 # ---------------------------------------------------------------------------

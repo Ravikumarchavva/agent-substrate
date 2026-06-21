@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from ravi.kernel.tools.chain import (
+from agent_substrate.kernel.tools.chain import (
     ChainCallRecord,
     ChainFile,
     ChainPolicy,
     ChainRunResult,
     InvocationResult,
 )
-from ravi.kernel.tools import ToolRisk
+from agent_substrate.kernel.tools import ToolRisk
 
 
 def test_chain_policy_defaults():

@@ -57,7 +57,7 @@ Both async and sync callbacks are accepted (sync ones are run off the event loop
 ## Using them
 
 ```python
-from ravi.agents.hooks import HookManager, HookEvent
+from agent_substrate.agents.hooks import HookManager, HookEvent
 
 hooks = HookManager()
 

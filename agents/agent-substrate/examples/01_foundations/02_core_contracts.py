@@ -1,5 +1,5 @@
 """Example 1-2: Core Contracts
-Module: ravi.kernel, ravi.kernel.stream, ravi.kernel.content
+Module: agent_substrate.kernel, agent_substrate.kernel.stream, agent_substrate.kernel.content
 
 Demonstrates the new kernel data model — all offline, no external services
 required. Covers: ChatMessage, ContentBlock subtypes, Tool Protocol, stream
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 
-from ravi.kernel import (
+from agent_substrate.kernel import (
     AgentId,
     ChatMessage,
     TextBlock,
@@ -22,7 +22,7 @@ from ravi.kernel import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from ravi.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
+from agent_substrate.kernel.stream import CompletionEvent, ReasoningDelta, StreamDone, TextDelta
 
 
 # ---------------------------------------------------------------------------

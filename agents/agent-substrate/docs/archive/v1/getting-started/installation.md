@@ -10,7 +10,7 @@
 ## Install the project
 
 ```bash
-git clone https://github.com/Ravikumarchavva/ravi.git
+git clone https://github.com/Ravikumarchavva/agent_substrategit
 cd ravi
 uv sync
 ```

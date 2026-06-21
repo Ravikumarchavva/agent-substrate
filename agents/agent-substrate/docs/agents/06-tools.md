@@ -89,7 +89,7 @@ You rarely build a `Toolbox` by hand. When you hand a plain `list` of tools to a
 ```python
 # in ReActAgent.__init__
 if isinstance(tools, list):
-    from ravi.agents.tools.toolbox import Toolbox
+    from agent_substrate.agents.tools.toolbox import Toolbox
     tb = Toolbox()
     for t in tools:
         tb.add(t)

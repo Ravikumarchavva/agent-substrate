@@ -6,17 +6,17 @@ import asyncio
 import pytest
 from dataclasses import dataclass
 
-from ravi.agents.runtime.context import RunContext
-from ravi.fabric.evals import (
+from agent_substrate.agents.runtime.context import RunContext
+from agent_substrate.fabric.evals import (
     EvalCase,
     EvalDataset,
     EvalRunner,
     EvalScore,
     CORRECTNESS,
 )
-from ravi.fabric.evals.judge import LLMJudge
-from ravi.kernel.core.identity import AgentId
-from ravi.kernel.messaging.message import Message
+from agent_substrate.fabric.evals.judge import LLMJudge
+from agent_substrate.kernel.core.identity import AgentId
+from agent_substrate.kernel.messaging.message import Message
 
 
 # ---------------------------------------------------------------------------
@@ -33,8 +33,8 @@ class OKAgent:
     async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
         for msg in inbox:
             # Extract input text from the message payload
-            from ravi.kernel.messaging.message import ChatPayload, DataPayload
-            from ravi.kernel.core.content import content_blocks_to_str
+            from agent_substrate.kernel.messaging.message import ChatPayload, DataPayload
+            from agent_substrate.kernel.core.content import content_blocks_to_str
 
             p = msg.payload
             if isinstance(p, ChatPayload):

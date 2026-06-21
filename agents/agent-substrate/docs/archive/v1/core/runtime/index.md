@@ -39,7 +39,7 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     Think of it as a typed async function call between actors.
 
     ```python
-    from ravi.core.runtime import LocalRuntime, AgentId
+    from agent_substratecore.runtime import LocalRuntime, AgentId
 
     runtime = LocalRuntime()
 
@@ -65,8 +65,8 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     No sender knows who is listening.
 
     ```python
-    from ravi.core.runtime import LocalRuntime, TopicId, DefaultTopicId
-    from ravi.core.runtime import default_subscription, type_subscription
+    from agent_substratecore.runtime import LocalRuntime, TopicId, DefaultTopicId
+    from agent_substratecore.runtime import default_subscription, type_subscription
 
     @default_subscription           # auto-subscribes to "default" topic
     class Logger(RoutedAgent): ...
@@ -92,7 +92,7 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     Ends with a `StreamDone` sentinel — consumers know the stream is closed.
 
     ```python
-    from ravi.core.runtime import StreamPublisher
+    from agent_substratecore.runtime import StreamPublisher
 
     publisher = StreamPublisher(runtime, topic_id=TopicId("llm-stream", "conv-1"))
 
@@ -111,7 +111,7 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     Configurable restart budget and strategy.
 
     ```python
-    from ravi.core.runtime import Supervisor, RestartStrategy
+    from agent_substratecore.runtime import Supervisor, RestartStrategy
 
     supervisor = Supervisor(
         runtime=runtime,
@@ -134,7 +134,7 @@ LocalRuntime gives you five building blocks. Everything else in the framework co
     Works retroactively — cancel a token you've already passed to a handler.
 
     ```python
-    from ravi.core.runtime import CancellationToken
+    from agent_substratecore.runtime import CancellationToken
 
     token = CancellationToken()
 
@@ -179,7 +179,7 @@ sequenceDiagram
 ```
 
 ```python
-from ravi.core.runtime import LocalRuntime
+from agent_substratecore.runtime import LocalRuntime
 
 runtime = LocalRuntime()
 agent = ReActAgent(tools=[WebSearchTool(), CodeTool()], model_client=client)

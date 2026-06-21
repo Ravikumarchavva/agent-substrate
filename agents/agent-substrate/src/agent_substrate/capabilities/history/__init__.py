@@ -1,0 +1,17 @@
+"""agent_substrate.capabilities.history — Concrete HistoryProvider backends (Redis, Postgres)."""
+
+from __future__ import annotations
+
+from agent_substrate.capabilities.history.redis_history import RedisHistoryProvider
+from agent_substrate.capabilities.history.postgres_history import (
+    PostgresHistoryProvider,
+    HistorySession,
+    HistoryMessage,
+)
+
+__all__ = [
+    "RedisHistoryProvider",
+    "PostgresHistoryProvider",
+    "HistorySession",
+    "HistoryMessage",
+]

@@ -44,7 +44,7 @@ flowchart TB
 Raw SQL implementation (no SQLAlchemy ORM model — pure `engine.begin()` / `engine.connect()`). Requires the `pgvector` PostgreSQL extension.
 
 ```python
-from ravi.capabilities.vector import PgVectorStore
+from agent_substrate.capabilities.vector import PgVectorStore
 
 store = PgVectorStore(
     session_factory=session_factory,
@@ -79,8 +79,8 @@ Each collection is a separate table — no cross-collection queries.
 Uses raw asyncpg connections to execute openCypher via the Apache AGE `cypher()` function. The graph is created automatically on first connect.
 
 ```python
-from ravi.capabilities.graph import AGEGraphStore
-from ravi.kernel.storage.graph import Entity, Relationship
+from agent_substrate.capabilities.graph import AGEGraphStore
+from agent_substrate.kernel.storage.graph import Entity, Relationship
 
 store = AGEGraphStore(
     dsn="postgresql://postgres:postgres@localhost/agentdb",
@@ -106,7 +106,7 @@ results = await store.query_cypher("MATCH (n:Person) RETURN n")
 Delegates to `MinIOConnector` (from `infrastructure/storage/minio.py`). Compatible with MinIO in docker-compose and AWS S3 in production.
 
 ```python
-from ravi.capabilities.storage import S3FileStore
+from agent_substrate.capabilities.storage import S3FileStore
 
 store = S3FileStore(
     endpoint_url="http://localhost:9000",

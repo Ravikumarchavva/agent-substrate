@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-KERNEL_DIR = REPO_ROOT / "src" / "ravi" / "kernel"
+KERNEL_DIR = REPO_ROOT / "src" / "agent_substrate" / "kernel"
 
 # Ceilings — kernel/runtime/ (10 durable-runtime contracts) raised this from 30.
 MAX_KERNEL_LOC = 6_000
@@ -95,13 +95,13 @@ def test_kernel_is_flat() -> None:
 
 
 _FORBIDDEN_PREFIXES = (
-    "ravi.agents",
-    "ravi.capabilities",
-    "ravi.fabric",
-    "ravi.integrations",
-    "ravi.serving",
-    "ravi.config",
-    "ravi.logger",
+    "agent_substrate.agents",
+    "agent_substrate.capabilities",
+    "agent_substrate.fabric",
+    "agent_substrate.integrations",
+    "agent_substrate.serving",
+    "agent_substrate.config",
+    "agent_substrate.logger",
 )
 
 
@@ -152,9 +152,9 @@ def test_kernel_has_no_vendor_strings() -> None:
 
 def test_message_round_trip() -> None:
     """Message must serialize/deserialize cleanly via model_dump_json()."""
-    from ravi.kernel.core.identity import AgentId
-    from ravi.kernel.core.content import TextBlock, ChatMessage
-    from ravi.kernel.messaging.message import Message, ChatPayload
+    from agent_substrate.kernel.core.identity import AgentId
+    from agent_substrate.kernel.core.content import TextBlock, ChatMessage
+    from agent_substrate.kernel.messaging.message import Message, ChatPayload
 
     agent = AgentId(type="assistant", key="test")
     chat = ChatMessage(role="user", content=[TextBlock(text="hello")])
@@ -172,8 +172,8 @@ def test_message_round_trip() -> None:
 
 def test_event_round_trip() -> None:
     """Event must serialize/deserialize cleanly."""
-    from ravi.kernel.messaging.events import Event
-    from ravi.kernel.core.identity import AgentId
+    from agent_substrate.kernel.messaging.events import Event
+    from agent_substrate.kernel.core.identity import AgentId
 
     agent = AgentId(type="test", key="a")
     ev = Event.create("agent.started", source=agent, data={"step": 1})
@@ -188,7 +188,7 @@ def test_event_round_trip() -> None:
 
 def test_content_block_unknown_preserved() -> None:
     """Unknown block types must be preserved as UnknownBlock, not silently mangled."""
-    from ravi.kernel.core.content import content_block_from_dict, UnknownBlock
+    from agent_substrate.kernel.core.content import content_block_from_dict, UnknownBlock
 
     raw = {"type": "future_block_v99", "some_field": "some_value"}
     result = content_block_from_dict(raw)  # type: ignore[arg-type]
@@ -198,7 +198,7 @@ def test_content_block_unknown_preserved() -> None:
 
 def test_content_block_invalid_raises() -> None:
     """Invalid data for a known block type must raise BlockValidationError."""
-    from ravi.kernel.core.content import content_block_from_dict, BlockValidationError
+    from agent_substrate.kernel.core.content import content_block_from_dict, BlockValidationError
 
     bad = {"type": "text"}  # missing required 'text' field
     try:
@@ -211,9 +211,9 @@ def test_content_block_invalid_raises() -> None:
 def test_custom_payload_serialization_round_trip() -> None:
     """A custom payload registered via register_payload_type is correctly deserialized from JSON."""
     from typing import Literal
-    from ravi.kernel.core.identity import AgentId
-    from ravi.kernel.messaging.message import Message, register_payload_type
-    from ravi.kernel.tools import PayloadBase
+    from agent_substrate.kernel.core.identity import AgentId
+    from agent_substrate.kernel.messaging.message import Message, register_payload_type
+    from agent_substrate.kernel.tools import PayloadBase
 
     class CustomTestPayload(PayloadBase):
         kind: Literal["custom_test"] = "custom_test"

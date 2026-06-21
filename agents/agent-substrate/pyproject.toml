@@ -1,5 +1,5 @@
 [project]
-name = "ravi"
+name = "agent-substrate"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -53,8 +53,8 @@ dependencies = [
 ]
 
 [project.scripts]
-ravi = "ravi.cli:main"
-start = "ravi.cli:start_main"
+agent-substrate = "agent_substrate.cli:main"
+start = "agent_substrate.cli:start_main"
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12"]
@@ -82,11 +82,11 @@ exclude = ["notebooks/", "examples/", ".venv"]
 # E701/E702: single-line if/semicolons are intentional in dispatch tables
 # E402: mid-file imports are intentional in some route files
 [tool.ruff.lint.per-file-ignores]
-"src/ravi/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
-"src/ravi/services/conversation/routes.py" = ["E402"]
+"src/agent_substrate/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
+"src/agent_substrate/services/conversation/routes.py" = ["E402"]
 # plugin/registry.py deliberately imports base classes at the bottom of the
 # module to avoid circular imports with kernel.{agents,guardrails,...}.
-"src/ravi/kernel/plugin/registry.py" = ["E402"]
+"src/agent_substrate/kernel/plugin/registry.py" = ["E402"]
 
 # ---------------------------------------------------------------------------
 # import-linter — enforce the layered architecture so the kernel stays frozen.
@@ -95,74 +95,74 @@ exclude = ["notebooks/", "examples/", ".venv"]
 # Run with: uv run lint-imports
 # ---------------------------------------------------------------------------
 [tool.importlinter]
-root_packages = ["ravi"]
+root_packages = ["agent_substrate"]
 
 [[tool.importlinter.contracts]]
 name = "four stack layers"
 type = "layers"
 layers = [
-    "ravi.fabric",        # L3 — orchestration programs (flows, evals, durable)
-    "ravi.capabilities",  # L2 — tools, skills, knowledge, connectors
-    "ravi.agents",        # L1 — core intelligence, LLM, guardrails, middleware
-    "ravi.kernel",        # L0 — pure contracts: Protocols, dataclasses, enums
+    "agent_substrate.fabric",        # L3 — orchestration programs (flows, evals, durable)
+    "agent_substrate.capabilities",  # L2 — tools, skills, knowledge, connectors
+    "agent_substrate.agents",        # L1 — core intelligence, LLM, guardrails, middleware
+    "agent_substrate.kernel",        # L0 — pure contracts: Protocols, dataclasses, enums
 ]
 
 [[tool.importlinter.contracts]]
 name = "agents cannot import capabilities or fabric"
 type = "forbidden"
-source_modules = ["ravi.agents"]
-forbidden_modules = ["ravi.capabilities", "ravi.fabric"]
+source_modules = ["agent_substrate.agents"]
+forbidden_modules = ["agent_substrate.capabilities", "agent_substrate.fabric"]
 
 [[tool.importlinter.contracts]]
 name = "capabilities cannot import fabric"
 type = "forbidden"
-source_modules = ["ravi.capabilities"]
-forbidden_modules = ["ravi.fabric"]
+source_modules = ["agent_substrate.capabilities"]
+forbidden_modules = ["agent_substrate.fabric"]
 
 [[tool.importlinter.contracts]]
 name = "kernel is independent"
 type = "forbidden"
-source_modules = ["ravi.kernel"]
+source_modules = ["agent_substrate.kernel"]
 forbidden_modules = [
-    "ravi.agents",
-    "ravi.capabilities",
-    "ravi.fabric",
-    "ravi.integrations",
-    "ravi.serving",
-    "ravi.config",
-    "ravi.logger",
+    "agent_substrate.agents",
+    "agent_substrate.capabilities",
+    "agent_substrate.fabric",
+    "agent_substrate.integrations",
+    "agent_substrate.serving",
+    "agent_substrate.config",
+    "agent_substrate.logger",
 ]
 
 [[tool.importlinter.contracts]]
 name = "serving cannot import agents or capabilities"
 type = "forbidden"
-source_modules = ["ravi.serving"]
-forbidden_modules = ["ravi.agents", "ravi.capabilities", "ravi.fabric"]
+source_modules = ["agent_substrate.serving"]
+forbidden_modules = ["agent_substrate.agents", "agent_substrate.capabilities", "agent_substrate.fabric"]
 # infrastructure/ is orthogonal — it may cross-cut to agents/capabilities by design.
 # We only want to catch DIRECT imports from serving/ to agents/capabilities.
 allow_indirect_imports = "true"
 ignore_imports = [
     # current_thread_id ContextVar spans both chat.py and capabilities/task_manager
-    "ravi.serving.monolith.routes.chat -> ravi.capabilities.tools.task_manager.tool",
+    "agent_substrate.serving.monolith.routes.chat -> agent_substrate.capabilities.tools.task_manager.tool",
     # WebHITLBridge delivers human-input events; must know the capability type
-    "ravi.serving.monolith.sse.bridge -> ravi.capabilities.tools.human_input",
+    "agent_substrate.serving.monolith.sse.bridge -> agent_substrate.capabilities.tools.human_input",
     # pipelines/triggers routes need DTOs defined in capabilities (PipelineDef, TriggerDef, ConditionDef)
-    "ravi.serving.monolith.routes.pipelines -> ravi.capabilities.pipeline.engine",
-    "ravi.serving.monolith.routes.triggers -> ravi.capabilities.triggers.conditions",
-    "ravi.serving.monolith.routes.triggers -> ravi.capabilities.triggers.scheduler",
+    "agent_substrate.serving.monolith.routes.pipelines -> agent_substrate.capabilities.pipeline.engine",
+    "agent_substrate.serving.monolith.routes.triggers -> agent_substrate.capabilities.triggers.conditions",
+    "agent_substrate.serving.monolith.routes.triggers -> agent_substrate.capabilities.triggers.scheduler",
     # agent_runtime: in-memory fallback Runtime (for RUNTIME_BACKEND=memory env)
-    "ravi.serving.services.agent_runtime.app -> ravi.agents.runtime",
+    "agent_substrate.serving.services.agent_runtime.app -> agent_substrate.agents.runtime",
     # agent_runtime service: load_session_memory is an L1 concern with no kernel protocol yet
-    "ravi.serving.services.agent_runtime.service -> ravi.agents.factory",
+    "agent_substrate.serving.services.agent_runtime.service -> agent_substrate.agents.factory",
     # tool_executor and code_interpreter ARE capability executors by design
-    "ravi.serving.services.tool_executor.app -> ravi.agents.storage.tasks",
-    "ravi.serving.services.tool_executor.app -> ravi.capabilities.tools.code_interpreter.http_client",
-    "ravi.serving.services.tool_executor.app -> ravi.capabilities.tools.code_interpreter.tool",
-    "ravi.serving.services.tool_executor.app -> ravi.capabilities.tools.task_manager.tool",
-    "ravi.serving.services.tool_executor.app -> ravi.capabilities.tools.web.surfer",
-    "ravi.serving.services.code_interpreter.app -> ravi.capabilities.tools.code_interpreter.config",
-    "ravi.serving.services.code_interpreter.app -> ravi.capabilities.tools.code_interpreter.session_manager",
-    "ravi.serving.services.code_interpreter.schemas -> ravi.capabilities.tools.code_interpreter.schemas",
+    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.agents.storage.tasks",
+    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.capabilities.tools.code_interpreter.http_client",
+    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.capabilities.tools.code_interpreter.tool",
+    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.capabilities.tools.task_manager.tool",
+    "agent_substrate.serving.services.tool_executor.app -> agent_substrate.capabilities.tools.web.surfer",
+    "agent_substrate.serving.services.code_interpreter.app -> agent_substrate.capabilities.tools.code_interpreter.config",
+    "agent_substrate.serving.services.code_interpreter.app -> agent_substrate.capabilities.tools.code_interpreter.session_manager",
+    "agent_substrate.serving.services.code_interpreter.schemas -> agent_substrate.capabilities.tools.code_interpreter.schemas",
 ]
 
 [tool.uv.sources]

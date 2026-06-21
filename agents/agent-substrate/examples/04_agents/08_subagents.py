@@ -19,15 +19,15 @@ import uuid
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from ravi.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
-from ravi.agents.core.react import ReActAgent
-from ravi.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
-from ravi.agents.runtime import Runtime
-from ravi.agents.middleware import AgentRunResult
-from ravi.kernel.core.content import Role
-from ravi.kernel.messaging.message import Message, ChatPayload
-from ravi.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
-from ravi.kernel import (
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from agent_substrate.agents.core.react import ReActAgent
+from agent_substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
+from agent_substrate.agents.runtime import Runtime
+from agent_substrate.agents.middleware import AgentRunResult
+from agent_substrate.kernel.core.content import Role
+from agent_substrate.kernel.messaging.message import Message, ChatPayload
+from agent_substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
+from agent_substrate.kernel import (
     Priority,
     TextBlock,
     Tool,
@@ -263,7 +263,7 @@ async def run_demo(
                                     is_error = getattr(res_block, "is_error", False)
                                     break
                     
-                    from ravi.agents.middleware._contracts import ToolCallRecord
+                    from agent_substrate.agents.middleware._contracts import ToolCallRecord
                     tool_calls.append(
                         ToolCallRecord(
                             name=block.tool_name,
@@ -292,11 +292,11 @@ async def run_demo(
 
 async def main() -> None:
     import os
-    from ravi.config import settings
+    from agent_substrate.config import settings
 
     # Use real LLM if key is present; otherwise fall back to the stub
     if settings.OPENAI_API_KEY:
-        from ravi.integrations.llm.openai.openai_client import OpenAIClient
+        from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
         model: object = OpenAIClient(
             model=settings.CHAT_MODEL.split("/")[-1],
             api_key=settings.OPENAI_API_KEY,

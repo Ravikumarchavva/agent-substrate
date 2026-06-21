@@ -13,15 +13,15 @@ Prerequisites:
 import asyncio
 import json
 
-from ravi.config import settings
-from ravi.integrations.llm.factory import create_model_client
-from ravi.integrations.tools.mcp.client import MCPClient
-from ravi.kernel.messages.client_messages import (
+from agent_substrate.config import settings
+from agent_substrate.integrations.llm.factory import create_model_client
+from agent_substrate.integrations.tools.mcp.client import MCPClient
+from agent_substrate.kernel.messages.client_messages import (
     SystemMessage,
     ToolExecutionResultMessage,
     UserMessage,
 )
-from ravi.kernel.messages.content import TextBlock
+from agent_substrate.kernel.messages.content import TextBlock
 
 # Infrastructure: MCP server must be running at SSE_URL before this script runs.
 

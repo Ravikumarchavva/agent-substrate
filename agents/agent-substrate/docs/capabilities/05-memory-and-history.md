@@ -43,7 +43,7 @@ flowchart TB
 Short-term, volatile session state. Stored as a **Redis HASH** (`session:state:<session_id>`). Each field is a JSON-serialised value.
 
 ```python
-from ravi.capabilities.memory import RedisSessionStore
+from agent_substrate.capabilities.memory import RedisSessionStore
 
 store = RedisSessionStore(redis_url="redis://localhost:6379/0", ttl=3600)
 await store.connect()
@@ -67,7 +67,7 @@ await store.disconnect()
 Long-term, searchable memory. Stored in an **`agent_memories`** table with a generated `tsvector` column for full-text search — no embeddings required.
 
 ```python
-from ravi.capabilities.memory import PostgresMemoryStore
+from agent_substrate.capabilities.memory import PostgresMemoryStore
 
 store = PostgresMemoryStore(database_url="postgresql+asyncpg://...")
 async with store:
@@ -134,7 +134,7 @@ Key behaviors:
 - **`clear_run`** — can selectively delete messages from a specific run without clearing the whole session
 
 ```python
-from ravi.capabilities.history import RedisHistoryProvider
+from agent_substrate.capabilities.history import RedisHistoryProvider
 
 provider = RedisHistoryProvider(
     redis_url="redis://localhost:6379/0",
@@ -155,7 +155,7 @@ SQLAlchemy 2.0 async ORM. Two tables:
 All queries are fully parameterised — no raw SQL string interpolation. Raw `session_id` values are validated at the public boundary (regex check) before being composed into the internal `agent_type:agent_key:session_id` key.
 
 ```python
-from ravi.capabilities.history import PostgresHistoryProvider
+from agent_substrate.capabilities.history import PostgresHistoryProvider
 
 provider = PostgresHistoryProvider(
     database_url="postgresql+asyncpg://postgres:postgres@localhost/agentdb",

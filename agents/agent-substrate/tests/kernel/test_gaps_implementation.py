@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from ravi.kernel.core.identity import AgentId, TopicId
-from ravi.kernel.messaging.stream import AgentProgress, AgentStep
-from ravi.kernel.messaging.message import Message, ProgressPayload, _PAYLOAD_REGISTRY
-from ravi.integrations.events.envelope import EventEnvelope
+from agent_substrate.kernel.core.identity import AgentId, TopicId
+from agent_substrate.kernel.messaging.stream import AgentProgress, AgentStep
+from agent_substrate.kernel.messaging.message import Message, ProgressPayload, _PAYLOAD_REGISTRY
+from agent_substrate.integrations.events.envelope import EventEnvelope
 
 
 def test_progress_payload_pydantic_serialization():
@@ -75,9 +75,9 @@ def test_event_envelope_translation():
 @pytest.mark.asyncio
 async def test_runtime_agent_registration():
     """Runtime: register + submit routes message to the agent inbox."""
-    from ravi.agents.runtime import Runtime
-    from ravi.kernel.core.identity import AgentId
-    from ravi.kernel.messaging.message import Message, DataPayload
+    from agent_substrate.agents.runtime import Runtime
+    from agent_substrate.kernel.core.identity import AgentId
+    from agent_substrate.kernel.messaging.message import Message, DataPayload
 
     received: list = []
 

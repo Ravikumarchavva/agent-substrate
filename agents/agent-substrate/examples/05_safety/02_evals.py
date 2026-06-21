@@ -16,11 +16,11 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from ravi.reasoning.structured import LLMJudge, parse
-from ravi.integrations.llm.openai.openai_client import OpenAIClient
-from ravi.kernel.guardrails.base_guardrail import GuardrailContext, GuardrailType
-from ravi.kernel.messages.client_messages import UserMessage
-from ravi.kernel.messages.content import TextBlock
+from agent_substratereasoning.structured import LLMJudge, parse
+from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
+from agent_substrate.kernel.guardrails.base_guardrail import GuardrailContext, GuardrailType
+from agent_substrate.kernel.messages.client_messages import UserMessage
+from agent_substrate.kernel.messages.content import TextBlock
 
 
 # ---

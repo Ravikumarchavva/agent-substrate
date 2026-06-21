@@ -22,19 +22,19 @@ from uuid import uuid4
 
 import pytest
 
-from ravi.kernel.core.identity import AgentId, TopicId
-from ravi.kernel.messaging.message import Message, DataPayload
-from ravi.kernel.core.errors import ConcurrentAppendError, SpawnDenied
-from ravi.kernel.agent.runtime_context import CancellationToken, RunMeta
-from ravi.kernel.agent.supervision import Supervision
-from ravi.kernel.runtime.ids import RunId, RunStatus, new_run_id
-from ravi.kernel.runtime.log_entry import RunLogEntry
-from ravi.kernel.runtime.effects import Effect, EffectResult
-from ravi.kernel.runtime.inbox import DeadLetterReason, DeadLetterEntry
-from ravi.kernel.runtime.wakeup import Wakeup
-from ravi.kernel.runtime.scheduler import Lease, RunRetryPolicy
-from ravi.kernel.runtime.supervisor import RunHandle, RunResult
-from ravi.kernel.runtime.agent import AgentRunContext, Agent
+from agent_substrate.kernel.core.identity import AgentId, TopicId
+from agent_substrate.kernel.messaging.message import Message, DataPayload
+from agent_substrate.kernel.core.errors import ConcurrentAppendError, SpawnDenied
+from agent_substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
+from agent_substrate.kernel.agent.supervision import Supervision
+from agent_substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
+from agent_substrate.kernel.runtime.log_entry import RunLogEntry
+from agent_substrate.kernel.runtime.effects import Effect, EffectResult
+from agent_substrate.kernel.runtime.inbox import DeadLetterReason, DeadLetterEntry
+from agent_substrate.kernel.runtime.wakeup import Wakeup
+from agent_substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
+from agent_substrate.kernel.runtime.supervisor import RunHandle, RunResult
+from agent_substrate.kernel.runtime.agent import AgentRunContext, Agent
 
 
 # ---------------------------------------------------------------------------
@@ -475,7 +475,7 @@ class TestRunRetryPolicy:
 
 class TestLease:
     def test_round_trip_json(self) -> None:
-        from ravi.kernel.core.identity import AgentId
+        from agent_substrate.kernel.core.identity import AgentId
 
         lease = Lease(
             run_id=new_run_id(),

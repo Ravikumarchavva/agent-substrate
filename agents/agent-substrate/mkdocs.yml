@@ -39,7 +39,10 @@ theme:
     - navigation.instant        # SPA-style page loads
     - navigation.instant.progress
     - navigation.tracking       # URL updates on scroll
+    - navigation.tabs           # top-level tabs
+    - navigation.tabs.sticky
     - navigation.sections       # collapsible sidebar sections
+    - navigation.expand
     - navigation.indexes        # section title links to its overview page
     - navigation.top            # back-to-top button
     - search.suggest

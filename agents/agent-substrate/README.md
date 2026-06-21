@@ -1,33 +1,35 @@
-<center><h1>Ravi Agent Framework</h1></center>
+<center><h1>Agent Substrate</h1></center>
 
 **A production-ready, protocol-oriented Python framework for building robust, observable, and composable autonomous AI agents and multi-agent workflows.**
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docs](https://img.shields.io/badge/docs-agent--substrate.pages.dev-teal)](https://agent-substrate.pages.dev)
 
 ---
 
 ## 🚀 Features
 
-*   **🤖 Protocol-Oriented Actor Mesh**: Uniform Erlang-style message passing (`send`/`publish`) using `AgentId` routing coordinates.
-*   **🔧 Safe Tool Execution**: Pydantic schema validation, granular timeout handlers, human-in-the-loop (HITL) gates, and Saga compensation transactions.
-*   **💾 Context & Memory Management**: Advanced prompt-compaction strategies (sliding windows, token budgetary constraints, dynamic summarizers) to fit LLM context ceilings.
-*   **🎯 Multi-Provider Support**: Seamless support for OpenAI, Anthropic, Gemini, Ollama, and more.
-*   **📊 Enterprise-Grade Guardrails**: Real-time evaluation of inputs, outputs, and tool calls in parallel using async tripwires and mutation policies.
-*   **🕷️ Composable Flows**: Linear, parallel, and conditional multi-agent pipelines that nest recursively.
-*   **📊 Observability**: Fully integrated lifecycle hooks, structured logging, and OTel spans for tracing.
+*   **🤖 ReAct Agent Loop**: Production-grade Reasoning + Action loop with HITL gates, supervision budgets, and priority preemption.
+*   **🔧 Safe Tool Execution**: JSON-schema-validated tools, risk-tiered approval gating, sandboxed code-mode chaining, and MCP integration.
+*   **💾 Pluggable Memory**: In-memory, Redis, and Postgres history providers with sliding-window, token-budget, and summarization compaction strategies.
+*   **🎯 Multi-Provider LLM**: OpenAI, Anthropic, Gemini, Groq, Ollama — auto-detected from model name prefix via `LLMFactory`.
+*   **📊 Guardrails & Middleware**: Async tripwire pipeline evaluating inputs, outputs, and tool calls with mutation policies.
+*   **🕷️ Composable Flows**: `SequentialFlow`, `ParallelFlow`, and `ConditionalFlow` nest recursively in `fabric/`.
+*   **📡 Durable Execution**: Postgres-backed event log + inbox + scheduler for at-most-once delivery and crash recovery.
+*   **📊 Observability**: OpenTelemetry traces, structured logging, lifecycle hooks, and a Grafana dashboard out of the box.
 
 ---
 
 ## 📋 Table of Contents
 
 *   [Quick Start](#-quick-start)
-*   [Core Architecture (L0-L5)](#-core-architecture-l0-l5)
-*   [Core Primitives & Concepts](#-core-primitives--concepts)
+*   [Core Architecture](#-core-architecture)
+*   [Key Patterns](#-key-patterns)
 *   [Multi-Agent Workflows](#-multi-agent-workflows)
 *   [Installation & Setup](#-installation--setup)
 *   [Testing](#-testing)
-*   [Roadmap](#-roadmap)
+*   [Documentation](#-documentation)
 
 ---
 
@@ -37,42 +39,39 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/Ravikumarchavva/agent_substrategit
-cd ravi/ravi-engine
+git clone https://github.com/Ravikumarchavva/agent-substrate
+cd agent-substrate
 
-# Sync dependencies using uv
+# Sync dependencies
 uv sync
 
-# Optional: install notebooks, browser automation, or S3 support
-uv sync --group notebooks --group browser --group storage
+# Start infrastructure (Postgres, Redis, MinIO, observability)
+make infra-up
 ```
 
-### Your First Assistant Agent
-
-Ravi utilizes `AssistantAgent` to execute the **ReAct (Reasoning and Action)** loop inside an asynchronous `LocalRuntime`:
+### Your First Agent
 
 ```python
 import asyncio
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.fabric.runtime.local import LocalRuntime
-from agent_substratereasoning.agents.assistant.agent import AssistantAgent
+from agent_substrate.agents import ReActAgent, Runtime
+from agent_substrate.agents.context import ContextConfig, InMemoryHistoryProvider
+from agent_substrate.integrations.llm import LLMFactory
 
 async def main():
-    # 1. Initialize and start the Local Runtime fabric
-    runtime = LocalRuntime()
+    runtime = Runtime()
     await runtime.start()
 
-    # 2. Instantiate the Assistant Agent
-    agent = AssistantAgent(
-        name="coder",
-        runtime=runtime,
-        model=OpenAIClient(model="gpt-4o"),
-        system="You are a helpful Python programming assistant."
+    llm = LLMFactory("gpt-4o", api_key="...").build()
+
+    agent = ReActAgent(
+        id="assistant",
+        llm=llm,
+        system="You are a helpful assistant.",
+        context_config=ContextConfig(history=InMemoryHistoryProvider()),
     )
-    
-    # 3. Run a user request through the ReAct loop
-    result = await agent.run("Write a python function to compute Fibonacci numbers.")
-    print(f"Assistant: {result.output}")
+
+    result = await runtime.run(agent, "Write a Python function to compute Fibonacci numbers.")
+    print(result.output)
 
     await runtime.stop()
 
@@ -82,66 +81,43 @@ if __name__ == "__main__":
 
 ### Agent with Tools
 
-You can register custom tools matching the `Tool` Protocol. Here's a complete mathematical expert agent:
-
 ```python
 import asyncio
-from agent_substrate.integrations.llm.openai.openai_client import OpenAIClient
-from agent_substrate.fabric.runtime.local import LocalRuntime
-from agent_substratereasoning.agents.assistant.agent import AssistantAgent
+from agent_substrate.agents import ReActAgent, Runtime
+from agent_substrate.integrations.llm import LLMFactory
 from agent_substrate.kernel.tools import ToolExecutionResult
-from agent_substrate.kernel.content import TextBlock
+from agent_substrate.kernel.core.content import TextBlock
 
-# Create a custom tool satisfying the Tool Protocol
 class CalculatorTool:
-    name: str = "calculator"
-    description: str = "Performs mathematical calculations. Supports arithmetic operators."
-    input_schema: dict = {
+    name = "calculator"
+    description = "Evaluates a mathematical expression."
+    input_schema = {
         "type": "object",
-        "properties": {
-            "expression": {
-                "type": "string",
-                "description": "Expression to evaluate (e.g. '1234 * 5678')"
-            }
-        },
-        "required": ["expression"]
+        "properties": {"expression": {"type": "string"}},
+        "required": ["expression"],
     }
 
-    async def execute(self, expression: str) -> ToolExecutionResult:
+    async def execute(self, *, ctx=None, expression: str) -> ToolExecutionResult:
         try:
-            # Safe evaluation
-            res = eval(expression, {"__builtins__": {}}, {})
-            return ToolExecutionResult(
-                content=[TextBlock(text=str(res))],
-                is_error=False
-            )
+            result = eval(expression, {"__builtins__": {}}, {})
+            return ToolExecutionResult(content=[TextBlock(text=str(result))])
         except Exception as e:
-            return ToolExecutionResult(
-                content=[TextBlock(text=f"Error: {e}")],
-                is_error=True
-            )
+            return ToolExecutionResult(content=[TextBlock(text=f"Error: {e}")], is_error=True)
 
 async def main():
-    runtime = LocalRuntime()
+    runtime = Runtime()
     await runtime.start()
 
-    # Instantiate the agent with the calculator tool registered
-    agent = AssistantAgent(
-        name="math_expert",
-        runtime=runtime,
-        model=OpenAIClient(model="gpt-4o"),
+    llm = LLMFactory("gpt-4o", api_key="...").build()
+    agent = ReActAgent(
+        id="math_expert",
+        llm=llm,
         tools=[CalculatorTool()],
-        system="Always use your calculator tool to solve math problems."
+        system="Always use the calculator tool to solve math problems.",
     )
 
-    result = await agent.run("Calculate 1234 * 5678 and tell me the answer.")
-    print(f"Final output:\n{result.output}\n")
-    
-    # Trace the tools used during execution
-    print("Tool trace:")
-    for record in result.tool_calls:
-        print(f" - Called {record.name}({record.arguments}) -> {record.result} ({record.duration_ms:.2f}ms)")
-
+    result = await runtime.run(agent, "Calculate 1234 * 5678.")
+    print(result.output)
     await runtime.stop()
 
 if __name__ == "__main__":
@@ -150,121 +126,128 @@ if __name__ == "__main__":
 
 ---
 
-## 🏛️ Core Architecture (L0-L5)
+## 🏛️ Core Architecture
 
-Ravi's codebase is partitioned into **six strict dependency layers**. Layer imports flow strictly downward; a lower layer never depends on or imports from a higher layer:
+Agent Substrate is partitioned into **four strict dependency layers**. Imports flow strictly downward — lower layers never depend on higher ones:
 
 ```
-[L5] platform     ← Scheduling (Temporal.io), Evals, RAG Pipelines, Metrics, Spans
-  [L4] guardrails ← Mutation Policies, Economic Budgets, Collusion & Killswitches
-    [L3] orchestr.← Hub-Spoke (Orchestrator), Linear/Parallel Flow Pipelines
-      [L2] reasoning  ← ReAct loop (AssistantAgent), Compaction Contexts, Hooks
-        [L1] fabric     ← Local/Distributed Runtimes, Actor Queues, Sagas, Locks
-          [L0] kernel     ← Protocols, ContentBlock types, Identity (AgentId), Plugin Registry
+fabric (L3)        ← Flows (Sequential/Parallel/Conditional), Evals, durable execution
+  capabilities (L2)  ← Tools, Skills, Knowledge/RAG, Memory, Vector/Graph stores, Triggers
+    agents (L1)      ← ReActAgent, OrchestratorAgent, Runtime, Middleware, Guardrails
+      kernel (L0)    ← FROZEN. Protocols, ContentBlock types, AgentId, Tool contracts
 ```
 
-### High-Level Layer Guides
-We have compiled extensive architectural guides for each of our key layers. Read them here:
-*   [🔵 **L0 · Kernel Overview**](docs/overview/kernel.md) — Protocols, pure value structures, and dynamic plugin registries.
-*   [🟢 **L1 · Fabric Overview**](docs/overview/fabric.md) — Actor queue mailboxes, message routing, sequence diagrams, and agent lifecycles.
-*   [🟡 **L2 · Reasoning Overview**](docs/overview/reasoning.md) — Single-agent cognitive ReAct loops, context strategies, parallel guardrails, and interceptors.
-*   [📖 **Layered Architecture Reference**](docs/framework/layered-architecture.md) — Complete migration history, LOC ceilings, and dependency enforcement bounds.
+**Orthogonal layers** (implement kernel Protocols, cross-cut all layers):
+
+| Layer | Responsibility |
+|---|---|
+| `integrations/` | Third-party adapters: LLM providers, MCP, event bus, connectors |
+| `infrastructure/` | Engine backends: Postgres, Redis, MinIO, durable runtime |
+| `serving/` | Deployment shells: monolith FastAPI app + 12 microservices |
+
+Import-linter enforces the layer contract on every CI run (`uv run lint-imports`).
 
 ---
 
-## 🏗️ Core Primitives & Concepts
+## 🔑 Key Patterns
 
-### 1. Identity & Routing Keys
-All actors in the mesh are addressed using decoupled value identifiers:
+### Adding a Tool
+
+Drop a file at `src/agent_substrate/capabilities/tools/<name>/tool.py` — `CatalogScanner` discovers it automatically, no registration needed:
+
 ```python
-from agent_substrate.kernel import AgentId, TopicId
+from agent_substrate.kernel.tools import ToolExecutionResult
+from agent_substrate.kernel.core.content import TextBlock
 
-# Address a specific actor instance
-target_agent = AgentId(type="assistant", key="math_expert")
+class MyTool:
+    name = "my_tool"
+    description = "What it does"
+    input_schema = {"type": "object", "properties": {...}, "required": [...]}
 
-# Address a pub/sub broadcast channel
-audit_topic = TopicId(source="security", key="pii_alerts")
+    async def execute(self, *, ctx=None, **kwargs) -> ToolExecutionResult:
+        return ToolExecutionResult(content=[TextBlock(text="result")])
 ```
 
-### 2. Envelope Messaging
-Under the hood, all routed data is wrapped in a transport `Message` payload:
-```python
-from agent_substrate.kernel.message import Message
+### LLM Client
 
-message = Message(
-    target=target_agent,
-    payload=TextBlock(text="Check calculations"),
-    sender=AgentId(type="user", key="system")
-)
+```python
+from agent_substrate.integrations.llm import LLMFactory
+
+# Provider auto-detected from model name prefix
+client = LLMFactory("gpt-4o", api_key).build()
+client = LLMFactory("claude-opus-4-8", api_key).build()
+client = LLMFactory("groq/llama-3.3-70b-versatile", api_key).build()
+client = LLMFactory("ollama/llama3.2", "ollama").build()   # local, no key
 ```
 
-### 3. Modular Memory & Compaction
-Avoid context overflow using active compaction. Register memory contexts to automatically prune prompts:
-```python
-from agent_substrate.fabric.context import SlidingWindowCompaction
+### MCP Tools
 
-# Keeps only the last 20 messages in active prompting
-compactor = SlidingWindowCompaction(max_messages=20)
+```python
+from agent_substrate.integrations.tools.mcp import MCPClient, MCPTool
+
+client = MCPClient(url="http://localhost:9000/sse")
+tools = await MCPTool.from_mcp_client(client)   # list[MCPTool]
+```
+
+### Knowledge / RAG
+
+```python
+from agent_substrate.capabilities.vector import PgVectorStore
+from agent_substrate.capabilities.knowledge import RAGPipeline
+
+pipeline = RAGPipeline(embedding_client=embed_client, vector_store=PgVectorStore(...))
+await pipeline.ingest("Long document …", collection="kb")
+results = await pipeline.query("What is X?", collection="kb")
 ```
 
 ---
 
 ## 🕸️ Multi-Agent Workflows
 
-Ravi supports powerful linear, parallel, and routing compositions. Since flows inherit from `BaseFlow`, they can be arbitrarily nested inside one another.
-
 ### OrchestratorAgent — Hub & Spoke
-An `OrchestratorAgent` registers sub-specialists as individual handoff tools. It analyzes user requests and routes tasks dynamically, synthesizing their results back to the caller.
 
 ```python
-from agent_substrateorchestration.agents.orchestrator.agent import OrchestratorAgent
+from agent_substrate.agents import OrchestratorAgent, SubAgentConfig
 
 orchestrator = OrchestratorAgent(
-    name="coordinator",
-    runtime=runtime,
-    model=openai_client,
-    sub_agents=[researcher, writer, review_agent],
-    description="Routes complex queries to specialized content assistants."
+    id="coordinator",
+    llm=llm,
+    sub_agents=[
+        SubAgentConfig(agent=researcher, description="Web research"),
+        SubAgentConfig(agent=writer, description="Content writing"),
+    ],
 )
 ```
 
 ### SequentialFlow — Linear Pipeline
-Steps execute sequentially in pipeline order. Each step receives the accumulated transcript of previous runs.
 
 ```python
-from agent_substrateorchestration.agents.flow import SequentialFlow
+from agent_substrate.fabric.flows import SequentialFlow
 
-pipeline = SequentialFlow(
-    name="etl_pipeline",
-    steps=[document_fetcher, json_converter, formatter_agent]
-)
-result = await pipeline.run("Load invoice dataset.")
+pipeline = SequentialFlow(steps=[fetcher_agent, parser_agent, formatter_agent])
+result = await runtime.run(pipeline, "Process this document.")
 ```
 
 ### ParallelFlow — Concurrent Execution
-Runs all branch agents in parallel concurrently and merges their outputs using standard (`concat`, `vote`) or custom callables.
 
 ```python
-from agent_substrateorchestration.agents.flow import ParallelFlow
+from agent_substrate.fabric.flows import ParallelFlow
 
 evaluator = ParallelFlow(
-    name="peer_review",
     branches=[security_auditor, legal_checker, grammar_advisor],
-    merge="concat"  # Combines all review results separating with double newlines
+    merge="concat",
 )
 ```
 
-### ConditionalFlow — Router Branching
-Evaluates a synchronous predicate function at runtime, dynamically branching execution to either `if_true` or `if_false` nodes.
+### ConditionalFlow — Dynamic Routing
 
 ```python
-from agent_substrateorchestration.agents.flow import ConditionalFlow
+from agent_substrate.fabric.flows import ConditionalFlow
 
-smart_router = ConditionalFlow(
-    name="inbound_gate",
+router = ConditionalFlow(
     predicate=lambda text: "bug" in text.lower(),
     if_true=bug_tracker_agent,
-    if_false=general_inbox_agent
+    if_false=general_inbox_agent,
 )
 ```
 
@@ -272,36 +255,49 @@ smart_router = ConditionalFlow(
 
 ## 🔧 Installation & Setup
 
-### Environment Variables
-Setup your API keys in a `.env` file inside the root directory:
+### Environment Variables (`.env`)
+
 ```bash
+# LLM providers (set at least one)
 OPENAI_API_KEY=sk-proj-...
 ANTHROPIC_API_KEY=sk-ant-...
-LOG_LEVEL=INFO
+
+# Database
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# Auth (required)
+JWT_SECRET=<32+ char random string>
+
+# Observability
+OTLP_ENDPOINT=http://localhost:4318
 ```
 
 ---
 
 ## 🧪 Testing
 
-Ravi utilizes `pytest` to run automated test suites. We assert architecture import bounds,LOC constraints, and ReAct loop convergence:
-
 ```bash
-# Execute standard test suite
-pytest
+# Run full test suite
+uv run pytest
 
-# Execute architecture linter checks
+# Single file
+uv run pytest tests/test_foo.py
+
+# Architecture + import-linter checks
 uv run lint-imports
+
+# Full CI preflight (lint → typecheck → test → security)
+make ci
 ```
 
 ---
 
-## 🛣️ Roadmap
+## 📖 Documentation
 
-*   **Phase 1: Foundation (Stable)** — Protocols, LocalRuntime messaging fabric, and ReAct loops.
-*   **Phase 2: Enterprise Sagas (In Progress)** — Saga coordinators, distributed locking, and persistent snapshots.
-*   **Phase 3: Scale (Planned)** — DistributedRuntime with Redis & gRPC backplanes, Temporal scheduler activities.
-*   **Phase 4: Optimization (Planned)** — Fine-tuning evals, multimodal vector caches, and interactive web dashboard.
+Full architecture reference, layer guides, and API docs at **[agent-substrate.pages.dev](https://agent-substrate.pages.dev)**.
 
 ---
 

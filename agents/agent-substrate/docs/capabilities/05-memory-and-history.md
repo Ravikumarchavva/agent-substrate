@@ -13,23 +13,29 @@ Two distinct concepts — both live in L2 but serve different purposes:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
+flowchart TB
     classDef proto fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
     classDef impl  fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
     classDef store fill:#FFF3E0,stroke:#E65100,color:#BF360C,stroke-dasharray:4 2
 
-    SM["SessionStore\nkernel Protocol\nget_state / set_state / update_state / clear"]:::proto
+    SM["SessionStore — kernel Protocol (kernel/storage/memory.py)<br/>get_state · set_state · update_state · clear"]:::proto
 
-    RSS["RedisSessionStore\nmemory/redis_session_store.py\nRedis HASH per session_id\nJSON values, optional TTL"]:::impl
-    PMS["PostgresMemoryStore\nmemory/postgres_memory_store.py\nagent_memories table\ntsvector full-text search"]:::impl
+    subgraph REDIS["RedisSessionStore (memory/redis_session_store.py)"]
+        direction TB
+        RSS["RedisSessionStore — ttl=3600<br/>get → HGETALL · set → DEL+HSET+EXPIRE<br/>update → HSET+EXPIRE (patch) · clear → DEL"]:::impl
+        RD["Redis HASH — key session:state:{session_id}<br/>field → JSON value · TTL reset on every write"]:::store
+        RSS --> RD
+    end
 
-    RD["Redis"]:::store
-    PG["PostgreSQL\nagent_memories table"]:::store
+    subgraph POSTGRES["PostgresMemoryStore (memory/postgres_memory_store.py)"]
+        direction TB
+        PMS["PostgresMemoryStore<br/>save(agent_id, content, metadata?, namespace?) → mem_id<br/>search(agent_id, query, limit) → list[dict] (FTS)<br/>delete(agent_id, mem_id) · create_tables()"]:::impl
+        PG["PostgreSQL table agent_memories<br/>id · agent_name · content · metadata JSONB · namespace<br/>search_vec TSVECTOR (GIN index) · created_at"]:::store
+        PMS --> PG
+    end
 
     SM --> RSS
     SM --> PMS
-    RSS --> RD
-    PMS --> PG
 ```
 
 ### `RedisSessionStore`
@@ -89,25 +95,33 @@ CREATE INDEX ON agent_memories USING GIN (search_vec);
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
+flowchart TB
     classDef proto fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
     classDef impl  fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
     classDef store fill:#FFF3E0,stroke:#E65100,color:#BF360C,stroke-dasharray:4 2
+    classDef dev   fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
 
-    HP["HistoryProvider\nkernel Protocol\nappend / get_messages / clear / count_messages"]:::proto
+    HP["HistoryProvider — kernel Protocol (kernel/storage/history.py)<br/>append · get_messages · clear · count_messages<br/>keyed by (agent_type, agent_key, session_id)"]:::proto
 
-    INMEM["InMemoryHistoryProvider\nagents/context/\ndict of lists — testing/dev only"]:::impl
-    RHP["RedisHistoryProvider\nhistory/redis_history.py\nRedis List, max_messages cap, TTL"]:::impl
-    PHP["PostgresHistoryProvider\nhistory/postgres_history.py\nhistory_sessions + history_messages tables\ndurable, queryable"]:::impl
+    INPROV["InMemoryHistoryProvider (agents/context/)<br/>_store: dict[key, list[ChatMessage]]<br/>no TTL · no persistence — dev / tests only"]:::dev
 
-    RD["Redis"]:::store
-    PG["PostgreSQL\nhistory_sessions\nhistory_messages"]:::store
+    subgraph REDISHIST["RedisHistoryProvider (history/redis_history.py)"]
+        direction TB
+        RHP["RedisHistoryProvider — ttl=3600, max_messages=200<br/>append → LPUSH + LTRIM + EXPIRE<br/>get_messages → LRANGE · clear → DEL<br/>refresh_ttl · clear_run(run_id)"]:::impl
+        RD["Redis LIST — key ravi:hist:{type}:{key}:{session}<br/>element JSON {run_id, msg} · LTRIM caps length"]:::store
+        RHP --> RD
+    end
 
-    HP --> INMEM
+    subgraph PGHIST["PostgresHistoryProvider (history/postgres_history.py)"]
+        direction TB
+        PHP["PostgresHistoryProvider — SQLAlchemy 2 async<br/>append → upsert session + INSERT message<br/>get_messages → SELECT ORDER BY sequence<br/>session_id validated by regex at boundary"]:::impl
+        PG["PostgreSQL — history_sessions (unique key, count)<br/>history_messages (sequence, payload JSONB, run_id)"]:::store
+        PHP --> PG
+    end
+
+    HP --> INPROV
     HP --> RHP
     HP --> PHP
-    RHP --> RD
-    PHP --> PG
 ```
 
 ### `RedisHistoryProvider`

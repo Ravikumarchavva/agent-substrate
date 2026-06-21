@@ -14,24 +14,39 @@ All three share the same dispatch pattern: build an `AgentId` + `Message`, call 
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
+flowchart TB
     classDef trig fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
-    classDef src  fill:#FFF3E0,stroke:#E65100,color:#BF360C,stroke-dasharray:4 2
+    classDef def  fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
     classDef rt   fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
 
-    CRON["TriggerScheduler\nAPScheduler\ncron / interval"]:::trig
-    HOOK["WebhookRegistry\nFastAPI route\nPOST /webhooks/{path}"]:::trig
-    COND["ConditionMonitor\nEventBus subscriber\nasync per event type"]:::trig
+    subgraph SCHED["TriggerScheduler (triggers/scheduler.py) — fired by clock"]
+        direction TB
+        CRON["TriggerScheduler — APScheduler AsyncScheduler<br/>set_runtime · start/stop<br/>add_trigger(TriggerDef) · remove_trigger · get_trigger"]:::trig
+        TDEF["TriggerDef — name · kind(cron|interval) · schedule<br/>target_type · target_name · target_params · enabled"]:::def
+        CRON --- TDEF
+    end
 
-    TIME["Time / Clock"]:::src
-    HTTP["External HTTP client"]:::src
-    BUS["Redis EventBus\n(integrations/events/)"]:::src
+    subgraph HOOK["WebhookRegistry (triggers/webhooks.py) — fired by HTTP POST"]
+        direction TB
+        HREG["WebhookRegistry — register · unregister<br/>handle(path, payload, secret) — validates + merges"]:::trig
+        WDEF["WebhookDef — name · path (URL slug) · target_*<br/>secret: 16-char hex (auto-generated)"]:::def
+        HREG --- WDEF
+    end
 
-    RT["Runtime.submit(agent_id, msg)\n→ run_id"]:::rt
+    subgraph COND["ConditionMonitor (triggers/conditions.py) — fired by EventBus"]
+        direction TB
+        CMON["ConditionMonitor — set_event_bus · start/stop<br/>add_condition · one asyncio task per event_type"]:::trig
+        CDEF["ConditionDef — name · event_type<br/>filters: dict (AND match on event.data) · target_*"]:::def
+        CMON --- CDEF
+    end
 
-    TIME --> CRON --> RT
-    HTTP --> HOOK --> RT
-    BUS --> COND --> RT
+    RT["Runtime.submit(AgentId(target_type, target_name),<br/>Message(payload=DataPayload(merged_params))) → run_id"]:::rt
+
+    SCHED --> RT
+    HOOK --> RT
+    COND --> RT
+    TDEF ~~~ HREG
+    WDEF ~~~ CMON
 ```
 
 ## `TriggerScheduler`

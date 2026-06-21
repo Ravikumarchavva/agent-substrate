@@ -115,23 +115,29 @@
     ctl("Zoom out", IC.zoomOut, function () { setScale(scale - ZOOM_STEP); });
     wrap.appendChild(pad);
 
-    /* Fullscreen toggle */
+    /* Fullscreen toggle.
+       We use a faux-fullscreen overlay (a position:fixed class) instead of the
+       native Fullscreen API: the native API rejects silently under a number of
+       conditions (transformed ancestors, some embed contexts) which made the
+       button appear to "do nothing". A CSS class toggle always works. */
     var fsBtn = makeBtn("mermaid-fs-btn", "Open fullscreen", IC.expand);
-    fsBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      if (!document.fullscreenElement) {
-        wrap.requestFullscreen && wrap.requestFullscreen();
-      } else {
-        document.exitFullscreen && document.exitFullscreen();
-      }
-    });
-    wrap.appendChild(fsBtn);
-    /* Attach to wrap, not document — prevents closure leak on SPA navigation */
-    wrap.addEventListener("fullscreenchange", function () {
-      var on = document.fullscreenElement === wrap;
+    function setFs(on) {
+      wrap.classList.toggle("mermaid-fs-faux", on);
+      document.body.classList.toggle("mermaid-fs-open", on);
       fsBtn.innerHTML = icon(on ? IC.collapse : IC.expand);
       fsBtn.title = on ? "Exit fullscreen" : "Open fullscreen";
+      reset();
+    }
+    fsBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      e.preventDefault();
+      setFs(!wrap.classList.contains("mermaid-fs-faux"));
     });
+    wrap.appendChild(fsBtn);
+    /* expose the closer so the single shared Escape handler can call it */
+    wrap._mfsClose = function () {
+      if (wrap.classList.contains("mermaid-fs-faux")) setFs(false);
+    };
 
     /* Drag-to-pan (mouse + touch-in-fullscreen) + pinch-to-zoom via Pointer Events */
     var pts = {},
@@ -203,6 +209,14 @@
   function scan() {
     document.querySelectorAll(".mermaid").forEach(wire);
   }
+
+  /* One shared Escape handler closes whichever diagram is faux-fullscreen —
+     avoids a per-diagram document listener leaking on SPA navigation. */
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    var open = document.querySelector(".mermaid-fs-wrap.mermaid-fs-faux");
+    if (open && open._mfsClose) open._mfsClose();
+  });
 
   var t = null;
   var observer = new MutationObserver(function () {

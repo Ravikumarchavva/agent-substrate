@@ -42,7 +42,7 @@ theme:
     - navigation.tabs.sticky
     - navigation.sections       # collapse-able sidebar sections
     - navigation.expand
-    - navigation.indexes        # section index pages
+    - navigation.indexes        # section header links to its overview (works on mobile too)
     - navigation.top            # back-to-top button
     - search.suggest
     - search.highlight

@@ -520,7 +520,10 @@ body, input {
 }
 .mermaid-viewport.grabbing { cursor: grabbing; }
 
-/* The transform target (Mermaid renders into this) */
+/* The transform target (Mermaid renders into this).
+   width:100% (+ flex:1) stops the element shrink-wrapping its SVG so the SVG's
+   width:100% below fills the content column instead of rendering at a small
+   natural size. We fill the column width only — never break out of it. */
 .md-typeset .mermaid {
   background-color: #ffffff !important;
   border: 0 !important;
@@ -529,6 +532,8 @@ body, input {
   margin: 0 !important;
   overflow: visible !important;
   display: flex !important;
+  flex: 1 1 100%;
+  width: 100%;
   justify-content: center;
   align-items: flex-start;
   transform-origin: center center;
@@ -609,26 +614,36 @@ body, input {
   .mermaid-fs-btn { opacity: 1; }
 }
 
-/* Fullscreen mode */
-.mermaid-fs-wrap:fullscreen {
+/* Faux-fullscreen mode — a fixed overlay toggled by JS (reliable everywhere,
+   unlike the native Fullscreen API). */
+body.mermaid-fs-open { overflow: hidden; }
+.mermaid-fs-wrap.mermaid-fs-faux {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  width: auto;          /* reset the column-breakout width so inset:0 fills */
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #ffffff;
   padding: 0;
 }
-.mermaid-fs-wrap:fullscreen .mermaid-viewport {
+.mermaid-fs-wrap.mermaid-fs-faux .mermaid-viewport {
   width: 100%;
   height: 100%;
   touch-action: none;
 }
-.mermaid-fs-wrap:fullscreen .mermaid-controls,
-.mermaid-fs-wrap:fullscreen .mermaid-fs-btn { opacity: 1; }
-.mermaid-fs-wrap:fullscreen .md-typeset .mermaid svg,
-.mermaid-fs-wrap:fullscreen .mermaid svg {
+.mermaid-fs-wrap.mermaid-fs-faux .mermaid-controls,
+.mermaid-fs-wrap.mermaid-fs-faux .mermaid-fs-btn { opacity: 1; }
+.mermaid-fs-wrap.mermaid-fs-faux .md-typeset .mermaid svg,
+.mermaid-fs-wrap.mermaid-fs-faux .mermaid svg {
   width: auto !important;
-  max-width: 92vw;
-  max-height: 88vh;
+  max-width: 94vw !important;
+  max-height: 90vh !important;
   height: auto !important;
 }
 
@@ -636,8 +651,9 @@ body, input {
    Both need to be white; the rect paints over the element background-color. */
 .md-typeset .mermaid svg {
   display: block;
+  /* fill the content column (override Mermaid's small inline max-width) */
   width: 100% !important;
-  max-width: 100%;
+  max-width: 100% !important;
   height: auto !important;
   background: #ffffff !important;
 }

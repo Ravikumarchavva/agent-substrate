@@ -6,25 +6,37 @@ Three concrete store types, each implementing a kernel Protocol:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
+flowchart TB
     classDef proto fill:#E8EAF6,stroke:#3949AB,color:#1A237E,font-weight:bold
     classDef impl  fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
     classDef infra fill:#FFF3E0,stroke:#E65100,color:#BF360C,stroke-dasharray:4 2
 
-    VS["VectorStore\nkernel Protocol\nadd / search / delete"]:::proto
-    GS["GraphStore\nkernel Protocol\nadd_entities / add_relationships\nquery_cypher / get_subgraph"]:::proto
-    BS["BlobStore\nkernel Protocol\nput / get / delete / list"]:::proto
+    subgraph VEC["Vector storage"]
+        direction TB
+        VS["VectorStore — kernel Protocol (vector.py)<br/>add(docs, collection) · delete(ids)<br/>search(vec, limit, filter) → list[SearchResult]"]:::proto
+        PGV["PgVectorStore · vector/pgvector_store.py<br/>raw SQL (no ORM) · dimensions must match model<br/>ensure_table() → vector_store_{collection}<br/>HNSW index (embedding vector_cosine_ops)"]:::impl
+        PG1["PostgreSQL + pgvector extension"]:::infra
+        VS --> PGV --> PG1
+    end
 
-    PGV["PgVectorStore\nvector/pgvector_store.py\nPostgreSQL + pgvector extension\nraw SQL, no ORM"]:::impl
-    AGE["AGEGraphStore\ngraph/age_store.py\nPostgreSQL + Apache AGE\nopenCypher via cypher() function"]:::impl
-    S3["S3FileStore\nstorage/s3.py\nwraps MinIOConnector\naiobotocore-based"]:::impl
+    subgraph GR["Graph storage"]
+        direction TB
+        GS["GraphStore — kernel Protocol (graph.py)<br/>add_entities · add_relationships<br/>get_subgraph(entities, depth) · query_cypher"]:::proto
+        AGE["AGEGraphStore · graph/age_store.py<br/>asyncpg raw SQL · Apache AGE cypher()<br/>graph auto-created on connect"]:::impl
+        PG2["PostgreSQL + Apache AGE (same instance)"]:::infra
+        GS --> AGE --> PG2
+    end
 
-    PG["PostgreSQL\nagentdb"]:::infra
-    MINIO["MinIO / AWS S3"]:::infra
+    subgraph BL["Blob storage"]
+        direction TB
+        BS["BlobStore — kernel Protocol (blob.py)<br/>put · get · delete · list"]:::proto
+        S3["S3FileStore · storage/s3.py<br/>wraps MinIOConnector (aiobotocore)<br/>connect() creates bucket if missing"]:::impl
+        MINIO["MinIO (dev) / AWS S3 (prod)"]:::infra
+        BS --> S3 --> MINIO
+    end
 
-    VS --> PGV --> PG
-    GS --> AGE --> PG
-    BS --> S3 --> MINIO
+    PG1 ~~~ GS
+    PG2 ~~~ BS
 ```
 
 ### `PgVectorStore`
@@ -119,12 +131,39 @@ flowchart TD
     classDef data fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
     classDef proc fill:#E8EAF6,stroke:#3949AB,color:#1A237E
     classDef out  fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef dec  fill:#FFF3E0,stroke:#E65100,color:#BF360C,font-weight:bold
 
-    DEF["PipelineDef\nname, description\nsteps: list[PipelineStep]"]:::data
-    ENG["PipelineEngine.execute(pipeline)\nfor each step:\n  resolve $-refs in input_mapping\n  tool = registry.get(adapter_name)\n  result = await tool.execute(**inputs)\n  context[output_key] = result\n  context['prev'] = result"]:::proc
-    RES["PipelineResult\nsuccess, step_results\nduration_ms, error"]:::out
+    DEF["PipelineDef<br/>──────────────────────<br/>name: str<br/>description: str<br/>steps: list[PipelineStep]"]:::data
 
-    DEF --> ENG --> RES
+    subgraph STEP["PipelineStep (per step in steps list)"]
+        style STEP fill:#e8f4fd,stroke:#1565C0,color:#0D47A1
+        S1["PipelineStep fields:<br/>──────────────────────<br/>adapter_name: str  (tool name in Toolbox)<br/>action: str = 'execute'<br/>input_mapping: dict  (literal or $-ref values)<br/>output_key: str = 'step_{i}'<br/>timeout: int = 60  (seconds per step)"]:::data
+    end
+
+    RESOLVE["_resolve_inputs(input_mapping, context)<br/>──────────────────────<br/>for each value in input_mapping:<br/>  if starts with '$': walk path through context dict<br/>    '$prev.content' → context['prev'].content<br/>    '$step_0.structured' → context['step_0'].structured<br/>  else: pass through as literal<br/>→ dict  (resolved kwargs)"]:::proc
+
+    GET["registry.get(adapter_name)<br/>──────────────────────<br/>Toolbox lookup by name<br/>→ Tool instance"]:::proc
+
+    EXEC["await tool.execute(**resolved_inputs)<br/>──────────────────────<br/>→ ToolExecutionResult(content, is_error,<br/>  structured_content, app_data)"]:::proc
+
+    CTX["context dict update:<br/>──────────────────────<br/>context[step.output_key] = result<br/>context['prev'] = result<br/>context['$step_{i}'] = result"]:::proc
+
+    ERR{"is_error or<br/>timeout?"}:::dec
+
+    ENG["PipelineEngine<br/>engine.py<br/>──────────────────────<br/>toolbox: Toolbox<br/>execute(pipeline: PipelineDef) → PipelineResult"]:::proc
+
+    RES["PipelineResult<br/>──────────────────────<br/>success: bool<br/>step_results: list[StepResult]<br/>duration_ms: float<br/>error: str | None"]:::out
+
+    DEF -->|"pipeline"| ENG
+    ENG --> STEP
+    STEP --> RESOLVE
+    RESOLVE --> GET
+    GET --> EXEC
+    EXEC --> ERR
+    ERR -->|"error"| RES
+    ERR -->|"ok"| CTX
+    CTX -->|"next step"| STEP
+    CTX -->|"all steps done"| RES
 ```
 
 ### `PipelineStep` fields
@@ -159,22 +198,34 @@ PipelineStep(adapter_name="email_sender",
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
-flowchart LR
-    classDef proc fill:#E8EAF6,stroke:#3949AB,color:#1A237E
+flowchart TD
+    classDef proc  fill:#E8EAF6,stroke:#3949AB,color:#1A237E
     classDef store fill:#FFF3E0,stroke:#E65100,color:#BF360C,stroke-dasharray:4 2
-    classDef obj fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
+    classDef obj   fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
+    classDef dec   fill:#E3F2FD,stroke:#1565C0,color:#0D47A1,font-weight:bold
 
-    IN["data: bytes | str | dict"]:::proc
-    DRS["DataRefStore.store()\nsize check"]:::proc
-    RD["Redis\ndata < 1 MB\nkey: dataref:{ref_id}\nTTL enforced"]:::store
-    S3["S3 / MinIO\ndata ≥ 1 MB\nkey: datarefs/{ref_id}"]:::store
-    REF["DataRef\nref_id, storage, key\nsize_bytes, ttl, pinned"]:::obj
-    RES["DataRefStore.resolve(ref)\n→ bytes"]:::proc
+    IN["data: bytes | str | dict<br/>──────────────────────<br/>str/dict → UTF-8 encoded to bytes<br/>before size check"]:::proc
+
+    DRS["DataRefStore.store(data)<br/>──────────────────────<br/>ref_id = uuid4()  (unique pointer)<br/>size_bytes = len(encoded_data)"]:::proc
+
+    THRESH{"size_bytes<br/>< 1 MB?"}:::dec
+
+    RD["Redis<br/>──────────────────────<br/>key: dataref:{ref_id}<br/>value: raw bytes<br/>TTL: default 3600s<br/>SETEX with TTL enforced"]:::store
+    S3["S3 / MinIO<br/>──────────────────────<br/>key: datarefs/{ref_id}<br/>bucket: agent-artifacts<br/>no automatic TTL<br/>(cleanup_expired() sweeps stale)"]:::store
+
+    REF["DataRef<br/>──────────────────────<br/>ref_id: str  (UUID)<br/>storage: 'redis' | 's3'<br/>key: str  (Redis key or S3 object key)<br/>size_bytes: int<br/>ttl: int  (seconds)<br/>pinned: bool  (prevent expiry for long jobs)"]:::obj
+
+    RES["DataRefStore.resolve(ref: DataRef) → bytes<br/>──────────────────────<br/>routes to Redis.GET or S3.get_object<br/>based on ref.storage field"]:::proc
+
+    WRAP["DataRefArtifactStore<br/>──────────────────────<br/>wraps DataRefStore<br/>satisfies kernel ArtifactStore Protocol<br/>used by ToolInvoker + ToolChainTool<br/>ref IDs exposed as plain strings<br/>at the tool boundary"]:::proc
 
     IN --> DRS
-    DRS -->|"< 1 MB"| RD --> REF
-    DRS -->|"≥ 1 MB"| S3 --> REF
+    DRS --> THRESH
+    THRESH -->|"yes  (< 1MB)"| RD --> REF
+    THRESH -->|"no  (≥ 1MB)"| S3 --> REF
     REF --> RES
+    REF -.->|"pin(ref): remove TTL<br/>unpin(ref): restore TTL<br/>delete(ref): manual cleanup"| REF
+    REF -.->|"ArtifactStore adapter"| WRAP
 ```
 
 | Method | Effect |

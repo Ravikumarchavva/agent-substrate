@@ -3,7 +3,7 @@
 Demonstrates:
   • ReActAgent with built-in tools
   • Runtime as async context manager
-  • Simple interactive REPL using run_agent() helper
+  • Interactive REPL via the Console
 
 Run:
     cd agent-substrate
@@ -27,29 +27,8 @@ from substrate.integrations.llm import (
     detect_provider,
     has_provider_api_key,
 )
-from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool, ReadUrlTool
-from substrate.kernel.core.content import ChatMessage, Role, TextBlock
-from substrate.kernel.core.identity import AgentId
-from substrate.kernel.messaging.message import Message, ChatPayload
+from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool
 from substrate.console import Console
-
-
-async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: str) -> str:
-    msg = Message(
-        target=agent.id,
-        sender=AgentId(type="proxy", key="user"),
-        payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])),
-        correlation_id=session_id,
-    )
-    run_id = await rt.submit(agent.id, msg)
-    async for entry in rt.event_log.tail(run_id):
-        if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
-            break
-    history = await agent.history.get_messages(agent.id, session_id=session_id)
-    for m in reversed(history):
-        if m.role == Role.ASSISTANT:
-            return " ".join(b.text for b in m.content if isinstance(b, TextBlock) and b.text)
-    return ""
 
 
 async def main() -> None:
@@ -64,12 +43,13 @@ async def main() -> None:
     agent = ReActAgent(
         "DemoBot",
         model=model,
-        tools=[CalculatorTool(), CurrentTimeTool(), WebSearchTool(), ReadUrlTool()],
+        tools=[CalculatorTool(), CurrentTimeTool()],
         context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
         system_instructions=(
             "You are a helpful assistant with access to tools. "
-            "When a tool returns data, extract the answer directly from it. "
-            "Always prefer tools over training data for factual or time-sensitive questions."
+            "Use a tool when it helps (e.g. calculations or the current time); "
+            "otherwise just answer directly from your own knowledge. "
+            "When a tool returns data, extract the answer directly from it."
         ),
         max_iterations=8,
     )

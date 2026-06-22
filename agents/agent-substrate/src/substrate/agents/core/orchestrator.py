@@ -172,6 +172,17 @@ class OrchestratorAgent:
 
                 spawn_tracker.acquire(cfg.agent.id, priority=cfg.priority)
                 task_text = dispatch.arguments.get("task", str(dispatch.arguments))
+                # Surface subagent lifecycle on the orchestrator's own run log so
+                # console / UIs can render a live subagent progress tree. The
+                # subagent itself runs under a separate run_id we don't tail here.
+                await ctx._log(
+                    "subagent.start",
+                    {
+                        "agent": cfg.agent.id.key,
+                        "parent": self.id.key,
+                        "task": str(task_text)[:200],
+                    },
+                )
                 boot_msg = Message(
                     target=cfg.agent.id,
                     sender=self.id,
@@ -192,6 +203,15 @@ class OrchestratorAgent:
                     outcome = await ctx.ask(handle, boot_msg, timeout=cfg.ask_timeout)
                 finally:
                     spawn_tracker.release(cfg.agent.id)
+
+                await ctx._log(
+                    "subagent.done",
+                    {
+                        "agent": cfg.agent.id.key,
+                        "parent": self.id.key,
+                        "ok": outcome.kind == "replied",
+                    },
+                )
 
                 if outcome.kind == "replied" and outcome.result:
                     out = outcome.result.output

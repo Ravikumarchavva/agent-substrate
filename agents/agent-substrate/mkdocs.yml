@@ -190,4 +190,9 @@ nav:
     - 6 · Storage & Pipeline: capabilities/06-storage-and-pipeline.md
     - 7 · Triggers: capabilities/07-triggers.md
 
+  - Fabric Layer (L3):
+    - Overview: fabric/index.md
+    - 1 · Flows: fabric/01-flows.md
+    - 2 · Evals: fabric/02-evals.md
+
   - GitHub: https://github.com/Ravikumarchavva/agent-substrate

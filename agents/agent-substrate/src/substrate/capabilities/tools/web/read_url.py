@@ -231,7 +231,12 @@ class ReadUrlTool:
         self, url: str, query: str | None, offset: int, limit: int
     ) -> ToolExecutionResult:
         try:
-            from crawl4ai import AsyncWebCrawler, HTTPCrawlerConfig
+            from crawl4ai import (
+                AsyncLogger,
+                AsyncWebCrawler,
+                CrawlerRunConfig,
+                HTTPCrawlerConfig,
+            )
             from crawl4ai.async_crawler_strategy import AsyncHTTPCrawlerStrategy
 
             config = HTTPCrawlerConfig(
@@ -246,11 +251,15 @@ class ReadUrlTool:
                     "Upgrade-Insecure-Requests": "1",
                 }
             )
+            # A quiet logger keeps Crawl4AI's [INIT]/[FETCH] banner off the
+            # console's live render (verbose=False alone does not silence it).
+            quiet_logger = AsyncLogger(verbose=False)
             async with AsyncWebCrawler(
                 crawler_strategy=AsyncHTTPCrawlerStrategy(browser_config=config),
+                logger=quiet_logger,
                 verbose=False,
             ) as crawler:
-                result = await crawler.arun(url)
+                result = await crawler.arun(url, config=CrawlerRunConfig(verbose=False))
 
             if not result.success:
                 return ToolExecutionResult(

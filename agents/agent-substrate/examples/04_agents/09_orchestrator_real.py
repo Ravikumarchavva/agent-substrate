@@ -36,18 +36,24 @@ from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, Sli
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
 from substrate.agents.runtime import Runtime
-from substrate.integrations.llm.openai.openai_client import OpenAIClient
+from substrate.integrations.llm import (
+    create_model_client,
+    detect_provider,
+    has_provider_api_key,
+)
 from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool, WebSearchTool
 from substrate.console import Console
 from substrate.kernel import Priority
 
-def _model() -> OpenAIClient:
-    if not settings.OPENAI_API_KEY:
-        raise SystemExit("OPENAI_API_KEY not set — add it to agent-substrate/.env")
-    return OpenAIClient(
-        model=settings.CHAT_MODEL.split("/")[-1],
-        api_key=settings.OPENAI_API_KEY,
-    )
+
+def _model():
+    provider = detect_provider(settings.CHAT_MODEL)
+    if not has_provider_api_key(provider, settings.provider_keys):
+        raise SystemExit(
+            f"No API key for provider {provider!r} (model {settings.CHAT_MODEL!r}). "
+            f"Add the matching key to agent-substrate/.env."
+        )
+    return create_model_client(settings.CHAT_MODEL, api_keys=settings.provider_keys)
 
 
 def _context() -> ContextConfig:
@@ -124,7 +130,7 @@ async def main() -> None:
     async with Runtime() as rt:
         orchestrator = build_team(rt)
         print(f"\nQuery: {QUERY}\n")
-        await Console(orchestrator).run_stream(QUERY)
+        await Console(orchestrator, runtime=rt).run_stream(QUERY)
 
 
 if __name__ == "__main__":

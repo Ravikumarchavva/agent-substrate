@@ -10,12 +10,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from substrate.agents.runtime.runtime import Runtime
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.messaging.message import ChatPayload, Message
-from substrate.kernel.runtime.ids import new_run_id
+from substrate.kernel.runtime.ids import RunId, new_run_id
 
 from substrate.fabric.evals.judge import LLMJudge
 from substrate.fabric.evals.models import (
@@ -29,6 +30,21 @@ if TYPE_CHECKING:
     from substrate.kernel.runtime.agent import Agent
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _Trace:
+    """Execution-trace aggregates read back from a run's event log.
+
+    Captures the agent-under-test's own run only. For an orchestrator, a
+    sub-agent's LLM/tool calls live in its child run and are not included.
+    """
+
+    steps: int = 0
+    tokens: int = 0
+    tool_total: int = 0
+    tool_by_name: dict[str, int] = field(default_factory=dict)
+    tool_order: list[str] = field(default_factory=list)
 
 
 class EvalRunner:
@@ -110,14 +126,17 @@ class EvalRunner:
         )
         cid = msg.correlation_id
         start = time.monotonic()
+        run_id: RunId = ""
+        trace = _Trace()
         try:
-            await rt.submit(self._agent.id, msg)
+            run_id = await rt.submit(self._agent.id, msg)
             payload = await asyncio.wait_for(
                 rt.signal_bus.wait_for_signal(sentinel_run_id, f"reply:{cid}"),
                 timeout=self._timeout,
             )
             output = str(payload.get("text", ""))
             duration = time.monotonic() - start
+            trace = await self._collect_trace(rt, run_id)
             case_result = EvalCaseResult(
                 case_id=case.case_id,
                 input=case.input,
@@ -126,6 +145,11 @@ class EvalRunner:
                 status="completed",
                 duration_seconds=duration,
                 tags=list(case.tags),
+                run_id=run_id,
+                steps_used=trace.steps,
+                tokens_used=trace.tokens,
+                tool_calls_total=trace.tool_total,
+                tool_calls_by_name=trace.tool_by_name,
             )
         except Exception as exc:
             duration = time.monotonic() - start
@@ -139,6 +163,7 @@ class EvalRunner:
                 error=str(exc),
                 duration_seconds=duration,
                 tags=list(case.tags),
+                run_id=run_id,
             )
 
         if self._judge and case_result.status != "error":
@@ -147,7 +172,29 @@ class EvalRunner:
                 actual_output=case_result.actual_output,
                 expected_output=case.expected_output,
                 context=case.context,
+                expected_tool_calls=case.expected_tool_calls,
+                actual_tool_calls=trace.tool_order,
             )
             case_result.scores = list(scores)
 
         return case_result
+
+    @staticmethod
+    async def _collect_trace(rt: Runtime, run_id: RunId) -> _Trace:
+        """Aggregate steps / tokens / tool calls from the run's event log.
+
+        Read once the reply has arrived: every ``llm.call`` and ``tool.call``
+        entry is journaled during the agent loop, before it replies.
+        """
+        trace = _Trace()
+        async for entry in rt.event_log.read(run_id):
+            payload = entry.payload or {}
+            if entry.kind == "llm.call":
+                trace.steps += 1
+                trace.tokens += int(payload.get("tokens", 0) or 0)
+            elif entry.kind == "tool.call":
+                name = str(payload.get("tool_name", "tool"))
+                trace.tool_total += 1
+                trace.tool_by_name[name] = trace.tool_by_name.get(name, 0) + 1
+                trace.tool_order.append(name)
+        return trace

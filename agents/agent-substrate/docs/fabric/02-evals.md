@@ -69,7 +69,7 @@ built in ([`fabric/evals/criteria.py`](https://github.com/Ravikumarchavva/agent-
 | `RELEVANCE` | on-topic for the query | 0.7 |
 | `SAFETY` | free of harmful content / PII | 0.8 |
 | `CONCISENESS` | no filler, every word earns its place | 0.6 |
-| `TOOL_USAGE` | right tools, right order | 0.7 |
+| `TOOL_USAGE` | right tools, right order (grades `expected_tool_calls` vs the captured trace) | 0.7 |
 
 Write your own by constructing an `EvalCriterion`:
 
@@ -89,7 +89,10 @@ TONE = EvalCriterion(
 ```
 
 Templates may use `{input}`, `{expected_output}`, `{actual_output}`, and
-`{context_section}` placeholders.
+`{context_section}` placeholders. Tool-trace criteria also get
+`{expected_tools}` (from the case's `expected_tool_calls`) and `{actual_tools}`
+(the tools the agent actually called, in order) — this is what `TOOL_USAGE`
+uses to grade tool behaviour rather than reply text.
 
 ## Scoring — `LLMJudge`
 
@@ -144,6 +147,28 @@ A case that errors or times out is recorded with `status="error"` and is **not**
 sent to the judge — it simply counts against the pass rate. `run_case()` runs a
 single case with its own runtime if you want to drive one at a time.
 
+### Execution-trace capture
+
+After a case replies, the runner reads back that run's event log and fills the
+trace fields on its `EvalCaseResult`:
+
+| Field | Source (event-log `kind`) |
+|---|---|
+| `steps_used` | count of `llm.call` entries (one per agent loop iteration) |
+| `tokens_used` | sum of `tokens` across `llm.call` entries |
+| `tool_calls_total` | count of `tool.call` entries |
+| `tool_calls_by_name` | `tool.call` entries grouped by `tool_name` |
+| `run_id` | the agent-under-test's run id |
+
+The ordered list of actual tool calls is also handed to the judge so the
+`TOOL_USAGE` criterion can grade real tool traces (see below).
+
+!!! note "Single-run scope"
+    The trace covers the **agent-under-test's own run only**. When that agent is
+    an `OrchestratorAgent`, each sub-agent runs under its own child run, so the
+    sub-agents' LLM and tool calls are **not** rolled into these counts — only the
+    orchestrator's own delegations and tokens are.
+
 ## Results — `EvalReport`
 
 `EvalReport` aggregates every `EvalCaseResult` and exposes computed metrics:
@@ -154,6 +179,7 @@ single case with its own runtime if you want to drive one at a time.
 | `pass_rate` | fraction of cases where every scored criterion passed |
 | `avg_score` | mean of per-case average scores |
 | `avg_latency` | mean wall-clock seconds per case |
+| `total_tokens` / `avg_tokens` | summed / mean tokens across cases (from the trace) |
 | `scores_by_criterion()` | `{criterion: {mean, min, max, stdev, pass_rate}}` |
 | `filter_failed()` / `filter_by_tag(tag)` | drill into specific results |
 | `summary()` / `to_dict()` | printable digest / JSON snapshot |
@@ -169,19 +195,14 @@ for failure in report.filter_failed():
     print(failure.case_id, failure.actual_output[:80])
 ```
 
-## Known limitations
+## Scope & caveats
 
-Be aware of what the runner does **not** capture today — these fields exist on
-`EvalCaseResult`/`EvalReport` but are currently always zero:
-
-- **`tokens_used` / `total_tokens` / `avg_tokens`** — token accounting is not
-  wired through the runner, so token metrics report `0`.
-- **`steps_used`, `tool_calls_total`, `tool_calls_by_name`** — the runner reads
-  only the agent's final reply text, not its step/tool trace.
-- **`TOOL_USAGE` scoring** compares `expected_tool_calls` against the agent's
-  *actual* tool calls, but since actual calls aren't captured, this criterion
-  currently has nothing real to grade. Prefer output-based criteria
-  (`CORRECTNESS`, `HELPFULNESS`, …) until trace capture lands.
-
-`avg_latency` and all judge-based scores are accurate — the gaps are limited to
-execution-trace telemetry.
+- **Trace metrics reflect one run.** `tokens_used`, `steps_used`, and the
+  `tool_calls_*` fields are read from the agent-under-test's own event log. For an
+  `OrchestratorAgent` they cover the orchestrator's run only — a sub-agent's
+  tokens and tool calls live in its child run and are not aggregated in.
+- **`tokens_used` is whatever the provider reported.** It sums the `tokens` field
+  journaled on each `llm.call`; a provider that omits usage contributes `0` for
+  that step.
+- **`TOOL_USAGE` needs `expected_tool_calls`.** Set them on the `EvalCase`,
+  otherwise the criterion has nothing to compare the captured trace against.

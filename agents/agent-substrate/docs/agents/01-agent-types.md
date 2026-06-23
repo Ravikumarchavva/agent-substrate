@@ -395,6 +395,20 @@ finally:
     spawn_tracker.release(cfg.agent.id)
 ```
 
+!!! warning "Register every sub-agent with the runtime"
+    `ctx.spawn` only enqueues a run — a Worker still has to resolve the
+    `AgentId` to an agent instance from the runtime's registry. If a sub-agent
+    was never `register`ed, the Worker can't find it, holds the lease, and the
+    orchestrator's `ctx.ask` blocks until its `ask_timeout` (default 120 s) —
+    a silent hang, not an error. Register the orchestrator **and** every
+    sub-agent before submitting:
+
+    ```python
+    await rt.register(orchestrator)
+    for cfg in orchestrator._sub_agents:
+        await rt.register(cfg.agent)
+    ```
+
 !!! warning "Branch on `outcome.kind` — never assume it replied"
     `ctx.ask` returns an `AskOutcome`. The orchestrator checks
     `outcome.kind == "replied"` before reading `outcome.result`. Any other

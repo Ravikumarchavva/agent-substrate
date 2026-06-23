@@ -21,7 +21,8 @@ class EvalCriterion:
         description: Human-readable description.
         prompt_template: The prompt sent to the judge LLM.
             Available placeholders: {input}, {expected_output},
-            {actual_output}, {context}.
+            {actual_output}, {context_section}, and — for tool-trace
+            criteria — {expected_tools} and {actual_tools}.
         score_range: Tuple of (min, max) for raw scores.
         threshold: Normalised score >= this value counts as "passed".
     """
@@ -154,8 +155,8 @@ TOOL_USAGE = EvalCriterion(
 You are an expert evaluator. Score the agent's TOOL USAGE.
 
 USER INPUT: {input}
-EXPECTED TOOLS: {expected_output}
-ACTUAL TOOLS USED: {actual_output}
+EXPECTED TOOLS: {expected_tools}
+ACTUAL TOOLS USED: {actual_tools}
 {context_section}
 
 Score 1-5:

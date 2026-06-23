@@ -10,7 +10,7 @@ const ENGINE_JWT_SECRET = process.env.ENGINE_JWT_SECRET ?? "";
 export function makeEngineToken(): string {
   if (!ENGINE_JWT_SECRET) return "";
   return jwt.sign(
-    { sub: "ravi-ui", email: "ui@ravi.local", type: "access" },
+    { sub: "ravi-ui", email: "ui@agent_substratelocal", type: "access" },
     ENGINE_JWT_SECRET,
     { expiresIn: "1h" }
   );

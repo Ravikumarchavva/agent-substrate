@@ -71,8 +71,14 @@ class LLMJudge:
         actual_output: str,
         expected_output: Optional[str] = None,
         context: Optional[str] = None,
+        expected_tool_calls: Optional[List[str]] = None,
+        actual_tool_calls: Optional[List[str]] = None,
     ) -> List[EvalScore]:
         """Score an agent output against all configured criteria.
+
+        ``expected_tool_calls`` / ``actual_tool_calls`` feed the
+        ``{expected_tools}`` / ``{actual_tools}`` placeholders used by
+        tool-trace criteria (e.g. ``TOOL_USAGE``).
 
         Returns:
             List of EvalScore, one per criterion.
@@ -85,6 +91,8 @@ class LLMJudge:
                     actual_output,
                     expected_output,
                     context,
+                    expected_tool_calls,
+                    actual_tool_calls,
                 )
                 for criterion in self.criteria
             ]
@@ -98,6 +106,8 @@ class LLMJudge:
                     actual_output,
                     expected_output,
                     context,
+                    expected_tool_calls,
+                    actual_tool_calls,
                 )
                 results.append(score)
             return results
@@ -109,6 +119,8 @@ class LLMJudge:
         actual_output: str,
         expected_output: Optional[str],
         context: Optional[str],
+        expected_tool_calls: Optional[List[str]] = None,
+        actual_tool_calls: Optional[List[str]] = None,
     ) -> EvalScore:
         """Score a single criterion using the judge LLM."""
         # Build context section
@@ -122,6 +134,12 @@ class LLMJudge:
             actual_output=actual_output,
             expected_output=expected_output or "(not provided)",
             context_section=context_section,
+            expected_tools=", ".join(expected_tool_calls)
+            if expected_tool_calls
+            else "(none specified)",
+            actual_tools=", ".join(actual_tool_calls)
+            if actual_tool_calls
+            else "(none used)",
         )
 
         # Call judge LLM with retries

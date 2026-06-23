@@ -129,6 +129,12 @@ QUERY = (
 async def main() -> None:
     async with Runtime() as rt:
         orchestrator = build_team(rt)
+        # Register every sub-agent so the runtime can resolve them when the
+        # orchestrator spawns them. Without this, each spawned run finds no
+        # agent in the registry and the orchestrator's ctx.ask() blocks until
+        # its timeout (120s per sub-agent).
+        for sub_cfg in orchestrator._sub_agents:
+            await rt.register(sub_cfg.agent)
         print(f"\nQuery: {QUERY}\n")
         await Console(orchestrator, runtime=rt).run_stream(QUERY)
 

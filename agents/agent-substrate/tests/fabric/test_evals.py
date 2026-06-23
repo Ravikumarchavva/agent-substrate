@@ -13,6 +13,7 @@ from substrate.fabric.evals import (
     EvalRunner,
     EvalScore,
     CORRECTNESS,
+    TOOL_USAGE,
 )
 from substrate.fabric.evals.judge import LLMJudge
 from substrate.kernel.core.identity import AgentId
@@ -56,6 +57,29 @@ class SlowAgent:
         await asyncio.sleep(10)  # exceeds any reasonable timeout
         for msg in inbox:
             await ctx.reply(msg, {"text": "never"})
+
+
+@dataclass
+class TracingAgent:
+    """Emits a fixed llm.call / tool.call trace, then replies.
+
+    Two LLM steps (100 + 50 tokens) and two calculator tool calls — lets the
+    runner's trace aggregation be asserted without a real model.
+    """
+
+    @property
+    def id(self) -> AgentId:
+        return AgentId(type="agent", key="tracing_agent")
+
+    async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+        for msg in inbox:
+            await ctx._log("llm.call", {"model": "fake", "tokens": 100})
+            await ctx._log("tool.call", {"tool_name": "calculator", "args": {}})
+            await ctx._log("tool.result", {"tool_name": "calculator", "ok": True})
+            await ctx._log("llm.call", {"model": "fake", "tokens": 50})
+            await ctx._log("tool.call", {"tool_name": "calculator", "args": {}})
+            await ctx._log("tool.result", {"tool_name": "calculator", "ok": True})
+            await ctx.reply(msg, {"text": "done"})
 
 
 def _dataset(*inputs: str) -> EvalDataset:
@@ -125,9 +149,7 @@ async def test_runner_with_mock_judge_populates_scores(monkeypatch):
         EvalScore(criterion="correctness", score=0.9, passed=True, reasoning="good")
     ]
 
-    async def mock_score(
-        *, input_text, actual_output, expected_output=None, context=None
-    ):
+    async def mock_score(*, input_text, actual_output, **kwargs):
         return mock_scores
 
     judge = LLMJudge.__new__(LLMJudge)
@@ -172,3 +194,61 @@ async def test_report_criteria_names_populated():
     runner = EvalRunner(agent=OKAgent(), judge=judge)
     report = await runner.run(_dataset("q"))
     assert "correctness" in report.criteria_names
+
+
+# ---------------------------------------------------------------------------
+# Execution-trace capture (tokens / steps / tool calls)
+# ---------------------------------------------------------------------------
+
+
+async def test_runner_captures_trace_from_event_log():
+    runner = EvalRunner(agent=TracingAgent())
+    report = await runner.run(EvalDataset(name="t", cases=[EvalCase(input="q")]))
+    r = report.results[0]
+    assert r.run_id != ""
+    assert r.steps_used == 2
+    assert r.tokens_used == 150
+    assert r.tool_calls_total == 2
+    assert r.tool_calls_by_name == {"calculator": 2}
+
+
+async def test_report_aggregates_tokens_across_cases():
+    runner = EvalRunner(agent=TracingAgent())
+    report = await runner.run(
+        EvalDataset(name="t", cases=[EvalCase(input="a"), EvalCase(input="b")])
+    )
+    assert report.total_tokens == 300
+    assert report.avg_tokens == pytest.approx(150.0)
+
+
+async def test_runner_passes_tool_calls_to_judge(monkeypatch):
+    """The runner must feed the actual + expected tool calls to the judge so
+    the TOOL_USAGE criterion grades real tool traces, not the reply text."""
+    captured: dict[str, object] = {}
+
+    async def mock_score(
+        *,
+        input_text,
+        actual_output,
+        expected_output=None,
+        context=None,
+        expected_tool_calls=None,
+        actual_tool_calls=None,
+    ):
+        captured["expected"] = expected_tool_calls
+        captured["actual"] = actual_tool_calls
+        return [EvalScore(criterion="tool_usage", score=1.0, passed=True)]
+
+    judge = LLMJudge.__new__(LLMJudge)
+    judge.criteria = [TOOL_USAGE]
+    monkeypatch.setattr(judge, "score", mock_score)
+
+    runner = EvalRunner(agent=TracingAgent(), judge=judge)
+    await runner.run(
+        EvalDataset(
+            name="t",
+            cases=[EvalCase(input="q", expected_tool_calls=["calculator"])],
+        )
+    )
+    assert captured["actual"] == ["calculator", "calculator"]
+    assert captured["expected"] == ["calculator"]

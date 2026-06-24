@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
     from substrate.serving.protocol import WireEvent
+    from substrate.kernel.runtime.wakeup import SignalBus
 
 from substrate.capabilities.tools.human_input import (
     CallbackApprovalHandler,
@@ -106,25 +107,29 @@ class WebHITLBridge:
         calls ``get_event()`` to drain them.
 
     Incoming (frontend → agent):
-        ``resolve(request_id, data)`` completes the matching Future.
+        ``resolve(request_id, data)`` completes the matching Future (tool
+        approval) or fires ``SignalBus.signal()`` (signal-based human input).
 
-    Both ``approval_handler`` and ``human_handler`` are pre-built
-    ``CallbackApprovalHandler`` / ``CallbackHumanHandler`` instances
-    that route through this bridge.
+    Both ``approval_handler`` and ``human_handler`` are pre-built handler
+    instances that route through this bridge.  When ``signal_bus`` is
+    provided, the human handler is marked ``suspends_via_signal = True`` so
+    ``AskHumanTool`` suspends via ``ctx.sleep_until_signal()`` and the event
+    flows through the normal run-log tail instead of the bridge queue.
 
     Lock-free HITL:
-        When a browser disconnects while a HITL Future is pending, the
-        bridge stays alive in the ``BridgeRegistry``.  The agent task keeps
-        running (blocked on the Future).  The user can reconnect and respond
-        via ``POST /chat/respond/{request_id}``.  Use ``has_pending`` to
-        check before deciding whether to release the bridge.
+        For Future-based approval requests the bridge stays alive in the
+        registry so the user can reconnect and respond.  Signal-based
+        requests are registered in ``_signal_requests`` for the same reason.
     """
 
-    def __init__(self, response_timeout: float = 300.0):
+    def __init__(self, response_timeout: float = 300.0, signal_bus: Optional["SignalBus"] = None):
         self._outgoing: asyncio.Queue[Any] = asyncio.Queue()
         self._pending: Dict[str, asyncio.Future[Dict[str, Any]]] = {}
         self._pending_payloads: Dict[str, Dict[str, Any]] = {}
         self._response_timeout = response_timeout
+        self._signal_bus = signal_bus
+        # request_id → run_id for signal-based human input requests
+        self._signal_requests: Dict[str, str] = {}
 
         # Pre-built handlers wired to this bridge
         self._approval_handler = CallbackApprovalHandler(
@@ -133,6 +138,11 @@ class WebHITLBridge:
         self._human_handler = CallbackHumanHandler(
             callback=self._handle_human_input,
         )
+        if signal_bus is not None:
+            # Marker: AskHumanTool will suspend via SignalBus instead of calling
+            # request_input().  The callback above becomes unreachable for the
+            # human-input path when this flag is set.
+            self._human_handler.suspends_via_signal = True  # type: ignore[attr-defined]
 
     # -- Public properties ---------------------------------------------------
 
@@ -151,7 +161,12 @@ class WebHITLBridge:
     @property
     def has_pending(self) -> bool:
         """True when at least one HITL request is awaiting user response."""
-        return bool(self._pending)
+        return bool(self._pending) or bool(self._signal_requests)
+
+    def register_signal_request(self, request_id: str, run_id: str) -> None:
+        """Register a signal-based HITL request so resolve() can fire the signal."""
+        self._signal_requests[request_id] = run_id
+        logger.debug("Bridge: registered signal HITL %s → run %s", request_id, run_id)
 
     def get_pending_info(self) -> list[dict[str, Any]]:
         """Return metadata about all pending HITL requests.
@@ -159,28 +174,29 @@ class WebHITLBridge:
         Used by the ``GET /hitl/status/{thread_id}`` endpoint so the frontend
         can restore approval/input cards after a reconnect.
         """
-        # We store the sent event payloads alongside Futures so we can
-        # replay them.  Fall back to just the request_id if no payload saved.
-        return [
+        # Future-based (tool approval) requests with full payload
+        result = [
             {
                 "request_id": rid,
                 **(self._pending_payloads.get(rid) or {}),
             }
             for rid in self._pending
         ]
+        # Signal-based (human input) requests — only request_id and run_id known
+        for rid, run_id in self._signal_requests.items():
+            if not any(r.get("request_id") == rid for r in result):
+                result.append({"request_id": rid, "run_id": run_id})
+        return result
 
     # -- Disconnect / cancellation -----------------------------------------------
 
     def cancel_all_pending(self, reason: str = "session_disconnected") -> int:
-        """Resolve all pending HITL futures immediately with a disconnect signal.
+        """Resolve all pending Future-based HITL requests with a disconnect signal.
 
-        Called when the client browser disconnects so the blocked agent can
-        resume (and likely abort), rather than waiting for the full timeout.
-
-        Args:
-            reason: Short machine-readable reason string stored under the
-                    ``"reason"`` key in the resolved dict.  Defaults to
-                    ``"session_disconnected"``.
+        Called when the client browser disconnects so blocked approval requests
+        can resume.  Signal-based human-input requests are NOT cancelled here —
+        they are killed when ``runtime.cancel(run_id)`` is called, which
+        cancels the suspended asyncio Task.
 
         Returns:
             Number of futures that were resolved.
@@ -200,6 +216,26 @@ class WebHITLBridge:
             )
         return resolved
 
+    async def cancel_signal_requests(self, reason: str = "new_message") -> None:
+        """Signal all pending signal-based HITL requests as cancelled.
+
+        Called before starting a new run for the same thread so the old
+        suspended run gets a clean ``{action: "cancelled"}`` result and can
+        finish, preserving valid tool_use / tool_result pairing in history.
+        """
+        for request_id, run_id in list(self._signal_requests.items()):
+            if self._signal_bus is not None:
+                await self._signal_bus.signal(
+                    run_id,
+                    f"hitl:{request_id}",
+                    {"action": "cancelled", "reason": reason},
+                )
+                logger.info(
+                    "Bridge: cancelled signal HITL %s (run=%s, reason=%s)",
+                    request_id, run_id, reason,
+                )
+        self._signal_requests.clear()
+
     # -- Outgoing queue (agent → SSE → frontend) ----------------------------
 
     async def get_event(self) -> Any:
@@ -216,11 +252,29 @@ class WebHITLBridge:
 
     # -- Incoming resolution (frontend → POST → agent) ----------------------
 
-    def resolve(self, request_id: str, data: Dict[str, Any]) -> bool:
+    async def resolve(self, request_id: str, data: Dict[str, Any]) -> bool:
         """Resolve a pending HITL request with the user's response.
+
+        For signal-based human-input requests (``_signal_requests``), fires
+        ``SignalBus.signal()`` to resume the suspended run.
+        For Future-based tool-approval requests (``_pending``), completes the Future.
 
         Returns True if the request was found and resolved, False otherwise.
         """
+        # Signal-based human input path
+        if request_id in self._signal_requests:
+            run_id = self._signal_requests.pop(request_id)
+            self._pending_payloads.pop(request_id, None)
+            if self._signal_bus is None:
+                logger.warning(
+                    "Bridge: signal HITL %s has no signal_bus — cannot resolve", request_id
+                )
+                return False
+            await self._signal_bus.signal(run_id, f"hitl:{request_id}", data)
+            logger.info("Resolved signal HITL %s (run=%s)", request_id, run_id)
+            return True
+
+        # Future-based tool-approval path
         future = self._pending.pop(request_id, None)
         self._pending_payloads.pop(request_id, None)
         if future is None:
@@ -425,10 +479,19 @@ class BridgeRegistry:
 
     Resolution uses UUID uniqueness to scan bridges without a secondary
     request_id → thread_id index (UUIDs are collision-free in practice).
+
+    Pass ``signal_bus`` (from ``runtime.signal_bus``) to enable signal-based
+    human-input HITL.  Without it only the Future-based tool-approval path
+    is available.
     """
 
-    def __init__(self, response_timeout: float = 300.0) -> None:
+    def __init__(
+        self,
+        response_timeout: float = 300.0,
+        signal_bus: Optional["SignalBus"] = None,
+    ) -> None:
         self._timeout = response_timeout
+        self._signal_bus = signal_bus
         self._bridges: Dict[str, "WebHITLBridge"] = {}
         self._lock = asyncio.Lock()
 
@@ -436,7 +499,9 @@ class BridgeRegistry:
         """Return the live bridge for *thread_id*, creating one if needed."""
         async with self._lock:
             if thread_id not in self._bridges:
-                self._bridges[thread_id] = WebHITLBridge(self._timeout)
+                self._bridges[thread_id] = WebHITLBridge(
+                    self._timeout, signal_bus=self._signal_bus
+                )
                 logger.debug("BridgeRegistry: created bridge for thread %s", thread_id)
             return self._bridges[thread_id]
 
@@ -474,15 +539,15 @@ class BridgeRegistry:
             )
             return True
 
-    def resolve(self, request_id: str, data: Dict[str, Any]) -> bool:
+    async def resolve(self, request_id: str, data: Dict[str, Any]) -> bool:
         """Find the bridge that owns *request_id* and resolve it.
 
         Scans all active bridges.  Because request IDs are UUIDs, collisions
         are statistically impossible across bridges.
         """
         for bridge in list(self._bridges.values()):
-            if request_id in bridge._pending:
-                return bridge.resolve(request_id, data)
+            if request_id in bridge._pending or request_id in bridge._signal_requests:
+                return await bridge.resolve(request_id, data)
         logger.warning("BridgeRegistry: no pending request for id=%s", request_id)
         return False
 

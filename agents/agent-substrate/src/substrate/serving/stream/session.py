@@ -28,6 +28,7 @@ from substrate.serving.monolith.sse.bridge import (
 )
 from substrate.serving.protocol import (
     HelloEvent,
+    InputRequestedEvent,
     RunCancelledEvent,
     RunCompletedEvent,
     RunFailedEvent,
@@ -148,6 +149,10 @@ class AgentStreamSession:
                 wire = wire_from_log(kind, entry.payload or {})
                 if wire is None:
                     continue
+                # When a signal-based HITL card arrives, register the mapping
+                # so BridgeRegistry.resolve() knows which run to signal back.
+                if isinstance(wire, InputRequestedEvent) and wire.run_id and run_id:
+                    self._bridge.register_signal_request(wire.request_id, wire.run_id)
                 await self._queue.put(wire)
                 if self._persister:
                     if isinstance(wire, ToolResultEvent):

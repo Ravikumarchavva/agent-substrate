@@ -276,17 +276,25 @@ class ToolInvoker:
                 run_id=run_id,
             )
 
-        # 7. Execute with per-call timeout
-        try:
-            exec_result = await asyncio.wait_for(
-                tool.execute(ctx=ctx, **args),  # type: ignore[union-attr]
-                timeout=policy.call_timeout_s,
-            )
-        except TimeoutError:
-            return InvocationResult(
-                status="error",
-                text=f"Tool '{tool_name}' timed out after {policy.call_timeout_s}s.",
-            )
+        # 7. Execute with per-call timeout.
+        # Tools that suspend the run for human input (e.g. ask_human) declare
+        # ``suspends = True`` and are exempt: a human may take minutes to answer,
+        # and the timeout would cancel the coroutine parked in sleep_until_signal,
+        # dropping the eventual answer. Their wait is governed elsewhere (the
+        # handler/bridge, or run cancellation on a new message / disconnect).
+        if getattr(tool, "suspends", False):
+            exec_result = await tool.execute(ctx=ctx, **args)  # type: ignore[union-attr]
+        else:
+            try:
+                exec_result = await asyncio.wait_for(
+                    tool.execute(ctx=ctx, **args),  # type: ignore[union-attr]
+                    timeout=policy.call_timeout_s,
+                )
+            except TimeoutError:
+                return InvocationResult(
+                    status="error",
+                    text=f"Tool '{tool_name}' timed out after {policy.call_timeout_s}s.",
+                )
 
         # 8. Emit progress: TOOL_RESULT
         if progress_sink is not None:

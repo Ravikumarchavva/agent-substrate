@@ -179,6 +179,7 @@ class InputRequestedEvent(BaseModel):
     context: str = ""
     options: list[dict[str, Any]] = Field(default_factory=list)
     allow_freeform: bool = True
+    run_id: str = ""
 
 
 # ---------------------------------------------------------------------------

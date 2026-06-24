@@ -26,7 +26,12 @@ import uuid
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.context import (
+    ContextConfig,
+    InMemoryHistoryProvider,
+    SlidingWindowCompaction,
+    CompactionPipeline,
+)
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
 from substrate.agents.runtime import Runtime
@@ -83,15 +88,19 @@ class StubLLMClient:
         self._agent_calls[name] = call + 1
 
         last_user = next(
-            (m.content[-1].text for m in reversed(messages) if m.role == "user"  # type: ignore[union-attr]
-             and m.content and hasattr(m.content[-1], "text")),
+            (
+                m.content[-1].text
+                for m in reversed(messages)
+                if m.role == "user"  # type: ignore[union-attr]
+                and m.content
+                and hasattr(m.content[-1], "text")
+            ),
             "unknown task",
         )
 
         # tools are schema dicts: {"name": ..., "description": ..., "parameters": ...}
         tool_names = {
-            (t["name"] if isinstance(t, dict) else t.name)
-            for t in (tools or [])
+            (t["name"] if isinstance(t, dict) else t.name) for t in (tools or [])
         }
         dispatch_names = tool_names
         has_researcher = any("researcher" in n for n in dispatch_names)
@@ -100,11 +109,16 @@ class StubLLMClient:
         # Orchestrator: first call delegates to researcher, second to writer, third synthesises
         if has_researcher or has_writer:
             if call == 0 and has_researcher:
-                return [ToolUseBlock(
-                    call_id=uuid.uuid4().hex[:8],
-                    tool_name=next(n for n in dispatch_names if "researcher" in n),
-                    arguments={"input": last_user, "reason": "Need factual research first"},
-                )]
+                return [
+                    ToolUseBlock(
+                        call_id=uuid.uuid4().hex[:8],
+                        tool_name=next(n for n in dispatch_names if "researcher" in n),
+                        arguments={
+                            "input": last_user,
+                            "reason": "Need factual research first",
+                        },
+                    )
+                ]
             if call == 1 and has_writer:
                 last_tool_result = next(
                     (
@@ -116,17 +130,30 @@ class StubLLMClient:
                     ),
                     last_user,
                 )
-                return [ToolUseBlock(
-                    call_id=uuid.uuid4().hex[:8],
-                    tool_name=next(n for n in dispatch_names if "writer" in n),
-                    arguments={"input": f"Write a summary of: {last_tool_result[:200]}", "reason": "Format research for the user"},
-                )]
+                return [
+                    ToolUseBlock(
+                        call_id=uuid.uuid4().hex[:8],
+                        tool_name=next(n for n in dispatch_names if "writer" in n),
+                        arguments={
+                            "input": f"Write a summary of: {last_tool_result[:200]}",
+                            "reason": "Format research for the user",
+                        },
+                    )
+                ]
             # Final synthesis
-            return [TextBlock(text=f"[Orchestrator] Task complete. Both specialists have responded to: '{last_user[:80]}'")]
+            return [
+                TextBlock(
+                    text=f"[Orchestrator] Task complete. Both specialists have responded to: '{last_user[:80]}'"
+                )
+            ]
 
         # Specialist agents
         if name == "researcher":
-            return [TextBlock(text=f"[Researcher] Found relevant information about: {last_user[:120]}. Key facts: Python was created by Guido van Rossum, released in 1991, widely used in AI/ML, data science, and web development.")]
+            return [
+                TextBlock(
+                    text=f"[Researcher] Found relevant information about: {last_user[:120]}. Key facts: Python was created by Guido van Rossum, released in 1991, widely used in AI/ML, data science, and web development."
+                )
+            ]
         if name == "writer":
             return [TextBlock(text=f"[Writer] Summary: {last_user[:120]}")]
         return [TextBlock(text=f"[{name}] Processed: {last_user[:80]}")]
@@ -137,8 +164,10 @@ class StubLLMClient:
         **kwargs: object,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
         content = await self.generate(messages, **kwargs)  # type: ignore[arg-type]
+
         async def _gen() -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
             yield CompletionEvent(content=content)
+
         return _gen()
 
     async def count_tokens(self, messages: list[ChatMessage]) -> int:
@@ -191,9 +220,21 @@ def build_agents(runtime: Runtime, model: object) -> OrchestratorAgent:
         "router",
         model=model,  # type: ignore[arg-type]
         sub_agents=[
-            SubAgentConfig(researcher, description="Searches the web and returns factual information.", priority=Priority.HIGH),
-            SubAgentConfig(writer, description="Formats and writes clear, concise summaries.", priority=Priority.NORMAL),
-            SubAgentConfig(calculator, description="Performs precise numerical calculations.", priority=Priority.NORMAL),
+            SubAgentConfig(
+                researcher,
+                description="Searches the web and returns factual information.",
+                priority=Priority.HIGH,
+            ),
+            SubAgentConfig(
+                writer,
+                description="Formats and writes clear, concise summaries.",
+                priority=Priority.NORMAL,
+            ),
+            SubAgentConfig(
+                calculator,
+                description="Performs precise numerical calculations.",
+                priority=Priority.NORMAL,
+            ),
         ],
         max_iterations=10,
     )
@@ -245,17 +286,21 @@ async def run_demo(
             break
 
     # Extract output and tool calls from history
-    history = await orchestrator.history.get_messages(orchestrator.id, session_id=session_id)
+    history = await orchestrator.history.get_messages(
+        orchestrator.id, session_id=session_id
+    )
     output = ""
     tool_calls = []
 
     for m in history:
         if m.role == Role.ASSISTANT:
             # Check for text output
-            text_blocks = [b.text for b in m.content if isinstance(b, TextBlock) and b.text]
+            text_blocks = [
+                b.text for b in m.content if isinstance(b, TextBlock) and b.text
+            ]
             if text_blocks:
                 output = "\n".join(text_blocks)
-            
+
             # Check for tool calls
             for block in m.content:
                 if isinstance(block, ToolUseBlock):
@@ -269,8 +314,9 @@ async def run_demo(
                                     result_text = getattr(res_block, "output", "")
                                     is_error = getattr(res_block, "is_error", False)
                                     break
-                    
+
                     from substrate.agents.middleware._contracts import ToolCallRecord
+
                     tool_calls.append(
                         ToolCallRecord(
                             name=block.tool_name,
@@ -293,15 +339,19 @@ async def run_demo(
     print(f"\nStatus: {result.status}")
     for tc in result.tool_calls:
         arrow = "✖" if tc.is_error else "✔"
-        print(f"  {arrow} {tc.name}({tc.arguments.get('input', tc.arguments.get('text', ''))})")
+        print(
+            f"  {arrow} {tc.name}({tc.arguments.get('input', tc.arguments.get('text', ''))})"
+        )
     return result
 
 
 async def main() -> None:
     import os
+
     # Use real LLM if key is present; otherwise fall back to the stub
     if settings.OPENAI_API_KEY:
         from substrate.integrations.llm.openai.openai_client import OpenAIClient
+
         model: object = OpenAIClient(
             model=settings.CHAT_MODEL.split("/")[-1],
             api_key=settings.OPENAI_API_KEY,
@@ -309,7 +359,9 @@ async def main() -> None:
         print("Using OpenAI LLM")
     else:
         model = StubLLMClient()
-        print("No OPENAI_API_KEY found — running with StubLLMClient (scripted responses)")
+        print(
+            "No OPENAI_API_KEY found — running with StubLLMClient (scripted responses)"
+        )
 
     async with Runtime() as rt:
         orchestrator = build_agents(rt, model)

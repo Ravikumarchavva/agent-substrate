@@ -23,7 +23,10 @@ from substrate.kernel.agent_catalog._catalog import AgentCatalog
 from substrate.agents.core import ReActAgent
 from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.agents.tools.builtin_tools import CalculatorTool, GetCurrentTimeTool
-from substrate.capabilities.tools.human_input.tool import AskHumanTool, HumanInputResponse
+from substrate.capabilities.tools.human_input.tool import (
+    AskHumanTool,
+    HumanInputResponse,
+)
 
 
 async def main():

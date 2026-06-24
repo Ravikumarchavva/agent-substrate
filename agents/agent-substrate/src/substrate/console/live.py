@@ -11,8 +11,9 @@ A sequential (no-``Live``) path handles notebooks / non-TTY / wide-character tex
 
 from __future__ import annotations
 
+import asyncio
 import time
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Optional
 
 from rich.console import Console as RichConsole, Group, RenderableType
 from rich.live import Live
@@ -27,6 +28,7 @@ from substrate.kernel.messaging.stream import (
     TextDelta,
 )
 
+from .hitl import ConsoleHumanHandler, _HITLRequest, render_hitl_panel
 from .status import StatusLine
 from .stream_adapter import _RunFailed
 from .subagents import SubagentTracker
@@ -64,11 +66,15 @@ class LiveTurn:
         name: str,
         theme: ConsoleTheme,
         status: StatusLine,
+        hitl_handler: ConsoleHumanHandler | None = None,
+        signal_bus: Optional[Any] = None,
     ) -> None:
         self.console = console
         self.name = name
         self.theme = theme
         self.status = status
+        self._hitl_handler = hitl_handler
+        self._signal_bus = signal_bus
 
         # Ephemeral state held in the live region until committed.
         self._section: str | None = None  # "reasoning" | "text" | None
@@ -78,6 +84,9 @@ class LiveTurn:
         self._subagents = SubagentTracker()
         self._final = ""
         self.failed = False
+        # Set by _handle_hitl when the user types free text instead of picking.
+        # interactive() checks this and re-submits as a new turn.
+        self.pending_followup: str | None = None
 
         self._live: Live | None = None
         self._sequential = not console.is_terminal
@@ -88,10 +97,74 @@ class LiveTurn:
         """Drive the turn to completion; returns the final assistant message."""
         try:
             async for ev in events:
-                self._handle(ev)
+                if isinstance(ev, _HITLRequest):
+                    await self._handle_hitl(ev)
+                else:
+                    self._handle(ev)
         finally:
             self._finalize()
         return self._final or self._assistant
+
+    async def _handle_hitl(self, ev: _HITLRequest) -> None:
+        """Pause rendering, show the option card, collect input, resume.
+
+        Input rules at the ``→`` prompt:
+          - digit in option range  → answered with selected option
+          - N+1 (freeform slot)    → prompts for text → answered with freeform
+          - s / empty              → skipped (agent uses best judgement)
+          - any other text         → cancelled; text stashed in pending_followup
+                                     for interactive() to re-submit as new turn
+        """
+        self._stop_live()
+        self.console.print(render_hitl_panel(ev, self.theme))
+
+        n_opts = len(ev.options)
+        loop = asyncio.get_running_loop()
+
+        signal_payload: dict[str, Any] | None = None
+        while signal_payload is None:
+            raw: str = await loop.run_in_executor(
+                None, lambda: input("\n  → ").strip()
+            )
+            lower = raw.lower()
+
+            if lower in ("s", "skip", ""):
+                signal_payload = {"action": "skipped"}
+                self.console.print("  [dim]Skipped[/dim]\n")
+
+            elif raw.isdigit():
+                n = int(raw)
+                if 1 <= n <= n_opts:
+                    opt = ev.options[n - 1]
+                    signal_payload = {
+                        "action": "answered",
+                        "selected_key": opt.key,
+                        "selected_label": opt.label,
+                    }
+                    self.console.print(f"  [dim]Selected: {opt.label}[/dim]\n")
+                elif ev.allow_freeform and n == n_opts + 1:
+                    text: str = await loop.run_in_executor(
+                        None, lambda: input("  Your answer: ").strip()
+                    )
+                    if text:
+                        signal_payload = {
+                            "action": "answered",
+                            "freeform_text": text,
+                        }
+                        self.console.print(f"  [dim]Input: {text}[/dim]\n")
+
+            else:
+                # Free text that isn't a numbered choice: cancel the pending
+                # HITL call and stash the text so interactive() can resubmit.
+                signal_payload = {"action": "cancelled"}
+                self.pending_followup = raw
+                self.console.print("  [dim]Cancelled — will resubmit your message[/dim]\n")
+
+        # Fire the signal to resume the suspended run.
+        if self._signal_bus is not None and ev.run_id:
+            await self._signal_bus.signal(
+                ev.run_id, f"hitl:{ev.request_id}", signal_payload
+            )
 
     # ── event handling ────────────────────────────────────────────────────
     def _handle(self, ev: Any) -> None:

@@ -320,6 +320,9 @@ def _serialize_attached_file(meta: Any) -> dict[str, Any]:
 async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
     """Assemble per-request agent dependencies with an isolated HITL bridge."""
     bridge = await ctx.bridge_registry.acquire(str(thread_id))
+    # Cancel any signal-based HITL from a prior run on this thread so the old
+    # suspended run can finish cleanly (tool_use → tool_result stays balanced).
+    await bridge.cancel_signal_requests("new_message")
     tools = build_chat_tools(ctx.tools, bridge)
     return {
         "model_client": ctx.model_client,

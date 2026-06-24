@@ -20,7 +20,12 @@ import uuid
 
 from substrate.capabilities.tools.human_input import AskHumanTool, HumanInputResponse
 from substrate.agents import ReActAgent, Runtime
-from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.context import (
+    ContextConfig,
+    InMemoryHistoryProvider,
+    SlidingWindowCompaction,
+    CompactionPipeline,
+)
 from substrate.capabilities.tools import CalculatorTool
 from substrate.integrations.llm import (
     create_model_client,
@@ -32,11 +37,15 @@ from substrate.kernel.core.identity import AgentId
 from substrate.kernel.messaging.message import Message, ChatPayload
 
 
-async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: str) -> str:
+async def run_agent(
+    rt: Runtime, agent: ReActAgent, text: str, *, session_id: str
+) -> str:
     msg = Message(
         target=agent.id,
         sender=AgentId(type="proxy", key="user"),
-        payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
+        ),
         correlation_id=session_id,
     )
     run_id = await rt.submit(agent.id, msg)
@@ -46,7 +55,9 @@ async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: st
     history = await agent.history.get_messages(agent.id, session_id=session_id)
     for m in reversed(history):
         if m.role == Role.ASSISTANT:
-            return " ".join(b.text for b in m.content if isinstance(b, TextBlock) and b.text)
+            return " ".join(
+                b.text for b in m.content if isinstance(b, TextBlock) and b.text
+            )
     return ""
 
 
@@ -81,7 +92,10 @@ async def main() -> None:
         "hitl-assistant",
         model=model,
         tools=[ask_tool, CalculatorTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
+        context=ContextConfig(
+            InMemoryHistoryProvider(),
+            pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
+        ),
         system_instructions=(
             "You are a helpful event-planning assistant. Whenever you need the "
             "user's preference or confirmation — such as cuisine, dietary "
@@ -97,7 +111,12 @@ async def main() -> None:
     print("=== Team Dinner Planner (answer the prompts below) ===\n")
     async with Runtime() as rt:
         await rt.register(agent)
-        output = await run_agent(rt, agent, "Help me plan a team dinner for 8 people this Friday.", session_id=session_id)
+        output = await run_agent(
+            rt,
+            agent,
+            "Help me plan a team dinner for 8 people this Friday.",
+            session_id=session_id,
+        )
         print("\n=== Final Plan ===")
         print(output)
 

@@ -32,7 +32,12 @@ settings = SubstrateConfig()
 
 import asyncio
 
-from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.context import (
+    ContextConfig,
+    InMemoryHistoryProvider,
+    SlidingWindowCompaction,
+    CompactionPipeline,
+)
 from substrate.agents.core.react import ReActAgent
 from substrate.agents.core.orchestrator import OrchestratorAgent, SubAgentConfig
 from substrate.agents.runtime import Runtime
@@ -110,9 +115,21 @@ def build_team(runtime: Runtime) -> OrchestratorAgent:
         "coordinator",
         model=model,
         sub_agents=[
-            SubAgentConfig(researcher, description="Searches the web for current facts and news.", priority=Priority.HIGH),
-            SubAgentConfig(calculator, description="Performs precise numerical calculations.", priority=Priority.NORMAL),
-            SubAgentConfig(clock, description="Reports the current date and time.", priority=Priority.NORMAL),
+            SubAgentConfig(
+                researcher,
+                description="Searches the web for current facts and news.",
+                priority=Priority.HIGH,
+            ),
+            SubAgentConfig(
+                calculator,
+                description="Performs precise numerical calculations.",
+                priority=Priority.NORMAL,
+            ),
+            SubAgentConfig(
+                clock,
+                description="Reports the current date and time.",
+                priority=Priority.NORMAL,
+            ),
         ],
         max_iterations=12,
     )
@@ -129,12 +146,7 @@ QUERY = (
 async def main() -> None:
     async with Runtime() as rt:
         orchestrator = build_team(rt)
-        # Register every sub-agent so the runtime can resolve them when the
-        # orchestrator spawns them. Without this, each spawned run finds no
-        # agent in the registry and the orchestrator's ctx.ask() blocks until
-        # its timeout (120s per sub-agent).
-        for sub_cfg in orchestrator._sub_agents:
-            await rt.register(sub_cfg.agent)
+        await rt.register(orchestrator)  # sub-agents are registered automatically
         print(f"\nQuery: {QUERY}\n")
         await Console(orchestrator, runtime=rt).run_stream(QUERY)
 

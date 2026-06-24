@@ -32,7 +32,7 @@ async def respond_to_hitl(
 ):
     """Resolve a pending HITL request (tool approval or human input)."""
     data = resp.model_dump(exclude_none=True)
-    resolved = ctx.bridge_registry.resolve(request_id, data)
+    resolved = await ctx.bridge_registry.resolve(request_id, data)
 
     if not resolved:
         raise HTTPException(

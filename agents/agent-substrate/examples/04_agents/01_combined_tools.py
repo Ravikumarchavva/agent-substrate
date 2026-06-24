@@ -18,7 +18,12 @@ settings = SubstrateConfig()
 import asyncio
 import uuid
 from substrate.agents import ReActAgent, Runtime
-from substrate.agents.context import ContextConfig, InMemoryHistoryProvider, SlidingWindowCompaction, CompactionPipeline
+from substrate.agents.context import (
+    ContextConfig,
+    InMemoryHistoryProvider,
+    SlidingWindowCompaction,
+    CompactionPipeline,
+)
 from substrate.integrations.llm import (
     create_model_client,
     detect_provider,
@@ -31,11 +36,15 @@ from substrate.kernel.messaging.message import Message, ChatPayload
 from substrate.kernel.tools import ToolExecutionResult
 
 
-async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: str) -> str:
+async def run_agent(
+    rt: Runtime, agent: ReActAgent, text: str, *, session_id: str
+) -> str:
     msg = Message(
         target=agent.id,
         sender=AgentId(type="proxy", key="user"),
-        payload=ChatPayload(message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])),
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
+        ),
         correlation_id=session_id,
     )
     run_id = await rt.submit(agent.id, msg)
@@ -45,7 +54,9 @@ async def run_agent(rt: Runtime, agent: ReActAgent, text: str, *, session_id: st
     history = await agent.history.get_messages(agent.id, session_id=session_id)
     for m in reversed(history):
         if m.role == Role.ASSISTANT:
-            return " ".join(b.text for b in m.content if isinstance(b, TextBlock) and b.text)
+            return " ".join(
+                b.text for b in m.content if isinstance(b, TextBlock) and b.text
+            )
     return ""
 
 
@@ -66,7 +77,10 @@ async def main() -> None:
         "DemoBot",
         model=model,
         tools=[CalculatorTool(), CurrentTimeTool()],
-        context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
+        context=ContextConfig(
+            InMemoryHistoryProvider(),
+            pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
+        ),
         max_iterations=5,
     )
 
@@ -76,7 +90,10 @@ async def main() -> None:
         # ---
         # Section 2: Single task that uses both tools in one query
         output = await run_agent(
-            rt, agent, "What is 1337 * 42? Also tell me the current UTC time.", session_id=session_id
+            rt,
+            agent,
+            "What is 1337 * 42? Also tell me the current UTC time.",
+            session_id=session_id,
         )
         print("=== Section 2: Combined tool call ===")
         print(output)
@@ -84,15 +101,21 @@ async def main() -> None:
         # ---
         # Section 3: Multi-turn conversation — memory is preserved across run() calls
         print("\n=== Section 3: Multi-turn (context retained) ===")
-        r1 = await run_agent(rt, agent, "My lucky number is 7. Remember it.", session_id=session_id)
+        r1 = await run_agent(
+            rt, agent, "My lucky number is 7. Remember it.", session_id=session_id
+        )
         print("Turn 1:", r1)
 
-        r2 = await run_agent(rt, agent, "What is my lucky number multiplied by 6?", session_id=session_id)
+        r2 = await run_agent(
+            rt, agent, "What is my lucky number multiplied by 6?", session_id=session_id
+        )
         print("Turn 2:", r2)
 
         # Reset agent history to start a fresh session
         await agent.history.clear_session(agent.id, session_id=session_id)
-        r3 = await run_agent(rt, agent, "What is my lucky number?", session_id=session_id)
+        r3 = await run_agent(
+            rt, agent, "What is my lucky number?", session_id=session_id
+        )
         print("Turn 3 (after clear — should not remember):", r3)
 
         # ---
@@ -103,23 +126,29 @@ async def main() -> None:
             input_schema: dict[str, object] = {
                 "type": "object",
                 "properties": {
-                    "celsius": {"type": "number", "description": "Temperature in Celsius"}
+                    "celsius": {
+                        "type": "number",
+                        "description": "Temperature in Celsius",
+                    }
                 },
-                "required": ["celsius"]
+                "required": ["celsius"],
             }
 
             async def execute(self, *, celsius: float, **kwargs) -> ToolExecutionResult:
                 fahrenheit = celsius * 9 / 5 + 32
                 return ToolExecutionResult(
                     name=self.name,
-                    content=[TextBlock(text=f"{celsius}°C = {fahrenheit}°F")]
+                    content=[TextBlock(text=f"{celsius}°C = {fahrenheit}°F")],
                 )
 
         agent2 = ReActAgent(
             "ConverterBot",
             model=model,
             tools=[CelsiusToFahrenheitTool()],
-            context=ContextConfig(InMemoryHistoryProvider(), pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)])),
+            context=ContextConfig(
+                InMemoryHistoryProvider(),
+                pipeline=CompactionPipeline([SlidingWindowCompaction(max_messages=40)]),
+            ),
             max_iterations=5,
         )
         await rt.register(agent2)

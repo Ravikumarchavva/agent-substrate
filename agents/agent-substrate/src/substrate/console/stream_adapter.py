@@ -26,6 +26,9 @@ from substrate.kernel.messaging.stream import (
     ReasoningDelta,
 )
 
+from substrate.capabilities.tools.human_input import InputOption
+
+from .hitl import _HITLRequest
 from .taskboard import _TaskBoardUpdate
 
 
@@ -115,6 +118,25 @@ async def stream_events(
             )
             yield StreamDone(reason="error")
             return
+
+        elif kind == "input.requested":
+            opts = [
+                InputOption(
+                    key=str(o.get("key", "")),
+                    label=str(o.get("label", "")),
+                    description=str(o.get("description", "")),
+                )
+                for o in p.get("options", [])
+                if isinstance(o, dict)
+            ]
+            yield _HITLRequest(
+                request_id=str(p.get("request_id", "")),
+                question=str(p.get("question", "")),
+                context=str(p.get("context", "")),
+                options=opts,
+                allow_freeform=bool(p.get("allow_freeform", True)),
+                run_id=str(p.get("run_id", "")),
+            )
 
         elif kind == "run.cancelled":
             yield _RunFailed(message="The run was cancelled.", status="cancelled")

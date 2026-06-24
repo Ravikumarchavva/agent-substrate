@@ -24,6 +24,7 @@ Usage (stream watcher — wrap any async iterator)::
 from __future__ import annotations
 
 from .app import Console
+from .hitl import ConsoleHumanHandler
 from .theme import ConsoleTheme, DEFAULT_THEME
 
-__all__ = ["Console", "ConsoleTheme", "DEFAULT_THEME"]
+__all__ = ["Console", "ConsoleHumanHandler", "ConsoleTheme", "DEFAULT_THEME"]

@@ -22,7 +22,7 @@ _ADAPTER: TypeAdapter[WireEvent] = TypeAdapter(WireEvent)
 
 # Log kinds that map 1:1 to a streaming wire event.
 STREAMING_KINDS = frozenset(
-    {"text.delta", "reasoning.delta", "tool.call", "tool.result"}
+    {"text.delta", "reasoning.delta", "tool.call", "tool.result", "input.requested"}
 )
 
 

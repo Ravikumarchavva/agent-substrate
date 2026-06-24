@@ -28,7 +28,10 @@ needs to know which backend is active.
 from __future__ import annotations
 
 import uuid
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from substrate.agents.core.orchestrator import SubAgentConfig
 
 from substrate.kernel.core.identity import AgentId
 from substrate.kernel.messaging.message import Message
@@ -127,8 +130,18 @@ class Runtime:
     # ------------------------------------------------------------------
 
     async def register(self, agent: Agent) -> None:
-        """Register an agent so the runtime can dispatch runs to it."""
+        """Register an agent so the runtime can dispatch runs to it.
+
+        If ``agent`` is an OrchestratorAgent whose ``_sub_agents`` list is
+        populated, every sub-agent is also registered automatically.  This
+        prevents the Worker from silently holding the lease (for up to its
+        timeout) when the orchestrator spawns a child that isn't in the
+        registry.
+        """
         self._registry[agent.id] = agent
+        sub_agents: list[SubAgentConfig] = getattr(agent, "_sub_agents", [])
+        for cfg in sub_agents:
+            self._registry[cfg.agent.id] = cfg.agent
 
     async def submit(
         self,

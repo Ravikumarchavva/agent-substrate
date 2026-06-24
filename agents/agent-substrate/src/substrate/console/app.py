@@ -23,6 +23,7 @@ from substrate.kernel.messaging.stream import (
 from substrate.logger import setup_logging
 
 from .commands import SlashCommands
+from .hitl import ConsoleHumanHandler
 from .input import PromptSession
 from .live import _FAIL_TITLES, LiveTurn
 from .status import StatusLine, model_name
@@ -61,15 +62,18 @@ class Console:
         output: Optional[RichConsole] = None,
         skill_manager: Optional["SkillManager"] = None,
         theme: ConsoleTheme = DEFAULT_THEME,
+        hitl_handler: Optional[ConsoleHumanHandler] = None,
     ) -> None:
         self.agent = agent
         self.theme = theme
         self._runtime = runtime
         self.console = output or RichConsole(theme=theme.rich_theme(), highlight=False)
         self._skill_manager = skill_manager
+        self._hitl_handler = hitl_handler
         self._correlation_id = uuid.uuid4().hex
         self._session_skills_used: set[str] = set()
         self._commands = SlashCommands()
+        self._pending_followup: Optional[str] = None
 
         setup_logging(mode="pretty", level=logging.WARNING)
 
@@ -125,8 +129,16 @@ class Console:
         if _echo:
             self.console.print(f"\n{user_markup(task, self.theme)}")
         status = StatusLine(model=model_name(self.agent))
-        turn = LiveTurn(self.console, name=self.name, theme=self.theme, status=status)
+        turn = LiveTurn(
+            self.console,
+            name=self.name,
+            theme=self.theme,
+            status=status,
+            hitl_handler=self._hitl_handler,
+            signal_bus=self._runtime.signal_bus if self._hitl_handler else None,
+        )
         final = await turn.consume(self._events(task))
+        self._pending_followup = turn.pending_followup
         self.console.print(status.render(self.theme, done=True, failed=turn.failed))
         return final
 
@@ -194,6 +206,15 @@ class Console:
             except Exception as exc:
                 self.console.print(f"[error]Error: {exc}[/error]")
             self._report_new_skills(before)
+
+            # Cancel-and-resubmit: if the user typed free text during a HITL
+            # card, the run was cancelled cleanly and the text is queued here
+            # for immediate resubmission as the next turn.
+            if self._pending_followup:
+                stripped = self._pending_followup
+                self._pending_followup = None
+                self.console.print(f"\n{user_markup(stripped, self.theme)}")
+                continue
 
     # ── greeting + skill tracking ─────────────────────────────────────────
     def _greeting(self, greeting: Optional[str]):

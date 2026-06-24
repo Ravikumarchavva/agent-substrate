@@ -48,8 +48,11 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from substrate.agents.runtime.context import RunContext
 
 from pydantic import BaseModel, Field
 
@@ -312,6 +315,11 @@ class AskHumanTool:
 
     risk: str = "safe"  # ask_human IS the human — never needs separate approval
 
+    # The tool suspends the run waiting on a human; it must NOT be subject to the
+    # ToolInvoker's per-call timeout (a human may take minutes to answer). The
+    # human-wait timeout, if any, is the handler's / bridge's concern.
+    suspends: bool = True
+
     description: str = (
         "Ask the user a question when you need their input, preference, "
         "or confirmation. Present 2-3 clear options plus an open-ended "
@@ -362,6 +370,7 @@ class AskHumanTool:
     async def execute(  # type: ignore[override]
         self,
         *,
+        ctx: RunContext | None = None,
         question: str,
         context: str,
         option_1: str,
@@ -424,6 +433,53 @@ class AskHumanTool:
 
         logger.info(f"Human input requested: {question} ({len(options)} options)")
 
+        # ── Signal-based (dead suspend) path ──────────────────────────────────
+        # When the handler opts in to signal mode, we log `input.requested` and
+        # suspend via SignalBus.  Zero compute is consumed while the human
+        # decides.  The signal payload carries the user's action and is mapped
+        # to a ToolExecutionResult by _shape_result().
+        if ctx is not None and getattr(self.handler, "suspends_via_signal", False):
+            log_payload = {
+                "request_id": request.request_id,
+                "question": request.question,
+                "context": request.context,
+                "options": [
+                    {"key": o.key, "label": o.label, "description": o.description}
+                    for o in options
+                ],
+                "allow_freeform": request.allow_freeform,
+                "run_id": ctx.run_id,
+            }
+            try:
+                await ctx._log("input.requested", log_payload)
+            except Exception:
+                pass
+            signal_payload = await ctx.sleep_until_signal(f"hitl:{request.request_id}")
+            self._request_count += 1
+            return self._shape_result(request, signal_payload)
+
+        # ── Event-log path (non-signal handlers that opt in to log emission) ──
+        # Emit `input.requested` so the console stream_adapter can render the
+        # picker card while handler.request_input() blocks in the executor.
+        if ctx is not None and getattr(self.handler, "supports_event_log", False):
+            try:
+                await ctx._log(
+                    "input.requested",
+                    {
+                        "request_id": request.request_id,
+                        "question": request.question,
+                        "context": request.context,
+                        "options": [
+                            {"key": o.key, "label": o.label, "description": o.description}
+                            for o in options
+                        ],
+                        "allow_freeform": request.allow_freeform,
+                        "run_id": ctx.run_id,
+                    },
+                )
+            except Exception:
+                pass  # never let logging break the tool
+
         # Guard: handler must be wired (placeholder instances have handler=None)
         if self.handler is None:
             logger.error(
@@ -442,7 +498,7 @@ class AskHumanTool:
                 is_error=True,
             )
 
-        # Collect response
+        # Collect response (blocking — runs in executor for CLI, Future for web)
         try:
             response = await self.handler.request_input(request)
         except Exception as e:
@@ -503,6 +559,106 @@ class AskHumanTool:
 
         return ToolExecutionResult(
             content=[TextBlock(text=json.dumps(result_data))],
+            is_error=False,
+        )
+
+    def _shape_result(
+        self, request: HumanInputRequest, payload: dict
+    ) -> ToolExecutionResult:
+        """Map a signal payload ``{action, ...}`` to a ToolExecutionResult.
+
+        Every path returns a valid result so no ``tool_use`` is ever left
+        without a ``tool_result`` in the message history.
+        """
+        action = payload.get("action", "answered")
+
+        if action == "skipped":
+            self._history.append(
+                {
+                    "request_id": request.request_id,
+                    "question": request.question,
+                    "options": [o.label for o in request.options],
+                    "answer": "(skipped)",
+                    "is_freeform": False,
+                    "timed_out": True,
+                }
+            )
+            return ToolExecutionResult(
+                content=[
+                    TextBlock(
+                        text=json.dumps(
+                            {
+                                "status": "timed_out",
+                                "message": (
+                                    "User did not respond in time. "
+                                    "Proceed with your best judgement."
+                                ),
+                            }
+                        )
+                    )
+                ],
+                is_error=False,
+            )
+
+        if action == "cancelled":
+            self._history.append(
+                {
+                    "request_id": request.request_id,
+                    "question": request.question,
+                    "options": [o.label for o in request.options],
+                    "answer": "(cancelled)",
+                    "is_freeform": False,
+                    "timed_out": False,
+                }
+            )
+            return ToolExecutionResult(
+                content=[
+                    TextBlock(
+                        text=json.dumps(
+                            {
+                                "status": "cancelled",
+                                "message": "User moved on without answering.",
+                            }
+                        )
+                    )
+                ],
+                is_error=False,
+            )
+
+        # action == "answered"
+        freeform = payload.get("freeform_text")
+        selected_key = payload.get("selected_key")
+        selected_label = payload.get("selected_label", "")
+        if not selected_label and selected_key:
+            opt = next((o for o in request.options if o.key == selected_key), None)
+            if opt:
+                selected_label = opt.label
+        user_choice = freeform if freeform else selected_label
+        is_freeform = bool(freeform)
+
+        self._history.append(
+            {
+                "request_id": request.request_id,
+                "question": request.question,
+                "options": [o.label for o in request.options],
+                "answer": user_choice,
+                "is_freeform": is_freeform,
+                "timed_out": False,
+            }
+        )
+        return ToolExecutionResult(
+            content=[
+                TextBlock(
+                    text=json.dumps(
+                        {
+                            "status": "answered",
+                            "user_choice": user_choice,
+                            "was_freeform": is_freeform,
+                            "selected_option": selected_label if not is_freeform else None,
+                        }
+                    )
+                )
+            ],
             is_error=False,
         )
 

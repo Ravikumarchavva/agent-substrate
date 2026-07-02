@@ -109,6 +109,7 @@ class Scheduler(Protocol):
         tenant: str,
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,
+        deadline: datetime | None = None,
     ) -> None:
         """Add ``run_id`` to the work-queue (or coalesce into existing entry).
 
@@ -116,6 +117,12 @@ class Scheduler(Protocol):
         ``tenant`` is used for per-tenant fairness and quota enforcement.
         ``wake`` is the trigger that caused this enqueue (informational for
         the worker when it drains the wakeup reason).
+        ``deadline`` (``datetime | None``) is an optional hard wall-clock
+        cutoff for this run — a coarser circuit breaker than any single
+        ``ctx.ask``/``ctx.join`` timeout, enforced durably by the Scheduler
+        itself (see ``PostgresScheduler.lease``/``heartbeat``) so a run stuck
+        pending or suspended past its deadline terminates even with no
+        parent waiting on it.
         """
         ...
 
@@ -134,12 +141,19 @@ class Scheduler(Protocol):
         """
         ...
 
-    async def heartbeat(self, lease: Lease) -> None:
+    async def heartbeat(self, lease: Lease) -> bool:
         """Renew the expiry on ``lease`` to prove the worker is still alive.
 
         Workers must call this at least once per (``expires_at`` − now) / 2
         interval.  A missing heartbeat causes the Scheduler to reclaim the
         lease and re-enqueue the run.
+
+        Returns ``True`` if a durable cancel (``Supervisor.cancel``) or a
+        deadline has been observed for this run since the last heartbeat.
+        The Worker cancels the run's local ``CancellationToken`` in
+        response, which ``ctx.check()`` picks up cooperatively — this is
+        how a cancel issued by a *different* worker process reaches a
+        run's live Task, since only the leasing worker holds that Task.
         """
         ...
 

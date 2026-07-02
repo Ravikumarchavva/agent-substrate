@@ -7,6 +7,7 @@ from substrate.serving.monolith.services.thread_service import (  # noqa: F401
     create_step,
     create_thread,
     delete_thread,
+    get_owned_thread,
     get_step,
     get_steps,
     get_thread,

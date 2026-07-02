@@ -53,7 +53,11 @@ CREATE TABLE IF NOT EXISTS ravi_run_queue (
     retry_count  INTEGER     NOT NULL DEFAULT 0,
     wakeup       JSONB,
     retry_policy JSONB,
-    enqueued_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    enqueued_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    wake_signals TEXT[],
+    wake_at      TIMESTAMPTZ,
+    cancel_requested BOOLEAN NOT NULL DEFAULT false,
+    deadline     TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS ravi_run_queue_pending_idx
     ON ravi_run_queue (priority, enqueued_at)
@@ -67,6 +71,34 @@ CREATE TABLE IF NOT EXISTS ravi_agent_runs (
 CREATE INDEX IF NOT EXISTS ravi_agent_runs_agent_idx
     ON ravi_agent_runs (agent_id);
 """
+
+# Columns added after the original table shape shipped — additive migration
+# for pre-existing deployments; CREATE TABLE above already includes them for
+# fresh ones. Must run BEFORE any index referencing these columns: on a
+# pre-existing table, "CREATE TABLE IF NOT EXISTS" in _CREATE_TABLES is a
+# no-op and never adds them, so an index created in that same statement
+# would reference a column that doesn't exist yet.
+_MIGRATE_COLUMNS: list[tuple[str, str]] = [
+    ("wake_signals", "TEXT[]"),
+    ("wake_at", "TIMESTAMPTZ"),
+    ("cancel_requested", "BOOLEAN NOT NULL DEFAULT false"),
+    ("deadline", "TIMESTAMPTZ"),
+    # Set once, when a run first reaches a terminal status — the retention
+    # sweep's cutoff (see infrastructure/runtime/retention.py). NULL for any
+    # non-terminal run.
+    ("terminated_at", "TIMESTAMPTZ"),
+]
+
+_CREATE_INDEXES_POST_MIGRATION = """
+CREATE INDEX IF NOT EXISTS ravi_run_queue_wake_at_idx
+    ON ravi_run_queue (wake_at)
+    WHERE status = 'suspended';
+CREATE INDEX IF NOT EXISTS ravi_run_queue_terminated_at_idx
+    ON ravi_run_queue (terminated_at)
+    WHERE terminated_at IS NOT NULL;
+"""
+
+_TERMINAL_STATUSES = ("completed", "failed", "cancelled")
 
 _STATUS_MAP: dict[str, RunStatus] = {
     "pending": RunStatus.PENDING,
@@ -90,6 +122,11 @@ class PostgresScheduler:
     async def setup(self) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(_CREATE_TABLES)
+            for col, defn in _MIGRATE_COLUMNS:
+                await conn.execute(
+                    f"ALTER TABLE ravi_run_queue ADD COLUMN IF NOT EXISTS {col} {defn}"
+                )
+            await conn.execute(_CREATE_INDEXES_POST_MIGRATION)
 
     async def save_run_spec(self, run_id: RunId, spec: dict) -> None:
         """Persist the agent spec for a run so it can be rebuilt on cold resume."""
@@ -238,6 +275,7 @@ class PostgresScheduler:
         tenant: str,
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,
+        deadline: datetime | None = None,
     ) -> None:
         agent_id = self._pending_registrations.pop(run_id, None)
         wakeup_json = wake.model_dump_json() if wake else None
@@ -258,8 +296,8 @@ class PostgresScheduler:
                 await conn.execute(
                     """
                     INSERT INTO ravi_run_queue
-                        (run_id, priority, tenant, status, wakeup, retry_policy)
-                    VALUES ($1, $2, $3, 'pending', $4::jsonb, $5::jsonb)
+                        (run_id, priority, tenant, status, wakeup, retry_policy, deadline)
+                    VALUES ($1, $2, $3, 'pending', $4::jsonb, $5::jsonb, $6)
                     ON CONFLICT (run_id) DO UPDATE
                         SET wakeup = COALESCE(EXCLUDED.wakeup, ravi_run_queue.wakeup)
                         WHERE ravi_run_queue.status NOT IN ('pending','running')
@@ -269,6 +307,7 @@ class PostgresScheduler:
                     tenant,
                     wakeup_json,
                     policy_json,
+                    deadline,
                 )
 
     async def lease(self, *, worker_id: str, capacity: int) -> list[Lease]:
@@ -281,6 +320,32 @@ class PostgresScheduler:
                     UPDATE ravi_run_queue
                     SET status = 'pending', worker_id = NULL, expires_at = NULL
                     WHERE status = 'running' AND expires_at < now()
+                    """
+                )
+                # Timer/deadline wakeups ride this same poll cadence — no
+                # separate timer service. A suspended run whose wake_at has
+                # passed is due; wake_signals is left as-is (harmless once
+                # pending — the wait will consume() and, if nothing's there
+                # yet, immediately re-suspend on the next iteration).
+                await conn.execute(
+                    """
+                    UPDATE ravi_run_queue
+                    SET status = 'pending', worker_id = NULL, expires_at = NULL
+                    WHERE status = 'suspended' AND wake_at IS NOT NULL AND wake_at <= now()
+                    """
+                )
+                # Deadline enforcement: a run stuck pending or suspended past
+                # its deadline (no worker ever running it to observe a
+                # heartbeat) terminates here directly — a coarser circuit
+                # breaker than any single ctx.ask/ctx.join timeout. Running
+                # runs are caught by heartbeat() instead (see there).
+                await conn.execute(
+                    """
+                    UPDATE ravi_run_queue
+                    SET status = 'failed', worker_id = NULL, expires_at = NULL,
+                        wake_signals = NULL, wake_at = NULL, terminated_at = now()
+                    WHERE status IN ('pending', 'suspended')
+                      AND deadline IS NOT NULL AND deadline <= now()
                     """
                 )
                 # Claim up to capacity pending runs
@@ -320,19 +385,26 @@ class PostgresScheduler:
             )
         return leases
 
-    async def heartbeat(self, lease: Lease) -> None:
+    async def heartbeat(self, lease: Lease) -> bool:
         new_expires = datetime.now(tz=timezone.utc) + timedelta(seconds=_LEASE_SECONDS)
         async with self._pool.acquire() as conn:
-            await conn.execute(
+            row = await conn.fetchrow(
                 """
                 UPDATE ravi_run_queue
                 SET expires_at = $1
                 WHERE run_id = $2 AND worker_id = $3 AND status = 'running'
+                RETURNING cancel_requested, deadline
                 """,
                 new_expires,
                 lease.run_id,
                 lease.worker_id,
             )
+        if row is None:
+            return False
+        if row["cancel_requested"]:
+            return True
+        deadline = row["deadline"]
+        return deadline is not None and datetime.now(tz=timezone.utc) >= deadline
 
     async def release(
         self,
@@ -378,13 +450,68 @@ class PostgresScheduler:
                             )
                             return
 
+                if status == RunStatus.SUSPENDED:
+                    # wake_signals and wake_at are orthogonal, not kind-exclusive:
+                    # ctx.ask() suspends on BOTH a set of signal names AND a
+                    # deadline at once (whichever comes first should wake it),
+                    # so a Wakeup can legitimately carry both regardless of its
+                    # nominal "kind".
+                    wake_signals = wake_on.signals if wake_on and wake_on.signals else None
+                    wake_at = wake_on.at if wake_on else None
+                    await conn.execute(
+                        """
+                        UPDATE ravi_run_queue
+                        SET status = 'suspended',
+                            worker_id = NULL,
+                            expires_at = NULL,
+                            wakeup = COALESCE($1::jsonb, wakeup),
+                            wake_signals = $2,
+                            wake_at = $3
+                        WHERE run_id = $4
+                        """,
+                        wakeup_json,
+                        wake_signals,
+                        wake_at,
+                        lease.run_id,
+                    )
+                    if wake_signals:
+                        # Close the lost-wakeup race: a signal may have
+                        # arrived between the miss inside RunContext (which
+                        # is why we're suspending) and this UPDATE landing.
+                        # If so, un-suspend immediately instead of parking
+                        # on a wakeup that already happened.
+                        pending = await conn.fetchval(
+                            """
+                            SELECT 1 FROM ravi_signals
+                            WHERE run_id = $1 AND name = ANY($2)
+                              AND consumed_at IS NULL
+                            LIMIT 1
+                            """,
+                            lease.run_id,
+                            wake_signals,
+                        )
+                        if pending:
+                            await conn.execute(
+                                """
+                                UPDATE ravi_run_queue
+                                SET status = 'pending', worker_id = NULL, expires_at = NULL
+                                WHERE run_id = $1
+                                """,
+                                lease.run_id,
+                            )
+                    return
+
+                # This is always a terminal status here (SUSPENDED and the
+                # FAILED-with-retries-remaining case both returned above) —
+                # stamp terminated_at for the retention sweep's cutoff.
                 await conn.execute(
                     """
                     UPDATE ravi_run_queue
                     SET status = $1,
                         worker_id = NULL,
                         expires_at = NULL,
-                        wakeup = COALESCE($2::jsonb, wakeup)
+                        wakeup = COALESCE($2::jsonb, wakeup),
+                        terminated_at = now()
                     WHERE run_id = $3
                     """,
                     status_str,

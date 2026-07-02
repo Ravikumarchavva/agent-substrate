@@ -106,7 +106,12 @@ async def test_sliding_window_calls_pipeline_ops():
 
 
 def _make_app(
-    *, enabled: bool = True, authed_rpm: int = 10, anon_rpm: int = 2, redis=None
+    *,
+    enabled: bool = True,
+    authed_rpm: int = 10,
+    anon_rpm: int = 2,
+    redis=None,
+    fail_open: bool = False,
 ) -> FastAPI:
     app = FastAPI()
     app.state.rate_limit_settings = rate_limit_settings(
@@ -114,6 +119,7 @@ def _make_app(
         authed_rpm=authed_rpm,
         anon_rpm=anon_rpm,
         window_seconds=60,
+        fail_open=fail_open,
     )
     app.state.redis = redis
 
@@ -131,9 +137,18 @@ def test_rate_limit_disabled_always_passes():
             assert client.get("/check").status_code == 200
 
 
-def test_rate_limit_no_redis_passes_through():
-    """Missing Redis must not block requests — graceful degradation."""
+def test_rate_limit_no_redis_fails_closed_by_default():
+    """Missing Redis must refuse requests (503) — never silently unlimited."""
     app = _make_app(anon_rpm=1, redis=None)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.get("/check")
+        assert r.status_code == 503
+        assert "Retry-After" in r.headers
+
+
+def test_rate_limit_no_redis_passes_through_when_fail_open():
+    """fail_open=True opts in to graceful degradation (dev/single-user)."""
+    app = _make_app(anon_rpm=1, redis=None, fail_open=True)
     with TestClient(app) as client:
         for _ in range(5):
             assert client.get("/check").status_code == 200
@@ -215,6 +230,7 @@ def test_rate_limit_settings_defaults():
     assert s["authed_rpm"] == 60
     assert s["anon_rpm"] == 5
     assert s["window_seconds"] == 60
+    assert s["fail_open"] is False  # fail-closed by default
 
 
 def test_rate_limit_settings_custom():

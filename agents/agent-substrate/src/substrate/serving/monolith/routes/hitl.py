@@ -10,11 +10,16 @@ GET /hitl/status/{thread_id} – check for pending HITL requests
 from __future__ import annotations
 from substrate.logger import setup_logging
 
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.schemas import HITLResponse
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
-from substrate.serving.monolith.security.deps import get_current_user
+from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
+from substrate.serving.monolith.services import get_owned_thread
 
 logger = setup_logging()
 
@@ -30,7 +35,13 @@ async def respond_to_hitl(
     resp: HITLResponse,
     ctx: ServerDependencies = Depends(get_ctx),
 ):
-    """Resolve a pending HITL request (tool approval or human input)."""
+    """Resolve a pending HITL request (tool approval or human input).
+
+    ``request_id`` is an unguessable UUID minted server-side and delivered
+    only over the owner's authenticated SSE stream — it acts as a capability
+    token.  Thread-ownership enforcement lands with the durable-signal HITL
+    rework (Phase 2), which gives resolution a request→thread mapping.
+    """
     data = resp.model_dump(exclude_none=True)
     resolved = await ctx.bridge_registry.resolve(request_id, data)
 
@@ -45,8 +56,10 @@ async def respond_to_hitl(
 
 @router.get("/hitl/status/{thread_id}")
 async def hitl_status(
-    thread_id: str,
+    thread_id: uuid.UUID,
     ctx: ServerDependencies = Depends(get_ctx),
+    db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Return pending HITL requests for a thread.
 
@@ -58,5 +71,8 @@ async def hitl_status(
         ``{"pending": [...]}`` — list of pending HITL event payloads.
         Empty list if no HITL is pending.
     """
-    pending = ctx.bridge_registry.get_pending_hitl(thread_id)
+    if not await get_owned_thread(db, thread_id, user):
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    pending = ctx.bridge_registry.get_pending_hitl(str(thread_id))
     return {"pending": pending}

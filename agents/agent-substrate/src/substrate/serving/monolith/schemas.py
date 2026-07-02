@@ -234,3 +234,92 @@ class UserOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Scheduled Tasks schemas ──────────────────────────────────────────────────
+
+
+class ScheduledTaskCreate(BaseModel):
+    """POST /scheduled – create a new scheduled task."""
+
+    name: str
+    prompt: str
+    cron_expression: str
+    kind: Optional[Literal["cron", "interval"]] = "cron"
+    task_type: Optional[Literal["report", "monitor", "reminder", "learning"]] = "report"
+    lookback_runs: Optional[int] = 5
+    auto_disable: Optional[bool] = False
+
+
+class ScheduledTaskUpdate(BaseModel):
+    """PATCH /scheduled/{id} – update a scheduled task."""
+
+    name: Optional[str] = None
+    prompt: Optional[str] = None
+    cron_expression: Optional[str] = None
+    kind: Optional[Literal["cron", "interval"]] = None
+    status: Optional[Literal["active", "paused", "completed", "error"]] = None
+    lookback_runs: Optional[int] = None
+    auto_disable: Optional[bool] = None
+
+
+class ScheduledTaskRunOut(BaseModel):
+    """Scheduled task run response object."""
+
+    id: uuid.UUID
+    task_id: uuid.UUID
+    status: str
+    output_summary: str
+    executed_at: datetime
+    duration_ms: int
+    was_silent: bool
+    error_message: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ScheduledTaskOut(BaseModel):
+    """Scheduled task response object."""
+
+    id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
+    name: str
+    prompt: str
+    cron_expression: str
+    kind: str
+    thread_id: uuid.UUID
+    status: str
+    lookback_runs: int
+    task_type: str
+    auto_disable: bool
+    created_at: datetime
+    updated_at: datetime
+    last_run_at: Optional[datetime] = None
+    next_run_at: Optional[datetime] = None
+    recent_runs: List[ScheduledTaskRunOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class ScheduledTaskParseRequest(BaseModel):
+    """POST /scheduled/parse – parse natural language request."""
+
+    text: str
+
+
+class ScheduledTaskParseResponse(BaseModel):
+    """Result from parsing natural language scheduling request."""
+
+    name: str
+    prompt: str
+    cron_expression: str
+    kind: Literal["cron", "interval"]
+    task_type: Literal["report", "monitor", "reminder", "learning"]
+
+
+class ScheduledTaskFeedbackRequest(BaseModel):
+    """POST /scheduled/{id}/feedback – submit user feedback to task thread."""
+
+    content: str
+
+

@@ -25,12 +25,12 @@ from substrate.serving.monolith.schemas import (
     ThreadOut,
     ThreadUpdate,
 )
-from substrate.serving.monolith.security.deps import get_current_user
+from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.services import (
     create_thread,
     delete_thread,
+    get_owned_thread,
     get_steps,
-    get_thread,
     list_threads,
     update_thread,
 )
@@ -38,7 +38,6 @@ from substrate.serving.monolith.services import (
 router = APIRouter(
     prefix="/threads",
     tags=["threads"],
-    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -46,9 +45,12 @@ router = APIRouter(
 async def create_thread_endpoint(
     body: ThreadCreate,
     db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
-    """Create a new chat thread."""
-    thread = await create_thread(db, name=body.name or "New Chat")
+    """Create a new chat thread owned by the caller."""
+    thread = await create_thread(
+        db, name=body.name or "New Chat", user_identifier=user.sub
+    )
     return ThreadOut(
         id=thread.id,
         name=thread.name,
@@ -66,9 +68,15 @@ async def list_threads_endpoint(
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
-    """List all threads, newest first."""
-    rows = await list_threads(db, limit=limit, offset=offset)
+    """List the caller's threads, newest first."""
+    rows = await list_threads(
+        db,
+        user_identifier=None if user.is_admin else user.sub,
+        limit=limit,
+        offset=offset,
+    )
     return [ThreadOut(**row) for row in rows]
 
 
@@ -76,9 +84,10 @@ async def list_threads_endpoint(
 async def get_thread_endpoint(
     thread_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Get a single thread by ID."""
-    thread = await get_thread(db, thread_id)
+    thread = await get_owned_thread(db, thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
     return ThreadOut(
@@ -98,8 +107,11 @@ async def update_thread_endpoint(
     thread_id: uuid.UUID,
     body: ThreadUpdate,
     db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Update thread name, tags, or metadata."""
+    if not await get_owned_thread(db, thread_id, user):
+        raise HTTPException(status_code=404, detail="Thread not found")
     thread = await update_thread(
         db,
         thread_id,
@@ -126,9 +138,10 @@ async def delete_thread_endpoint(
     thread_id: uuid.UUID,
     ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Delete a thread and all its data."""
-    thread = await get_thread(db, thread_id)
+    thread = await get_owned_thread(db, thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
@@ -141,9 +154,10 @@ async def delete_thread_endpoint(
 async def get_thread_messages(
     thread_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Get all messages (steps) for a thread in chronological order."""
-    thread = await get_thread(db, thread_id)
+    thread = await get_owned_thread(db, thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 

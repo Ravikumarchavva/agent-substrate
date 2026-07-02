@@ -3,6 +3,14 @@
 This file is read automatically by Claude when working in this repo.
 Trust it as the primary reference; only search the codebase if something here is incomplete or appears incorrect.
 
+**Deeper knowledge lives in [`docs/claude_docs/`](docs/claude_docs/CLAUDE.md)** —
+architecture rationale, an honest prioritized roadmap, recorded decisions, and
+debugging playbooks. This file (root CLAUDE.md) stays a fast orientation
+reference; `docs/claude_docs/` is where the *why*, the *what's actually next*,
+and the *how do I debug this specific class of problem* live. Read its index
+before starting non-trivial work, and update it as you learn things worth
+keeping — it decays like this file does if left untouched.
+
 ---
 
 ## Project Summary

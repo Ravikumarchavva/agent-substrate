@@ -53,13 +53,13 @@ from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.hooks import ChatContext, hooks
 from substrate.serving.monolith.schemas import ChatRequest
-from substrate.serving.monolith.services import get_thread
+from substrate.serving.monolith.services import get_owned_thread
 from substrate.serving.monolith.services.agent_service import (
     persist_assistant_message,
     persist_tool_result,
     persist_user_message,
 )
-from substrate.serving.monolith.security.deps import get_current_user
+from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
 from substrate.serving.shared.rate_limit import rate_limit
 from substrate.serving.protocol import (
@@ -409,8 +409,13 @@ class _WirePersister:
             logger.exception("Failed to persist assistant turn")
 
     async def persist_tool(self, event: ToolResultEvent) -> None:
-        if event.ok:
-            return  # successful results are reconstructed from the assistant turn
+        # ask_human results carry the user's answer; persist them (even on
+        # success) so the answered HITL card can be rebuilt on reload. All other
+        # successful results are reconstructed from the assistant turn.
+        is_ask_human = event.tool_name == "ask_human"
+        if event.ok and not is_ask_human:
+            return
+        output = event.output if event.ok else (event.error or "")
         try:
             async with self._session_factory() as db:
                 await persist_tool_result(
@@ -418,8 +423,8 @@ class _WirePersister:
                     self._thread_id,
                     event.call_id,
                     event.tool_name,
-                    event.error or "",
-                    is_error=True,
+                    output,
+                    is_error=not event.ok,
                 )
                 await db.commit()
         except Exception:
@@ -485,11 +490,12 @@ async def chat(
     request: Request,
     ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Stream agent response as Server-Sent Events with HITL support.
 
     Flow:
-      1. Validate thread exists
+      1. Validate thread exists and belongs to the caller
       2. Single-flight check — 409 if same thread already has a running stream
       3. Build agent with restored memory + per-thread HITL bridge
       4. Fire on_message hook, persist user message
@@ -497,8 +503,8 @@ async def chat(
          tool_result, HITL events, error)
       6. Persist assistant messages and tool results inline as they arrive
     """
-    # 1. Validate thread
-    thread = await get_thread(db, body.thread_id)
+    # 1. Validate thread + ownership (404 on foreign threads — no existence leak)
+    thread = await get_owned_thread(db, body.thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
@@ -590,14 +596,12 @@ async def chat(
         # Check if an existing task list exists for this thread.
         # If so, we nudge the model to continue it — UNLESS the user is explicitly
         # asking to create a new board (e.g. "make a task board"), in which case we
-        # skip the "continue existing" hint and let force_task_planning take over.
-        has_existing_tasks = False
+        # skip the "continue existing" hint.
         force_new_board = _should_force_task_planning(display_content)
         if allow_task_planning and not force_new_board:
             _store = request.app.state.task_tool.store
             _existing = await _store.get_by_conversation(str(body.thread_id))
             if _existing:
-                has_existing_tasks = True
                 deps["system_instructions"] = (
                     deps["system_instructions"]
                     + "\n\n---\n**Existing task board:**\n"
@@ -635,28 +639,10 @@ async def chat(
                     deps["system_instructions"],
                 )
             )
-        if (
-            not initial_tool_choice
-            and allow_task_planning
-            and (not has_existing_tasks or force_new_board)
-            and force_new_board
-        ):
-            initial_tool_choice = "manage_tasks"
-            deps["system_instructions"] = (
-                deps["system_instructions"]
-                + "\n\n---\n**Task Planning — call manage_tasks NOW:**\n"
-                + f'The user said: "{display_content}"\n'
-                + "Call manage_tasks action=create_list EXACTLY ONCE with 2-5 specific, actionable task titles "
-                + "that reflect EXACTLY what the user asked for above. "
-                + "Use concrete titles like the real steps someone would do for this request. "
-                + "Do NOT use generic placeholders like 'Identify tasks', 'Complete kanban tasks', or 'Plan approach'. "
-                + "Do NOT call create_list more than once — never re-create or update the task list after starting work. "
-                + "After creating the list, work through tasks ONE AT A TIME: "
-                + "call start_task for ONE task, do the actual work, call complete_task to mark it done, "
-                + "THEN move to the next task. Never call start_task on multiple tasks simultaneously. "
-                + "Before you write your final answer, every task must be completed (or failed) — "
-                + "do NOT end your turn with any task still in progress."
-            )
+        # NOTE: manage_tasks is intentionally NOT force-injected here. The tool
+        # stays available (when allow_task_planning) and the model decides on its
+        # own whether a request warrants a task board — keyword-matching "plan"
+        # and mandating a board produced spurious boards for simple questions.
         if initial_tool_choice:
             logger.info(
                 "Thread %s: forcing first tool choice to %s via system prompt",

@@ -98,12 +98,24 @@ async def _check(
     redis = getattr(request.app.state, "redis", None)
     settings = getattr(request.app.state, "rate_limit_settings", None)
 
-    # If not configured or disabled, pass through
+    # If not configured or explicitly disabled, pass through
     if settings is None or not settings.get("enabled", True):
         return
+
+    fail_open = settings.get("fail_open", False)
+
     if redis is None:
-        logger.warning("rate_limit: Redis not available on app.state — skipping")
-        return
+        if fail_open:
+            logger.warning("rate_limit: Redis not available on app.state — skipping")
+            return
+        # Fail closed: with the limiter's backing store gone we cannot bound
+        # abuse, so refuse rather than silently run unlimited.
+        logger.error("rate_limit: Redis not available — failing closed (503)")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Rate limiter unavailable. Try again shortly.",
+            headers={"Retry-After": "5"},
+        )
 
     if user is not None:
         limit = settings.get("authed_rpm", 60)
@@ -121,9 +133,18 @@ async def _check(
         count, reset_in = await _sliding_window_check(
             redis, key, limit=limit, window_seconds=window
         )
+    except HTTPException:
+        raise
     except Exception:
-        logger.exception("rate_limit: Redis error — skipping limit check")
-        return
+        if fail_open:
+            logger.exception("rate_limit: Redis error — skipping limit check")
+            return
+        logger.exception("rate_limit: Redis error — failing closed (503)")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Rate limiter unavailable. Try again shortly.",
+            headers={"Retry-After": "5"},
+        )
 
     remaining = max(0, limit - count)
     reset_ts = math.ceil(time.time()) + reset_in
@@ -171,11 +192,19 @@ def rate_limit_settings(
     authed_rpm: int = 60,
     anon_rpm: int = 5,
     window_seconds: int = 60,
+    fail_open: bool = False,
 ) -> dict:
-    """Build the settings dict stored on ``app.state.rate_limit_settings``."""
+    """Build the settings dict stored on ``app.state.rate_limit_settings``.
+
+    ``fail_open=False`` (default): if Redis is unavailable the limiter
+    returns 503 instead of silently allowing unlimited traffic.  Set
+    ``fail_open=True`` only for deployments that prefer availability over
+    abuse protection (e.g. single-user dev instances).
+    """
     return {
         "enabled": enabled,
         "authed_rpm": authed_rpm,
         "anon_rpm": anon_rpm,
         "window_seconds": window_seconds,
+        "fail_open": fail_open,
     }

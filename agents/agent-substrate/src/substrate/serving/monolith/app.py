@@ -44,6 +44,7 @@ from substrate.serving.monolith.routes.connector_tokens import (
 from substrate.serving.monolith.routes.tasks import router as tasks_router
 from substrate.serving.monolith.routes.threads import router as threads_router
 from substrate.serving.monolith.routes.triggers import router as triggers_router
+from substrate.serving.monolith.routes.scheduled import router as scheduled_router
 from substrate.serving.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
@@ -136,6 +137,7 @@ async def lifespan(app: FastAPI):
         authed_rpm=settings.RATE_LIMIT_AUTHED_RPM,
         anon_rpm=settings.RATE_LIMIT_ANON_RPM,
         window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+        fail_open=settings.RATE_LIMIT_FAIL_OPEN,
     )
 
     # Runtime services (chains, pipelines, workflows, triggers)
@@ -172,10 +174,29 @@ async def lifespan(app: FastAPI):
         session_factory=app.state.session_factory,
         ci_client=app.state.ci_client,
         file_store=app.state.file_store,
+        trigger_scheduler=app.state.trigger_scheduler,
     )
 
     for name in ("httpx", "urllib3", "openai"):
         setup_logging().setLevel(logging.WARNING)
+
+    # ── Load persistent scheduled tasks ──────────────────────────────────────
+    from substrate.serving.monolith.services.scheduled_service import (
+        execute_scheduled_task,
+        load_active_tasks_into_scheduler,
+    )
+
+    app.state.trigger_scheduler.set_scheduled_task_executor(
+        lambda task_id: execute_scheduled_task(
+            task_id,
+            session_factory=app.state.session_factory,
+            app_state=app.state.ctx,
+        )
+    )
+    await load_active_tasks_into_scheduler(
+        app.state.trigger_scheduler,
+        app.state.session_factory,
+    )
 
     yield
 
@@ -238,6 +259,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks_router)
     app.include_router(pipelines_router)
     app.include_router(triggers_router)
+    app.include_router(scheduled_router)
     app.include_router(rag_router)
     app.include_router(files_router)
     app.include_router(rate_limit_router)

@@ -28,7 +28,7 @@ needs to know which backend is active.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from substrate.agents.core.orchestrator import SubAgentConfig
@@ -43,6 +43,7 @@ from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.inbox import Inbox
 from substrate.kernel.runtime.log_entry import EventLog
 from substrate.kernel.runtime.scheduler import Scheduler
+from substrate.kernel.runtime.supervisor import Supervisor
 from substrate.kernel.runtime.wakeup import SignalBus
 
 from substrate.agents.runtime.backends._event_log import InMemoryEventLog
@@ -73,6 +74,7 @@ class Runtime:
         journal: Journal | None = None,
         scheduler: Scheduler | None = None,
         signal_bus: SignalBus | None = None,
+        supervisor: Supervisor | None = None,
         follow_graph: FollowGraph | None = None,
         fanout: FanoutStrategy | None = None,
     ) -> None:
@@ -85,7 +87,12 @@ class Runtime:
         self._inbox.set_deliver_hook(self._on_inbox_deliver)  # type: ignore[attr-defined]
         self._follow_graph: FollowGraph = follow_graph or InMemoryFollowGraph()
         self._fanout: FanoutStrategy = fanout or PushAllFanout()
-        self._signal_bus: SignalBus = signal_bus or InMemorySignalBus()
+        # The default in-memory SignalBus wakes suspended runs via the
+        # scheduler it's paired with — see backends/_signal_bus.py.
+        self._signal_bus: SignalBus = signal_bus or InMemorySignalBus(
+            self._scheduler  # type: ignore[arg-type]
+        )
+        self._supervisor: Supervisor | None = supervisor
         self._registry: dict[AgentId, Agent] = {}
         self._worker: Worker | None = None
 
@@ -201,16 +208,17 @@ class Runtime:
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
-        supervisor = InMemorySupervisor(
+        supervisor = self._supervisor or InMemorySupervisor(
             event_log=self._event_log,  # type: ignore[arg-type]
             inbox=self._inbox,  # type: ignore[arg-type]
             journal=self._journal,  # type: ignore[arg-type]
             scheduler=self._scheduler,  # type: ignore[arg-type]
+            signal_bus=self._signal_bus,  # type: ignore[arg-type]
         )
+        self._supervisor = supervisor
         self._worker = Worker(
             worker_id=f"worker-{uuid.uuid4().hex}",
             event_log=self._event_log,  # type: ignore[arg-type]
-            journal=self._journal,  # type: ignore[arg-type]
             inbox=self._inbox,  # type: ignore[arg-type]
             follow_graph=self._follow_graph,
             fanout=self._fanout,
@@ -250,8 +258,21 @@ class Runtime:
         return self._inbox
 
     @property
-    def signal_bus(self) -> InMemorySignalBus:
-        # The in-process Runtime always uses the in-memory signal bus, whose
-        # wait_for_signal() helper (not part of the kernel SignalBus Protocol)
-        # is needed by tests and RunContext.ask().
-        return cast("InMemorySignalBus", self._signal_bus)
+    def signal_bus(self) -> SignalBus:
+        # Whatever backend was injected (InMemorySignalBus by default, or a
+        # durable backend via build_postgres_runtime) — serving/console code
+        # only ever calls .signal() on this, which every backend implements
+        # identically per the kernel Protocol.
+        return self._signal_bus
+
+    @property
+    def supervisor(self) -> Supervisor:
+        """The active Supervisor — ``None`` until ``start()``/``__aenter__``.
+
+        Exposed for cascading ``cancel(handle)`` (recursive subtree
+        cancellation — distinct from ``Runtime.cancel(run_id)`` above, which
+        only cancels a single in-process Task) and other Supervisor-level
+        operations (``children_of`` for crash reconciliation).
+        """
+        assert self._supervisor is not None, "Runtime not started"
+        return self._supervisor

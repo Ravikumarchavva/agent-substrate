@@ -144,11 +144,10 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
         runtime = await stack.enter_async_context(
             build_postgres_runtime(
                 postgres_url=pg_url,
-                redis_url=cfg.REDIS_URL,
                 reclaim_orphans=True,
             )
         )
-        logger.info("Agent runtime: durable (Postgres EventLog + Redis journal)")
+        logger.info("Agent runtime: durable (Postgres EventLog)")
         return runtime, stack
 
     from substrate.agents.runtime import Runtime

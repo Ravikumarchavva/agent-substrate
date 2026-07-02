@@ -248,19 +248,24 @@ class TestEffect:
     def test_make_id_deterministic(self) -> None:
         rid = new_run_id()
         args = {"email": "a@b.com", "subject": "hi"}
-        id1 = Effect.make_id(rid, 3, "email.send", args)
-        id2 = Effect.make_id(rid, 3, "email.send", args)
+        id1 = Effect.make_id(rid, "3", "email.send", args)
+        id2 = Effect.make_id(rid, "3", "email.send", args)
         assert id1 == id2
 
     def test_make_id_arg_order_independent(self) -> None:
         rid = new_run_id()
-        id1 = Effect.make_id(rid, 0, "k", {"a": 1, "b": 2})
-        id2 = Effect.make_id(rid, 0, "k", {"b": 2, "a": 1})
+        id1 = Effect.make_id(rid, "0", "k", {"a": 1, "b": 2})
+        id2 = Effect.make_id(rid, "0", "k", {"b": 2, "a": 1})
         assert id1 == id2
 
     def test_make_id_different_steps_differ(self) -> None:
         rid = new_run_id()
-        assert Effect.make_id(rid, 0, "k", {}) != Effect.make_id(rid, 1, "k", {})
+        assert Effect.make_id(rid, "0", "k", {}) != Effect.make_id(rid, "1", "k", {})
+
+    def test_make_id_hierarchical_paths_differ(self) -> None:
+        """A nested path ("0.0") must not collide with a sibling top-level path ("0")."""
+        rid = new_run_id()
+        assert Effect.make_id(rid, "0", "k", {}) != Effect.make_id(rid, "0.0", "k", {})
 
     def test_round_trip_json(self) -> None:
         e = Effect(id="abc123", kind="email.send", spec={"to": "x@y.com"})
@@ -450,9 +455,13 @@ class TestWakeup:
         assert w.result_ref == "ref:abc"
 
     def test_signal_carries_payload(self) -> None:
-        w = Wakeup(kind="signal", signal="new_item", payload={"count": 3})
-        assert w.signal == "new_item"
+        w = Wakeup(kind="signal", signals=["new_item"], payload={"count": 3})
+        assert w.signals == ["new_item"]
         assert w.payload == {"count": 3}
+
+    def test_signal_can_watch_multiple_names(self) -> None:
+        w = Wakeup(kind="signal", signals=["reply:abc", "child:def"])
+        assert w.signals == ["reply:abc", "child:def"]
 
 
 # ---------------------------------------------------------------------------

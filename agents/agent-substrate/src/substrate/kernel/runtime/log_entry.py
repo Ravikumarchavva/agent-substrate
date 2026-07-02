@@ -5,9 +5,11 @@ Named ``RunLogEntry`` (not ``RunEvent``) to avoid collision with
 
 Truth model
 -----------
-A run's state is ``fold(entries from seq=0)``.  ``Checkpoint`` (in
-``kernel/agent.py``) is demoted to a log-compaction snapshot — an optimization
-to bound rehydration cost, never the source of authority.
+A run's state is ``fold(entries from seq=0)`` — implemented by
+``agents/runtime/effect_cache.py::EffectCache.fold()``, folded once per lease.
+There is no separate checkpoint/snapshot type; nothing in this codebase
+implements one today. If fold cost ever exceeds budget at P99, a log-
+compaction snapshot would be the fix — evaluate then, not preemptively.
 
 Optimistic concurrency
 ----------------------

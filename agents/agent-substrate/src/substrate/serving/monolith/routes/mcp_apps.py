@@ -21,8 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.schemas import McpContextUpdate
-from substrate.serving.monolith.security.deps import get_current_user
-from substrate.serving.monolith.services import create_step, get_thread
+from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
+from substrate.serving.monolith.services import create_step, get_owned_thread
 
 logger = setup_logging()
 
@@ -316,6 +316,7 @@ async def update_mcp_context(
     thread_id: uuid.UUID,
     body: McpContextUpdate,
     db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
 ):
     """Store a model context update from an interactive MCP App.
 
@@ -323,7 +324,7 @@ async def update_mcp_context(
     the app sends the updated state here. This is stored as a step so the LLM
     sees the latest state in its next turn (per MCP Apps spec ui/update-model-context).
     """
-    thread = await get_thread(db, thread_id)
+    thread = await get_owned_thread(db, thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 

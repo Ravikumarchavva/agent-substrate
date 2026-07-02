@@ -13,6 +13,7 @@ import { AppPanel } from "@/components/AppPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarToggleIcon } from "@/components/SidebarToggleIcon";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { ScheduledPanel } from "@/components/ScheduledPanel";
 import { ModelEffortPicker } from "@/components/ModelEffortPicker";
 import type { SettingsTab } from "@/components/SettingsPanel";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
@@ -78,11 +79,18 @@ function ChatPageContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // True while the run is suspended waiting on a HITL card (ask_human / approval).
+  // The run is parked server-side (zero compute) — the UI must show a calm
+  // "your turn" state, not the active "running" spinners.
+  const [hitlPending, setHitlPending] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [lastActiveThreadId, setLastActiveThreadId] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const wasAuthenticatedRef = useRef(false);
+
+  const [scheduledPanelOpen, setScheduledPanelOpen] = useState(false);
+  const [scheduledCount, setScheduledCount] = useState(0);
 
   const updateLastActiveThreadId = useCallback((threadId: string | null) => {
     setLastActiveThreadId(threadId);
@@ -90,6 +98,25 @@ function ChatPageContent() {
   }, []);
 
   const currentThreadId = routeState.threadId ?? lastActiveThreadId;
+
+  // Poll for active scheduled tasks count
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return;
+    
+    const updateCount = async () => {
+      try {
+        const tasks = await api.getScheduledTasks();
+        const activeCount = tasks.filter(t => t.status === "active").length;
+        setScheduledCount(activeCount);
+      } catch (err) {
+        console.error("Failed to fetch scheduled count:", err);
+      }
+    };
+
+    updateCount();
+    const interval = setInterval(updateCount, 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, authLoading]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -142,6 +169,7 @@ function ChatPageContent() {
   useEffect(() => {
     if (routeState.threadId !== null) {
       updateLastActiveThreadId(routeState.threadId);
+      setScheduledPanelOpen(false);
     }
   }, [routeState.threadId, updateLastActiveThreadId]);
 
@@ -194,6 +222,18 @@ function ChatPageContent() {
     router.push(buildChatPath(lastActiveThreadId), { scroll: false });
   }, [lastActiveThreadId, router]);
 
+  const handleOpenScheduled = useCallback(() => {
+    setScheduledPanelOpen(true);
+    setMobileSidebarOpen(false);
+    if (settingsPanelOpen) {
+      closeSettingsPanel();
+    }
+  }, [settingsPanelOpen, closeSettingsPanel]);
+
+  const handleCloseScheduled = useCallback(() => {
+    setScheduledPanelOpen(false);
+  }, []);
+
   useEffect(() => {
     if (settingsPanelOpen) {
       setDesktopSidebarOpen(true);
@@ -221,14 +261,33 @@ function ChatPageContent() {
     setBoardAnchors(new Map());
   }, [currentThreadId]);
 
-  // Group plan boards by the message they render beneath. Boards with no live
-  // anchor (e.g. seeded after a reload) attach to the most recent user message.
+  // Group plan boards by the message they render beneath. A board anchors to
+  // the user message whose turn created it: prefer the board's persisted
+  // created_at (the user message just before it), so the anchor survives reload
+  // and thread promotion (which clears the live boardAnchors map). Fall back to
+  // the live anchor, then to the most recent user message.
   const boardsByAnchor = useMemo(() => {
     const result = new Map<string, TaskList[]>();
     if (boards.size === 0) return result;
-    const lastUserId = [...messages].reverse().find((m) => m.role === "user")?.id;
+    const userMessages = messages.filter((m) => m.role === "user");
+    const lastUserId = userMessages[userMessages.length - 1]?.id;
+
+    const anchorByTime = (createdAt?: string): string | undefined => {
+      if (!createdAt) return undefined;
+      const created = new Date(createdAt).getTime();
+      if (Number.isNaN(created)) return undefined;
+      // Latest user message sent at or before the board's creation time.
+      let anchor: string | undefined;
+      for (const m of userMessages) {
+        if (m.timestamp.getTime() <= created + 1000) anchor = m.id;
+        else break;
+      }
+      return anchor;
+    };
+
     for (const tl of boards.values()) {
-      const anchor = boardAnchors.get(tl.agent_id) ?? lastUserId;
+      const anchor =
+        anchorByTime(tl.created_at) ?? boardAnchors.get(tl.agent_id) ?? lastUserId;
       if (!anchor) continue;
       const arr = result.get(anchor) ?? [];
       arr.push(tl);
@@ -320,10 +379,12 @@ function ChatPageContent() {
 
   // Wrap hook handlers to also manage local page state
   const handleNewChat = useCallback(async () => {
+    setScheduledPanelOpen(false);
     await _handleNewChat({ onCreated: () => { setMessages([]); setMobileSidebarOpen(false); } });
   }, [_handleNewChat]);
 
   const handleSelectThread = useCallback((threadId: string) => {
+    setScheduledPanelOpen(false);
     _handleSelectThread(threadId, { onSelected: () => { setMobileSidebarOpen(false); } });
   }, [_handleSelectThread]);
 
@@ -418,6 +479,9 @@ function ChatPageContent() {
     requestId: string,
     data: Record<string, unknown>
   ) {
+    // The run resumes server-side; go back to the active "running" state until
+    // the next card or the final answer arrives.
+    setHitlPending(false);
     api.respondToHitl(requestId, data).catch((err: unknown) => {
       console.error("HITL respond failed:", err);
     });
@@ -615,6 +679,7 @@ function ChatPageContent() {
             },
           },
         ]);
+        setHitlPending(true);
         return;
       }
 
@@ -637,6 +702,7 @@ function ChatPageContent() {
             },
           },
         ]);
+        setHitlPending(true);
         return;
       }
 
@@ -743,6 +809,7 @@ function ChatPageContent() {
 
       // ── Streaming text ──────────────────────────────────────────────
       if (data.type === "text.delta") {
+        if (hitlPending) setHitlPending(false);
         ensureActiveBubble();
         const textContent = String(data.text || "");
         setMessages((m) =>
@@ -786,7 +853,10 @@ function ChatPageContent() {
         const hasToolCalls = toolCallList.length > 0;
 
         const toolCalls: import("@/types").ToolCall[] = toolCallList
-          .filter((tc) => (tc as { name: string }).name !== "manage_tasks")
+          .filter((tc) => {
+            const n = (tc as { name: string }).name;
+            return n !== "manage_tasks" && n !== "ask_human";
+          })
           .map((tc) => {
             const t = tc as { id: string; name: string; args: unknown; _meta?: import("@/types").ToolCallMeta; risk?: "safe" | "sensitive" | "critical"; color?: "green" | "yellow" | "red" };
             return {
@@ -850,7 +920,7 @@ function ChatPageContent() {
       }
 
       if (data.type === "tool.call") {
-        if (data.tool_name === "manage_tasks") return;
+        if (data.tool_name === "manage_tasks" || data.tool_name === "ask_human") return;
         ensureActiveBubble();
         const toolCall = {
           id: (data.call_id as string) || nanoid(),
@@ -1095,6 +1165,9 @@ function ChatPageContent() {
           onRenameThread={handleRenameThread}
           onCollapse={() => setDesktopSidebarOpen(false)}
           onOpenSettings={openSettingsPanel}
+          onOpenScheduled={handleOpenScheduled}
+          isScheduledOpen={scheduledPanelOpen}
+          scheduledCount={scheduledCount}
           mode={settingsPanelOpen ? "settings" : "chat"}
           settingsTab={settingsPanelTab}
           onSelectSettingsTab={selectSettingsTab}
@@ -1134,6 +1207,8 @@ function ChatPageContent() {
                 onTabChange={selectSettingsTab}
               />
             </div>
+          ) : scheduledPanelOpen ? (
+            <ScheduledPanel onBack={handleCloseScheduled} />
           ) : (
             <>
               <div
@@ -1241,6 +1316,12 @@ function ChatPageContent() {
                                 }
                                 allowFreeform={m.metadata.allowFreeform as boolean | undefined}
                                 onRespond={respondToHITL}
+                                initialStatus={
+                                  m.metadata.initialStatus as "answered" | "skipped" | undefined
+                                }
+                                initialAnswerLabel={
+                                  m.metadata.initialAnswerLabel as string | undefined
+                                }
                               />
                             </div>
                           </div>
@@ -1298,7 +1379,7 @@ function ChatPageContent() {
                                 <div className="mx-auto max-w-(--chat-width)">
                                   <PlanCardStack
                                     boards={anchoredBoards}
-                                    runActive={loading}
+                                    runActive={loading && !hitlPending}
                                     onChange={upsertBoard}
                                   />
                                 </div>
@@ -1311,7 +1392,7 @@ function ChatPageContent() {
                       return null;
                     })}
 
-                    {loading && !messages.some((m) => m.role === "assistant" && m.id === messages[messages.length - 1]?.id) && (
+                    {loading && !hitlPending && !messages.some((m) => m.role === "assistant" && m.id === messages[messages.length - 1]?.id) && (
                       <div className="px-4 py-2 sm:px-6">
                         <div className="mx-auto flex max-w-(--chat-width) items-center gap-2 py-2">
                           <div className="flex items-center gap-1.5">
@@ -1392,8 +1473,8 @@ function ChatPageContent() {
                           onSelectThinking={setThinkingLevel}
                         />
 
-                        {input.trim() || loading ? (
-                          loading ? (
+                        {input.trim() || (loading && !hitlPending) ? (
+                          loading && !hitlPending ? (
                             <button
                               type="button"
                               onClick={handleStop}
@@ -1486,6 +1567,9 @@ function ChatPageContent() {
               onRenameThread={handleRenameThread}
               onCollapse={() => setMobileSidebarOpen(false)}
               onOpenSettings={openSettingsPanel}
+              onOpenScheduled={handleOpenScheduled}
+              isScheduledOpen={scheduledPanelOpen}
+              scheduledCount={scheduledCount}
               mode={settingsPanelOpen ? "settings" : "chat"}
               settingsTab={settingsPanelTab}
               onSelectSettingsTab={selectSettingsTab}

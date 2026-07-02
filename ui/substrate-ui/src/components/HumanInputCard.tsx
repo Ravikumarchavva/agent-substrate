@@ -16,6 +16,10 @@ type HumanInputCardProps = {
   options: Option[];
   allowFreeform?: boolean;
   onRespond: (requestId: string, data: Record<string, unknown>) => void;
+  /** When set, the card mounts in a read-only, already-answered state (history reload). */
+  initialStatus?: "answered" | "skipped";
+  /** The answer label to show when initialStatus === "answered". */
+  initialAnswerLabel?: string;
 };
 
 export function HumanInputCard({
@@ -25,42 +29,63 @@ export function HumanInputCard({
   options,
   allowFreeform = true,
   onRespond,
+  initialStatus,
+  initialAnswerLabel,
 }: HumanInputCardProps) {
-  const [answered, setAnswered] = useState(false);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [freeformText, setFreeformText] = useState("");
+  const isHistory = initialStatus !== undefined;
+  const [answered, setAnswered] = useState(initialStatus === "answered");
+  const [skipped, setSkipped] = useState(initialStatus === "skipped");
+  const [collapsed, setCollapsed] = useState(isHistory);
+  const [selectedKey, setSelectedKey] = useState<string | null>(
+    initialStatus === "answered"
+      ? options.find((o) => o.label === initialAnswerLabel)?.key ?? "__freeform__"
+      : null
+  );
+  const [freeformText, setFreeformText] = useState(
+    initialStatus === "answered" && !options.some((o) => o.label === initialAnswerLabel)
+      ? initialAnswerLabel ?? ""
+      : ""
+  );
   const freeformRef = useRef<HTMLInputElement>(null);
 
-  // When user clicks freeform row, focus the input
+  // When user clicks freeform row, focus the input (skip in read-only history mode)
   useEffect(() => {
-    if (selectedKey === "__freeform__") {
+    if (!isHistory && selectedKey === "__freeform__") {
       freeformRef.current?.focus();
     }
-  }, [selectedKey]);
+  }, [selectedKey, isHistory]);
 
   function submit(key: string, label: string, freeform?: string) {
     setAnswered(true);
+    setCollapsed(true);
     if (freeform !== undefined) {
-      onRespond(requestId, { freeform_text: freeform });
+      onRespond(requestId, { action: "answered", freeform_text: freeform });
     } else {
-      onRespond(requestId, { selected_key: key, selected_label: label });
+      onRespond(requestId, { action: "answered", selected_key: key, selected_label: label });
     }
   }
 
+  function handleSkip() {
+    if (answered || skipped) return;
+    setSkipped(true);
+    setCollapsed(true);
+    onRespond(requestId, { action: "skipped" });
+  }
+
   function handleRowClick(opt: Option) {
-    if (answered) return;
+    if (answered || skipped) return;
     setSelectedKey(opt.key);
     // Immediate submit for predefined options
     submit(opt.key, opt.label);
   }
 
   function handleFreeformRowClick() {
-    if (answered) return;
+    if (answered || skipped) return;
     setSelectedKey("__freeform__");
   }
 
   function handleFreeformSubmit() {
-    if (!freeformText.trim() || answered) return;
+    if (!freeformText.trim() || answered || skipped) return;
     submit("__freeform__", freeformText.trim(), freeformText.trim());
   }
 
@@ -68,6 +93,8 @@ export function HumanInputCard({
     selectedKey === "__freeform__"
       ? freeformText
       : options.find((o) => o.key === selectedKey)?.label ?? "";
+
+  const answeredOptionKey = selectedKey !== "__freeform__" ? selectedKey : null;
 
   return (
     <div
@@ -93,22 +120,65 @@ export function HumanInputCard({
           </p>
         </div>
 
-        {/* Answered state */}
-        {answered ? (
-          <div className="px-4 py-3 flex items-center gap-2">
-            <div
-              className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "var(--accent)" }}
+        {/* Answered / skipped state */}
+        {(answered || skipped) ? (
+          <>
+            {/* Compact confirmed row — click to expand */}
+            <button
+              onClick={() => setCollapsed((c) => !c)}
+              className="w-full px-4 py-2.5 flex items-center gap-2 text-left cursor-pointer transition-colors"
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--card-hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
-              <Check className="w-3 h-3 text-(--accent-foreground)" strokeWidth={3} />
-            </div>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>
-              Answered:{" "}
-              <span className="font-medium" style={{ color: "var(--foreground)" }}>
-                {answeredLabel}
+              <div
+                className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                style={{ background: skipped ? "color-mix(in srgb, var(--muted) 40%, transparent)" : "var(--accent)" }}
+              >
+                <Check className="w-2.5 h-2.5" style={{ color: skipped ? "var(--muted)" : "var(--accent-foreground)" }} strokeWidth={3} />
+              </div>
+              <span className="text-xs flex-1 min-w-0" style={{ color: "var(--muted)" }}>
+                {skipped ? (
+                  "Skipped"
+                ) : (
+                  <>
+                    <span style={{ color: "var(--muted)" }}>Answered: </span>
+                    <span className="font-medium" style={{ color: "var(--foreground)" }}>
+                      {answeredLabel}
+                    </span>
+                  </>
+                )}
               </span>
-            </span>
-          </div>
+              <span className="text-[10px] shrink-0" style={{ color: "var(--muted)" }}>
+                {collapsed ? "▸" : "▾"}
+              </span>
+            </button>
+
+            {/* Expanded read-only view */}
+            {!collapsed && (
+              <div className="py-1 opacity-60 pointer-events-none" style={{ borderTop: "1px solid var(--border)" }}>
+                {options.map((opt, idx) => {
+                  const isSelected = opt.key === answeredOptionKey;
+                  return (
+                    <div key={opt.key} className="flex items-center gap-3 px-4 py-2">
+                      <span
+                        className="shrink-0 w-5 h-5 flex items-center justify-center text-[11px] font-semibold rounded-sm"
+                        style={{
+                          background: isSelected ? "var(--accent)" : "var(--step-bg)",
+                          color: isSelected ? "var(--accent-foreground)" : "var(--muted)",
+                          border: isSelected ? "none" : "1px solid var(--border)",
+                        }}
+                      >
+                        {idx + 1}
+                      </span>
+                      <span className="text-xs" style={{ color: isSelected ? "var(--accent)" : "var(--foreground)" }}>
+                        {opt.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         ) : (
           <div className="py-1">
             {/* Fallback: no options and no freeform — show simple acknowledge button */}
@@ -253,6 +323,19 @@ export function HumanInputCard({
                 )}
               </div>
             )}
+
+            {/* Skip — always shown at bottom */}
+            <div style={{ borderTop: "1px solid var(--border)" }} className="px-4 py-2">
+              <button
+                onClick={handleSkip}
+                className="text-xs cursor-pointer transition-colors"
+                style={{ color: "var(--muted)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--foreground)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--muted)"; }}
+              >
+                Skip
+              </button>
+            </div>
           </div>
         )}
     </div>

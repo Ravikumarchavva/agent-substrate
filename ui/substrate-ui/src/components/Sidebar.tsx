@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import type { Thread } from "@/types";
 import {
   ArrowLeft,
+  CalendarClock,
   Check,
   ChevronsUpDown,
   LogOut,
@@ -37,6 +38,9 @@ type Props = {
   onRenameThread: (threadId: string, newName: string) => void;
   onCollapse?: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
+  onOpenScheduled?: () => void;
+  isScheduledOpen?: boolean;
+  scheduledCount?: number;
   mode?: SidebarMode;
   settingsTab?: SettingsTab;
   onSelectSettingsTab?: (tab: SettingsTab) => void;
@@ -78,17 +82,25 @@ interface QuickActionButtonProps {
   label: string;
   onClick: () => void;
   isActive?: boolean;
+  badge?: number;
 }
 
-function QuickActionButton({ icon: Icon, label, onClick, isActive = false }: QuickActionButtonProps) {
+function QuickActionButton({ icon: Icon, label, onClick, isActive = false, badge }: QuickActionButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`ravi-press flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-(--card-hover)"}`}
+      className={`ravi-press flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3 text-left text-sm transition-colors ${isActive ? "bg-foreground text-background" : "text-foreground hover:bg-(--card-hover)"}`}
     >
-      <Icon className="h-4 w-4 shrink-0" />
-      <span className="truncate font-medium">{label}</span>
+      <div className="flex items-center gap-3 min-w-0">
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="truncate font-medium">{label}</span>
+      </div>
+      {badge !== undefined && badge > 0 && (
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${isActive ? "bg-background text-foreground" : "bg-violet-500 text-white"}`}>
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -102,6 +114,9 @@ export function Sidebar({
   onRenameThread,
   onCollapse,
   onOpenSettings,
+  onOpenScheduled,
+  isScheduledOpen,
+  scheduledCount,
   mode = "chat",
   settingsTab,
   onSelectSettingsTab,
@@ -182,7 +197,16 @@ export function Sidebar({
     }
   };
 
-  const chatQuickActions = [{ label: "New chat", icon: SquarePen, onClick: onNewChat }];
+  const chatQuickActions = [
+    { label: "New chat", icon: SquarePen, onClick: onNewChat },
+    {
+      label: "Scheduled",
+      icon: CalendarClock,
+      onClick: onOpenScheduled || (() => {}),
+      isActive: isScheduledOpen,
+      badge: scheduledCount,
+    },
+  ];
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
@@ -239,6 +263,8 @@ export function Sidebar({
                   icon={action.icon}
                   label={action.label}
                   onClick={action.onClick}
+                  isActive={action.isActive}
+                  badge={action.badge}
                 />
               ))
             )}

@@ -23,4 +23,6 @@ export type TaskList = {
   agent_id: string;
   agent_label: string;
   parent_agent_id: string | null;
+  /** ISO-8601 creation time — used to anchor the board under the turn that created it. */
+  created_at?: string;
 };

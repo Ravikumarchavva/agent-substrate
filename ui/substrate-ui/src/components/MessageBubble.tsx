@@ -113,6 +113,40 @@ function CopyableMarkdownTable({ children, className, ...props }: ComponentProps
   );
 }
 
+function CopyablePre({ children, className, ...props }: ComponentPropsWithoutRef<"pre">) {
+  const preRef = useRef<HTMLPreElement | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyCode = async () => {
+    if (!preRef.current) {
+      return;
+    }
+
+    const text = preRef.current.textContent || "";
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="relative my-4 w-full group/code">
+      <button
+        type="button"
+        onClick={handleCopyCode}
+        className="btn-icon absolute right-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-(--muted) bg-(--card)/85 backdrop-blur-sm border border-(--border) opacity-0 group-hover/code:opacity-100 transition-all hover:bg-(--card-hover) hover:text-foreground shadow-sm"
+        aria-label={copied ? "Copied" : "Copy code"}
+        title={copied ? "Copied" : "Copy code"}
+        style={{ minWidth: 'unset', minHeight: 'unset' }}
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+      <pre ref={preRef} className={className} style={{ margin: 0 }} {...props}>
+        {children}
+      </pre>
+    </div>
+  );
+}
+
 interface AttachmentDocumentCardProps {
   attachment: UploadedFile;
 }
@@ -701,7 +735,7 @@ export function MessageBubble({
                         ?.children;
                       return <Mermaid chart={String(raw).replace(/\n$/, "")} />;
                     }
-                    return <pre className={className}>{children}</pre>;
+                    return <CopyablePre className={className}>{children}</CopyablePre>;
                   },
                   code({ className, children }) {
                     return <code className={className}>{children}</code>;

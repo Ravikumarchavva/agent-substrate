@@ -164,8 +164,6 @@ export function PlanCard({ taskList, runActive, onChange }: PlanCardProps) {
                 className="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-(--background)"
                 style={{
                   cursor: next ? "pointer" : "default",
-                  textDecoration:
-                    t.status === "succeeded" || t.status === "abandoned" ? "line-through" : "none",
                 }}
                 onClick={() => next && setStatus(t.id, next)}
                 title={t.note ? t.note : next ? `Click to mark ${next.replace("_", " ")}` : undefined}

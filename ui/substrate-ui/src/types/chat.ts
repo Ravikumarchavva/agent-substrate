@@ -50,8 +50,11 @@ export type BackendMessage = {
   generation?: {
     finish_reason?: string;
     tool_calls?: Array<{
-      id: string;
-      name: string;
+      // Persisted ToolUseBlock uses call_id/tool_name; some paths use id/name.
+      id?: string;
+      call_id?: string;
+      name?: string;
+      tool_name?: string;
       arguments: string | Record<string, unknown>;
       _meta?: ToolCallMeta;
     }>;

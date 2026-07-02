@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 from uuid import uuid4
 
@@ -39,23 +40,24 @@ CREATE TABLE IF NOT EXISTS ravi_task_lists (
     parent_agent_id TEXT        NULL,
     max_retries     INTEGER     NOT NULL DEFAULT 3,
     tasks           JSONB       NOT NULL DEFAULT '[]',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (conversation_id, agent_id)
 )
 """
 
 _SELECT_BY_ID = """
-SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks
+SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
 FROM ravi_task_lists WHERE id = :id
 """
 
 _SELECT_BY_CONV_AGENT = """
-SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks
+SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
 FROM ravi_task_lists WHERE conversation_id = :cid AND agent_id = :aid
 """
 
 _SELECT_ALL_BY_CONV = """
-SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks
+SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
 FROM ravi_task_lists WHERE conversation_id = :cid
 """
 
@@ -80,6 +82,7 @@ class PgTaskStore:
                 ("agent_id", "TEXT NOT NULL DEFAULT ''"),
                 ("agent_label", "TEXT NOT NULL DEFAULT ''"),
                 ("parent_agent_id", "TEXT NULL"),
+                ("created_at", "TIMESTAMPTZ NOT NULL DEFAULT now()"),
             ]:
                 await session.execute(
                     text(
@@ -120,6 +123,7 @@ class PgTaskStore:
             agent_id=agent_id,
             agent_label=agent_label,
             parent_agent_id=parent_agent_id,
+            created_at=datetime.now(timezone.utc).isoformat(),
             tasks=[
                 Task(
                     id=str(uuid4()), title=t.strip(), status=TaskStatus.PLANNED, order=i
@@ -130,7 +134,9 @@ class PgTaskStore:
         )
         tasks_json = json.dumps([_task_to_dict(t) for t in task_list.tasks])
         async with self._factory() as session:
-            await session.execute(
+            # created_at is intentionally NOT updated on conflict so the board
+            # stays anchored to the turn that first created it.
+            result = await session.execute(
                 text(
                     """
                     INSERT INTO ravi_task_lists
@@ -143,6 +149,7 @@ class PgTaskStore:
                             max_retries = EXCLUDED.max_retries,
                             tasks = EXCLUDED.tasks,
                             updated_at = now()
+                    RETURNING created_at
                     """
                 ),
                 {
@@ -155,7 +162,14 @@ class PgTaskStore:
                     "tasks": tasks_json,
                 },
             )
+            row = result.first()
             await session.commit()
+        if row is not None and row[0] is not None:
+            created = row[0]
+            task_list = dataclasses.replace(
+                task_list,
+                created_at=created.isoformat() if hasattr(created, "isoformat") else str(created),
+            )
         return task_list
 
     # ------------------------------------------------------------------
@@ -389,6 +403,7 @@ def _row_to_task_list(row: object) -> TaskList:
     tasks_data: list = (
         json.loads(tasks_raw) if isinstance(tasks_raw, str) else (tasks_raw or [])
     )
+    created = m.get("created_at")
     return TaskList(
         id=m["id"],
         conversation_id=m["conversation_id"],
@@ -396,6 +411,9 @@ def _row_to_task_list(row: object) -> TaskList:
         agent_id=m.get("agent_id", ""),
         agent_label=m.get("agent_label", ""),
         parent_agent_id=m.get("parent_agent_id"),
+        created_at=(
+            created.isoformat() if hasattr(created, "isoformat") else (created or "")
+        ),
         tasks=[
             Task(
                 id=t["id"],

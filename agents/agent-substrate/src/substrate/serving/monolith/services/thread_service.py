@@ -10,6 +10,7 @@ from sqlalchemy import func, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.monolith.models import Thread, Step, Feedback
+from substrate.serving.shared.auth.claims import AuthClaims
 
 
 # ── Thread CRUD ──────────────────────────────────────────────────────────────
@@ -38,19 +39,61 @@ async def create_thread(
 
 
 async def get_thread(db: AsyncSession, thread_id: uuid.UUID) -> Optional[Thread]:
-    """Get a thread by ID."""
+    """Get a thread by ID — NO ownership check.
+
+    Only for internal/background callers that have no request identity
+    (e.g. scheduled tasks operating on their own tagged threads).  Every
+    route that resolves a caller-supplied thread_id must use
+    ``get_owned_thread`` instead.
+    """
     result = await db.execute(select(Thread).where(Thread.id == thread_id))
     return result.scalar_one_or_none()
+
+
+async def get_owned_thread(
+    db: AsyncSession,
+    thread_id: uuid.UUID,
+    claims: AuthClaims,
+) -> Optional[Thread]:
+    """Get a thread by ID, enforcing that the caller owns it.
+
+    Returns ``None`` both when the thread does not exist and when it belongs
+    to another user, so routes 404 identically and never leak existence.
+
+    Ownership = ``thread.user_identifier == claims.sub`` (the frontend's
+    stable user id carried in the JWT).  Admins bypass the check.
+
+    Migration affordance: threads created before ownership stamping existed
+    have ``user_identifier IS NULL``; the first authenticated user to access
+    one claims it (stamped in place).  New threads are always created with an
+    owner, so this branch only fires for legacy rows.
+    """
+    thread = await get_thread(db, thread_id)
+    if thread is None:
+        return None
+    if claims.is_admin or thread.user_identifier == claims.sub:
+        return thread
+    if thread.user_identifier is None:
+        thread.user_identifier = claims.sub
+        await db.flush()
+        return thread
+    return None
 
 
 async def list_threads(
     db: AsyncSession,
     *,
     user_id: Optional[uuid.UUID] = None,
+    user_identifier: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
 ) -> List[Dict[str, Any]]:
-    """List threads with message counts."""
+    """List threads with message counts.
+
+    ``user_identifier`` scopes the list to threads owned by that user, plus
+    unowned legacy rows (``user_identifier IS NULL`` — claimable on access,
+    see ``get_owned_thread``).
+    """
     # Subquery for message count
     count_subq = (
         select(Step.thread_id, func.count(Step.id).label("message_count"))
@@ -69,8 +112,17 @@ async def list_threads(
         .offset(offset)
     )
 
+    # Exclude scheduled tasks threads from regular recent threads list
+    query = query.where((Thread.tags == None) | (~Thread.tags.contains(["scheduled_task"])))
+
     if user_id:
         query = query.where(Thread.user_id == user_id)
+
+    if user_identifier is not None:
+        query = query.where(
+            (Thread.user_identifier == user_identifier)
+            | (Thread.user_identifier == None)  # noqa: E711 — SQLAlchemy IS NULL
+        )
 
     result = await db.execute(query)
     rows = result.all()

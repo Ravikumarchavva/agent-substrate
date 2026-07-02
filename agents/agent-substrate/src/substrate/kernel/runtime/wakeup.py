@@ -42,14 +42,17 @@ class Wakeup(BaseModel):
     --------------
     message:    ``source_run`` — the AgentId/RunId that sent the message (informational)
     timer:      ``at`` — the datetime that expired
-    signal:     ``signal`` — the signal name; ``payload`` — signal data
+    signal:     ``signals`` — the signal name(s) being waited on (a wait can watch
+                more than one name at once, e.g. ``ask()`` waits on both a reply
+                signal and a child-failure signal); ``payload`` — the payload of
+                whichever signal actually fired, once resolved
     child_done: ``child_run`` — which child finished; ``result_ref`` — ArtifactStore
                 ref where its ``RunResult`` is stored (avoids large inline payload)
     """
 
     kind: Literal["message", "timer", "signal", "child_done"]
     at: datetime | None = None
-    signal: str | None = None
+    signals: list[str] | None = None
     payload: JsonObject = Field(default_factory=dict)
     source_run: RunId | None = None
     child_run: RunId | None = None
@@ -65,13 +68,19 @@ class SignalBus(Protocol):
     specific run by name.  They are the mechanism behind ``ctx.wait_signal()``
     and ``ctx.sleep_until()``.
 
-    Implementations: in-memory asyncio.Event dict (Stage 0), Redis pub/sub
-    with run_id channel (Stage 1+).
+    Implementations: in-memory asyncio dict (Stage 0), Postgres table +
+    ``pg_notify`` (Stage 1+).
 
     Semantic guarantees
     -------------------
-    - A signal fired before the run suspends is not lost — it is buffered and
-      delivered as the wakeup trigger when the run next calls ``suspend``.
+    - A signal fired before the run suspends is not lost — it is buffered as
+      an unconsumed row/entry and delivered the next time something consumes
+      that name for that run.
+    - ``consume`` is exactly-once per ``effect_id``: the caller supplies a
+      deterministic, replay-stable ``effect_id`` (see
+      ``RunContext``/``Effect.make_id``); a wait that replays after already
+      having consumed a signal gets the SAME payload back (idempotent
+      re-claim), never a different or absent one.
     - ``timer`` is best-effort with millisecond granularity; the implementation
       may fire up to a few seconds late under load.  Agents must not rely on
       precise wall-clock accuracy for correctness.
@@ -87,6 +96,22 @@ class SignalBus(Protocol):
 
         Wakes a suspended run that is waiting on this signal name.
         If the run is not currently suspended, the signal is buffered.
+        """
+        ...
+
+    async def consume(
+        self,
+        run_id: RunId,
+        name: str,
+        effect_id: str,
+    ) -> JsonObject | None:
+        """Claim one buffered signal named ``name`` for ``run_id``, or ``None``.
+
+        Exactly-once: if ``effect_id`` already claimed a signal (a replay of
+        the same journaled wait), returns that same payload again without
+        claiming a new one.  Otherwise atomically claims the oldest unclaimed
+        signal matching ``name`` and returns its payload, or ``None`` if none
+        is buffered yet.
         """
         ...
 

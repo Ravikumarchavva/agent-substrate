@@ -9,9 +9,11 @@ approximation: **at-most-once execution** via an idempotent lookup.
 
 Protocol on every effect
 ------------------------
-1. Compute ``effect_id = hash(run_id + step_seq + kind + canonical(args))``.
+1. Compute ``effect_id = hash(run_id + path + kind + canonical(args))``.
    It is deterministic — the same logical step in the same run always
-   produces the same id.
+   produces the same id. ``path`` is hierarchical (see ``Effect.make_id``),
+   not a flat counter, so a journal-hit ancestor whose body never executes
+   cannot desync the ids of everything that comes after it.
 2. ``Journal.lookup(effect_id)`` → hit → return cached result, **do not re-run**.
 3. Miss → execute the effect → ``Journal.record(result)``.
 
@@ -63,17 +65,28 @@ class Effect(BaseModel):
     @staticmethod
     def make_id(
         run_id: RunId,
-        step_seq: int,
+        path: str,
         kind: str,
         args: JsonObject,
     ) -> str:
         """Deterministically compute an effect id.
 
+        ``path`` is a hierarchical position, not a flat counter — e.g. ``"2"``
+        for the 3rd top-level journaled call, ``"2.0"`` for the 1st journaled
+        call made *inside* that call's body (only tool calls open a nested
+        scope; see ``RunContext``). This is required for replay correctness:
+        if a call is a journal hit, its body (and any journaled calls inside
+        it) never executes, so no indices are consumed at that nested level —
+        only the single index for the call itself. A flat run-wide counter
+        would desync from the second nested effect onward on any replay where
+        an ancestor was a cache hit. Callers with no nesting concern (LLM
+        calls, deterministic helpers) just pass a single-segment path.
+
         Canonical: sorts dict keys before hashing so argument order doesn't
         matter.  Returns a 16-char hex prefix of SHA-256.
         """
         raw = json.dumps(
-            {"run_id": run_id, "step_seq": step_seq, "kind": kind, "args": args},
+            {"run_id": run_id, "path": path, "kind": kind, "args": args},
             sort_keys=True,
             separators=(",", ":"),
         ).encode()

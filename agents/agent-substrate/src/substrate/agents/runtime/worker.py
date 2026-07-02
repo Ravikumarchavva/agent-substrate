@@ -1,9 +1,18 @@
 """Worker — the run loop that leases runs and calls Agent.run().
 
-Stage 0 design: each leased run is executed as an asyncio Task.  The Task
-stays alive while the agent is awaiting inside ctx.ask() or
-ctx.sleep_until_signal() — the coroutine is suspended by asyncio, not by
-the durable serialize/fold mechanism (that is Stage 1).
+Each leased run is executed as an asyncio Task, but the Task does NOT stay
+alive across a suspension. When the agent awaits something not yet available
+(``ctx.ask()``, ``ctx.sleep_until_signal()``, ``ctx.sleep_until()``,
+``ctx.join()``), ``RunContext`` raises ``SuspendInterrupt`` — a
+``BaseException`` that unwinds straight out of ``agent.run()`` to
+``_run_agent`` below. This Task then genuinely ends: the run is released
+with ``status=SUSPENDED`` and costs nothing until something wakes it. Resume
+is just a fresh lease: any worker (this one or another) picks it up, folds a
+new ``EffectCache`` from the EventLog, and calls ``agent.run()`` again from
+the top — every already-completed effect and consumed signal replays as a
+cache hit, so execution fast-forwards silently back to the same wait point,
+which now succeeds. See ``agents/runtime/context.py`` module docstring for
+the full suspend/resume contract.
 
 Multiple agents can be in-flight concurrently because each is its own Task.
 The Scheduler's lease capacity controls how many are started per poll tick.
@@ -18,12 +27,11 @@ from typing import TYPE_CHECKING
 from substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
 from substrate.kernel.runtime.ids import RunStatus
 from substrate.kernel.runtime.log_entry import RunLogEntry
-from substrate.kernel.core.errors import CancellationError
+from substrate.kernel.core.errors import CancellationError, SuspendInterrupt
 
 if TYPE_CHECKING:
     from substrate.agents.runtime.backends._event_log import InMemoryEventLog
     from substrate.agents.runtime.backends._inbox import InMemoryInbox
-    from substrate.agents.runtime.backends._journal import InMemoryJournal
     from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
     from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
     from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
@@ -43,7 +51,6 @@ class Worker:
         self,
         worker_id: str,
         event_log: InMemoryEventLog,
-        journal: InMemoryJournal,
         inbox: InMemoryInbox,
         follow_graph: FollowGraph,
         fanout: FanoutStrategy,
@@ -54,7 +61,6 @@ class Worker:
     ) -> None:
         self._worker_id = worker_id
         self._event_log = event_log
-        self._journal = journal
         self._inbox = inbox
         self._follow_graph = follow_graph
         self._fanout = fanout
@@ -126,7 +132,7 @@ class Worker:
             except Exception:
                 pass
             try:
-                await self._supervisor.record_completion(run_id, RunStatus.CANCELLED)
+                await self._supervisor.finish_run(run_id, RunStatus.CANCELLED)
             except Exception:
                 pass
 
@@ -210,6 +216,7 @@ class Worker:
 
     async def _run_agent(self, lease, agent: Agent) -> None:
         from substrate.agents.runtime.context import RunContext
+        from substrate.agents.runtime.effect_cache import EffectCache
 
         run_id = lease.run_id
         token = CancellationToken()
@@ -218,11 +225,20 @@ class Worker:
 
         llm_client = getattr(agent, "model", None)
         tool_invoker = self._build_tool_invoker(agent)
+        blob_store = getattr(agent, "blob_store", None)
+
+        # Fold the EventLog into the effect cache once per lease — this is
+        # the "replay" half of fold-is-truth: every effect.result this run
+        # already recorded becomes a free in-memory lookup for the rest of
+        # this invocation. last_seq also seeds RunContext's local seq
+        # cursor, so no separate last_seq() query is needed below.
+        effect_cache = await EffectCache.fold(self._event_log, run_id)
 
         ctx = RunContext(
             meta=meta,
             event_log=self._event_log,
-            journal=self._journal,
+            effect_cache=effect_cache,
+            blob_store=blob_store,
             inbox=self._inbox,
             follow_graph=self._follow_graph,
             fanout=self._fanout,
@@ -234,17 +250,35 @@ class Worker:
             agent=agent,
         )
 
-        # Log run start (seq -1 → first append at seq 0)
-        seq = await self._event_log.last_seq(run_id)
-        if seq < 0:
-            await self._event_log.append(
-                run_id,
-                RunLogEntry(run_id=run_id, seq=0, kind="run.started"),
-                expected_seq=-1,
-            )
+        # Log run start (last_seq -1 → first append at seq 0). Routed through
+        # ctx._log so its local seq cursor stays the single source of truth
+        # instead of drifting from an out-of-band append.
+        if effect_cache.last_seq < 0:
+            await ctx._log("run.started", {})
 
-        # Drain inbox
-        inbox_msgs = await self._inbox.drain(agent.id, max=100)
+        # Journaled drain: inbox.drain() is a non-destructive peek (messages
+        # stay until acked), so on a genuine replay a message that arrived
+        # DURING the prior attempt's suspension would otherwise be silently
+        # folded into inbox_msgs this time, changing what the agent sees
+        # from one replay attempt to the next — a real nondeterminism source.
+        # Recording which message ids were drained on the live attempt and
+        # reusing that exact set on replay closes it; a message that arrives
+        # mid-suspension simply waits for the run's NEXT drain instead.
+        from substrate.kernel.runtime.effects import Effect
+
+        drain_path = ctx._alloc_path()
+        drain_effect_id = Effect.make_id(run_id, drain_path, "inbox.drain", {})
+        cached_drain = ctx._lookup_effect(drain_effect_id)
+        if cached_drain is not None:
+            drained = await ctx._resolve_effect_value(cached_drain)
+            all_msgs = await self._inbox.drain(agent.id, max=1000)
+            by_id = {m.id: m for m in all_msgs}
+            inbox_msgs = [by_id[mid] for mid in drained.get("msg_ids", []) if mid in by_id]
+        else:
+            inbox_msgs = await self._inbox.drain(agent.id, max=100)
+            await ctx._record_effect(
+                drain_effect_id, "ok", {"msg_ids": [m.id for m in inbox_msgs]}
+            )
 
         hooks = getattr(agent, "hooks", None)
         middleware = getattr(agent, "middleware", None)
@@ -264,7 +298,15 @@ class Worker:
             while True:
                 await asyncio.sleep(_HEARTBEAT_INTERVAL)
                 try:
-                    await self._scheduler.heartbeat(lease)
+                    cancel_requested = await self._scheduler.heartbeat(lease)
+                    if cancel_requested:
+                        # Durable cancel or deadline observed for this run —
+                        # possibly requested by a DIFFERENT worker process
+                        # (Supervisor.cancel() has no reference to this
+                        # process's live Task), so the heartbeat round-trip
+                        # is how it reaches this token. ctx.check() picks it
+                        # up cooperatively at the next yield point.
+                        token.cancel("cancel_requested")
                 except Exception:
                     pass  # never let a missed heartbeat kill the run
 
@@ -292,7 +334,16 @@ class Worker:
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.COMPLETED)
-            await self._supervisor.record_completion(run_id, RunStatus.COMPLETED)
+            await self._supervisor.finish_run(run_id, RunStatus.COMPLETED)
+
+        except SuspendInterrupt as exc:
+            # Genuine dormancy: no ack/nack (the drained messages are still
+            # unacked in the inbox — see the journaled drain above — and will
+            # be there, exactly as-is, on the next lease), no terminal event,
+            # no finish_run. release(SUSPENDED) is the only state
+            # change; the Task ends here and the run costs nothing until
+            # something wakes it.
+            await self._scheduler.release(lease, status=RunStatus.SUSPENDED, wake_on=exc.wakeup)
 
         except (asyncio.CancelledError, CancellationError):
             token.cancel("task-cancelled")
@@ -303,7 +354,7 @@ class Worker:
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.CANCELLED)
-            await self._supervisor.record_completion(run_id, RunStatus.CANCELLED)
+            await self._supervisor.finish_run(run_id, RunStatus.CANCELLED)
 
         except Exception as exc:
             from substrate.kernel.core.errors import (
@@ -348,7 +399,7 @@ class Worker:
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.FAILED)
-            await self._supervisor.record_completion(
+            await self._supervisor.finish_run(
                 run_id, RunStatus.FAILED, error=str(exc)
             )
         finally:

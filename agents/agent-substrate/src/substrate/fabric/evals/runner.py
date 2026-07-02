@@ -130,10 +130,26 @@ class EvalRunner:
         trace = _Trace()
         try:
             run_id = await rt.submit(self._agent.id, msg)
-            payload = await asyncio.wait_for(
-                rt.signal_bus.wait_for_signal(sentinel_run_id, f"reply:{cid}"),
-                timeout=self._timeout,
+            # Poll consume() rather than block: SignalBus is consume-based
+            # (matches the durable backend, which has no way to "block" on a
+            # DB row). sentinel_run_id is a synthetic mailbox key for this
+            # external harness, not a real tracked run, so a fixed effect_id
+            # is fine — this call site never replays.
+            deadline = (
+                time.monotonic() + self._timeout if self._timeout is not None else None
             )
+            payload: dict | None = None
+            while deadline is None or time.monotonic() < deadline:
+                payload = await rt.signal_bus.consume(
+                    sentinel_run_id, f"reply:{cid}", f"eval-wait:{sentinel_run_id}:{cid}"
+                )
+                if payload is not None:
+                    break
+                await asyncio.sleep(0.05)
+            if payload is None:
+                raise TimeoutError(
+                    f"Timed out after {self._timeout}s waiting for a reply"
+                )
             output = str(payload.get("text", ""))
             duration = time.monotonic() - start
             trace = await self._collect_trace(rt, run_id)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import dataclasses
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
 
@@ -62,6 +63,7 @@ class TaskStore:
                 agent_id=agent_id,
                 agent_label=agent_label,
                 parent_agent_id=parent_agent_id,
+                created_at=datetime.now(timezone.utc).isoformat(),
                 tasks=[
                     Task(
                         id=str(uuid4()),

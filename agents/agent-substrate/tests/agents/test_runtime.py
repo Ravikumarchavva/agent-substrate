@@ -280,7 +280,7 @@ async def test_ask_timeout_is_not_target_failed() -> None:
 
 async def test_journal_write_once() -> None:
     journal = InMemoryJournal()
-    effect_id = Effect.make_id("run-abc", 0, "send_email", {"to": "user@example.com"})
+    effect_id = Effect.make_id("run-abc", "0", "send_email", {"to": "user@example.com"})
 
     first = EffectResult(effect_id=effect_id, status="ok", value={"sent": True})
     second = EffectResult(
@@ -311,12 +311,18 @@ async def test_journal_dedup_via_context() -> None:
                 self.call_count += 1
                 return {"n": self.call_count}
 
+            # Snapshot the path stack as run() sees it (Worker's own journaled
+            # effects before calling run(), e.g. inbox.drain, may have already
+            # consumed earlier indices — this test only cares about relative
+            # position, not absolute index 0).
+            start_stack = list(ctx._path_stack)
+
             # First journaled call
             result1 = await ctx._journaled("count", {}, _side_effect)
-            # Second call with a DIFFERENT step_seq → different effect_id → executes
+            # Second call with a DIFFERENT path → different effect_id → executes
             result2 = await ctx._journaled("count", {}, _side_effect)
-            # Reset seq to 0 to simulate replay: same effect_id as result1
-            ctx._step_seq = 0
+            # Reset the path stack to simulate replay: same path/effect_id as result1
+            ctx._path_stack = start_stack
             result1_replay = await ctx._journaled("count", {}, _side_effect)
 
             assert result1 == {"n": 1}
@@ -332,6 +338,89 @@ async def test_journal_dedup_via_context() -> None:
         await rt.register(agent)
         await rt.submit(agent_id, _msg(agent_id, {}))
         await asyncio.wait_for(agent.done.wait(), timeout=2.0)
+
+
+async def test_nested_effect_inside_journal_hit_tool_stays_replay_safe() -> None:
+    """A tool that journals its own nested effect (e.g. ctx.uuid()) must not
+    desync sibling effect ids when the tool call itself becomes a journal hit.
+
+    Regression test for the flat _step_seq bug: with a run-wide flat counter,
+    a cache-hit tool call still "consumed" an index for each effect its body
+    *would* have journaled internally, but on replay the body never runs, so
+    those internal increments never happen — every effect_id after the first
+    such hit would diverge and needlessly re-execute (re-billing an LLM call,
+    re-sending an email, ...). The hierarchical path fixes this: a tool call
+    always consumes exactly one index in its parent scope regardless of hit
+    or miss, and its internal effects live in a child scope that is only
+    entered when the body genuinely executes.
+    """
+    from substrate.agents.tools.toolbox import Toolbox
+    from substrate.kernel.core.content import TextBlock
+    from substrate.kernel.tools import ToolExecutionResult, ToolRisk
+
+    class NestedUuidTool:
+        name = "nested_uuid_tool"
+        description = "Journals its own uuid() call inside execute()."
+        risk = ToolRisk.SAFE
+        input_schema: dict = {"type": "object", "properties": {}}
+        call_count = 0
+
+        async def execute(self, *, ctx: RunContext | None = None, **_: object):
+            NestedUuidTool.call_count += 1
+            assert ctx is not None
+            request_id = await ctx.uuid()  # nested journaled effect
+            return ToolExecutionResult(content=[TextBlock(text=request_id)])
+
+    class NestedEffectAgent:
+        def __init__(self, agent_id: AgentId) -> None:
+            self.id = agent_id
+            self.tools = Toolbox()
+            self.tools.add(NestedUuidTool())
+            self.done = asyncio.Event()
+            self.sibling_ids: list[str] = []
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            # Snapshot the path stack as run() sees it (Worker's own journaled
+            # effects before calling run(), e.g. inbox.drain, may have already
+            # consumed earlier indices).
+            start_stack = list(ctx._path_stack)
+
+            # Live run: tool call (opens a child scope, journals a nested
+            # uuid() inside it), then a top-level sibling uuid() call.
+            await ctx.tool("nested_uuid_tool")
+            sibling_live = await ctx.uuid()
+            self.sibling_ids.append(sibling_live)
+
+            # Simulate replay: reset to run()'s own starting path, same
+            # journal/run_id — the tool call is now a journal hit (its body
+            # must NOT re-execute, so no child scope is entered and
+            # NestedUuidTool.call_count must not increase).
+            ctx._path_stack = start_stack
+            await ctx.tool("nested_uuid_tool")
+            sibling_replay = await ctx.uuid()
+            self.sibling_ids.append(sibling_replay)
+
+            self.done.set()
+
+    agent_id = _agent_id("nested-effect")
+    agent = NestedEffectAgent(agent_id)
+
+    async with Runtime() as rt:
+        await rt.register(agent)
+        await rt.submit(agent_id, _msg(agent_id, {}))
+        await asyncio.wait_for(agent.done.wait(), timeout=2.0)
+
+    assert NestedUuidTool.call_count == 1, (
+        "Tool body must execute exactly once — the replayed call is a "
+        "journal hit and must not re-run"
+    )
+    live, replay = agent.sibling_ids
+    assert live == replay, (
+        "The sibling uuid() call after the tool call must resolve to the "
+        "SAME effect_id on replay as it did live — proves the tool call's "
+        "hit consumed exactly one index in the parent scope, keeping this "
+        "sibling's path aligned"
+    )
 
 
 async def test_supervisor_join() -> None:

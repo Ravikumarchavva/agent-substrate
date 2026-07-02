@@ -26,14 +26,12 @@ logger = setup_logging()
 
 
 @asynccontextmanager
-async def _runtime_cm(backend: str, pg_url: str, redis_url: str):
+async def _runtime_cm(backend: str, pg_url: str):
     if backend == "postgres" and pg_url:
         from substrate.infrastructure.runtime import build_postgres_runtime
 
-        async with build_postgres_runtime(
-            postgres_url=pg_url, redis_url=redis_url
-        ) as rt:
-            logger.info("Agent Runtime: durable (Postgres EventLog + Redis journal)")
+        async with build_postgres_runtime(postgres_url=pg_url) as rt:
+            logger.info("Agent Runtime: durable (Postgres EventLog)")
             yield rt
     else:
         from substrate.agents.runtime import Runtime
@@ -72,7 +70,7 @@ async def lifespan(app):
         os.environ.get("DATABASE_URL", "") or os.environ.get("ASYNC_DATABASE_URL", "")
     ).replace("+asyncpg", "")
 
-    async with _runtime_cm(backend, pg_url, redis_url) as runtime:
+    async with _runtime_cm(backend, pg_url) as runtime:
         app.state.runtime = runtime
 
         app.state.redis = aioredis.from_url(redis_url, decode_responses=True)

@@ -1,7 +1,7 @@
 """End-to-end integration tests for build_postgres_runtime().
 
-Requires running Postgres (and optionally Redis).  Skips automatically when
-the infra is not reachable.
+Requires running Postgres.  Skips automatically when the infra is not
+reachable.
 
 Run with infra up:
     make infra-up
@@ -24,7 +24,6 @@ pytestmark = [pytest.mark.requires_postgres]
 _PG_URL = os.environ.get(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb"
 ).replace("+asyncpg", "")
-_REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 
 async def _pg_reachable() -> bool:
@@ -38,18 +37,6 @@ async def _pg_reachable() -> bool:
         return False
 
 
-async def _redis_reachable() -> bool:
-    try:
-        import redis.asyncio as aioredis
-
-        client = aioredis.from_url(_REDIS_URL)
-        await client.ping()
-        await client.aclose()
-        return True
-    except Exception:
-        return False
-
-
 @pytest.fixture()
 async def pg_runtime():
     """Runtime backed by Postgres only (in-memory journal)."""
@@ -58,23 +45,6 @@ async def pg_runtime():
     from substrate.infrastructure.runtime import build_postgres_runtime
 
     async with build_postgres_runtime(postgres_url=_PG_URL) as rt:
-        yield rt
-
-
-@pytest.fixture()
-async def pg_redis_runtime():
-    """Runtime backed by Postgres + Redis."""
-    if not await _pg_reachable():
-        pytest.skip("Postgres not reachable")
-    if not await _redis_reachable():
-        pytest.skip("Redis not reachable")
-    from substrate.infrastructure.runtime import build_postgres_runtime
-
-    async with build_postgres_runtime(
-        postgres_url=_PG_URL,
-        redis_url=_REDIS_URL,
-        journal_ttl_seconds=60,
-    ) as rt:
         yield rt
 
 
@@ -213,25 +183,87 @@ async def test_pg_ask_reply(pg_runtime) -> None:
     assert asker.outcome.result.output.data == {"echo": {"value": 99}}
 
 
-# ---------------------------------------------------------------------------
-# 4. Fire-and-forget with Postgres + Redis (full Stage 1 stack)
-# ---------------------------------------------------------------------------
+class ChildAgent:
+    def __init__(self, agent_id: AgentId) -> None:
+        self.id = agent_id
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        pass  # simply finishes — status COMPLETED
 
 
-async def test_pg_redis_fire_and_forget(pg_redis_runtime) -> None:
-    agent_id = _agent_id("recorder-redis")
-    agent = RecorderAgent(agent_id)
+class ParentJoinAgent:
+    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+        self.id = agent_id
+        self.child_id = child_id
+        self.done = asyncio.Event()
+        self.child_result = None
 
-    await pg_redis_runtime.register(agent)
-    await pg_redis_runtime.submit(agent_id, _msg(agent_id, {"hello": "redis-journal"}))
-    await asyncio.wait_for(agent.done.wait(), timeout=5.0)
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        boot = _msg(self.child_id, {"task": "work"})
+        handle = await ctx.spawn(self.child_id, boot=boot)  # type: ignore[attr-defined]
+        self.child_result = await ctx.join(handle)  # type: ignore[attr-defined]
+        self.done.set()
 
-    payloads = [
-        m.payload.data  # type: ignore[union-attr]
-        for m in agent.received
-        if isinstance(m.payload, DataPayload)
-    ]
-    assert {"hello": "redis-journal"} in payloads
+
+async def test_pg_spawn_join(pg_runtime) -> None:
+    """ctx.join() suspends the parent (durably) and resumes when the child
+    finishes — the PostgresSupervisor.finish_run() -> child:{run_id} signal
+    path, replacing the old asyncio.Event()-blocking Supervisor.join()."""
+    from substrate.kernel.runtime.ids import RunStatus
+
+    child_id = _agent_id("pg-join-child")
+    parent_id = _agent_id("pg-join-parent")
+    child = ChildAgent(child_id)
+    parent = ParentJoinAgent(parent_id, child_id)
+
+    await pg_runtime.register(child)
+    await pg_runtime.register(parent)
+    await pg_runtime.submit(parent_id, _msg(parent_id, {"start": True}))
+
+    await asyncio.wait_for(parent.done.wait(), timeout=8.0)
+    assert parent.child_result is not None
+    assert parent.child_result.status == RunStatus.COMPLETED
+
+
+class CrashingChildAgent:
+    def __init__(self, agent_id: AgentId) -> None:
+        self.id = agent_id
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        raise RuntimeError("child deliberately crashes")
+
+
+class ParentJoinCrashAgent:
+    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+        self.id = agent_id
+        self.child_id = child_id
+        self.done = asyncio.Event()
+        self.child_result = None
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        boot = _msg(self.child_id, {"task": "work"})
+        handle = await ctx.spawn(self.child_id, boot=boot)  # type: ignore[attr-defined]
+        self.child_result = await ctx.join(handle)  # type: ignore[attr-defined]
+        self.done.set()
+
+
+async def test_pg_join_crash_fast_path(pg_runtime) -> None:
+    """A crashed child wakes the joining parent immediately via its FAILED
+    finish_run() signal — the parent must not depend on any timeout."""
+    from substrate.kernel.runtime.ids import RunStatus
+
+    child_id = _agent_id("pg-join-crash-child")
+    parent_id = _agent_id("pg-join-crash-parent")
+    child = CrashingChildAgent(child_id)
+    parent = ParentJoinCrashAgent(parent_id, child_id)
+
+    await pg_runtime.register(child)
+    await pg_runtime.register(parent)
+    await pg_runtime.submit(parent_id, _msg(parent_id, {"start": True}))
+
+    await asyncio.wait_for(parent.done.wait(), timeout=8.0)
+    assert parent.child_result is not None
+    assert parent.child_result.status == RunStatus.FAILED
 
 
 # ---------------------------------------------------------------------------
@@ -486,3 +518,288 @@ async def test_pg_cold_resume() -> None:
             )
     finally:
         await pool.close()
+
+
+# ---------------------------------------------------------------------------
+# 6. PR7 — cancel cascade, deadline enforcement, ask() crash fast-path
+# ---------------------------------------------------------------------------
+
+
+class SleepForeverAgent:
+    """Suspends on a signal that never arrives — stays SUSPENDED indefinitely."""
+
+    def __init__(self, agent_id: AgentId) -> None:
+        self.id = agent_id
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        await ctx.sleep_until_signal("never_arrives")  # type: ignore[attr-defined]
+
+
+class SpawnChainAgent:
+    """Spawns one SleepForeverAgent child and reports the handle via the event."""
+
+    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+        self.id = agent_id
+        self.child_id = child_id
+        self.spawned = asyncio.Event()
+        self.child_run_id: str | None = None
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        boot = _msg(self.child_id, {})
+        handle = await ctx.spawn(self.child_id, boot=boot)  # type: ignore[attr-defined]
+        self.child_run_id = handle.run_id
+        self.spawned.set()
+        await ctx.sleep_until_signal("never_arrives")  # type: ignore[attr-defined]
+
+
+async def test_pg_cancel_cascade(pg_runtime) -> None:
+    """Cancelling the root of a 2-deep spawn tree of suspended runs marks
+    the entire subtree cancelled — the recursive CTE in
+    PostgresSupervisor.cancel(), exercised through the public Runtime."""
+    from substrate.kernel.runtime.supervisor import RunHandle
+
+    grandchild_id = _agent_id("pg-cancel-grandchild")
+    child_id = _agent_id("pg-cancel-child")
+    root_id = _agent_id("pg-cancel-root")
+
+    grandchild = SleepForeverAgent(grandchild_id)
+    child = SpawnChainAgent(child_id, grandchild_id)
+    root = SpawnChainAgent(root_id, child_id)
+
+    await pg_runtime.register(grandchild)
+    await pg_runtime.register(child)
+    await pg_runtime.register(root)
+
+    root_run_id = await pg_runtime.submit(root_id, _msg(root_id, {"start": True}))
+
+    # Wait for the whole chain to actually spawn and suspend: root spawns
+    # child (and itself suspends), child's run then spawns grandchild (and
+    # itself suspends), grandchild suspends forever.
+    await asyncio.wait_for(root.spawned.wait(), timeout=8.0)
+    await asyncio.wait_for(child.spawned.wait(), timeout=8.0)
+
+    async def _status_of(run_id: str) -> str | None:
+        async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
+            return await conn.fetchval(
+                "SELECT status FROM ravi_run_queue WHERE run_id = $1", run_id
+            )
+
+    async def _wait_suspended(run_id: str) -> None:
+        for _ in range(100):
+            if await _status_of(run_id) == "suspended":
+                return
+            await asyncio.sleep(0.05)
+        raise AssertionError(f"{run_id} never reached suspended")
+
+    await _wait_suspended(root_run_id)
+    await _wait_suspended(child.child_run_id)
+
+    handle = RunHandle(run_id=root_run_id, agent_id=root_id, parent_run="")
+    await pg_runtime.supervisor.cancel(handle, reason="test cancel cascade")
+
+    for run_id in (root_run_id, child.child_run_id):
+        assert await _status_of(run_id) == "cancelled", run_id
+
+    async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
+        tree_status = await conn.fetch(
+            "SELECT run_id, status FROM ravi_run_tree WHERE run_id = ANY($1)",
+            [child.child_run_id, root.child_run_id],
+        )
+    assert all(r["status"] == "cancelled" for r in tree_status)
+
+
+class DeadlineAgent:
+    """Suspends forever — used purely to occupy a 'suspended' row for the
+    deadline-enforcement test (deadline is set directly via SQL, mirroring
+    the plan's own verification approach: "fire signal via bare DB write")."""
+
+    def __init__(self, agent_id: AgentId) -> None:
+        self.id = agent_id
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        await ctx.sleep_until_signal("never_arrives")  # type: ignore[attr-defined]
+
+
+async def test_pg_deadline_enforcement(pg_runtime) -> None:
+    """A suspended run whose deadline has passed is terminal-marked FAILED
+    by the scheduler's own lease poll — no external actor needed."""
+    from datetime import datetime, timedelta, timezone
+
+    agent_id = _agent_id("pg-deadline")
+    agent = DeadlineAgent(agent_id)
+    await pg_runtime.register(agent)
+    run_id = await pg_runtime.submit(agent_id, _msg(agent_id, {}))
+
+    async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
+        for _ in range(100):
+            status = await conn.fetchval(
+                "SELECT status FROM ravi_run_queue WHERE run_id = $1", run_id
+            )
+            if status == "suspended":
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("run never reached suspended")
+
+        past = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
+        await conn.execute(
+            "UPDATE ravi_run_queue SET deadline = $1 WHERE run_id = $2", past, run_id
+        )
+
+        for _ in range(100):
+            status = await conn.fetchval(
+                "SELECT status FROM ravi_run_queue WHERE run_id = $1", run_id
+            )
+            if status == "failed":
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("deadline was never enforced")
+
+
+class SpawnThenAskAgent:
+    """Spawns a child (so ctx.ask gets a RunHandle, not a bare AgentId) and
+    asks it with a deliberately generous timeout — the crash fast-path
+    (child:{run_id} in ask()'s wait_names) must resolve long before that
+    timeout, not wait it out."""
+
+    def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+        self.id = agent_id
+        self.child_id = child_id
+        self.done = asyncio.Event()
+        self.outcome: AskOutcome | None = None
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        boot = _msg(self.child_id, {})
+        handle = await ctx.spawn(self.child_id, boot=boot)  # type: ignore[attr-defined]
+        self.outcome = await ctx.ask(  # type: ignore[attr-defined]
+            handle, boot, timeout=60.0
+        )
+        self.done.set()
+
+
+async def test_pg_ask_crash_fast_path(pg_runtime) -> None:
+    """ctx.ask(handle, ...) on a spawned child returns as soon as the child
+    crashes — via finish_run()'s child:{run_id} signal — not after waiting
+    out the (deliberately huge) timeout."""
+    child_id = _agent_id("pg-ask-crash-child")
+    asker_id = _agent_id("pg-ask-crash-asker")
+
+    class CrashingAgent:
+        def __init__(self, agent_id: AgentId) -> None:
+            self.id = agent_id
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            raise RuntimeError("target deliberately crashes")
+
+    crashing = CrashingAgent(child_id)
+    asker = SpawnThenAskAgent(asker_id, child_id)
+
+    await pg_runtime.register(crashing)
+    await pg_runtime.register(asker)
+
+    start = asyncio.get_event_loop().time()
+    await pg_runtime.submit(asker_id, _msg(asker_id, {"start": True}))
+    await asyncio.wait_for(asker.done.wait(), timeout=8.0)
+    elapsed = asyncio.get_event_loop().time() - start
+
+    assert asker.outcome is not None
+    assert asker.outcome.kind == "target_failed"
+    assert elapsed < 8.0, "must not wait out the 60s timeout"
+
+
+# ---------------------------------------------------------------------------
+# 7. PR8 — signal GC and retention sweep
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_signal_gc_on_finish(pg_runtime) -> None:
+    """A terminal run's leftover ravi_signals rows are deleted by finish_run() —
+    both the reply it consumed and any late/never-consumed extras."""
+    echo_id = _agent_id("pg-gc-echo")
+    asker_id = _agent_id("pg-gc-asker")
+    echo = EchoAgent(echo_id)
+    asker = AskerAgent(asker_id, echo_id)
+
+    await pg_runtime.register(echo)
+    await pg_runtime.register(asker)
+    await pg_runtime.submit(asker_id, _msg(asker_id))
+    await asyncio.wait_for(asker.done.wait(), timeout=8.0)
+
+    asker_run_id = None
+    async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
+        for _ in range(50):
+            row = await conn.fetchrow(
+                "SELECT run_id FROM ravi_agent_runs WHERE agent_id = $1", str(asker_id)
+            )
+            if row is not None:
+                asker_run_id = row["run_id"]
+                break
+            await asyncio.sleep(0.05)
+        assert asker_run_id is not None
+
+        for _ in range(50):
+            status = await conn.fetchval(
+                "SELECT status FROM ravi_run_queue WHERE run_id = $1", asker_run_id
+            )
+            if status == "completed":
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("asker run never completed")
+
+        remaining = await conn.fetchval(
+            "SELECT count(*) FROM ravi_signals WHERE run_id = $1", asker_run_id
+        )
+    assert remaining == 0
+
+
+async def test_pg_retention_sweep(pg_runtime) -> None:
+    """sweep_terminal_runs() deletes durable state for old terminal runs,
+    and leaves runs terminated more recently than the cutoff untouched."""
+    from datetime import timedelta
+
+    from substrate.infrastructure.runtime import sweep_terminal_runs
+
+    agent_id = _agent_id("pg-sweep")
+    agent = RecorderAgent(agent_id)
+    await pg_runtime.register(agent)
+    run_id = await pg_runtime.submit(agent_id, _msg(agent_id, {}))
+    await asyncio.wait_for(agent.done.wait(), timeout=8.0)
+
+    pool = pg_runtime.event_log._pool  # type: ignore[attr-defined]
+    async with pool.acquire() as conn:
+        for _ in range(50):
+            row = await conn.fetchrow(
+                "SELECT status, terminated_at FROM ravi_run_queue WHERE run_id = $1",
+                run_id,
+            )
+            if row is not None and row["status"] == "completed":
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("run never completed")
+        assert row["terminated_at"] is not None
+
+        # Not old enough yet: a 1-day cutoff must not touch it.
+        await sweep_terminal_runs(pool, older_than=timedelta(days=1))
+        still_there = await conn.fetchval(
+            "SELECT 1 FROM ravi_run_queue WHERE run_id = $1", run_id
+        )
+        assert still_there == 1
+
+        # Backdate it past any cutoff, then sweep for real.
+        await conn.execute(
+            "UPDATE ravi_run_queue SET terminated_at = now() - interval '2 days' WHERE run_id = $1",
+            run_id,
+        )
+        await sweep_terminal_runs(pool, older_than=timedelta(days=1))
+
+        gone = await conn.fetchval(
+            "SELECT 1 FROM ravi_run_queue WHERE run_id = $1", run_id
+        )
+        assert gone is None
+        gone_log = await conn.fetchval(
+            "SELECT 1 FROM ravi_event_log WHERE run_id = $1 LIMIT 1", run_id
+        )
+        assert gone_log is None

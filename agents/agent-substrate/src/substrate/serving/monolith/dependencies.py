@@ -37,6 +37,7 @@ class ServerDependencies:
     session_factory: Any = None
     ci_client: Optional[Any] = None
     file_store: Optional[Any] = None
+    trigger_scheduler: Optional[Any] = None
 
 
 def get_ctx(request: Request) -> ServerDependencies:

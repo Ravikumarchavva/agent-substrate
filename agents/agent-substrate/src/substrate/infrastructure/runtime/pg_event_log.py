@@ -24,6 +24,7 @@ safety backstop in case a notification is ever missed.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, AsyncIterator
@@ -224,7 +225,15 @@ class PostgresEventLog:
 
 
 def _lock_key(run_id: RunId) -> int:
-    return hash(run_id) & 0x7FFFFFFFFFFFFFFF
+    """Stable advisory-lock key for *run_id*.
+
+    Must NOT use Python's ``hash()``: CPython salts ``str.__hash__`` per
+    process (PYTHONHASHSEED), so two worker processes would compute different
+    lock keys for the same run and the cross-process append serialization
+    would silently not hold.  A digest is stable across processes and hosts.
+    """
+    digest = hashlib.sha256(run_id.encode()).digest()
+    return int.from_bytes(digest[:8], "big") & 0x7FFFFFFFFFFFFFFF
 
 
 def _row_to_entry(run_id: RunId, row: object) -> RunLogEntry:

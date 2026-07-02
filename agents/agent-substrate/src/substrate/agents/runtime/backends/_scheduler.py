@@ -60,7 +60,13 @@ class InMemoryScheduler:
         tenant: str,
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,
+        deadline: datetime | None = None,
     ) -> None:
+        # deadline: not enforced in-process — Worker.cancel() already
+        # reaches this same process's CancellationToken directly and
+        # synchronously; the durable deadline column exists specifically
+        # for Postgres's multi-worker case (see PostgresScheduler).
+        del deadline
         if run_id in self._pending or run_id in self._leases:
             # Coalesce: merge wakeup but don't add duplicate entry
             if wake:
@@ -102,9 +108,12 @@ class InMemoryScheduler:
             leases.append(lease)
         return leases
 
-    async def heartbeat(self, lease: Lease) -> None:
-        # In-process: no-op; lease expiry is not enforced within a single process
-        pass
+    async def heartbeat(self, lease: Lease) -> bool:
+        # In-process: no-op; lease expiry is not enforced within a single
+        # process, and cancel() already cancels the local CancellationToken
+        # synchronously (same process, same Worker holds both) — no
+        # heartbeat round-trip needed to observe it.
+        return False
 
     async def release(
         self,

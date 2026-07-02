@@ -52,6 +52,9 @@ class ServerSettings(SubstrateConfig):
     RATE_LIMIT_ANON_RPM: int = 5
     RATE_LIMIT_WINDOW_SECONDS: int = 86400
     PORTFOLIO_RATE_LIMIT_RPM: int = 10
+    # False (default) = fail closed: 503 when Redis is unavailable instead of
+    # silently allowing unlimited traffic. Set True only for dev/single-user.
+    RATE_LIMIT_FAIL_OPEN: bool = False
 
     # ── Observability ────────────────────────────────────────────────────────
     OTLP_ENDPOINT: str = "http://localhost:4318"

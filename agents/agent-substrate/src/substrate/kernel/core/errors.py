@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from substrate.kernel.core.identity import AgentId
+
+if TYPE_CHECKING:
+    from substrate.kernel.runtime.wakeup import Wakeup
 
 
 class KernelError(Exception):
@@ -36,12 +41,16 @@ class HandlerError(KernelError):
 class AgentCrashError(KernelError):
     """Raised when an agent's run fails with an unexpected exception.
 
-    The orchestrator catches this, consults the retry policy, and
-    re-dispatches the agent via the dispatch tool, resuming from the
-    last ``Checkpoint`` (see ``kernel/agent.py``).
+    The Worker catches this, journals ``run.failed``, and (per retry policy)
+    re-enqueues the run. Resume is a fresh lease: any worker folds a new
+    ``EffectCache`` from the EventLog (``fold(entries from seq=0)`` — see
+    ``kernel/runtime/log_entry.py``) and calls ``agent.run()`` again from the
+    top; every already-completed effect replays as a cache hit. There is no
+    separate checkpoint/snapshot mechanism — the EventLog fold is the sole
+    source of truth.
 
     ``run_id`` and ``agent_id`` identify which run/agent failed so the
-    orchestrator knows which history and checkpoint to reload.
+    resuming worker knows which EventLog to fold.
     """
 
     def __init__(
@@ -87,6 +96,29 @@ class CancellationError(KernelError):
     Agents and tools should propagate this rather than catch and swallow it,
     so the cancellation can reach the outermost caller cleanly.
     """
+
+
+class SuspendInterrupt(BaseException):
+    """Raised to unwind a run to the Worker when it must go dormant.
+
+    Deliberately a ``BaseException``, not ``Exception``: agent and tool code
+    routinely wraps journaled calls in broad ``except Exception`` blocks (to
+    record a journal error and re-raise). If this were an ``Exception``, that
+    kind of handler would silently swallow the suspend signal and journal it
+    as a failed effect instead of letting it unwind to the Worker.
+
+    ``wakeup`` (a ``kernel.runtime.wakeup.Wakeup``, referenced under
+    ``TYPE_CHECKING`` to avoid a kernel/core -> kernel/runtime import cycle)
+    is what the Worker passes to ``Scheduler.release(status=SUSPENDED,
+    wake_on=wakeup)`` — it's how the raiser (``RunContext``) tells the
+    catcher (``Worker``) what should wake this run back up.
+    """
+
+    def __init__(self, run_id: str, wakeup: "Wakeup", *, reason: str = "") -> None:
+        super().__init__(f"run {run_id} suspended" + (f": {reason}" if reason else ""))
+        self.run_id = run_id
+        self.wakeup = wakeup
+        self.reason = reason
 
 
 class ConcurrentAppendError(KernelError):
@@ -144,6 +176,7 @@ __all__ = [
     "BudgetExhaustedError",
     "MiddlewareTermination",
     "CancellationError",
+    "SuspendInterrupt",
     "ConcurrentAppendError",
     "SpawnDenied",
 ]

@@ -52,10 +52,19 @@ async def _run_flow(flow, text: str, *extra_agents, timeout: float = 5.0) -> str
             await rt.register(agent)
         await rt.register(flow)
         await rt.submit(flow.id, msg)
-        payload = await asyncio.wait_for(
-            rt.signal_bus.wait_for_signal(sentinel, f"reply:{cid}"),
-            timeout=timeout,
-        )
+        # SignalBus is consume-based (matches the durable backend) — poll
+        # rather than block.
+        deadline = asyncio.get_event_loop().time() + timeout
+        payload = None
+        while asyncio.get_event_loop().time() < deadline:
+            payload = await rt.signal_bus.consume(
+                sentinel, f"reply:{cid}", f"test-wait:{sentinel}:{cid}"
+            )
+            if payload is not None:
+                break
+            await asyncio.sleep(0.02)
+        if payload is None:
+            raise asyncio.TimeoutError(f"Timed out after {timeout}s waiting for a reply")
     return str(payload.get("text", ""))
 
 

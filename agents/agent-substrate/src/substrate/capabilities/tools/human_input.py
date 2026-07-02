@@ -321,18 +321,29 @@ class AskHumanTool:
     suspends: bool = True
 
     description: str = (
-        "Ask the user a question when you need their input, preference, "
+        "Ask the user ONE question when you need their input, preference, "
         "or confirmation. Present 2-3 clear options plus an open-ended "
         "option for the user to type their own answer. Use this when you "
         "are unsure about the user's intent, need to choose between "
-        "approaches, or want confirmation before taking an action."
+        "approaches, or want confirmation before taking an action.\n\n"
+        "CRITICAL — ask one thing at a time, never a multi-field checklist:\n"
+        "- Each option must be a complete, concrete answer the user could "
+        "actually pick as-is (e.g. 'Dine-in, mid-range, Italian, Indiranagar, "
+        "date night' or 'Delivery, budget-friendly'), never a template or a "
+        "list of field names/placeholders like 'budget • food type • area'.\n"
+        "- If you genuinely need several independent pieces of information "
+        "(e.g. budget AND cuisine AND location), do NOT cram them into one "
+        "question with templated options. Either: (a) ask a single focused "
+        "question per call and make several calls in sequence, or (b) ask one "
+        "open question and rely on the free-text answer — never invent "
+        "options that just restate the field names you want filled in."
     )
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
             "question": {
                 "type": "string",
-                "description": "The question to ask the user",
+                "description": "The single, specific question to ask the user — not a bundle of several questions",
             },
             "context": {
                 "type": "string",
@@ -340,15 +351,24 @@ class AskHumanTool:
             },
             "option_1": {
                 "type": "string",
-                "description": "First option (required)",
+                "description": (
+                    "First option — a complete, concrete answer the user could pick "
+                    "as-is. Never a placeholder or field name (e.g. write "
+                    "'Mid-range, ₹1000-2000 for two', not 'budget')."
+                ),
             },
             "option_2": {
                 "type": "string",
-                "description": "Second option (required)",
+                "description": (
+                    "Second option — a complete, concrete answer, same rule as option_1 (required)."
+                ),
             },
             "option_3": {
                 "type": "string",
-                "description": "Third option (optional, leave empty to skip)",
+                "description": (
+                    "Third option — a complete, concrete answer, same rule as option_1 "
+                    "(optional, leave empty to skip)."
+                ),
             },
         },
         "required": ["question", "context", "option_1", "option_2"],
@@ -439,6 +459,14 @@ class AskHumanTool:
         # decides.  The signal payload carries the user's action and is mapped
         # to a ToolExecutionResult by _shape_result().
         if ctx is not None and getattr(self.handler, "suspends_via_signal", False):
+            # Replay-stable id: this call suspends via ctx.sleep_until_signal
+            # below, which can raise SuspendInterrupt and unwind. On replay,
+            # this tool body re-executes from the top (a suspending tool call
+            # is never itself a journal hit while suspended — see RunContext
+            # docstring) — a fresh uuid4() here would mint a NEW request_id
+            # each attempt, orphaning whatever card the user is looking at.
+            # ctx.uuid() is journaled, so every replay gets the SAME id.
+            request.request_id = await ctx.uuid()
             log_payload = {
                 "request_id": request.request_id,
                 "question": request.question,
@@ -569,8 +597,23 @@ class AskHumanTool:
 
         Every path returns a valid result so no ``tool_use`` is ever left
         without a ``tool_result`` in the message history.
+
+        The result JSON also echoes the question + options under ``_card`` so a
+        UI can rebuild the answered card on reload purely from the (reliably
+        persisted) tool_result — the assistant turn's tool_calls are not a
+        dependable source (turn-flush timing can drop ask-only turns).
         """
         action = payload.get("action", "answered")
+        card = {
+            "request_id": request.request_id,
+            "question": request.question,
+            "context": request.context,
+            "options": [
+                {"key": o.key, "label": o.label, "description": o.description}
+                for o in request.options
+            ],
+            "allow_freeform": request.allow_freeform,
+        }
 
         if action == "skipped":
             self._history.append(
@@ -593,6 +636,7 @@ class AskHumanTool:
                                     "User did not respond in time. "
                                     "Proceed with your best judgement."
                                 ),
+                                "_card": card,
                             }
                         )
                     )
@@ -618,6 +662,7 @@ class AskHumanTool:
                             {
                                 "status": "cancelled",
                                 "message": "User moved on without answering.",
+                                "_card": card,
                             }
                         )
                     )
@@ -655,6 +700,7 @@ class AskHumanTool:
                             "user_choice": user_choice,
                             "was_freeform": is_freeform,
                             "selected_option": selected_label if not is_freeform else None,
+                            "_card": card,
                         }
                     )
                 )

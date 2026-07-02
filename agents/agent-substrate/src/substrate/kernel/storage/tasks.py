@@ -49,6 +49,9 @@ class TaskList:
     agent_id: str = ""
     agent_label: str = ""
     parent_agent_id: str | None = None
+    # ISO-8601 creation time — lets a UI anchor the board to the turn that
+    # created it (stable, unlike updated_at which moves on every status change).
+    created_at: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -58,6 +61,7 @@ class TaskList:
             "agent_id": self.agent_id,
             "agent_label": self.agent_label,
             "parent_agent_id": self.parent_agent_id,
+            "created_at": self.created_at,
             "tasks": [
                 {
                     "id": t.id,

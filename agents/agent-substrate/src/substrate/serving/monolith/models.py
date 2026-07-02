@@ -404,3 +404,82 @@ class AdapterPipeline(Base):
 
     def __repr__(self) -> str:
         return f"<AdapterPipeline(id={self.id}, name={self.name!r})>"
+
+
+# ── Scheduled Tasks ──────────────────────────────────────────────────────────
+
+
+class ScheduledTask(Base):
+    __tablename__ = "scheduled_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    cron_expression: Mapped[str] = mapped_column(String, nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False, default="cron")  # "cron" | "interval"
+    thread_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("threads.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False, default="active")  # "active" | "paused" | "completed" | "error"
+    lookback_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    task_type: Mapped[str] = mapped_column(String, nullable=False, default="report")  # "report" | "monitor" | "reminder" | "learning"
+    auto_disable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    user = relationship("User")
+    thread = relationship("Thread")
+    runs: Mapped[List["ScheduledTaskRun"]] = relationship(
+        "ScheduledTaskRun",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="ScheduledTaskRun.executed_at.desc()",
+    )
+
+    def __repr__(self) -> str:
+        return f"<ScheduledTask(id={self.id}, name={self.name!r}, status={self.status!r})>"
+
+
+class ScheduledTaskRun(Base):
+    __tablename__ = "scheduled_task_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("scheduled_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False)  # "success" | "failed" | "silent"
+    output_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    executed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    was_silent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    task: Mapped["ScheduledTask"] = relationship("ScheduledTask", back_populates="runs")
+
+    def __repr__(self) -> str:
+        return f"<ScheduledTaskRun(id={self.id}, status={self.status!r}, executed_at={self.executed_at!r})>"
+

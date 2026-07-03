@@ -204,6 +204,74 @@ class Supervision:
     def is_root(self) -> bool:
         return self.parent_id is None
 
+    def to_dict(self) -> dict:
+        """JSON-serializable form — for persisting alongside a spawned run.
+
+        A child's ``Supervision`` only exists as a live Python object in the
+        parent's process at spawn time; the child executes in a fresh
+        ``RunContext`` built by whichever worker later leases it (possibly a
+        different process entirely), so this is what makes
+        ``execution_budget`` inheritance survive that boundary — see
+        ``Supervisor.spawn()``'s persistence of this alongside the run.
+        """
+        return {
+            "run_id": self.run_id,
+            "session_id": self.session_id,
+            "root_id": {
+                "type": self.root_id.type,
+                "key": self.root_id.key,
+                "namespace": self.root_id.namespace,
+            },
+            "parent_id": (
+                {
+                    "type": self.parent_id.type,
+                    "key": self.parent_id.key,
+                    "namespace": self.parent_id.namespace,
+                }
+                if self.parent_id
+                else None
+            ),
+            "depth": self.depth,
+            "spawn_budget": {
+                "max_agents": self.spawn_budget.max_agents,
+                "allow_preempt": self.spawn_budget.allow_preempt,
+            },
+            "execution_budget": {
+                "max_tokens": self.execution_budget.max_tokens,
+                "max_cost_usd": self.execution_budget.max_cost_usd,
+                "max_turns": self.execution_budget.max_turns,
+                "deadline_s": self.execution_budget.deadline_s,
+            },
+            "retention": self.retention.value,
+            "priority": int(self.priority),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Supervision:
+        root = data["root_id"]
+        parent = data.get("parent_id")
+        return cls(
+            run_id=data["run_id"],
+            session_id=data["session_id"],
+            root_id=AgentId(
+                type=root["type"], key=root["key"], namespace=root.get("namespace", "default")
+            ),
+            parent_id=(
+                AgentId(
+                    type=parent["type"],
+                    key=parent["key"],
+                    namespace=parent.get("namespace", "default"),
+                )
+                if parent
+                else None
+            ),
+            depth=data.get("depth", 0),
+            spawn_budget=SpawnBudget(**data.get("spawn_budget", {})),
+            execution_budget=ExecutionBudget(**data.get("execution_budget", {})),
+            retention=HistoryRetention(data.get("retention", HistoryRetention.RUN.value)),
+            priority=Priority(data.get("priority", Priority.NORMAL.value)),
+        )
+
 
 __all__ = [
     "HistoryRetention",

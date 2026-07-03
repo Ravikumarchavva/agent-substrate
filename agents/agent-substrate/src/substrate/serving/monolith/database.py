@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import AsyncGenerator
 
 from fastapi import Request
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -13,6 +14,16 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from substrate.serving.monolith.models import Base
+
+# Columns added to existing tables after they first shipped —
+# `Base.metadata.create_all` below is a no-op on a pre-existing table (it
+# only creates missing tables, never alters existing ones), so a column
+# added to a model here never reaches an already-provisioned dev/staging DB
+# without this. Mirrors the same additive-migration pattern used for
+# ravi_run_queue in infrastructure/runtime/pg_scheduler.py.
+_MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
+    ("threads", "tenant_id", "VARCHAR"),
+]
 
 
 async def init_db(
@@ -39,6 +50,10 @@ async def init_db(
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for table, col, defn in _MIGRATE_COLUMNS:
+            await conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {defn}")
+            )
 
     return engine, session_factory
 

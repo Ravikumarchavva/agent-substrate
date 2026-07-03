@@ -62,7 +62,8 @@ class AgentStreamSession:
         msg: Any,
         bridge: WebHITLBridge,
         is_disconnected: DisconnectCheck | None = None,
-        cancel_event: asyncio.Event | None = None,
+        thread_id: str | None = None,
+        tenant_id: str | None = None,
         persister: Persister | None = None,
         on_complete: Callable[[], Awaitable[list[dict]]] | None = None,
         poll_interval: float = 0.2,
@@ -73,7 +74,8 @@ class AgentStreamSession:
         self._msg = msg
         self._bridge = bridge
         self._is_disconnected = is_disconnected
-        self._cancel = cancel_event or asyncio.Event()
+        self._thread_id = thread_id
+        self._tenant_id = tenant_id
         self._persister = persister
         self._on_complete = on_complete
         self._poll = poll_interval
@@ -87,13 +89,30 @@ class AgentStreamSession:
 
     async def _agent_worker(self) -> str:
         """Register agent, submit message, tail EventLog. Returns terminal reason."""
+        from substrate.kernel.core.errors import ThreadBusyError
+
         try:
             await self._runtime.register(self._agent)
             # max_retries=0: interactive chat runs must not be retried with the
             # same run_id — retries replay the journal and re-hit journaled errors.
-            run_id = await self._runtime.submit(
-                self._agent.id, self._msg, max_retries=0
-            )
+            try:
+                run_id = await self._runtime.submit(
+                    self._agent.id,
+                    self._msg,
+                    max_retries=0,
+                    thread_id=self._thread_id,
+                    tenant=self._tenant_id or "default",
+                )
+            except ThreadBusyError:
+                # The route's own pre-check (find_run_for_thread) already
+                # rejects the common case with a clean 409 before the SSE
+                # stream even starts — this only fires on the rare race
+                # where two requests for the same thread both pass that
+                # check. No clean HTTP status is possible anymore (headers
+                # are already sent), so this surfaces as a run.failed event
+                # instead — see the generic exception handler below.
+                self._error = f"thread {self._thread_id} already has an active run"
+                return "error"
             self._run_id = run_id
 
             # Persist the agent spec so it can be rebuilt on cold resume.
@@ -224,7 +243,7 @@ class AgentStreamSession:
 
         try:
             while True:
-                if await self._check_disconnect_or_cancel(agent_task):
+                if await self._check_disconnect(agent_task):
                     terminal = RunCancelledEvent()
                     break
 
@@ -264,14 +283,24 @@ class AgentStreamSession:
 
     # -- helpers --------------------------------------------------------------
 
-    async def _check_disconnect_or_cancel(self, agent_task: asyncio.Task) -> bool:
-        """Return True if the run should stop (client gone or explicit cancel)."""
+    async def _check_disconnect(self, agent_task: asyncio.Task) -> bool:
+        """Return True if the run should stop because the client disconnected.
+
+        Explicit cancel (``POST /chat/{thread_id}/cancel``) is no longer
+        routed through this session at all — it durably cancels the run via
+        ``Supervisor.cancel()`` (see ``routes/cancel.py``), and this session
+        notices the same way it would notice a cancel from any other source:
+        the EventLog gets a ``run.cancelled`` entry, ``_agent_worker``'s tail
+        loop sees it and returns, and that naturally ends the stream. That
+        works correctly regardless of which replica initiated the cancel —
+        a local ``asyncio.Event`` only ever worked for a cancel landing on
+        the same replica already serving this SSE connection.
+        """
         disconnected = bool(self._is_disconnected and await self._is_disconnected())
-        if not disconnected and not self._cancel.is_set():
+        if not disconnected:
             return False
 
-        if disconnected:
-            self._bridge.cancel_all_pending("session_disconnected")
+        self._bridge.cancel_all_pending("session_disconnected")
         if self._run_id is not None:
             await self._runtime.cancel(self._run_id)
         if not agent_task.done():

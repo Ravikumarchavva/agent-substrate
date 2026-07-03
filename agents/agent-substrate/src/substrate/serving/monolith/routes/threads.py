@@ -49,7 +49,10 @@ async def create_thread_endpoint(
 ):
     """Create a new chat thread owned by the caller."""
     thread = await create_thread(
-        db, name=body.name or "New Chat", user_identifier=user.sub
+        db,
+        name=body.name or "New Chat",
+        user_identifier=user.sub,
+        tenant_id=user.tenant_id,
     )
     return ThreadOut(
         id=thread.id,

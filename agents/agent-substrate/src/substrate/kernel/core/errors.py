@@ -168,6 +168,22 @@ class SpawnDenied(KernelError):
         self.budget = budget
 
 
+class ThreadBusyError(KernelError):
+    """Raised by ``Scheduler.enqueue`` when ``thread_id`` already has an
+    active (PENDING/RUNNING/SUSPENDED) run.
+
+    Durable, cross-replica single-flight: unlike a per-process
+    ``asyncio.Lock``, this is enforced by the backing store itself (a unique
+    partial index on the durable backend), so a second replica racing to
+    start a run for the same thread gets the same rejection a same-process
+    caller would. Serving code should translate this into an HTTP 409.
+    """
+
+    def __init__(self, message: str, *, thread_id: str) -> None:
+        super().__init__(message)
+        self.thread_id = thread_id
+
+
 __all__ = [
     "KernelError",
     "AgentNotFoundError",
@@ -179,4 +195,5 @@ __all__ = [
     "SuspendInterrupt",
     "ConcurrentAppendError",
     "SpawnDenied",
+    "ThreadBusyError",
 ]

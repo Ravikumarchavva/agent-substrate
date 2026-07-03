@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from substrate.logger import setup_logging
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
@@ -195,7 +196,35 @@ async def load_session_memory(
         logger.debug(
             "History miss for %s — loading from %s", session_id, cold_store_name
         )
-        await _seed(history)
+
+        # Idempotent seed: guard against two concurrent callers (two
+        # replicas, or two racing requests before any single-flight check
+        # engages) both observing the miss above and both seeding — a
+        # double-seed silently truncates older messages once the provider's
+        # per-session cap kicks in (see RedisHistoryProvider.
+        # try_acquire_seed_lock's docstring). Only providers that expose the
+        # lock primitive are guarded; others (in-memory, single-process
+        # test doubles) have no cross-process race to guard against.
+        acquire_lock = getattr(history, "try_acquire_seed_lock", None)
+        if acquire_lock is None:
+            await _seed(history)
+            return history
+
+        if await acquire_lock(_aid, session_id):
+            await _seed(history)
+            return history
+
+        # Lost the race — someone else is seeding (or just finished).
+        # Wait for their write to land instead of proceeding with a
+        # possibly-still-empty history.
+        for _ in range(50):
+            if await history.count_messages(_aid, session_id=session_id) > 0:
+                break
+            await asyncio.sleep(0.1)
+        else:
+            logger.warning(
+                "Timed out waiting for concurrent seed of session %s", session_id
+            )
         return history
 
     fallback = InMemoryHistoryProvider()

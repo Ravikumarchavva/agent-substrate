@@ -158,12 +158,29 @@ class Runtime:
         priority: int = 5,
         tenant: str = "default",
         max_retries: int = 3,
+        thread_id: str | None = None,
     ) -> RunId:
         """Deliver ``msg`` to ``agent_id`` and enqueue a run.
 
         Returns the new run_id.  The run starts when the Worker next polls.
         Pass ``max_retries=0`` for interactive runs where the journal-replay
         retry loop would cause repeated failures on the same journaled error.
+
+        ``thread_id`` (optional) enforces durable, cross-replica single-flight
+        for the conversation thread this run belongs to — a second
+        ``submit(..., thread_id=X)`` while thread X already has an active run
+        raises ``kernel.core.errors.ThreadBusyError`` instead of enqueuing.
+        On that (rare) rejection, ``msg`` may already be sitting in
+        ``agent_id``'s inbox — delivery happens first, before the
+        single-flight check, because the run must find its own message
+        already there the instant it's leasable (delivery has to happen
+        before enqueue, not after — a worker can lease and start draining
+        the inbox as soon as the queue row exists, and a message that lands
+        a moment later would be invisible to that first drain). A caller
+        that wires ``thread_id`` is expected to have already done its own
+        cheap pre-check (see ``routes/chat.py``) so this collision is rare;
+        the orphaned inbox entry is picked up by the next legitimate run for
+        this agent_id, same as an unsolicited delivery would be.
         """
         from substrate.kernel.runtime.scheduler import RunRetryPolicy
 
@@ -181,6 +198,7 @@ class Runtime:
             priority=priority,
             tenant=tenant,
             retry_policy=RunRetryPolicy(max_retries=max_retries),
+            thread_id=thread_id,
         )
         return run_id
 
@@ -256,6 +274,13 @@ class Runtime:
     @property
     def inbox(self) -> Inbox:
         return self._inbox
+
+    @property
+    def scheduler(self) -> Scheduler:
+        # Exposed for find_run_for_thread() — serving code resolves a
+        # conversation thread's active run_id durably (works across
+        # replicas) instead of keeping its own thread_id → run_id registry.
+        return self._scheduler
 
     @property
     def signal_bus(self) -> SignalBus:

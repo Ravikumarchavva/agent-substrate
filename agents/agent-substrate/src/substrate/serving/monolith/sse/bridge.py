@@ -483,15 +483,24 @@ class BridgeRegistry:
     Pass ``signal_bus`` (from ``runtime.signal_bus``) to enable signal-based
     human-input HITL.  Without it only the Future-based tool-approval path
     is available.
+
+    Pass ``scheduler`` (from ``runtime.scheduler``) to make signal-based
+    resolution work cross-replica: a ``resolve()`` call for a request_id
+    with no local bridge (this replica never saw the ``input.requested``
+    event, because no session is running here for that thread) falls back
+    to ``Scheduler.find_run_by_wake_signal()`` — a durable query, not the
+    in-process ``_signal_requests`` map any single bridge keeps.
     """
 
     def __init__(
         self,
         response_timeout: float = 300.0,
         signal_bus: Optional["SignalBus"] = None,
+        scheduler: Optional[Any] = None,
     ) -> None:
         self._timeout = response_timeout
         self._signal_bus = signal_bus
+        self._scheduler = scheduler
         self._bridges: Dict[str, "WebHITLBridge"] = {}
         self._lock = asyncio.Lock()
 
@@ -544,10 +553,34 @@ class BridgeRegistry:
 
         Scans all active bridges.  Because request IDs are UUIDs, collisions
         are statistically impossible across bridges.
+
+        Future-based tool-approval requests only ever exist locally (the
+        Future lives in this process), so a miss there is final. Signal-based
+        human-input requests fall back to a durable, cross-replica lookup —
+        this POST may be landing on a different replica than the one whose
+        session registered ``request_id`` in a bridge's ``_signal_requests``
+        (that registration only happens as a side effect of *this* replica
+        having tailed the ``input.requested`` event — see
+        ``AgentStreamSession``), so the SignalBus's own durable state
+        (``Scheduler.find_run_by_wake_signal``) is the source of truth, not
+        any bridge's local map.
         """
         for bridge in list(self._bridges.values()):
             if request_id in bridge._pending or request_id in bridge._signal_requests:
                 return await bridge.resolve(request_id, data)
+
+        if self._scheduler is not None and self._signal_bus is not None:
+            run_id = await self._scheduler.find_run_by_wake_signal(f"hitl:{request_id}")
+            if run_id is not None:
+                await self._signal_bus.signal(run_id, f"hitl:{request_id}", data)
+                logger.info(
+                    "BridgeRegistry: resolved request_id=%s durably (run=%s, "
+                    "no local bridge owned it)",
+                    request_id,
+                    run_id,
+                )
+                return True
+
         logger.warning("BridgeRegistry: no pending request for id=%s", request_id)
         return False
 

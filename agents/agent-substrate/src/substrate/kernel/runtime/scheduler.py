@@ -76,6 +76,7 @@ class Lease(BaseModel):
     worker_id: str
     expires_at: datetime
     attempt: int = 0
+    tenant: str = "default"
 
     model_config = {"frozen": True}
 
@@ -110,6 +111,7 @@ class Scheduler(Protocol):
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,
         deadline: datetime | None = None,
+        thread_id: str | None = None,
     ) -> None:
         """Add ``run_id`` to the work-queue (or coalesce into existing entry).
 
@@ -123,6 +125,15 @@ class Scheduler(Protocol):
         itself (see ``PostgresScheduler.lease``/``heartbeat``) so a run stuck
         pending or suspended past its deadline terminates even with no
         parent waiting on it.
+        ``thread_id`` (optional) tags this run as owned by a conversation
+        thread. At most one PENDING/RUNNING/SUSPENDED run may exist per
+        ``thread_id`` at a time — a second ``enqueue()`` for the same
+        ``thread_id`` while one is still active raises
+        ``kernel.core.errors.ThreadBusyError`` (enforced durably: a unique
+        partial index on the backing store, not a per-process lock, so it
+        holds across replicas). This also backs ``find_run_for_thread`` —
+        the durable way to resolve "which run is this thread's cancel
+        button talking about" without an in-process registry.
         """
         ...
 
@@ -210,6 +221,34 @@ class Scheduler(Protocol):
         Returns ``None`` when no PENDING, RUNNING, or SUSPENDED run exists.
         Used by the inbox-delivery hook to decide whether to spawn a fresh run
         or wake an existing one.
+        """
+        ...
+
+    async def find_run_by_wake_signal(self, signal_name: str) -> RunId | None:
+        """Return the SUSPENDED run currently waiting on ``signal_name``, if any.
+
+        ``signal_name`` matches ``Wakeup.signals`` entries (e.g.
+        ``f"hitl:{request_id}"`` for ``ask_human``). This is what lets a HITL
+        response POST resolve durably and cross-replica: given only a
+        ``request_id`` a caller has no other way to know which run it
+        belongs to (the run that suspended itself is not necessarily known
+        to the replica handling the response), and this is queryable from
+        the same durable state ``release(SUSPENDED, wake_on=...)`` already
+        wrote — no separate request_id → run_id table needed.
+        """
+        ...
+
+    async def find_run_for_thread(self, thread_id: str) -> tuple[RunId, RunStatus] | None:
+        """Return ``(run_id, status)`` for any active run tagged with ``thread_id``.
+
+        Returns ``None`` when no PENDING, RUNNING, or SUSPENDED run is tagged
+        with this thread. ``thread_id`` is set via ``Scheduler.enqueue(...,
+        thread_id=...)`` and enforced unique-while-active by a partial index
+        on the durable backend — this is what makes "one non-terminal run per
+        thread" a real, cross-replica-safe constraint (a DB unique-violation
+        on ``enqueue()``, not a per-process ``asyncio.Lock``) and lets a
+        cancel request landing on any replica resolve the thread's run_id
+        without any in-process registry.
         """
         ...
 

@@ -6,7 +6,6 @@ attribute access instead of the dynamic ``app.state.*`` bag.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -19,7 +18,15 @@ from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
 @dataclass
 class ServerDependencies:
-    """All shared dependencies available to route handlers."""
+    """All shared dependencies available to route handlers.
+
+    ``cancel_registry``/``thread_locks`` (per-process cancel Events and
+    single-flight asyncio.Locks) were removed — both single-flight and
+    cancel are now enforced durably by the Runtime itself (a unique index
+    on ``ravi_run_queue`` and ``Supervisor.cancel()`` respectively), which
+    holds correctly across replicas instead of only within one process. See
+    ``routes/chat.py`` and ``routes/cancel.py``.
+    """
 
     model_client: LLMClient
     history: HistoryProvider
@@ -31,8 +38,6 @@ class ServerDependencies:
     model_client_kwargs: dict[str, Any] = field(default_factory=dict)
     api_keys: dict[str, str] = field(default_factory=dict)
     runtime: Optional[Any] = None
-    cancel_registry: dict[str, Any] = field(default_factory=dict)
-    thread_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     mcp_servers: dict[str, dict] = field(default_factory=dict)
     session_factory: Any = None
     ci_client: Optional[Any] = None

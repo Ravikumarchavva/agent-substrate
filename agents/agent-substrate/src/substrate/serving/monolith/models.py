@@ -77,6 +77,12 @@ class Thread(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
     user_identifier: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Tenant namespace (see AuthClaims.tenant_id) — "default" for
+    # single-tenant deployments. NULL-tenant legacy rows claim-on-first-access
+    # the same way NULL-owner rows do (see get_owned_thread).
+    tenant_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, index=True
+    )
     tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), default=list)
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         "metadata", JSONB, default=dict

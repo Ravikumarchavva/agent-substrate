@@ -41,6 +41,8 @@ class InMemoryScheduler:
         self._wakeups: dict[RunId, Wakeup | None] = {}
         self._retry_policies: dict[RunId, RunRetryPolicy] = {}
         self._retry_counts: dict[RunId, int] = {}
+        self._threads: dict[RunId, str] = {}  # run_id → thread_id
+        self._tenants: dict[RunId, str] = {}  # run_id → tenant
 
     def register_run(self, run_id: RunId, agent_id: AgentId) -> None:
         """Associate a run_id with its agent before enqueue."""
@@ -61,6 +63,7 @@ class InMemoryScheduler:
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,
         deadline: datetime | None = None,
+        thread_id: str | None = None,
     ) -> None:
         # deadline: not enforced in-process — Worker.cancel() already
         # reaches this same process's CancellationToken directly and
@@ -72,12 +75,31 @@ class InMemoryScheduler:
             if wake:
                 self._wakeups[run_id] = wake
             return
+        if thread_id is not None:
+            existing = await self.find_run_for_thread(thread_id)
+            if existing is not None and existing[0] != run_id:
+                from substrate.kernel.core.errors import ThreadBusyError
+
+                raise ThreadBusyError(
+                    f"thread {thread_id} already has an active run", thread_id=thread_id
+                )
+            self._threads[run_id] = thread_id
         self._pending.add(run_id)
         self._status[run_id] = RunStatus.PENDING
         self._wakeups[run_id] = wake
+        self._tenants[run_id] = tenant
         if retry_policy:
             self._retry_policies[run_id] = retry_policy
         await self._queue.put((priority, time.monotonic(), run_id))
+
+    async def find_run_for_thread(self, thread_id: str) -> tuple[RunId, RunStatus] | None:
+        _terminal = {RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED}
+        for run_id, tid in list(self._threads.items()):
+            if tid == thread_id:
+                status = self._status.get(run_id)
+                if status is not None and status not in _terminal:
+                    return (run_id, status)
+        return None
 
     async def lease(self, *, worker_id: str, capacity: int) -> list[Lease]:
         leases: list[Lease] = []
@@ -102,6 +124,7 @@ class InMemoryScheduler:
                 worker_id=worker_id,
                 expires_at=expires_at,
                 attempt=attempt,
+                tenant=self._tenants.get(run_id, "default"),
             )
             self._leases[run_id] = lease
             self._status[run_id] = RunStatus.RUNNING
@@ -155,6 +178,14 @@ class InMemoryScheduler:
         """Re-enqueue a suspended run (called by SignalBus/Inbox when a wakeup fires)."""
         if self._status.get(run_id) == RunStatus.SUSPENDED:
             await self.enqueue(run_id, priority=priority, tenant="default")
+
+    async def find_run_by_wake_signal(self, signal_name: str) -> RunId | None:
+        for run_id, wakeup in list(self._wakeups.items()):
+            if self._status.get(run_id) != RunStatus.SUSPENDED:
+                continue
+            if wakeup is not None and wakeup.signals and signal_name in wakeup.signals:
+                return run_id
+        return None
 
     async def find_run_for_agent(
         self, agent_id: AgentId

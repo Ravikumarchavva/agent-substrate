@@ -803,3 +803,223 @@ async def test_pg_retention_sweep(pg_runtime) -> None:
             "SELECT 1 FROM ravi_event_log WHERE run_id = $1 LIMIT 1", run_id
         )
         assert gone_log is None
+
+
+# ---------------------------------------------------------------------------
+# 8. Phase 2 — durable single-flight per thread_id
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_thread_single_flight(pg_runtime) -> None:
+    """A second submit() for the same thread_id, while the first run is still
+    active, raises ThreadBusyError — durably, via a unique partial index on
+    ravi_run_queue, not a per-process lock (see routes/chat.py)."""
+    from substrate.kernel.core.errors import ThreadBusyError
+
+    agent_id = _agent_id("pg-singleflight")
+    agent = SleepForeverAgent(agent_id)
+    await pg_runtime.register(agent)
+
+    thread_id = f"thread-{agent_id.key}"
+    run_id_1 = await pg_runtime.submit(
+        agent_id, _msg(agent_id, {}), thread_id=thread_id
+    )
+
+    async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
+        for _ in range(100):
+            status = await conn.fetchval(
+                "SELECT status FROM ravi_run_queue WHERE run_id = $1", run_id_1
+            )
+            if status in ("pending", "running", "suspended"):
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("first run never became active")
+
+    agent_2_id = _agent_id("pg-singleflight-2")
+    agent_2 = SleepForeverAgent(agent_2_id)
+    await pg_runtime.register(agent_2)
+
+    with pytest.raises(ThreadBusyError):
+        await pg_runtime.submit(agent_2_id, _msg(agent_2_id, {}), thread_id=thread_id)
+
+    found = await pg_runtime.scheduler.find_run_for_thread(thread_id)
+    assert found is not None
+    assert found[0] == run_id_1
+
+
+async def test_pg_thread_single_flight_frees_after_completion(pg_runtime) -> None:
+    """Once the active run for a thread reaches a terminal state, the thread
+    is free again — the unique index only excludes non-terminal statuses."""
+    agent_id = _agent_id("pg-singleflight-done")
+    agent = RecorderAgent(agent_id)
+    await pg_runtime.register(agent)
+
+    thread_id = f"thread-{agent_id.key}"
+    await pg_runtime.submit(agent_id, _msg(agent_id, {}), thread_id=thread_id)
+    await asyncio.wait_for(agent.done.wait(), timeout=8.0)
+
+    async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
+        for _ in range(100):
+            status = await conn.fetchval(
+                "SELECT status FROM ravi_run_queue WHERE run_id = "
+                "(SELECT run_id FROM ravi_run_queue WHERE thread_id = $1 "
+                "ORDER BY enqueued_at DESC LIMIT 1)",
+                thread_id,
+            )
+            if status == "completed":
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("run never completed")
+
+    agent_2 = RecorderAgent(agent_id)
+    await pg_runtime.register(agent_2)
+    # Must not raise: the previous run for this thread is terminal.
+    await pg_runtime.submit(agent_id, _msg(agent_id, {}), thread_id=thread_id)
+
+
+# ---------------------------------------------------------------------------
+# 9. Phase 2 — SSE tail works cross-replica (independent pool, from_seq resume)
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_tail_reconnect_from_different_pool_and_seq(pg_runtime) -> None:
+    """Simulates a reconnect landing on a different replica: a SECOND,
+    independent PostgresEventLog (its own asyncpg pool, its own LISTEN
+    connection) resumes tailing an in-progress run from a mid-stream
+    from_seq and sees only what it asked for, then the rest live — proving
+    SSE reconnect doesn't depend on replica affinity."""
+    from substrate.infrastructure.runtime.pg_event_log import PostgresEventLog
+
+    agent_id = _agent_id("pg-reconnect")
+    agent = StreamingAgent(agent_id)
+    await pg_runtime.register(agent)
+    run_id = await pg_runtime.submit(agent_id, _msg(agent_id, {}))
+
+    # Read the log once to find the tool.call entry's own seq deterministically
+    # — no race on "how far has the writer gotten," which computing resume_from
+    # from a live last_seq() call would have (StreamingAgent logs everything
+    # with no awaits in between, so by the time this reader task gets
+    # scheduled the run is typically already finished). tail() never
+    # terminates on its own, so stop as soon as tool.call is seen.
+    tool_call_seq: int | None = None
+    async for entry in pg_runtime.event_log.tail(run_id):
+        if entry.kind == "tool.call":
+            tool_call_seq = entry.seq
+            break
+    assert tool_call_seq is not None
+    resume_from = tool_call_seq + 1
+
+    import asyncpg
+
+    other_pool = await asyncpg.create_pool(_PG_URL)
+    try:
+        other_replica_log = PostgresEventLog(other_pool, dsn=_PG_URL)
+        seen_second_pass: list[str] = []
+        async for entry in other_replica_log.tail(run_id, from_seq=resume_from):
+            seen_second_pass.append(entry.kind)
+            if entry.kind == "tool.result":
+                break
+        # Resumed strictly from resume_from: no re-delivery of the
+        # already-seen text.delta entries from before that seq.
+        assert seen_second_pass[0] != "text.delta"
+        assert "tool.result" in seen_second_pass
+    finally:
+        await other_replica_log.close()
+        await other_pool.close()
+
+
+# ---------------------------------------------------------------------------
+# 10. Phase 3 — per-tenant fair scheduling in lease()
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_fair_scheduling_across_tenants() -> None:
+    """A tenant with 5 queued runs enqueued FIRST (chronologically oldest)
+    must not push a second tenant's single run enqueued after them down to
+    rank 6 — the ROW_NUMBER() OVER (PARTITION BY tenant ...) ranking in
+    lease() ties the starved tenant's one run at rank 1 with the flooding
+    tenant's oldest, always competitive for the very next slot, rather than
+    strict (priority, enqueued_at) FIFO's guaranteed rank 6.
+
+    Asserts the ranking directly (the same expression lease() uses) rather
+    than asserting on lease() call outcomes: which of two rank-1-tied rows
+    an actual lease() picks is an arbitrary (run_id) tie-break, not a
+    fairness signal, so asserting on it would make this test flaky on
+    tie-break luck rather than testing the actual guarantee.
+
+    Uses a bare PostgresScheduler (no Runtime/Worker) so nothing else is
+    competing for leases — a live Worker's default capacity=10 would drain
+    all 6 rows in a single poll tick regardless of fairness, which would
+    defeat the point of this test.
+    """
+    if not await _pg_reachable():
+        pytest.skip("Postgres not reachable")
+    import asyncpg
+
+    from substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
+
+    pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
+    try:
+        scheduler = PostgresScheduler(pool)
+        await scheduler.setup()
+
+        # Isolation: the ranking in lease() scans the WHOLE table, and its
+        # own first step reclaims any expired 'running' lease back to
+        # 'pending' before ranking — so stale debris from unrelated tests
+        # (a different tenant, competing for the same rn=1 slot) makes this
+        # test flaky whether it's sitting at 'pending' OR 'running' with a
+        # long-expired lease. Tests run sequentially in one process here, so
+        # any non-terminal row at this point is leftover debris, never a
+        # live concurrent run to respect.
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM ravi_run_queue WHERE status NOT IN "
+                "('completed', 'failed', 'cancelled')"
+            )
+
+        flood_id = _agent_id("pg-fair-flood")
+        starved_id = _agent_id("pg-fair-starved")
+        flood_run_ids = []
+        for _ in range(5):
+            run_id = f"flood-{id(object())}-{len(flood_run_ids)}"
+            scheduler.register_run(run_id, flood_id)
+            await scheduler.enqueue(run_id, priority=5, tenant="flood")
+            flood_run_ids.append(run_id)
+
+        starved_run_id = f"starved-{id(object())}"
+        scheduler.register_run(starved_run_id, starved_id)
+        await scheduler.enqueue(starved_run_id, priority=5, tenant="starved")
+
+        async with pool.acquire() as conn:
+            ranks = await conn.fetch(
+                """
+                SELECT run_id, tenant,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY tenant ORDER BY priority, enqueued_at
+                    ) AS rn
+                FROM ravi_run_queue
+                WHERE status = 'pending'
+                """
+            )
+        rank_by_run_id = {row["run_id"]: row["rn"] for row in ranks}
+
+        assert rank_by_run_id[starved_run_id] == 1
+        assert rank_by_run_id[flood_run_ids[0]] == 1
+        assert rank_by_run_id[flood_run_ids[-1]] == 5, (
+            "flood's own 5 runs should still be ranked 1..5 relative to "
+            "each other — fairness partitions across tenants, it doesn't "
+            "reorder within one"
+        )
+    finally:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM ravi_run_queue WHERE run_id = ANY($1)",
+                [*flood_run_ids, starved_run_id],
+            )
+            await conn.execute(
+                "DELETE FROM ravi_agent_runs WHERE run_id = ANY($1)",
+                [*flood_run_ids, starved_run_id],
+            )
+        await pool.close()

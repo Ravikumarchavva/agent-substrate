@@ -87,6 +87,10 @@ _MIGRATE_COLUMNS: list[tuple[str, str]] = [
     # sweep's cutoff (see infrastructure/runtime/retention.py). NULL for any
     # non-terminal run.
     ("terminated_at", "TIMESTAMPTZ"),
+    # Conversation thread this run belongs to, if any (submitted from the
+    # serving layer, not an internal ctx.spawn() child). NULL for runs with
+    # no thread association (spawned subagents, background jobs).
+    ("thread_id", "TEXT"),
 ]
 
 _CREATE_INDEXES_POST_MIGRATION = """
@@ -96,6 +100,13 @@ CREATE INDEX IF NOT EXISTS ravi_run_queue_wake_at_idx
 CREATE INDEX IF NOT EXISTS ravi_run_queue_terminated_at_idx
     ON ravi_run_queue (terminated_at)
     WHERE terminated_at IS NOT NULL;
+-- Durable single-flight: at most one non-terminal run per thread_id. A
+-- suspended run (e.g. waiting on ask_human) still "owns" the thread — a
+-- second POST /chat for the same thread must not start a competing run
+-- while the first is dormant waiting for a HITL reply.
+CREATE UNIQUE INDEX IF NOT EXISTS ravi_run_queue_thread_singleflight_idx
+    ON ravi_run_queue (thread_id)
+    WHERE thread_id IS NOT NULL AND status IN ('pending', 'running', 'suspended');
 """
 
 _TERMINAL_STATUSES = ("completed", "failed", "cancelled")
@@ -238,6 +249,40 @@ class PostgresScheduler:
             return None
         return (RunId(row["run_id"]), _STATUS_MAP[row["status"]])
 
+    async def find_run_by_wake_signal(self, signal_name: str) -> RunId | None:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchval(
+                """
+                SELECT run_id FROM ravi_run_queue
+                WHERE status = 'suspended' AND $1 = ANY(wake_signals)
+                LIMIT 1
+                """,
+                signal_name,
+            )
+        return RunId(row) if row is not None else None
+
+    async def find_run_for_thread(self, thread_id: str) -> tuple[RunId, RunStatus] | None:
+        """Return the active (non-terminal) run for thread_id, if any.
+
+        Durable, cross-replica: any replica handling a cancel request for
+        this thread resolves the same run_id, since ``thread_id`` and
+        ``status`` both live in ``ravi_run_queue`` — no in-process registry
+        involved.
+        """
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT run_id, status FROM ravi_run_queue
+                WHERE thread_id = $1 AND status NOT IN ('completed','failed','cancelled')
+                ORDER BY enqueued_at DESC
+                LIMIT 1
+                """,
+                thread_id,
+            )
+        if row is None:
+            return None
+        return (RunId(row["run_id"]), _STATUS_MAP[row["status"]])
+
     async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
         """Re-enqueue the active suspended run for agent_id, if any."""
         async with self._pool.acquire() as conn:
@@ -276,7 +321,12 @@ class PostgresScheduler:
         wake: Wakeup | None = None,
         retry_policy: RunRetryPolicy | None = None,
         deadline: datetime | None = None,
+        thread_id: str | None = None,
     ) -> None:
+        import asyncpg
+
+        from substrate.kernel.core.errors import ThreadBusyError
+
         agent_id = self._pending_registrations.pop(run_id, None)
         wakeup_json = wake.model_dump_json() if wake else None
         policy_json = retry_policy.model_dump_json() if retry_policy else None
@@ -293,22 +343,31 @@ class PostgresScheduler:
                         run_id,
                         str(agent_id),
                     )
-                await conn.execute(
-                    """
-                    INSERT INTO ravi_run_queue
-                        (run_id, priority, tenant, status, wakeup, retry_policy, deadline)
-                    VALUES ($1, $2, $3, 'pending', $4::jsonb, $5::jsonb, $6)
-                    ON CONFLICT (run_id) DO UPDATE
-                        SET wakeup = COALESCE(EXCLUDED.wakeup, ravi_run_queue.wakeup)
-                        WHERE ravi_run_queue.status NOT IN ('pending','running')
-                    """,
-                    run_id,
-                    priority,
-                    tenant,
-                    wakeup_json,
-                    policy_json,
-                    deadline,
-                )
+                try:
+                    await conn.execute(
+                        """
+                        INSERT INTO ravi_run_queue
+                            (run_id, priority, tenant, status, wakeup, retry_policy, deadline, thread_id)
+                        VALUES ($1, $2, $3, 'pending', $4::jsonb, $5::jsonb, $6, $7)
+                        ON CONFLICT (run_id) DO UPDATE
+                            SET wakeup = COALESCE(EXCLUDED.wakeup, ravi_run_queue.wakeup)
+                            WHERE ravi_run_queue.status NOT IN ('pending','running')
+                        """,
+                        run_id,
+                        priority,
+                        tenant,
+                        wakeup_json,
+                        policy_json,
+                        deadline,
+                        thread_id,
+                    )
+                except asyncpg.UniqueViolationError as exc:
+                    if thread_id is not None:
+                        raise ThreadBusyError(
+                            f"thread {thread_id} already has an active run",
+                            thread_id=thread_id,
+                        ) from exc
+                    raise
 
     async def lease(self, *, worker_id: str, capacity: int) -> list[Lease]:
         expires_at = datetime.now(tz=timezone.utc) + timedelta(seconds=_LEASE_SECONDS)
@@ -348,19 +407,39 @@ class PostgresScheduler:
                       AND deadline IS NOT NULL AND deadline <= now()
                     """
                 )
-                # Claim up to capacity pending runs
+                # Claim up to capacity pending runs — fairly, not strict FIFO.
+                # ravi_run_queue.tenant partitions the ranking: each tenant's
+                # Nth-oldest-by-priority run competes for a slot against every
+                # other tenant's Nth-oldest, so one tenant flooding the queue
+                # can never starve another's first run indefinitely (weighted
+                # round-robin, not "whoever enqueued first wins forever").
+                # FOR UPDATE SKIP LOCKED can't combine with a window function
+                # in one SELECT, so ranking happens in a lock-free CTE first;
+                # the final UPDATE re-targets exactly those candidate rows
+                # with its own SKIP LOCKED — a candidate claimed by a
+                # concurrent worker in between is silently dropped (fewer
+                # than `capacity` leases this poll), never double-claimed.
                 rows = await conn.fetch(
                     """
+                    WITH ranked AS (
+                        SELECT run_id,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY tenant ORDER BY priority, enqueued_at
+                            ) AS rn
+                        FROM ravi_run_queue
+                        WHERE status = 'pending'
+                    ),
+                    candidates AS (
+                        SELECT run_id FROM ranked ORDER BY rn, run_id LIMIT $3
+                    )
                     UPDATE ravi_run_queue rq
                     SET status = 'running', worker_id = $1, expires_at = $2
                     WHERE rq.run_id IN (
                         SELECT run_id FROM ravi_run_queue
-                        WHERE status = 'pending'
-                        ORDER BY priority, enqueued_at
-                        LIMIT $3
+                        WHERE run_id IN (SELECT run_id FROM candidates)
                         FOR UPDATE SKIP LOCKED
                     )
-                    RETURNING rq.run_id, rq.attempt,
+                    RETURNING rq.run_id, rq.attempt, rq.tenant,
                         (SELECT agent_id FROM ravi_agent_runs WHERE run_id = rq.run_id) AS agent_id
                     """,
                     worker_id,
@@ -381,6 +460,7 @@ class PostgresScheduler:
                     worker_id=worker_id,
                     expires_at=expires_at,
                     attempt=row["attempt"],
+                    tenant=row["tenant"],
                 )
             )
         return leases

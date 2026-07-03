@@ -125,7 +125,6 @@ async def lifespan(app: FastAPI):
     )
     app.state.system_instructions = _prompt_path.read_text(encoding="utf-8").strip()
 
-    app.state.cancel_registry = {}
     app.state.mcp_servers = {}
 
     # Rate limiting — Redis sliding window, two-tier (authed by user_id, anon by IP)
@@ -169,7 +168,6 @@ async def lifespan(app: FastAPI):
         tool_timeout=app.state.tool_timeout,
         api_keys=app.state.api_keys,
         runtime=app.state.runtime,
-        cancel_registry=app.state.cancel_registry,
         mcp_servers=app.state.mcp_servers,
         session_factory=app.state.session_factory,
         ci_client=app.state.ci_client,

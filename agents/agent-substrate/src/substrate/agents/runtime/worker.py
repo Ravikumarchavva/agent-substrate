@@ -220,7 +220,12 @@ class Worker:
 
         run_id = lease.run_id
         token = CancellationToken()
-        meta = RunMeta(run_id=run_id, cancellation=token, tenant_id=None)
+        # lease.tenant is whatever Runtime.submit(..., tenant=...) passed to
+        # enqueue() — "default" if the caller never set one. Previously
+        # always None here regardless of what was enqueued: RunMeta.tenant_id
+        # existed end-to-end (kernel type, request path) but nothing ever
+        # actually populated it on the resume/execute side.
+        meta = RunMeta(run_id=run_id, cancellation=token, tenant_id=lease.tenant)
         self._tokens[run_id] = token
 
         llm_client = getattr(agent, "model", None)

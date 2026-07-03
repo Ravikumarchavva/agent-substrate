@@ -68,3 +68,84 @@ async def test_redis_clear_run():
     finally:
         await provider.clear(agent_id, session_id=session_id)
         await provider.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_try_acquire_seed_lock_is_exclusive():
+    """Only one caller wins the seed-lock race — the guard against the
+    double-seed truncation bug (see try_acquire_seed_lock's docstring)."""
+    provider = RedisHistoryProvider(redis_url="redis://localhost:6379/0", ttl=60)
+    try:
+        await provider.connect()
+    except (redis.exceptions.ConnectionError, OSError) as e:
+        pytest.skip(f"Redis is not available: {e}")
+
+    agent_id = AgentId(type="user", key="seedlock-test")
+    session_id = "seedlock-sess"
+    try:
+        # Clean slate: delete any leftover lock key from a prior run.
+        client = provider._require_client()  # type: ignore[attr-defined]
+        await client.delete(provider._seed_lock_key(agent_id, session_id))  # type: ignore[attr-defined]
+
+        first = await provider.try_acquire_seed_lock(agent_id, session_id, ttl=5)
+        second = await provider.try_acquire_seed_lock(agent_id, session_id, ttl=5)
+        assert first is True
+        assert second is False
+    finally:
+        await provider.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_load_session_memory_concurrent_calls_seed_once():
+    """Two concurrent load_session_memory() calls for the same session (the
+    real-world race: two replicas, or two racing requests) must seed exactly
+    once — a double-seed would double every persisted message in history."""
+    from substrate.agents.factory import load_session_memory
+
+    provider = RedisHistoryProvider(redis_url="redis://localhost:6379/0", ttl=60)
+    try:
+        await provider.connect()
+    except (redis.exceptions.ConnectionError, OSError) as e:
+        pytest.skip(f"Redis is not available: {e}")
+
+    session_id = "concurrent-seed-sess"
+    agent_id = AgentId(type="assistant", key=session_id)
+    try:
+        await provider.clear(agent_id, session_id=session_id)
+
+        steps = [
+            {"type": "user_message", "input": "hello"},
+            {"type": "assistant_message", "output": "hi there"},
+        ]
+        # rebuild_messages_from_steps also prepends one system message
+        # whenever system_instructions is non-empty.
+        expected_count = len(steps) + 1
+
+        async def _load_steps():
+            return steps
+
+        import asyncio
+
+        results = await asyncio.gather(
+            *[
+                load_session_memory(
+                    session_id=session_id,
+                    system_instructions="You are helpful.",
+                    load_persisted_steps=_load_steps,
+                    history=provider,
+                )
+                for _ in range(5)
+            ]
+        )
+        assert all(r is provider for r in results)
+
+        count = await provider.count_messages(agent_id, session_id=session_id)
+        assert count == expected_count, (
+            f"expected exactly {expected_count} messages from one seed, got "
+            f"{count} — a double-seed would produce a multiple of it"
+        )
+    finally:
+        await provider.clear(agent_id, session_id=session_id)
+        client = provider._require_client()  # type: ignore[attr-defined]
+        await client.delete(provider._seed_lock_key(agent_id, session_id))  # type: ignore[attr-defined]
+        await provider.disconnect()

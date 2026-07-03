@@ -22,6 +22,7 @@ async def create_thread(
     name: str = "New Chat",
     user_id: Optional[uuid.UUID] = None,
     user_identifier: Optional[str] = None,
+    tenant_id: Optional[str] = None,
     tags: Optional[List[str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Thread:
@@ -30,6 +31,7 @@ async def create_thread(
         name=name,
         user_id=user_id,
         user_identifier=user_identifier,
+        tenant_id=tenant_id,
         tags=tags or [],
         metadata_=metadata or {},
     )
@@ -58,23 +60,38 @@ async def get_owned_thread(
     """Get a thread by ID, enforcing that the caller owns it.
 
     Returns ``None`` both when the thread does not exist and when it belongs
-    to another user, so routes 404 identically and never leak existence.
+    to another user or tenant, so routes 404 identically and never leak
+    existence.
 
-    Ownership = ``thread.user_identifier == claims.sub`` (the frontend's
-    stable user id carried in the JWT).  Admins bypass the check.
+    Ownership = ``thread.user_identifier == claims.sub`` AND
+    ``thread.tenant_id == claims.tenant_id`` (the frontend's stable user id
+    and tenant namespace carried in the JWT).  Admins bypass the check
+    entirely — an admin's ``tenant_id`` is not assumed to match every
+    tenant's threads.
 
-    Migration affordance: threads created before ownership stamping existed
-    have ``user_identifier IS NULL``; the first authenticated user to access
-    one claims it (stamped in place).  New threads are always created with an
-    owner, so this branch only fires for legacy rows.
+    Migration affordance: threads created before ownership/tenant stamping
+    existed have ``user_identifier``/``tenant_id IS NULL``; the first
+    authenticated user to access one claims it (stamped in place, both
+    fields together — a legacy thread can't be claimed into a mismatched
+    tenant). New threads are always created with an owner and tenant, so
+    this branch only fires for legacy rows.
     """
     thread = await get_thread(db, thread_id)
     if thread is None:
         return None
-    if claims.is_admin or thread.user_identifier == claims.sub:
+    if claims.is_admin:
         return thread
-    if thread.user_identifier is None:
+    owned = thread.user_identifier == claims.sub
+    same_tenant = thread.tenant_id == claims.tenant_id
+    if owned and same_tenant:
+        return thread
+    if owned and thread.tenant_id is None:
+        thread.tenant_id = claims.tenant_id
+        await db.flush()
+        return thread
+    if thread.user_identifier is None and thread.tenant_id is None:
         thread.user_identifier = claims.sub
+        thread.tenant_id = claims.tenant_id
         await db.flush()
         return thread
     return None

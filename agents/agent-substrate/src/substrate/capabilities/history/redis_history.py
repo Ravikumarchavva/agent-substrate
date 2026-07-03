@@ -117,6 +117,32 @@ class RedisHistoryProvider:
     def _key(self, agent_id: AgentId, session_id: str) -> str:
         return f"{self._key_prefix}:{agent_id.type}:{agent_id.key}:{session_id}"
 
+    def _seed_lock_key(self, agent_id: AgentId, session_id: str) -> str:
+        return f"{self._key_prefix}:seedlock:{agent_id.type}:{agent_id.key}:{session_id}"
+
+    async def try_acquire_seed_lock(
+        self, agent_id: AgentId, session_id: str, *, ttl: int = 30
+    ) -> bool:
+        """Atomic ``SET NX EX`` — True if the caller won the race to seed.
+
+        Guards the cold-store seed race in ``agents/factory.py::
+        load_session_memory``: two concurrent requests for the same session
+        (two replicas, or two racing SSE connections before any per-thread
+        single-flight engages) can both observe ``count_messages() == 0`` and
+        both append the full persisted history, double-seeding this list —
+        and since ``append()`` LTRIMs to ``max_messages`` on every write, a
+        double-seed can push the list over the cap and silently evict
+        legitimate *older* messages. Only one caller should ever win this
+        lock per session; the other(s) should wait for ``count_messages()``
+        to reflect the winner's seed instead of seeding again. ``ttl``
+        bounds how long a crashed seeder can block others (not a mutex held
+        for the whole request — released implicitly by expiry, not
+        explicitly, so a slow seed never blocks losers past ``ttl``).
+        """
+        client = self._require_client()
+        key = self._seed_lock_key(agent_id, session_id)
+        return bool(await client.set(key, "1", nx=True, ex=ttl))
+
     # -- HistoryProvider protocol ---------------------------------------------
 
     async def append(

@@ -7,7 +7,6 @@ including tool approval requests, human input requests, and tool results.
 from __future__ import annotations
 from substrate.logger import setup_logging
 
-import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -509,10 +508,17 @@ async def chat(
         raise HTTPException(status_code=404, detail="Thread not found")
 
     # 2. Single-flight: only one active stream per thread at a time.
-    # asyncio is single-threaded and cooperative: no await between the locked()
-    # check and acquire(), so no other coroutine can slip in between — no TOCTOU.
-    thread_lock = ctx.thread_locks.setdefault(str(body.thread_id), asyncio.Lock())
-    if thread_lock.locked():
+    # Durable and cross-replica: a unique partial index on ravi_run_queue
+    # (see PostgresScheduler) is the actual enforcement, at Runtime.submit()
+    # time — this is a cheap pre-check so the common case still gets a clean
+    # 409 before the (comparatively expensive) agent build below runs, same
+    # as the old per-process asyncio.Lock did. Unlike that lock, this holds
+    # even when the existing run is being served by a different replica.
+    # The rare race (two requests for the same thread both pass this check)
+    # degrades gracefully instead of corrupting anything: submit() still
+    # rejects one of them, surfaced as a run.failed SSE event since headers
+    # are already sent by then — see AgentStreamSession._agent_worker.
+    if await ctx.runtime.scheduler.find_run_for_thread(str(body.thread_id)):
         raise HTTPException(
             status_code=409,
             detail=(
@@ -520,11 +526,8 @@ async def chat(
                 "Cancel it first via POST /chat/{thread_id}/cancel."
             ),
         )
-    await thread_lock.acquire()
 
     # 3. Build agent with restored memory + per-thread HITL bridge
-    # Guard: release the lock if any pre-stream setup step throws so the lock
-    # is never orphaned (sse_generator's finally only runs once iterated).
     try:
         deps = await _get_agent_deps(ctx, str(body.thread_id))
         file_block, image_inputs, attachments = await _build_file_context(
@@ -723,19 +726,15 @@ async def chat(
         await db.commit()
 
     except Exception:
-        thread_lock.release()
-        ctx.thread_locks.pop(str(body.thread_id), None)
+        # No per-thread lock to release anymore (single-flight is enforced
+        # durably by Runtime.submit()'s unique-index check, not a lock this
+        # handler owns) — this except exists only to preserve the original
+        # exception's traceback/type on the way out.
         raise
     # Per-thread HITL bridge (acquired in _get_agent_deps).
     bridge: WebHITLBridge = deps["bridge"]
 
-    # Tool risk/UI metadata, built in setup so a failure releases the lock here
-    # (not inside the generator where it could orphan the lock).
     tool_meta_map = _build_tool_meta_map(deps["tools"])
-
-    # Per-request cancel signal — set by POST /chat/{thread_id}/cancel.
-    cancel_event: asyncio.Event = asyncio.Event()
-    ctx.cancel_registry[str(body.thread_id)] = cancel_event
 
     # current_thread_id is set inside sse_generator (with reset) to scope it
     # to the streaming task and avoid leaking into the request handler scope.
@@ -780,7 +779,8 @@ async def chat(
         msg=_entry_msg,
         bridge=bridge,
         is_disconnected=request.is_disconnected,
-        cancel_event=cancel_event,
+        thread_id=str(body.thread_id),
+        tenant_id=user.tenant_id,
         persister=persister,
         on_complete=_settle_boards,
         spec=_agent_spec,
@@ -790,8 +790,10 @@ async def chat(
         """Serialize the session's WireEvents as SSE `data:` lines.
 
         All concurrency (agent run, HITL merge, cancel/disconnect, persistence)
-        lives in `AgentStreamSession`; this only frames events for the transport
-        and guarantees the thread lock is released exactly once.
+        lives in `AgentStreamSession`; this only frames events for the transport.
+        Single-flight is enforced durably by Runtime.submit() itself (a unique
+        index on ravi_run_queue), not by anything this generator owns, so
+        there's no per-thread lock left to release here.
         """
         _thread_id_token = current_thread_id.set(str(body.thread_id))
         try:
@@ -802,9 +804,6 @@ async def chat(
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
         finally:
             current_thread_id.reset(_thread_id_token)
-            ctx.cancel_registry.pop(str(body.thread_id), None)
-            thread_lock.release()
-            ctx.thread_locks.pop(str(body.thread_id), None)
             await ctx.bridge_registry.release_if_idle(str(body.thread_id))
             yield "data: [DONE]\n\n"
 

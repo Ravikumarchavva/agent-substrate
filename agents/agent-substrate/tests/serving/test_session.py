@@ -177,7 +177,16 @@ async def test_persister_called_on_turn_complete() -> None:
     assert "persisted text" in persist_calls[0].text
 
 
-async def test_cancel_event_cancels_run() -> None:
+async def test_durable_cancel_ends_session() -> None:
+    """Supervisor.cancel() — the durable, cross-replica path routes/cancel.py
+    actually calls — terminates the session exactly like a same-process
+    cancel does: purely via the EventLog's run.cancelled entry appearing,
+    with no session-owned cancel Event/registry involved at all. This is
+    what makes cancel work correctly even when POST /cancel lands on a
+    different replica than the one running the SSE stream."""
+    from substrate.kernel.core.identity import AgentId as _AgentId
+    from substrate.kernel.runtime.supervisor import RunHandle
+
     @dataclass
     class HangingAgent:
         name: str = "hanging"
@@ -193,22 +202,37 @@ async def test_cancel_event_cancels_run() -> None:
     async with Runtime() as rt:
         agent = HangingAgent()
         msg = _make_msg(agent.id)
-        cancel_event = asyncio.Event()
+        thread_id = "test-thread-durable-cancel"
         session = AgentStreamSession(
             runtime=rt,
             agent=agent,
             msg=msg,
             bridge=_StubBridge(),
-            cancel_event=cancel_event,
+            thread_id=thread_id,
             poll_interval=0.01,
         )
 
-        # Start consuming events, and trigger cancel on hello
+        async def _cancel_once_active() -> None:
+            found = None
+            for _ in range(200):
+                found = await rt.scheduler.find_run_for_thread(thread_id)
+                if found is not None:
+                    break
+                await asyncio.sleep(0.01)
+            assert found is not None, "run never became active for thread"
+            run_id, _status = found
+            # agent_id/parent_run are placeholders — Supervisor.cancel() only
+            # reads handle.run_id (see routes/cancel.py for the same pattern).
+            handle = RunHandle(
+                run_id=run_id, agent_id=_AgentId(type="", key=""), parent_run=""
+            )
+            await rt.supervisor.cancel(handle, reason="test")
+
+        asyncio.create_task(_cancel_once_active())
+
         events = []
         async for ev in session.events():
             events.append(ev)
-            if isinstance(ev, HelloEvent):
-                cancel_event.set()
 
         assert any(isinstance(e, RunCancelledEvent) for e in events)
 

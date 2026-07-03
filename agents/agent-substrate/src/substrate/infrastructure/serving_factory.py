@@ -230,7 +230,9 @@ async def init_infrastructure(
     data_store = DataRefStore(redis_url=cfg.REDIS_URL)
     await data_store.connect()
 
-    bridge_registry = BridgeRegistry(response_timeout=300.0, signal_bus=runtime.signal_bus)
+    bridge_registry = BridgeRegistry(
+        response_timeout=300.0, signal_bus=runtime.signal_bus, scheduler=runtime.scheduler
+    )
     skill_manager = SkillManager(auto_discover=True)
     file_store = _init_file_store(cfg)
     await file_store.connect()

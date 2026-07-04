@@ -82,7 +82,7 @@ def _encode_audio_content(ac: AudioBlock) -> genai_types.Part:
     else:
         audio_bytes = ac.data
     return genai_types.Part(
-        inline_data=genai_types.Blob(mime_type=f"audio/{ac.format}", data=audio_bytes)
+        inline_data=genai_types.Blob(mime_type=ac.media_type, data=audio_bytes)
     )
 
 

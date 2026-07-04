@@ -12,6 +12,7 @@ from substrate.integrations.events.envelope import EventEnvelope
 from substrate.kernel.core.content import ChatMessage, Role
 from substrate.kernel.core.identity import AgentId
 from substrate.kernel.messaging.message import ChatPayload, Message
+from substrate.kernel.storage.history import HistoryProvider
 from substrate.kernel import TextBlock
 
 logger = setup_logging()
@@ -21,7 +22,7 @@ async def load_memory_for_thread(
     *,
     thread_id: str,
     system_instructions: str,
-    history: object,
+    history: HistoryProvider | None,
     conversation_service_url: str,
 ) -> object:
     """Load agent history from the cache or the conversation service."""
@@ -151,7 +152,6 @@ async def execute_agent_run(
             await event_bus.publish(
                 EventEnvelope(
                     event_type="agent.run_completed",
-                    correlation_id=run_id,
                     payload={
                         "type": "agent.run_completed",
                         "run_id": run_id,

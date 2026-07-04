@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Dict
 
+from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.storage.tasks import TaskStatus
 from substrate.kernel.tools import ToolExecutionResult, ToolUI
 from substrate.kernel import TextBlock
@@ -144,10 +145,10 @@ class TaskManagerTool:
     # Execute
     # ------------------------------------------------------------------
 
-    async def execute(  # type: ignore[override]
+    async def execute(
         self,
         *,
-        ctx: Any = None,
+        ctx: RunMeta | None = None,
         action: str,
         tasks: list[str] | None = None,
         task_id: str | None = None,
@@ -155,6 +156,7 @@ class TaskManagerTool:
         note: str | None = None,
         max_retries: int = 3,
         thread_id: str | None = None,
+        **_: Any,
     ) -> ToolExecutionResult:
 
         store = self._store

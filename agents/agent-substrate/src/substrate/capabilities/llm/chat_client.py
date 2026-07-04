@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 from openai import AsyncOpenAI
 
 from substrate.kernel import ChatMessage, ContentBlock
+from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 from substrate.kernel.core.content import (
     DataBlock,
@@ -369,6 +370,7 @@ class OpenAIChatCompletionClient:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
     ) -> LLMResponse:
         tool_dicts = _tools_to_dicts(options.tools)
         chat_messages = self._serialize_messages(messages)
@@ -467,6 +469,7 @@ class OpenAIChatCompletionClient:
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
     ) -> AsyncIterator[TextDelta | CompletionEvent]:
         return self._do_stream(messages, options=options)
 

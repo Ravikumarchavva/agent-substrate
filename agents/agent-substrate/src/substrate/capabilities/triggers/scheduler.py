@@ -3,6 +3,8 @@
 from __future__ import annotations
 from substrate.logger import setup_logging
 
+import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, TYPE_CHECKING
@@ -132,11 +134,15 @@ class TriggerScheduler:
 
     # ── Scheduled Tasks Support ──────────────────────────────────────────────
 
-    def set_scheduled_task_executor(self, executor_cb: Callable[[uuid.UUID], Awaitable[None]]) -> None:
+    def set_scheduled_task_executor(
+        self, executor_cb: Callable[[uuid.UUID], Awaitable[None]]
+    ) -> None:
         """Register the executor callback for scheduled tasks."""
         self._scheduled_task_executor = executor_cb
 
-    async def add_scheduled_task(self, task_id: uuid.UUID, cron_expression: str, kind: str = "cron") -> None:
+    async def add_scheduled_task(
+        self, task_id: uuid.UUID, cron_expression: str, kind: str = "cron"
+    ) -> None:
         """Register/schedule a new persistent scheduled task."""
         if self._scheduler is None:
             raise RuntimeError("Scheduler not started")
@@ -158,17 +164,26 @@ class TriggerScheduler:
             id=job_id,
             args=[task_id],
         )
-        logger.info("Scheduled task job '%s' registered with schedule: %s (%s)", job_id, cron_expression, kind)
+        logger.info(
+            "Scheduled task job '%s' registered with schedule: %s (%s)",
+            job_id,
+            cron_expression,
+            kind,
+        )
 
     async def remove_scheduled_task(self, task_id: uuid.UUID) -> bool:
         """Remove a persistent scheduled task job from APScheduler."""
         if self._scheduler is not None:
             try:
                 await self._scheduler.remove_schedule(f"task_{task_id}")
-                logger.info("Removed scheduled task job 'task_%s' from APScheduler", task_id)
+                logger.info(
+                    "Removed scheduled task job 'task_%s' from APScheduler", task_id
+                )
                 return True
             except Exception:
-                logger.warning("Scheduled task job 'task_%s' not found in APScheduler", task_id)
+                logger.warning(
+                    "Scheduled task job 'task_%s' not found in APScheduler", task_id
+                )
         return False
 
     async def get_next_run_time(self, task_id: uuid.UUID) -> datetime | None:
@@ -185,11 +200,19 @@ class TriggerScheduler:
     async def _fire_scheduled_task(self, task_id: uuid.UUID) -> None:
         """Callback fired by APScheduler to run a scheduled task."""
         logger.info("Scheduler fired scheduled task callback for task_id: %s", task_id)
-        if hasattr(self, "_scheduled_task_executor") and self._scheduled_task_executor is not None:
+        if (
+            hasattr(self, "_scheduled_task_executor")
+            and self._scheduled_task_executor is not None
+        ):
             try:
                 await self._scheduled_task_executor(task_id)
             except Exception as exc:
-                logger.error("Error executing scheduled task %s callback: %s", task_id, exc, exc_info=True)
+                logger.error(
+                    "Error executing scheduled task %s callback: %s",
+                    task_id,
+                    exc,
+                    exc_info=True,
+                )
         else:
             logger.warning("No executor registered for scheduled task %s", task_id)
 
@@ -237,4 +260,3 @@ class TriggerScheduler:
                 "Trigger '%s' fired, but no Runtime is configured for dispatch.",
                 trigger_name,
             )
-

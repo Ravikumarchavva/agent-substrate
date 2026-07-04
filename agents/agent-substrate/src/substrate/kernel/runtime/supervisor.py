@@ -195,7 +195,7 @@ class Supervisor(Protocol):
         """
         ...
 
-    async def children_of(
+    def children_of(
         self,
         parent: RunId,
     ) -> AsyncIterator[RunHandle]:

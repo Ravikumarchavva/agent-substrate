@@ -5,17 +5,27 @@ from __future__ import annotations
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from substrate.logger import setup_logging
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun
-from substrate.infrastructure.serving_factory import build_agent_for_thread, build_chat_tools
-from substrate.serving.monolith.services.agent_service import persist_assistant_message, persist_user_message
+from substrate.infrastructure.serving_factory import (
+    build_agent_for_thread,
+    build_chat_tools,
+)
+from substrate.serving.monolith.services.agent_service import (
+    persist_assistant_message,
+    persist_user_message,
+)
 from substrate.kernel.messaging.message import Message, ChatPayload
-from substrate.kernel.core.content import ChatMessage as KernelChatMessage, Role, TextBlock as KernelTextBlock
+from substrate.kernel.core.content import (
+    ChatMessage as KernelChatMessage,
+    Role,
+    TextBlock as KernelTextBlock,
+)
 from substrate.kernel.core.identity import AgentId
 
 logger = setup_logging()
@@ -32,9 +42,13 @@ def format_lookback_context(runs: list[ScheduledTaskRun]) -> str:
 
     for run in runs:
         if run.was_silent:
-            lines.append(f"- **{run.executed_at.strftime('%b %d, %H:%M')}**: [Silent check — condition not met]")
+            lines.append(
+                f"- **{run.executed_at.strftime('%b %d, %H:%M')}**: [Silent check — condition not met]"
+            )
         else:
-            lines.append(f"### Run at {run.executed_at.strftime('%b %d, %Y %H:%M')} UTC")
+            lines.append(
+                f"### Run at {run.executed_at.strftime('%b %d, %Y %H:%M')} UTC"
+            )
             lines.append(run.output_summary)
             lines.append("")
 
@@ -50,13 +64,16 @@ async def execute_scheduled_task(
     """Execute a single scheduled task run."""
     logger.info("Executing scheduled task: %s", task_id)
     async with session_factory() as db:
+        start = time.monotonic()
         try:
             task = await db.get(ScheduledTask, task_id)
             if not task:
                 logger.warning("Scheduled task not found: %s", task_id)
                 return
             if task.status != "active":
-                logger.info("Scheduled task %s is not active (status: %s)", task_id, task.status)
+                logger.info(
+                    "Scheduled task %s is not active (status: %s)", task_id, task.status
+                )
                 return
 
             # 1. Fetch recent runs for lookback
@@ -77,7 +94,7 @@ async def execute_scheduled_task(
             scheduled_instructions = (
                 f"{base_instructions}\n\n"
                 f"---\n"
-                f"**You are executing a scheduled task: \"{task.name}\"**\n"
+                f'**You are executing a scheduled task: "{task.name}"**\n'
                 f"Current date/time: {datetime.now(timezone.utc).isoformat()}\n\n"
                 f"Task instructions: {task.prompt}\n\n"
                 f"{lookback_block}\n\n"
@@ -106,7 +123,9 @@ async def execute_scheduled_task(
                 target=agent.id,
                 sender=AgentId(type="proxy", key="job"),
                 payload=ChatPayload(
-                    message=KernelChatMessage(role=Role.USER, content=[KernelTextBlock(text=task.prompt)])
+                    message=KernelChatMessage(
+                        role=Role.USER, content=[KernelTextBlock(text=task.prompt)]
+                    )
                 ),
                 correlation_id=str(task.thread_id),
             )
@@ -146,8 +165,7 @@ async def execute_scheduled_task(
                 await persist_user_message(db, task.thread_id, task.prompt)
                 # Save assistant response
                 assistant_msg = KernelChatMessage(
-                    role=Role.ASSISTANT,
-                    content=[KernelTextBlock(text=output_text)]
+                    role=Role.ASSISTANT, content=[KernelTextBlock(text=output_text)]
                 )
                 await persist_assistant_message(db, task.thread_id, assistant_msg)
 
@@ -157,12 +175,16 @@ async def execute_scheduled_task(
 
             task.updated_at = datetime.now(timezone.utc)
             await db.commit()
-            logger.info("Successfully executed scheduled task %s (silent=%s)", task_id, is_silent)
+            logger.info(
+                "Successfully executed scheduled task %s (silent=%s)",
+                task_id,
+                is_silent,
+            )
 
         except Exception as exc:
             logger.exception("Error executing scheduled task %s", task_id)
             try:
-                duration_ms = int((time.monotonic() - start) * 1000) if 'start' in locals() else 0
+                duration_ms = int((time.monotonic() - start) * 1000)
                 run = ScheduledTaskRun(
                     task_id=task_id,
                     status="failed",
@@ -174,7 +196,9 @@ async def execute_scheduled_task(
                 db.add(run)
                 await db.commit()
             except Exception as db_exc:
-                logger.error("Failed to persist failed run log for task %s: %s", task_id, db_exc)
+                logger.error(
+                    "Failed to persist failed run log for task %s: %s", task_id, db_exc
+                )
 
 
 async def load_active_tasks_into_scheduler(
@@ -189,7 +213,13 @@ async def load_active_tasks_into_scheduler(
         tasks = result.scalars().all()
         for task in tasks:
             try:
-                await scheduler.add_scheduled_task(task.id, task.cron_expression, task.kind)
-                logger.info("Scheduled task %s ('%s') loaded successfully", task.id, task.name)
+                await scheduler.add_scheduled_task(
+                    task.id, task.cron_expression, task.kind
+                )
+                logger.info(
+                    "Scheduled task %s ('%s') loaded successfully", task.id, task.name
+                )
             except Exception as exc:
-                logger.error("Failed to load scheduled task %s into scheduler: %s", task.id, exc)
+                logger.error(
+                    "Failed to load scheduled task %s into scheduler: %s", task.id, exc
+                )

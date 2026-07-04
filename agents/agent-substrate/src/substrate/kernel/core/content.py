@@ -24,6 +24,7 @@ for each LLM API.
 from __future__ import annotations
 
 from enum import StrEnum
+from collections.abc import Sequence
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -149,6 +150,9 @@ class ImageBlock(BaseModel):
 
     Exactly one of ``url``, ``data``, or ``file_id`` must be set.
     ``data`` is raw bytes; serializes as base64 in JSON.
+
+    ``detail`` is OpenAI's vision resolution hint (``"low"``/``"high"``/
+    ``"auto"``); providers that don't support it simply ignore it.
     """
 
     type: Literal["image"] = "image"
@@ -156,6 +160,7 @@ class ImageBlock(BaseModel):
     data: bytes | None = None
     file_id: str | None = None
     media_type: str = "image/jpeg"
+    detail: Literal["low", "high", "auto"] = "auto"
 
     model_config = _MEDIA_CONFIG  # type: ignore[assignment]
 
@@ -479,7 +484,7 @@ def content_block_from_dict(data: dict[str, object]) -> ContentBlock | UnknownBl
         ) from exc
 
 
-def content_blocks_to_str(blocks: list[ContentBlock | UnknownBlock]) -> str:
+def content_blocks_to_str(blocks: Sequence[ContentBlock | UnknownBlock]) -> str:
     """Human-readable string from a list of content blocks."""
     return "\n".join(
         block.to_text_repr() if hasattr(block, "to_text_repr") else str(block)

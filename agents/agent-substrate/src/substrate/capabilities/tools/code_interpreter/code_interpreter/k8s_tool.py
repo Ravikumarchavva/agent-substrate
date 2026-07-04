@@ -44,6 +44,7 @@ import os
 from typing import Any
 
 from substrate.kernel import ImageBlock  # was ImageContent, MediaContent
+from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel import TextBlock
 
@@ -83,37 +84,34 @@ class K8sSandboxCodeInterpreterTool:
         shutdown_after_seconds: int | None = None,
         warmpool: str | None = None,
     ) -> None:
-        super().__init__(
-            name="code_interpreter",
-            description=(
-                "Execute Python code in a secure, isolated Kubernetes sandbox pod. "
-                "Python state persists between calls: variables defined in one call "
-                "are available in the next. "
-                "Available packages: numpy, pandas, matplotlib, scipy, scikit-learn, "
-                "seaborn, plotly, openpyxl, polars, Pillow, requests. "
-                "Matplotlib and Plotly figures are auto-captured and returned as artifacts. "
-                "Print results via print() or return them from expressions."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": (
-                            "Python code to execute. "
-                            "Use print() to produce visible output."
-                        ),
-                    },
-                    "timeout": {
-                        "type": "integer",
-                        "description": "Max execution time in seconds (default 60, max 300)",
-                        "default": 60,
-                    },
-                },
-                "required": ["code"],
-                "additionalProperties": False,
-            },
+        self.name = "code_interpreter"
+        self.description = (
+            "Execute Python code in a secure, isolated Kubernetes sandbox pod. "
+            "Python state persists between calls: variables defined in one call "
+            "are available in the next. "
+            "Available packages: numpy, pandas, matplotlib, scipy, scikit-learn, "
+            "seaborn, plotly, openpyxl, polars, Pillow, requests. "
+            "Matplotlib and Plotly figures are auto-captured and returned as artifacts. "
+            "Print results via print() or return them from expressions."
         )
+        self.input_schema = {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": (
+                        "Python code to execute. Use print() to produce visible output."
+                    ),
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Max execution time in seconds (default 60, max 300)",
+                    "default": 60,
+                },
+            },
+            "required": ["code"],
+            "additionalProperties": False,
+        }
 
         if service is not None:
             self._service = service
@@ -148,11 +146,13 @@ class K8sSandboxCodeInterpreterTool:
 
     # ── Tool execution ──────────────────────────────────────────────────────────
 
-    async def execute(  # type: ignore[override]
+    async def execute(
         self,
         *,
+        ctx: RunMeta | None = None,
         code: str,
         timeout: int = 60,
+        **_: Any,
     ) -> ToolExecutionResult:
         """Execute Python code in the session's sandbox pod.
 
@@ -263,7 +263,6 @@ class K8sSandboxCodeInterpreterTool:
             response_data["output_files"] = non_image_files
 
         return ToolExecutionResult(
-            content=[TextBlock(text=json.dumps(response_data))],
+            content=[TextBlock(text=json.dumps(response_data)), *media],
             is_error=not success,
-            media=media or None,
         )

@@ -14,14 +14,19 @@ import os
 import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from substrate.config import SubstrateConfig
 from substrate.kernel.llm import EmbeddingClient, LLMClient
 from substrate.kernel.storage.history import HistoryProvider
-from substrate.kernel.tools import Tool, ToolRisk
+from substrate.kernel.tools import (
+    Tool,
+    ToolRisk,
+    is_hosted_tool,
+    is_provider_defined_tool,
+)
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -231,7 +236,9 @@ async def init_infrastructure(
     await data_store.connect()
 
     bridge_registry = BridgeRegistry(
-        response_timeout=300.0, signal_bus=runtime.signal_bus, scheduler=runtime.scheduler
+        response_timeout=300.0,
+        signal_bus=runtime.signal_bus,
+        scheduler=runtime.scheduler,
     )
     skill_manager = SkillManager(auto_discover=True)
     file_store = _init_file_store(cfg)
@@ -315,7 +322,12 @@ async def init_tool_registry(
         code_interpreter_tool = CodeInterpreterTool()
 
     registry = Toolbox()
-    registry.add(ask_tool)
+    # AskHumanTool.execute() genuinely requires the full RunContext (ctx.uuid(),
+    # ctx.sleep_until_signal(), ...) to suspend/resume for HITL, not just the
+    # kernel's minimal RunMeta that the generic Tool protocol promises. Safe
+    # here because this registry is only ever dispatched via ToolInvoker,
+    # which always passes the real RunContext — see agents/tools/invoker.py.
+    registry.add(ask_tool)  # pyright: ignore[reportArgumentType]
     registry.add(task_tool)
     _exa_key = cfg.EXA_API_KEY or None
     _tavily_key = cfg.TAVILY_API_KEY or None
@@ -341,7 +353,12 @@ async def init_tool_registry(
 
     from substrate.capabilities.tools.utils.tool_search import ToolSearchTool
 
-    registry.add(ToolSearchTool(registry.all()))
+    local_tools = [
+        cast(Tool, t)
+        for t in registry.all()
+        if not is_hosted_tool(t) and not is_provider_defined_tool(t)
+    ]
+    registry.add(ToolSearchTool(local_tools))
 
     tools_requiring_approval = [
         t.name for t in registry.by_risk(ToolRisk.CRITICAL) if t.name != "ask_human"
@@ -599,7 +616,7 @@ async def build_agent_for_thread(
         def _registry(*tool_instances) -> Toolbox:
             tb = Toolbox()
             for t in tool_instances:
-                tb.register(t)
+                tb.add(t)
             return tb
 
         researcher = ReActAgent(
@@ -615,7 +632,7 @@ async def build_agent_for_thread(
                     exa_api_key=_settings.EXA_API_KEY or None,
                 ),
             ),
-            context=_make_context(model_context_window),
+            context=_make_context(),
             system_instructions="You are a research specialist.",
             max_iterations=5,
         )
@@ -623,7 +640,7 @@ async def build_agent_for_thread(
             "calculator",
             model=model_client,
             tools=_registry(CalculatorTool()),
-            context=_make_context(model_context_window),
+            context=_make_context(),
             system_instructions="You are a calculation specialist.",
             max_iterations=3,
         )
@@ -631,7 +648,7 @@ async def build_agent_for_thread(
             "clock",
             model=model_client,
             tools=_registry(CurrentTimeTool()),
-            context=_make_context(model_context_window),
+            context=_make_context(),
             system_instructions="You are a time specialist.",
             max_iterations=2,
         )
@@ -650,7 +667,7 @@ async def build_agent_for_thread(
                 ),
             ],
             max_iterations=15,
-            context=_make_context(model_context_window),
+            context=_make_context(),
         )
         researcher.name = "Researcher"
         calculator.name = "Calculator"

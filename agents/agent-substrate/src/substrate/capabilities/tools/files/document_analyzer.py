@@ -77,7 +77,7 @@ class DocumentAnalyzerTool:
         if action == "extract":
             return ToolExecutionResult(
                 content=[TextBlock(text=display_content)],
-                app_data={
+                structured_content={
                     "file": str(path),
                     "chars": len(content),
                     "truncated": truncated,
@@ -125,7 +125,7 @@ class DocumentAnalyzerTool:
                 )
             return ToolExecutionResult(
                 content=[TextBlock(text=answer or "No response generated.")],
-                app_data={"file": str(path), "action": action},
+                structured_content={"file": str(path), "action": action},
             )
 
         return ToolExecutionResult(

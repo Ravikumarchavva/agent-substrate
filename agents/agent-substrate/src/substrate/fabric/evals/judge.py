@@ -159,7 +159,9 @@ class LLMJudge:
                 )
 
                 # Parse response
-                text_parts = [b.text for b in response if isinstance(b, TextBlock)]
+                text_parts = [
+                    b.text for b in response.content if isinstance(b, TextBlock)
+                ]
                 response_text = "".join(text_parts)
                 parsed = self._parse_judge_response(response_text)
 

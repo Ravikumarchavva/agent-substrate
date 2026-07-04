@@ -107,14 +107,6 @@ pythonpath = ["."]
 exclude = ["notebooks/", "examples/", ".venv"]
 
 [tool.ruff.lint]
-# E701/E702: single-line if/semicolons are intentional in dispatch tables
-# E402: mid-file imports are intentional in some route files
-[tool.ruff.lint.per-file-ignores]
-"src/substrate/tools/code_interpreter/guest_agent/agent.py" = ["E701", "E702"]
-"src/substrate/services/conversation/routes.py" = ["E402"]
-# plugin/registry.py deliberately imports base classes at the bottom of the
-# module to avoid circular imports with kernel.{agents,guardrails,...}.
-"src/substrate/kernel/plugin/registry.py" = ["E402"]
 
 # ---------------------------------------------------------------------------
 # import-linter — enforce the layered architecture so the kernel stays frozen.

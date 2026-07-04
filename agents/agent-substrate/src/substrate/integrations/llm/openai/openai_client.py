@@ -6,7 +6,7 @@ from substrate.logger import setup_logging
 import hashlib
 import io
 import json
-from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, AsyncIterator, Optional, cast
 
 import tiktoken
 from openai import AsyncOpenAI
@@ -16,8 +16,10 @@ from openai.types.responses.response_reasoning_summary_text_delta_event import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
 
+from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.llm import GenerationOptions, LLMClient, LLMResponse, Usage
 from substrate.kernel import ChatMessage, ContentBlock
+from substrate.kernel.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.kernel.core.content import (
     TextBlock,
     ImageBlock,
@@ -111,9 +113,19 @@ def _build_openai_text_format(response_format: type["BaseModel"]) -> dict[str, A
 def _tools_from_options(options: "GenerationOptions") -> Optional[list[dict[str, Any]]]:
     if not options.tools:
         return None
+    # HostedTool / ProviderDefinedTool have no input_schema — this client only
+    # advertises local Tool schemas here; hosted/provider-defined tools aren't
+    # wired into this code path yet.
+    local_tools = [
+        cast(Tool, t)
+        for t in options.tools
+        if not is_hosted_tool(t) and not is_provider_defined_tool(t)
+    ]
+    if not local_tools:
+        return None
     return [
         {"name": t.name, "description": t.description, "parameters": t.input_schema}
-        for t in options.tools
+        for t in local_tools
     ]
 
 
@@ -328,6 +340,7 @@ class OpenAIClient(LLMClient):
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
     ) -> LLMResponse:
         """Generate a single response from OpenAI using Responses API."""
         tool_dicts = _tools_from_options(options)
@@ -548,6 +561,7 @@ class OpenAIClient(LLMClient):
         messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
+        ctx: RunMeta | None = None,
     ) -> AsyncIterator[TextDelta | ReasoningDelta | CompletionEvent]:
         return self._do_stream(messages, options=options)
 

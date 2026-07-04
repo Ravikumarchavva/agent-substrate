@@ -27,9 +27,8 @@ class ToolRegistry:
         self._tools: Dict[str, Tool] = {}
 
     def register(self, tool: Tool) -> None:
-        schema = tool.get_schema()
-        self._tools[schema.name] = tool
-        logger.debug("Registered tool: %s", schema.name)
+        self._tools[tool.name] = tool
+        logger.debug("Registered tool: %s", tool.name)
 
     def register_many(self, tools: List[Tool]) -> None:
         for tool in tools:
@@ -42,13 +41,12 @@ class ToolRegistry:
         result = []
         for name, tool in self._tools.items():
             try:
-                schema = tool.get_schema()
                 result.append(
                     {
-                        "name": schema.name,
-                        "description": schema.description,
-                        "input_schema": schema.inputSchema,
-                        "risk": getattr(schema, "risk", "safe"),
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.input_schema,
+                        "risk": getattr(tool, "risk", "safe"),
                     }
                 )
             except Exception as e:
@@ -142,7 +140,6 @@ async def execute_and_publish(
     await event_bus.publish(
         EventEnvelope(
             event_type="tool.execution_completed",
-            correlation_id=run_id,
             payload={
                 "type": "tool.execution_completed",
                 "run_id": run_id,

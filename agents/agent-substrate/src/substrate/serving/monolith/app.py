@@ -199,8 +199,9 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    if getattr(app.state, "runtime_stack", None):
-        await app.state.runtime_stack.aclose()
+    runtime_stack = getattr(app.state, "runtime_stack", None)
+    if runtime_stack:
+        await runtime_stack.aclose()
     elif getattr(app.state, "runtime", None):
         await app.state.runtime.stop()
     if getattr(app.state, "trigger_scheduler", None):

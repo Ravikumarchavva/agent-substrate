@@ -6,7 +6,9 @@ from substrate.kernel import ChatMessage, TextBlock
 from substrate.kernel.llm import LLMResponse, EmbeddingResult, GenerationOptions
 from substrate.kernel.storage.vector import Document, SearchResult
 from substrate.kernel.storage.graph import Entity, Relationship, SubGraph
-from substrate.capabilities.llm.openai_embedding_client import OpenAIEmbeddingClient
+from substrate.integrations.llm.openai.openai_embedding_client import (
+    OpenAIEmbeddingClient,
+)
 from substrate.capabilities.knowledge.page_pipeline import PageIndexRAGPipeline
 from substrate.capabilities.knowledge.graph_rag import GraphRAGPipeline
 from substrate.capabilities.knowledge.pipeline import RAGPipeline

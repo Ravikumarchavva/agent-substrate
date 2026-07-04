@@ -94,7 +94,7 @@ async def lifespan(app):
             "You reason carefully, use tools purposefully, and communicate with clarity and precision.",
         )
         app.state.conversation_service_url = conversation_url
-        app.state.forwarding_tasks: dict[str, asyncio.Task] = {}
+        app.state.forwarding_tasks = {}
 
         cancel_task = asyncio.create_task(
             _cancel_listener(runtime, event_bus), name="cancel-listener"

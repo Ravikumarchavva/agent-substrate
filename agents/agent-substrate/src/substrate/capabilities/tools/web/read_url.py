@@ -187,7 +187,7 @@ class ReadUrlTool:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: Exa(api_key=self._exa_key).get_contents([url], highlights=True),
+                lambda: Exa(api_key=self._exa_key).get_contents([url], text=True),
             )
 
             results = response.results if response.results else []

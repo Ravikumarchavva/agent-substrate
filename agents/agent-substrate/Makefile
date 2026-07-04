@@ -95,6 +95,6 @@ ci:
 	$(MAKE) sync
 	$(MAKE) lint-apply
 	$(MAKE) lint
-	$(MAKE) typecheck-soft
+	$(MAKE) typecheck
 	$(MAKE) test-ci
 	$(MAKE) security-soft

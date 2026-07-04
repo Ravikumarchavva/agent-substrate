@@ -19,6 +19,9 @@ from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
 
 
+from substrate.serving.shared.rate_limit import rate_limit
+
+
 @pytest.fixture
 def mock_user_claims() -> AuthClaims:
     return AuthClaims(sub="stream-test-user", tenant_id="default")
@@ -27,8 +30,10 @@ def mock_user_claims() -> AuthClaims:
 @pytest.fixture(autouse=True)
 def override_auth(mock_user_claims: AuthClaims):
     app.dependency_overrides[get_current_user] = lambda: mock_user_claims
+    app.dependency_overrides[rate_limit] = lambda: None
     yield
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(rate_limit, None)
 
 
 @pytest.mark.asyncio

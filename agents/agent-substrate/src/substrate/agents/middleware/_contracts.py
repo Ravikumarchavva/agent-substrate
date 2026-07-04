@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable, Protocol
 
-from substrate.kernel import ChatMessage, Tool
+from substrate.kernel import ChatMessage
 from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.llm import LLMResponse
 from substrate.kernel.tools.chain import InvocationResult
+from substrate.kernel.tools.tools import AnyTool
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +86,7 @@ class MiddlewareContext:
 
     # CHAT — one model.generate() call
     system_instructions: str | None = None
-    tools: list[Tool] | None = None
+    tools: list[AnyTool] | None = None
     chat_result: LLMResponse | None = None
 
     # TOOL — one tool.execute() call
@@ -97,3 +98,21 @@ class MiddlewareContext:
     # modify it must reassign via
     # ``context.tool_result = context.tool_result.model_copy(update={...})``.
     tool_result: InvocationResult | None = None
+
+
+class Middleware(Protocol):
+    """The one interceptor shape, typed against the concrete ``MiddlewareContext``.
+
+    Structurally the same interceptor shape as
+    ``substrate.kernel.agent.middleware.Middleware``, but typed against the
+    concrete dataclass above instead of the kernel's minimal
+    ``MiddlewareContextProtocol`` — the agents layer is where
+    ``MiddlewareContext`` lives, so real middleware implementations can be
+    typed precisely here without the kernel needing to import this module.
+    """
+
+    async def process(
+        self,
+        context: MiddlewareContext,
+        call_next: Callable[[], Awaitable[None]],
+    ) -> None: ...

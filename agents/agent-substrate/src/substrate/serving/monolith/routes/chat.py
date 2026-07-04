@@ -505,6 +505,10 @@ async def chat(
          tool_result, HITL events, error)
       6. Persist assistant messages and tool results inline as they arrive
     """
+    runtime = ctx.runtime
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
+
     # 1. Validate thread + ownership (404 on foreign threads — no existence leak)
     thread = await get_owned_thread(db, body.thread_id, user)
     if not thread:
@@ -521,7 +525,7 @@ async def chat(
     # degrades gracefully instead of corrupting anything: submit() still
     # rejects one of them, surfaced as a run.failed SSE event since headers
     # are already sent by then — see AgentStreamSession._agent_worker.
-    if await ctx.runtime.scheduler.find_run_for_thread(str(body.thread_id)):
+    if await runtime.scheduler.find_run_for_thread(str(body.thread_id)):
         raise HTTPException(
             status_code=409,
             detail=(
@@ -848,11 +852,15 @@ async def stream_thread(
     (``last_seq`` at connect time) onward, so the two are complementary, not
     duplicative.
     """
+    runtime = ctx.runtime
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
+
     thread = await get_owned_thread(db, thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    found = await ctx.runtime.scheduler.find_run_for_thread(str(thread_id))
+    found = await runtime.scheduler.find_run_for_thread(str(thread_id))
 
     async def _empty_generator() -> AsyncIterator[str]:
         yield "data: [DONE]\n\n"
@@ -868,15 +876,14 @@ async def stream_thread(
         )
 
     run_id, _status = found
-    from_seq = await ctx.runtime.event_log.last_seq(run_id) + 1
+    event_log = runtime.event_log
+    from_seq = await event_log.last_seq(run_id) + 1
 
     async def sse_generator() -> AsyncIterator[str]:
         _thread_id_token = current_thread_id.set(str(thread_id))
         try:
             yield f"data: {json.dumps(HelloEvent().model_dump(mode='json'), default=str)}\n\n"
-            async for wire in tail_wire_events(
-                ctx.runtime.event_log, run_id, from_seq=from_seq
-            ):
+            async for wire in tail_wire_events(event_log, run_id, from_seq=from_seq):
                 yield f"data: {json.dumps(wire.model_dump(mode='json'), default=str)}\n\n"
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("Reconnect stream error for thread %s", thread_id)

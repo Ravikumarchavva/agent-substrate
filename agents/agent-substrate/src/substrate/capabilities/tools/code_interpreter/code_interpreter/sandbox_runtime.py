@@ -76,7 +76,7 @@ async def _startup() -> None:
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     os.makedirs(ARTIFACTS_DIR, exist_ok=True)
     try:
-        import matplotlib
+        import matplotlib  # pyright: ignore[reportMissingImports]
 
         matplotlib.use("Agg", force=True)
     except Exception:
@@ -471,7 +471,7 @@ def _new_artifact_path(prefix: str, extension: str) -> str:
 
 def _capture_matplotlib_figures(*, close_figures: bool) -> list[dict[str, Any]]:
     try:
-        import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt  # pyright: ignore[reportMissingImports]
     except Exception:
         return []
 
@@ -499,7 +499,7 @@ def _is_matplotlib_figure(value: Any) -> bool:
 
 def _install_plotly_show_hook() -> None:
     try:
-        from plotly.basedatatypes import BaseFigure
+        from plotly.basedatatypes import BaseFigure  # pyright: ignore[reportMissingImports]
     except Exception:
         return
 

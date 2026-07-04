@@ -387,7 +387,7 @@ class AskHumanTool:
         self._max_requests = max_requests_per_run
         self._history: List[Dict[str, Any]] = []
 
-    async def execute(  # type: ignore[override]
+    async def execute(
         self,
         *,
         ctx: RunContext | None = None,
@@ -396,6 +396,7 @@ class AskHumanTool:
         option_1: str,
         option_2: str,
         option_3: str = "",
+        **_: Any,
     ) -> ToolExecutionResult:
         """Execute the human input request."""
 
@@ -504,7 +505,11 @@ class AskHumanTool:
                         "question": request.question,
                         "context": request.context,
                         "options": [
-                            {"key": o.key, "label": o.label, "description": o.description}
+                            {
+                                "key": o.key,
+                                "label": o.label,
+                                "description": o.description,
+                            }
                             for o in options
                         ],
                         "allow_freeform": request.allow_freeform,
@@ -705,7 +710,9 @@ class AskHumanTool:
                             "status": "answered",
                             "user_choice": user_choice,
                             "was_freeform": is_freeform,
-                            "selected_option": selected_label if not is_freeform else None,
+                            "selected_option": selected_label
+                            if not is_freeform
+                            else None,
                             "_card": card,
                         }
                     )

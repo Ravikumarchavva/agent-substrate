@@ -49,7 +49,11 @@ async def cancel_chat(
     if not await get_owned_thread(db, thread_id, user):
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    found = await ctx.runtime.scheduler.find_run_for_thread(str(thread_id))
+    runtime = ctx.runtime
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
+
+    found = await runtime.scheduler.find_run_for_thread(str(thread_id))
     if found is None:
         logger.debug(
             "Cancel requested for thread %s but no active run found", thread_id
@@ -65,10 +69,10 @@ async def cancel_chat(
     # Best-effort fast path: if this request happens to land on the replica
     # actually running the task, this cancels its local CancellationToken
     # immediately instead of waiting out a heartbeat interval.
-    await ctx.runtime.cancel(run_id)
+    await runtime.cancel(run_id)
     # Durable, cross-replica cascade: always correct regardless of which
     # replica owns the run (see module docstring).
-    await ctx.runtime.supervisor.cancel(handle, reason="user_requested")
+    await runtime.supervisor.cancel(handle, reason="user_requested")
 
     logger.info("Cancellation requested for thread %s (run %s)", thread_id, run_id)
     return {"status": "cancelled", "thread_id": str(thread_id)}

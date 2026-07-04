@@ -5,10 +5,11 @@ from __future__ import annotations
 from substrate.agents.middleware.pipeline import MiddlewarePipeline
 from substrate.agents.middleware._contracts import (
     AgentRunResult,
+    Middleware,
     MiddlewareContext,
     ToolCallRecord,
 )
-from substrate.kernel.agent.middleware import Middleware, MiddlewareStage
+from substrate.kernel.agent.middleware import MiddlewareStage
 
 # Infrastructure middleware
 from substrate.agents.middleware.audit_logger import AuditLoggerMiddleware

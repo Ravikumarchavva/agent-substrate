@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, delete, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.logger import setup_logging
@@ -53,7 +53,6 @@ router = APIRouter(
 def validate_schedule(cron_expression: str, kind: str) -> None:
     """Validate that the schedule expression is legal for APScheduler."""
     from apscheduler.triggers.cron import CronTrigger
-    from apscheduler.triggers.interval import IntervalTrigger
 
     try:
         if kind == "cron":
@@ -74,7 +73,11 @@ async def create_scheduled_task_endpoint(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Create a new persistent scheduled task."""
-    validate_schedule(body.cron_expression, body.kind)
+    scheduler = ctx.trigger_scheduler
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="TriggerScheduler not configured")
+    kind = body.kind or "cron"
+    validate_schedule(body.cron_expression, kind)
 
     # 1. Create a dedicated thread for the scheduled task
     thread = await create_thread(
@@ -88,7 +91,7 @@ async def create_scheduled_task_endpoint(
         name=body.name,
         prompt=body.prompt,
         cron_expression=body.cron_expression,
-        kind=body.kind,
+        kind=kind,
         thread_id=thread.id,
         status="active",
         lookback_runs=body.lookback_runs,
@@ -101,7 +104,7 @@ async def create_scheduled_task_endpoint(
 
     # 3. Schedule task job in APScheduler
     try:
-        await ctx.trigger_scheduler.add_scheduled_task(
+        await scheduler.add_scheduled_task(
             task.id,
             task.cron_expression,
             task.kind,
@@ -110,7 +113,7 @@ async def create_scheduled_task_endpoint(
         logger.error("Failed to register scheduled task job: %s", exc)
         # We still return the task as active; the process restart will reload it
 
-    next_run_at = await ctx.trigger_scheduler.get_next_run_time(task.id)
+    next_run_at = await scheduler.get_next_run_time(task.id)
 
     return ScheduledTaskOut(
         id=task.id,
@@ -138,6 +141,9 @@ async def list_scheduled_tasks(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """List all scheduled tasks with execution status preview."""
+    scheduler = ctx.trigger_scheduler
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="TriggerScheduler not configured")
     stmt = select(ScheduledTask)
     if status_filter:
         stmt = stmt.where(ScheduledTask.status == status_filter)
@@ -149,7 +155,7 @@ async def list_scheduled_tasks(
     tasks_out = []
     for task in tasks:
         # Get next scheduled run time
-        next_run_at = await ctx.trigger_scheduler.get_next_run_time(task.id)
+        next_run_at = await scheduler.get_next_run_time(task.id)
 
         # Get last 3 runs for preview
         stmt_runs = (
@@ -177,7 +183,9 @@ async def list_scheduled_tasks(
                 created_at=task.created_at,
                 updated_at=task.updated_at,
                 next_run_at=next_run_at,
-                recent_runs=[ScheduledTaskRunOut.model_validate(r) for r in recent_runs],
+                recent_runs=[
+                    ScheduledTaskRunOut.model_validate(r) for r in recent_runs
+                ],
             )
         )
 
@@ -191,11 +199,14 @@ async def get_scheduled_task(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Get details of a single scheduled task with last 5 runs."""
+    scheduler = ctx.trigger_scheduler
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="TriggerScheduler not configured")
     task = await db.get(ScheduledTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    next_run_at = await ctx.trigger_scheduler.get_next_run_time(task.id)
+    next_run_at = await scheduler.get_next_run_time(task.id)
 
     stmt_runs = (
         select(ScheduledTaskRun)
@@ -234,14 +245,13 @@ async def list_scheduled_task_runs(
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve run history log for a task (paginated)."""
-    stmt = (
-        select(ScheduledTaskRun)
-        .where(ScheduledTaskRun.task_id == task_id)
-    )
+    stmt = select(ScheduledTaskRun).where(ScheduledTaskRun.task_id == task_id)
     if not include_silent:
-        stmt = stmt.where(ScheduledTaskRun.was_silent == False)
+        stmt = stmt.where(ScheduledTaskRun.was_silent == False)  # noqa: E712
 
-    stmt = stmt.order_by(ScheduledTaskRun.executed_at.desc()).limit(limit).offset(offset)
+    stmt = (
+        stmt.order_by(ScheduledTaskRun.executed_at.desc()).limit(limit).offset(offset)
+    )
     result = await db.execute(stmt)
     runs = result.scalars().all()
     return [ScheduledTaskRunOut.model_validate(r) for r in runs]
@@ -255,12 +265,19 @@ async def update_scheduled_task_endpoint(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Update a scheduled task's configuration, prompt, or status."""
+    scheduler = ctx.trigger_scheduler
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="TriggerScheduler not configured")
     task = await db.get(ScheduledTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
     # If updating schedule, validate first
-    new_expr = body.cron_expression if body.cron_expression is not None else task.cron_expression
+    new_expr = (
+        body.cron_expression
+        if body.cron_expression is not None
+        else task.cron_expression
+    )
     new_kind = body.kind if body.kind is not None else task.kind
     if body.cron_expression is not None or body.kind is not None:
         validate_schedule(new_expr, new_kind)
@@ -286,10 +303,10 @@ async def update_scheduled_task_endpoint(
     await db.refresh(task)
 
     # Dynamic scheduler sync
-    await ctx.trigger_scheduler.remove_scheduled_task(task.id)
+    await scheduler.remove_scheduled_task(task.id)
     if task.status == "active":
         try:
-            await ctx.trigger_scheduler.add_scheduled_task(
+            await scheduler.add_scheduled_task(
                 task.id,
                 task.cron_expression,
                 task.kind,
@@ -297,7 +314,7 @@ async def update_scheduled_task_endpoint(
         except Exception as exc:
             logger.error("Failed to re-register scheduled task: %s", exc)
 
-    next_run_at = await ctx.trigger_scheduler.get_next_run_time(task.id)
+    next_run_at = await scheduler.get_next_run_time(task.id)
 
     # Fetch last 3 runs for response
     stmt_runs = (
@@ -335,18 +352,21 @@ async def delete_scheduled_task_endpoint(
     ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Delete a scheduled task and its associated thread/history."""
+    scheduler = ctx.trigger_scheduler
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="TriggerScheduler not configured")
     task = await db.get(ScheduledTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
     # 1. Unschedule APScheduler job
-    await ctx.trigger_scheduler.remove_scheduled_task(task.id)
+    await scheduler.remove_scheduled_task(task.id)
 
     # 2. Delete task (thread deletion will cascade delete steps/runs/etc. in SQLite/Postgres)
     # But since SQLite/PG cascade is set, deleting Thread is enough. Let's delete both:
     thread_id = task.thread_id
     await db.delete(task)
-    
+
     # Check if thread exists, delete it
     thread = await db.get(Thread, thread_id)
     if thread:
@@ -378,7 +398,6 @@ async def trigger_scheduled_task_now(
 
     async def _run_bg():
         # Retrieve a fresh session factory to execute the task run
-        from fastapi import FastAPI
         # We need the app state. In fastapi endpoint, we can access it via fastapi.requests,
         # but since we already have the session_factory on ctx and the app_state is just request.app.state,
         # let's write a simple lambda/callable that gets app_state.
@@ -418,17 +437,19 @@ async def parse_schedule_endpoint(
         "into a clean JSON structure.\n\n"
         "Return ONLY a JSON object matching this schema:\n"
         "{\n"
-        "  \"name\": \"A short, punchy name for the task (e.g. 'Daily AI News Brief')\",\n"
-        "  \"prompt\": \"The detailed agent prompt or instructions. Instruct the agent what tools to run (e.g. web search) and what to produce.\",\n"
+        '  "name": "A short, punchy name for the task (e.g. \'Daily AI News Brief\')",\n'
+        '  "prompt": "The detailed agent prompt or instructions. Instruct the agent what tools to run (e.g. web search) and what to produce.",\n'
         "  \"cron_expression\": \"A valid cron expression (e.g. '0 8 * * *' for daily at 8am, '0 9 * * 1' for weekly monday at 9am, or '* * * * *' for every minute) or interval in seconds as a string (e.g. '3600' for hourly)\",\n"
-        "  \"kind\": \"cron\" or \"interval\",\n"
-        "  \"task_type\": \"report\" | \"monitor\" | \"reminder\" | \"learning\"\n"
+        '  "kind": "cron" or "interval",\n'
+        '  "task_type": "report" | "monitor" | "reminder" | "learning"\n'
         "}\n\n"
         "Do NOT write any preamble, explanation, or markdown block wrappers. Return raw JSON."
     )
 
     messages = [
-        ChatMessage(role="user", content=[TextBlock(text=f"Parse this request: '{body.text}'")])
+        ChatMessage(
+            role="user", content=[TextBlock(text=f"Parse this request: '{body.text}'")]
+        )
     ]
 
     try:
@@ -447,7 +468,9 @@ async def parse_schedule_endpoint(
             pass
 
         if not data:
-            json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response_text, re.DOTALL)
+            json_match = re.search(
+                r"```(?:json)?\s*(\{.*?\})\s*```", response_text, re.DOTALL
+            )
             if json_match:
                 data = json.loads(json_match.group(1))
             else:
@@ -496,7 +519,7 @@ async def add_scheduled_task_feedback(
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
     from substrate.serving.monolith.services.agent_service import persist_user_message
+
     await persist_user_message(db, task.thread_id, body.content)
     await db.commit()
     return {"status": "success"}
-

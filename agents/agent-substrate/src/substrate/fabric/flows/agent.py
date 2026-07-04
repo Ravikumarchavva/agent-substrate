@@ -42,7 +42,7 @@ from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
 from substrate.kernel.runtime.communication import AskOutcome
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.context import RunContext
+    from substrate.agents.runtime.context import Agent, RunContext
     from substrate.kernel.runtime.supervisor import RunHandle
 
 logger = logging.getLogger(__name__)
@@ -202,8 +202,8 @@ class ConditionalFlow:
     """
 
     predicate: Callable[[str], bool]
-    if_true: object
-    if_false: object
+    if_true: "Agent"
+    if_false: "Agent"
     name: str = "conditional_flow"
     description: str = ""
     branch_timeout: float = 300.0

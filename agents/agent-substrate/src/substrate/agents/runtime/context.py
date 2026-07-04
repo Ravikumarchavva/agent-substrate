@@ -43,10 +43,11 @@ import json
 import random as _random
 import uuid as _uuid
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, Protocol
 
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.core.content import (
+    ChatMessage,
     ContentBlock,
     JsonObject,
     content_block_from_dict,
@@ -68,15 +69,14 @@ from substrate.kernel.tools.chain import InvocationResult
 from substrate.agents.runtime.effect_cache import EffectCache
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-    from substrate.agents.runtime.backends._inbox import InMemoryInbox
-    from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
-    from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
-    from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
+    from substrate.kernel.runtime.log_entry import EventLog
+    from substrate.kernel.runtime.inbox import Inbox
+    from substrate.kernel.runtime.scheduler import Scheduler
+    from substrate.kernel.runtime.wakeup import SignalBus
+    from substrate.kernel.runtime.supervisor import Supervisor
     from substrate.kernel.llm.llm import LLMClient
     from substrate.kernel.runtime.fanout import FanoutStrategy
     from substrate.kernel.runtime.follow_graph import FollowGraph
-    from substrate.kernel.runtime.agent import Agent
     from substrate.kernel.storage.blob import BlobStore
     from substrate.agents.tools.invoker import InvokerSession, ToolInvoker
 
@@ -84,6 +84,25 @@ if TYPE_CHECKING:
 # and referenced by ``artifact_ref`` rather than inlined in the EventLog
 # entry — keeps large tool/LLM payloads out of the hot append-only log.
 _ARTIFACT_OFFLOAD_BYTES = 64 * 1024
+
+
+class Agent(Protocol):
+    """The one interceptor shape real agents implement, typed against the
+    concrete ``RunContext`` rather than the kernel's minimal
+    ``AgentRunContext``.
+
+    Structurally the same contract as ``substrate.kernel.runtime.agent.Agent``
+    (``id`` + ``run(ctx, inbox)``) — see that Protocol's docstring: agent
+    authors are meant to type-hint ``ctx: RunContext`` for the full journaled
+    capability surface (``ctx.llm()``, ``ctx.tool()``, ``ctx.spawn()``, …),
+    which the kernel Protocol can't reference directly without importing the
+    agents layer. This Protocol is what ``Runtime``/``Worker`` actually use to
+    type concrete agents like ``ReActAgent``.
+    """
+
+    id: AgentId
+
+    async def run(self, ctx: "RunContext", inbox: list[Message]) -> None: ...
 
 
 class RunContext:
@@ -109,14 +128,14 @@ class RunContext:
         self,
         *,
         meta: RunMeta,
-        event_log: InMemoryEventLog,
+        event_log: EventLog,
         effect_cache: EffectCache,
-        inbox: InMemoryInbox,
+        inbox: Inbox,
         follow_graph: FollowGraph,
         fanout: FanoutStrategy,
-        scheduler: InMemoryScheduler,
-        supervisor: InMemorySupervisor,
-        signal_bus: InMemorySignalBus,
+        scheduler: Scheduler,
+        supervisor: Supervisor,
+        signal_bus: SignalBus,
         blob_store: BlobStore | None = None,
         llm_client: LLMClient | None = None,
         tool_invoker: ToolInvoker | None = None,
@@ -285,7 +304,7 @@ class RunContext:
         return result.value
 
     async def _record_effect(
-        self, effect_id: str, status: str, value: JsonObject
+        self, effect_id: str, status: Literal["ok", "error"], value: JsonObject
     ) -> None:
         """Append ``effect.result`` to the EventLog (durable, replay source of
         truth) and update the in-run cache.  Large values are offloaded to
@@ -419,7 +438,10 @@ class RunContext:
         # doesn't push it back out every time this wait is re-entered.
         deadline_path = self._alloc_path()
         deadline_effect_id = Effect.make_id(
-            self.run_id, deadline_path, "ask.deadline", {"correlation_id": correlation_id}
+            self.run_id,
+            deadline_path,
+            "ask.deadline",
+            {"correlation_id": correlation_id},
         )
         deadline = await self._deadline_for(deadline_effect_id, timeout)
 
@@ -448,7 +470,9 @@ class RunContext:
                 return AskOutcome(kind="replied", result=result, last_seq=0)
             # child_name fired: the supervisor reports how the child ended.
             kind = payload.get("kind", "target_failed")
-            await self._log("ask.timeout", {"correlation_id": correlation_id, "kind": kind})
+            await self._log(
+                "ask.timeout", {"correlation_id": correlation_id, "kind": kind}
+            )
             return AskOutcome(kind=kind, handle=handle, last_seq=-1)
 
         if datetime.now(tz=timezone.utc) >= deadline:
@@ -461,7 +485,10 @@ class RunContext:
         # for Stage 0's real timer; a no-op-beyond-wake_at for Postgres,
         # whose release() below already sets it from the Wakeup) and suspend.
         await self._signal_bus.timer(self.run_id, deadline)
-        await self._log("run.suspended", {"waiting_for": wait_names, "deadline": deadline.isoformat()})
+        await self._log(
+            "run.suspended",
+            {"waiting_for": wait_names, "deadline": deadline.isoformat()},
+        )
         raise SuspendInterrupt(
             self.run_id,
             Wakeup(kind="signal", signals=wait_names, at=deadline),
@@ -578,12 +605,18 @@ class RunContext:
         child_run = handle.run_id
         signal_name = f"child:{child_run}"
         path = self._alloc_path()
-        effect_id = Effect.make_id(self.run_id, path, "join.wait", {"child_run": child_run})
+        effect_id = Effect.make_id(
+            self.run_id, path, "join.wait", {"child_run": child_run}
+        )
         payload = await self._signal_bus.consume(self.run_id, signal_name, effect_id)
         if payload is not None:
             status = RunStatus(payload["status"])
-            await self._log("join.completed", {"child_run": child_run, "status": status.value})
-            return RunResult(run_id=child_run, status=status, error=payload.get("error"))
+            await self._log(
+                "join.completed", {"child_run": child_run, "status": status.value}
+            )
+            return RunResult(
+                run_id=child_run, status=status, error=payload.get("error")
+            )
         await self._log("run.suspended", {"waiting_for": signal_name})
         raise SuspendInterrupt(
             self.run_id,
@@ -635,7 +668,9 @@ class RunContext:
         await self._signal_bus.timer(self.run_id, dt)
         await self._log("run.suspended", {"until": dt.isoformat()})
         raise SuspendInterrupt(
-            self.run_id, Wakeup(kind="timer", at=dt), reason=f"sleep_until:{dt.isoformat()}"
+            self.run_id,
+            Wakeup(kind="timer", at=dt),
+            reason=f"sleep_until:{dt.isoformat()}",
         )
 
     # ------------------------------------------------------------------
@@ -660,7 +695,7 @@ class RunContext:
 
     async def llm(
         self,
-        messages: list,
+        messages: list[ChatMessage],
         *,
         options: GenerationOptions = GenerationOptions(),
     ) -> LLMResponse:
@@ -670,6 +705,7 @@ class RunContext:
                 "No LLM client injected into this context.  "
                 "Set agent.model before registering with the runtime."
             )
+        llm_client = self._llm_client
 
         def _serialize(resp: LLMResponse) -> JsonObject:
             return {
@@ -698,7 +734,7 @@ class RunContext:
             )
             return LLMResponse(content=blocks, usage=usage)
 
-        args: JsonObject = {"model": self._llm_client.model, "msg_count": len(messages)}
+        args: JsonObject = {"model": llm_client.model, "msg_count": len(messages)}
         path = self._alloc_path()
         effect_id = Effect.make_id(self.run_id, path, "llm", args)
         cached = self._lookup_effect(effect_id)
@@ -708,7 +744,7 @@ class RunContext:
                 raise RuntimeError(value.get("error", "journaled llm error"))
             return _deserialize(await self._resolve_effect_value(cached))
 
-        async def _do_generate(msgs: list) -> LLMResponse:
+        async def _do_generate(msgs: list[ChatMessage]) -> LLMResponse:
             from substrate.kernel.messaging.stream import (
                 TextDelta,
                 ReasoningDelta,
@@ -722,11 +758,11 @@ class RunContext:
             final_usage: Usage | None = None
 
             try:
-                stream = self._llm_client.generate_stream(
+                stream = llm_client.generate_stream(
                     msgs, options=options, ctx=self._meta
                 )
             except TypeError:
-                stream = self._llm_client.generate_stream(msgs, options=options)
+                stream = llm_client.generate_stream(msgs, options=options)
 
             async for chunk in stream:
                 if isinstance(chunk, TextDelta):
@@ -763,7 +799,7 @@ class RunContext:
                 )
 
                 async def _final(c: MiddlewareContext) -> None:
-                    c.chat_result = await _do_generate(c.messages)
+                    c.chat_result = await _do_generate(c.messages or messages)
 
                 await middleware.execute(chat_ctx, _final)
                 if chat_ctx.chat_result is None:
@@ -777,7 +813,7 @@ class RunContext:
             await self._record_effect(effect_id, "ok", _serialize(resp))
             await self._log(
                 "llm.call",
-                {"model": self._llm_client.model, "tokens": resp.usage.total_tokens},
+                {"model": llm_client.model, "tokens": resp.usage.total_tokens},
             )
             return resp
         except Exception as exc:
@@ -797,8 +833,10 @@ class RunContext:
                 "No ToolInvoker injected into this context.  "
                 "Set agent.tools before registering with the runtime."
             )
+        tool_invoker = self._tool_invoker
         if self._invoker_session is None:
-            self._invoker_session = self._tool_invoker.open_session()
+            self._invoker_session = tool_invoker.open_session()
+        invoker_session = self._invoker_session
 
         call = ToolCallRequest(name=name, arguments=args)
         effect_args: JsonObject = {"name": name, "args_keys": sorted(args.keys())}
@@ -827,9 +865,7 @@ class RunContext:
         self._enter_scope()
 
         async def _do_invoke() -> InvocationResult:
-            return await self._tool_invoker.invoke(
-                call, session=self._invoker_session, ctx=self
-            )
+            return await tool_invoker.invoke(call, session=invoker_session, ctx=self)
 
         try:
             # log_once, not _log: a tool that suspends internally (raises

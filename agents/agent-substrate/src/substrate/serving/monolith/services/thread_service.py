@@ -130,7 +130,9 @@ async def list_threads(
     )
 
     # Exclude scheduled tasks threads from regular recent threads list
-    query = query.where((Thread.tags == None) | (~Thread.tags.contains(["scheduled_task"])))
+    query = query.where(
+        (Thread.tags == None) | (~Thread.tags.contains(["scheduled_task"]))  # noqa: E711
+    )
 
     if user_id:
         query = query.where(Thread.user_id == user_id)

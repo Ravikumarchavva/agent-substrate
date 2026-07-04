@@ -558,10 +558,27 @@ export function MessageBubble({
                 )}
               </div>
             )}
-            {timestamp && (
-              <span className="text-[11px] text-(--muted) pr-1">
-                {formatTime(timestamp)}
-              </span>
+            {(safeContent || timestamp) && (
+              <div className="flex items-center gap-2 mt-1 pr-1">
+                {safeContent && (
+                  <div className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 flex items-center">
+                    <button
+                      type="button"
+                      onClick={copyToClipboard}
+                      className="btn-icon flex items-center justify-center w-6 h-6 rounded-md hover:bg-(--card-hover) transition-colors cursor-pointer text-(--muted)"
+                      title="Copy message"
+                      style={{ minWidth: "unset", minHeight: "unset" }}
+                    >
+                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                )}
+                {timestamp && (
+                  <span className="text-[11px] text-(--muted) select-none">
+                    {formatTime(timestamp)}
+                  </span>
+                )}
+              </div>
             )}
           </div>
           </div>

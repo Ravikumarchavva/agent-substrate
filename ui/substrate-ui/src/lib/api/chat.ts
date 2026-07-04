@@ -1,6 +1,15 @@
 import { getPreferredChatModel } from "@/lib/model-preferences";
-import { API_BASE, getErrorMessage } from "./_client";
+import { API_BASE, getErrorMessage, requestJson } from "./_client";
 import type { ChatStreamRequest } from "./_client";
+
+export interface PendingHitlRequest {
+  request_id: string;
+  run_id?: string;
+  question?: string;
+  context?: string;
+  options?: Array<{ key: string; label: string; description?: string }>;
+  allow_freeform?: boolean;
+}
 
 export class ChatConflictError extends Error {
   constructor() {
@@ -36,6 +45,17 @@ export const chatApi = {
     }
   },
 
+  async getHitlStatus(threadId: string): Promise<{ pending: PendingHitlRequest[] }> {
+    // GET /hitl/status/{thread_id} — used on thread load/reconnect to
+    // restore a still-pending ask_human card. The run itself is durably
+    // suspended (Postgres) even across a backend restart; without this
+    // call the frontend has no way to know a card is still waiting, since
+    // input.requested only ever otherwise arrives as a live SSE event.
+    return requestJson<{ pending: PendingHitlRequest[] }>(
+      `/hitl/status/${threadId}`
+    );
+  },
+
   async cancelChat(threadId: string): Promise<void> {
     const res = await fetch("/api/chat/cancel", {
       method: "POST",
@@ -60,6 +80,25 @@ export const chatApi = {
     if (res.status === 409) {
       throw new ChatConflictError();
     }
+    if (!res.ok || !res.body) {
+      throw new Error(await getErrorMessage(res, `HTTP ${res.status}`));
+    }
+    return res;
+  },
+
+  async streamThread(threadId: string, signal: AbortSignal): Promise<Response> {
+    // GET /stream/{thread_id} — reconnects to a thread's ALREADY-RUNNING run
+    // and relays its remaining wire events. Only meaningful when there's no
+    // live streamChat() connection already open for this thread (e.g. after
+    // a page refresh, answering a HITL card that's suspended the run) — the
+    // run itself is durable and keeps executing server-side regardless of
+    // whether anything is connected, so this exists purely to let a
+    // reconnecting browser see what happens next.
+    const res = await fetch(`${API_BASE}/stream/${threadId}`, {
+      method: "GET",
+      headers: { Accept: "text/event-stream" },
+      signal,
+    });
     if (!res.ok || !res.body) {
       throw new Error(await getErrorMessage(res, `HTTP ${res.status}`));
     }

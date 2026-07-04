@@ -102,7 +102,7 @@ function ChatPageContent() {
   // Poll for active scheduled tasks count
   useEffect(() => {
     if (!isAuthenticated || authLoading) return;
-    
+
     const updateCount = async () => {
       try {
         const tasks = await api.getScheduledTasks();
@@ -186,7 +186,12 @@ function ChatPageContent() {
     [router, updateLastActiveThreadId],
   );
 
-  // Promote a freshly-created thread into the URL at the END of its first stream.
+  // Promote a freshly-created thread into the URL. Called immediately after
+  // thread creation (the thread durably exists server-side by then — a run
+  // can suspend indefinitely waiting on ask_human before any
+  // turn.completed/run.completed event fires, so deferring until "stream
+  // completed" left a stale /chat URL, and a refresh mid-suspend, for as
+  // long as the human hadn't answered yet).
   // We deliberately use history.replaceState instead of router.replace: a real
   // Next.js navigation from /chat → /chat/{id} changes the optional-catch-all
   // slug and REMOUNTS this page, which wipes the in-flight (and not-yet-persisted)
@@ -302,7 +307,7 @@ function ChatPageContent() {
     fetch("/api/backend/mcp-apps/manifest")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: ManifestEntry[]) => setMcpManifest(data))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -471,19 +476,101 @@ function ChatPageContent() {
       console.error("Failed to load messages:", error);
       setMessages((current) => (wsRef.current ? current : []));
     }
+
+    // Restore a still-pending ask_human card. input.requested is only ever
+    // otherwise pushed into `messages` as a live SSE event — a human_input
+    // card is never part of the persisted message history — so without
+    // this, a thread with a durably-suspended run (waiting on a human,
+    // possibly across a backend restart) loads with no visible card at all
+    // even though the conversation is genuinely still waiting on the user.
+    try {
+      const { pending } = await api.getHitlStatus(threadId);
+      if (pending.length > 0 && !wsRef.current && streamedThreadRef.current !== threadId) {
+        const request = pending[0];
+        setMessages((current) => {
+          if (current.some((m) => m.metadata?.requestId === request.request_id)) {
+            return current;
+          }
+          return [
+            ...current,
+            {
+              id: nanoid(),
+              role: "human_input" as const,
+              content: "",
+              timestamp: new Date(),
+              metadata: {
+                requestId: request.request_id,
+                question: request.question,
+                context: request.context,
+                options: request.options,
+                allowFreeform: request.allow_freeform,
+              },
+            },
+          ];
+        });
+        setHitlPending(true);
+      }
+    } catch (error) {
+      // Non-fatal: worst case the card doesn't restore and the user's
+      // answer POST 404s, same as before this fallback existed.
+      console.error("Failed to load HITL status:", error);
+    }
   }
 
-  // HITL: respond to a tool approval or human input request via HTTP POST.
+  // HITL: respond to a tool approval or human input request.
   // The Next.js route at /api/chat/respond/[requestId] proxies to the backend.
-  function respondToHITL(
+  async function respondToHITL(
     requestId: string,
     data: Record<string, unknown>
   ) {
-    // The run resumes server-side; go back to the active "running" state until
-    // the next card or the final answer arrives.
+    // Go back to the active "running" state until the next card or the
+    // final answer arrives.
     setHitlPending(false);
-    api.respondToHitl(requestId, data).catch((err: unknown) => {
-      console.error("HITL respond failed:", err);
+
+    // Fast path: doSendMessage's stream is still live and connected — its
+    // event_log.tail() already spans the whole suspend/resume gap, so it
+    // will see whatever the agent does next with no help needed here. Just
+    // POST the answer; tearing down a healthy connection to reconnect via
+    // GET /stream/{threadId} would be pure overhead (and its own source of
+    // bugs) for a case that already works.
+    if (wsRef.current) {
+      api.respondToHitl(requestId, data).catch((err: unknown) => {
+        console.error("HITL respond failed:", err);
+      });
+      return;
+    }
+
+    // No live stream — most commonly a page refresh: the card itself was
+    // restored from GET /hitl/status/{threadId} (see loadMessages), but
+    // nothing has been tailing the run since. Reconnect FIRST, then POST
+    // the answer, so nothing the resume produces lands in the gap between
+    // the two (mirrors doSendMessage's own submit ordering).
+    if (!currentThreadId) return;
+    const threadId = currentThreadId;
+
+    let lastUserMsgId = "";
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        lastUserMsgId = messages[i].id;
+        break;
+      }
+    }
+
+    const msgState = {
+      activeAssistantId: nanoid() as string,
+      // Always fresh — whatever comes next must render below the card
+      // that's already visible, never back-fill some earlier bubble.
+      needsNewBubble: true,
+      userMsgId: lastUserMsgId,
+      isNewThread: false,
+    };
+
+    await runEventStream(threadId, msgState, async (signal) => {
+      const res = await api.streamThread(threadId, signal);
+      api.respondToHitl(requestId, data).catch((err: unknown) => {
+        console.error("HITL respond failed:", err);
+      });
+      return res;
     });
   }
 
@@ -542,10 +629,14 @@ function ChatPageContent() {
     // NEXT text response must appear BELOW those cards — not update the old
     // placeholder that sits above them. We track this with a plain mutable
     // object (not React state) so handlers can mutate it synchronously.
+    // isNewThread lives here too (not a separate local) so the shared
+    // runEventStream can read/mutate it identically for both this call and
+    // the HITL-reconnect call in respondToHITL.
     const msgState = {
       activeAssistantId: nanoid() as string,
       needsNewBubble: false,
       userMsgId: nanoid() as string,
+      isNewThread: false,
     };
 
     // Clear input and show user message AND assistant placeholder immediately!
@@ -560,27 +651,37 @@ function ChatPageContent() {
         timestamp: new Date(),
         attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
       },
-      { 
-        id: msgState.activeAssistantId, 
-        role: "assistant" as const, 
-        content: "", 
-        reasoning: "", 
-        timestamp: new Date() 
+      {
+        id: msgState.activeAssistantId,
+        role: "assistant" as const,
+        content: "",
+        reasoning: "",
+        timestamp: new Date()
       }
     ]);
     setLoading(true);
 
     // Ensure a thread exists before opening the stream
     let threadId = currentThreadId;
-    let isNewThread = false;
     if (!threadId) {
       try {
         const newThread = await api.createThread("New Chat");
         threadId = newThread.id;
-        isNewThread = true;
-        // DO NOT call selectThread or setThreads here! We want to keep the UI perfectly 
-        // stable without triggering route transitions or sidebar layout shifts during stream start.
-        // We will update the URL and sidebar when the stream is completed.
+        msgState.isNewThread = true;
+        // DO NOT call selectThread or setThreads here! We want to keep the UI perfectly
+        // stable without triggering route transitions or sidebar layout shifts during
+        // stream start (a real Next.js navigation would remount the page and wipe the
+        // in-flight, not-yet-persisted assistant message — see promoteThreadUrl's
+        // comment). But the URL itself must be promoted NOW, not deferred until the
+        // stream completes: the thread already durably exists server-side at this
+        // point, and a run can now suspend indefinitely waiting on a human (ask_human)
+        // with no "run.completed"/"turn.completed" event firing until answered — if the
+        // user refreshes while suspended, a stale "/chat" URL with no thread id loses
+        // the conversation (and its pending HITL card) entirely. promoteThreadUrl uses
+        // history.replaceState, which (per its own comment) updates the URL bar with no
+        // remount, so doing it immediately is exactly as safe as doing it later.
+        promoteThreadUrl(threadId);
+        msgState.isNewThread = false;
       } catch (error) {
         console.error("Failed to create thread:", error);
         setMessages((prev) => [
@@ -598,13 +699,49 @@ function ChatPageContent() {
       }
     }
 
-    activeStreamThreadIdRef.current = threadId;
-
     // Update thread name on the first message
     if (messages.length === 0) {
       const name = currentInput.slice(0, 50) + (currentInput.length > 50 ? "..." : "");
       handleRenameThread(threadId, name);
     }
+
+    await runEventStream(threadId, msgState, (signal) =>
+      api.streamChat(
+        {
+          thread_id: threadId!,
+          messages: [{ role: "user", content: currentInput }],
+          ...(currentFileIds.length ? { file_ids: currentFileIds } : {}),
+          ...(() => {
+            const base = localStorage.getItem("system_instructions_override")?.trim() ?? "";
+            const tz = localStorage.getItem("user_timezone")?.trim();
+            const tzNote = tz ? `User timezone: ${tz}. Always use this timezone when creating or interpreting calendar events and times.` : "";
+            const combined = [tzNote, base].filter(Boolean).join("\n");
+            return combined ? { system_instructions: combined } : {};
+          })(),
+          model: requestedModel,
+        },
+        signal,
+      )
+    );
+  }
+
+  // Runs one SSE stream to completion, feeding every event into the shared
+  // message/card/board state. Both the initial send (doSendMessage) and a
+  // HITL-answer reconnect (respondToHITL, only when no live stream is
+  // already open) call this — so a resumed run's output is handled by
+  // IDENTICAL logic regardless of which path triggered it, instead of a
+  // second, divergent implementation that could drift out of sync.
+  async function runEventStream(
+    threadId: string,
+    msgState: {
+      activeAssistantId: string;
+      needsNewBubble: boolean;
+      userMsgId: string;
+      isNewThread: boolean;
+    },
+    streamFactory: (signal: AbortSignal) => Promise<Response>,
+  ) {
+    activeStreamThreadIdRef.current = threadId;
 
     // Call before any handler that writes streaming content. If a tool step
     // just finished (needsNewBubble=true), inserts a fresh bubble at the
@@ -650,6 +787,8 @@ function ChatPageContent() {
     // ── Start SSE stream from backend ────────────────────────────────────
     const abortController = new AbortController();
     wsRef.current = abortController;
+    isSubmittingRef.current = true;
+    setLoading(true);
 
     // processEvent handles every server-sent event type.
     const processEvent = (data: Record<string, unknown>) => {
@@ -680,6 +819,13 @@ function ChatPageContent() {
           },
         ]);
         setHitlPending(true);
+        // Whatever text streams in once this resumes (possibly the agent's
+        // very first output, if this was its first action) must land in a
+        // NEW bubble appended after this card — not back-fill the initial
+        // placeholder bubble created at submit time, which sits earlier in
+        // the array and would otherwise render the final answer ABOVE this
+        // card even though it happened chronologically after.
+        msgState.needsNewBubble = true;
         return;
       }
 
@@ -703,6 +849,10 @@ function ChatPageContent() {
           },
         ]);
         setHitlPending(true);
+        // See approval.requested above: force the next text into a fresh
+        // trailing bubble instead of the (possibly still-empty, and
+        // array-early) original placeholder.
+        msgState.needsNewBubble = true;
         return;
       }
 
@@ -911,9 +1061,9 @@ function ChatPageContent() {
         } else {
           setLoading(false);
           void loadThreads();
-          if (isNewThread && !currentThreadId) {
+          if (msgState.isNewThread && !currentThreadId) {
             promoteThreadUrl(threadId);
-            isNewThread = false;
+            msgState.isNewThread = false;
           }
         }
         return;
@@ -945,9 +1095,9 @@ function ChatPageContent() {
           finalizeAssistantMessages();
           setLoading(false);
           void loadThreads();
-          if (isNewThread && !currentThreadId) {
+          if (msgState.isNewThread && !currentThreadId) {
             promoteThreadUrl(threadId);
-            isNewThread = false;
+            msgState.isNewThread = false;
           }
           const cardId = nanoid();
           setMessages((m) => [
@@ -961,9 +1111,9 @@ function ChatPageContent() {
           finalizeAssistantMessages();
           setLoading(false);
           void loadThreads();
-          if (isNewThread && !currentThreadId) {
+          if (msgState.isNewThread && !currentThreadId) {
             promoteThreadUrl(threadId);
-            isNewThread = false;
+            msgState.isNewThread = false;
           }
         }
         return;
@@ -976,9 +1126,9 @@ function ChatPageContent() {
           content: message.content + "\n\n⚠️ " + errorMsg,
         }));
         setLoading(false);
-        if (isNewThread && !currentThreadId) {
+        if (msgState.isNewThread && !currentThreadId) {
           promoteThreadUrl(threadId);
-          isNewThread = false;
+          msgState.isNewThread = false;
         }
         return;
       }
@@ -1019,22 +1169,7 @@ function ChatPageContent() {
 
     // ── Fetch SSE and feed each event line into processEvent ──────────
     try {
-      const response = await api.streamChat(
-        {
-          thread_id: threadId,
-          messages: [{ role: "user", content: currentInput }],
-          ...(currentFileIds.length ? { file_ids: currentFileIds } : {}),
-          ...(() => {
-            const base = localStorage.getItem("system_instructions_override")?.trim() ?? "";
-            const tz = localStorage.getItem("user_timezone")?.trim();
-            const tzNote = tz ? `User timezone: ${tz}. Always use this timezone when creating or interpreting calendar events and times.` : "";
-            const combined = [tzNote, base].filter(Boolean).join("\n");
-            return combined ? { system_instructions: combined } : {};
-          })(),
-          model: requestedModel,
-        },
-        abortController.signal,
-      );
+      const response = await streamFactory(abortController.signal);
 
       const responseBody = response.body;
       if (!responseBody) throw new Error("No response body");

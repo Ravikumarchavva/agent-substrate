@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS ravi_run_tree (
     agent_id    TEXT NOT NULL,
     status      TEXT NOT NULL DEFAULT 'pending',
     error       TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    supervision JSONB
 );
 CREATE INDEX IF NOT EXISTS ravi_run_tree_parent_idx ON ravi_run_tree (parent_run);
 CREATE INDEX IF NOT EXISTS ravi_run_tree_root_idx ON ravi_run_tree (root_run);
@@ -63,6 +64,13 @@ CREATE TABLE IF NOT EXISTS ravi_spawn_effects (
     child_run_id TEXT NOT NULL
 );
 """
+
+# Additive migration, mirroring PostgresScheduler's _MIGRATE_COLUMNS — a
+# no-op on a fresh table (already covered by _CREATE_TABLES above), needed
+# only for a pre-existing deployment's table.
+_MIGRATE_COLUMNS: list[tuple[str, str]] = [
+    ("supervision", "JSONB"),
+]
 
 _STATUS_STR: dict[RunStatus, str] = {
     RunStatus.COMPLETED: "completed",
@@ -92,6 +100,10 @@ class PostgresSupervisor:
     async def setup(self) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(_CREATE_TABLES)
+            for col, defn in _MIGRATE_COLUMNS:
+                await conn.execute(
+                    f"ALTER TABLE ravi_run_tree ADD COLUMN IF NOT EXISTS {col} {defn}"
+                )
 
     async def spawn(
         self,
@@ -126,15 +138,18 @@ class PostgresSupervisor:
                     effect_id,
                     child_run_id,
                 )
+                import json
+
                 await conn.execute(
                     """
-                    INSERT INTO ravi_run_tree (run_id, parent_run, root_run, agent_id, status)
-                    VALUES ($1, $2, $3, $4, 'pending')
+                    INSERT INTO ravi_run_tree (run_id, parent_run, root_run, agent_id, status, supervision)
+                    VALUES ($1, $2, $3, $4, 'pending', $5::jsonb)
                     """,
                     child_run_id,
                     parent,
                     supervision.run_id,
                     str(child_agent),
+                    json.dumps(supervision.to_dict()),
                 )
                 # Deliver stamped with the caller's replay-stable
                 # correlation_id — see RunHandle.boot_correlation_id
@@ -309,6 +324,18 @@ class PostgresSupervisor:
             "cancelled": RunStatus.CANCELLED,
         }.get(row["status"], RunStatus.PENDING)
         return RunResult(run_id=handle.run_id, status=status, error=row["error"])
+
+    async def supervision_of(self, run_id: RunId) -> Supervision | None:
+        import json
+
+        async with self._pool.acquire() as conn:
+            raw = await conn.fetchval(
+                "SELECT supervision FROM ravi_run_tree WHERE run_id = $1", run_id
+            )
+        if raw is None:
+            return None
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        return Supervision.from_dict(data)
 
 
 __all__ = ["PostgresSupervisor"]

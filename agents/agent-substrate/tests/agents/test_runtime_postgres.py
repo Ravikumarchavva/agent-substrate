@@ -1023,3 +1023,66 @@ async def test_pg_fair_scheduling_across_tenants() -> None:
                 [*flood_run_ids, starved_run_id],
             )
         await pool.close()
+
+
+# ---------------------------------------------------------------------------
+# 11. Phase 3 — execution_budget inheritance survives a durable spawn
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
+    """Same guarantee as the in-memory test, but round-tripped through
+    Postgres: Supervision.to_dict()/from_dict() persisted in
+    ravi_run_tree.supervision and rehydrated by a (potentially different)
+    worker leasing the grandchild — proving inheritance survives the
+    process boundary, not just a shared in-memory dict."""
+    from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
+
+    class GrandchildAgent:
+        def __init__(self, agent_id: AgentId) -> None:
+            self.id = agent_id
+            self.seen_max_tokens = "unset"
+            self.done = asyncio.Event()
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            sup = ctx.meta.supervision  # type: ignore[attr-defined]
+            self.seen_max_tokens = sup.execution_budget.max_tokens if sup else None
+            self.done.set()
+
+    class ChildAgent:
+        def __init__(self, agent_id: AgentId, grandchild_id: AgentId) -> None:
+            self.id = agent_id
+            self.grandchild_id = grandchild_id
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            boot = _msg(self.grandchild_id, {})
+            await ctx.spawn(self.grandchild_id, boot=boot)  # type: ignore[attr-defined]
+
+    class RootAgent:
+        def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+            self.id = agent_id
+            self.child_id = child_id
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            boot = _msg(self.child_id, {})
+            custom_sup = Supervision.root(
+                self.child_id, execution_budget=ExecutionBudget(max_tokens=77)
+            )
+            await ctx.spawn(  # type: ignore[attr-defined]
+                self.child_id, boot=boot, supervision=custom_sup
+            )
+
+    root_id = _agent_id("pg-budget-root")
+    child_id = _agent_id("pg-budget-child")
+    grandchild_id = _agent_id("pg-budget-grandchild")
+    grandchild = GrandchildAgent(grandchild_id)
+    child = ChildAgent(child_id, grandchild_id)
+    root = RootAgent(root_id, child_id)
+
+    await pg_runtime.register(grandchild)
+    await pg_runtime.register(child)
+    await pg_runtime.register(root)
+    await pg_runtime.submit(root_id, _msg(root_id, {"start": True}))
+    await asyncio.wait_for(grandchild.done.wait(), timeout=8.0)
+
+    assert grandchild.seen_max_tokens == 77

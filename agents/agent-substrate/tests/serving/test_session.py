@@ -24,7 +24,7 @@ from substrate.serving.protocol import (
     WireEvent,
     RunCancelledEvent,
 )
-from substrate.serving.stream.session import AgentStreamSession
+from substrate.serving.stream.session import AgentStreamSession, tail_wire_events
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +177,117 @@ async def test_persister_called_on_turn_complete() -> None:
     assert "persisted text" in persist_calls[0].text
 
 
+async def test_persistence_survives_disconnect_through_suspend_and_resume() -> None:
+    """The core data-loss bug, reproducing the EXACT real-world scenario:
+    a run suspends on ask_human, the browser disconnects (a refresh does
+    this), the human answers some time LATER, the run resumes and only then
+    produces its final response — which must still be persisted.
+
+    agent_task does both event-relay AND persist_turn/persist_tool — the
+    only place persistence happens. The run itself is durable and keeps
+    executing regardless of the SSE connection, but persistence only
+    happens while something tails the EventLog. Two bugs had to be fixed
+    for this to work:
+      1. _check_disconnect must not Runtime.cancel() the run on a mere
+         disconnect (a refresh isn't a cancel).
+      2. events()'s cleanup must not cancel agent_task — the previous code
+         did `await wait_for(gather(agent_task, ...), timeout=5.0)`, which
+         CANCELS agent_task ~5s after disconnect, i.e. before a human
+         typically answers. It must instead detach it so it keeps tailing/
+         persisting until the run reaches a terminal state.
+
+    This test deliberately keeps the run suspended across the disconnect
+    (nothing is sleeping on a wall-clock timer that would let it slip under
+    the old 5s window) and only fires the resume signal after confirming
+    the SSE generator has already returned and the task is detached-alive."""
+    persist_calls: list[TurnCompletedEvent] = []
+
+    class _FakePersister:
+        async def persist_turn(self, event: TurnCompletedEvent) -> None:
+            persist_calls.append(event)
+
+        async def persist_tool(self, event: ToolResultEvent) -> None:
+            pass
+
+    signal_name = "resume-me"
+
+    @dataclass
+    class SuspendingReplyAgent:
+        name: str = "suspend_reply"
+
+        @property
+        def id(self) -> AgentId:
+            return AgentId(type="agent", key=self.name)
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            for msg in inbox:
+                # Suspends here (raises SuspendInterrupt) until the signal
+                # fires — exactly like ask_human's sleep_until_signal.
+                await ctx.sleep_until_signal(signal_name)
+                await ctx._log("text.delta", {"text": "post-resume reply"})
+                await ctx.reply(msg, {"text": "post-resume reply"})
+
+    is_disconnected = False
+
+    async def check_disconnected() -> bool:
+        return is_disconnected
+
+    async with Runtime() as rt:
+        agent = SuspendingReplyAgent()
+        msg = _make_msg(agent.id)
+        session = AgentStreamSession(
+            runtime=rt,
+            agent=agent,
+            msg=msg,
+            bridge=_StubBridge(),
+            is_disconnected=check_disconnected,
+            persister=_FakePersister(),
+            poll_interval=0.01,
+        )
+
+        async for ev in session.events():
+            if isinstance(ev, HelloEvent):
+                # Disconnect while the run is still suspended (before answer).
+                # _run_id isn't set yet at hello time (the detached agent_task
+                # sets it only after submit) — read it after the loop.
+                is_disconnected = True
+
+        # events() has returned. The run is suspended, NOT cancelled, and the
+        # detached agent_task is still alive tailing it — persistence hasn't
+        # fired yet because the human hasn't "answered".
+        for _ in range(100):
+            if session._run_id is not None:
+                break
+            await asyncio.sleep(0.02)
+        run_id = session._run_id
+        assert run_id is not None
+        assert not persist_calls
+        for _ in range(100):
+            status = await rt.scheduler.get_status(run_id)
+            if status is not None and status.value == "suspended":
+                break
+            await asyncio.sleep(0.02)
+        assert status is not None and status.value == "suspended", (
+            "run should be suspended (not cancelled) after a mere disconnect"
+        )
+
+        # Now the human answers — well after the old 5s cancel window would
+        # have killed agent_task. The detached task must still be tailing to
+        # persist the resumed run's output.
+        await rt.signal_bus.signal(run_id, signal_name, {})
+
+        for _ in range(200):
+            if persist_calls:
+                break
+            await asyncio.sleep(0.02)
+
+    assert len(persist_calls) == 1, (
+        "persist_turn never fired for the resumed run — persistence died "
+        "with the connection instead of surviving suspend→answer→resume"
+    )
+    assert "post-resume reply" in persist_calls[0].text
+
+
 async def test_durable_cancel_ends_session() -> None:
     """Supervisor.cancel() — the durable, cross-replica path routes/cancel.py
     actually calls — terminates the session exactly like a same-process
@@ -237,10 +348,19 @@ async def test_durable_cancel_ends_session() -> None:
         assert any(isinstance(e, RunCancelledEvent) for e in events)
 
 
-async def test_disconnected_callback_cancels_run() -> None:
+async def test_disconnected_stops_local_relay_without_cancelling_run() -> None:
+    """A browser disconnect (which a page refresh also triggers) must NOT
+    cancel the underlying run or its persistence — only the LOCAL relay to
+    this now-dead connection stops. This is the whole point of durable
+    suspend/resume: a refresh must not destroy in-flight progress. Before
+    this fix, disconnect unconditionally cancelled the run's own Worker
+    Task via Runtime.cancel() — a race-prone "coin flip" depending on
+    whether the ASGI-level teardown or this check ran first."""
+    done = asyncio.Event()
+
     @dataclass
-    class HangingAgent:
-        name: str = "hanging"
+    class SlowAgent:
+        name: str = "slow"
 
         @property
         def id(self) -> AgentId:
@@ -248,7 +368,8 @@ async def test_disconnected_callback_cancels_run() -> None:
 
         async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
             for msg in inbox:
-                await asyncio.sleep(100)
+                await asyncio.sleep(0.2)
+            done.set()
 
     is_disconnected = False
 
@@ -256,7 +377,7 @@ async def test_disconnected_callback_cancels_run() -> None:
         return is_disconnected
 
     async with Runtime() as rt:
-        agent = HangingAgent()
+        agent = SlowAgent()
         msg = _make_msg(agent.id)
         session = AgentStreamSession(
             runtime=rt,
@@ -273,4 +394,106 @@ async def test_disconnected_callback_cancels_run() -> None:
             if isinstance(ev, HelloEvent):
                 is_disconnected = True
 
+        # The local stream still terminates promptly for this connection...
         assert any(isinstance(e, RunCancelledEvent) for e in events)
+        # ...but the run itself was never told to stop, and finishes on its
+        # own — proving Runtime.cancel() was NOT called on disconnect.
+        await asyncio.wait_for(done.wait(), timeout=3.0)
+        run_id = session._run_id
+        assert run_id is not None
+        for _ in range(100):
+            status = await rt.scheduler.get_status(run_id)
+            if status is not None and status.value == "completed":
+                break
+            await asyncio.sleep(0.02)
+        assert status is not None and status.value == "completed"
+
+
+# ---------------------------------------------------------------------------
+# tail_wire_events — reconnect tailer (GET /stream/{thread_id})
+# ---------------------------------------------------------------------------
+
+
+async def test_tail_wire_events_skips_non_streamable_kinds_without_crashing() -> None:
+    """The exact bug this guards against: wire_from_log() returns None for
+    any kind outside STREAMING_KINDS (run.started, run.suspended,
+    run.resumed, llm.call, effect.result, ...) — a naive tailer that calls
+    `event.model_dump()` without a None-check crashes on the very first such
+    entry, which is nearly guaranteed to appear before any real content
+    (e.g. run.resumed fires immediately on reconnect-after-answer). This
+    interleaves several non-streamable kinds among real ones and asserts
+    they're silently skipped, not fatal."""
+
+    async def agent_run(ctx: RunContext, inbox: list[Message]) -> None:
+        await ctx._log("run.started", {})
+        await ctx._log("effect.result", {"value": {}})
+        await ctx._log("text.delta", {"text": "hello "})
+        await ctx._log("llm.call", {"model": "x", "tokens": 1})
+        await ctx._log("text.delta", {"text": "world"})
+        await ctx._log("run.completed", {})
+
+    class InlineAgent:
+        id = AgentId(type="agent", key="tail_wire_test")
+        run = staticmethod(agent_run)
+
+    async with Runtime() as rt:
+        agent = InlineAgent()
+        await rt.register(agent)
+        msg = Message(
+            target=agent.id,
+            payload=ChatPayload(
+                message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
+            ),
+        )
+        run_id = await rt.submit(agent.id, msg)
+
+        for _ in range(200):
+            status = await rt.scheduler.get_status(run_id)
+            if status is not None and status.value == "completed":
+                break
+            await asyncio.sleep(0.01)
+        assert status is not None and status.value == "completed"
+
+        events = [
+            ev
+            async for ev in tail_wire_events(rt.event_log, run_id, from_seq=0)
+        ]
+
+    assert any(isinstance(e, RunCompletedEvent) for e in events)
+    text_events = [e for e in events if getattr(e, "type", None) == "text.delta"]
+    assert len(text_events) == 2
+
+
+async def test_tail_wire_events_maps_run_failed() -> None:
+    async def agent_run(ctx: RunContext, inbox: list[Message]) -> None:
+        raise RuntimeError("boom")
+
+    class CrashInlineAgent:
+        id = AgentId(type="agent", key="tail_wire_fail_test")
+        run = staticmethod(agent_run)
+
+    async with Runtime() as rt:
+        agent = CrashInlineAgent()
+        await rt.register(agent)
+        msg = Message(
+            target=agent.id,
+            payload=ChatPayload(
+                message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
+            ),
+        )
+        run_id = await rt.submit(agent.id, msg)
+
+        for _ in range(200):
+            status = await rt.scheduler.get_status(run_id)
+            if status is not None and status.value == "failed":
+                break
+            await asyncio.sleep(0.01)
+        assert status is not None and status.value == "failed"
+
+        events = [
+            ev
+            async for ev in tail_wire_events(rt.event_log, run_id, from_seq=0)
+        ]
+
+    assert len(events) == 1
+    assert isinstance(events[0], RunFailedEvent)

@@ -27,9 +27,9 @@ retried safely — at enterprise scale.
 |---|---|---|
 | **0** | Audit record; IDOR fix (thread ownership); stable advisory-lock key; rate-limiter fail-closed | **Done** (2026-07-02) — `get_owned_thread` + ownership on chat/cancel/hitl-status/threads/tasks/mcp-context; ownership stamped at creation; list scoped per user; legacy NULL-owner threads claim-on-first-access; sha256 `_lock_key`; `RATE_LIMIT_FAIL_OPEN=False` default (503 when Redis down); tests in `tests/serving/test_thread_ownership.py` |
 | **1** | Durable coordination core: hierarchical effect paths (**PR2 done**) → event-log-as-journal + fold (**PR3 done**) → PostgresSignalBus + scheduler columns (**PR4 done**) → durable suspend/resume via `SuspendInterrupt` (**PR5 done**) → PostgresSupervisor (**PR6 done**) → cancel cascade + deadlines + crash fast-path (**PR7 done**) → cleanup/GC/docs (**PR8 done**) | **Done** (2026-07-03) — all 7 PRs shipped; Phase 2 (horizontally scalable serving) is next |
-| **2** | Horizontally scalable serving: scheduler-enforced single-flight (kill `thread_locks`); cancel via durable signal (kill `cancel_registry`); HITL cross-replica via PostgresSignalBus (kill `WebHITLBridge._pending` futures, incl. tool-approval migration); SSE-from-any-replica verification; memory-seed idempotency + partial-eviction reseed | Pending |
-| **3** | Full multi-tenancy: `tenant_id` through thread/step queries (evaluate RLS), history keys, task store; per-tenant fair scheduling in `lease()`; wire `Supervision.execution_budget`/`spawn_child()` (currently dead code); tenant quotas + tenant-scoped rate limits | Pending |
-| **4** | Microservices as the scale path: converge `human_gate` onto the Phase-1 signal bus + wire `agent_runtime` HITL pause/resume (today zero callers); feature-parity porting (files/RAG → triggers/scheduled incl. durable APScheduler job store → pipelines → MCP apps); k8s replica policies | Pending |
+| **2** | Horizontally scalable serving: scheduler-enforced single-flight (kill `thread_locks`); cancel via durable signal (kill `cancel_registry`); HITL cross-replica via PostgresSignalBus; SSE-from-any-replica verification; memory-seed idempotency | **Done** (2026-07-03) — see "Recently shipped". Future-based tool-approval → signal migration (kills `WebHITLBridge._pending`) explicitly deferred (see below) |
+| **3** | Full multi-tenancy: `tenant_id` through thread ownership + `RunMeta`; per-tenant fair scheduling in `lease()`; wire `Supervision.execution_budget`/`spawn_child()` (was dead code) | **Done** (2026-07-03) — see "Recently shipped". `RedisHistoryProvider`/`GlobalTaskStore` tenant-keying and tenant-level quota aggregation/rate limits explicitly deferred (see below) |
+| **4** | Microservices as the scale path: converge `human_gate` onto the Phase-1 signal bus | **Partially done** (2026-07-03) — signal convergence shipped; wiring `agent_runtime` to actually run an HITL-capable tool against it is deferred (see below). Feature-parity porting (files/RAG → triggers/scheduled → pipelines → MCP apps) and k8s replica policy tuning not started — long tail, out of this program's architecture-remediation scope |
 | **5** | Enterprise hardening: attach `AgentTracingMiddleware`/`ChatTracingMiddleware` (exist, never installed); webhook idempotency keys + HMAC; agent versioning guard on replay; event-log retention/compaction (implement snapshot only if fold P99 demands it) | Pending |
 
 Verification gates per phase are specified in the plan (crash/replay harness,
@@ -49,7 +49,127 @@ check .` · `uv run pytest` · `uv run lint-imports`.
 - **Test coverage gaps** outside the program's new suites: guardrails,
   middleware, MCP adapter, `fabric/evals`.
 
+## Explicitly deferred from Phase 2-4 (scoped out, not forgotten)
+
+Each of these was evaluated during Phase 2-4 implementation (2026-07-03) and
+deliberately scoped out — either because it's a substantially larger feature
+than the surrounding architecture fix, or because the real risk it addresses
+turned out to be negligible given how the code actually works. Recorded here
+so the decision is visible, not silently dropped.
+
+- **Future-based tool-approval → signal migration** (kills
+  `WebHITLBridge._pending`/`ToolApprovalHandler`'s Futures). The signal-based
+  `ask_human` path was already migrated (pre-program); tool-approval is a
+  separate, comparably-sized migration of its own (new suspend-based
+  approval primitive, `human_gate` wiring, its own test suite) — not
+  attempted alongside the single-flight/cancel/HITL-resolution fixes that
+  made up the rest of Phase 2.
+- **`RedisHistoryProvider._key`/`GlobalTaskStore` tenant-namespacing.**
+  Evaluated and scoped out: both are keyed by `session_id`/`conversation_id`,
+  which are UUIDs in every real call path — two different tenants can never
+  collide on the same key by construction, so the actual cross-tenant risk
+  is negligible. Formally threading `tenant_id` through would require a
+  kernel `HistoryProvider` Protocol change rippling through all 3
+  implementations (InMemory/Redis/Postgres) for that marginal gain. Revisit
+  only if a call path is ever found constructing a `session_id` from
+  non-UUID, potentially-colliding input.
+- **Tenant-level token/cost aggregation + tenant-scoped rate limits.**
+  `RunMeta.tenant_id` is now genuinely populated end-to-end (Phase 3), which
+  is the prerequisite this needs — but the aggregation store/read path
+  itself (summing `effect.result` usage payloads per tenant, wiring that
+  into `serving/shared/rate_limit.py`) is new feature surface, not a fix to
+  something already dead/broken.
+- **Wiring `agent_runtime` to actually run an HITL-capable tool against the
+  now-signal-capable `human_gate`.** `human_gate.resolve_request()` can fire
+  the durable `hitl:{request_id}` signal (shipped), and `POST /hitl/request`
+  now exists to create the record — but nothing in `agent_runtime` yet
+  constructs an `AskHumanTool` with a `suspends_via_signal=True` handler, and
+  `app.state.tools` is currently a single static list built once at lifespan
+  startup (no per-run tool customization exists yet in that service). Also
+  unresolved: `human_gate`'s response body shape (`approved`/`value`) and
+  `AskHumanTool._shape_result()`'s expected payload shape (`action`/`value`)
+  were built independently and don't fully align — `resolve_request()`'s
+  signal payload does a best-effort mapping (see its docstring) that hasn't
+  been validated against a real `AskHumanTool` call. This is a genuine new
+  feature (new handler class + per-run tool wiring + payload-shape
+  reconciliation + its own test suite), not a coordination-layer fix.
+- **Feature-parity porting** (files/RAG → triggers/scheduled, incl. moving
+  the APScheduler job store off `MemoryDataStore` → pipelines → MCP apps)
+  and **k8s replica-policy tuning**. Both are explicitly called out in the
+  original plan as a long tail — genuinely multi-week feature/ops work, not
+  architecture remediation. Per-service k8s manifests already exist
+  (`deployment/k8s/base/runtime/*.yaml`) and are not a monolith-only
+  deployment; nothing here blocks scaling replicas today.
+
 ## Recently shipped (prune over time)
+
+- **Phase 2-4 — horizontally scalable serving, multi-tenancy, and initial
+  microservices convergence** (2026-07-03):
+  - **Phase 2**: Durable single-flight — `ravi_run_queue` gained a
+    `thread_id` column + unique partial index (`WHERE status IN ('pending',
+    'running', 'suspended')`); `Scheduler.enqueue(..., thread_id=...)` raises
+    the new `ThreadBusyError` (kernel) on conflict; `routes/chat.py` does a
+    cheap `find_run_for_thread()` pre-check for a clean 409 in the common
+    case, `Runtime.submit()` is the authoritative enforcement (the rare race
+    surfaces as a `run.failed` SSE event instead, since a 409 isn't possible
+    once SSE headers are sent). `thread_locks`/`cancel_registry` deleted
+    entirely from `ServerDependencies`/`app.py`. Cancel is now
+    `routes/cancel.py` resolving the active run via `find_run_for_thread()`
+    then calling both `Runtime.cancel()` (fast, same-process best-effort)
+    and `Supervisor.cancel()` (durable, cross-replica — the actual
+    guarantee). `AgentStreamSession` dropped its `cancel_event` entirely;
+    cancellation from *any* replica is observed the same way completion
+    always was — a `run.cancelled` EventLog entry appearing under tail().
+    HITL: new `Scheduler.find_run_by_wake_signal(name)` lets
+    `BridgeRegistry.resolve()` fall back to a durable lookup
+    (`ravi_run_queue.wake_signals`) when no local bridge owns a
+    `request_id` — the cross-replica case. Memory-seed race:
+    `RedisHistoryProvider.try_acquire_seed_lock()` (atomic `SET NX EX`)
+    guards `agents/factory.py::load_session_memory()`'s seed — closes the
+    double-seed-truncates-older-messages bug at the root (prevents the race
+    that caused it, rather than working around the truncation symptom).
+  - **Phase 3**: `Thread` gained a `tenant_id` column (additive migration in
+    `serving/monolith/database.py`, mirroring the `ravi_run_queue` pattern);
+    `get_owned_thread()` now requires matching tenant, not just matching
+    user, with the same claim-on-first-access affordance for legacy NULL
+    rows. `Lease` (kernel) gained a `tenant` field, threaded from
+    `PostgresScheduler`/`InMemoryScheduler.lease()`; `Worker._run_agent()`
+    finally populates `RunMeta.tenant_id` from it (previously always `None`
+    regardless of what was enqueued — the field existed end-to-end but
+    nothing wrote it). `PostgresScheduler.lease()`'s claim query rewritten
+    as `ROW_NUMBER() OVER (PARTITION BY tenant ORDER BY priority,
+    enqueued_at)` — a tenant flooding the queue can no longer push another
+    tenant's run down to a fixed low rank; both always compete for the next
+    slot. `Supervision` (kernel) gained `to_dict()`/`from_dict()`;
+    `ravi_run_tree.supervision` (JSONB) persists it at spawn time; new
+    `Supervisor.supervision_of(run_id)` lets the Worker rehydrate it into
+    `RunMeta.supervision` at lease time; `ctx.spawn()` without an explicit
+    `supervision=` override now calls `self._meta.supervision.spawn_child()`
+    when available instead of unconditionally falling back to
+    `Supervision.root()` — `execution_budget` inheritance verified
+    transitively (grandchild sees the budget a mid-tree spawn set, proving
+    the Worker rehydrates it fresh at every lease, not just once).
+  - **Phase 4** (partial — see deferred list above): `human_gate` gained
+    `POST /hitl/request` (the create route never existed — `create_request()`
+    was an unreachable service-layer function) and `resolve_request()`/
+    `cancel_pending_for_thread()` now accept a `signal_bus` that fires the
+    same `hitl:{request_id}` signal `AskHumanTool`'s signal-suspend path
+    waits on, alongside the existing Redis pub/sub publish (both point at
+    the same physical Postgres database — verified via the shared
+    `DATABASE_URL` env var in both `docker-compose.microservices.yml` and
+    the k8s secrets).
+  - New tests: `tests/serving/test_bridge_registry.py` (new file, durable
+    HITL fallback), `tests/serving/test_human_gate_service.py` (new file, 3
+    tests), `tests/serving/test_session.py` (durable-cancel replacement for
+    the removed `cancel_event` test), `tests/agents/test_runtime.py` +
+    `tests/agents/test_runtime_postgres.py` (execution_budget inheritance),
+    `tests/agents/test_runtime_postgres.py` (+6 more: single-flight ×2, fair
+    scheduling, SSE cross-replica reconnect), `tests/integrations/
+    test_redis_history.py` (+2: seed-lock exclusivity, concurrent-seed race).
+    Full suite green (448 unit — one confirmed pre-existing, unrelated
+    Redis-subscription-timing flake in `test_triggers.py` reproducible only
+    under full-suite load, passes standalone — + 18 Postgres + 4 Redis + 3
+    human_gate), 5/5 import-linter contracts, 10/10 kernel invariants.
 
 - **Phase 1 PR8 — cleanup** (2026-07-03): signal GC — `finish_run()` now
   deletes every `ravi_signals` row addressed to a run the instant it goes

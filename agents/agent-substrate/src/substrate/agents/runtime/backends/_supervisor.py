@@ -49,6 +49,10 @@ class InMemorySupervisor:
         self._parent_of: dict[RunId, RunId] = {}
         self._results: dict[RunId, RunResult] = {}
         self._events: dict[RunId, asyncio.Event] = {}
+        self._supervision_of: dict[RunId, Supervision] = {}
+
+    async def supervision_of(self, run_id: RunId) -> Supervision | None:
+        return self._supervision_of.get(run_id)
 
     async def spawn(
         self,
@@ -111,6 +115,10 @@ class InMemorySupervisor:
                 ),
                 expected_seq=seq,
             )
+
+        # Idempotent regardless of cache hit/miss — a replay of this same
+        # spawn() call reconstructs the identical Supervision object anyway.
+        self._supervision_of[child_run_id] = supervision
 
         handle = RunHandle(
             run_id=child_run_id,

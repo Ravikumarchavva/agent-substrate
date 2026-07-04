@@ -462,3 +462,147 @@ async def test_supervisor_join() -> None:
     assert parent.child_result is not None
     assert parent.child_result.status == RunStatus.COMPLETED
     assert parent.child_result.run_id != ""
+
+
+async def test_spawn_inherits_execution_budget_transitively() -> None:
+    """ctx.spawn() without an explicit supervision override inherits the
+    CALLER's own execution_budget (via Supervision.spawn_child()), not a
+    fresh Supervision.root() — and this must hold transitively: a grandchild
+    spawned by a child (which was itself spawned with a custom budget) sees
+    that same budget too, proving the Worker actually rehydrates
+    RunMeta.supervision from Supervisor.supervision_of() at each lease, not
+    just at the moment of the original spawn() call."""
+    from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
+
+    class GrandchildAgent:
+        def __init__(self, agent_id: AgentId) -> None:
+            self.id = agent_id
+            self.seen_max_tokens: int | None = "unset"  # type: ignore[assignment]
+            self.done = asyncio.Event()
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            sup = ctx.meta.supervision
+            self.seen_max_tokens = sup.execution_budget.max_tokens if sup else None
+            self.done.set()
+
+    class ChildAgent:
+        def __init__(self, agent_id: AgentId, grandchild_id: AgentId) -> None:
+            self.id = agent_id
+            self.grandchild_id = grandchild_id
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            boot = _msg(self.grandchild_id, {})
+            # No explicit supervision= override — must inherit from ctx's own.
+            await ctx.spawn(self.grandchild_id, boot=boot)
+
+    class RootAgent:
+        def __init__(self, agent_id: AgentId, child_id: AgentId) -> None:
+            self.id = agent_id
+            self.child_id = child_id
+
+        async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
+            boot = _msg(self.child_id, {})
+            custom_sup = Supervision.root(
+                self.child_id, execution_budget=ExecutionBudget(max_tokens=42)
+            )
+            await ctx.spawn(self.child_id, boot=boot, supervision=custom_sup)
+
+    root_id = _agent_id("budget_root")
+    child_id = _agent_id("budget_child")
+    grandchild_id = _agent_id("budget_grandchild")
+    grandchild = GrandchildAgent(grandchild_id)
+    child = ChildAgent(child_id, grandchild_id)
+    root = RootAgent(root_id, child_id)
+
+    async with Runtime() as rt:
+        await rt.register(grandchild)
+        await rt.register(child)
+        await rt.register(root)
+        await rt.submit(root_id, _msg(root_id, {"start": True}))
+        await asyncio.wait_for(grandchild.done.wait(), timeout=3.0)
+
+    assert grandchild.seen_max_tokens == 42
+
+
+async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
+    """A tool that suspends via SuspendInterrupt (e.g. ask_human) re-executes
+    its ENTIRE body on resume — the outer ctx.tool() effect can never be
+    recorded before a suspend (SuspendInterrupt is a BaseException
+    specifically so it bypasses the `except Exception` that would otherwise
+    record it). Anything logged with plain ctx._log() before the suspend
+    point would duplicate once per suspend/resume cycle — this is exactly
+    the bug reported live: an ask_human question appearing twice in the UI,
+    with the SAME request_id, after the human's answer resumed the run.
+
+    ctx.log_once() must append its entry exactly once no matter how many
+    times the surrounding tool body re-executes."""
+    from substrate.kernel.tools import ToolExecutionResult
+    from substrate.kernel.core.content import TextBlock
+
+    log_call_count = 0
+
+    class SuspendingTool:
+        name = "suspending_tool"
+        description = "suspends once via signal, logs once before doing so"
+        input_schema: dict = {"type": "object", "properties": {}}
+
+        async def execute(self, *, ctx=None, **kwargs):
+            nonlocal log_call_count
+            log_call_count += 1
+            request_id = await ctx.uuid()
+            await ctx.log_once("input.requested", {"request_id": request_id})
+            payload = await ctx.sleep_until_signal(f"hitl:{request_id}")
+            return ToolExecutionResult(content=[TextBlock(text=str(payload))])
+
+    class SuspendingAgent:
+        def __init__(self, agent_id: AgentId) -> None:
+            self.id = agent_id
+            self.done = asyncio.Event()
+
+        async def run(self, ctx: RunContext, inbox) -> None:
+            await ctx.tool("suspending_tool")
+            self.done.set()
+
+    from substrate.agents.tools.toolbox import Toolbox
+
+    agent_id = _agent_id("log_once_suspend")
+    agent = SuspendingAgent(agent_id)
+    toolbox = Toolbox()
+    toolbox.add(SuspendingTool())
+    agent.tools = toolbox
+
+    async with Runtime() as rt:
+        await rt.register(agent)
+        run_id = await rt.submit(agent_id, _msg(agent_id, {}))
+
+        for _ in range(100):
+            status = await rt.scheduler.get_status(run_id)
+            if status is not None and status.value == "suspended":
+                break
+            await asyncio.sleep(0.02)
+        assert status is not None and status.value == "suspended"
+
+        input_requested_count = 0
+        request_id = None
+        async for entry in rt.event_log.read(run_id):
+            if entry.kind == "input.requested":
+                input_requested_count += 1
+                request_id = entry.payload["request_id"]
+        assert input_requested_count == 1
+
+        await rt.signal_bus.signal(run_id, f"hitl:{request_id}", {"answer": "yes"})
+        await asyncio.wait_for(agent.done.wait(), timeout=3.0)
+
+        final_count = 0
+        async for entry in rt.event_log.read(run_id):
+            if entry.kind == "input.requested":
+                final_count += 1
+        assert final_count == 1, (
+            f"input.requested duplicated across suspend/resume: {final_count} entries"
+        )
+        assert log_call_count == 2, (
+            "sanity check on the premise itself: the tool body should have "
+            "genuinely re-executed once (live attempt + one replay-on-resume) "
+            f"— got {log_call_count}. If this is 1, the test setup is wrong "
+            "and isn't exercising the replay path log_once is meant to guard."
+        )

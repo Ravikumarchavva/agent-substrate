@@ -1,6 +1,7 @@
 """Human Gate Service — HTTP routes.
 
 Routes:
+  POST /hitl/request               — create a pending HITL request
   POST /hitl/respond/{request_id}  — respond to a HITL request
   GET  /hitl/status/{thread_id}    — get pending HITL requests for a thread
   GET  /hitl/request/{request_id}  — get a specific HITL request
@@ -10,7 +11,7 @@ from __future__ import annotations
 from substrate.logger import setup_logging
 
 import uuid
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from substrate.serving.shared.database.dependency import get_db_session
 
 from substrate.serving.services.human_gate.service import (
     cancel_pending_for_thread,
+    create_request,
     get_pending_for_thread,
     get_request,
     resolve_request,
@@ -28,6 +30,17 @@ from substrate.serving.services.human_gate.service import (
 logger = setup_logging()
 
 router = APIRouter(prefix="/hitl", tags=["hitl"])
+
+
+class HITLRequestCreate(BaseModel):
+    request_id: str
+    thread_id: uuid.UUID
+    run_id: Optional[str] = None
+    type: str
+    tool_name: Optional[str] = None
+    tool_input: Optional[Dict[str, Any]] = None
+    prompt: Optional[str] = None
+    options: Optional[list] = None
 
 
 class HITLResponseBody(BaseModel):
@@ -64,6 +77,31 @@ def _to_out(req) -> HITLRequestOut:
     )
 
 
+@router.post("/request", status_code=201)
+async def create_request_endpoint(
+    body: HITLRequestCreate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Create a pending HITL request — the counterpart callers (e.g.
+    ``agent_runtime``, running an ``AskHumanTool`` in signal-suspend mode)
+    use to make a request visible/answerable, with the SAME ``request_id``
+    the run itself suspended on (``ctx.uuid()``-derived — see
+    ``capabilities/tools/human_input.py``) so ``resolve_request()``'s signal
+    reaches the right suspended run."""
+    req = await create_request(
+        db,
+        request_id=body.request_id,
+        thread_id=body.thread_id,
+        run_id=body.run_id,
+        type=body.type,
+        tool_name=body.tool_name,
+        tool_input=body.tool_input,
+        prompt=body.prompt,
+        options=body.options,
+    )
+    return _to_out(req)
+
+
 @router.post("/respond/{request_id}")
 async def respond_to_request(
     request_id: str,
@@ -96,6 +134,7 @@ async def respond_to_request(
         responded_by=body.responded_by,
         redis_client=request.app.state.redis,
         event_bus=request.app.state.event_bus,
+        signal_bus=getattr(request.app.state, "signal_bus", None),
     )
 
     return _to_out(resolved)
@@ -138,5 +177,6 @@ async def cancel_thread_requests(
         db,
         thread_id,
         redis_client=request.app.state.redis,
+        signal_bus=getattr(request.app.state, "signal_bus", None),
     )
     return {"thread_id": str(thread_id), "cancelled_count": count}

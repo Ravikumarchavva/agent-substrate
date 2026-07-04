@@ -297,3 +297,102 @@ parts that did ship are "done," the parts that didn't get their own
 "deferred" entry with the concrete reason (bigger scope, negligible real
 risk, needs a design decision first, etc.) — not folded into a vague
 "mostly done."
+
+---
+
+## A version-mismatched persisted run spec fails cleanly, never resumes silently
+
+**Decision:** when `resume_pending_runs()` (`infrastructure/serving_factory.py`)
+finds a cold-resume spec whose `agent_version` doesn't match the running
+`substrate.__version__`, it refuses to rebuild/register the agent. The run
+is terminally failed instead (`run.failed` EventLog entry with
+`status: "version_mismatch"`, `PostgresScheduler.fail_pending_run()`,
+`Supervisor.finish_run(FAILED)`).
+
+**Why:** replay-from-top (Phase 1's suspend/resume design) re-executes the
+agent's actual code path and only skips effects it finds in the journal.
+If the code has changed since the spec was persisted — a tool renamed or
+removed, prompt logic altered, control flow restructured — the replayed
+effect path can silently diverge from what the journal expects, corrupting
+the run in a way that's hard to detect (unlike a hard crash, which is
+loud). Resuming-with-a-warning was considered and rejected: it has the same
+silent-divergence risk, just with a log line nobody's watching in the
+failure path.
+
+**Ruled out:** silently resuming version-mismatched specs; resuming with
+only a warning log. Both leave the divergence risk in place.
+
+**How to apply:** if a future change needs "resume anyway, best-effort" for
+some specific version delta (e.g. a genuinely compatible minor bump), that
+needs its own compatibility-range design (e.g. semver-range matching, not
+exact-equality) — don't relax the exact-match check as a quick fix.
+
+---
+
+## Middleware is one `Middleware` Protocol, one `MiddlewareContext`, one `MiddlewarePipeline` — never split by what it wraps
+
+**Decision (final, 2026-07-04 — supersedes both prior iterations below):**
+there is exactly one middleware concept in this framework. `kernel/agent/middleware.py`
+defines one `Middleware` Protocol (`process(context, call_next)`) and a
+`MiddlewareStage` enum (`TURN`/`CHAT`/`TOOL`). `agents/middleware/_contracts.py`
+defines one concrete `MiddlewareContext` dataclass with a `stage` field and
+every stage's fields declared (unused ones are `None`) plus three
+precisely-typed result fields (`turn_result: AgentRunResult`,
+`chat_result: LLMResponse`, `tool_result: InvocationResult` — typed
+separately rather than one `Any`, since the three result shapes are
+genuinely different classes middleware reads real members off of).
+`ReActAgent.__init__` takes exactly one `middleware: MiddlewarePipeline`. A
+middleware that only cares about one stage declares that via a class-level
+`stages: ClassVar[frozenset[MiddlewareStage]]`; `MiddlewarePipeline.execute()`
+filters to only the middlewares whose declared `stages` include the current
+context's `stage` before building the call chain — a middleware that didn't
+declare a stage never gets `process()` called for it, not even as a no-op
+pass-through.
+
+This still dispatches at the same three real call sites as before
+(`agents/core/react.py`'s `_handle_message()` builds a `stage=TURN` context;
+`agents/runtime/context.py`'s `RunContext.llm()`/`.tool()` build `CHAT`/`TOOL`
+contexts) — what changed is that all three now share the *same* pipeline
+object and the *same* context class, with `stage` as data rather than type
+or attachment-point distinguishing them.
+
+**Why:** the user's explicit read on the two prior iterations — three
+separate context types (`AgentCallContext`/`ChatContext`/`FunctionContext`)
+bundled via a `MiddlewareBundle` with one `MiddlewarePipeline` per field —
+was "we completely messed up middleware... a middleware is a middleware
+across the framework, no different kinds." That design also left a
+pre-existing duplication unfixed: `kernel/agent/middleware.py` and
+`agents/middleware/pipeline.py` each independently declared their own
+structurally-identical `Middleware`/`MiddlewareProtocol`, and the kernel
+separately aliased `AgentMiddleware`/`ChatMiddleware`/`FunctionMiddleware` as
+three "kinds" of the same generic protocol — exactly the proliferation being
+rejected. Collapsing to one Protocol/context/pipeline, with `stages`-based
+filtering as the only per-middleware customization, resolves both the
+literal "no different kinds" ask and the kernel/agents duplication.
+
+**Ruled out:**
+- A single `agent.middleware` (kernel `RunContext`-based) hook for
+  everything (the *first* iteration, pre-`MiddlewareBundle`). Works for
+  middleware that only needs `run_id`/`tenant_id` (tracing), but
+  `RunContext` has no `.messages`/`.arguments`/result shape — structurally
+  incapable of content filtering, PII detection, token limits, or caching.
+- Three separate context types bundled into three separate pipelines (the
+  *second* iteration, `MiddlewareBundle`). Fixed the guardrail-wireability
+  problem but reintroduced "kinds" at the type and attachment-point level —
+  judged wrong by the user despite working correctly.
+- Manual self-filtering (`if context.stage != X: return await call_next()`
+  at the top of every `process()`) instead of declarative `stages`. Confirmed
+  with the user directly: declarative filtering is more robust (can't forget
+  the check; a TOOL-only middleware simply never sees a TURN/CHAT context to
+  misinterpret) at the cost of one more attribute per middleware class.
+
+**How to apply:** every new middleware — guardrail or infra — is a plain
+class with `process(self, context: MiddlewareContext, call_next)` and a
+`stages` attribute naming which `MiddlewareStage`(s) it needs. Wire it into
+`create_assistant_agent(..., middleware=[...])` (`agents/factory.py`, one
+list, order = outermost-first) or directly into `MiddlewarePipeline([...])`
+passed to `ReActAgent(middleware=...)`. Add an end-to-end test in
+`tests/agents/test_middleware_wiring.py` (through a real `ReActAgent` +
+`Runtime`, not just a hand-built context) — a unit test that calls
+`.process()` directly with a hand-built context proves the guardrail's logic
+but not that it's actually reachable at its real call site.

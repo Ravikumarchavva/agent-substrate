@@ -8,6 +8,7 @@ from __future__ import annotations
 from substrate.logger import setup_logging
 
 import json
+import substrate
 import re
 import uuid
 from dataclasses import dataclass
@@ -760,6 +761,7 @@ async def chat(
 
     _agent_spec = {
         "mode": "react",
+        "agent_version": substrate.__version__,
         "system_instructions": deps["system_instructions"],
         "tool_names": [getattr(t, "name", "") for t in deps["tools"]],
         "max_iterations": 50 if initial_tool_choice else 30,

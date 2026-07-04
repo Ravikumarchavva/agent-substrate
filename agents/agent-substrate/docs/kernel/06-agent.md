@@ -423,16 +423,15 @@ those into a composable layer — like the **layered checkpoints at airport
 security**: each layer can inspect you on the way in, wave you through to the
 next, then inspect you again on the way out.
 
-The kernel defines one generic interceptor Protocol. All three middleware levels
-(agent-run, chat, tool) share this exact shape:
+The kernel defines one interceptor Protocol — not one per level. Every
+middleware in the framework, regardless of which of the three moments
+(agent-turn, chat, tool) it wraps, implements this exact shape:
 
 ```python
-CtxT = TypeVar("CtxT")
-
-class Middleware(Protocol[CtxT]):
+class Middleware(Protocol):
     async def process(
         self,
-        context: CtxT,
+        context: MiddlewareContextProtocol,
         call_next: Callable[[], Awaitable[None]],
     ) -> None: ...
 ```
@@ -461,21 +460,34 @@ flowchart TB
     style L3 fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
 ```
 
-The kernel also defines three **minimal context protocols** — one per level —
-describing only the attributes a middleware at that level actually reads. They
-live in the kernel (not `agents/`) so the pipeline can be type-checked without
-importing any concrete context class; the `agents/` layer narrows `CtxT` to its
-real dataclasses when wiring a pipeline.
+The kernel also defines `MiddlewareStage` — an enum, not a type parameter —
+saying which of the three moments a given context represents:
 
-| Context protocol | Wraps | Readable fields |
-|---|---|---|
-| `AgentRunContextProtocol` | one `agent.run()` call | `agent_name`, `run_id`, `session_id` |
-| `ChatContextProtocol` | each `model.generate()` call | `agent_name`, `run_id`, `system_instructions` |
-| `FunctionContextProtocol` | each `tool.execute()` call | `agent_name`, `run_id`, `function_name`, `arguments` |
+```python
+class MiddlewareStage(str, Enum):
+    TURN = "turn"   # one inbox message
+    CHAT = "chat"   # one model.generate() call
+    TOOL = "tool"   # one tool.execute() call
+```
 
-The module also exports three aliases — `AgentMiddleware`, `ChatMiddleware`,
-`FunctionMiddleware` — purely for documentation clarity; each is
-`Middleware[Any]` whose runtime context is the matching protocol above.
+And a **minimal context protocol** describing only the attributes the kernel
+itself needs to type-check against, without importing the concrete
+`MiddlewareContext` dataclass the `agents/` layer actually constructs:
+
+```python
+class MiddlewareContextProtocol(Protocol):
+    stage: MiddlewareStage
+    agent_name: str
+    run_id: str
+    metadata: dict[str, Any]
+```
+
+That's it — one Protocol, one enum, no per-level type aliases. The concrete
+`MiddlewareContext` at the `agents/` layer carries the full set of
+stage-specific fields (`messages`, `arguments`, `turn_result`, …); see
+[Middleware](../concepts/middleware.md) for that shape and
+`agents/core/react.py`/`agents/runtime/context.py` for where each stage is
+actually dispatched.
 
 !!! note "Contracts here, behaviour next door"
     This page documents only the *interceptor shape*. The `MiddlewarePipeline`
@@ -498,7 +510,8 @@ The module also exports three aliases — `AgentMiddleware`, `ChatMiddleware`,
 | `CancellationToken` | class (pure asyncio) | cooperative stop button: `cancel()`, `check()`, `wait()`, `child()` |
 | `CompactionStrategy` | Protocol | trims raw history into a prompt window |
 | `AgentContextProtocol` | Protocol | minimal context the loop sees: `agent_id` + `get_prompt_window()` |
-| `Middleware` | Protocol | generic `process(context, call_next)` interceptor for all three levels |
+| `Middleware` | Protocol | one `process(context, call_next)` interceptor shape, used for all three stages |
+| `MiddlewareStage` | `str` enum | `TURN` / `CHAT` / `TOOL` — which moment a `MiddlewareContext` represents |
 
 !!! tip "The one rule to remember"
     The kernel only *states* policy — frozen shapes with no behaviour. The
@@ -516,7 +529,7 @@ The module also exports three aliases — `AgentMiddleware`, `ChatMiddleware`,
 | `Supervision`, `SpawnBudget`, `ExecutionBudget`, `Priority`, `HistoryRetention` | `kernel/agent/supervision.py` |
 | `RunMeta`, `CancellationToken` | `kernel/agent/runtime_context.py` |
 | `CompactionStrategy`, `AgentContextProtocol` | `kernel/agent/context.py` |
-| `Middleware` + per-level context protocols + aliases | `kernel/agent/middleware.py` |
+| `Middleware`, `MiddlewareStage`, `MiddlewareContextProtocol` | `kernel/agent/middleware.py` |
 | `AgentId`, `TopicId` (ids carried by `Supervision`) | `kernel/core/identity.py` |
 | `ChatMessage` (compaction payload) | `kernel/core/content.py` |
 | `CancellationError`, `BudgetExhaustedError`, `MiddlewareTermination` | `kernel/core/errors.py` |

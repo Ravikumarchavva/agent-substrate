@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 from substrate.kernel.core.content import (
@@ -22,7 +23,13 @@ from substrate.kernel.tools.tools import ToolRisk
 from substrate.agents.context.context import ContextConfig
 from substrate.agents.resources.budget import ExecutionTracker
 from substrate.agents.hooks.manager import HookEvent, HookManager
+from substrate.agents.middleware._contracts import (
+    AgentRunResult,
+    MiddlewareContext,
+    ToolCallRecord,
+)
 from substrate.agents.middleware.pipeline import MiddlewarePipeline
+from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.agents.storage.tasks import (
     current_agent_id as _task_agent_id,
     current_agent_label as _task_agent_label,
@@ -47,6 +54,18 @@ class ReActAgent:
 
     ``model``, ``tools``, ``approval_handler``, and ``approval_required_risk``
     are read by the Worker when building the per-run RunContext.
+
+    ``middleware`` (``MiddlewarePipeline``) is the one middleware pipeline
+    for this agent. It's dispatched at three different moments — once per
+    inbox message/turn (``MiddlewareStage.TURN``, wrapping the whole ReAct
+    loop for that turn, in this file's ``_handle_message()``), around every
+    ``ctx.llm()`` call (``MiddlewareStage.CHAT``, in
+    ``agents/runtime/context.py``), and around every ``ctx.tool()`` call
+    (``MiddlewareStage.TOOL``, same file) — but it's the identical pipeline
+    object and the identical ``Middleware.process(context, call_next)``
+    shape every time. A middleware that only cares about one stage (e.g.
+    ``PIIDetectionMiddleware`` only cares about TOOL) declares that via a
+    ``stages`` class attribute; see ``agents/middleware/pipeline.py``.
     """
 
     def __init__(
@@ -91,7 +110,7 @@ class ReActAgent:
         self.approval_required_risk = approval_required_risk
         self._execution_budget = execution_budget
         self.hooks = hooks
-        self.middleware = middleware
+        self.middleware = middleware or MiddlewarePipeline()
         self._initial_tool_choice = initial_tool_choice
 
     @property
@@ -122,7 +141,20 @@ class ReActAgent:
         user_turn = message_to_chat(msg)
         messages: list[ChatMessage] = history_messages + [user_turn]
 
-        await self._react_loop(ctx, msg, session_id, messages, len(history_messages))
+        call_ctx = MiddlewareContext(
+            stage=MiddlewareStage.TURN,
+            agent_name=self.name,
+            run_id=ctx.run_id,
+            session_id=session_id,
+            messages=messages,
+        )
+
+        async def _final(c: MiddlewareContext) -> None:
+            c.turn_result = await self._react_loop(
+                ctx, msg, session_id, messages, len(history_messages)
+            )
+
+        await self.middleware.execute(call_ctx, _final)
 
     async def _react_loop(
         self,
@@ -131,7 +163,7 @@ class ReActAgent:
         session_id: str,
         messages: list[ChatMessage],
         n_loaded: int,
-    ) -> None:
+    ) -> AgentRunResult:
         tool_list = self.tools.all() if self.tools else []
         base_options = GenerationOptions(
             system_instructions=self._system_instructions,
@@ -147,6 +179,8 @@ class ReActAgent:
             if self._initial_tool_choice
             else base_options
         )
+
+        tool_call_records: list[ToolCallRecord] = []
 
         for _ in range(self._max_iterations):
             ctx.check()
@@ -188,12 +222,25 @@ class ReActAgent:
             results: list[ToolResultBlock] = []
             for tc in tool_calls:
                 ctx.check()
+                t0 = time.monotonic()
                 inv_result = await ctx.tool(tc.tool_name, **tc.arguments)
+                duration_ms = (time.monotonic() - t0) * 1000
+                is_error = inv_result.status != "ok"
                 results.append(
                     ToolResultBlock(
                         call_id=tc.call_id,
                         content=[TextBlock(text=inv_result.text or "")],
-                        is_error=inv_result.status != "ok",
+                        is_error=is_error,
+                    )
+                )
+                tool_call_records.append(
+                    ToolCallRecord(
+                        name=tc.tool_name,
+                        call_id=tc.call_id,
+                        arguments=tc.arguments,
+                        result=inv_result.text or "",
+                        is_error=is_error,
+                        duration_ms=duration_ms,
                     )
                 )
 
@@ -211,6 +258,13 @@ class ReActAgent:
         ans = final_text(messages)
         await deliver(
             ctx, msg, {"text": ans}, sender=self.id, output_topic=self._output_topic
+        )
+
+        return AgentRunResult(
+            output=ans,
+            status="success",
+            tool_calls=tool_call_records,
+            run_id=ctx.run_id,
         )
 
 

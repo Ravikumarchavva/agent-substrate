@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, ClassVar
 
-from substrate.agents.middleware._contracts import ChatContext
+from substrate.agents.middleware._contracts import MiddlewareContext
+from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.core.errors import MiddlewareTermination
 from substrate.logger import setup_logging
 
@@ -16,6 +17,8 @@ logger = setup_logging()
 
 class LLMJudgeMiddleware:
     """Use a secondary LLM to judge content safety of the primary LLM's output."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.CHAT})
 
     _DEFAULT_JUDGE_PROMPT = (
         "You are a content safety classifier. Evaluate if the following content "
@@ -34,17 +37,17 @@ class LLMJudgeMiddleware:
         self._judge_prompt = judge_prompt or self._DEFAULT_JUDGE_PROMPT
 
     async def process(
-        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
         await call_next()
 
-        if not context.result:
+        if not context.chat_result:
             return
 
         from substrate.kernel import TextBlock
 
         text = " ".join(
-            b.text for b in context.result.content if isinstance(b, TextBlock)
+            b.text for b in context.chat_result.content if isinstance(b, TextBlock)
         )
         if not text:
             return

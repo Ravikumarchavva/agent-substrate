@@ -39,12 +39,12 @@ A request travels **inward** through every layer to the core, and the response t
 
 ## The contract
 
-A middleware is anything with a `process` method. The pipeline calls it with the shared `context` and a `call_next` continuation:
+A middleware is anything with a `process` method. There is exactly one shape — no per-purpose variants. The pipeline calls it with the shared `context` and a `call_next` continuation:
 
 ```python
-class MiddlewareProtocol(Protocol[ContextT_contra]):
+class Middleware(Protocol):
     async def process(
-        self, context: ContextT_contra, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None: ...
 ```
 
@@ -87,15 +87,19 @@ sequenceDiagram
 
 ## The context is the payload
 
-Middleware doesn't return values — it reads and writes a shared **context** object that flows through the chain. There are three context types depending on what's being wrapped:
+Middleware doesn't return values — it reads and writes a shared **context** object that flows through the chain. There is **one** context class, `MiddlewareContext`, used for every middleware regardless of what moment it wraps. A `stage` field says which moment this particular instance represents; fields that don't apply to that stage are simply `None`:
 
-| Context | Wraps | Key fields |
+| Field | Populated for | Meaning |
 |---|---|---|
-| `ChatContext` | A single model call | `messages`, `system_instructions`, `tools`, `result: LLMResponse` |
-| `AgentCallContext` | A whole agent run | `messages`, `result: AgentRunResult` |
-| `FunctionContext` | A single tool call | `function_name`, `arguments`, `result: ToolExecutionResult` |
+| `stage` | always | `MiddlewareStage.TURN` / `.CHAT` / `.TOOL` |
+| `messages` | TURN, CHAT | the turn's full history (TURN) or this call's window (CHAT) |
+| `session_id`, `turn_result` | TURN | one inbox message |
+| `system_instructions`, `tools`, `chat_result` | CHAT | one model call |
+| `function_name`, `arguments`, `tool_result` | TOOL | one tool call |
 
-A layer reads inputs from the context before `call_next()` and reads or mutates `result`/`metadata` after. For example, the schema validator parses `context.result` and stashes the parsed object in `context.metadata["parsed"]` rather than mutating the frozen `LLMResponse`.
+The three result fields (`turn_result: AgentRunResult`, `chat_result: LLMResponse`, `tool_result: InvocationResult`) are separate and precisely typed rather than one generic `result: Any` — the three result shapes are genuinely different classes, and this way a middleware and a type checker both know exactly what shape to expect without a stage-dependent cast.
+
+A layer reads inputs from the context before `call_next()` and reads or mutates the relevant result field / `metadata` after. For example, the schema validator parses `context.chat_result` and stashes the parsed object in `context.metadata["parsed"]` rather than mutating the frozen `LLMResponse`.
 
 ---
 
@@ -115,21 +119,20 @@ These live in `agents/middleware/` and follow the contract above:
 | `FileValidator` | Checks file inputs before a tool runs |
 | **Guardrails** | A whole family — see [Guardrails](guardrails.md) |
 
-Compose them in the order you want them to wrap:
+Every middleware is written against the identical `MiddlewareContext` — a middleware that only cares about one stage (most do) declares that via a class-level `stages` attribute, and the pipeline skips calling `process()` for any stage it didn't declare. `ReActAgent` takes exactly one `middleware: MiddlewarePipeline`:
 
 ```python
 from substrate.agents.middleware import MiddlewarePipeline
 
-pipeline = MiddlewarePipeline([
-    RateLimiter(...),
-    Cache(...),
-    Retry(...),
-    SchemaValidator(...),
-])
-agent = ReActAgent("bot", model=model, middleware=pipeline)
+agent = ReActAgent(
+    "bot", model=model,
+    middleware=MiddlewarePipeline([RateLimiter(...), Cache(...), Retry(...), SchemaValidator(...)]),
+)
 ```
 
-The Worker runs the pipeline around the agent run; the agent loop runs it around each model call. Either way the agent's own code stays clean.
+A `RateLimiter` (TURN-stage) and a `Cache` (TOOL-stage) sit in the exact same list — there's no separate slot per stage to route them into. Order is still outermost-first (index 0 wraps everything after it), but that ordering is scoped to whichever stage(s) each middleware actually runs at.
+
+The agent loop dispatches this one pipeline once per inbox message (`MiddlewareStage.TURN`); `RunContext.llm()`/`RunContext.tool()` dispatch the same pipeline again around each model/tool call (`.CHAT`/`.TOOL`). The Worker itself never references middleware at all — dispatch lives entirely in the agent loop and `RunContext`.
 
 ---
 
@@ -146,9 +149,11 @@ Both observe the run, but they differ in power:
 
 | Piece | Location |
 |---|---|
-| `MiddlewarePipeline`, `MiddlewareProtocol` | `agents/middleware/pipeline.py` |
-| Context types (`ChatContext`, …) | `agents/middleware/_contracts.py` |
+| `MiddlewarePipeline` | `agents/middleware/pipeline.py` |
+| `Middleware` Protocol, `MiddlewareStage` enum | `kernel/agent/middleware.py` |
+| `MiddlewareContext` | `agents/middleware/_contracts.py` |
 | Built-in middlewares | `agents/middleware/*.py` |
 | Guardrail middlewares | `agents/middleware/guardrails/` |
+| Default tracing + guardrail wiring | `agents/factory.py` (`create_assistant_agent()`) |
 
 **Next:** [Guardrails](guardrails.md) — the safety-focused middleware family.

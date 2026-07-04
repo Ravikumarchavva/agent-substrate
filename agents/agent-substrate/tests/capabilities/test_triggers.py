@@ -53,8 +53,17 @@ async def test_scheduler_trigger_dispatch():
     await scheduler.stop()
 
 
+def _sign(secret: str, raw_body: bytes) -> str:
+    import hashlib
+    import hmac
+
+    return hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+
+
 @pytest.mark.asyncio
 async def test_webhook_trigger_dispatch():
+    import json
+
     rt = MockRuntime()
     registry = WebhookRegistry(runtime=rt)
 
@@ -66,10 +75,14 @@ async def test_webhook_trigger_dispatch():
         target_params={"fixed": "data"},
     )
 
+    payload = {"dynamic": "input"}
+    raw_body = json.dumps(payload).encode()
+
     res = await registry.handle(
         path="notify",
-        payload={"dynamic": "input"},
-        secret=webhook.secret,
+        payload=payload,
+        raw_body=raw_body,
+        signature=_sign(webhook.secret, raw_body),
     )
 
     assert res["status"] == "triggered"
@@ -80,6 +93,55 @@ async def test_webhook_trigger_dispatch():
     agent_id, msg = rt.submitted[0]
     assert agent_id == AgentId(type="chain", key="test-chain")
     assert msg.payload.data == {"fixed": "data", "dynamic": "input"}
+
+
+@pytest.mark.asyncio
+async def test_webhook_rejects_invalid_signature():
+    rt = MockRuntime()
+    registry = WebhookRegistry(runtime=rt)
+    await registry.register(
+        name="test-webhook", path="notify", target_type="chain", target_name="test-chain"
+    )
+
+    res = await registry.handle(
+        path="notify", payload={}, raw_body=b"{}", signature="sha256=deadbeef"
+    )
+
+    assert res["dispatched"] is False
+    assert "signature" in res["error"].lower()
+    assert len(rt.submitted) == 0
+
+
+@pytest.mark.asyncio
+async def test_webhook_idempotency_key_dedupes_retried_delivery():
+    import json
+
+    rt = MockRuntime()
+    registry = WebhookRegistry(runtime=rt)
+    webhook = await registry.register(
+        name="test-webhook", path="notify", target_type="chain", target_name="test-chain"
+    )
+    payload = {"dynamic": "input"}
+    raw_body = json.dumps(payload).encode()
+    signature = _sign(webhook.secret, raw_body)
+
+    first = await registry.handle(
+        path="notify",
+        payload=payload,
+        raw_body=raw_body,
+        signature=signature,
+        idempotency_key="delivery-1",
+    )
+    second = await registry.handle(
+        path="notify",
+        payload=payload,
+        raw_body=raw_body,
+        signature=signature,
+        idempotency_key="delivery-1",
+    )
+
+    assert first == second
+    assert len(rt.submitted) == 1
 
 
 async def _redis_reachable(url: str) -> bool:

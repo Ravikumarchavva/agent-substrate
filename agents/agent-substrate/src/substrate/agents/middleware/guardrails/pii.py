@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.middleware._contracts import FunctionContext
+from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.exceptions import MiddlewareTermination
+from substrate.kernel.agent.middleware import MiddlewareStage
 
 _PII_PATTERNS: dict[str, re.Pattern[str]] = {
     "email": re.compile(
@@ -19,6 +20,8 @@ _PII_PATTERNS: dict[str, re.Pattern[str]] = {
 
 class PIIDetectionMiddleware:
     """Detect personally identifiable information in function arguments."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.TOOL})
 
     def __init__(
         self,
@@ -41,13 +44,14 @@ class PIIDetectionMiddleware:
                     ) from e
 
     async def process(
-        self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
-        if not context.arguments:
+        arguments = context.arguments or {}
+        if not arguments:
             await call_next()
             return
 
-        for key, val in context.arguments.items():
+        for key, val in arguments.items():
             if not isinstance(val, str):
                 continue
             for label, pattern in self._patterns.items():

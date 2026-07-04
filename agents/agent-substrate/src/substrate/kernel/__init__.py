@@ -83,12 +83,8 @@ from substrate.kernel.storage.history import HistoryProvider
 from substrate.kernel.agent.context import CompactionStrategy, AgentContextProtocol
 from substrate.kernel.agent.middleware import (
     Middleware,
-    AgentMiddleware,
-    ChatMiddleware,
-    FunctionMiddleware,
-    AgentRunContextProtocol,
-    ChatContextProtocol,
-    FunctionContextProtocol,
+    MiddlewareStage,
+    MiddlewareContextProtocol,
 )
 from substrate.kernel.core.errors import (
     KernelError,
@@ -243,12 +239,8 @@ __all__ = [
     "AgentContextProtocol",
     # Middleware
     "Middleware",
-    "AgentMiddleware",
-    "ChatMiddleware",
-    "FunctionMiddleware",
-    "AgentRunContextProtocol",
-    "ChatContextProtocol",
-    "FunctionContextProtocol",
+    "MiddlewareStage",
+    "MiddlewareContextProtocol",
     # Errors
     "KernelError",
     "AgentNotFoundError",

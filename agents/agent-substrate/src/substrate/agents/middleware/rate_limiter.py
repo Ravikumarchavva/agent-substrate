@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.middleware._contracts import AgentCallContext
+from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.exceptions import MiddlewareTermination
+from substrate.kernel.agent.middleware import MiddlewareStage
 
 
 class RateLimiterMiddleware:
     """Token-bucket rate limiter. Defaults to 60 requests per minute."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.TURN})
 
     def __init__(self, *, max_rate: float = 60.0, per_seconds: float = 60.0) -> None:
         self._max_tokens = max_rate
@@ -19,7 +22,7 @@ class RateLimiterMiddleware:
         self._lock = asyncio.Lock()
 
     async def process(
-        self, context: AgentCallContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
         async with self._lock:
             now = time.monotonic()

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from substrate.agents.middleware.pipeline import MiddlewarePipeline
 from substrate.agents.middleware._contracts import (
-    AgentCallContext,
     AgentRunResult,
-    ChatContext,
-    FunctionContext,
+    MiddlewareContext,
     ToolCallRecord,
 )
+from substrate.kernel.agent.middleware import Middleware, MiddlewareStage
 
 # Infrastructure middleware
 from substrate.agents.middleware.audit_logger import AuditLoggerMiddleware
@@ -25,6 +24,7 @@ from substrate.agents.middleware.schema_validator import SchemaValidatorMiddlewa
 from substrate.agents.middleware.observability import (
     AgentTracingMiddleware,
     ChatTracingMiddleware,
+    FunctionTracingMiddleware,
 )
 
 # Guardrails (safety / policy enforcement)
@@ -39,12 +39,12 @@ from substrate.agents.middleware.guardrails import (
 
 __all__ = [
     # pipeline
+    "Middleware",
+    "MiddlewareStage",
     "MiddlewarePipeline",
     # context and result types
-    "AgentCallContext",
+    "MiddlewareContext",
     "AgentRunResult",
-    "ChatContext",
-    "FunctionContext",
     "ToolCallRecord",
     # infrastructure
     "AuditLoggerMiddleware",
@@ -58,6 +58,7 @@ __all__ = [
     # observability
     "AgentTracingMiddleware",
     "ChatTracingMiddleware",
+    "FunctionTracingMiddleware",
     # guardrails
     "ContentFilterMiddleware",
     "LLMJudgeMiddleware",

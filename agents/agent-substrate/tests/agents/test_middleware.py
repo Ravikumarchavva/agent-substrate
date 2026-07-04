@@ -7,17 +7,22 @@ import pytest
 from substrate.kernel.core.content import ChatMessage, TextBlock
 from substrate.agents.middleware import (
     MiddlewarePipeline,
+    MiddlewareStage,
     AuditLoggerMiddleware,
-    AgentCallContext,
+    MiddlewareContext,
     AgentRunResult,
 )
 from substrate.exceptions import MiddlewareTermination
 
 
-def _ctx(text: str = "hello") -> AgentCallContext:
+def _ctx(text: str = "hello") -> MiddlewareContext:
     msg = ChatMessage(role="user", content=[TextBlock(text=text)])
-    return AgentCallContext(
-        agent_name="TestAgent", run_id="r1", session_id="s1", messages=[msg]
+    return MiddlewareContext(
+        stage=MiddlewareStage.TURN,
+        agent_name="TestAgent",
+        run_id="r1",
+        session_id="s1",
+        messages=[msg],
     )
 
 
@@ -32,7 +37,7 @@ async def test_pipeline_calls_final():
     pipeline = MiddlewarePipeline([])
     called = []
 
-    async def final(ctx: AgentCallContext) -> None:
+    async def final(ctx: MiddlewareContext) -> None:
         called.append(ctx.agent_name)
 
     await pipeline.execute(_ctx(), final)
@@ -48,14 +53,14 @@ async def test_pipeline_chains_middlewares_in_order():
         def __init__(self, name: str) -> None:
             self._name = name
 
-        async def process(self, context: AgentCallContext, call_next) -> None:
+        async def process(self, context: MiddlewareContext, call_next) -> None:
             order.append(f"{self._name}:before")
             await call_next()
             order.append(f"{self._name}:after")
 
     pipeline = MiddlewarePipeline([RecordMiddleware("A"), RecordMiddleware("B")])
 
-    async def final(ctx: AgentCallContext) -> None:
+    async def final(ctx: MiddlewareContext) -> None:
         order.append("final")
 
     await pipeline.execute(_ctx(), final)
@@ -69,11 +74,11 @@ async def test_pipeline_halts_on_middleware_termination():
     reached_b = []
 
     class BlockingMiddleware:
-        async def process(self, context: AgentCallContext, call_next) -> None:
+        async def process(self, context: MiddlewareContext, call_next) -> None:
             raise MiddlewareTermination("blocked")
 
     class TrailingMiddleware:
-        async def process(self, context: AgentCallContext, call_next) -> None:
+        async def process(self, context: MiddlewareContext, call_next) -> None:
             reached_b.append(True)
             await call_next()
 
@@ -91,17 +96,38 @@ async def test_pipeline_middleware_can_mutate_context():
     """Middleware can mutate context before calling next."""
 
     class AddMessageMiddleware:
-        async def process(self, context: AgentCallContext, call_next) -> None:
+        async def process(self, context: MiddlewareContext, call_next) -> None:
             context.metadata["injected"] = True
             await call_next()
 
-    async def noop(c: AgentCallContext) -> None:
+    async def noop(c: MiddlewareContext) -> None:
         pass
 
     pipeline = MiddlewarePipeline([AddMessageMiddleware()])
     ctx = _ctx()
     await pipeline.execute(ctx, noop)
     assert ctx.metadata.get("injected") is True
+
+
+@pytest.mark.asyncio
+async def test_pipeline_skips_middleware_for_undeclared_stage():
+    """A middleware declaring a different stage never gets its process() called."""
+    called = []
+
+    class ToolOnlyMiddleware:
+        stages = frozenset({MiddlewareStage.TOOL})
+
+        async def process(self, context: MiddlewareContext, call_next) -> None:
+            called.append(True)
+            await call_next()
+
+    pipeline = MiddlewarePipeline([ToolOnlyMiddleware()])
+
+    async def final(c: MiddlewareContext) -> None:
+        pass
+
+    await pipeline.execute(_ctx(), final)  # _ctx() is stage=TURN
+    assert called == []
 
 
 # ---------------------------------------------------------------------------
@@ -119,9 +145,9 @@ async def test_audit_logger_logs_run(caplog):
 
     result_holder: list[AgentRunResult] = []
 
-    async def final(c: AgentCallContext) -> None:
-        c.result = AgentRunResult(output="done", status="success", run_id="r1")
-        result_holder.append(c.result)
+    async def final(c: MiddlewareContext) -> None:
+        c.turn_result = AgentRunResult(output="done", status="success", run_id="r1")
+        result_holder.append(c.turn_result)
 
     with caplog.at_level(logging.INFO, logger="substrate"):
         await MiddlewarePipeline([mw]).execute(ctx, final)

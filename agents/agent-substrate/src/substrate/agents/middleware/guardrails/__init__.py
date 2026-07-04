@@ -1,12 +1,15 @@
 """Safety and policy guardrails — middleware that validates and may halt execution.
 
-Each class is a typed middleware (AgentMiddleware, ChatMiddleware, or
-FunctionMiddleware) that raises ``MiddlewareTermination`` when its policy fires.
-Register them on ``ReActAgent`` at the appropriate level:
+Each class is an ordinary ``Middleware`` that raises ``MiddlewareTermination``
+when its policy fires. Add them to a ``ReActAgent``'s one ``middleware``
+pipeline (``MiddlewarePipeline``) — each declares which stage(s) it applies
+to via a ``stages`` class attribute, so a TURN-stage guardrail (e.g.
+``ContentFilterMiddleware``, input/prompt checking) and a TOOL-stage one
+(e.g. ``PIIDetectionMiddleware``) are wired identically, in the same list:
 
-    agent_middleware  — runs once per agent.run() call (input/prompt checking)
-    chat_middleware   — runs around every model.generate() (token limits, LLM judge)
-    function_middleware — runs around every tool.execute() (PII, tool validation)
+    MiddlewareStage.TURN — one inbox message (input/prompt checking)
+    MiddlewareStage.CHAT — one model.generate() call (token limits, LLM judge)
+    MiddlewareStage.TOOL — one tool.execute() call (PII, tool validation)
 """
 
 from __future__ import annotations

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -119,13 +120,17 @@ async def delete_webhook(path: str, request: Request) -> dict[str, str]:
 async def handle_webhook(path: str, request: Request) -> dict[str, Any]:
     """Receive an incoming webhook payload and dispatch the workflow."""
     registry = _get_webhook_registry(request)
-    payload = (
-        await request.json()
-        if request.headers.get("content-length", "0") != "0"
-        else {}
+    raw_body = await request.body()
+    payload = json.loads(raw_body) if raw_body else {}
+    signature = request.headers.get("x-webhook-signature")
+    idempotency_key = request.headers.get("x-webhook-idempotency-key")
+    return await registry.handle(
+        path,
+        payload,
+        raw_body=raw_body,
+        signature=signature,
+        idempotency_key=idempotency_key,
     )
-    secret = request.headers.get("x-webhook-secret")
-    return await registry.handle(path, payload, secret)
 
 
 # ── Conditions ────────────────────────────────────────────────────────────

@@ -3,7 +3,10 @@
 from __future__ import annotations
 from substrate.logger import setup_logging
 
+import hashlib
+import hmac
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
@@ -12,6 +15,10 @@ if TYPE_CHECKING:
     from substrate.agents.runtime import Runtime
 
 logger = setup_logging()
+
+# Bounds the idempotency-key cache so a flood of distinct keys can't grow it
+# unboundedly; oldest entries are evicted once the cap is exceeded.
+_IDEMPOTENCY_CACHE_SIZE = 1000
 
 
 @dataclass
@@ -55,6 +62,12 @@ class WebhookRegistry:
     def __init__(self, runtime: Runtime | None = None) -> None:
         self._webhooks: dict[str, WebhookDef] = {}  # keyed by path
         self._runtime = runtime
+        # (path, idempotency_key) -> previously returned result, so a retried
+        # delivery (same key) returns the original result instead of
+        # re-dispatching the target a second time.
+        self._idempotency_cache: OrderedDict[tuple[str, str], dict[str, Any]] = (
+            OrderedDict()
+        )
 
     def set_runtime(self, runtime: Runtime) -> None:
         """Inject active Runtime for trigger dispatch."""
@@ -97,9 +110,22 @@ class WebhookRegistry:
         return self._webhooks.get(path)
 
     async def handle(
-        self, path: str, payload: dict[str, Any], secret: str | None = None
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        raw_body: bytes,
+        signature: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """Handle an incoming webhook request.
+
+        ``signature`` is an HMAC-SHA256 hex digest of ``raw_body`` keyed by
+        the webhook's secret (e.g. ``X-Webhook-Signature: sha256=<hexdigest>``,
+        the same shape GitHub/Stripe use) — the secret itself is never sent
+        over the wire. ``idempotency_key`` (e.g. a delivery ID header) dedupes
+        retried deliveries: a repeat of the same key for the same path
+        returns the original result instead of dispatching the target again.
 
         Returns dispatch result dict.
         """
@@ -113,9 +139,14 @@ class WebhookRegistry:
         if not webhook.enabled:
             return {"error": "Webhook is disabled", "dispatched": False}
 
-        # Validate secret if provided
-        if secret and secret != webhook.secret:
-            return {"error": "Invalid webhook secret", "dispatched": False}
+        if not self._verify_signature(webhook.secret, raw_body, signature):
+            return {"error": "Invalid webhook signature", "dispatched": False}
+
+        if idempotency_key is not None:
+            cache_key = (path, idempotency_key)
+            cached = self._idempotency_cache.get(cache_key)
+            if cached is not None:
+                return cached
 
         logger.info(
             "Webhook '%s' triggered → %s:%s",
@@ -142,7 +173,7 @@ class WebhookRegistry:
                     run_id,
                     agent_id,
                 )
-                return {
+                result = {
                     "status": "triggered",
                     "dispatched": True,
                     "run_id": run_id,
@@ -156,7 +187,7 @@ class WebhookRegistry:
                     agent_id,
                     exc,
                 )
-                return {
+                result = {
                     "status": "failed",
                     "dispatched": False,
                     "error": str(exc),
@@ -166,4 +197,24 @@ class WebhookRegistry:
                 "Webhook '%s' triggered, but no Runtime is configured for dispatch.",
                 webhook.name,
             )
-            return {"status": "triggered", "dispatched": False}
+            result = {"status": "triggered", "dispatched": False}
+
+        if idempotency_key is not None:
+            cache_key = (path, idempotency_key)
+            self._idempotency_cache[cache_key] = result
+            if len(self._idempotency_cache) > _IDEMPOTENCY_CACHE_SIZE:
+                self._idempotency_cache.popitem(last=False)
+        return result
+
+    @staticmethod
+    def _verify_signature(secret: str, raw_body: bytes, signature: str | None) -> bool:
+        """Constant-time HMAC-SHA256 check over the raw request body.
+
+        Accepts either a bare hex digest or a ``sha256=<hexdigest>`` prefixed
+        form (the GitHub/Stripe convention).
+        """
+        if not signature:
+            return False
+        provided = signature.split("=", 1)[-1] if "=" in signature else signature
+        expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(provided, expected)

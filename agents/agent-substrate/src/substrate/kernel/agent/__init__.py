@@ -8,12 +8,8 @@ from .supervision import (
 from .context import CompactionStrategy, AgentContextProtocol
 from .middleware import (
     Middleware,
-    AgentMiddleware,
-    ChatMiddleware,
-    FunctionMiddleware,
-    AgentRunContextProtocol,
-    ChatContextProtocol,
-    FunctionContextProtocol,
+    MiddlewareStage,
+    MiddlewareContextProtocol,
 )
 from .runtime_context import CancellationToken, RunMeta
 
@@ -26,12 +22,8 @@ __all__ = [
     "CompactionStrategy",
     "AgentContextProtocol",
     "Middleware",
-    "AgentMiddleware",
-    "ChatMiddleware",
-    "FunctionMiddleware",
-    "AgentRunContextProtocol",
-    "ChatContextProtocol",
-    "FunctionContextProtocol",
+    "MiddlewareStage",
+    "MiddlewareContextProtocol",
     "CancellationToken",
     "RunMeta",
 ]

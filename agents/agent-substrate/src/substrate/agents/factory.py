@@ -24,6 +24,13 @@ from substrate.kernel import (
     Tool,
 )
 from substrate.kernel.core.identity import AgentId
+from substrate.kernel.agent.middleware import Middleware
+from substrate.agents.middleware.observability import (
+    AgentTracingMiddleware,
+    ChatTracingMiddleware,
+    FunctionTracingMiddleware,
+)
+from substrate.agents.middleware.pipeline import MiddlewarePipeline
 
 if TYPE_CHECKING:
     from substrate.agents.core import ReActAgent
@@ -251,6 +258,11 @@ def rebuild_agent(
 
     ``tools`` should be the resolved tool objects (caller looks up by name
     from the live registry); any ``tool_names`` not found are silently dropped.
+
+    Extra middleware isn't persisted in the spec (it's live Python objects,
+    not JSON-serializable) — only the default tracing middleware is
+    attached. A cold-resumed agent that needs more must be paired with a
+    spec that records which ones to reattach; not needed by any caller today.
     """
     from substrate.agents.core import ReActAgent
     from substrate.agents.tools.toolbox import Toolbox
@@ -280,6 +292,9 @@ def rebuild_agent(
         system_instructions=system_instructions,
         context=ctx,
         max_iterations=max_iterations,
+        middleware=MiddlewarePipeline(
+            [AgentTracingMiddleware(), ChatTracingMiddleware(), FunctionTracingMiddleware()]
+        ),
     )
 
 
@@ -295,6 +310,7 @@ def create_assistant_agent(
     tool_timeout: float | None = None,
     name: str = "ChatBot",
     session_id: str | None = None,
+    middleware: list[Middleware] | None = None,
 ) -> ReActAgent:
     """Create a configured ``ReActAgent``.
 
@@ -318,6 +334,20 @@ def create_assistant_agent(
         tool_timeout: Per-tool execution timeout in seconds (unused internally —
             passed through for caller convenience).
         name: Agent name / identifier.
+        middleware: Extra middleware to attach, in wrap order (index 0 is
+            outermost). Each middleware declares which stage(s) it applies
+            to via a ``stages`` class attribute (see
+            ``agents/middleware/pipeline.py``) — e.g.
+            ``ContentFilterMiddleware``/``PromptInjectionMiddleware`` (TURN),
+            ``MaxTokenMiddleware``/``HistoryTruncatorMiddleware``/
+            ``RetryMiddleware``/``LLMJudgeMiddleware`` (CHAT),
+            ``PIIDetectionMiddleware``/``ToolCallValidationMiddleware``/
+            ``CacheMiddleware``/``ContentTruncatorMiddleware`` (TOOL).
+            Appended after the built-in tracing middlewares
+            (``AgentTracingMiddleware``/``ChatTracingMiddleware``/
+            ``FunctionTracingMiddleware``), which stay outermost so a
+            ``MiddlewareTermination`` from a caller-supplied middleware
+            still produces an ERROR-tagged span.
     """
     from substrate.agents.core import ReActAgent
     from substrate.agents.tools.toolbox import Toolbox
@@ -344,4 +374,12 @@ def create_assistant_agent(
         context=ctx,
         max_iterations=max_iterations,
         session_id=session_id,
+        middleware=MiddlewarePipeline(
+            [
+                AgentTracingMiddleware(),
+                ChatTracingMiddleware(),
+                FunctionTracingMiddleware(),
+                *(middleware or []),
+            ]
+        ),
     )

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.middleware._contracts import ChatContext
+from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.exceptions import MiddlewareTermination
+from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.core.content import TextBlock
 
 
 class MaxTokenMiddleware:
-    """Reject Chat Context that exceeds a token limit."""
+    """Reject a chat call whose messages exceed a token limit."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.CHAT})
 
     def __init__(
         self,
@@ -40,11 +43,11 @@ class MaxTokenMiddleware:
         return int(len(text) / self.chars_per_token)
 
     async def process(
-        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
         # Concatenate text from all messages for a rough input token count
         total_text = ""
-        for msg in context.messages:
+        for msg in context.messages or []:
             total_text += (
                 " ".join(b.text for b in msg.content if isinstance(b, TextBlock)) + " "
             )

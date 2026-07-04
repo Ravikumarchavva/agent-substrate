@@ -707,7 +707,8 @@ class RunContext:
                 value = await self._resolve_effect_value(cached)
                 raise RuntimeError(value.get("error", "journaled llm error"))
             return _deserialize(await self._resolve_effect_value(cached))
-        try:
+
+        async def _do_generate(msgs: list) -> LLMResponse:
             from substrate.kernel.messaging.stream import (
                 TextDelta,
                 ReasoningDelta,
@@ -722,10 +723,10 @@ class RunContext:
 
             try:
                 stream = self._llm_client.generate_stream(
-                    messages, options=options, ctx=self._meta
+                    msgs, options=options, ctx=self._meta
                 )
             except TypeError:
-                stream = self._llm_client.generate_stream(messages, options=options)
+                stream = self._llm_client.generate_stream(msgs, options=options)
 
             async for chunk in stream:
                 if isinstance(chunk, TextDelta):
@@ -744,7 +745,34 @@ class RunContext:
             if final_usage is None:
                 final_usage = Usage()
 
-            resp = LLMResponse(content=final_content, usage=final_usage)
+            return LLMResponse(content=final_content, usage=final_usage)
+
+        try:
+            middleware = getattr(self.agent, "middleware", None)
+            if middleware is not None:
+                from substrate.agents.middleware._contracts import MiddlewareContext
+                from substrate.kernel.agent.middleware import MiddlewareStage
+
+                chat_ctx = MiddlewareContext(
+                    stage=MiddlewareStage.CHAT,
+                    agent_name=str(self.agent.id) if self.agent else "unknown",
+                    run_id=self.run_id,
+                    messages=messages,
+                    system_instructions=options.system_instructions or "",
+                    tools=options.tools,
+                )
+
+                async def _final(c: MiddlewareContext) -> None:
+                    c.chat_result = await _do_generate(c.messages)
+
+                await middleware.execute(chat_ctx, _final)
+                if chat_ctx.chat_result is None:
+                    raise RuntimeError(
+                        "middleware pipeline completed without producing a chat_result"
+                    )
+                resp = chat_ctx.chat_result
+            else:
+                resp = await _do_generate(messages)
 
             await self._record_effect(effect_id, "ok", _serialize(resp))
             await self._log(
@@ -797,6 +825,12 @@ class RunContext:
         # journaling its own ctx.uuid() for a replay-stable id) get paths
         # nested under this call's path rather than colliding with siblings.
         self._enter_scope()
+
+        async def _do_invoke() -> InvocationResult:
+            return await self._tool_invoker.invoke(
+                call, session=self._invoker_session, ctx=self
+            )
+
         try:
             # log_once, not _log: a tool that suspends internally (raises
             # SuspendInterrupt, e.g. ask_human) never lets this call's outer
@@ -808,9 +842,32 @@ class RunContext:
                 "tool.call",
                 {"call_id": effect_id, "tool_name": name, "args": args},
             )
-            result = await self._tool_invoker.invoke(
-                call, session=self._invoker_session, ctx=self
-            )
+
+            middleware = getattr(self.agent, "middleware", None)
+            if middleware is not None:
+                from substrate.agents.middleware._contracts import MiddlewareContext
+                from substrate.kernel.agent.middleware import MiddlewareStage
+
+                func_ctx = MiddlewareContext(
+                    stage=MiddlewareStage.TOOL,
+                    agent_name=str(self.agent.id) if self.agent else "unknown",
+                    run_id=self.run_id,
+                    function_name=name,
+                    arguments=args,
+                )
+
+                async def _final(c: MiddlewareContext) -> None:
+                    c.tool_result = await _do_invoke()
+
+                await middleware.execute(func_ctx, _final)
+                if func_ctx.tool_result is None:
+                    raise RuntimeError(
+                        "middleware pipeline completed without producing a tool_result"
+                    )
+                result = func_ctx.tool_result
+            else:
+                result = await _do_invoke()
+
             await self._record_effect(
                 effect_id,
                 "ok" if result.status == "ok" else "error",

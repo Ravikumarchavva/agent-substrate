@@ -154,7 +154,7 @@ def _encode_audio_content(ac: AudioBlock, role: str) -> dict[str, Any]:
         "source": {
             "type": "base64",
             "media_type": ac.media_type,
-            "data": bytes_to_base64(audio_bytes),
+            "data": bytes_to_base64(audio_bytes or b""),
         },
     }
 

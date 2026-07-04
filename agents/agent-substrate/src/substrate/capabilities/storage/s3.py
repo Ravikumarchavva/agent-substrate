@@ -50,9 +50,11 @@ class S3FileStore:
             region_name=self._connector._region,
         ) as client:
             try:
-                await client.head_bucket(Bucket=self._bucket)
+                # aiobotocore's dynamically-generated client methods aren't
+                # typed precisely — pyright infers NoReturn for these calls.
+                await client.head_bucket(Bucket=self._bucket)  # pyright: ignore[reportGeneralTypeIssues]
             except botocore.exceptions.ClientError:
-                await client.create_bucket(Bucket=self._bucket)
+                await client.create_bucket(Bucket=self._bucket)  # pyright: ignore[reportGeneralTypeIssues]
 
     async def upload(
         self,

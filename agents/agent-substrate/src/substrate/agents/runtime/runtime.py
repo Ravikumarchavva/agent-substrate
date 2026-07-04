@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 from substrate.kernel.core.identity import AgentId
 from substrate.kernel.messaging.message import Message
-from substrate.kernel.runtime.agent import Agent
+from substrate.agents.runtime.context import Agent
 from substrate.kernel.runtime.effects import Journal
 from substrate.kernel.runtime.fanout import FanoutStrategy
 from substrate.kernel.runtime.follow_graph import FollowGraph
@@ -226,23 +226,33 @@ class Runtime:
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
-        supervisor = self._supervisor or InMemorySupervisor(
-            event_log=self._event_log,  # type: ignore[arg-type]
-            inbox=self._inbox,  # type: ignore[arg-type]
-            journal=self._journal,  # type: ignore[arg-type]
-            scheduler=self._scheduler,  # type: ignore[arg-type]
-            signal_bus=self._signal_bus,  # type: ignore[arg-type]
-        )
-        self._supervisor = supervisor
+        if self._supervisor is None:
+            # InMemorySupervisor reaches into InMemoryScheduler's private state
+            # (see backends/_supervisor.py), so it can only stand in as the
+            # default when every other backend is also the in-memory one — a
+            # caller mixing durable backends must supply an explicit supervisor.
+            assert isinstance(self._event_log, InMemoryEventLog)
+            assert isinstance(self._inbox, InMemoryInbox)
+            assert isinstance(self._journal, InMemoryJournal)
+            assert isinstance(self._scheduler, InMemoryScheduler)
+            assert isinstance(self._signal_bus, InMemorySignalBus)
+            self._supervisor = InMemorySupervisor(
+                event_log=self._event_log,
+                inbox=self._inbox,
+                journal=self._journal,
+                scheduler=self._scheduler,
+                signal_bus=self._signal_bus,
+            )
+        supervisor = self._supervisor
         self._worker = Worker(
             worker_id=f"worker-{uuid.uuid4().hex}",
-            event_log=self._event_log,  # type: ignore[arg-type]
-            inbox=self._inbox,  # type: ignore[arg-type]
+            event_log=self._event_log,
+            inbox=self._inbox,
             follow_graph=self._follow_graph,
             fanout=self._fanout,
-            scheduler=self._scheduler,  # type: ignore[arg-type]
+            scheduler=self._scheduler,
             supervisor=supervisor,
-            signal_bus=self._signal_bus,  # type: ignore[arg-type]
+            signal_bus=self._signal_bus,
             registry=self._registry,
         )
         await self._worker.start()

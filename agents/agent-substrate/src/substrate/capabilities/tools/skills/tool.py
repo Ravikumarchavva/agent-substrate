@@ -96,7 +96,7 @@ class SkillTool:
             )
         return ToolExecutionResult(
             content=[TextBlock(text=skill.body)],
-            app_data={
+            structured_content={
                 "skill_name": skill.name,
                 "skill_version": skill.metadata.version,
             },

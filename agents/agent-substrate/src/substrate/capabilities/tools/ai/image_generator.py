@@ -121,5 +121,5 @@ class ImageGeneratorTool:
                 TextBlock(text=f"Generated image for: {revised_prompt}"),
                 ImageBlock(data=image_url, media_type="image/png"),
             ],
-            app_data={"url": image_url, "revised_prompt": revised_prompt},
+            structured_content={"url": image_url, "revised_prompt": revised_prompt},
         )

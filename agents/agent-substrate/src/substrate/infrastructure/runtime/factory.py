@@ -58,6 +58,7 @@ async def build_postgres_runtime(
     import asyncpg
 
     pool = await asyncpg.create_pool(postgres_url)
+    event_log: PostgresEventLog | None = None
     try:
         event_log = PostgresEventLog(pool, dsn=postgres_url)
         inbox = PostgresInbox(pool)
@@ -89,7 +90,8 @@ async def build_postgres_runtime(
         ) as rt:
             yield rt
     finally:
-        await event_log.close()
+        if event_log is not None:
+            await event_log.close()
         await pool.close()
 
 

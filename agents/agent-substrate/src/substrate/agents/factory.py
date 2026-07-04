@@ -24,7 +24,7 @@ from substrate.kernel import (
     Tool,
 )
 from substrate.kernel.core.identity import AgentId
-from substrate.kernel.agent.middleware import Middleware
+from substrate.agents.middleware._contracts import Middleware
 from substrate.agents.middleware.observability import (
     AgentTracingMiddleware,
     ChatTracingMiddleware,
@@ -293,7 +293,11 @@ def rebuild_agent(
         context=ctx,
         max_iterations=max_iterations,
         middleware=MiddlewarePipeline(
-            [AgentTracingMiddleware(), ChatTracingMiddleware(), FunctionTracingMiddleware()]
+            [
+                AgentTracingMiddleware(),
+                ChatTracingMiddleware(),
+                FunctionTracingMiddleware(),
+            ]
         ),
     )
 

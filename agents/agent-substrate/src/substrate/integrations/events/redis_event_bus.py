@@ -51,7 +51,9 @@ class EventBus:
         stream_key = event.stream_key()
         json_data = event.model_dump_json()
         data = cast(Any, {"envelope": json_data})
-        msg_id: str = await self._client.xadd(stream_key, data)
+        raw_msg_id = await self._client.xadd(stream_key, data)
+        # decode_responses=True on this client, so this is always str at runtime.
+        msg_id = raw_msg_id.decode() if isinstance(raw_msg_id, bytes) else raw_msg_id
 
         await self._client.publish(stream_key, json_data)
 
@@ -104,10 +106,15 @@ class EventBus:
                     messages.items() if isinstance(messages, dict) else messages
                 )
                 for stream, entries in messages_items:
-                    for msg_id, data in entries:
+                    # redis-py's XReadGroupResponse stub is a union that also
+                    # covers the XCLAIM 4-tuple shape (only returned when
+                    # claim_min_idle_time is passed, which this call never
+                    # does) — every entry here is genuinely the plain 2-tuple
+                    # (msg_id, data) shape.
+                    for msg_id, data in entries:  # pyright: ignore[reportAssignmentType]
                         try:
                             envelope = EventEnvelope.model_validate_json(
-                                data["envelope"]
+                                data["envelope"]  # pyright: ignore[reportOptionalSubscript, reportCallIssue, reportArgumentType]
                             )
                             parent_ctx = extract(envelope.trace_context or {})
                             tracer = trace.get_tracer("substrateevents")
@@ -120,7 +127,7 @@ class EventBus:
                                 },
                             ):
                                 yield envelope
-                            await self._client.xack(stream_key, group, msg_id)
+                            await self._client.xack(stream_key, group, msg_id)  # pyright: ignore[reportArgumentType]
                         except Exception:
                             logger.exception("Failed to process event %s", msg_id)
 

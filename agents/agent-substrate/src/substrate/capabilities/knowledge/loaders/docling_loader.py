@@ -105,14 +105,14 @@ def _extract_docx_metadata(path: Path) -> dict[str, Any]:
     try:
         from docx import Document as DocxDoc  # type: ignore[import-unresolved]
 
-        props = DocxDoc(path).core_properties
+        props = DocxDoc(str(path)).core_properties
         return {
             k: v
             for k, v in {
                 "title": props.title or None,
                 "author": props.author or None,
                 "subject": props.subject or None,
-                "description": props.description or None,
+                "description": props.comments or None,
                 "keywords": props.keywords or None,
                 "created_at": props.created.isoformat() if props.created else None,
                 "modified_at": props.modified.isoformat() if props.modified else None,
@@ -248,10 +248,13 @@ class DoclingLoader(BaseDocumentLoader):
     def _converter(self) -> Any:
         from docling.document_converter import DocumentConverter, PdfFormatOption  # type: ignore[import-unresolved]
         from docling.datamodel.pipeline_options import PdfPipelineOptions  # type: ignore[import-unresolved]
+        from docling.datamodel.base_models import InputFormat  # type: ignore[import-unresolved]
 
         pipeline_opts = PdfPipelineOptions(do_ocr=self.ocr_enabled)
         return DocumentConverter(
-            format_options={"pdf": PdfFormatOption(pipeline_options=pipeline_opts)}
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_opts)
+            }
         )
 
     def _convert(self, source: Union[str, Path, bytes], path: Path | None) -> Any:

@@ -144,10 +144,14 @@ class ConditionMonitor:
 
     async def _monitor_event_type_loop(self, event_type: str) -> None:
         """Subscribe to specific event_type stream and match conditions."""
+        event_bus = self._event_bus
+        if event_bus is None:
+            logger.warning(
+                "ConditionMonitor: no EventBus configured, stopping monitor loop"
+            )
+            return
         try:
-            async for envelope in self._event_bus.subscribe(
-                event_type, "condition-monitor"
-            ):
+            async for envelope in event_bus.subscribe(event_type, "condition-monitor"):
                 event_dict = {
                     "type": envelope.event_type,
                     "data": envelope.payload,

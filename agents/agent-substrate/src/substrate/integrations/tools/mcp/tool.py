@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 from substrate.kernel.core.content import DocumentBlock, ImageBlock, TextBlock
@@ -83,7 +84,11 @@ class MCPTool:
                         content.append(TextBlock(text=item.text))
                     elif item.type == "image" and hasattr(item, "data"):
                         mime = getattr(item, "mimeType", "image/png")
-                        content.append(ImageBlock(data=item.data, media_type=mime))
+                        content.append(
+                            ImageBlock(
+                                data=base64.b64decode(item.data), media_type=mime
+                            )
+                        )
                     elif item.type == "resource" and hasattr(item, "resource"):
                         r = item.resource
                         uri = getattr(r, "uri", "")
@@ -104,7 +109,7 @@ class MCPTool:
                     elif item_type == "image":
                         content.append(
                             ImageBlock(
-                                data=str(item.get("data", "")),
+                                data=base64.b64decode(str(item.get("data", ""))),
                                 media_type=str(
                                     item.get(
                                         "mediaType",

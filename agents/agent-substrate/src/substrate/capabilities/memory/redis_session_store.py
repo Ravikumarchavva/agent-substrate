@@ -74,7 +74,10 @@ class RedisSessionStore:
 
     async def get_state(self, session_id: str) -> dict[str, Any]:
         raw = await self._r().hgetall(self._key(session_id))
-        return {k.decode(): json.loads(v) for k, v in raw.items()}
+        return {
+            (k.decode() if isinstance(k, bytes) else k): json.loads(v)
+            for k, v in raw.items()
+        }
 
     async def set_state(self, session_id: str, state: dict[str, Any]) -> None:
         key = self._key(session_id)

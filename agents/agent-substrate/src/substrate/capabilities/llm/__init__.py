@@ -29,10 +29,8 @@ from substrate.capabilities.llm.chat_client import OpenAIChatCompletionClient
 from substrate.capabilities.llm.sentence_transformers_embedding_client import (
     SentenceTransformersEmbeddingClient,
 )
-from substrate.capabilities.llm.openai_embedding_client import OpenAIEmbeddingClient
 
 __all__ = [
     "OpenAIChatCompletionClient",
     "SentenceTransformersEmbeddingClient",
-    "OpenAIEmbeddingClient",
 ]

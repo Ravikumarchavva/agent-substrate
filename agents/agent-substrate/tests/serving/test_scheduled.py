@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import datetime, timezone
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession, create_async_engine
 
 from substrate.serving.monolith.app import app
-from substrate.serving.monolith.database import Base
-from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun, Thread, Step
+from substrate.serving.monolith.models import ScheduledTaskRun, Thread
 from substrate.serving.monolith.security.deps import get_current_user
 from substrate.serving.shared.auth.claims import AuthClaims
-from substrate.serving.monolith.services.scheduled_service import format_lookback_context
+from substrate.serving.monolith.services.scheduled_service import (
+    format_lookback_context,
+)
 from substrate.serving.monolith.services.thread_service import list_threads
 
 
@@ -71,7 +70,9 @@ async def test_format_lookback_context() -> None:
 async def test_thread_filtering_excludes_scheduled_tasks(database_url: str) -> None:
     # Use SQLite/Postgres based on database_url fixture
     engine = create_async_engine(database_url)
-    session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     async with session_factory() as db:
         # Create a regular thread
@@ -99,8 +100,11 @@ async def test_thread_filtering_excludes_scheduled_tasks(database_url: str) -> N
 @pytest.mark.asyncio
 async def test_scheduled_tasks_crud_endpoints(database_url: str) -> None:
     from httpx import ASGITransport
+
     async with app.router.lifespan_context(app):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
             # 1. Create a task
             payload = {
                 "name": "Hourly stock check",

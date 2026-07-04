@@ -56,8 +56,8 @@ def configure_opentelemetry(
         logger.debug("OpenTelemetry already configured, skipping re-init")
         return
 
-    # Configure structured logging first (auto-detects server vs interactive)
-    setup_logging(mode="auto")
+    # Configure structured logging first (server/production mode)
+    setup_logging(mode="json")
 
     logger.info("Configuring OpenTelemetry")
 

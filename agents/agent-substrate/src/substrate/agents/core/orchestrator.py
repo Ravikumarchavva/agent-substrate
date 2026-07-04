@@ -41,9 +41,8 @@ from substrate.agents.core._loop import (
 )
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.context import RunContext
+    from substrate.agents.runtime.context import Agent, RunContext
     from substrate.kernel.llm.llm import LLMClient
-    from substrate.kernel.runtime.agent import Agent
     from substrate.kernel.storage.history import HistoryProvider
 
 

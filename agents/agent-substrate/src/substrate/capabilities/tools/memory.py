@@ -158,7 +158,7 @@ class MemoryTool:
             mem_id = await self._long_term.save(self._agent_id, value)
             return ToolExecutionResult(
                 content=[TextBlock(text=f"Stored memory (id={mem_id}).")],
-                app_data={"memory_id": mem_id},
+                structured_content={"memory_id": mem_id},
             )
 
         if action == "recall":

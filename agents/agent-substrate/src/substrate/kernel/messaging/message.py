@@ -42,21 +42,25 @@ from substrate.kernel.tools import PayloadBase, ToolCallRequest, ToolExecutionRe
 class ChatPayload(PayloadBase):
     """A conversation turn."""
 
-    kind: Literal["chat"] = "chat"
+    # Narrowing PayloadBase.kind (str) to a Literal per subclass is a known
+    # pyright/pydantic limitation: frozen-ness is a runtime (model_config)
+    # guarantee pyright can't see statically, so it flags the narrower
+    # override as unsound even though these models are genuinely immutable.
+    kind: Literal["chat"] = "chat"  # pyright: ignore[reportIncompatibleVariableOverride]
     message: ChatMessage
 
 
 class DataPayload(PayloadBase):
     """Arbitrary JSON-serializable structured data."""
 
-    kind: Literal["data"] = "data"
+    kind: Literal["data"] = "data"  # pyright: ignore[reportIncompatibleVariableOverride]
     data: JsonObject
 
 
 class ControlPayload(PayloadBase):
     """Runtime control signal — pause, cancel, handoff, etc."""
 
-    kind: Literal["control"] = "control"
+    kind: Literal["control"] = "control"  # pyright: ignore[reportIncompatibleVariableOverride]
     signal: str
     data: JsonObject = Field(default_factory=dict)
 
@@ -64,7 +68,7 @@ class ControlPayload(PayloadBase):
 class ProgressPayload(PayloadBase):
     """Payload carrying an agent progress event."""
 
-    kind: Literal["progress"] = "progress"
+    kind: Literal["progress"] = "progress"  # pyright: ignore[reportIncompatibleVariableOverride]
     progress: AgentProgress
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
@@ -153,7 +157,7 @@ class Message(BaseModel):
             raise ValueError(f"Unregistered payload type: {type(v).__name__!r}")
         if isinstance(v, dict):
             kind = v.get("kind")
-            model = _PAYLOAD_REGISTRY.get(kind)
+            model = _PAYLOAD_REGISTRY.get(kind) if isinstance(kind, str) else None
             if model is None:
                 raise ValueError(f"Unknown payload kind: {kind!r}")
             return model.model_validate(v)

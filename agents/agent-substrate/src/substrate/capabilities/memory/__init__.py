@@ -1,7 +1,6 @@
 """substrate.capabilities.memory — Concrete memory backends.
 
 Short-term memory (ShortTermMemory protocol):
-    InMemorySessionStore   — in agents layer (no external deps)
     RedisSessionStore      — Redis HASH per session, configurable TTL
 
 Long-term memory (LongTermMemory protocol):

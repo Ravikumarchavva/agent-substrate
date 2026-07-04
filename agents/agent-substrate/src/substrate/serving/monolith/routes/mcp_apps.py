@@ -281,10 +281,11 @@ async def get_manifest(request: Request) -> List[Dict[str, Any]]:
     The frontend can use this to know which tools have interactive UIs
     and pre-fetch their HTML resources.
     """
-    raw_tools = getattr(request.app.state, "tools", [])
+    raw_tools = getattr(request.app.state, "tools", None)
     # app.state.tools is a Toolbox (not a plain list) — call .all() to iterate
+    all_method = getattr(raw_tools, "all", None)
     tool_list: list[Tool] = (
-        raw_tools.all() if hasattr(raw_tools, "all") else list(raw_tools)
+        all_method() if all_method is not None else list(raw_tools or [])
     )
     manifest: List[Dict[str, Any]] = []
 

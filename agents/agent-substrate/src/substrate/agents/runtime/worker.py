@@ -30,12 +30,12 @@ from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.core.errors import CancellationError, SuspendInterrupt
 
 if TYPE_CHECKING:
-    from substrate.agents.runtime.backends._event_log import InMemoryEventLog
-    from substrate.agents.runtime.backends._inbox import InMemoryInbox
-    from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
-    from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
-    from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
-    from substrate.kernel.runtime.agent import Agent
+    from substrate.kernel.runtime.log_entry import EventLog
+    from substrate.kernel.runtime.inbox import Inbox
+    from substrate.kernel.runtime.scheduler import Scheduler
+    from substrate.kernel.runtime.wakeup import SignalBus
+    from substrate.kernel.runtime.supervisor import Supervisor
+    from substrate.agents.runtime.context import Agent
     from substrate.kernel.runtime.fanout import FanoutStrategy
     from substrate.kernel.runtime.follow_graph import FollowGraph
 
@@ -50,13 +50,13 @@ class Worker:
     def __init__(
         self,
         worker_id: str,
-        event_log: InMemoryEventLog,
-        inbox: InMemoryInbox,
+        event_log: EventLog,
+        inbox: Inbox,
         follow_graph: FollowGraph,
         fanout: FanoutStrategy,
-        scheduler: InMemoryScheduler,
-        supervisor: InMemorySupervisor,
-        signal_bus: InMemorySignalBus,
+        scheduler: Scheduler,
+        supervisor: Supervisor,
+        signal_bus: SignalBus,
         registry: dict,  # AgentId → Agent
     ) -> None:
         self._worker_id = worker_id
@@ -96,8 +96,9 @@ class Worker:
 
     async def cancel(self, run_id: str) -> None:
         """Cancel a running or pending task by run_id."""
-        if hasattr(self._scheduler, "_status"):
-            self._scheduler._status[run_id] = RunStatus.CANCELLED
+        status_map = getattr(self._scheduler, "_status", None)
+        if status_map is not None:
+            status_map[run_id] = RunStatus.CANCELLED
 
         task = self._tasks.get(run_id)
         if task is not None and not task.done():
@@ -293,7 +294,9 @@ class Worker:
             drained = await ctx._resolve_effect_value(cached_drain)
             all_msgs = await self._inbox.drain(agent.id, max=1000)
             by_id = {m.id: m for m in all_msgs}
-            inbox_msgs = [by_id[mid] for mid in drained.get("msg_ids", []) if mid in by_id]
+            inbox_msgs = [
+                by_id[mid] for mid in drained.get("msg_ids", []) if mid in by_id
+            ]
         else:
             inbox_msgs = await self._inbox.drain(agent.id, max=100)
             await ctx._record_effect(
@@ -359,7 +362,9 @@ class Worker:
             # no finish_run. release(SUSPENDED) is the only state
             # change; the Task ends here and the run costs nothing until
             # something wakes it.
-            await self._scheduler.release(lease, status=RunStatus.SUSPENDED, wake_on=exc.wakeup)
+            await self._scheduler.release(
+                lease, status=RunStatus.SUSPENDED, wake_on=exc.wakeup
+            )
 
         except (asyncio.CancelledError, CancellationError):
             token.cancel("task-cancelled")
@@ -415,9 +420,7 @@ class Worker:
                 expected_seq=final_seq,
             )
             await self._scheduler.release(lease, status=RunStatus.FAILED)
-            await self._supervisor.finish_run(
-                run_id, RunStatus.FAILED, error=str(exc)
-            )
+            await self._supervisor.finish_run(run_id, RunStatus.FAILED, error=str(exc))
         finally:
             heartbeat_task.cancel()
             try:

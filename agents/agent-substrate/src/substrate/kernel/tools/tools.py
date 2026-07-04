@@ -166,7 +166,9 @@ class ToolCallRequest(PayloadBase):
     ``ToolExecutionResult`` when the tool completes.
     """
 
-    kind: Literal["tool_call"] = "tool_call"
+    # Narrowing PayloadBase.kind (str) to a Literal is a known pyright/pydantic
+    # limitation — see ChatPayload in kernel/messaging/message.py for detail.
+    kind: Literal["tool_call"] = "tool_call"  # pyright: ignore[reportIncompatibleVariableOverride]
     name: str
     arguments: JsonObject = Field(default_factory=dict)
     call_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -190,7 +192,7 @@ class ToolExecutionResult(PayloadBase):
     representation suitable for LLM context.
     """
 
-    kind: Literal["tool_result"] = "tool_result"
+    kind: Literal["tool_result"] = "tool_result"  # pyright: ignore[reportIncompatibleVariableOverride]
     call_id: str = ""
     name: str = ""
     content: list[ContentBlock] = Field(default_factory=list)

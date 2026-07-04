@@ -26,10 +26,11 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from substrate.capabilities.pipeline.data_ref import DataRefStore
 from substrate.agents.tools.toolbox import Toolbox
+from substrate.kernel.tools.tools import Tool, is_hosted_tool, is_provider_defined_tool
 from substrate.logger import setup_logging
 
 logger = setup_logging()
@@ -136,10 +137,24 @@ class PipelineEngine:
                     duration_ms=duration,
                 )
 
+            if is_hosted_tool(tool) or is_provider_defined_tool(tool):
+                duration = int((time.monotonic() - start) * 1000)
+                return PipelineResult(
+                    pipeline_name=pipeline.name,
+                    success=False,
+                    step_results=step_results,
+                    error=(
+                        f"Step {i}: adapter '{step.adapter_name}' is a "
+                        "provider-hosted tool and can't be run as a pipeline step"
+                    ),
+                    duration_ms=duration,
+                )
+
+            local_tool = cast(Tool, tool)
             resolved_inputs = self._resolve_inputs(step.input_mapping, context)
 
             try:
-                result = await tool.execute(**resolved_inputs)
+                result = await local_tool.execute(**resolved_inputs)
             except Exception as exc:
                 duration = int((time.monotonic() - start) * 1000)
                 return PipelineResult(

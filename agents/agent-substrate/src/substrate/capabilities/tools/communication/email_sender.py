@@ -111,5 +111,5 @@ class EmailSenderTool:
 
         return ToolExecutionResult(
             content=[TextBlock(text=f'Email sent to {to}: "{subject}"')],
-            app_data={"to": to, "subject": subject},
+            structured_content={"to": to, "subject": subject},
         )

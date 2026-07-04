@@ -38,6 +38,7 @@ import os
 from typing import Any
 
 from substrate.kernel import ImageBlock  # was ImageContent
+from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel import TextBlock
 
@@ -144,12 +145,14 @@ class CodeInterpreterTool:
 
     # ── Tool execution ────────────────────────────────────────────────────────
 
-    async def execute(  # type: ignore[override]
+    async def execute(
         self,
         *,
+        ctx: RunMeta | None = None,
         code: str,
         exec_type: str = "python",
         timeout: int = 30,
+        **_: Any,
     ) -> ToolExecutionResult:
         """Execute code in the current session's VM."""
         timeout = max(1, min(timeout, 300))
@@ -245,9 +248,8 @@ class CodeInterpreterTool:
             response_data["error"] = resp.error
 
         return ToolExecutionResult(
-            content=[TextBlock(text=json.dumps(response_data))],
+            content=[TextBlock(text=json.dumps(response_data)), *media],
             is_error=not resp.success,
-            media=media or None,
         )
 
     # ── Direct mode ───────────────────────────────────────────────────────────
@@ -322,9 +324,8 @@ class CodeInterpreterTool:
             "exec_type": exec_type,
         }
         return ToolExecutionResult(
-            content=[TextBlock(text=json.dumps(data))],
+            content=[TextBlock(text=json.dumps(data)), *media],
             is_error=not success,
-            media=media or None,
         )
 
     def _require_http_client(self) -> Any:

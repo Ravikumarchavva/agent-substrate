@@ -250,6 +250,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
     from substrate.agents.tools.toolbox import Toolbox
     from substrate.integrations.llm.openai.openai_client import OpenAIClient
     from substrate.agents.context import (
+        CompactionPipeline,
         ContextConfig,
         InMemoryHistoryProvider,
         SlidingWindowCompaction,
@@ -276,7 +277,7 @@ def cmd_chat(args: argparse.Namespace) -> None:
                 tools=toolbox,
                 context=ContextConfig(
                     InMemoryHistoryProvider(),
-                    SlidingWindowCompaction(max_messages=1000),
+                    CompactionPipeline([SlidingWindowCompaction(max_messages=1000)]),
                 ),
                 max_iterations=args.max_iterations,
             )

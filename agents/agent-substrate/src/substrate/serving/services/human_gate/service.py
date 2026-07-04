@@ -160,11 +160,11 @@ async def resolve_request(
         await event_bus.publish(
             EventEnvelope(
                 event_type="hitl.request_resolved",
-                correlation_id=req.run_id or request_id,
                 payload={
                     "type": "hitl.request_resolved",
                     "request_id": request_id,
                     "thread_id": str(req.thread_id),
+                    "correlation_id": req.run_id or request_id,
                     "hitl_type": req.type,
                     "status": status,
                     "response_value": response_value,

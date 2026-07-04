@@ -158,7 +158,7 @@ class InvoiceExtractorTool:
 
         return ToolExecutionResult(
             content=[TextBlock(text=full_text)],
-            app_data={
+            structured_content={
                 "file": str(path),
                 "format": "image_ocr",
                 "total_pages": len(frames),
@@ -262,7 +262,7 @@ class InvoiceExtractorTool:
 
         return ToolExecutionResult(
             content=[TextBlock(text="\n".join(output_parts))],
-            app_data={
+            structured_content={
                 "file": str(path),
                 "format": "pdf",
                 "total_pages": total_pages,

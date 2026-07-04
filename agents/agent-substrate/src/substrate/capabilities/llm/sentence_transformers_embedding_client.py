@@ -47,7 +47,7 @@ class SentenceTransformersEmbeddingClient:
         batch_size: int = 64,
         device: str | None = None,
     ) -> None:
-        from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer  # pyright: ignore[reportMissingImports]
 
         if device is None:
             try:

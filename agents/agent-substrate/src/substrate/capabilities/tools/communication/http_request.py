@@ -88,7 +88,7 @@ class HttpRequestTool:
         )
         return ToolExecutionResult(
             content=[TextBlock(text=result_text)],
-            app_data={
+            structured_content={
                 "status_code": response.status_code,
                 "url": url,
                 "method": method,

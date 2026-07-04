@@ -33,7 +33,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 
 from substrate.serving.shared.settings import settings
-from substrate.kernel.llm import LLMClient
+from substrate.integrations.llm.openai.openai_client import OpenAIClient
 from substrate.integrations.llm.factory import (
     create_model_client,
     detect_provider,
@@ -66,14 +66,19 @@ def _resolve_model_client(
     app_state: Any,
     requested_model: str | None,
     fallback_model: str,
-) -> tuple[LLMClient, str, str]:
-    """Resolve the correct provider client for an incoming audio request."""
+) -> tuple[OpenAIClient, str, str]:
+    """Resolve the correct provider client for an incoming audio request.
+
+    Audio (STT/TTS/Realtime) is only implemented on ``OpenAIClient`` today —
+    raises 501 rather than crashing with ``AttributeError`` if the resolved
+    provider for *requested_model*/*fallback_model* isn't OpenAI.
+    """
     effective_model = (
         requested_model.strip()
         if requested_model and requested_model.strip()
         else fallback_model
     )
-    default_client: LLMClient = app_state.model_client
+    default_client: Any = app_state.model_client
     effective_provider = detect_provider(effective_model)
     bare_model = strip_provider_prefix(effective_model)
 
@@ -81,13 +86,19 @@ def _resolve_model_client(
         getattr(default_client, "provider", None) == effective_provider
         and getattr(default_client, "model", None) == bare_model
     ):
-        return default_client, effective_provider, bare_model
+        client = default_client
+    else:
+        client = create_model_client(
+            effective_model,
+            api_keys=getattr(app_state, "api_keys", {}),
+            **getattr(app_state, "model_client_kwargs", {}),
+        )
 
-    client = create_model_client(
-        effective_model,
-        api_keys=getattr(app_state, "api_keys", {}),
-        **getattr(app_state, "model_client_kwargs", {}),
-    )
+    if not isinstance(client, OpenAIClient):
+        raise HTTPException(
+            status_code=501,
+            detail=f"Audio features are only supported for OpenAI models, not '{effective_provider}'",
+        )
     return client, effective_provider, bare_model
 
 

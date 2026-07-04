@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.middleware._contracts import FunctionContext
+from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.exceptions import MiddlewareTermination
+from substrate.kernel.agent.middleware import MiddlewareStage
 
 
 class ToolCallValidationMiddleware:
     """Validate tool calls against allow/block lists and argument schemas."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.TOOL})
 
     def __init__(
         self,
@@ -37,9 +40,9 @@ class ToolCallValidationMiddleware:
                     self._arg_patterns[tool][arg_name] = compiled
 
     async def process(
-        self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
-        tool_name = context.function_name
+        tool_name = context.function_name or ""
         tool_args = context.arguments or {}
 
         if tool_name in self.blocked_tools:

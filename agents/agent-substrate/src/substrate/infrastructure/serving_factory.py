@@ -457,13 +457,51 @@ async def resume_pending_runs(runtime: Any, *, registry: Any, model_client: Any)
     if scheduler is None or not hasattr(scheduler, "pending_run_specs"):
         return 0
 
+    import substrate
     from substrate.agents.factory import rebuild_agent
+    from substrate.kernel.runtime.ids import RunStatus
+    from substrate.kernel.runtime.log_entry import RunLogEntry
 
     specs = await scheduler.pending_run_specs()
     if not specs:
         return 0
 
-    for _run_id, agent_id, spec in specs:
+    for run_id, agent_id, spec in specs:
+        spec_version = spec.get("agent_version")
+        if spec_version != substrate.__version__:
+            # The code that would replay this run's effects has moved on
+            # since the spec was persisted — resuming anyway risks the
+            # replayed effect path silently diverging from what actually
+            # happened (a tool renamed/removed, prompt logic changed, etc).
+            # Fail the run cleanly rather than attempt a divergent replay.
+            logger.warning(
+                "Refusing to resume agent %s for run %s: spec version %r != "
+                "running version %r",
+                agent_id,
+                run_id,
+                spec_version,
+                substrate.__version__,
+            )
+            error = (
+                f"agent version mismatch: spec was persisted at version "
+                f"{spec_version!r}, running version is {substrate.__version__!r}"
+            )
+            final_seq = await runtime.event_log.last_seq(run_id)
+            await runtime.event_log.append(
+                run_id,
+                RunLogEntry(
+                    run_id=run_id,
+                    seq=final_seq + 1,
+                    kind="run.failed",
+                    payload={"error": error, "status": "version_mismatch"},
+                ),
+                expected_seq=final_seq,
+            )
+            if hasattr(scheduler, "fail_pending_run"):
+                await scheduler.fail_pending_run(run_id)
+            await runtime.supervisor.finish_run(run_id, RunStatus.FAILED, error=error)
+            continue
+
         tool_names: list[str] = spec.get("tool_names") or []
         resolved_tools = [
             t for t in registry.all() if getattr(t, "name", None) in tool_names

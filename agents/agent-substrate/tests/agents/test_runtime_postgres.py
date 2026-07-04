@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import types
 
 import pytest
 
@@ -517,6 +518,125 @@ async def test_pg_cold_resume() -> None:
                 "DELETE FROM ravi_agent_runs WHERE run_id = $1", orphan_run_id
             )
     finally:
+        await pool.close()
+
+
+async def test_pg_cold_resume_refuses_version_mismatch() -> None:
+    """A persisted spec from a different substrate version fails cleanly
+    instead of being replayed (Phase 5 agent versioning guard).
+
+    Uses bare backend objects (no live Worker polling loop) — same
+    reasoning as ``test_pg_cold_resume``: a running Worker (this process's
+    or another live process sharing the same Postgres DB) leases *any*
+    'pending' row it sees, agent-agnostically, which would race this test's
+    direct 'pending' insert before ``resume_pending_runs`` gets to read it.
+
+    Asserts: the run ends up 'failed' (not silently resumed), exactly one
+    ``run.failed`` EventLog entry is appended, and no agent is registered
+    for it.
+    """
+    if not await _pg_reachable():
+        pytest.skip("Postgres not reachable")
+
+    import json as _json
+
+    import asyncpg
+
+    import substrate
+    from substrate.infrastructure.runtime.pg_event_log import PostgresEventLog
+    from substrate.infrastructure.runtime.pg_inbox import PostgresInbox
+    from substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
+    from substrate.infrastructure.runtime.pg_signal_bus import PostgresSignalBus
+    from substrate.infrastructure.runtime.pg_supervisor import PostgresSupervisor
+    from substrate.infrastructure.serving_factory import resume_pending_runs
+
+    stale_spec = {
+        "mode": "react",
+        "agent_version": "0.0.0-stale",
+        "system_instructions": "test",
+        "tool_names": [],
+        "max_iterations": 5,
+        "session_id": "resume-version-test",
+        "model_context_window": 10,
+    }
+    run_id = f"version-mismatch-{id(object())}"
+    agent_id = _agent_id("version-mismatch-agent")
+
+    pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
+    try:
+        event_log = PostgresEventLog(pool)
+        scheduler = PostgresScheduler(pool)
+        inbox = PostgresInbox(pool)
+        signal_bus = PostgresSignalBus(pool)
+        supervisor = PostgresSupervisor(
+            pool,
+            event_log=event_log,
+            inbox=inbox,
+            scheduler=scheduler,
+            signal_bus=signal_bus,
+        )
+        await event_log.setup()
+        await scheduler.setup()
+        await inbox.setup()
+        await signal_bus.setup()
+        await supervisor.setup()
+
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO ravi_agent_runs (run_id, agent_id, spec)
+                VALUES ($1, $2, $3::jsonb)
+                ON CONFLICT (run_id) DO NOTHING
+                """,
+                run_id,
+                str(agent_id),
+                _json.dumps(stale_spec),
+            )
+            await conn.execute(
+                """
+                INSERT INTO ravi_run_queue (run_id, status)
+                VALUES ($1, 'pending')
+                ON CONFLICT (run_id) DO NOTHING
+                """,
+                run_id,
+            )
+
+        class _EmptyRegistry:
+            def all(self):
+                return []
+
+        async def _unexpected_register(agent):
+            raise AssertionError(
+                "should not register an agent for a version-mismatched spec"
+            )
+
+        fake_runtime = types.SimpleNamespace(
+            _scheduler=scheduler,
+            event_log=event_log,
+            supervisor=supervisor,
+            register=_unexpected_register,
+        )
+
+        resumed = await resume_pending_runs(
+            fake_runtime, registry=_EmptyRegistry(), model_client=None
+        )
+        assert resumed == 1
+
+        entries = [e async for e in event_log.read(run_id)]
+        failed_entries = [e for e in entries if e.kind == "run.failed"]
+        assert len(failed_entries) == 1
+        assert failed_entries[0].payload["status"] == "version_mismatch"
+
+        row = await pool.fetchrow(
+            "SELECT status FROM ravi_run_queue WHERE run_id = $1", run_id
+        )
+        assert row["status"] == "failed"
+
+        # Sanity: the spec really was stale relative to the running version.
+        assert stale_spec["agent_version"] != substrate.__version__
+    finally:
+        await pool.execute("DELETE FROM ravi_run_queue WHERE run_id = $1", run_id)
+        await pool.execute("DELETE FROM ravi_agent_runs WHERE run_id = $1", run_id)
         await pool.close()
 
 

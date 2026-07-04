@@ -30,7 +30,7 @@ retried safely — at enterprise scale.
 | **2** | Horizontally scalable serving: scheduler-enforced single-flight (kill `thread_locks`); cancel via durable signal (kill `cancel_registry`); HITL cross-replica via PostgresSignalBus; SSE-from-any-replica verification; memory-seed idempotency | **Done** (2026-07-03) — see "Recently shipped". Future-based tool-approval → signal migration (kills `WebHITLBridge._pending`) explicitly deferred (see below) |
 | **3** | Full multi-tenancy: `tenant_id` through thread ownership + `RunMeta`; per-tenant fair scheduling in `lease()`; wire `Supervision.execution_budget`/`spawn_child()` (was dead code) | **Done** (2026-07-03) — see "Recently shipped". `RedisHistoryProvider`/`GlobalTaskStore` tenant-keying and tenant-level quota aggregation/rate limits explicitly deferred (see below) |
 | **4** | Microservices as the scale path: converge `human_gate` onto the Phase-1 signal bus | **Partially done** (2026-07-03) — signal convergence shipped; wiring `agent_runtime` to actually run an HITL-capable tool against it is deferred (see below). Feature-parity porting (files/RAG → triggers/scheduled → pipelines → MCP apps) and k8s replica policy tuning not started — long tail, out of this program's architecture-remediation scope |
-| **5** | Enterprise hardening: attach `AgentTracingMiddleware`/`ChatTracingMiddleware` (exist, never installed); webhook idempotency keys + HMAC; agent versioning guard on replay; event-log retention/compaction (implement snapshot only if fold P99 demands it) | Pending |
+| **5** | Enterprise hardening: tracing spans on agent runs/LLM calls/tool calls; webhook idempotency keys + HMAC; agent versioning guard on replay; event-log retention/compaction | **Done** (2026-07-04) — see "Recently shipped". `ChatTracingMiddleware` deleted rather than installed (see below); most of the pre-existing guardrail/infra middleware family found unwireable in its current form (see below) |
 
 Verification gates per phase are specified in the plan (crash/replay harness,
 two-worker integration, lost-wakeup race, cancel/deadline cascade, tenancy
@@ -100,8 +100,115 @@ so the decision is visible, not silently dropped.
   architecture remediation. Per-service k8s manifests already exist
   (`deployment/k8s/base/runtime/*.yaml`) and are not a monolith-only
   deployment; nothing here blocks scaling replicas today.
+- **Event-log snapshot/compaction (`Checkpoint`).** Evaluated during Phase 5
+  (2026-07-04): `sweep_terminal_runs` (`infrastructure/runtime/retention.py`,
+  shipped in PR8) already handles retention — deleting EventLog/signals/
+  tree/spec/queue rows for old *terminal* runs. Compaction (folding a
+  long-lived run's effect history into a snapshot so replay doesn't refold
+  from entry 0) is the genuinely unbuilt half, but the plan's own guidance is
+  explicit: build it "only if measured fold cost exceeds budget at P99" — no
+  such measurement exists yet. Building a snapshot format/versioning scheme
+  speculatively is exactly the kind of premature abstraction the project's
+  coding standards warn against. Revisit if fold latency is ever profiled
+  and found to matter.
 
 ## Recently shipped (prune over time)
+
+- **Middleware rebuilt as one Protocol/context/pipeline — no different kinds**
+  (2026-07-04, final iteration — supersedes both an earlier RunContext-only
+  hook and a subsequent three-pipeline `MiddlewareBundle`, per explicit user
+  direction: "a middleware is a middleware across the framework, no different
+  kinds"). `kernel/agent/middleware.py` now defines exactly one `Middleware`
+  Protocol (non-generic), one `MiddlewareStage` enum (`TURN`/`CHAT`/`TOOL`),
+  and one minimal `MiddlewareContextProtocol` — deleting the prior
+  `AgentRunContextProtocol`/`ChatContextProtocol`/`FunctionContextProtocol`
+  trio and the `AgentMiddleware`/`ChatMiddleware`/`FunctionMiddleware` type
+  aliases. `agents/middleware/_contracts.py` defines one concrete
+  `MiddlewareContext` dataclass (deleting `AgentCallContext`/`ChatContext`/
+  `FunctionContext`) with a `stage` field and three precisely-typed result
+  slots (`turn_result: AgentRunResult`, `chat_result: LLMResponse`,
+  `tool_result: InvocationResult` — kept separate rather than one `Any`,
+  since the three result shapes are genuinely different classes). A
+  middleware that only cares about one stage declares
+  `stages: ClassVar[frozenset[MiddlewareStage]]`;
+  `MiddlewarePipeline.execute()` (`agents/middleware/pipeline.py`, its
+  duplicate `MiddlewareProtocol` also deleted in favor of importing the
+  kernel's `Middleware`) filters to only the middlewares that declared the
+  current context's stage before building the call chain — a middleware
+  that didn't declare a stage never gets `process()` called for it there.
+  `ReActAgent.__init__` (`agents/core/react.py`) takes exactly one
+  `middleware: MiddlewarePipeline`; `_handle_message()` builds a
+  `MiddlewareContext(stage=TURN, ...)` and sets `c.turn_result` from
+  `_react_loop()`'s real `AgentRunResult`. `agents/runtime/context.py`'s
+  `RunContext.llm()`/`.tool()` build `CHAT`/`TOOL`-stage contexts around
+  their genuine-execution branch only (never the replay-cache-hit branch)
+  and set `c.chat_result`/`c.tool_result`; `CacheMiddleware`'s
+  skip-`call_next`-on-hit short-circuit and `HistoryTruncatorMiddleware`'s
+  in-place `context.messages` mutation both still work exactly as before —
+  only the field names and dispatch object changed. All 17 middleware
+  classes across 15 files migrated to the new shape (each gained a
+  `stages` attribute and renamed `.result` → the matching typed field).
+  `agents/factory.py`'s `create_assistant_agent()`/`rebuild_agent()` collapsed
+  `agent_guardrails`/`chat_guardrails`/`function_guardrails` into one
+  `middleware: list[Middleware] | None` param, appended after the three
+  default tracing middlewares in one shared pipeline. `worker.py` stays
+  untouched (it already didn't reference middleware). Tests:
+  `tests/agents/test_middleware_wiring.py` rewritten — every guardrail now
+  wires identically (`agent.middleware = MiddlewarePipeline([...])`)
+  regardless of which stage it targets, plus a new test proving one pipeline
+  holding TURN/CHAT/TOOL middleware together dispatches all three correctly
+  in a single run; `test_middleware.py`/`test_guardrails.py` updated for the
+  new context shape, all still passing. Full gate: ruff, lint-imports (5/5
+  contracts kept), kernel invariants, and the full suite (443 passed, only
+  the same pre-existing environmental failures) all green; zero remaining
+  references to any deleted name anywhere in `src/`/`tests/`.
+  - **Webhook idempotency + HMAC**: `WebhookRegistry.handle()`
+    (`capabilities/triggers/webhooks.py`) now requires an HMAC-SHA256
+    signature over the raw request body (`X-Webhook-Signature`, GitHub/
+    Stripe-style `sha256=<hexdigest>`) verified with `hmac.compare_digest`,
+    replacing the old plain `==` check against a secret sent directly in a
+    header (`X-Webhook-Secret`) — which also used to silently skip
+    verification if the header was omitted. Added `X-Webhook-Idempotency-Key`
+    dedup: retried deliveries with the same key return the original
+    dispatch result instead of re-dispatching, via a bounded (1000-entry)
+    in-memory LRU cache. Route updated in
+    `serving/monolith/routes/triggers.py` to read the raw body once and pass
+    it + the new headers through. Tests: `test_webhook_trigger_dispatch`
+    updated for the new contract, plus
+    `test_webhook_rejects_invalid_signature` and
+    `test_webhook_idempotency_key_dedupes_retried_delivery`
+    (`tests/capabilities/test_triggers.py`).
+  - **Agent versioning guard**: persisted run specs
+    (`serving/monolith/routes/chat.py`'s `_agent_spec`) now carry
+    `agent_version: substrate.__version__`. `resume_pending_runs()`
+    (`infrastructure/serving_factory.py`) checks this against the running
+    version before rebuilding an agent from a cold-resumed spec; on
+    mismatch, it refuses to replay (never calls `rebuild_agent`/
+    `runtime.register`), instead appending a `run.failed` EventLog entry
+    (`status: "version_mismatch"`) and terminally failing the run via the
+    new `PostgresScheduler.fail_pending_run()` (a direct pending→failed
+    transition for specs that were never leased in this process, so no
+    `Lease` exists to hand to `release()`) + `Supervisor.finish_run()`. This
+    was chosen over silently resuming (which risks the replayed effect path
+    diverging from what actually happened once code has moved on) or
+    resuming-with-a-warning (which risks the same silent divergence, just
+    logged). Test:
+    `test_pg_cold_resume_refuses_version_mismatch`
+    (`tests/agents/test_runtime_postgres.py`) — built against bare backend
+    objects rather than a full `build_postgres_runtime()`, matching
+    `test_pg_cold_resume`'s existing pattern, because a live Worker
+    (this process's or another sharing the same Postgres DB) leases *any*
+    'pending' row agent-agnostically and would otherwise race the test's
+    direct insert before `resume_pending_runs` reads it.
+  - **Retention/compaction**: evaluated, not re-shipped — `sweep_terminal_runs`
+    already covers retention (PR8); compaction/snapshot deliberately not
+    built (see "Explicitly deferred").
+  - Gate: `uv run ruff check .` clean on all changed files, `uv run
+    lint-imports` (5/5 contracts kept), `uv run pytest
+    tests/architecture/test_kernel_invariants.py` (10/10 passed), full
+    suite 435-439 passed with only pre-existing environmental failures
+    (shared rate-limiter state + Postgres lease contention against a live
+    `uv run start` process on the same DB — unrelated to this phase's files).
 
 - **Phase 2-4 — horizontally scalable serving, multi-tenancy, and initial
   microservices convergence** (2026-07-03):

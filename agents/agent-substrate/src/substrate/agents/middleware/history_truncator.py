@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
 from substrate.logger import setup_logging
-from substrate.agents.middleware._contracts import ChatContext
+from substrate.agents.middleware._contracts import MiddlewareContext
+from substrate.kernel.agent.middleware import MiddlewareStage
 
 logger = setup_logging()
 
@@ -14,13 +15,15 @@ class HistoryTruncatorMiddleware:
     Keeps any system messages intact while dropping the oldest non-system messages.
     """
 
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.CHAT})
+
     def __init__(self, *, max_messages: int = 30) -> None:
         self.max_messages = max_messages
 
     async def process(
-        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
-        messages = context.messages
+        messages = context.messages or []
         if len(messages) > self.max_messages:
             system_msgs = [m for m in messages if getattr(m, "role", None) == "system"]
             other_msgs = [m for m in messages if getattr(m, "role", None) != "system"]

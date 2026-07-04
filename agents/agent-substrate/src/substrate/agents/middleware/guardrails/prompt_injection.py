@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.middleware._contracts import AgentCallContext
+from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.exceptions import MiddlewareTermination
+from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.core.content import TextBlock
 
 _INJECTION_PATTERNS: list[re.Pattern[str]] = [
@@ -30,6 +31,8 @@ _INJECTION_PATTERNS: list[re.Pattern[str]] = [
 class PromptInjectionMiddleware:
     """Detect common prompt injection / jailbreak attempts."""
 
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.TURN})
+
     def __init__(
         self,
         *,
@@ -44,13 +47,14 @@ class PromptInjectionMiddleware:
                     raise ValueError(f"Invalid extra_pattern regex '{p}': {e}") from e
 
     async def process(
-        self, context: AgentCallContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
-        if not context.messages:
+        messages = context.messages or []
+        if not messages:
             await call_next()
             return
 
-        last_msg = context.messages[-1]
+        last_msg = messages[-1]
         text = " ".join(b.text for b in last_msg.content if isinstance(b, TextBlock))
 
         for pattern in self._patterns:

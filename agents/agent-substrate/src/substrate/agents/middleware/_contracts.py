@@ -1,4 +1,4 @@
-"""Middleware context types and agent result types."""
+"""The one middleware context, plus agent run result types."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from substrate.kernel import ChatMessage, Tool
+from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.llm import LLMResponse
-from substrate.kernel.tools import ToolExecutionResult
+from substrate.kernel.tools.chain import InvocationResult
 
 
 # ---------------------------------------------------------------------------
@@ -55,36 +56,44 @@ class AgentRunResult:
 
 
 # ---------------------------------------------------------------------------
-# Middleware context types
+# The one middleware context
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class AgentCallContext:
+@dataclass(kw_only=True)
+class MiddlewareContext:
+    """The one context shape every middleware in the framework receives.
+
+    ``stage`` says which of the three call sites constructed this instance
+    (``react.py``'s ``_handle_message()`` for TURN;
+    ``RunContext.llm()``/``.tool()`` for CHAT/TOOL) — fields not meaningful
+    for that stage are simply ``None``. Each of the three result fields is
+    precisely typed rather than a single loose ``Any``, since the three
+    result shapes (``AgentRunResult``/``LLMResponse``/``InvocationResult``)
+    are genuinely different classes middleware reads real members off of.
+    """
+
+    stage: MiddlewareStage
     agent_name: str
     run_id: str
-    session_id: str
-    messages: list[ChatMessage]
-    result: AgentRunResult | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    # TURN — one agent.run() inbox message
+    session_id: str | None = None
+    messages: list[ChatMessage] | None = None  # also the CHAT-stage per-call window
+    turn_result: AgentRunResult | None = None
 
-@dataclass
-class ChatContext:
-    agent_name: str
-    run_id: str
-    messages: list[ChatMessage]
-    system_instructions: str
-    tools: list[Tool] | None
-    result: LLMResponse | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    # CHAT — one model.generate() call
+    system_instructions: str | None = None
+    tools: list[Tool] | None = None
+    chat_result: LLMResponse | None = None
 
-
-@dataclass
-class FunctionContext:
-    agent_name: str
-    run_id: str
-    function_name: str
-    arguments: dict[str, Any]
-    result: ToolExecutionResult | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    # TOOL — one tool.execute() call
+    function_name: str | None = None
+    arguments: dict[str, Any] | None = None
+    # InvocationResult — the actual wire-form ``RunContext.tool()`` returns
+    # (``status``/``text``/``structured``). It's frozen (pydantic
+    # ``model_config = {"frozen": True}``), so a middleware that wants to
+    # modify it must reassign via
+    # ``context.tool_result = context.tool_result.model_copy(update={...})``.
+    tool_result: InvocationResult | None = None

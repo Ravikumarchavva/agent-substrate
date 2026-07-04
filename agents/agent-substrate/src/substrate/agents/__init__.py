@@ -31,10 +31,10 @@ from substrate.agents.llm import (
 )
 from substrate.agents.middleware import (
     AuditLoggerMiddleware,
+    Middleware,
+    MiddlewareStage,
     MiddlewarePipeline,
-    AgentCallContext,
-    ChatContext,
-    FunctionContext,
+    MiddlewareContext,
     RateLimiterMiddleware,
     RetryMiddleware,
     CacheMiddleware,
@@ -44,6 +44,7 @@ from substrate.agents.middleware import (
     HistoryTruncatorMiddleware,
     AgentTracingMiddleware,
     ChatTracingMiddleware,
+    FunctionTracingMiddleware,
     ContentFilterMiddleware,
     PromptInjectionMiddleware,
     MaxTokenMiddleware,
@@ -87,9 +88,9 @@ __all__ = [
     "get_model_profile",
     "list_models",
     # middleware
-    "AgentCallContext",
-    "ChatContext",
-    "FunctionContext",
+    "Middleware",
+    "MiddlewareStage",
+    "MiddlewareContext",
     "RateLimiterMiddleware",
     "RetryMiddleware",
     "CacheMiddleware",
@@ -100,6 +101,7 @@ __all__ = [
     # observability
     "AgentTracingMiddleware",
     "ChatTracingMiddleware",
+    "FunctionTracingMiddleware",
     # guardrails
     "ContentFilterMiddleware",
     "PromptInjectionMiddleware",

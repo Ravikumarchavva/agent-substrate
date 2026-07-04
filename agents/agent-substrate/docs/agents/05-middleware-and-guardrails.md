@@ -4,7 +4,7 @@
 
 This page is about the layers that wrap an agent's work without *being* the
 agent's work. **Middleware** is the machinery that runs *around* every model
-call, every tool call, and every whole run — to cache, retry, log, truncate, and
+call, every tool call, and every whole turn — to cache, retry, log, truncate, and
 measure. **Guardrails** are a specialized branch of that same machinery whose job
 is not to *help* the call but to *judge* it, and to **stop the run** when a line
 is crossed.
@@ -13,7 +13,7 @@ is crossed.
     [Middleware (concept)](../concepts/middleware.md) tells the *why* of wrapping
     cross-cutting concerns; [Guardrails (concept)](../concepts/guardrails.md)
     tells the *why* of safety checks that can halt. **This page is the precise
-    L1 implementation** — the real classes, the three context types, the exact
+    L1 implementation** — the real classes, the one context type, the exact
     halt mechanism. We cross-link heavily and try not to repeat the stories.
 
 !!! tip "Two analogies to hold the whole page"
@@ -26,10 +26,21 @@ is crossed.
     look and wave you through. A guardrail is the one that, if it doesn't like
     what it sees, says *"you're not getting on this flight"* — the run stops dead.
 
-This is the `agents/` layer (L1). It builds on the frozen kernel (L0) contracts —
-`ChatMessage`, `LLMResponse`, `Tool`, `ToolExecutionResult`, and the
-`MiddlewareTermination` error — but never reaches up into `capabilities` or
+This is the `agents/` layer (L1), built on top of the frozen kernel (L0)
+contract in `kernel/agent/middleware.py` (`Middleware`, `MiddlewareStage`,
+`MiddlewareContextProtocol`) — but never reaches up into `capabilities` or
 `fabric`.
+
+!!! note "One middleware concept, not three"
+    Earlier designs in this framework gave "agent middleware," "chat
+    middleware," and "function middleware" separate context types and
+    separate pipelines. That's gone: there is exactly one `Middleware`
+    Protocol, one `MiddlewareContext` dataclass, and one `MiddlewarePipeline`
+    per agent. `MiddlewareStage` (`TURN`/`CHAT`/`TOOL`) is a *value* on the
+    context saying which moment a given instance represents — not a
+    different kind of middleware. A middleware that only cares about one
+    moment declares that via a `stages` class attribute; the pipeline itself
+    skips calling `process()` for any stage a middleware didn't declare.
 
 ---
 
@@ -73,14 +84,13 @@ reverse. A layer has three moves:
 
 ### The contract
 
-`MiddlewareProtocol` is the whole interface. It is generic over the context type
-(`ContextT_contra` is contravariant, so a middleware written against a base
-context still works for a more specific one).
+`Middleware` (`kernel/agent/middleware.py`) is the whole interface — one shape,
+used identically by every middleware regardless of what it wraps:
 
 ```python
-class MiddlewareProtocol(Protocol[ContextT_contra]):
+class Middleware(Protocol):
     async def process(
-        self, context: ContextT_contra, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None: ...
 ```
 
@@ -97,17 +107,18 @@ class TimingMiddleware:
 !!! note "Middleware returns nothing — the context IS the channel"
     `process` returns `None`. It never *returns* a value. Instead it **reads and
     writes a shared `context` object** that flows through the whole chain: read
-    the inputs before `call_next()`, read or mutate `context.result` /
-    `context.metadata` after.
+    the inputs before `call_next()`, read or mutate the relevant result field
+    (`turn_result`/`chat_result`/`tool_result`) / `context.metadata` after.
 
 ### How the pipeline builds the chain
 
-`MiddlewarePipeline.execute(context, final)` does one clever thing: it folds the
-list of middlewares into a recursive `call_next()` chain, where the *innermost*
+`MiddlewarePipeline.execute(context, final)` does two things: it filters out
+any middleware that didn't declare interest in `context.stage`, then folds
+the remaining list into a recursive `call_next()` chain where the *innermost*
 `call_next()` is `final` — the actual work being wrapped.
 
 ```python
-class MiddlewarePipeline(Generic[ContextT]):
+class MiddlewarePipeline:
     def __init__(self, middlewares=None) -> None:
         self._middlewares = list(middlewares or [])
 
@@ -115,19 +126,23 @@ class MiddlewarePipeline(Generic[ContextT]):
         self._middlewares.append(middleware)
 
     async def execute(self, context, final) -> None:
+        active = [mw for mw in self._middlewares
+                  if context.stage in getattr(mw, "stages", _ALL_STAGES)]
+
         async def build_chain(idx: int) -> None:
-            if idx >= len(self._middlewares):
+            if idx >= len(active):
                 await final(context)              # innermost: do the real work
                 return
             # this middleware's call_next() is "run the next index"
-            await self._middlewares[idx].process(context, lambda: build_chain(idx + 1))
+            await active[idx].process(context, lambda: build_chain(idx + 1))
 
         await build_chain(0)
 ```
 
 So `MiddlewarePipeline([A, B, C])` produces the call tree
-`A( B( C( final ) ) )`. The first middleware in the list is the **outermost**
-layer of the onion.
+`A( B( C( final ) ) )` for whichever of A/B/C declared interest in the current
+stage. The first middleware in the list is the **outermost** layer of the onion
+— for that stage.
 
 ### Watching the chain unwind
 
@@ -145,41 +160,73 @@ sequenceDiagram
     C->>R: call_next()
     Note over R: before — note attempt count
     R->>F: call_next()
-    F-->>R: returns (ctx.result is now set)
+    F-->>R: returns (ctx.tool_result is now set)
     Note over R: after — call succeeded, no retry
     R-->>C: unwinds
-    Note over C: after — store ctx.result in cache
+    Note over C: after — store ctx.tool_result in cache
     C-->>P: done
 ```
 
 ---
 
-## The three context types
+## The one context type
 
-Middleware wraps three *different things*, so there are three context dataclasses
-in `_contracts.py`. Each one carries the inputs going in and a `result` slot
-coming out, plus a free-form `metadata` dict for layers to scribble on. They all
-live as plain dataclasses — no I/O, no surprises.
+Middleware wraps three *different moments*, but there is **one** context
+dataclass, `MiddlewareContext` (`agents/middleware/_contracts.py`). A `stage`
+field says which moment a given instance represents; fields that don't apply
+to that stage are simply `None`. It's a plain dataclass — no I/O, no
+surprises.
 
-| Context | Wraps | Key fields | Result type |
-|---|---|---|---|
-| `AgentCallContext` | A whole `agent.run()` | `agent_name`, `run_id`, `session_id`, `messages` | `AgentRunResult` |
-| `ChatContext` | A single model call | `agent_name`, `run_id`, `messages`, `system_instructions`, `tools` | `LLMResponse` |
-| `FunctionContext` | A single tool call | `agent_name`, `run_id`, `function_name`, `arguments` | `ToolExecutionResult` |
+| Field | Populated for | Meaning |
+|---|---|---|
+| `stage`, `agent_name`, `run_id`, `metadata` | always | shared by every stage |
+| `session_id`, `turn_result` | `TURN` | one inbox message |
+| `messages` | `TURN`, `CHAT` | the turn's full history (TURN) or this call's window (CHAT) |
+| `system_instructions`, `tools`, `chat_result` | `CHAT` | one model call |
+| `function_name`, `arguments`, `tool_result` | `TOOL` | one tool call |
+
+!!! note "Three result fields, not one loose `result`"
+    `turn_result: AgentRunResult`, `chat_result: LLMResponse`, and
+    `tool_result: InvocationResult` are three separate, precisely-typed
+    fields rather than one `result: Any` — the three result shapes are
+    genuinely different classes, and this way both a middleware author and a
+    type checker know exactly which one is meaningful for a given stage.
+
+!!! note "`InvocationResult` is frozen"
+    `InvocationResult` (`kernel/tools/chain.py`) is the real wire-form
+    `RunContext.tool()` returns — `status: "ok" | "error" | "denied"`, `text`,
+    `structured`. It's frozen (pydantic `model_config = {"frozen": True}`),
+    so a middleware that wants to change it (like `ContentTruncatorMiddleware`)
+    must reassign via `context.tool_result = context.tool_result.model_copy(update={...})`,
+    not mutate in place.
+
+!!! note "TURN fires once per inbox message, not once per agent.run()"
+    A single `agent.run()` call can process several inbox messages in a
+    batch; each gets its own `MiddlewareContext(stage=MiddlewareStage.TURN, ...)`
+    and its own `AgentRunResult`.
 
 ```python
-@dataclass
-class ChatContext:
+@dataclass(kw_only=True)
+class MiddlewareContext:
+    stage: MiddlewareStage
     agent_name: str
     run_id: str
-    messages: list[ChatMessage]
-    system_instructions: str
-    tools: list[Tool] | None
-    result: LLMResponse | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    session_id: str | None = None
+    messages: list[ChatMessage] | None = None
+    turn_result: AgentRunResult | None = None
+
+    system_instructions: str | None = None
+    tools: list[Tool] | None = None
+    chat_result: LLMResponse | None = None
+
+    function_name: str | None = None
+    arguments: dict[str, Any] | None = None
+    tool_result: InvocationResult | None = None
 ```
 
-`AgentRunResult` is the terminal output of a whole run, also defined here (in
+`AgentRunResult` is the terminal output of a whole turn, also defined here (in
 `_contracts.py`, to avoid a circular import with `react.py`):
 
 ```python
@@ -192,30 +239,24 @@ class AgentRunResult:
     error: str | None = None
 ```
 
-!!! tip "These contexts map 1:1 to the three attach levels"
-    `AgentCallContext` ↔ **agent** level, `ChatContext` ↔ **chat** level,
-    `FunctionContext` ↔ **function** level. Pick a middleware's level by which
-    context it accepts — that decision is made just by the type its `process`
-    signature declares. More on levels in [the attach-levels section](#the-three-attach-levels).
-
 ---
 
 ## The built-in middlewares
 
 These ship in `agents/middleware/*.py`. Each is a plain class with a `process`
-method — no base class, no registration.
+method and a `stages` class attribute — no base class, no registration.
 
-| Middleware | Level (context) | What it does |
+| Middleware | Stage | What it does |
 |---|---|---|
-| `CacheMiddleware` | function | Returns a stored `ToolExecutionResult` for an identical `(function_name, args)` — **short-circuits** by skipping `call_next()` |
-| `RetryMiddleware` | chat | Re-runs the inner call on transient errors with exponential backoff + jitter |
-| `RateLimiterMiddleware` | agent | Token-bucket limiter — raises `MiddlewareTermination` when the bucket is empty |
-| `SchemaValidatorMiddleware` | chat | Parses model output against a Pydantic schema, stashes the parsed object in `context.metadata` |
-| `AuditLoggerMiddleware` | agent | Logs RUN START / END / ERROR with timing for compliance |
-| `AgentTracingMiddleware` / `ChatTracingMiddleware` | agent / chat | OpenTelemetry spans (falls back to DEBUG logs if OTel is absent) |
-| `ContentTruncatorMiddleware` | function | Trims an over-long tool result to `max_chars` |
-| `HistoryTruncatorMiddleware` | chat | Drops oldest non-system messages to keep the window under `max_messages` |
-| `FileValidatorMiddleware` | function | Vets file-path arguments (existence, extension, size) — raises `MiddlewareTermination` on a bad file |
+| `CacheMiddleware` | `TOOL` | Returns a stored `InvocationResult` for an identical `(function_name, args)` — **short-circuits** by skipping `call_next()` |
+| `RetryMiddleware` | `CHAT` | Re-runs the inner call on transient errors with exponential backoff + jitter |
+| `RateLimiterMiddleware` | `TURN` | Token-bucket limiter — raises `MiddlewareTermination` when the bucket is empty |
+| `SchemaValidatorMiddleware` | `CHAT` | Parses model output against a Pydantic schema, stashes the parsed object in `context.metadata` |
+| `AuditLoggerMiddleware` | `TURN` | Logs RUN START / END / ERROR with timing for compliance |
+| `AgentTracingMiddleware` / `ChatTracingMiddleware` / `FunctionTracingMiddleware` | `TURN` / `CHAT` / `TOOL` | OpenTelemetry spans (falls back to DEBUG logs if OTel is absent); attached by default to every agent built via `create_assistant_agent()` |
+| `ContentTruncatorMiddleware` | `TOOL` | Trims an over-long tool result to `max_chars` |
+| `HistoryTruncatorMiddleware` | `CHAT` | Drops oldest non-system messages to keep the window under `max_messages` |
+| `FileValidatorMiddleware` | `TOOL` | Vets file-path arguments (existence, extension, size) — raises `MiddlewareTermination` on a bad file |
 
 ### A short-circuit example: the cache
 
@@ -223,16 +264,19 @@ method — no base class, no registration.
 **returns without calling inward** — the tool never actually runs:
 
 ```python
-async def process(self, context: FunctionContext, call_next) -> None:
-    key = self._make_key(context)               # sha256 of {function, args}
-    if key in self._cache:
-        context.metadata["_cache_hit"] = True
-        context.result = self._cache[key]
-        return                                  # ← skip call_next() — short-circuit
+class CacheMiddleware:
+    stages = frozenset({MiddlewareStage.TOOL})
 
-    context.metadata["_cache_hit"] = False
-    await call_next()                           # miss: run the tool for real
-    self._cache[key] = context.result           # then remember the result
+    async def process(self, context: MiddlewareContext, call_next) -> None:
+        key = self._make_key(context)               # sha256 of {function, args}
+        if key in self._cache:
+            context.metadata["_cache_hit"] = True
+            context.tool_result = self._cache[key]
+            return                                  # ← skip call_next() — short-circuit
+
+        context.metadata["_cache_hit"] = False
+        await call_next()                           # miss: run the tool for real
+        self._cache[key] = context.tool_result      # then remember the result
 ```
 
 ### A wrap-and-retry example
@@ -241,18 +285,21 @@ async def process(self, context: FunctionContext, call_next) -> None:
 attempts and re-raising once `max_retries` is exhausted:
 
 ```python
-async def process(self, context: ChatContext, call_next) -> None:
-    attempt = 0
-    while True:
-        try:
-            await call_next()
-            return
-        except self.retryable_exceptions as exc:
-            if attempt >= self.max_retries:
-                raise                                   # give up — propagate
-            delay = _backoff(attempt, self.base_delay, self.max_delay, self.jitter)
-            await asyncio.sleep(delay)
-            attempt += 1
+class RetryMiddleware:
+    stages = frozenset({MiddlewareStage.CHAT})
+
+    async def process(self, context: MiddlewareContext, call_next) -> None:
+        attempt = 0
+        while True:
+            try:
+                await call_next()
+                return
+            except self.retryable_exceptions as exc:
+                if attempt >= self.max_retries:
+                    raise                                   # give up — propagate
+                delay = _backoff(attempt, self.base_delay, self.max_delay, self.jitter)
+                await asyncio.sleep(delay)
+                attempt += 1
 ```
 
 ### Why `SchemaValidator` writes to `metadata`
@@ -264,32 +311,35 @@ stores the parsed object back in `context.metadata["parsed"]`.
 !!! warning "`LLMResponse` is frozen — the parsed object cannot live on it"
     `LLMResponse` is a frozen, slotted dataclass; you cannot attach a `parsed`
     attribute to it. So the validator deliberately puts its output in
-    `context.metadata`, not on `context.result`. Downstream code reads
+    `context.metadata`, not on `context.chat_result`. Downstream code reads
     `context.metadata["parsed"]` and `context.metadata["schema_valid"]`.
 
 ```python
-async def process(self, context: ChatContext, call_next) -> None:
-    await call_next()                                    # let the model answer first
-    schema = context.metadata.get("response_schema")
-    if schema is None or context.result is None:
-        return
-    text = context.result.content[0].text               # first TextBlock
-    try:
-        obj = schema.model_validate_json(text)
-        context.metadata["parsed"] = obj                # ← parsed object lives here
-        context.metadata["schema_valid"] = True
-    except Exception as exc:
-        context.metadata["schema_valid"] = False        # fail open — don't halt
+class SchemaValidatorMiddleware:
+    stages = frozenset({MiddlewareStage.CHAT})
+
+    async def process(self, context: MiddlewareContext, call_next) -> None:
+        await call_next()                                    # let the model answer first
+        schema = context.metadata.get("response_schema")
+        if schema is None or context.chat_result is None:
+            return
+        text = context.chat_result.content[0].text           # first TextBlock
+        try:
+            obj = schema.model_validate_json(text)
+            context.metadata["parsed"] = obj                # ← parsed object lives here
+            context.metadata["schema_valid"] = True
+        except Exception as exc:
+            context.metadata["schema_valid"] = False        # fail open — don't halt
 ```
 
 ---
 
-## The three attach levels
+## The three dispatch points
 
-Because middleware wraps three different things, it attaches at three levels.
-Each level is the natural home for a different family of checks, and each level
-sees its matching context type as control flows through one turn of the agent
-loop.
+One `MiddlewarePipeline` is dispatched at three different moments in an
+agent's execution. Each moment builds its own `MiddlewareContext` (with the
+matching `stage` and only the relevant fields populated) and calls the
+*same* pipeline object.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
@@ -299,13 +349,13 @@ flowchart TD
     classDef tool    fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20,font-weight:bold
 
     IN(["Worker calls agent.run(ctx, inbox)"]):::runtime
-    subgraph AG["agent level — AgentCallContext (once per run)"]
+    subgraph AG["_handle_message() — stage=TURN (once per inbox message)"]
         direction TB
         LOOP["ReAct loop iterates"]:::agent
-        subgraph CH["chat level — ChatContext (each model call)"]
+        subgraph CH["RunContext.llm() — stage=CHAT (each model call)"]
             MODEL["model.generate()"]:::runtime
         end
-        subgraph FN["function level — FunctionContext (each tool call)"]
+        subgraph FN["RunContext.tool() — stage=TOOL (each tool call)"]
             TOOL["tool.execute()"]:::tool
         end
         LOOP --> CH --> FN --> LOOP
@@ -318,47 +368,76 @@ flowchart TD
     style FN fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
 ```
 
-| Level | Context | Runs | Good home for |
-|---|---|---|---|
-| **agent** | `AgentCallContext` | once per `agent.run()` | input/prompt checks, rate limiting, audit logging |
-| **chat** | `ChatContext` | around every model call | token caps, retry, history truncation, output judging |
-| **function** | `FunctionContext` | around every tool call | caching, PII checks, tool-arg validation, file checks |
+| Stage | Fires | Good home for |
+|---|---|---|
+| `MiddlewareStage.TURN` | once per inbox message | input/prompt checks, rate limiting, audit logging |
+| `MiddlewareStage.CHAT` | around every model call | token caps, retry, history truncation, output judging |
+| `MiddlewareStage.TOOL` | around every tool call | caching, PII checks, tool-arg validation, file checks |
 
 !!! note "How wiring works today"
-    `ReActAgent` accepts a single `middleware: MiddlewarePipeline`, and the
-    **Worker** runs it at the **agent** level — it wraps the whole `agent.run`:
+    `ReActAgent` accepts a single `middleware: MiddlewarePipeline`
+    (`agents/middleware/pipeline.py`). The identical pipeline object is
+    dispatched at three real call sites, not by the Worker:
 
     ```python
-    # agents/runtime/worker.py
-    if middleware is not None:
-        await middleware.execute(ctx, lambda c: agent.run(c, inbox_msgs))
-    else:
-        await agent.run(ctx, inbox_msgs)
+    # agents/core/react.py — _handle_message(), once per inbox message
+    call_ctx = MiddlewareContext(stage=MiddlewareStage.TURN, ...)
+    await self.middleware.execute(call_ctx, _final)   # _final runs _react_loop()
+
+    # agents/runtime/context.py — RunContext.llm(), once per model call
+    chat_ctx = MiddlewareContext(stage=MiddlewareStage.CHAT, ...)
+    await middleware.execute(chat_ctx, _final)        # _final does the real generate call
+
+    # agents/runtime/context.py — RunContext.tool(), once per tool call
+    func_ctx = MiddlewareContext(stage=MiddlewareStage.TOOL, ...)
+    await middleware.execute(func_ctx, _final)        # _final does the real tool invoke
     ```
 
-    The chat and function levels are the same pattern applied around the
-    model call and the tool call inside the loop. The level a middleware belongs
-    to is fixed by the context type its `process` signature accepts — a
-    `ChatContext` middleware is a chat middleware, a `FunctionContext` middleware
-    is a function middleware.
+    The Worker itself (`agents/runtime/worker.py`) doesn't reference
+    middleware at all — it just calls `await agent.run(ctx, inbox_msgs)`.
+    A middleware that only cares about one stage declares that via its
+    `stages` class attribute; the pipeline skips calling `process()` for any
+    stage it didn't declare, so a `TOOL`-only middleware never fires — not
+    even a no-op pass-through — during a `TURN` or `CHAT` dispatch.
 
 ### Composing a pipeline
 
-Order the list **outermost-first** — index 0 is the outer onion layer:
+Order the list **outermost-first** — index 0 is the outer onion layer. A
+`TURN`-stage middleware and a `CHAT`-stage middleware sit in the exact same
+list; there's no separate slot to route them into:
 
 ```python
 from substrate.agents.middleware import (
-    MiddlewarePipeline, RateLimiterMiddleware, CacheMiddleware,
-    RetryMiddleware, SchemaValidatorMiddleware,
+    MiddlewarePipeline, RateLimiterMiddleware,
+    CacheMiddleware, RetryMiddleware, SchemaValidatorMiddleware,
 )
 
-pipeline = MiddlewarePipeline([
-    RateLimiterMiddleware(max_rate=60),   # outermost
-    CacheMiddleware(),
-    RetryMiddleware(max_retries=3),
-    SchemaValidatorMiddleware(),          # innermost, closest to the real call
-])
-agent = ReActAgent("bot", model=model, middleware=pipeline)
+agent = ReActAgent(
+    "bot", model=model,
+    middleware=MiddlewarePipeline([
+        RateLimiterMiddleware(max_rate=60),      # TURN
+        RetryMiddleware(max_retries=3),          # CHAT — outermost of the two CHAT ones
+        SchemaValidatorMiddleware(),             # CHAT — innermost, closest to the real call
+        CacheMiddleware(),                       # TOOL
+    ]),
+)
+```
+
+Or use `create_assistant_agent(...)` (`agents/factory.py`), which already
+attaches the default tracing middlewares and appends yours to the same list:
+
+```python
+from substrate.agents.factory import create_assistant_agent
+
+agent = create_assistant_agent(
+    model_client=model,
+    middleware=[
+        RateLimiterMiddleware(max_rate=60),
+        RetryMiddleware(max_retries=3),
+        SchemaValidatorMiddleware(),
+        CacheMiddleware(),
+    ],
+)
 ```
 
 ---
@@ -374,14 +453,14 @@ or block it (`raise`).
 human-readable `.message`. Its whole purpose is to be an *intentional* stop, not
 a crash.
 
-| Guardrail | Level | What it catches |
+| Guardrail | Stage | What it catches |
 |---|---|---|
-| `PromptInjectionMiddleware` | agent | "ignore previous instructions", "jailbreak", "developer mode", and similar override attempts in the last message |
-| `ContentFilterMiddleware` | agent | Banned keywords or regex patterns in the last message |
-| `MaxTokenMiddleware` | chat | Input over a token budget (uses `tiktoken` if available, else a chars/token estimate) |
-| `LLMJudgeMiddleware` | chat | Unsafe model *output*, classified by a secondary LLM |
-| `PIIDetectionMiddleware` | function | Email / phone / SSN / credit-card / IP patterns leaking into tool arguments |
-| `ToolCallValidationMiddleware` | function | Calls to blocked tools, calls outside an allow-list, or blocked argument patterns |
+| `PromptInjectionMiddleware` | `TURN` | "ignore previous instructions", "jailbreak", "developer mode", and similar override attempts in the last message |
+| `ContentFilterMiddleware` | `TURN` | Banned keywords or regex patterns in the last message |
+| `MaxTokenMiddleware` | `CHAT` | Input over a token budget (uses `tiktoken` if available, else a chars/token estimate) |
+| `LLMJudgeMiddleware` | `CHAT` | Unsafe model *output*, classified by a secondary LLM |
+| `PIIDetectionMiddleware` | `TOOL` | Email / phone / SSN / credit-card / IP patterns leaking into tool arguments |
+| `ToolCallValidationMiddleware` | `TOOL` | Calls to blocked tools, calls outside an allow-list, or blocked argument patterns |
 
 ### How a guardrail halts
 
@@ -389,38 +468,44 @@ The shape is uniform: do the check around `call_next()`; if the policy fires,
 raise. `MaxTokenMiddleware` checks **before** the call (it's gating the input):
 
 ```python
-async def process(self, context: ChatContext, call_next) -> None:
-    total_text = "".join(
-        " ".join(b.text for b in m.content if isinstance(b, TextBlock)) + " "
-        for m in context.messages
-    )
-    token_count = self._count_tokens(total_text.strip())
-    if token_count > self.max_tokens:
-        raise MiddlewareTermination(          # ← hard stop, before the model runs
-            f"MaxToken: Input too long: {token_count} tokens — limit is {self.max_tokens}"
+class MaxTokenMiddleware:
+    stages = frozenset({MiddlewareStage.CHAT})
+
+    async def process(self, context: MiddlewareContext, call_next) -> None:
+        total_text = "".join(
+            " ".join(b.text for b in m.content if isinstance(b, TextBlock)) + " "
+            for m in context.messages
         )
-    await call_next()
+        token_count = self._count_tokens(total_text.strip())
+        if token_count > self.max_tokens:
+            raise MiddlewareTermination(          # ← hard stop, before the model runs
+                f"MaxToken: Input too long: {token_count} tokens — limit is {self.max_tokens}"
+            )
+        await call_next()
 ```
 
 `LLMJudgeMiddleware` checks **after** the call (it's judging the output), and is
 the one guardrail that uses a *second* model — its own `LLMClient` — to classify:
 
 ```python
-async def process(self, context: ChatContext, call_next) -> None:
-    await call_next()                                   # let the primary model answer
-    if not context.result:
-        return
-    text = " ".join(b.text for b in context.result.content if isinstance(b, TextBlock))
-    try:
-        judgment = await self._classify(text)           # ask the JUDGE model
-        if not judgment.get("safe", True):
-            raise MiddlewareTermination(
-                f"LLMJudge flagged as unsafe: {judgment.get('reason')}"
-            )
-    except MiddlewareTermination:
-        raise                                           # a real block — propagate it
-    except Exception as e:
-        logger.warning("[LLMJudge] error — failing open: %s", e)   # judge itself broke
+class LLMJudgeMiddleware:
+    stages = frozenset({MiddlewareStage.CHAT})
+
+    async def process(self, context: MiddlewareContext, call_next) -> None:
+        await call_next()                                   # let the primary model answer
+        if not context.chat_result:
+            return
+        text = " ".join(b.text for b in context.chat_result.content if isinstance(b, TextBlock))
+        try:
+            judgment = await self._classify(text)           # ask the JUDGE model
+            if not judgment.get("safe", True):
+                raise MiddlewareTermination(
+                    f"LLMJudge flagged as unsafe: {judgment.get('reason')}"
+                )
+        except MiddlewareTermination:
+            raise                                           # a real block — propagate it
+        except Exception as e:
+            logger.warning("[LLMJudge] error — failing open: %s", e)   # judge itself broke
 ```
 
 ```mermaid
@@ -447,7 +532,8 @@ flowchart LR
 When `MiddlewareTermination` propagates all the way out of `agent.run`, the
 **Worker** catches it in its exception handler and recognizes it as a guardrail
 trip — distinct from a budget exhaustion and, crucially, from an unexpected
-crash:
+crash. This handling is entirely dispatch-agnostic: it doesn't matter whether
+the exception came from a `TURN`, `CHAT`, or `TOOL`-stage middleware.
 
 ```python
 # agents/runtime/worker.py — terminal exception handling
@@ -518,8 +604,10 @@ infrastructure blip (a false positive).
 
 ### Composing guardrails
 
-Guardrails are middleware, so they compose in a `MiddlewarePipeline` like
-anything else — order them outermost-first:
+Guardrails are middleware, so they compose in the one `MiddlewarePipeline` like
+anything else — `PromptInjectionMiddleware` (`TURN`), `MaxTokenMiddleware`
+(`CHAT`), and `PIIDetectionMiddleware` (`TOOL`) all go in the same list, in the
+order you want them to wrap:
 
 ```python
 from substrate.agents.middleware import MiddlewarePipeline
@@ -527,12 +615,14 @@ from substrate.agents.middleware.guardrails import (
     PromptInjectionMiddleware, MaxTokenMiddleware, PIIDetectionMiddleware,
 )
 
-pipeline = MiddlewarePipeline([
-    PromptInjectionMiddleware(),          # agent — check input first
-    MaxTokenMiddleware(max_tokens=8000),  # chat  — bound cost
-    PIIDetectionMiddleware(),             # function — vet tool arguments
-])
-agent = ReActAgent("bot", model=model, middleware=pipeline)
+agent = ReActAgent(
+    "bot", model=model,
+    middleware=MiddlewarePipeline([
+        PromptInjectionMiddleware(),           # TURN — check input first
+        MaxTokenMiddleware(max_tokens=8000),   # CHAT — bound cost
+        PIIDetectionMiddleware(),              # TOOL — vet tool arguments
+    ]),
+)
 ```
 
 ---
@@ -541,14 +631,18 @@ agent = ReActAgent("bot", model=model, middleware=pipeline)
 
 | Piece | Location |
 |---|---|
-| `MiddlewarePipeline`, `MiddlewareProtocol` | `agents/middleware/pipeline.py` |
-| Context types + `AgentRunResult`, `ToolCallRecord` | `agents/middleware/_contracts.py` |
+| `MiddlewarePipeline` | `agents/middleware/pipeline.py` |
+| `Middleware` Protocol, `MiddlewareStage` enum, `MiddlewareContextProtocol` | `kernel/agent/middleware.py` |
+| `MiddlewareContext`, `AgentRunResult`, `ToolCallRecord` | `agents/middleware/_contracts.py` |
 | Built-in middlewares (`Cache`, `Retry`, `RateLimiter`, …) | `agents/middleware/*.py` |
-| Observability (`AgentTracing`, `ChatTracing`) | `agents/middleware/observability.py` |
+| Observability (`AgentTracing`, `ChatTracing`, `FunctionTracing`) | `agents/middleware/observability.py` |
 | Guardrail middlewares | `agents/middleware/guardrails/` |
 | `MiddlewareTermination` | `kernel/core/errors.py` |
-| Pipeline executed around the run + trip handling | `agents/runtime/worker.py` |
+| Pipeline dispatched once per turn | `agents/core/react.py` (`_handle_message`) |
+| Pipeline dispatched per LLM/tool call | `agents/runtime/context.py` (`RunContext.llm()`/`.tool()`) |
+| Trip handling (dispatch-agnostic) | `agents/runtime/worker.py` (exception handling only — no middleware reference) |
+| Default tracing + `middleware=` wiring | `agents/factory.py` |
 | Public exports | `agents/middleware/__init__.py` |
 
 **Next:** [Tools: Toolbox & Invoker](06-tools.md) — how agents act on the world,
-and the dispatch path that function-level middleware and guardrails wrap.
+and the dispatch path that tool-stage middleware and guardrails wrap.

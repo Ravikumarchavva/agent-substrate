@@ -154,6 +154,20 @@ class PostgresScheduler:
                 json.dumps(spec),
             )
 
+    async def fail_pending_run(self, run_id: RunId) -> None:
+        """Terminally fail a ``pending`` run that was never leased in this process.
+
+        Used by cold-resume when a persisted agent spec fails a precondition
+        (e.g. a version guard) before an agent is ever rebuilt for it, so
+        there's no ``Lease`` to hand to ``release()``.
+        """
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE ravi_run_queue SET status = 'failed', worker_id = NULL "
+                "WHERE run_id = $1 AND status = 'pending'",
+                run_id,
+            )
+
     async def pending_run_specs(self) -> list[tuple[RunId, AgentId, dict]]:
         """Return (run_id, agent_id, spec) for all pending runs that have a spec.
 

@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
 from substrate.logger import setup_logging
-from substrate.agents.middleware._contracts import FunctionContext
+from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.exceptions import MiddlewareTermination
+from substrate.kernel.agent.middleware import MiddlewareStage
 
 logger = setup_logging()
 
 
 class FileValidatorMiddleware:
     """Validates file paths in tool arguments before execution."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.TOOL})
 
     def __init__(
         self,
@@ -23,13 +26,14 @@ class FileValidatorMiddleware:
         self.max_file_size_bytes = max_file_size_bytes
 
     async def process(
-        self, context: FunctionContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
-        if not context.arguments:
+        arguments = context.arguments or {}
+        if not arguments:
             await call_next()
             return
 
-        for key, value in context.arguments.items():
+        for key, value in arguments.items():
             if not isinstance(value, str):
                 continue
             if "file" not in key.lower() and "path" not in key.lower():

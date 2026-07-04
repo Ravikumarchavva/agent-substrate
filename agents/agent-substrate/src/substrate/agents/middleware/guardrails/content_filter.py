@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
-from substrate.agents.middleware._contracts import AgentCallContext
+from substrate.agents.middleware._contracts import MiddlewareContext
 from substrate.exceptions import MiddlewareTermination
+from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.core.content import TextBlock
 
 
 class ContentFilterMiddleware:
     """Block messages that match any pattern in a configurable blocklist."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.TURN})
 
     def __init__(
         self,
@@ -26,13 +29,14 @@ class ContentFilterMiddleware:
                 raise ValueError(f"Invalid blocked_pattern regex '{p}': {e}") from e
 
     async def process(
-        self, context: AgentCallContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
-        if not context.messages:
+        messages = context.messages or []
+        if not messages:
             await call_next()
             return
 
-        last_msg = context.messages[-1]
+        last_msg = messages[-1]
         text = " ".join(b.text for b in last_msg.content if isinstance(b, TextBlock))
 
         text_lower = text.lower()

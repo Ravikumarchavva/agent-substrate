@@ -1,40 +1,51 @@
-"""Generic MiddlewarePipeline."""
+"""MiddlewarePipeline — dispatches the one Middleware shape, stage-filtered."""
 
 from __future__ import annotations
 
-from typing import Generic, TypeVar, Protocol, Callable, Awaitable, Sequence
+from typing import Awaitable, Callable, Sequence
 
-ContextT = TypeVar("ContextT")
-# Middleware only consumes its context (parameter position), so the Protocol's
-# type var is contravariant — a Middleware[BaseCtx] is usable as Middleware[SubCtx].
-ContextT_contra = TypeVar("ContextT_contra", contravariant=True)
+from substrate.agents.middleware._contracts import MiddlewareContext
+from substrate.kernel.agent.middleware import Middleware, MiddlewareStage
 
-
-class MiddlewareProtocol(Protocol[ContextT_contra]):
-    async def process(
-        self, context: ContextT_contra, call_next: Callable[[], Awaitable[None]]
-    ) -> None: ...
+_ALL_STAGES = frozenset(MiddlewareStage)
 
 
-class MiddlewarePipeline(Generic[ContextT]):
-    """Executes a chain of middlewares via call_next() pattern."""
+class MiddlewarePipeline:
+    """Executes a chain of middlewares via the call_next() pattern.
 
-    def __init__(
-        self, middlewares: Sequence[MiddlewareProtocol[ContextT]] | None = None
-    ) -> None:
+    Every middleware in the pipeline implements the identical
+    ``Middleware.process(context, call_next)`` shape — there is no
+    per-stage pipeline variant. A middleware that only cares about one
+    stage (or a few) declares that via a class-level ``stages`` attribute
+    (a ``frozenset[MiddlewareStage]``); this pipeline skips calling
+    ``process()`` for any stage a middleware didn't declare, so a
+    TOOL-only middleware never runs — not even a no-op pass-through —
+    during a TURN or CHAT dispatch. A middleware that omits ``stages``
+    entirely runs at every stage.
+    """
+
+    def __init__(self, middlewares: Sequence[Middleware] | None = None) -> None:
         self._middlewares = list(middlewares or [])
 
-    def add(self, middleware: MiddlewareProtocol[ContextT]) -> None:
+    def add(self, middleware: Middleware) -> None:
         self._middlewares.append(middleware)
 
     async def execute(
-        self, context: ContextT, final: Callable[[ContextT], Awaitable[None]]
+        self,
+        context: MiddlewareContext,
+        final: Callable[[MiddlewareContext], Awaitable[None]],
     ) -> None:
+        active = [
+            mw
+            for mw in self._middlewares
+            if context.stage in getattr(mw, "stages", _ALL_STAGES)
+        ]
+
         async def build_chain(idx: int) -> None:
-            if idx >= len(self._middlewares):
+            if idx >= len(active):
                 await final(context)
                 return
-            await self._middlewares[idx].process(context, lambda: build_chain(idx + 1))
+            await active[idx].process(context, lambda: build_chain(idx + 1))
 
         await build_chain(0)
 

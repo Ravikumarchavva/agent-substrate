@@ -81,8 +81,8 @@ class MiddlewareTermination(KernelError):
     the rate limit was exceeded, etc.  The agent loop catches it and produces
     an ``AgentRunResult`` with ``status="guardrail_tripped"``.
 
-    Raise from any ``AgentMiddleware``, ``ChatMiddleware``, or
-    ``FunctionMiddleware`` to stop execution at that level.
+    Raise from any middleware (see ``substrate.kernel.agent.middleware``)
+    to stop execution at whichever stage it's running in.
     """
 
     def __init__(self, message: str) -> None:

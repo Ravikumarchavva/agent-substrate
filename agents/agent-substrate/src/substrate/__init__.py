@@ -28,9 +28,8 @@ if TYPE_CHECKING:
     )
     from substrate.agents.middleware import (
         AgentRunResult,
-        AgentCallContext,
-        ChatContext,
-        FunctionContext,
+        MiddlewareContext,
+        MiddlewareStage,
         AuditLoggerMiddleware,
         CacheMiddleware,
         ContentFilterMiddleware,
@@ -78,9 +77,8 @@ __all__ = [
     "ContextConfig",
     "SlidingWindowCompaction",
     # middleware
-    "AgentCallContext",
-    "ChatContext",
-    "FunctionContext",
+    "MiddlewareContext",
+    "MiddlewareStage",
     "MiddlewarePipeline",
     "AuditLoggerMiddleware",
     "CacheMiddleware",
@@ -132,9 +130,8 @@ _LAZY: dict[str, tuple[str, str]] = {
     "ContextConfig": ("substrate.agents.context", "ContextConfig"),
     "SlidingWindowCompaction": ("substrate.agents.context", "SlidingWindowCompaction"),
     # middleware
-    "AgentCallContext": ("substrate.agents.middleware", "AgentCallContext"),
-    "ChatContext": ("substrate.agents.middleware", "ChatContext"),
-    "FunctionContext": ("substrate.agents.middleware", "FunctionContext"),
+    "MiddlewareContext": ("substrate.agents.middleware", "MiddlewareContext"),
+    "MiddlewareStage": ("substrate.agents.middleware", "MiddlewareStage"),
     "MiddlewarePipeline": ("substrate.agents.middleware", "MiddlewarePipeline"),
     "AuditLoggerMiddleware": ("substrate.agents.middleware", "AuditLoggerMiddleware"),
     "CacheMiddleware": ("substrate.agents.middleware", "CacheMiddleware"),

@@ -8,22 +8,27 @@ from substrate.agents.middleware import (
     ContentFilterMiddleware,
     MaxTokenMiddleware,
     PromptInjectionMiddleware,
-    AgentCallContext,
-    ChatContext,
+    MiddlewareContext,
+    MiddlewareStage,
     MiddlewarePipeline,
 )
 from substrate.kernel.core.content import ChatMessage, TextBlock
 
 
-def _agent_ctx(text: str) -> AgentCallContext:
+def _agent_ctx(text: str) -> MiddlewareContext:
     msg = ChatMessage(role="user", content=[TextBlock(text=text)])
-    return AgentCallContext(
-        agent_name="test", run_id="r1", session_id="s1", messages=[msg]
+    return MiddlewareContext(
+        stage=MiddlewareStage.TURN,
+        agent_name="test",
+        run_id="r1",
+        session_id="s1",
+        messages=[msg],
     )
 
 
-def _chat_ctx(messages: list[ChatMessage]) -> ChatContext:
-    return ChatContext(
+def _chat_ctx(messages: list[ChatMessage]) -> MiddlewareContext:
+    return MiddlewareContext(
+        stage=MiddlewareStage.CHAT,
         agent_name="test",
         run_id="r1",
         messages=messages,

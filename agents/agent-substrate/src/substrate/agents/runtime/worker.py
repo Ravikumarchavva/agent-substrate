@@ -301,7 +301,6 @@ class Worker:
             )
 
         hooks = getattr(agent, "hooks", None)
-        middleware = getattr(agent, "middleware", None)
         if hooks:
             from substrate.agents.hooks.manager import HookEvent
 
@@ -332,10 +331,7 @@ class Worker:
 
         heartbeat_task = asyncio.create_task(_heartbeat(), name=f"hb-{run_id[:8]}")
         try:
-            if middleware is not None:
-                await middleware.execute(ctx, lambda c: agent.run(c, inbox_msgs))
-            else:
-                await agent.run(ctx, inbox_msgs)
+            await agent.run(ctx, inbox_msgs)
 
             # Ack all processed messages
             for msg in inbox_msgs:

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import random
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, ClassVar
 
 from substrate.logger import setup_logging
-from substrate.agents.middleware._contracts import ChatContext
+from substrate.agents.middleware._contracts import MiddlewareContext
+from substrate.kernel.agent.middleware import MiddlewareStage
 
 logger = setup_logging()
 
@@ -17,6 +18,8 @@ def _backoff(attempt: int, base: float, max_delay: float, jitter: float) -> floa
 
 class RetryMiddleware:
     """Retries LLM execution on transient errors using exponential backoff."""
+
+    stages: ClassVar[frozenset[MiddlewareStage]] = frozenset({MiddlewareStage.CHAT})
 
     def __init__(
         self,
@@ -34,7 +37,7 @@ class RetryMiddleware:
         self.jitter = jitter
 
     async def process(
-        self, context: ChatContext, call_next: Callable[[], Awaitable[None]]
+        self, context: MiddlewareContext, call_next: Callable[[], Awaitable[None]]
     ) -> None:
         attempt = 0
         while True:

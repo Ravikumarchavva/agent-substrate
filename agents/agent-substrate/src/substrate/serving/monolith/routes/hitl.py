@@ -75,4 +75,54 @@ async def hitl_status(
         raise HTTPException(status_code=404, detail="Thread not found")
 
     pending = ctx.bridge_registry.get_pending_hitl(str(thread_id))
+    if pending:
+        return {"pending": pending}
+
+    # In-memory bridge has nothing (e.g. the monolith process restarted —
+    # BridgeRegistry._bridges is not durable, only the run itself is). The
+    # run's own suspension IS durable (ravi_run_queue.status='suspended'),
+    # and its input.requested card content lives in the EventLog (logged
+    # exactly once now via ctx.log_once — see agents/runtime/context.py),
+    # so reconstruct the card from there instead of just returning empty.
+    pending = await _durable_pending_hitl(ctx, str(thread_id))
     return {"pending": pending}
+
+
+async def _durable_pending_hitl(ctx: ServerDependencies, thread_id: str) -> list[dict]:
+    from substrate.kernel.runtime.ids import RunStatus
+
+    runtime = getattr(ctx, "runtime", None)
+    if runtime is None:
+        return []
+    found = await runtime.scheduler.find_run_for_thread(thread_id)
+    if found is None:
+        return []
+    run_id, status = found
+    if status != RunStatus.SUSPENDED:
+        return []
+
+    last_request: dict | None = None
+    async for entry in runtime.event_log.read(run_id):
+        if entry.kind == "input.requested":
+            last_request = entry.payload
+    if last_request is None:
+        return []
+
+    request_id = last_request.get("request_id", "")
+    card = {
+        "request_id": request_id,
+        "run_id": run_id,
+        "question": last_request.get("question", ""),
+        "context": last_request.get("context", ""),
+        "options": last_request.get("options", []),
+        "allow_freeform": last_request.get("allow_freeform", True),
+    }
+    # Rehydrate the in-memory bridge so a subsequent POST /chat/respond
+    # resolves through the normal path instead of needing its own lookup.
+    bridge = await ctx.bridge_registry.acquire(thread_id)
+    bridge.register_signal_request(
+        request_id,
+        run_id,
+        card={k: card[k] for k in ("question", "context", "options", "allow_freeform")},
+    )
+    return [card]

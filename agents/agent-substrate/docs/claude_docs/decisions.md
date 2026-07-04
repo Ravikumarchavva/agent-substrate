@@ -234,3 +234,66 @@ verification criteria demanded sub-15s cancel latency, and adding a second
 live-Task-reachable channel alongside heartbeat would be complexity without
 a stated requirement driving it — revisit if a real latency requirement
 shows up.
+
+---
+
+## Single-flight and cancel are enforced by the Scheduler/Supervisor, never a per-process lock or Event
+
+**Decision:** "only one active run per thread" and "stop this run" are both
+enforced entirely through durable state (`ravi_run_queue.thread_id` +
+unique partial index; `Supervisor.cancel()`'s `cancel_requested`/terminal-mark)
+— never through an `asyncio.Lock`/`asyncio.Event` owned by the HTTP request
+handler (`ServerDependencies.thread_locks`/`cancel_registry`, both deleted
+in Phase 2, 2026-07-03).
+
+**Why:** a per-process primitive is invisible to every OTHER replica. Two
+uvicorn workers (or two pods) each hold their own empty `thread_locks` dict
+— a second `POST /chat` for a thread already streaming on a *different*
+replica sails right through the check. Same failure mode for cancel: a
+`POST /cancel` landing on a different replica than the one running the
+stream found nothing in its local `cancel_registry` and silently did
+nothing. Neither of these was a live bug in a single-replica deployment,
+which is exactly why it went unnoticed — it only manifests once you actually
+scale out, which is the whole point of Phase 2.
+
+**How resolution propagates:** the SSE-serving replica never needs to be
+told about a cross-replica cancel directly — it just keeps doing what it
+already does, tailing the run's EventLog. A durable cancel eventually
+appends a `run.cancelled` entry (via the owning worker's heartbeat noticing
+`cancel_requested`, or immediately if suspended), and `AgentStreamSession`'s
+tail loop treats that exactly like any other termination. No new "who do I
+need to notify" logic was needed on the reading side at all — see
+`AgentStreamSession._check_disconnect`'s docstring.
+
+**Ruled out:** adding a cross-replica pub/sub channel (Redis, `pg_notify`)
+purely to propagate "someone cancelled this" faster. The EventLog's own
+LISTEN/NOTIFY-backed tail already delivers `run.cancelled` to every replica
+tailing that run — a second notification channel would be solving a
+problem that doesn't exist.
+
+---
+
+## Deferring a fix is a recorded decision, not a silent gap
+
+**Decision:** when a sub-item of a larger remediation phase turns out to be
+a substantially bigger feature than the surrounding fix (e.g. migrating
+tool-approval off Futures onto signals, or wiring `agent_runtime` to run an
+`AskHumanTool` against `human_gate`), it gets scoped out explicitly and
+recorded in `roadmap.md`'s "Explicitly deferred" section — with the
+reasoning for why it's out of scope — rather than either (a) rushed through
+shallowly to claim the phase "done," or (b) silently dropped with no trace.
+
+**Why:** "Phase 2/3/4 done" as a checkbox is meaningless if it papers over
+a rushed, undertested piece bolted onto otherwise-solid work — the next
+person (or the next session) needs to know precisely which claims are
+backed by tests and which are explicitly punted, not have to re-derive that
+by reading a diff. A recorded deferral with reasoning also does the
+scoping work once, so it doesn't need re-litigating from scratch next time
+someone considers picking it up.
+
+**How to apply:** before marking any multi-part item "done," ask whether
+every sub-bullet actually shipped with test coverage. If not, split it: the
+parts that did ship are "done," the parts that didn't get their own
+"deferred" entry with the concrete reason (bigger scope, negligible real
+risk, needs a design decision first, etc.) — not folded into a vague
+"mostly done."

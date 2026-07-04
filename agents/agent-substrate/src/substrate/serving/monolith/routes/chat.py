@@ -9,6 +9,7 @@ from substrate.logger import setup_logging
 
 import json
 import re
+import uuid
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
@@ -63,10 +64,11 @@ from substrate.serving.monolith.sse.bridge import WebHITLBridge
 from substrate.serving.shared.rate_limit import rate_limit
 from substrate.serving.protocol import (
     PROTOCOL_VERSION,
+    HelloEvent,
     TurnCompletedEvent,
     ToolResultEvent,
 )
-from substrate.serving.stream import AgentStreamSession
+from substrate.serving.stream import AgentStreamSession, tail_wire_events
 
 logger = setup_logging()
 
@@ -809,6 +811,80 @@ async def chat(
 
     return StreamingResponse(
         content=sse_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Protocol-Version": PROTOCOL_VERSION,
+        },
+    )
+
+
+@router.get("/stream/{thread_id}", tags=["chat"])
+async def stream_thread(
+    thread_id: uuid.UUID,
+    ctx: ServerDependencies = Depends(get_ctx),
+    db: AsyncSession = Depends(get_db),
+    user: AuthClaims = Depends(get_current_user),
+):
+    """Reconnect to a thread's active run and relay its remaining wire events.
+
+    For a browser that lost its original SSE connection (refresh, network
+    drop) while the run kept executing durably server-side — NOT for
+    starting a new run (use POST /chat for that). Read-only: this does not
+    persist anything. The original request's AgentStreamSession already owns
+    persistence for the run via its detached background task (see
+    stream.session.AgentStreamSession.events()'s docstring) — that task
+    keeps tailing and persisting independently of any UI connection until
+    the run reaches a terminal state, regardless of whether anyone
+    reconnects. A second tailer here calling persist_turn/persist_tool would
+    save the same turns twice.
+
+    A still-pending HITL card is NOT re-sent here — GET /hitl/status/{id}
+    (called on page load, see ravi-ui's loadMessages) already restores that
+    from the EventLog. This endpoint picks up from whatever's already known
+    (``last_seq`` at connect time) onward, so the two are complementary, not
+    duplicative.
+    """
+    thread = await get_owned_thread(db, thread_id, user)
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    found = await ctx.runtime.scheduler.find_run_for_thread(str(thread_id))
+
+    async def _empty_generator() -> AsyncIterator[str]:
+        yield "data: [DONE]\n\n"
+
+    if found is None:
+        # No active run for this thread — nothing to reconnect to (already
+        # completed, or never started). Not an error: the frontend's own
+        # message history load already has the final state in this case.
+        return StreamingResponse(
+            _empty_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    run_id, _status = found
+    from_seq = await ctx.runtime.event_log.last_seq(run_id) + 1
+
+    async def sse_generator() -> AsyncIterator[str]:
+        _thread_id_token = current_thread_id.set(str(thread_id))
+        try:
+            yield f"data: {json.dumps(HelloEvent().model_dump(mode='json'), default=str)}\n\n"
+            async for wire in tail_wire_events(
+                ctx.runtime.event_log, run_id, from_seq=from_seq
+            ):
+                yield f"data: {json.dumps(wire.model_dump(mode='json'), default=str)}\n\n"
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception("Reconnect stream error for thread %s", thread_id)
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+        finally:
+            current_thread_id.reset(_thread_id_token)
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        sse_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

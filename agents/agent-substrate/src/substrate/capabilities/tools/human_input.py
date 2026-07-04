@@ -479,7 +479,13 @@ class AskHumanTool:
                 "run_id": ctx.run_id,
             }
             try:
-                await ctx._log("input.requested", log_payload)
+                # log_once, not _log: this whole tool body re-executes on
+                # every resume (the outer tool() wrapper's effect can never
+                # be recorded before a suspend — see RunContext.log_once's
+                # docstring), so a plain _log here would append a duplicate
+                # input.requested entry — and a duplicate question card in
+                # the UI — every time this run suspends and resumes.
+                await ctx.log_once("input.requested", log_payload)
             except Exception:
                 pass
             signal_payload = await ctx.sleep_until_signal(f"hitl:{request.request_id}")

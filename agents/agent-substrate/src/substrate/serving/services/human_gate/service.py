@@ -10,7 +10,7 @@ from substrate.logger import setup_logging
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import redis.asyncio as aioredis
 from sqlalchemy import select, update
@@ -19,6 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from substrate.serving.services.human_gate.models import HITLRequest
 from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
+
+if TYPE_CHECKING:
+    from substrate.kernel.runtime.wakeup import SignalBus
 
 logger = setup_logging()
 
@@ -87,8 +90,22 @@ async def resolve_request(
     responded_by: Optional[str] = None,
     redis_client: Optional[aioredis.Redis] = None,
     event_bus: Optional[EventBus] = None,
+    signal_bus: Optional["SignalBus"] = None,
 ) -> Optional[HITLRequest]:
-    """Resolve a HITL request and notify the waiting agent via Redis pub/sub."""
+    """Resolve a HITL request and notify the waiting agent.
+
+    Two independent notification channels, since this service predates the
+    Phase-1 durable runtime and nothing has migrated off Redis pub/sub yet:
+    ``redis_client`` (legacy, for any consumer still watching
+    ``HITL_RESPONSE_CHANNEL``) and ``signal_bus`` (the durable Phase-1
+    ``SignalBus`` — same ``hitl:{request_id}`` signal name
+    ``AskHumanTool``'s signal-suspend path waits on via
+    ``ctx.sleep_until_signal``, see ``capabilities/tools/human_input.py``).
+    Both are optional and independent; pass whichever your deployment needs.
+    Requires ``req.run_id`` to be set (only true for requests created for a
+    signal-suspended run — a bare Future-based approval request has no
+    run_id to signal).
+    """
     now = datetime.now(timezone.utc)
     await db.execute(
         update(HITLRequest)
@@ -122,6 +139,22 @@ async def resolve_request(
         )
         await redis_client.publish(channel, response_data)
 
+    # Durable signal — the mechanism AskHumanTool's signal-suspend path
+    # actually waits on. "action" is what _shape_result() branches on
+    # (capabilities/tools/human_input.py); map from this service's own
+    # status vocabulary ("answered"/"approved"/"rejected"/"cancelled") since
+    # the two were built independently and don't share a payload shape.
+    if signal_bus is not None and req.run_id:
+        await signal_bus.signal(
+            req.run_id,
+            f"hitl:{request_id}",
+            {
+                "action": "cancelled" if status == "cancelled" else "answered",
+                "value": response_value,
+                "responded_by": responded_by,
+            },
+        )
+
     # Publish event for observability
     if event_bus:
         await event_bus.publish(
@@ -148,6 +181,7 @@ async def cancel_pending_for_thread(
     *,
     reason: str = "cancelled",
     redis_client: Optional[aioredis.Redis] = None,
+    signal_bus: Optional["SignalBus"] = None,
 ) -> int:
     """Cancel all pending HITL requests for a thread. Returns count cancelled."""
     pending = await get_pending_for_thread(db, thread_id)
@@ -158,5 +192,6 @@ async def cancel_pending_for_thread(
             status="cancelled",
             response_value=reason,
             redis_client=redis_client,
+            signal_bus=signal_bus,
         )
     return len(pending)

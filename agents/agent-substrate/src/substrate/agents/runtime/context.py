@@ -234,6 +234,31 @@ class RunContext:
         )
         self._seq_cursor = seq
 
+    async def log_once(self, kind: str, payload: JsonObject | None = None) -> None:
+        """Journaled EventLog append — happens at most once across all replay
+        attempts, unlike plain ``_log`` (which appends unconditionally on
+        every call).
+
+        Needed for any informational entry inside a tool body that can
+        suspend via ``SuspendInterrupt``: the outer ``tool()`` wrapper's own
+        effect is deliberately never recorded before a suspend
+        (``SuspendInterrupt`` is a ``BaseException`` specifically so it
+        bypasses the ``except Exception`` that would otherwise record it —
+        see ``tool()``), so the entire tool body — including everything
+        before the suspend point — re-executes on every resume. A plain
+        ``_log`` call in that path (e.g. ``ask_human``'s
+        ``input.requested``) would append a duplicate entry, and a
+        duplicate UI card, once per suspend/resume cycle. This doesn't:
+        the first attempt logs it and records a marker effect; every
+        subsequent replay hits that marker and skips the append entirely.
+        """
+        path = self._alloc_path()
+        effect_id = Effect.make_id(self.run_id, path, "log_once", {"kind": kind})
+        if self._lookup_effect(effect_id) is not None:
+            return
+        await self._log(kind, payload or {})
+        await self._record_effect(effect_id, "ok", {})
+
     # ------------------------------------------------------------------
     # Effect cache — lookup/record against the EventLog (replaces Journal)
     # ------------------------------------------------------------------
@@ -492,7 +517,21 @@ class RunContext:
     ) -> RunHandle:
         """Spawn a child run.  Returns a handle; does NOT wait for completion."""
         self.check()
-        sup = supervision or Supervision.root(child_agent)
+        if supervision is not None:
+            sup = supervision
+        elif self._meta.supervision is not None:
+            # Inherit the caller's own execution_budget/spawn_budget (this
+            # run was itself ctx.spawn()'d, and its Supervision was
+            # persisted by Supervisor.spawn() and rehydrated by the Worker
+            # at lease time — see RunMeta.supervision / Worker._run_agent).
+            # spawn_child() defaults the child's execution_budget to the
+            # parent's; previously this branch never existed and every
+            # child got Supervision.root() unconditionally — an unlimited,
+            # unrelated-to-parent budget regardless of what constraints the
+            # spawning run itself was under.
+            sup = self._meta.supervision.spawn_child(child_agent)
+        else:
+            sup = Supervision.root(child_agent)
         # The spawn effect's identity, and the boot message's correlation_id,
         # must come from OUR OWN replay-stable path allocation — never from
         # anything the Supervisor computes fresh (e.g. the parent log's
@@ -759,7 +798,13 @@ class RunContext:
         # nested under this call's path rather than colliding with siblings.
         self._enter_scope()
         try:
-            await self._log(
+            # log_once, not _log: a tool that suspends internally (raises
+            # SuspendInterrupt, e.g. ask_human) never lets this call's outer
+            # effect_id get recorded (see class docstring / log_once), so
+            # this exact line re-runs on every resume. A plain _log would
+            # duplicate the tool.call entry — and the UI card built from
+            # it — once per suspend/resume cycle.
+            await self.log_once(
                 "tool.call",
                 {"call_id": effect_id, "tool_name": name, "args": args},
             )

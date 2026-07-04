@@ -222,5 +222,19 @@ class Supervisor(Protocol):
         """
         ...
 
+    async def supervision_of(self, run_id: RunId) -> Supervision | None:
+        """Return the ``Supervision`` a spawned run was given at spawn time.
+
+        ``None`` for a run never spawned via ``ctx.spawn()`` (a top-level
+        ``submit()``) or on backends without persistence for it. The Worker
+        calls this when leasing a run to populate ``RunMeta.supervision``,
+        which is what lets ``ctx.spawn()`` inherit the caller's own
+        ``execution_budget``/``spawn_budget`` (via
+        ``Supervision.spawn_child()``) instead of always falling back to
+        ``Supervision.root()`` — a fresh, unlimited budget with no relation
+        to whatever constraints the calling run itself was given.
+        """
+        ...
+
 
 __all__ = ["RunHandle", "RunResult", "Supervisor"]

@@ -225,7 +225,22 @@ class Worker:
         # always None here regardless of what was enqueued: RunMeta.tenant_id
         # existed end-to-end (kernel type, request path) but nothing ever
         # actually populated it on the resume/execute side.
-        meta = RunMeta(run_id=run_id, cancellation=token, tenant_id=lease.tenant)
+        #
+        # supervision_of() is None for a top-level submit() (never spawned)
+        # or an in-memory run before any spawn happened to persist one — in
+        # both cases ctx.spawn() falls back to Supervision.root() exactly as
+        # it always has. For a run that WAS itself ctx.spawn()'d, this is
+        # what lets its own ctx.spawn() calls inherit the caller's
+        # execution_budget via Supervision.spawn_child() instead of handing
+        # every grandchild a fresh, unlimited budget unrelated to whatever
+        # constraints its own parent was given.
+        supervision = await self._supervisor.supervision_of(run_id)
+        meta = RunMeta(
+            run_id=run_id,
+            cancellation=token,
+            tenant_id=lease.tenant,
+            supervision=supervision,
+        )
         self._tokens[run_id] = token
 
         llm_client = getattr(agent, "model", None)

@@ -163,9 +163,23 @@ class WebHITLBridge:
         """True when at least one HITL request is awaiting user response."""
         return bool(self._pending) or bool(self._signal_requests)
 
-    def register_signal_request(self, request_id: str, run_id: str) -> None:
-        """Register a signal-based HITL request so resolve() can fire the signal."""
+    def register_signal_request(
+        self, request_id: str, run_id: str, card: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Register a signal-based HITL request so resolve() can fire the signal.
+
+        ``card`` (question/context/options/allow_freeform — the same fields
+        the ``InputRequestedEvent`` wire event carries) is cached the same
+        way ``_pending_payloads`` caches a Future-based request's payload,
+        so ``get_pending_info()`` can return full card content on reconnect
+        instead of just a bare ``request_id``. Without it, ``GET
+        /hitl/status/{thread_id}`` returned a stub the frontend had nothing
+        to render — the card silently didn't come back after a page
+        refresh even though the run was still correctly suspended.
+        """
         self._signal_requests[request_id] = run_id
+        if card is not None:
+            self._pending_payloads[request_id] = card
         logger.debug("Bridge: registered signal HITL %s → run %s", request_id, run_id)
 
     def get_pending_info(self) -> list[dict[str, Any]]:
@@ -182,10 +196,18 @@ class WebHITLBridge:
             }
             for rid in self._pending
         ]
-        # Signal-based (human input) requests — only request_id and run_id known
+        # Signal-based (human input) requests — full card if register_signal_
+        # request() was given one, else just request_id/run_id (a genuinely
+        # older/incomplete registration, not expected in normal operation).
         for rid, run_id in self._signal_requests.items():
             if not any(r.get("request_id") == rid for r in result):
-                result.append({"request_id": rid, "run_id": run_id})
+                result.append(
+                    {
+                        "request_id": rid,
+                        "run_id": run_id,
+                        **(self._pending_payloads.get(rid) or {}),
+                    }
+                )
         return result
 
     # -- Disconnect / cancellation -----------------------------------------------

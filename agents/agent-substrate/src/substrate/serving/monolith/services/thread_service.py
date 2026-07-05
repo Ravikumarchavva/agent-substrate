@@ -116,10 +116,7 @@ async def list_threads(
     ``routes/admin.py::list_all_threads`` for the same join pattern.
     """
     query = (
-        select(Thread)
-        .order_by(Thread.updated_at.desc())
-        .limit(limit)
-        .offset(offset)
+        select(Thread).order_by(Thread.updated_at.desc()).limit(limit).offset(offset)
     )
 
     # Exclude scheduled tasks threads from regular recent threads list

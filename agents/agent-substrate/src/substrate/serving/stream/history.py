@@ -88,7 +88,10 @@ async def _append_to_thread(
 
 
 async def append_mcp_app_context(
-    event_log: "EventLog", scheduler: "Scheduler", thread_id: str, payload: dict[str, Any]
+    event_log: "EventLog",
+    scheduler: "Scheduler",
+    thread_id: str,
+    payload: dict[str, Any],
 ) -> None:
     """Log an interactive MCP App's context update to the thread's run.
 
@@ -109,7 +112,11 @@ async def append_user_message(
     if the thread has no runs at all yet — there is nothing to attach to.
     """
     return await _append_to_thread(
-        event_log, scheduler, thread_id, "user.message", {"text": text, "attachments": []}
+        event_log,
+        scheduler,
+        thread_id,
+        "user.message",
+        {"text": text, "attachments": []},
     )
 
 

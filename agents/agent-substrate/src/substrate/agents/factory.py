@@ -203,7 +203,11 @@ async def step_rows_from_log(
                 if saw_tool_result:
                     _flush()
                 if current is None:
-                    current = {"type": "assistant_message", "output": "", "generation": {}}
+                    current = {
+                        "type": "assistant_message",
+                        "output": "",
+                        "generation": {},
+                    }
                 current["output"] = (current.get("output") or "") + payload.get(
                     "text", ""
                 )
@@ -213,7 +217,11 @@ async def step_rows_from_log(
                 if saw_tool_result:
                     _flush()
                 if current is None:
-                    current = {"type": "assistant_message", "output": "", "generation": {}}
+                    current = {
+                        "type": "assistant_message",
+                        "output": "",
+                        "generation": {},
+                    }
                 tool_calls = current.setdefault("generation", {}).setdefault(
                     "tool_calls", []
                 )

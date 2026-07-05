@@ -1381,15 +1381,11 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
 
         async def generate_stream(self, messages, *, options, ctx=None):
             yield TextDelta(text=self._answer)
-            yield CompletionEvent(
-                content=[TextBlock(text=self._answer)], usage=Usage()
-            )
+            yield CompletionEvent(content=[TextBlock(text=self._answer)], usage=Usage())
 
     from substrate.agents.core.react import ReActAgent
 
-    agent1 = ReActAgent(
-        "pg-crash-resume-agent", model=ScriptedLLM("first answer")
-    )
+    agent1 = ReActAgent("pg-crash-resume-agent", model=ScriptedLLM("first answer"))
     thread_id = f"thread-crash-resume-{_agent_id('x').key}"
 
     await pg_runtime.register(agent1)
@@ -1400,9 +1396,7 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
         ),
         correlation_id=thread_id,
     )
-    run1 = await pg_runtime.submit(
-        agent1.id, msg1, thread_id=thread_id, max_retries=0
-    )
+    run1 = await pg_runtime.submit(agent1.id, msg1, thread_id=thread_id, max_retries=0)
     async for entry in pg_runtime.event_log.tail(run1):
         if entry.kind == "run.completed":
             break
@@ -1419,9 +1413,7 @@ async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
         ),
         correlation_id=thread_id,
     )
-    run2 = await pg_runtime.submit(
-        agent2.id, msg2, thread_id=thread_id, max_retries=0
-    )
+    run2 = await pg_runtime.submit(agent2.id, msg2, thread_id=thread_id, max_retries=0)
     async for entry in pg_runtime.event_log.tail(run2):
         if entry.kind == "run.completed":
             break

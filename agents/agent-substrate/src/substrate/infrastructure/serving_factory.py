@@ -409,7 +409,7 @@ async def init_runtime_services(
     pipeline_engine = PipelineEngine(registry=registry, data_store=data_store)
     pipeline_store = PipelineStore(session_factory=session_factory)
 
-    trigger_scheduler = TriggerScheduler(redis_url=cfg.REDIS_URL, runtime=runtime)
+    trigger_scheduler = TriggerScheduler(runtime=runtime)
     webhook_registry = WebhookRegistry(runtime=runtime)
     condition_monitor = ConditionMonitor(runtime=runtime)
 

@@ -1,7 +1,7 @@
-"""Integration tests for Stage 1 Postgres + Redis backends.
+"""Integration tests for Stage 1 Postgres backends.
 
-Requires running Postgres and (for RedisJournal) Redis.
-Skip automatically when DATABASE_URL / REDIS_URL are not reachable.
+Requires running Postgres.
+Skip automatically when DATABASE_URL is not reachable.
 
 Run with infra up:
     make infra-up
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 _PG_URL = os.environ.get(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/agentdb"
 ).replace("+asyncpg", "")
-_REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 
 async def _pg_pool():
@@ -44,19 +43,6 @@ async def pg_pool():
         pytest.skip("Postgres not reachable")
     yield pool
     await pool.close()
-
-
-@pytest.fixture()
-async def redis_client():
-    try:
-        import redis.asyncio as aioredis
-
-        client = aioredis.from_url(_REDIS_URL)
-        await client.ping()
-        yield client
-        await client.aclose()
-    except Exception:
-        pytest.skip("Redis not reachable")
 
 
 # ---------------------------------------------------------------------------
@@ -208,51 +194,6 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
     assert len(dead) == 1
     assert dead[0].msg.id == msg.id
     assert dead[0].last_error == "err2"
-
-
-# ---------------------------------------------------------------------------
-# RedisJournal
-# ---------------------------------------------------------------------------
-
-
-async def test_redis_journal_lookup_miss(redis_client) -> None:
-    from substrate.infrastructure.runtime import RedisJournal
-
-    journal = RedisJournal(redis_client, ttl_seconds=10)
-    result = await journal.lookup("nonexistent-effect-id")
-    assert result is None
-
-
-async def test_redis_journal_record_and_lookup(redis_client) -> None:
-    from substrate.infrastructure.runtime import RedisJournal
-    from substrate.kernel.runtime.effects import EffectResult
-
-    journal = RedisJournal(redis_client, ttl_seconds=10)
-    effect_id = f"test-effect-{id(object())}"
-    result = EffectResult(effect_id=effect_id, status="ok", value={"x": 42})
-    await journal.record(result)
-
-    found = await journal.lookup(effect_id)
-    assert found is not None
-    assert found.status == "ok"
-    assert found.value == {"x": 42}
-
-
-async def test_redis_journal_at_most_once(redis_client) -> None:
-    from substrate.infrastructure.runtime import RedisJournal
-    from substrate.kernel.runtime.effects import EffectResult
-
-    journal = RedisJournal(redis_client, ttl_seconds=10)
-    effect_id = f"test-amo-{id(object())}"
-
-    r1 = EffectResult(effect_id=effect_id, status="ok", value={"v": 1})
-    r2 = EffectResult(effect_id=effect_id, status="ok", value={"v": 2})
-    await journal.record(r1)
-    await journal.record(r2)  # must be a no-op
-
-    found = await journal.lookup(effect_id)
-    assert found is not None
-    assert found.value == {"v": 1}  # first writer wins
 
 
 # ---------------------------------------------------------------------------

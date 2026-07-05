@@ -1,8 +1,12 @@
 """InMemorySupervisor — Stage 0 in-process implementation of Supervisor.
 
-``spawn`` is lifecycle: creates a child run, journals the spawn (so replay
-returns the same child_run_id), delivers the boot message, and enqueues
-the child.  It does NOT wait.
+``spawn`` is lifecycle: creates a child run, records the spawn in
+``_spawn_effects`` (so replay returns the same child_run_id), delivers the
+boot message, and enqueues the child.  It does NOT wait.  Mirrors
+``PostgresSupervisor``'s dedicated ``substrate_spawn_effects`` table — spawn
+dedup is a Supervisor-local concern, not the generic effect Journal (which no
+longer exists; ``ctx.llm()``/``ctx.tool()`` dedup through the EventLog itself
+via ``EffectCache.fold()``).
 
 ``cancel`` cascades through the child's subtree by recursively cancelling
 every child of the cancelled run, then marks the run CANCELLED.
@@ -26,7 +30,6 @@ from substrate.kernel.agent.supervision import Supervision
 if TYPE_CHECKING:
     from substrate.agents.runtime.backends._event_log import InMemoryEventLog
     from substrate.agents.runtime.backends._inbox import InMemoryInbox
-    from substrate.agents.runtime.backends._journal import InMemoryJournal
     from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
     from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
 
@@ -36,15 +39,14 @@ class InMemorySupervisor:
         self,
         event_log: InMemoryEventLog,
         inbox: InMemoryInbox,
-        journal: InMemoryJournal,
         scheduler: InMemoryScheduler,
         signal_bus: InMemorySignalBus,
     ) -> None:
         self._event_log = event_log
         self._inbox = inbox
-        self._journal = journal
         self._scheduler = scheduler
         self._signal_bus = signal_bus
+        self._spawn_effects: dict[str, RunId] = {}
         self._children: dict[RunId, list[RunHandle]] = defaultdict(list)
         self._parent_of: dict[RunId, RunId] = {}
         self._results: dict[RunId, RunResult] = {}
@@ -64,7 +66,7 @@ class InMemorySupervisor:
         path: str,
         correlation_id: str,
     ) -> RunHandle:
-        from substrate.kernel.runtime.effects import Effect, EffectResult
+        from substrate.kernel.runtime.effects import Effect
         from substrate.kernel.runtime.log_entry import RunLogEntry
 
         # effect_id derives ONLY from the caller's own replay-stable `path` —
@@ -77,18 +79,12 @@ class InMemorySupervisor:
         effect_id = Effect.make_id(
             parent, path, "spawn", {"child_agent": str(child_agent)}
         )
-        cached = await self._journal.lookup(effect_id)
-        if cached:
-            child_run_id: RunId = cached.value["child_run_id"]
+        cached = self._spawn_effects.get(effect_id)
+        if cached is not None:
+            child_run_id: RunId = cached
         else:
             child_run_id = new_run_id()
-            await self._journal.record(
-                EffectResult(
-                    effect_id=effect_id,
-                    status="ok",
-                    value={"child_run_id": child_run_id},
-                )
-            )
+            self._spawn_effects[effect_id] = child_run_id
             # Deliver boot message to child inbox, stamped with the caller's
             # replay-stable correlation_id so ctx.ask(handle, ...) can wait
             # for the reply without a second delivery. notify=False: we

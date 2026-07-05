@@ -37,7 +37,6 @@ if TYPE_CHECKING:
 from substrate.kernel.core.identity import AgentId
 from substrate.kernel.messaging.message import Message
 from substrate.agents.runtime.context import Agent
-from substrate.kernel.runtime.effects import Journal
 from substrate.kernel.runtime.fanout import FanoutStrategy
 from substrate.kernel.runtime.follow_graph import FollowGraph
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
@@ -51,7 +50,6 @@ from substrate.agents.runtime.backends._event_log import InMemoryEventLog
 from substrate.agents.runtime.backends._fanout import PushAllFanout
 from substrate.agents.runtime.backends._follow_graph import InMemoryFollowGraph
 from substrate.agents.runtime.backends._inbox import InMemoryInbox
-from substrate.agents.runtime.backends._journal import InMemoryJournal
 from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
 from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
 from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
@@ -91,7 +89,6 @@ class Runtime:
         *,
         event_log: EventLog | None = None,
         inbox: Inbox | None = None,
-        journal: Journal | None = None,
         scheduler: Scheduler | None = None,
         signal_bus: SignalBus | None = None,
         supervisor: Supervisor | None = None,
@@ -99,7 +96,6 @@ class Runtime:
         fanout: FanoutStrategy | None = None,
     ) -> None:
         self._event_log: EventLog = event_log or InMemoryEventLog()
-        self._journal: Journal = journal or InMemoryJournal()
         self._scheduler: Scheduler = scheduler or InMemoryScheduler()
         self._inbox: Inbox = inbox or InMemoryInbox()
         # The inbox→runtime wakeup hook is a runtime concern; wire it on whatever
@@ -372,13 +368,11 @@ class Runtime:
             # caller mixing durable backends must supply an explicit supervisor.
             assert isinstance(self._event_log, InMemoryEventLog)
             assert isinstance(self._inbox, InMemoryInbox)
-            assert isinstance(self._journal, InMemoryJournal)
             assert isinstance(self._scheduler, InMemoryScheduler)
             assert isinstance(self._signal_bus, InMemorySignalBus)
             self._supervisor = InMemorySupervisor(
                 event_log=self._event_log,
                 inbox=self._inbox,
-                journal=self._journal,
                 scheduler=self._scheduler,
                 signal_bus=self._signal_bus,
             )

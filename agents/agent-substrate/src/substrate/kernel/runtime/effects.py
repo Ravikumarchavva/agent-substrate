@@ -1,11 +1,12 @@
-"""Effect and Journal — at-most-once guarantee for external side-effects.
+"""Effect and EffectResult — at-most-once guarantee for external side-effects.
 
 Why this exists
 ---------------
 You cannot make a real-world side-effect (send email, charge card, call an
 external API) atomic with your event log — the external service doesn't
-participate in your transaction.  The Journal provides the closest safe
-approximation: **at-most-once execution** via an idempotent lookup.
+participate in your transaction.  Journaling ``EffectResult`` entries straight
+into the EventLog provides the closest safe approximation: **at-most-once
+execution** via an idempotent lookup.
 
 Protocol on every effect
 ------------------------
@@ -14,13 +15,15 @@ Protocol on every effect
    produces the same id. ``path`` is hierarchical (see ``Effect.make_id``),
    not a flat counter, so a journal-hit ancestor whose body never executes
    cannot desync the ids of everything that comes after it.
-2. ``Journal.lookup(effect_id)`` → hit → return cached result, **do not re-run**.
-3. Miss → execute the effect → ``Journal.record(result)``.
+2. ``EffectCache.lookup(effect_id)`` (folded from the EventLog — see
+   ``agents/runtime/effect_cache.py``) → hit → return cached result, **do not
+   re-run**.
+3. Miss → execute the effect → append an ``effect.result`` log entry.
 
-Crash window: if the worker dies after step 3's *execute* but before *record*,
-the effect may have happened without a journal entry.  On replay the miss path
-runs again — so the effect executes twice in that rare window.  This is the
-unavoidable trade-off: **at-most-once** means we do NOT retry on that
+Crash window: if the worker dies after step 3's *execute* but before the log
+append, the effect may have happened without a journal entry.  On replay the
+miss path runs again — so the effect executes twice in that rare window.  This
+is the unavoidable trade-off: **at-most-once** means we do NOT retry on that
 uncertainty, so you never double-send, but a crash in that window may silently
 lose the effect.
 
@@ -34,7 +37,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Literal, Protocol
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -53,7 +56,7 @@ class Effect(BaseModel):
     (e.g. ``"email.send"``, ``"stripe.charge"``, ``"db.insert"``).
 
     ``spec`` carries the arguments needed to execute the effect — a JSON-
-    serializable dict so the Journal can store it for audit replay.
+    serializable dict so it can be logged for audit replay.
     """
 
     id: str
@@ -96,12 +99,13 @@ class Effect(BaseModel):
 class EffectResult(BaseModel):
     """Cached result of a completed effect execution.
 
-    Stored in the Journal immediately after the external call returns.
-    On replay, ``Journal.lookup(effect_id)`` returns this instead of
+    Logged to the EventLog as an ``effect.result`` entry immediately after the
+    external call returns. On replay, ``EffectCache.fold()`` (built from these
+    entries — see ``agents/runtime/effect_cache.py``) returns this instead of
     re-running the effect.
 
     ``artifact_ref`` is set when the result was offloaded to ``ArtifactStore``
-    (e.g. a 200 MB query result) — the Journal stores only the ref.
+    (e.g. a 200 MB query result) — the log entry stores only the ref.
     """
 
     effect_id: str
@@ -112,31 +116,4 @@ class EffectResult(BaseModel):
     model_config = {"frozen": True}
 
 
-class Journal(Protocol):
-    """Idempotency cache for external effects.
-
-    Implementations: in-memory dict (Stage 0), Postgres table keyed by
-    ``effect_id`` (Stage 1), Redis with TTL (hot path Stage 2+).
-
-    Semantic guarantees
-    -------------------
-    - ``lookup`` is idempotent and read-only.
-    - ``record`` is a write-once operation: recording an already-recorded
-      effect_id is a no-op (the first result wins — never overwritten).
-    - Both operations are safe to call concurrently across workers.
-    """
-
-    async def lookup(self, effect_id: str) -> EffectResult | None:
-        """Return the cached result for ``effect_id``, or ``None`` on miss."""
-        ...
-
-    async def record(self, result: EffectResult) -> None:
-        """Persist ``result`` for its ``effect_id``.
-
-        Write-once: if ``effect_id`` already has a recorded result, this is
-        a no-op.  Never raises on duplicate — callers do not need to check.
-        """
-        ...
-
-
-__all__ = ["Effect", "EffectResult", "Journal"]
+__all__ = ["Effect", "EffectResult"]

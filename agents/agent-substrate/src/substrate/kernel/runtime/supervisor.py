@@ -17,8 +17,8 @@ The four hard properties realized on the durable substrate
 1. **Replay-deterministic spawn.**
    ``spawn`` appends ``child.spawned{child_run}`` to the *parent's* log before
    enqueuing the child.  On parent replay the journaled entry returns the *same*
-   ``child_run_id`` — never a duplicate child.  Same Journal mechanism as a
-   tool call: look up by (parent_run_id, step_seq, "child.spawn", child_agent).
+   ``child_run_id`` — never a duplicate child.  Same idempotency-key mechanism
+   as a tool call: look up by (parent_run_id, step_seq, "child.spawn", child_agent).
 
 2. **Mobile children.**
    A child is its own run with its own EventLog — any worker can pick it up.

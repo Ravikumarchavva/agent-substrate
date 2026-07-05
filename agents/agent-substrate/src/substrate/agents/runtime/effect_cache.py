@@ -14,6 +14,12 @@ miss on every effect: LLM calls re-billed, tools re-executed).
 
 Built once per lease (``Worker._run_agent``), read many times during that
 run — lookups are a plain dict access, no I/O.
+
+Error effects are deliberately excluded from the fold (see ``fold()``): a
+scheduler retry must re-execute a failed effect, not replay its failure
+forever from cache. They're still written to the EventLog by
+``RunContext._record_effect`` for the durable per-attempt record — this only
+affects what a *fresh* fold (a new lease, i.e. every retry) rehydrates.
 """
 
 from __future__ import annotations
@@ -48,6 +54,13 @@ class EffectCache:
 
         ``last_seq`` seeds ``RunContext``'s local seq cursor, so the Worker
         never needs a separate ``last_seq()`` query before its first append.
+
+        ``status == "error"`` entries are skipped: a failed effect must be a
+        cache MISS on the next lease so the scheduler's retry genuinely
+        re-executes it, rather than re-raising the same cached failure on
+        every attempt (see module docstring). A later successful attempt at
+        the same effect_id overwrites the dict entry as usual, since it's a
+        forward scan over the log in seq order.
         """
         effects: dict[str, EffectResult] = {}
         last_seq = -1
@@ -55,6 +68,9 @@ class EffectCache:
             last_seq = entry.seq
             if entry.kind == "effect.result":
                 p = entry.payload
+                if p["status"] == "error":
+                    effects.pop(p["effect_id"], None)
+                    continue
                 effects[p["effect_id"]] = EffectResult(
                     effect_id=p["effect_id"],
                     status=p["status"],

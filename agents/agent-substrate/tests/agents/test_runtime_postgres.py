@@ -227,11 +227,17 @@ async def test_pg_spawn_join(pg_runtime) -> None:
 
 
 class CrashingChildAgent:
+    """Crashes unconditionally on every attempt — PermanentError so the
+    fast-path fires on the first crash instead of backing off for retries
+    that would just crash identically again."""
+
     def __init__(self, agent_id: AgentId) -> None:
         self.id = agent_id
 
     async def run(self, ctx: object, inbox: list[Message]) -> None:
-        raise RuntimeError("child deliberately crashes")
+        from substrate.kernel.core.errors import PermanentError
+
+        raise PermanentError("child deliberately crashes")
 
 
 class ParentJoinCrashAgent:
@@ -810,11 +816,15 @@ async def test_pg_ask_crash_fast_path(pg_runtime) -> None:
     asker_id = _agent_id("pg-ask-crash-asker")
 
     class CrashingAgent:
+        """Crashes unconditionally — PermanentError, see CrashingChildAgent."""
+
         def __init__(self, agent_id: AgentId) -> None:
             self.id = agent_id
 
         async def run(self, ctx: object, inbox: list[Message]) -> None:
-            raise RuntimeError("target deliberately crashes")
+            from substrate.kernel.core.errors import PermanentError
+
+            raise PermanentError("target deliberately crashes")
 
     crashing = CrashingAgent(child_id)
     asker = SpawnThenAskAgent(asker_id, child_id)
@@ -1211,3 +1221,72 @@ async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
     await asyncio.wait_for(grandchild.done.wait(), timeout=8.0)
 
     assert grandchild.seen_max_tokens == 77
+
+
+# ---------------------------------------------------------------------------
+# 8. Retry re-execution + backoff against the real PostgresScheduler
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_flaky_retry_genuinely_re_executes(pg_runtime) -> None:
+    """A retryable failure must re-run the agent, not replay a cached error
+    from EffectCache.fold() forever — the fix for the sticky-error bug."""
+    from substrate.kernel.runtime.scheduler import RunRetryPolicy
+
+    class FlakyAgent:
+        def __init__(self, agent_id: AgentId) -> None:
+            self.id = agent_id
+            self.attempts = 0
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            self.attempts += 1
+            if self.attempts == 1:
+                raise RuntimeError("transient blip")
+
+    agent = FlakyAgent(_agent_id("pg-flaky-retry"))
+    await pg_runtime.register(agent)
+    run_id = await pg_runtime.submit(
+        agent.id,
+        _msg(agent.id, {}),
+        retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.05),
+    )
+
+    async for entry in pg_runtime.event_log.tail(run_id):
+        if entry.kind in ("run.completed", "run.failed"):
+            outcome = entry.kind
+            break
+
+    assert outcome == "run.completed"
+    assert agent.attempts == 2, "must genuinely re-execute, not replay the cached error"
+
+
+async def test_pg_permanent_error_skips_retry(pg_runtime) -> None:
+    """PermanentError terminal-fails on the first attempt against the real
+    PostgresScheduler — no backoff, no retry_count increment wasted."""
+    from substrate.kernel.core.errors import PermanentError
+    from substrate.kernel.runtime.scheduler import RunRetryPolicy
+
+    class AlwaysCrashingAgent:
+        def __init__(self, agent_id: AgentId) -> None:
+            self.id = agent_id
+            self.attempts = 0
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            self.attempts += 1
+            raise PermanentError("never going to work")
+
+    agent = AlwaysCrashingAgent(_agent_id("pg-permanent"))
+    await pg_runtime.register(agent)
+    run_id = await pg_runtime.submit(
+        agent.id,
+        _msg(agent.id, {}),
+        retry_policy=RunRetryPolicy(max_retries=5, backoff_s=5.0),
+    )
+
+    async for entry in pg_runtime.event_log.tail(run_id):
+        if entry.kind in ("run.completed", "run.failed"):
+            outcome = entry.kind
+            break
+
+    assert outcome == "run.failed"
+    assert agent.attempts == 1, "a PermanentError must not be retried at all"

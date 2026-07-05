@@ -164,8 +164,13 @@ async def test_run_end_fires_even_on_agent_crash() -> None:
 
     async with Runtime() as rt:
         await rt.register(agent)
+        # max_retries=0: this test is about hook firing on a crash, not
+        # retry semantics — a default retry policy would back the run off
+        # and retry rather than terminal-failing on the first attempt.
         run_id = await rt.submit(
-            agent.id, Message(target=agent.id, payload=DataPayload(data={}))
+            agent.id,
+            Message(target=agent.id, payload=DataPayload(data={})),
+            max_retries=0,
         )
         async for entry in rt.event_log.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):

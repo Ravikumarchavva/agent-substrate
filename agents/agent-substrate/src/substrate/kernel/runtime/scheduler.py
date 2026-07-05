@@ -49,15 +49,22 @@ from substrate.kernel.runtime.wakeup import Wakeup
 class RunRetryPolicy(BaseModel):
     """Policy governing automatic retries when a run terminates with FAILED.
 
-    ``max_retries`` — how many times to re-enqueue before moving to dead-run.
-    ``backoff_s``   — seconds to wait before the next retry (flat for now;
-                      exponential backoff is an implementation concern).
+    ``max_retries``   — how many times to re-enqueue before moving to dead-run.
+    ``backoff_s``      — base delay before the first retry; doubles each
+                         subsequent attempt (``backoff_s * 2**(retry_count-1)``),
+                         capped at ``max_backoff_s``. Implemented by parking
+                         the run ``suspended`` with a ``wake_at`` timer — the
+                         same mechanism a timed suspension already rides — so
+                         a retry backoff survives a process restart exactly
+                         like any other legitimate dormancy.
+    ``max_backoff_s``  — ceiling on the exponential backoff delay.
     ``dead_run_on_cancel`` — if ``True``, a CANCELLED run is also moved to
                              dead-run storage; default ``False``.
     """
 
     max_retries: int = 3
     backoff_s: float = 5.0
+    max_backoff_s: float = 300.0
     dead_run_on_cancel: bool = False
 
     model_config = {"frozen": True}
@@ -174,7 +181,8 @@ class Scheduler(Protocol):
         *,
         status: RunStatus,
         wake_on: Wakeup | None = None,
-    ) -> None:
+        retryable: bool = True,
+    ) -> bool:
         """Return the lease and record the run's new status.
 
         ``status=SUSPENDED`` + ``wake_on`` schedules the next wakeup trigger.
@@ -182,6 +190,24 @@ class Scheduler(Protocol):
         storage (and triggers retry logic for FAILED per the retry policy).
         ``status=RUNNING`` should not be passed to release — that is the
         lease's in-flight state.
+
+        ``retryable`` (only consulted when ``status=FAILED``) — ``False``
+        skips the retry policy entirely and terminal-fails on this first
+        attempt, regardless of ``max_retries``. The Worker passes ``False``
+        for failures the retry policy's `EffectCache` replay can never fix
+        (a guardrail trip, a budget exhaustion, or agent/tool code raising
+        ``kernel.core.errors.PermanentError``) — retrying those re-executes
+        the identical deterministic decision and wastes a lease cycle.
+
+        Returns ``True`` if the run actually reached a terminal state
+        (COMPLETED, CANCELLED, or a non-retried/exhausted FAILED) — the
+        Worker only calls ``Supervisor.finish_run()`` when this is ``True``.
+        Returns ``False`` for SUSPENDED and for a FAILED release that the
+        retry policy turned into a fresh (backed-off) pending attempt: the
+        run isn't actually done, so a parent watching it via ``ctx.ask``/
+        ``ctx.join`` must not be told it failed yet — that would resolve the
+        parent's wait on the FIRST transient failure, defeating the entire
+        point of retrying.
         """
         ...
 

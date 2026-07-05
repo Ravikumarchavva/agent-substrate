@@ -123,6 +123,14 @@ _STATUS_STR: dict[RunStatus, str] = {v: k for k, v in _STATUS_MAP.items()}
 _TERMINAL = {"completed", "failed", "cancelled"}
 
 
+def _retry_backoff_seconds(retry_count: int, policy: RunRetryPolicy) -> float:
+    """Exponential backoff: ``backoff_s * 2**(retry_count-1)``, capped at
+    ``max_backoff_s``. ``retry_count`` is already post-increment (1 on the
+    first retry), so the first backoff is exactly ``backoff_s``."""
+    delay = policy.backoff_s * (2 ** max(retry_count - 1, 0))
+    return min(delay, policy.max_backoff_s)
+
+
 class PostgresScheduler:
     """Postgres-backed Scheduler implementing the kernel Scheduler Protocol."""
 
@@ -508,13 +516,14 @@ class PostgresScheduler:
         *,
         status: RunStatus,
         wake_on: Wakeup | None = None,
-    ) -> None:
+        retryable: bool = True,
+    ) -> bool:
         status_str = _STATUS_STR[status]
         wakeup_json = wake_on.model_dump_json() if wake_on else None
 
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                if status == RunStatus.FAILED:
+                if status == RunStatus.FAILED and retryable:
                     row = await conn.fetchrow(
                         """
                         UPDATE substrate_run_queue
@@ -536,15 +545,27 @@ class PostgresScheduler:
                         else:
                             policy = RunRetryPolicy()
                         if row["retry_count"] <= policy.max_retries:
+                            # Exponential backoff via the same suspended+wake_at
+                            # mechanism a timed suspension already rides — a
+                            # retry backoff is legitimate dormancy, not a crash,
+                            # so it must survive a process restart the same way
+                            # (reclaim_orphans() never touches 'suspended' rows).
+                            delay = _retry_backoff_seconds(row["retry_count"], policy)
+                            wake_at = datetime.now(tz=timezone.utc) + timedelta(
+                                seconds=delay
+                            )
                             await conn.execute(
                                 """
                                 UPDATE substrate_run_queue
-                                SET status = 'pending', worker_id = NULL, expires_at = NULL
+                                SET status = 'suspended', worker_id = NULL,
+                                    expires_at = NULL, wake_signals = NULL,
+                                    wake_at = $2
                                 WHERE run_id = $1
                                 """,
                                 lease.run_id,
+                                wake_at,
                             )
-                            return
+                            return False
 
                 if status == RunStatus.SUSPENDED:
                     # wake_signals and wake_at are orthogonal, not kind-exclusive:
@@ -597,7 +618,7 @@ class PostgresScheduler:
                                 """,
                                 lease.run_id,
                             )
-                    return
+                    return False
 
                 # This is always a terminal status here (SUSPENDED and the
                 # FAILED-with-retries-remaining case both returned above) —
@@ -616,6 +637,7 @@ class PostgresScheduler:
                     wakeup_json,
                     lease.run_id,
                 )
+                return True
 
     async def pending_runs(
         self,

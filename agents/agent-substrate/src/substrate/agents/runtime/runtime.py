@@ -28,6 +28,7 @@ needs to know which backend is active.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -55,6 +56,25 @@ from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
 from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
 from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
 from substrate.agents.runtime.worker import Worker
+
+
+@dataclass
+class RunOutcome:
+    """Result of ``Runtime.run()`` — the ergonomic, one-shot run API.
+
+    ``output`` is the agent's final assistant text (``None`` if the run
+    produced no text or did not complete). ``error`` carries the failure
+    message when ``status`` is ``FAILED``.
+    """
+
+    run_id: str
+    status: RunStatus
+    output: str | None = None
+    error: str | None = None
+    metadata: dict = field(default_factory=dict)
+
+    def __str__(self) -> str:
+        return self.output or ""
 
 
 class Runtime:
@@ -201,6 +221,63 @@ class Runtime:
             thread_id=thread_id,
         )
         return run_id
+
+    async def run(
+        self,
+        agent: Agent,
+        prompt: str,
+        *,
+        tenant: str = "default",
+    ) -> RunOutcome:
+        """Run ``agent`` on a single ``prompt`` and wait for the final answer.
+
+        The ergonomic one-shot entry point: registers the agent, delivers the
+        prompt as a chat message, submits a run, tails its EventLog until the
+        run reaches a terminal state, and returns a :class:`RunOutcome` whose
+        ``output`` is the agent's final assistant text.
+
+        For streaming, multi-message, or durable-suspend workflows use
+        ``register`` + ``submit`` and tail ``event_log`` yourself — this helper
+        is for the common "ask once, get one answer" case.
+        """
+        from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+        from substrate.kernel.messaging.message import ChatPayload
+
+        await self.register(agent)
+        msg = Message(
+            target=agent.id,
+            sender=AgentId(type="user", key="run"),
+            payload=ChatPayload(
+                message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
+            ),
+        )
+        # max_retries=0: a one-shot interactive run must not replay-retry a
+        # journaled error (see AgentStreamSession).
+        run_id = await self.submit(agent.id, msg, tenant=tenant, max_retries=0)
+
+        text_acc = ""
+        async for entry in self._event_log.tail(run_id):
+            kind = entry.kind
+            payload = entry.payload or {}
+            if kind == "tool.result":
+                # New turn boundary — the final answer is the text produced
+                # after the last tool result.
+                text_acc = ""
+            elif kind == "text.delta":
+                text_acc += payload.get("text", "")
+            elif kind == "run.completed":
+                return RunOutcome(
+                    run_id=run_id, status=RunStatus.COMPLETED, output=text_acc or None
+                )
+            elif kind == "run.failed":
+                return RunOutcome(
+                    run_id=run_id,
+                    status=RunStatus.FAILED,
+                    error=payload.get("error", "agent run failed"),
+                )
+            elif kind == "run.cancelled":
+                return RunOutcome(run_id=run_id, status=RunStatus.CANCELLED)
+        return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=text_acc or None)
 
     async def follow(
         self, follower: AgentId, topic_type: str, topic_source: str

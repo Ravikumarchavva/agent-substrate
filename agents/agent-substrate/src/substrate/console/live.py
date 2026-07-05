@@ -123,9 +123,7 @@ class LiveTurn:
 
         signal_payload: dict[str, Any] | None = None
         while signal_payload is None:
-            raw: str = await loop.run_in_executor(
-                None, lambda: input("\n  → ").strip()
-            )
+            raw: str = await loop.run_in_executor(None, lambda: input("\n  → ").strip())
             lower = raw.lower()
 
             if lower in ("s", "skip", ""):
@@ -158,7 +156,9 @@ class LiveTurn:
                 # HITL call and stash the text so interactive() can resubmit.
                 signal_payload = {"action": "cancelled"}
                 self.pending_followup = raw
-                self.console.print("  [dim]Cancelled — will resubmit your message[/dim]\n")
+                self.console.print(
+                    "  [dim]Cancelled — will resubmit your message[/dim]\n"
+                )
 
         # Fire the signal to resume the suspended run.
         if self._signal_bus is not None and ev.run_id:

@@ -275,7 +275,9 @@ class PostgresScheduler:
             )
         return RunId(row) if row is not None else None
 
-    async def find_run_for_thread(self, thread_id: str) -> tuple[RunId, RunStatus] | None:
+    async def find_run_for_thread(
+        self, thread_id: str
+    ) -> tuple[RunId, RunStatus] | None:
         """Return the active (non-terminal) run for thread_id, if any.
 
         Durable, cross-replica: any replica handling a cancel request for
@@ -550,7 +552,9 @@ class PostgresScheduler:
                     # deadline at once (whichever comes first should wake it),
                     # so a Wakeup can legitimately carry both regardless of its
                     # nominal "kind".
-                    wake_signals = wake_on.signals if wake_on and wake_on.signals else None
+                    wake_signals = (
+                        wake_on.signals if wake_on and wake_on.signals else None
+                    )
                     wake_at = wake_on.at if wake_on else None
                     await conn.execute(
                         """

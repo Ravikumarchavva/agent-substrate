@@ -92,7 +92,9 @@ class InMemoryScheduler:
             self._retry_policies[run_id] = retry_policy
         await self._queue.put((priority, time.monotonic(), run_id))
 
-    async def find_run_for_thread(self, thread_id: str) -> tuple[RunId, RunStatus] | None:
+    async def find_run_for_thread(
+        self, thread_id: str
+    ) -> tuple[RunId, RunStatus] | None:
         _terminal = {RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED}
         for run_id, tid in list(self._threads.items()):
             if tid == thread_id:

@@ -50,7 +50,9 @@ class _FakeEventLog:
 
     entries: list[RunLogEntry]
 
-    async def tail(self, run_id: str, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]:
+    async def tail(
+        self, run_id: str, *, from_seq: int = 0
+    ) -> AsyncIterator[RunLogEntry]:
         for e in self.entries:
             yield e
 
@@ -98,7 +100,11 @@ async def test_run_failed_emits_run_failed_event() -> None:
     """run.failed log entry MUST produce _RunFailed — regression guard for the bug
     where the emit was silently dropped and the error appeared as 'completed · 0 tools'."""
     entries = [
-        _entry("run.failed", {"error": "401 Unauthorized", "status": "agent_crashed"}, seq=0),
+        _entry(
+            "run.failed",
+            {"error": "401 Unauthorized", "status": "agent_crashed"},
+            seq=0,
+        ),
     ]
     events = await _collect(entries)
 
@@ -188,7 +194,8 @@ async def test_failed_tool_result_content_tagged() -> None:
     events = await _collect(entries)
 
     result_ev = next(
-        e for e in events
+        e
+        for e in events
         if isinstance(e, AgentProgress) and e.step == AgentStep.TOOL_RESULT
     )
     assert "error" in result_ev.content
@@ -210,15 +217,22 @@ async def test_run_completed_emits_completion_then_done() -> None:
 
 async def test_subagent_start_and_done_produce_depth1_progress() -> None:
     entries = [
-        _entry("subagent.start", {"agent": "worker", "parent": "orchestrator", "task": "do it"}, seq=0),
-        _entry("subagent.done", {"agent": "worker", "parent": "orchestrator", "ok": True}, seq=1),
+        _entry(
+            "subagent.start",
+            {"agent": "worker", "parent": "orchestrator", "task": "do it"},
+            seq=0,
+        ),
+        _entry(
+            "subagent.done",
+            {"agent": "worker", "parent": "orchestrator", "ok": True},
+            seq=1,
+        ),
         _entry("run.completed", {}, seq=2),
     ]
     events = await _collect(entries)
 
     subagent_events = [
-        e for e in events
-        if isinstance(e, AgentProgress) and e.depth == 1
+        e for e in events if isinstance(e, AgentProgress) and e.depth == 1
     ]
     assert len(subagent_events) == 2
     assert subagent_events[0].agent_id.key == "worker"
@@ -229,14 +243,19 @@ async def test_subagent_start_and_done_produce_depth1_progress() -> None:
 async def test_failed_subagent_done_maps_to_error_step() -> None:
     entries = [
         _entry("subagent.start", {"agent": "flaky", "parent": "orch"}, seq=0),
-        _entry("subagent.done", {"agent": "flaky", "parent": "orch", "ok": False}, seq=1),
+        _entry(
+            "subagent.done", {"agent": "flaky", "parent": "orch", "ok": False}, seq=1
+        ),
         _entry("run.completed", {}, seq=2),
     ]
     events = await _collect(entries)
 
     done_ev = next(
-        e for e in events
-        if isinstance(e, AgentProgress) and e.agent_id.key == "flaky" and e.step != AgentStep.THINKING
+        e
+        for e in events
+        if isinstance(e, AgentProgress)
+        and e.agent_id.key == "flaky"
+        and e.step != AgentStep.THINKING
     )
     assert done_ev.step == AgentStep.ERROR
 
@@ -246,7 +265,14 @@ async def test_failed_subagent_done_maps_to_error_step() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _ap(key: str, step: AgentStep, *, parent: str | None = None, depth: int = 1, seq: int = 0) -> AgentProgress:
+def _ap(
+    key: str,
+    step: AgentStep,
+    *,
+    parent: str | None = None,
+    depth: int = 1,
+    seq: int = 0,
+) -> AgentProgress:
     return AgentProgress(
         agent_id=AgentId(type="agent", key=key),
         step=step,
@@ -386,10 +412,13 @@ async def test_live_turn_sets_failed_flag_on_run_failed() -> None:
     assert isinstance(turn, LiveTurn)
     assert not turn.failed
 
-    await _feed(turn, [
-        _RunFailed(message="something went wrong", status="agent_crashed"),
-        StreamDone(reason="error"),
-    ])
+    await _feed(
+        turn,
+        [
+            _RunFailed(message="something went wrong", status="agent_crashed"),
+            StreamDone(reason="error"),
+        ],
+    )
 
     assert turn.failed, "LiveTurn.failed must be True after _RunFailed"
 
@@ -399,11 +428,14 @@ async def test_live_turn_failed_false_on_success() -> None:
     from substrate.kernel.core.content import TextBlock
 
     turn = _make_turn()
-    await _feed(turn, [
-        TextDelta(text="Hello"),
-        CompletionEvent(content=[TextBlock(text="Hello")]),
-        StreamDone(reason="success"),
-    ])
+    await _feed(
+        turn,
+        [
+            TextDelta(text="Hello"),
+            CompletionEvent(content=[TextBlock(text="Hello")]),
+            StreamDone(reason="success"),
+        ],
+    )
 
     assert not turn.failed
 
@@ -412,11 +444,14 @@ async def test_live_turn_returns_assistant_text() -> None:
     from substrate.kernel.core.content import TextBlock
 
     turn = _make_turn()
-    result = await _feed(turn, [
-        TextDelta(text="Hello "),
-        TextDelta(text="world"),
-        CompletionEvent(content=[TextBlock(text="Hello world")]),
-        StreamDone(reason="success"),
-    ])
+    result = await _feed(
+        turn,
+        [
+            TextDelta(text="Hello "),
+            TextDelta(text="world"),
+            CompletionEvent(content=[TextBlock(text="Hello world")]),
+            StreamDone(reason="success"),
+        ],
+    )
 
     assert result == "Hello world"

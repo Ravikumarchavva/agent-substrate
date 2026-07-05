@@ -254,7 +254,9 @@ class Supervision:
             run_id=data["run_id"],
             session_id=data["session_id"],
             root_id=AgentId(
-                type=root["type"], key=root["key"], namespace=root.get("namespace", "default")
+                type=root["type"],
+                key=root["key"],
+                namespace=root.get("namespace", "default"),
             ),
             parent_id=(
                 AgentId(
@@ -268,7 +270,9 @@ class Supervision:
             depth=data.get("depth", 0),
             spawn_budget=SpawnBudget(**data.get("spawn_budget", {})),
             execution_budget=ExecutionBudget(**data.get("execution_budget", {})),
-            retention=HistoryRetention(data.get("retention", HistoryRetention.RUN.value)),
+            retention=HistoryRetention(
+                data.get("retention", HistoryRetention.RUN.value)
+            ),
             priority=Priority(data.get("priority", Priority.NORMAL.value)),
         )
 

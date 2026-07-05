@@ -64,7 +64,9 @@ async def _run_flow(flow, text: str, *extra_agents, timeout: float = 5.0) -> str
                 break
             await asyncio.sleep(0.02)
         if payload is None:
-            raise asyncio.TimeoutError(f"Timed out after {timeout}s waiting for a reply")
+            raise asyncio.TimeoutError(
+                f"Timed out after {timeout}s waiting for a reply"
+            )
     return str(payload.get("text", ""))
 
 

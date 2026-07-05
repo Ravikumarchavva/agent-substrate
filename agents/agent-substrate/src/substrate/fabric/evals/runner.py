@@ -141,7 +141,9 @@ class EvalRunner:
             payload: dict | None = None
             while deadline is None or time.monotonic() < deadline:
                 payload = await rt.signal_bus.consume(
-                    sentinel_run_id, f"reply:{cid}", f"eval-wait:{sentinel_run_id}:{cid}"
+                    sentinel_run_id,
+                    f"reply:{cid}",
+                    f"eval-wait:{sentinel_run_id}:{cid}",
                 )
                 if payload is not None:
                     break

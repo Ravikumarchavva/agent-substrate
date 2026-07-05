@@ -238,7 +238,9 @@ class Scheduler(Protocol):
         """
         ...
 
-    async def find_run_for_thread(self, thread_id: str) -> tuple[RunId, RunStatus] | None:
+    async def find_run_for_thread(
+        self, thread_id: str
+    ) -> tuple[RunId, RunStatus] | None:
         """Return ``(run_id, status)`` for any active run tagged with ``thread_id``.
 
         Returns ``None`` when no PENDING, RUNNING, or SUSPENDED run is tagged

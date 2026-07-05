@@ -100,7 +100,10 @@ async def test_webhook_rejects_invalid_signature():
     rt = MockRuntime()
     registry = WebhookRegistry(runtime=rt)
     await registry.register(
-        name="test-webhook", path="notify", target_type="chain", target_name="test-chain"
+        name="test-webhook",
+        path="notify",
+        target_type="chain",
+        target_name="test-chain",
     )
 
     res = await registry.handle(
@@ -119,7 +122,10 @@ async def test_webhook_idempotency_key_dedupes_retried_delivery():
     rt = MockRuntime()
     registry = WebhookRegistry(runtime=rt)
     webhook = await registry.register(
-        name="test-webhook", path="notify", target_type="chain", target_name="test-chain"
+        name="test-webhook",
+        path="notify",
+        target_type="chain",
+        target_name="test-chain",
     )
     payload = {"dynamic": "input"}
     raw_body = json.dumps(payload).encode()
@@ -177,7 +183,7 @@ async def test_condition_trigger_dispatch(redis_url):
     )
     await monitor.add_condition(condition)
     await monitor.start()
-    
+
     # Wait for the consumer group to be created in Redis
     stream_key = f"events:{condition.event_type}"
     for _ in range(50):

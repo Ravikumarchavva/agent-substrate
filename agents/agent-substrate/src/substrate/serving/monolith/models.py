@@ -80,9 +80,7 @@ class Thread(Base):
     # Tenant namespace (see AuthClaims.tenant_id) — "default" for
     # single-tenant deployments. NULL-tenant legacy rows claim-on-first-access
     # the same way NULL-owner rows do (see get_owned_thread).
-    tenant_id: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True, index=True
-    )
+    tenant_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), default=list)
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         "metadata", JSONB, default=dict
@@ -430,16 +428,22 @@ class ScheduledTask(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     cron_expression: Mapped[str] = mapped_column(String, nullable=False)
-    kind: Mapped[str] = mapped_column(String, nullable=False, default="cron")  # "cron" | "interval"
+    kind: Mapped[str] = mapped_column(
+        String, nullable=False, default="cron"
+    )  # "cron" | "interval"
     thread_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("threads.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    status: Mapped[str] = mapped_column(String, nullable=False, default="active")  # "active" | "paused" | "completed" | "error"
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="active"
+    )  # "active" | "paused" | "completed" | "error"
     lookback_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
-    task_type: Mapped[str] = mapped_column(String, nullable=False, default="report")  # "report" | "monitor" | "reminder" | "learning"
+    task_type: Mapped[str] = mapped_column(
+        String, nullable=False, default="report"
+    )  # "report" | "monitor" | "reminder" | "learning"
     auto_disable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -459,7 +463,9 @@ class ScheduledTask(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<ScheduledTask(id={self.id}, name={self.name!r}, status={self.status!r})>"
+        return (
+            f"<ScheduledTask(id={self.id}, name={self.name!r}, status={self.status!r})>"
+        )
 
 
 class ScheduledTaskRun(Base):
@@ -474,7 +480,9 @@ class ScheduledTaskRun(Base):
         nullable=False,
         index=True,
     )
-    status: Mapped[str] = mapped_column(String, nullable=False)  # "success" | "failed" | "silent"
+    status: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # "success" | "failed" | "silent"
     output_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -488,4 +496,3 @@ class ScheduledTaskRun(Base):
 
     def __repr__(self) -> str:
         return f"<ScheduledTaskRun(id={self.id}, status={self.status!r}, executed_at={self.executed_at!r})>"
-

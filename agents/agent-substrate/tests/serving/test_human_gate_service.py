@@ -147,10 +147,18 @@ async def test_cancel_pending_for_thread_signals_each_request(
     req_b = f"req-{uuid.uuid4().hex}"
 
     await create_request(
-        db_session, request_id=req_a, thread_id=thread_id, run_id=run_id_a, type="human_input"
+        db_session,
+        request_id=req_a,
+        thread_id=thread_id,
+        run_id=run_id_a,
+        type="human_input",
     )
     await create_request(
-        db_session, request_id=req_b, thread_id=thread_id, run_id=run_id_b, type="human_input"
+        db_session,
+        request_id=req_b,
+        thread_id=thread_id,
+        run_id=run_id_b,
+        type="human_input",
     )
     await db_session.commit()
 

@@ -8,18 +8,39 @@ This is the single place that orchestrates a streaming chat run:
   * merges out-of-band HITL / task-board events from the thread's
     ``WebHITLBridge``,
   * watches for client disconnect and explicit cancel,
-  * persists the assistant turn and tool results inline (optional callbacks),
   * frames the run with ``protocol.hello`` … ``run.completed|failed|cancelled``.
 
 The route stays thin: build the agent + message + bridge, construct a session,
 and stream ``session.events()`` as SSE.  All the concurrency lives here.
+
+There is no inline persistence here anymore: the agent itself durably logs
+its own conversation (``ReActAgent``'s ``log_user_message``/journaled
+``ctx.llm()``/``ctx.tool()`` calls) straight to the EventLog, the single
+source of truth for conversation history (see
+``serving/stream/history.py::project_thread()``). This session's only
+remaining job is relaying that same log, live, to one SSE connection — a
+disconnect (or this process restarting) loses nothing, since the run keeps
+executing durably via its own Worker-owned Task regardless of whether
+anything is tailing it, and a reconnecting client re-tails the log from
+wherever it left off (``tail_wire_events``) or loads the finished
+conversation from ``project_thread()``.
+
+One subtlety survives the persistence removal: ``events()`` still must not
+*cancel* its own tailing task (``agent_task``) on disconnect, even though
+nothing downstream of it needs to keep running for persistence's sake
+anymore. ``agent_task`` calls ``register()``+``submit()`` before it ever
+reaches the tail loop — cancelling it at the wrong moment could abort the
+run before it's even enqueued, which is a worse outcome than anything
+persistence-related ever was. So a disconnect still detaches (rather than
+cancels) an in-flight ``agent_task``, exactly as before; the only thing
+that's gone is the reason it used to matter.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import Any, AsyncIterator, Awaitable, Callable, Protocol
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 from substrate.logger import setup_logging
 from substrate.serving.monolith.sse.bridge import (
@@ -33,11 +54,7 @@ from substrate.serving.protocol import (
     RunCancelledEvent,
     RunCompletedEvent,
     RunFailedEvent,
-    TextDeltaEvent,
-    ToolCallEvent,
-    ToolCallSummary,
     ToolResultEvent,
-    TurnCompletedEvent,
     WireEvent,
     wire_from_log,
 )
@@ -47,19 +64,13 @@ logger = setup_logging()
 DisconnectCheck = Callable[[], Awaitable[bool]]
 
 # Strong references to agent_task instances that outlived their SSE
-# connection (client disconnected while the run was still running/suspended).
-# asyncio only holds a WEAK reference to a task nobody is awaiting, so without
-# this a detached persistence task could be garbage-collected mid-flight and
-# silently stop persisting. Entries remove themselves via a done-callback
-# (see events()'s finally) once the run reaches a terminal state.
-_BACKGROUND_PERSIST_TASKS: set[asyncio.Task] = set()
-
-
-class Persister(Protocol):
-    """Inline persistence hooks. The route binds these to its DB session."""
-
-    async def persist_turn(self, event: TurnCompletedEvent) -> None: ...
-    async def persist_tool(self, event: ToolResultEvent) -> None: ...
+# connection (client disconnected before register()+submit() reached the
+# tail loop). asyncio only holds a WEAK reference to a task nobody is
+# awaiting, so without this a detached task could be garbage-collected
+# mid-submit, silently dropping the run before it's even enqueued. Entries
+# remove themselves via a done-callback (see events()'s finally) once the
+# task finishes.
+_DETACHED_TASKS: set[asyncio.Task] = set()
 
 
 class AgentStreamSession:
@@ -73,7 +84,6 @@ class AgentStreamSession:
         is_disconnected: DisconnectCheck | None = None,
         thread_id: str | None = None,
         tenant_id: str | None = None,
-        persister: Persister | None = None,
         on_complete: Callable[[], Awaitable[list[dict]]] | None = None,
         poll_interval: float = 0.2,
         spec: dict | None = None,
@@ -85,7 +95,6 @@ class AgentStreamSession:
         self._is_disconnected = is_disconnected
         self._thread_id = thread_id
         self._tenant_id = tenant_id
-        self._persister = persister
         self._on_complete = on_complete
         self._poll = poll_interval
         self._spec = spec
@@ -133,45 +142,15 @@ class AgentStreamSession:
                     except Exception:
                         logger.debug("save_run_spec unavailable or failed — skipping")
 
-            text_acc = ""
-            tool_calls_acc: list[ToolCallSummary] = []
-            _saw_tool_result = (
-                False  # True after tool.result; flush turn on next text.delta
-            )
-
-            async def _flush_turn() -> None:
-                nonlocal text_acc, tool_calls_acc, _saw_tool_result
-                if self._persister and (text_acc or tool_calls_acc):
-                    await self._persister.persist_turn(
-                        TurnCompletedEvent(
-                            text=text_acc,
-                            tool_calls=tool_calls_acc,
-                            finish_reason="stop",
-                        )
-                    )
-                text_acc = ""
-                tool_calls_acc = []
-                _saw_tool_result = False
-
             async for entry in self._runtime.event_log.tail(run_id):
                 kind = entry.kind
                 if kind == "run.completed":
-                    await _flush_turn()
                     await self._settle_task_boards()
                     return "success"
                 if kind == "run.failed":
-                    # Persist whatever was accumulated before the failure.
-                    try:
-                        await _flush_turn()
-                    except Exception:
-                        pass
                     self._error = (entry.payload or {}).get("error", "agent run failed")
                     return "error"
                 if kind == "run.cancelled":
-                    try:
-                        await _flush_turn()
-                    except Exception:
-                        pass
                     return "cancelled"
 
                 wire = wire_from_log(kind, entry.payload or {})
@@ -194,24 +173,6 @@ class AgentStreamSession:
                         },
                     )
                 await self._queue.put(wire)
-                if self._persister:
-                    if isinstance(wire, ToolResultEvent):
-                        await self._persister.persist_tool(wire)
-                        _saw_tool_result = True
-                    elif isinstance(wire, TextDeltaEvent):
-                        # A new text.delta after tool results means a new LLM turn
-                        # started — flush the completed turn before accumulating.
-                        if _saw_tool_result and (text_acc or tool_calls_acc):
-                            await _flush_turn()
-                        text_acc += wire.text
-                    elif isinstance(wire, ToolCallEvent):
-                        tool_calls_acc.append(
-                            ToolCallSummary(
-                                id=wire.call_id,
-                                name=wire.tool_name,
-                                args=wire.args,
-                            )
-                        )
         except Exception as exc:
             logger.exception("Agent run failed")
             self._error = str(exc)
@@ -292,43 +253,35 @@ class AgentStreamSession:
                     terminal = RunFailedEvent(error=reason)
         finally:
             # bridge_task only relays local HITL/task-board events into
-            # self._queue for THIS connection — nothing durable depends on
-            # it. Cancel it and await the cancellation (bounded, immediate).
+            # self._queue for THIS connection — nothing depends on it once
+            # this generator is done. Cancel it and await the cancellation
+            # (bounded, immediate).
             if not bridge_task.done():
                 bridge_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await bridge_task
 
-            # agent_task does two things: (1) relay wire events to
-            # self._queue for this connection, and (2) call
-            # self._persister.persist_turn/persist_tool as turns complete —
-            # the ONLY place persistence happens. The run itself is durable
-            # and keeps executing via its own Worker-owned Task regardless
-            # of this SSE connection's fate (the whole point of Phase 1),
-            # but persistence is NOT durable on its own: it only happens
-            # while something tails the EventLog. So agent_task must keep
-            # running until the run reaches a terminal state even after this
-            # connection closes — otherwise a run that suspends on
-            # ask_human, gets answered after the browser refreshed, and then
-            # completes would land its full response in the EventLog but
-            # never in the steps/messages table, and a reconnecting client
-            # would find nothing.
-            #
-            # CRITICAL: do NOT await it with a timeout here. asyncio.wait_for
-            # (and asyncio.gather under it) CANCELS the awaited task when the
-            # timeout fires — which would kill agent_task ~5s after
-            # disconnect, i.e. before a human typically answers. That was the
-            # exact bug this used to have. Instead, if the task is already
-            # done we surface its result/exception; if not, we DETACH it: a
-            # strong reference in a module-level set (so asyncio doesn't GC a
-            # task nobody's awaiting) plus done-callbacks to clean up and log.
+            # agent_task is NOT safe to cancel here: it does
+            # register()+submit() before it ever reaches the tail loop, and
+            # cancelling it mid-submit could abort the run before it's even
+            # enqueued (worse than anything persistence-related — the run
+            # would simply never happen). The run's own execution lives in a
+            # separate, Worker-owned Task regardless of agent_task's fate, so
+            # once submit() has landed, cancelling this tailing loop would be
+            # safe — but there's no cheap way to know we're past that point
+            # from here. So: if it's already done, just check for an
+            # exception; if not, detach it (a strong reference so asyncio
+            # doesn't GC a task nobody's awaiting) and let it run to the
+            # run's own natural completion, same as before persistence was
+            # removed — it's simply relaying to a queue nobody drains
+            # anymore instead of also persisting.
             if agent_task.done():
                 exc = agent_task.exception()
                 if exc is not None:
                     logger.error("agent_task for run %s failed: %s", self._run_id, exc)
             else:
-                _BACKGROUND_PERSIST_TASKS.add(agent_task)
-                agent_task.add_done_callback(_BACKGROUND_PERSIST_TASKS.discard)
+                _DETACHED_TASKS.add(agent_task)
+                agent_task.add_done_callback(_DETACHED_TASKS.discard)
                 agent_task.add_done_callback(_log_detached_agent_task_exception)
 
         yield terminal
@@ -338,21 +291,19 @@ class AgentStreamSession:
     async def _check_disconnect(self) -> bool:
         """Return True if THIS connection should stop relaying events.
 
-        Deliberately does NOT cancel the run (nor ``agent_task``, which also
-        does the durable persistence — see ``events()``'s ``finally``
-        docstring) just because the browser disconnected. A disconnect is
-        not the same as "the user wants this stopped" — a page refresh
-        disconnects too, and the entire point of durable suspend/resume is
-        that a refresh must not destroy in-flight progress. Explicit cancel
-        (``POST /chat/{thread_id}/cancel``) is the only thing that actually
-        stops a run — it durably cancels via ``Supervisor.cancel()`` (see
-        ``routes/cancel.py``), and this session notices that the same way
-        it notices completion: the EventLog gets a ``run.cancelled`` entry,
-        ``_agent_worker``'s tail loop sees it and returns. That works
-        correctly regardless of which replica initiated the cancel — a
-        local ``asyncio.Event`` (the previous design) only ever worked for
-        a cancel landing on the same replica already serving this SSE
-        connection.
+        Deliberately does NOT cancel the run just because the browser
+        disconnected. A disconnect is not the same as "the user wants this
+        stopped" — a page refresh disconnects too, and the entire point of
+        durable suspend/resume is that a refresh must not destroy in-flight
+        progress. Explicit cancel (``POST /chat/{thread_id}/cancel``) is the
+        only thing that actually stops a run — it durably cancels via
+        ``Supervisor.cancel()`` (see ``routes/cancel.py``), and this session
+        notices that the same way it notices completion: the EventLog gets a
+        ``run.cancelled`` entry, ``_agent_worker``'s tail loop sees it and
+        returns. That works correctly regardless of which replica initiated
+        the cancel — a local ``asyncio.Event`` (the previous design) only
+        ever worked for a cancel landing on the same replica already serving
+        this SSE connection.
 
         Only ``cancel_all_pending`` runs here, and only for Future-based
         tool-approval requests specifically — those aren't durable yet (see
@@ -388,7 +339,7 @@ def _log_detached_agent_task_exception(task: asyncio.Task) -> None:
         return
     exc = task.exception()
     if exc is not None:
-        logger.error("Background persistence task failed after disconnect: %s", exc)
+        logger.error("Detached agent_task failed after disconnect: %s", exc)
 
 
 async def tail_wire_events(
@@ -398,18 +349,11 @@ async def tail_wire_events(
     wire events, for a browser that lost its original SSE connection
     (refresh, network drop) while the run kept executing durably server-side.
 
-    Deliberately does NOT persist anything (no Persister, no turn
-    accumulation) — the original request's ``AgentStreamSession`` already
-    owns persistence for this run via its detached ``agent_task`` (see
-    ``events()``'s docstring), which keeps tailing and persisting
-    independently of any UI connection until the run reaches a terminal
-    state. A second tailer calling ``persist_turn``/``persist_tool`` for the
-    same turns would persist them twice. This function's only job is
-    "what should a reconnecting browser see next" — mirrors exactly the
-    same terminal-kind handling ``AgentStreamSession._agent_worker`` uses:
-    ``run.completed``/``run.failed``/``run.cancelled`` are checked BEFORE
-    calling ``wire_from_log`` (they aren't in ``STREAMING_KINDS`` — it would
-    return ``None`` for them, same as any other non-wire-mapped kind like
+    Mirrors exactly the same terminal-kind handling
+    ``AgentStreamSession._agent_worker`` uses: ``run.completed``/
+    ``run.failed``/``run.cancelled`` are checked BEFORE calling
+    ``wire_from_log`` (they aren't in ``STREAMING_KINDS`` — it would return
+    ``None`` for them, same as any other non-wire-mapped kind like
     ``run.suspended``/``run.resumed``/``llm.call``/``effect.result``, all of
     which must be silently skipped, not crash the generator).
     """
@@ -433,4 +377,4 @@ async def tail_wire_events(
         yield wire
 
 
-__all__ = ["AgentStreamSession", "Persister", "tail_wire_events"]
+__all__ = ["AgentStreamSession", "tail_wire_events"]

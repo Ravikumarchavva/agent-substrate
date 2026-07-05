@@ -52,11 +52,7 @@ from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.hooks import ChatContext, hooks
 from substrate.serving.monolith.schemas import ChatRequest
-from substrate.serving.monolith.services import (
-    get_owned_thread,
-    load_messages_for_memory,
-)
-from substrate.serving.monolith.services.agent_service import persist_user_message
+from substrate.serving.monolith.services import get_owned_thread
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
 from substrate.serving.shared.rate_limit import rate_limit
@@ -71,11 +67,7 @@ from substrate.serving.monolith.routes.chat_intents import (
     _configure_workspace_mail_request,
     _configure_calendar_write_request,
 )
-from substrate.serving.monolith.routes.chat_wire import (
-    MediaType,
-    _build_tool_meta_map,
-    _WirePersister,
-)
+from substrate.serving.monolith.routes.chat_wire import MediaType
 from substrate.serving.monolith.routes.chat_context import (
     _get_agent_deps,
     _build_file_context,
@@ -293,7 +285,6 @@ async def chat(
             tools=deps["tools"],
             system_instructions=deps["system_instructions"],
             cfg=settings,
-            load_persisted_steps=lambda: load_messages_for_memory(db, body.thread_id),
             history=ctx.history,
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
             runtime=deps["runtime"],
@@ -318,22 +309,10 @@ async def chat(
             agent=agent,
         )
         await hooks.fire_message(hook_ctx, user_content)
-
-        # Persist user message
-        user_metadata = (
-            {
-                "display_content": display_content,
-                "attachments": attachments,
-            }
-            if attachments
-            else None
-        )
-        await persist_user_message(
-            db,
-            body.thread_id,
-            user_content,
-            metadata=user_metadata,
-        )
+        # The user's turn is durably logged inside the run itself
+        # (ReActAgent's log_user_message -> user.message EventLog entry,
+        # including display_content/attachments via Message.metadata below)
+        # — no separate steps-table write here anymore.
         await db.commit()
 
     except Exception:
@@ -345,17 +324,8 @@ async def chat(
     # Per-thread HITL bridge (acquired in _get_agent_deps).
     bridge: WebHITLBridge = deps["bridge"]
 
-    tool_meta_map = _build_tool_meta_map(deps["tools"])
-
     # current_thread_id is set inside sse_generator (with reset) to scope it
     # to the streaming task and avoid leaking into the request handler scope.
-
-    persister = _WirePersister(
-        session_factory=ctx.session_factory,
-        thread_id=body.thread_id,
-        tool_meta_map=tool_meta_map,
-        attachments=attachments,
-    )
 
     _user_blocks: list = [_TextBlock(text=user_content)]
     _entry_msg = _Message(
@@ -399,7 +369,6 @@ async def chat(
         is_disconnected=request.is_disconnected,
         thread_id=str(body.thread_id),
         tenant_id=user.tenant_id,
-        persister=persister,
         on_complete=_settle_boards,
         spec=_agent_spec,
     )

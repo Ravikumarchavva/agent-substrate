@@ -12,12 +12,14 @@ import uuid
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import desc, func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.monolith.database import get_db
-from substrate.serving.monolith.models import Step, Thread
+from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
+from substrate.serving.monolith.models import Thread
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
+from substrate.serving.stream import project_thread
 
 logger = setup_logging()
 
@@ -44,14 +46,20 @@ async def admin_stats(
     db: AsyncSession = Depends(get_db),
     _: AuthClaims = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """Return top-level aggregate stats."""
+    """Return top-level aggregate stats.
 
+    ``total_events`` counts durable EventLog rows (``substrate_event_log``)
+    directly — conversation history has no separate steps table anymore; the
+    EventLog is the single source of truth (see ``serving/stream/history.py``).
+    """
     thread_count: int = (await db.execute(select(func.count(Thread.id)))).scalar_one()
-    step_count: int = (await db.execute(select(func.count(Step.id)))).scalar_one()
+    event_count: int = (
+        await db.execute(text("SELECT COUNT(*) FROM substrate_event_log"))
+    ).scalar_one()
 
     return {
         "total_threads": thread_count,
-        "total_steps": step_count,
+        "total_events": event_count,
     }
 
 
@@ -62,31 +70,35 @@ async def list_all_threads(
     db: AsyncSession = Depends(get_db),
     _: AuthClaims = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
-    """Return all threads with step counts, newest first."""
+    """Return all threads with EventLog event counts, newest first.
 
-    # Sub-query: count of steps per thread
-    step_counts_sq = (
-        select(Step.thread_id, func.count(Step.id).label("step_count"))
-        .group_by(Step.thread_id)
-        .subquery()
-    )
-
-    q = (
-        select(
-            Thread.id,
-            Thread.name,
-            Thread.user_identifier,
-            Thread.created_at,
-            Thread.updated_at,
-            func.coalesce(step_counts_sq.c.step_count, 0).label("step_count"),
+    Raw SQL (not the ORM) for the event-count join: substrate_run_queue and
+    substrate_event_log are asyncpg-managed tables in the same physical
+    database, not SQLAlchemy models, so a plain JOIN is simpler than
+    stitching a raw subquery onto ORM Core constructs.
+    """
+    rows = (
+        await db.execute(
+            text(
+                """
+                SELECT
+                    t.id, t.name, t.user_identifier, t.created_at, t.updated_at,
+                    COALESCE(ec.event_count, 0) AS event_count
+                FROM threads t
+                LEFT JOIN (
+                    SELECT rq.thread_id AS thread_id, COUNT(el.*) AS event_count
+                    FROM substrate_run_queue rq
+                    JOIN substrate_event_log el ON el.run_id = rq.run_id
+                    WHERE rq.thread_id IS NOT NULL
+                    GROUP BY rq.thread_id
+                ) ec ON ec.thread_id = t.id::text
+                ORDER BY t.updated_at DESC
+                OFFSET :skip LIMIT :limit
+                """
+            ),
+            {"skip": skip, "limit": limit},
         )
-        .outerjoin(step_counts_sq, Thread.id == step_counts_sq.c.thread_id)
-        .order_by(desc(Thread.updated_at))
-        .offset(skip)
-        .limit(limit)
-    )
-
-    rows = (await db.execute(q)).all()
+    ).all()
     return [
         {
             "id": str(r.id),
@@ -94,7 +106,7 @@ async def list_all_threads(
             "user_identifier": r.user_identifier,
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-            "step_count": r.step_count,
+            "event_count": r.event_count,
         }
         for r in rows
     ]
@@ -103,31 +115,25 @@ async def list_all_threads(
 @router.get("/threads/{thread_id}/steps")
 async def get_thread_steps(
     thread_id: str,
-    db: AsyncSession = Depends(get_db),
+    ctx: ServerDependencies = Depends(get_ctx),
     _: AuthClaims = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
-    """Return all steps for a specific thread (for admin inspection)."""
+    """Return the thread's full wire-event history (for admin inspection).
 
+    Same projection the user-facing history endpoint and live streaming use
+    (``project_thread()``) — there is no separate admin-only steps table.
+    """
     try:
-        tid = uuid.UUID(thread_id)
+        uuid.UUID(thread_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid thread ID") from exc
 
-    q = select(Step).where(Step.thread_id == tid).order_by(Step.created_at)
-    steps = (await db.execute(q)).scalars().all()
+    runtime = ctx.runtime
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
 
-    return [
-        {
-            "id": str(s.id),
-            "type": s.type,
-            "name": s.name,
-            "input": s.input,
-            "output": s.output,
-            "is_error": s.is_error,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
-        }
-        for s in steps
-    ]
+    events = await project_thread(runtime.event_log, runtime.scheduler, thread_id)
+    return [event.model_dump(mode="json") for event in events]
 
 
 @router.delete("/threads/{thread_id}")

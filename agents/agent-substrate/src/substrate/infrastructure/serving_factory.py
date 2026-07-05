@@ -150,6 +150,8 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
             build_postgres_runtime(
                 postgres_url=pg_url,
                 reclaim_orphans=True,
+                pool_min_size=cfg.RUNTIME_PG_POOL_MIN_SIZE,
+                pool_max_size=cfg.RUNTIME_PG_POOL_MAX_SIZE,
             )
         )
         logger.info("Agent runtime: durable (Postgres EventLog)")

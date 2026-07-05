@@ -40,6 +40,14 @@ class SubstrateConfig(BaseSettings):
     DATABASE_URL: str = ""
     ASYNC_DATABASE_URL: str = ""
 
+    # ── Durable runtime asyncpg pool ─────────────────────────────────────────
+    # This is a SEPARATE pool from the ORM's own (SQLAlchemy/asyncpg or
+    # psycopg engine) — see build_postgres_runtime(). Total connection budget
+    # against your Postgres max_connections is (this pool) + (ORM engine pool)
+    # per process, times the number of replicas.
+    RUNTIME_PG_POOL_MIN_SIZE: int = 2
+    RUNTIME_PG_POOL_MAX_SIZE: int = 10
+
     # ── Redis ────────────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_SESSION_TTL: int = 3600

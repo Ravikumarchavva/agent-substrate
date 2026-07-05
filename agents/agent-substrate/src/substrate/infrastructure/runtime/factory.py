@@ -43,6 +43,8 @@ async def build_postgres_runtime(
     *,
     postgres_url: str,
     reclaim_orphans: bool = False,
+    pool_min_size: int = 2,
+    pool_max_size: int = 10,
 ) -> AsyncIterator[Runtime]:
     """Create a Runtime backed by Postgres (EventLog/Inbox/Scheduler/SignalBus).
 
@@ -54,10 +56,18 @@ async def build_postgres_runtime(
     previous process, so it is requeued immediately instead of waiting out the
     lease.  Leave it ``False`` for multi-replica workers (lease expiry handles
     orphans safely there).
+
+    ``pool_min_size``/``pool_max_size`` bound this runtime's OWN asyncpg pool —
+    separate from any ORM engine pool (e.g. the monolith's SQLAlchemy Thread/
+    Feedback engine) sharing the same Postgres instance. Size against your
+    Postgres ``max_connections`` accordingly: this pool's max, plus the ORM
+    pool's max, times replica count.
     """
     import asyncpg
 
-    pool = await asyncpg.create_pool(postgres_url)
+    pool = await asyncpg.create_pool(
+        postgres_url, min_size=pool_min_size, max_size=pool_max_size
+    )
     event_log: PostgresEventLog | None = None
     try:
         event_log = PostgresEventLog(pool, dsn=postgres_url)

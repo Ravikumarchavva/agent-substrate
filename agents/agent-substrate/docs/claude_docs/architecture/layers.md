@@ -40,7 +40,7 @@ a LOC ceiling (6k) and file-count ceiling (45) exist specifically to catch
 Agent *behavior* (the ReAct loop, guardrails, middleware pipeline) must not
 depend on *what tools exist*. This is what lets you build a new agent type
 without needing every tool wired up yet, and what keeps the tool catalog
-(`capabilities/tools/`) hot-swappable per deployment (ravi-ui vs a custom
+(`capabilities/tools/`) hot-swappable per deployment (substrate-ui vs a custom
 SaaS instance) without agents/ caring.
 
 ## Why `integrations/`, `infrastructure/`, `serving/` are orthogonal

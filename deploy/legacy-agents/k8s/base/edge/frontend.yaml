@@ -5,30 +5,30 @@ metadata:
   namespace: af-edge
 spec:
   selector:
-    app: ravi-ui
+    app: substrate-ui
   ports:
     - port: 3000
       targetPort: 3000
 ---
-# NOTE: Add a Deployment for ravi-ui here or use an external frontend deployment.
+# NOTE: Add a Deployment for substrate-ui here or use an external frontend deployment.
 # This Service stub ensures the Ingress backend exists.
 # Example:
 #   apiVersion: apps/v1
 #   kind: Deployment
 #   metadata:
-#     name: ravi-ui
+#     name: substrate-ui
 #     namespace: af-edge
 #   spec:
 #     selector:
 #       matchLabels:
-#         app: ravi-ui
+#         app: substrate-ui
 #     template:
 #       metadata:
 #         labels:
-#           app: ravi-ui
+#           app: substrate-ui
 #       spec:
 #         containers:
-#           - name: ravi-ui
-#             image: ghcr.io/your-org/ravi-ui:latest
+#           - name: substrate-ui
+#             image: ghcr.io/your-org/substrate-ui:latest
 #             ports:
 #               - containerPort: 3000

@@ -1,4 +1,4 @@
-"""Service layer for thread (session) and step (message) CRUD operations."""
+"""Service layer for thread (session) and feedback CRUD operations."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, select, update, delete
+from sqlalchemy import select, text, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from substrate.serving.monolith.models import Thread, Step, Feedback
+from substrate.serving.monolith.models import Thread, Feedback
 from substrate.serving.shared.auth.claims import AuthClaims
 
 
@@ -110,20 +110,13 @@ async def list_threads(
     ``user_identifier`` scopes the list to threads owned by that user, plus
     unowned legacy rows (``user_identifier IS NULL`` — claimable on access,
     see ``get_owned_thread``).
-    """
-    # Subquery for message count
-    count_subq = (
-        select(Step.thread_id, func.count(Step.id).label("message_count"))
-        .where(Step.type.in_(["user_message", "assistant_message"]))
-        .group_by(Step.thread_id)
-        .subquery()
-    )
 
+    Message counts come from the EventLog (``substrate_run_queue`` joined to
+    ``substrate_event_log``), not a separate steps table — see
+    ``routes/admin.py::list_all_threads`` for the same join pattern.
+    """
     query = (
-        select(
-            Thread, func.coalesce(count_subq.c.message_count, 0).label("message_count")
-        )
-        .outerjoin(count_subq, Thread.id == count_subq.c.thread_id)
+        select(Thread)
         .order_by(Thread.updated_at.desc())
         .limit(limit)
         .offset(offset)
@@ -144,7 +137,26 @@ async def list_threads(
         )
 
     result = await db.execute(query)
-    rows = result.all()
+    threads = list(result.scalars().all())
+    if not threads:
+        return []
+
+    thread_ids = [str(t.id) for t in threads]
+    count_rows = (
+        await db.execute(
+            text(
+                """
+                SELECT rq.thread_id AS thread_id, COUNT(el.*) AS message_count
+                FROM substrate_run_queue rq
+                JOIN substrate_event_log el ON el.run_id = rq.run_id
+                WHERE rq.thread_id = ANY(:thread_ids)
+                GROUP BY rq.thread_id
+                """
+            ),
+            {"thread_ids": thread_ids},
+        )
+    ).all()
+    counts = {r.thread_id: r.message_count for r in count_rows}
 
     return [
         {
@@ -155,9 +167,9 @@ async def list_threads(
             "metadata": thread.metadata_,
             "created_at": thread.created_at,
             "updated_at": thread.updated_at,
-            "message_count": msg_count,
+            "message_count": counts.get(str(thread.id), 0),
         }
-        for thread, msg_count in rows
+        for thread in threads
     ]
 
 
@@ -189,91 +201,9 @@ async def update_thread(
 
 
 async def delete_thread(db: AsyncSession, thread_id: uuid.UUID) -> bool:
-    """Delete a thread and all its steps/elements/feedbacks (cascade)."""
+    """Delete a thread and its feedbacks (cascade)."""
     result = await db.execute(delete(Thread).where(Thread.id == thread_id))
     return bool(getattr(result, "rowcount", 0))
-
-
-# ── Step CRUD ────────────────────────────────────────────────────────────────
-
-
-async def create_step(
-    db: AsyncSession,
-    *,
-    thread_id: uuid.UUID,
-    type: str,
-    name: str = "",
-    parent_id: Optional[uuid.UUID] = None,
-    input: Optional[str] = None,
-    output: Optional[str] = None,
-    streaming: bool = False,
-    is_error: bool = False,
-    metadata: Optional[Dict[str, Any]] = None,
-    generation: Optional[Dict[str, Any]] = None,
-    start_time: Optional[datetime] = None,
-    end_time: Optional[datetime] = None,
-) -> Step:
-    """Create a new step (message, tool call, etc.)."""
-    step = Step(
-        thread_id=thread_id,
-        type=type,
-        name=name,
-        parent_id=parent_id,
-        input=input,
-        output=output,
-        streaming=streaming,
-        is_error=is_error,
-        metadata_=metadata or {},
-        generation=generation,
-        start_time=start_time,
-        end_time=end_time,
-    )
-    db.add(step)
-    await db.flush()
-
-    # Update thread's updated_at
-    await db.execute(
-        update(Thread)
-        .where(Thread.id == thread_id)
-        .values(updated_at=datetime.now(timezone.utc))
-    )
-
-    return step
-
-
-async def get_steps(
-    db: AsyncSession,
-    thread_id: uuid.UUID,
-    *,
-    types: Optional[List[str]] = None,
-) -> List[Step]:
-    """Get all steps for a thread, optionally filtered by type."""
-    query = select(Step).where(Step.thread_id == thread_id).order_by(Step.created_at)
-    if types:
-        query = query.where(Step.type.in_(types))
-
-    result = await db.execute(query)
-    return list(result.scalars().all())
-
-
-async def get_step(db: AsyncSession, step_id: uuid.UUID) -> Optional[Step]:
-    """Get a single step by ID."""
-    result = await db.execute(select(Step).where(Step.id == step_id))
-    return result.scalar_one_or_none()
-
-
-async def update_step(
-    db: AsyncSession,
-    step_id: uuid.UUID,
-    **values: Any,
-) -> Optional[Step]:
-    """Update a step (e.g. set output after streaming completes)."""
-    if not values:
-        return await get_step(db, step_id)
-
-    await db.execute(update(Step).where(Step.id == step_id).values(**values))
-    await db.flush()
-    return await get_step(db, step_id)
 
 
 # ── Feedback CRUD ────────────────────────────────────────────────────────────
@@ -297,43 +227,3 @@ async def create_feedback(
     db.add(feedback)
     await db.flush()
     return feedback
-
-
-# ── Memory helpers ───────────────────────────────────────────────────────────
-
-
-async def load_messages_for_memory(
-    db: AsyncSession,
-    thread_id: uuid.UUID,
-) -> List[Dict[str, Any]]:
-    """Load steps as dicts suitable for reconstructing agent memory.
-
-    Returns steps in chronological order with type, input, output, and metadata
-    so the agent service can rebuild the proper message objects.
-    """
-    steps = await get_steps(
-        db,
-        thread_id,
-        types=[
-            "system_message",
-            "user_message",
-            "assistant_message",
-            "tool_call",
-            "tool_result",
-            "mcp_app_context",
-        ],
-    )
-    return [
-        {
-            "id": str(step.id),
-            "type": step.type,
-            "name": step.name,
-            "input": step.input,
-            "output": step.output,
-            "metadata": step.metadata_,
-            "generation": step.generation,
-            "is_error": step.is_error,
-            "created_at": step.created_at.isoformat() if step.created_at else None,
-        }
-        for step in steps
-    ]

@@ -20,9 +20,11 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from substrate.serving.monolith.database import get_db
+from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.schemas import McpContextUpdate
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
-from substrate.serving.monolith.services import create_step, get_owned_thread
+from substrate.serving.monolith.services import get_owned_thread
+from substrate.serving.stream import append_mcp_app_context
 
 logger = setup_logging()
 
@@ -318,12 +320,16 @@ async def update_mcp_context(
     body: McpContextUpdate,
     db: AsyncSession = Depends(get_db),
     user: AuthClaims = Depends(get_current_user),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
-    """Store a model context update from an interactive MCP App.
+    """Log a model context update from an interactive MCP App to the EventLog.
 
     When a user interacts with an MCP App (e.g., drags tasks on a Kanban board),
-    the app sends the updated state here. This is stored as a step so the LLM
-    sees the latest state in its next turn (per MCP Apps spec ui/update-model-context).
+    the app sends the updated state here. This is appended to the thread's
+    active (or most recent) run's log so the LLM sees the latest state in its
+    next turn (per MCP Apps spec ui/update-model-context) — see
+    ``agents/factory.py::step_rows_from_log``, which folds ``mcp_app_context``
+    entries back into the agent's context.
     """
     thread = await get_owned_thread(db, thread_id, user)
     if not thread:
@@ -336,14 +342,14 @@ async def update_mcp_context(
         raw = raw.model_dump()
     context_str = json.dumps(raw, indent=2) if not isinstance(raw, str) else raw
 
-    await create_step(
-        db,
-        thread_id=thread_id,
-        type="mcp_app_context",
-        name=body.tool_name,
-        output=context_str,
-        metadata={"tool_name": body.tool_name, "source": "mcp_app"},
+    runtime = ctx.runtime
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
+    await append_mcp_app_context(
+        runtime.event_log,
+        runtime.scheduler,
+        str(thread_id),
+        {"tool_name": body.tool_name, "context": context_str},
     )
-    await db.commit()
 
     return {"status": "ok"}

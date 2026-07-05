@@ -47,29 +47,6 @@ class ThreadOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── Step / Message schemas ───────────────────────────────────────────────────
-
-
-class StepOut(BaseModel):
-    """Step (message / tool call) response object."""
-
-    id: uuid.UUID
-    type: str
-    name: str
-    thread_id: uuid.UUID
-    parent_id: Optional[uuid.UUID] = None
-    input: Optional[str] = None
-    output: Optional[str] = None
-    is_error: Optional[bool] = None
-    metadata: Optional[JsonObject] = None
-    generation: Optional[JsonObject] = None
-    created_at: datetime
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-
-    model_config = {"from_attributes": True}
-
-
 # ── Chat schemas ─────────────────────────────────────────────────────────────
 
 

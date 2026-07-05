@@ -94,11 +94,6 @@ class Thread(Base):
 
     # Relationships
     user: Mapped[Optional["User"]] = relationship(back_populates="threads")
-    steps: Mapped[List["Step"]] = relationship(
-        back_populates="thread",
-        cascade="all, delete-orphan",
-        order_by="Step.created_at",
-    )
     elements: Mapped[List["Element"]] = relationship(
         back_populates="thread", cascade="all, delete-orphan"
     )
@@ -110,81 +105,6 @@ class Thread(Base):
         return f"<Thread(id={self.id}, name={self.name!r})>"
 
     __table_args__ = (Index("ix_threads_updated_at", "updated_at"),)
-
-
-# ── Steps (Messages / Tool Calls / Agent Steps) ─────────────────────────────
-
-
-class Step(Base):
-    """Each step in a conversation thread.
-
-    Covers user messages, assistant messages, tool calls, tool results,
-    and internal agent steps.
-
-    type values:
-      - "user_message"   – user input
-      - "assistant_message" – LLM response
-      - "tool_call"       – function/tool invocation
-      - "tool_result"     – tool execution result
-      - "system_message"  – system instructions
-    """
-
-    __tablename__ = "steps"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(String, nullable=False, default="")
-    type: Mapped[str] = mapped_column(String, nullable=False)
-    thread_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False
-    )
-    parent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
-
-    # Content
-    input: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # State
-    streaming: Mapped[bool] = mapped_column(Boolean, default=False)
-    wait_for_answer: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    is_error: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-
-    # Metadata
-    metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        "metadata", JSONB, default=dict
-    )
-    tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), default=list)
-    generation: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    start_time: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    end_time: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
-    # Display
-    show_input: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    language: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    indent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
-    # Relationships
-    thread: Mapped["Thread"] = relationship(back_populates="steps")
-
-    def __repr__(self) -> str:
-        return f"<Step(id={self.id}, type={self.type!r}, name={self.name!r})>"
-
-    __table_args__ = (
-        Index("ix_steps_thread_created", "thread_id", "created_at"),
-        Index("ix_steps_type", "type"),
-    )
 
 
 # ── Elements (Attachments) ───────────────────────────────────────────────────

@@ -26,10 +26,12 @@ is crossed.
     look and wave you through. A guardrail is the one that, if it doesn't like
     what it sees, says *"you're not getting on this flight"* — the run stops dead.
 
-This is the `agents/` layer (L1), built on top of the frozen kernel (L0)
-contract in `kernel/agent/middleware.py` (`Middleware`, `MiddlewareStage`,
-`MiddlewareContextProtocol`) — but never reaches up into `capabilities` or
-`fabric`.
+This is the `agents/` layer (L1). It owns the `Middleware` Protocol and
+`MiddlewareContext` dataclass itself (`agents/middleware/_contracts.py`) —
+kernel (L0) only contributes the dependency-free `MiddlewareStage` enum
+(`kernel/agent/middleware.py`); a kernel-minimal duplicate of the Protocol
+would have zero real consumers, so it isn't kept there. Middleware never
+reaches up into `capabilities` or `fabric`.
 
 !!! note "One middleware concept, not three"
     Earlier designs in this framework gave "agent middleware," "chat
@@ -84,8 +86,8 @@ reverse. A layer has three moves:
 
 ### The contract
 
-`Middleware` (`kernel/agent/middleware.py`) is the whole interface — one shape,
-used identically by every middleware regardless of what it wraps:
+`Middleware` (`agents/middleware/_contracts.py`) is the whole interface — one
+shape, used identically by every middleware regardless of what it wraps:
 
 ```python
 class Middleware(Protocol):
@@ -632,8 +634,8 @@ agent = ReActAgent(
 | Piece | Location |
 |---|---|
 | `MiddlewarePipeline` | `agents/middleware/pipeline.py` |
-| `Middleware` Protocol, `MiddlewareStage` enum, `MiddlewareContextProtocol` | `kernel/agent/middleware.py` |
-| `MiddlewareContext`, `AgentRunResult`, `ToolCallRecord` | `agents/middleware/_contracts.py` |
+| `MiddlewareStage` enum | `kernel/agent/middleware.py` |
+| `Middleware` Protocol, `MiddlewareContext`, `AgentRunResult`, `ToolCallRecord` | `agents/middleware/_contracts.py` |
 | Built-in middlewares (`Cache`, `Retry`, `RateLimiter`, …) | `agents/middleware/*.py` |
 | Observability (`AgentTracing`, `ChatTracing`, `FunctionTracing`) | `agents/middleware/observability.py` |
 | Guardrail middlewares | `agents/middleware/guardrails/` |

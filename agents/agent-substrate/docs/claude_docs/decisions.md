@@ -331,11 +331,14 @@ exact-equality) — don't relax the exact-match check as a quick fix.
 
 ## Middleware is one `Middleware` Protocol, one `MiddlewareContext`, one `MiddlewarePipeline` — never split by what it wraps
 
-**Decision (final, 2026-07-04 — supersedes both prior iterations below):**
-there is exactly one middleware concept in this framework. `kernel/agent/middleware.py`
-defines one `Middleware` Protocol (`process(context, call_next)`) and a
-`MiddlewareStage` enum (`TURN`/`CHAT`/`TOOL`). `agents/middleware/_contracts.py`
-defines one concrete `MiddlewareContext` dataclass with a `stage` field and
+**Decision (final, 2026-07-04 — supersedes both prior iterations below; the
+kernel-location detail was itself corrected 2026-07-05, see the note at the
+end of this entry):** there is exactly one middleware concept in this
+framework. `agents/middleware/_contracts.py` defines one `Middleware`
+Protocol (`process(context, call_next)`) and one concrete `MiddlewareContext`
+dataclass; `kernel/agent/middleware.py` holds only the `MiddlewareStage` enum
+(`TURN`/`CHAT`/`TOOL`) the `stage` field is typed against. `MiddlewareContext`
+has a `stage` field and
 every stage's fields declared (unused ones are `None`) plus three
 precisely-typed result fields (`turn_result: AgentRunResult`,
 `chat_result: LLMResponse`, `tool_result: InvocationResult` — typed
@@ -351,10 +354,24 @@ pass-through.
 
 This still dispatches at the same three real call sites as before
 (`agents/core/react.py`'s `_handle_message()` builds a `stage=TURN` context;
-`agents/runtime/context.py`'s `RunContext.llm()`/`.tool()` build `CHAT`/`TOOL`
-contexts) — what changed is that all three now share the *same* pipeline
-object and the *same* context class, with `stage` as data rather than type
-or attachment-point distinguishing them.
+`agents/runtime/context/`'s (now a package — `journal.py`/`llm.py`/`tool.py`/
+`messaging.py`/`supervision.py`) `RunContext.llm()`/`.tool()` build
+`CHAT`/`TOOL` contexts) — what changed is that all three now share the *same*
+pipeline object and the *same* context class, with `stage` as data rather
+than type or attachment-point distinguishing them.
+
+!!! note "2026-07-05 correction: kernel never actually kept a `Middleware` Protocol copy for long"
+    The paragraph above originally said `kernel/agent/middleware.py` defines
+    the `Middleware` Protocol and a `MiddlewareContextProtocol`. That was
+    true only briefly: investigating a direct question about why
+    Protocols were being defined in `agents/` at all turned up that this
+    kernel-side pair had **zero real consumers** — every actual middleware
+    needs the concrete `MiddlewareContext`'s stage-specific fields, so
+    nothing outside kernel's own re-export ever imported the kernel copy.
+    Deleted both; kernel now holds only `MiddlewareStage`. The decision
+    below (one Protocol, one context, one pipeline, `stages`-based filtering)
+    is otherwise unchanged — only *where* the Protocol/context class
+    physically live was corrected.
 
 **Why:** the user's explicit read on the two prior iterations — three
 separate context types (`AgentCallContext`/`ChatContext`/`FunctionContext`)

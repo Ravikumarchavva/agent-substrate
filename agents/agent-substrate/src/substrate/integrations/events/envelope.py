@@ -8,10 +8,9 @@ this shape on the wire.  Previously inherited from ``substrate.kernel.contracts.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 from substrate.kernel import Event
-
 from pydantic import BaseModel, Field
 
 
@@ -27,9 +26,9 @@ class EventEnvelope(BaseModel):
     """
 
     event_type: str
-    payload: Dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
     event_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
-    trace_context: Optional[Dict[str, str]] = None
+    trace_context: dict[str, str] | None = None
 
     model_config = {"populate_by_name": True}
 

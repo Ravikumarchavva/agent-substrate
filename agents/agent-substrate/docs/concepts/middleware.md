@@ -150,8 +150,8 @@ Both observe the run, but they differ in power:
 | Piece | Location |
 |---|---|
 | `MiddlewarePipeline` | `agents/middleware/pipeline.py` |
-| `Middleware` Protocol, `MiddlewareStage` enum | `kernel/agent/middleware.py` |
-| `MiddlewareContext` | `agents/middleware/_contracts.py` |
+| `MiddlewareStage` enum | `kernel/agent/middleware.py` |
+| `Middleware` Protocol, `MiddlewareContext` | `agents/middleware/_contracts.py` |
 | Built-in middlewares | `agents/middleware/*.py` |
 | Guardrail middlewares | `agents/middleware/guardrails/` |
 | Default tracing + guardrail wiring | `agents/factory.py` (`create_assistant_agent()`) |

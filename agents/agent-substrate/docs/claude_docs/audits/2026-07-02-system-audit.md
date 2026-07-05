@@ -1,5 +1,18 @@
 # System Architecture Audit — 2026-07-02
 
+!!! warning "Superseded — read as history, not current state"
+    This audit is a point-in-time snapshot. The remediation program it
+    triggered (Phases 0-5, see `../roadmap.md`) is now mostly **Done**:
+    `PostgresSignalBus`, `PostgresSupervisor`, and durable
+    `SuspendInterrupt`-based suspend/resume shipped in Phase 1 (2026-07-03);
+    horizontally-scalable serving, full tenant_id threading, and initial
+    `human_gate` signal convergence shipped in Phases 2-4 (2026-07-03);
+    tracing/webhook-HMAC/agent-versioning hardening shipped in Phase 5
+    (2026-07-04). The "Executive verdict" and per-area findings below
+    describe the state **before** that program — check `../roadmap.md`'s
+    "Phase status" table before treating any specific finding here as still
+    open.
+
 **Scope:** the whole system, audited as three parallel deep-dives:
 (A) runtime execution path (`agents/runtime/`, `infrastructure/runtime/`),
 (B) serving + state layer (`serving/monolith/`, `serving/services/`, session/memory),

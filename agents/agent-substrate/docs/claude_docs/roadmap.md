@@ -125,33 +125,101 @@ so the decision is visible, not silently dropped.
 
 ## Recently shipped (prune over time)
 
+- **CI hardening + full architecture-boundary audit** (2026-07-05). `make ci`
+  and `.github/workflows/ci.yml` had independent `|| true`/soft-fail bypasses
+  on typecheck and security that silently defeated each other — both flipped
+  to hard-fail, and a `lint-imports` target/CI job added (it was never wired
+  in at all before). `uv run pytest --with pyright pyright src/` now runs
+  clean (0 errors) as a gate. A dependency audit found the framework's own
+  `pyproject.toml` pulled in `langchain`/`paddleocr[all]` transitively with
+  zero real importers anywhere in `src/`/`tests/` — removed. Followed by a
+  deep audit for out-of-boundary implementations (things living in the wrong
+  layer) and duplicate logic, fixing:
+  - `infrastructure/serving_factory.py` was importing backwards *from*
+    `serving/` (forbidden direction) and embedding agent-topology
+    construction that belongs in `agents/factory.py`. Fixed by adding
+    `build_research_orchestrator()`/`build_token_budget_pipeline()` to
+    `agents/factory.py` (accepting pre-built capability tools as parameters,
+    since `agents/` cannot import `capabilities/` — caught by `lint-imports`
+    on the first draft, which tried to construct `WebSearchTool` et al.
+    directly inside `agents/factory.py`) and having `build_agent_for_thread()`
+    accept an injected `cfg`/`load_persisted_steps` instead of importing
+    `serving.shared.settings`/`serving.monolith.services` itself.
+  - `_cosine_similarity` was reimplemented identically in three files
+    (`capabilities/tools/ai/knowledge_search.py`, `agents/llm/cache.py`,
+    `agents/storage/vector.py`). Consolidated into one
+    `agents/storage/vector.py::cosine_similarity()`, re-exported from
+    `agents.storage`.
+  - All 9 microservices (`serving/services/*/app.py`) hand-rolled their own
+    `aioredis.from_url()`/`.aclose()` instead of reusing
+    `infrastructure/cache/redis.py::RedisConnector`. Switched all 9 to
+    `RedisConnector`.
+  - `serving/shared/contracts/human_gate.py`'s `HITLResponse.action` Literal
+    only allowed `"approve"/"deny"/"modify"` (tool-approval actions) while the
+    monolith's equivalent schema also allows `"answered"/"skipped"/"cancelled"`
+    (human-input-resolution actions) — the microservices gateway would 422 on
+    any human-input HITL response proxied through it. Aligned the two.
+  - Several other audit candidates (trigger-scheduler→Runtime dispatch,
+    tool-approval-list placement, MCP-apps static resource registry,
+    `build_chat_tools`'s per-request tool composition) were investigated and
+    found to be either legal under the enforced layering rules or too small
+    to be worth the churn — left as-is rather than "fixed" for its own sake.
+  Gate for all of the above: `uv run ruff check .`/`format --check` clean,
+  `uv run lint-imports` 5/5 contracts kept, `uv run --with pyright pyright
+  src/` 0 errors, full suite 441 passed.
+- **Kernel dead-code cleanup — `Middleware`/`MiddlewareContextProtocol` deleted
+  from kernel; `CancellationToken` split into Protocol + concrete impl**
+  (2026-07-05, prompted by the user asking why middleware/agent/tool-approval
+  Protocols were being defined in `agents/` when they "should all live in
+  kernel"). Investigation found the kernel `Agent` Protocol genuinely has a
+  real consumer (`fabric/evals/runner.py`) but kernel's `Middleware` Protocol
+  and `MiddlewareContextProtocol` (added in the middleware rebuild below) had
+  **zero** real consumers outside kernel's own re-export — every actual
+  middleware implementation needs the concrete, richer `MiddlewareContext`
+  dataclass's stage-specific fields, so a kernel-minimal duplicate Protocol
+  was pure duplication. Deleted both; `kernel/agent/middleware.py` now
+  defines only `MiddlewareStage` (the enum every middleware implementation
+  needs, with zero dependencies — exactly what kernel exists to hold).
+  `agents/middleware/_contracts.py`'s `Middleware`/`MiddlewareContext` are now
+  the only definitions of those names. Same investigation also converted
+  `CancellationToken` (`kernel/agent/runtime_context.py`) from a concrete
+  class (real `asyncio.Event`, callback list) into a pure Protocol, moving the
+  concrete implementation to a new file, `agents/runtime/cancellation.py`.
+  Deleted `RunMeta.standalone()` — a classmethod with zero production
+  callers that could no longer construct a concrete `CancellationToken` from
+  within kernel without violating kernel independence; a test-local
+  `_standalone_meta()` helper replaces it in `tests/kernel/test_runtime_contracts.py`.
+  Gate: `uv run ruff check .` clean, `uv run lint-imports` 5/5 contracts kept,
+  `tests/architecture/test_kernel_invariants.py` 10/10 passed, full suite 441
+  passed.
 - **Middleware rebuilt as one Protocol/context/pipeline — no different kinds**
   (2026-07-04, final iteration — supersedes both an earlier RunContext-only
   hook and a subsequent three-pipeline `MiddlewareBundle`, per explicit user
   direction: "a middleware is a middleware across the framework, no different
-  kinds"). `kernel/agent/middleware.py` now defines exactly one `Middleware`
-  Protocol (non-generic), one `MiddlewareStage` enum (`TURN`/`CHAT`/`TOOL`),
-  and one minimal `MiddlewareContextProtocol` — deleting the prior
-  `AgentRunContextProtocol`/`ChatContextProtocol`/`FunctionContextProtocol`
-  trio and the `AgentMiddleware`/`ChatMiddleware`/`FunctionMiddleware` type
-  aliases. `agents/middleware/_contracts.py` defines one concrete
-  `MiddlewareContext` dataclass (deleting `AgentCallContext`/`ChatContext`/
-  `FunctionContext`) with a `stage` field and three precisely-typed result
-  slots (`turn_result: AgentRunResult`, `chat_result: LLMResponse`,
-  `tool_result: InvocationResult` — kept separate rather than one `Any`,
-  since the three result shapes are genuinely different classes). A
-  middleware that only cares about one stage declares
+  kinds"; **superseded again on 2026-07-05** — see the "Kernel dead-code
+  cleanup" entry above, which deleted the kernel-side `Middleware` Protocol
+  and `MiddlewareContextProtocol` entirely once they were found to have zero
+  real consumers). `agents/middleware/_contracts.py` defines one concrete
+  `Middleware` Protocol and one `MiddlewareContext` dataclass (deleting
+  `AgentCallContext`/`ChatContext`/`FunctionContext`) with a `stage` field
+  (backed by kernel's `MiddlewareStage` enum — `TURN`/`CHAT`/`TOOL`, the one
+  piece of this that does still live in `kernel/agent/middleware.py`) and
+  three precisely-typed result slots (`turn_result: AgentRunResult`,
+  `chat_result: LLMResponse`, `tool_result: InvocationResult` — kept separate
+  rather than one `Any`, since the three result shapes are genuinely
+  different classes). A middleware that only cares about one stage declares
   `stages: ClassVar[frozenset[MiddlewareStage]]`;
   `MiddlewarePipeline.execute()` (`agents/middleware/pipeline.py`, its
-  duplicate `MiddlewareProtocol` also deleted in favor of importing the
-  kernel's `Middleware`) filters to only the middlewares that declared the
+  duplicate `MiddlewareProtocol` also deleted in favor of one shared
+  `Middleware` Protocol) filters to only the middlewares that declared the
   current context's stage before building the call chain — a middleware
   that didn't declare a stage never gets `process()` called for it there.
   `ReActAgent.__init__` (`agents/core/react.py`) takes exactly one
   `middleware: MiddlewarePipeline`; `_handle_message()` builds a
   `MiddlewareContext(stage=TURN, ...)` and sets `c.turn_result` from
-  `_react_loop()`'s real `AgentRunResult`. `agents/runtime/context.py`'s
-  `RunContext.llm()`/`.tool()` build `CHAT`/`TOOL`-stage contexts around
+  `_react_loop()`'s real `AgentRunResult`. `agents/runtime/context/`'s
+  (now a package: `journal.py`/`llm.py`/`tool.py`/`messaging.py`/
+  `supervision.py`) `llm()`/`tool()` build `CHAT`/`TOOL`-stage contexts around
   their genuine-execution branch only (never the replay-cache-hit branch)
   and set `c.chat_result`/`c.tool_result`; `CacheMiddleware`'s
   skip-`call_next`-on-hit short-circuit and `HistoryTruncatorMiddleware`'s

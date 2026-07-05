@@ -359,7 +359,8 @@ the full rich surface an agent author actually uses: `ctx.llm()`, `ctx.tool()`,
 `ctx.check()`, and more. **Every effectful call is journaled**, so a replay never
 re-bills the model or re-sends an email.
 
-It lives at `agents/runtime/context.py`.
+It lives at `agents/runtime/context/` (a small package: `journal.py`, `llm.py`,
+`tool.py`, `messaging.py`, `supervision.py` — not a single file).
 
 !!! tip "Analogy — the toolkit and the notebook"
     `ctx` is a fresh toolkit handed to the agent for *this one job*: a phone to
@@ -368,38 +369,48 @@ It lives at `agents/runtime/context.py`.
     is logged. If the job restarts, the agent re-reads the notebook instead of
     re-doing the expensive work.
 
-### `_step_seq` and the at-most-once helper
+### Hierarchical effect paths and the `EffectCache`
 
-The context keeps a counter `_step_seq` that starts at 0 and bumps on every
-journaled operation. That counter is the **namespace** for effect ids: step N in
-a run always computes the same `effect_id`, so on replay it finds the journal hit
-and skips the work. The generic helper is `_journaled()`:
+At-most-once used to be keyed by a flat `_step_seq` counter looked up in a
+separate `Journal` backend. That's been replaced: the context now keeps a
+**scope stack** (`_path_stack`) rather than a flat counter, and effect
+lookups/records go through an `EffectCache` (`agents/runtime/effect_cache.py`)
+folded straight from the EventLog's own `effect.result` entries — not a
+separate Journal store. `_alloc_path()` allocates a hierarchical path
+(`"0"`, `"0.1"`, `"1"`, …) so a tool's own internal journaled calls (e.g. a
+nested `ctx.uuid()`) get stable paths of their own without desyncing sibling
+effect ids, even when the outer call itself replays as a cache hit. The
+generic helper is `_journaled()`:
 
 ```python
 async def _journaled(self, kind, args, fn):
-    effect_id = Effect.make_id(self.run_id, self._step_seq, kind, args)
-    self._step_seq += 1
-    cached = await self._journal.lookup(effect_id)
+    path = self._alloc_path()
+    effect_id = Effect.make_id(self.run_id, path, kind, args)
+    cached = self._lookup_effect(effect_id)     # EffectCache — pure in-memory, no I/O
     if cached:
         if cached.status == "error":
-            raise RuntimeError(cached.value.get("error", "journaled error"))
-        return cached.value           # HIT — return cached, do NOT re-run
+            raise RuntimeError((await self._resolve_effect_value(cached)).get("error", "journaled error"))
+        return await self._resolve_effect_value(cached)   # HIT — do NOT re-run
+    self._enter_scope()                          # open a child path scope for fn()'s own calls
     try:
-        result = await fn()           # MISS — run the real effect
-        await self._journal.record(EffectResult(effect_id=effect_id, status="ok",
-                                                value=result or {}))
+        result = await fn()                       # MISS — run the real effect
+        await self._record_effect(effect_id, "ok", result or {})
         return result
     except Exception as exc:
-        await self._journal.record(EffectResult(effect_id=effect_id, status="error",
-                                                value={"error": str(exc)}))
+        await self._record_effect(effect_id, "error", {"error": str(exc)})
         raise
+    finally:
+        self._exit_scope()
 ```
 
-This is the same three-step lookup -> execute -> record dance described in
-[Durability](../concepts/durability.md#the-at-most-once-protocol). `ctx.llm()`
-and `ctx.tool()` inline the same pattern (so they can stream and serialize their
-own results) rather than calling `_journaled` directly, but the contract is
-identical.
+This is the same lookup -> execute -> record dance described in
+[Durability](../concepts/durability.md#the-at-most-once-protocol), just backed
+by the EffectCache/EventLog rather than a Journal. `ctx.llm()` and `ctx.tool()`
+inline the same pattern (so they can stream and serialize their own results)
+rather than calling `_journaled` directly, but the contract is identical.
+Values over 64KB are transparently offloaded to `BlobStore` and referenced by
+`artifact_ref`, dereferenced lazily by `_resolve_effect_value()` only on a
+genuine cross-process replay hit.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E3F2FD','primaryTextColor': '#0D47A1','primaryBorderColor': '#1565C0','lineColor': '#546E7A','fontSize': '13px'}}}%%
@@ -408,14 +419,20 @@ flowchart TD
     classDef decision fill:#FFF3E0,stroke:#E65100,color:#BF360C,font-weight:bold
     classDef cache fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20,font-weight:bold
 
-    START(["ctx.llm() / ctx.tool() begins"]) --> ID["effect_id = Effect.make_id<br/>(run_id, step_seq, kind, args)<br/>step_seq += 1"]:::process
-    ID --> LOOK{"Journal.lookup(effect_id)"}:::decision
+    START(["ctx.llm() / ctx.tool() begins"]) --> ID["effect_id = Effect.make_id<br/>(run_id, hierarchical path, kind, args)"]:::process
+    ID --> LOOK{"EffectCache.lookup(effect_id)"}:::decision
     LOOK -->|"HIT — already done"| RET["return cached result<br/>(model NOT re-called)"]:::cache
     LOOK -->|"MISS"| EXEC["run the real effect<br/>(stream LLM / invoke tool)"]:::process
-    EXEC --> REC["Journal.record(result)"]:::process
-    REC --> LOG["append tool.result / llm.call<br/>to EventLog"]:::process
-    LOG --> RET2["return result"]:::process
+    EXEC --> REC["append effect.result to EventLog<br/>and update EffectCache"]:::process
+    REC --> RET2["return result"]:::process
 ```
+
+!!! note "`EffectCache.fold()` — one fold per lease, not per call"
+    `EffectCache.fold(event_log, run_id)` reconstructs the whole cache from
+    the EventLog's `effect.result` entries once, when a run is leased (see
+    `Worker._run_agent`) — not on every `_journaled()` call. A crash mid-run
+    means the next process folds fresh from the same durable log and gets
+    the identical cache a live process would have had.
 
 ### The capability surface
 
@@ -487,21 +504,37 @@ fast tests, identical surface. They all live in `agents/runtime/backends/`.
 | In-memory backend | Implements kernel Protocol | Production counterpart (`infrastructure/runtime/`) |
 |---|---|---|
 | `InMemoryEventLog` | `EventLog` | `PostgresEventLog` (append-only table, `(run_id, seq)` PK) |
-| `InMemoryJournal` | `Journal` | `RedisJournal` (keyed by `effect_id`, TTL) |
 | `InMemoryInbox` | `Inbox` | `PostgresInbox` (durable queue + dead-letter) |
 | `InMemoryScheduler` | `Scheduler` | `PostgresScheduler` (`SELECT … FOR UPDATE SKIP LOCKED` + leases) |
-| `InMemorySupervisor` | `Supervisor` | *(still in-memory in Stage 1 — runs over the durable EventLog/Journal)* |
-| `InMemorySignalBus` | `SignalBus` | *(still in-memory in Stage 1)* |
-| `PushAllFanout` | `FanoutStrategy` | *(still in-memory — Stage 3 adds a push/pull hybrid)* |
-| `InMemoryFollowGraph` | `FollowGraph` | *(still in-memory in Stage 1)* |
+| `InMemorySupervisor` | `Supervisor` | `PostgresSupervisor` (`ravi_run_tree` + `ravi_spawn_effects` tables — shipped) |
+| `InMemorySignalBus` | `SignalBus` | `PostgresSignalBus` (`ravi_signals` table, exactly-once consume-based fencing — shipped) |
+| `PushAllFanout` | `FanoutStrategy` | *(still in-memory — a push/pull hybrid for celebrity agents is unbuilt)* |
+| `InMemoryFollowGraph` | `FollowGraph` | *(still in-memory)* |
 
-!!! note "The factory only swaps four backends today"
-    `build_postgres_runtime` injects `PostgresEventLog`, `PostgresInbox`,
-    `PostgresScheduler`, and `RedisJournal` (falling back to `InMemoryJournal` when
-    no `redis_url` is given). Supervisor, SignalBus, Fanout, and FollowGraph keep
-    their in-memory implementations — they ride on top of the now-durable EventLog
-    and Journal. Because everything is behind a Protocol, hardening those four is a
-    drop-in swap later.
+!!! note "`Journal` still exists, but no longer backs `RunContext`'s effect cache"
+    `Journal`/`InMemoryJournal` (`kernel/runtime/effects.py`,
+    `agents/runtime/backends/_journal.py`) are still real and still used — as
+    `Runtime`'s default and by `InMemorySupervisor` for spawn-id dedup. What
+    changed is `RunContext`'s own at-most-once mechanism: it no longer talks
+    to a Journal at all. Effect-result durability (LLM/tool call dedup) now
+    comes from the EventLog itself (`effect.result` entries, folded into an
+    `EffectCache` per lease; see `agents/runtime/effect_cache.py` and the
+    "Hierarchical effect paths and the `EffectCache`" section above). The
+    production path drops Journal entirely: `PostgresSupervisor` uses its own
+    `ravi_spawn_effects` table for spawn dedup instead of a Journal
+    implementation, and there is no `RedisJournal` anymore — closing a real
+    gap the old TTL'd Redis store had (a run suspended past the TTL used to
+    come back to a journal miss on every effect, re-billing LLM calls,
+    re-running tools; the EventLog never expires).
+
+!!! note "`build_postgres_runtime` swaps five backends"
+    `infrastructure/runtime/factory.py::build_postgres_runtime` injects
+    `PostgresEventLog`, `PostgresInbox`, `PostgresScheduler`,
+    `PostgresSignalBus`, and `PostgresSupervisor` — the full coordination core
+    is durable today, not just the four originally hardened. `PushAllFanout`
+    and `InMemoryFollowGraph` are still in-memory; because everything is
+    behind a Protocol, hardening those two is a drop-in swap later if a
+    single-process fanout/follow-graph ever becomes a bottleneck.
 
 A one-line tour:
 
@@ -510,9 +543,6 @@ A one-line tour:
   `expected_seq` doesn't match the real tail), `read` yields a finite slice,
   `tail` yields then blocks on an `asyncio.Event` for new entries (this powers
   live SSE streaming).
-- **`InMemoryJournal`** — a `dict[effect_id, EffectResult]`. `record` uses
-  `setdefault`, so it is **write-once**: the first result wins and a racing
-  replay can never overwrite it.
 - **`InMemoryInbox`** — per-agent message store with dedup by `Message.id`,
   per-sender FIFO ordering, and a retry counter that dead-letters after
   `max_retries` nacks. Holds the `on_deliver` wakeup hook the Runtime wires in.
@@ -522,11 +552,12 @@ A one-line tour:
   `heartbeat` is a no-op (single process), and `release` re-enqueues `FAILED`
   runs per their `RunRetryPolicy`. It owns `find_run_for_agent` — the wake-vs-spawn
   decider.
-- **`InMemorySupervisor`** — `spawn` journals the child run id (so replay returns
-  the *same* child and never duplicates it), delivers the boot message with
-  `notify=False`, and logs `child.spawned` in the parent's EventLog. `join` awaits
-  an `asyncio.Event` set by `record_completion`; `cancel` recurses through the
-  subtree.
+- **`InMemorySupervisor`** — `spawn` journals the child run id via the
+  `EffectCache` (so replay returns the *same* child and never duplicates it),
+  delivers the boot message with `notify=False`, and logs `child.spawned` in
+  the parent's EventLog. `join` suspends on a consume-based `child:{run_id}`
+  signal (via `SignalBus`) rather than blocking on an `asyncio.Event`; `cancel`
+  recurses through the subtree.
 - **`InMemorySignalBus`** — `run_id -> name -> (asyncio.Event, payload_box)`.
   `signal` fired *before* a run waits is buffered (delivered eagerly), so a signal
   is never lost. `timer` schedules an `asyncio.sleep` that fires the `__timer__`
@@ -534,7 +565,7 @@ A one-line tour:
   `sleep_until_signal`.
 - **`PushAllFanout`** — `publish` simply `async for follower in
   graph.followers_of(topic): inbox.deliver(follower, msg)`. Fine for normal
-  agents; Stage 3 swaps a pull model for celebrity agents.
+  agents; a pull model for celebrity agents is unbuilt.
 - **`InMemoryFollowGraph`** — two `defaultdict`s (`followers_of` and `following`)
   keyed by `"{type}/{source}"`; `follow` is idempotent (a set), `unfollow` is
   safe on an absent subscription.
@@ -545,11 +576,13 @@ A one-line tour:
 
 | Piece | Location |
 |---|---|
-| `Runtime` facade | `agents/runtime/runtime.py` |
+| `Runtime` facade (takes an optional `supervisor` param too) | `agents/runtime/runtime.py` |
 | `Worker` run loop | `agents/runtime/worker.py` |
-| `RunContext` (the journaled `ctx`) | `agents/runtime/context.py` |
+| `RunContext` (the journaled `ctx`) | `agents/runtime/context/` (package: `journal.py`, `llm.py`, `tool.py`, `messaging.py`, `supervision.py`) |
+| `EffectCache` (replaces Journal for `RunContext`'s own effect dedup) | `agents/runtime/effect_cache.py` |
+| Concrete `CancellationToken` | `agents/runtime/cancellation.py` |
 | `InMemoryEventLog` | `agents/runtime/backends/_event_log.py` |
-| `InMemoryJournal` | `agents/runtime/backends/_journal.py` |
+| `InMemoryJournal` (still used by `InMemorySupervisor`'s spawn dedup, not by `RunContext`) | `agents/runtime/backends/_journal.py` |
 | `InMemoryInbox` | `agents/runtime/backends/_inbox.py` |
 | `InMemoryScheduler` | `agents/runtime/backends/_scheduler.py` |
 | `InMemorySupervisor` | `agents/runtime/backends/_supervisor.py` |
@@ -557,7 +590,7 @@ A one-line tour:
 | `PushAllFanout` | `agents/runtime/backends/_fanout.py` |
 | `InMemoryFollowGraph` | `agents/runtime/backends/_follow_graph.py` |
 | The kernel Protocols these implement | `kernel/runtime/` ([contracts page](../kernel/07-runtime.md)) |
-| Postgres / Redis backends + factory | `infrastructure/runtime/` |
+| `PostgresEventLog`/`Inbox`/`Scheduler`/`SignalBus`/`Supervisor` + `build_postgres_runtime` factory | `infrastructure/runtime/` |
 
 **Next:** [Context, Compaction & Memory Backends](03-context-and-memory.md) — how
 an agent's conversation history is stored, trimmed, and summarised so a long run

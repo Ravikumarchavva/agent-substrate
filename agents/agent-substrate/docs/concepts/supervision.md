@@ -135,5 +135,16 @@ The whole tree can spawn at most 10 agents; `researcher` outranks `analyst` for 
 | `ExecutionTracker` (per-agent spend) | `agents/resources/budget.py` |
 | `OrchestratorAgent`, `SubAgentConfig` | `agents/core/orchestrator.py` |
 | `BudgetExhaustedError` | `kernel/core/errors.py` |
+| `PostgresSupervisor` (production `Supervisor`: durable spawn tree + idempotent spawn, `ravi_run_tree`/`ravi_spawn_effects`) | `infrastructure/runtime/pg_supervisor.py` |
+
+!!! note "Durable multi-run coordination (production)"
+    Everything above this note describes per-agent policy (budgets,
+    priority, preemption), which is backend-agnostic. What ties multiple
+    *runs* together durably — so a spawn/join tree, and cross-run cancel
+    cascades, survive a worker crash — is `PostgresSupervisor` in
+    production (`InMemorySupervisor` in dev/tests), covered in
+    [The Runtime](../agents/02-runtime.md). `RunMeta.tenant_id` is also
+    threaded end-to-end through the scheduler's lease/tenant-fairness
+    logic now, not just carried as an unused field.
 
 **Next:** [Hooks](hooks.md) — observe the run loop without changing it.

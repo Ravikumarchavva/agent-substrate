@@ -19,6 +19,12 @@ import { getMessageAttachments } from "./_client";
  * Known gap: assistant-generated file attachments mid-turn only ever
  * arrived via turn.completed, so they aren't recoverable here — only
  * user-uploaded attachments (carried on user.message) survive reload.
+ *
+ * Also filters out scheduled-task "silent monitoring check" turns (an
+ * assistant reply whose entire text is exactly "[SILENT_CHECK]"). This used
+ * to be a write-time decision (the backend skipped persisting them); now
+ * that the EventLog can't be filtered retroactively, it's a display-time
+ * content rule instead — same effective behavior.
  */
 
 type WireEvent = { type: string; [key: string]: unknown };
@@ -75,7 +81,12 @@ export function foldWireEventsToMessages(events: WireEvent[]): Message[] {
 
   function flush(): void {
     const bubble = state.active;
-    if (bubble && (bubble.content || (bubble.toolCalls && bubble.toolCalls.length > 0))) {
+    const isSilentCheck = bubble?.content.trim() === "[SILENT_CHECK]";
+    if (
+      bubble &&
+      !isSilentCheck &&
+      (bubble.content || (bubble.toolCalls && bubble.toolCalls.length > 0))
+    ) {
       messages.push(bubble);
     }
     state.active = null;

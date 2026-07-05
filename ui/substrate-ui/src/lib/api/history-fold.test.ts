@@ -135,4 +135,23 @@ describe("foldWireEventsToMessages", () => {
       "second answer",
     ]);
   });
+
+  it("hides a scheduled-task silent monitoring check from chat history", () => {
+    const messages = foldWireEventsToMessages([
+      { type: "user.message", text: "check the weather every hour" },
+      { type: "text.delta", text: "[SILENT_CHECK]" },
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+  });
+
+  it("does not hide an assistant reply that merely mentions SILENT_CHECK", () => {
+    const messages = foldWireEventsToMessages([
+      { type: "user.message", text: "what does silent check mean?" },
+      { type: "text.delta", text: "[SILENT_CHECK] is an internal marker, not user text." },
+    ]);
+
+    expect(messages).toHaveLength(2);
+  });
 });

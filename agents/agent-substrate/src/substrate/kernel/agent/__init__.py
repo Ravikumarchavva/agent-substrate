@@ -6,11 +6,7 @@ from .supervision import (
     ExecutionBudget,
 )
 from .context import CompactionStrategy, AgentContextProtocol
-from .middleware import (
-    Middleware,
-    MiddlewareStage,
-    MiddlewareContextProtocol,
-)
+from .middleware import MiddlewareStage
 from .runtime_context import CancellationToken, RunMeta
 
 __all__ = [
@@ -21,9 +17,7 @@ __all__ = [
     "ExecutionBudget",
     "CompactionStrategy",
     "AgentContextProtocol",
-    "Middleware",
     "MiddlewareStage",
-    "MiddlewareContextProtocol",
     "CancellationToken",
     "RunMeta",
 ]

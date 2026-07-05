@@ -9,8 +9,7 @@ from substrate.logger import setup_logging
 import os
 from contextlib import asynccontextmanager
 
-import redis.asyncio as aioredis
-
+from substrate.infrastructure.cache.redis import RedisConnector
 from substrate.serving.services.admin.models import ServiceBase
 from substrate.serving.services.admin.routes import router
 from substrate.serving.services.base import create_service_app, init_service_db
@@ -31,7 +30,9 @@ async def lifespan(app):
     app.state.engine = engine
     app.state.session_factory = session_factory
 
-    app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
+    redis_connector = RedisConnector(redis_url)
+    await redis_connector.connect()
+    app.state.redis = redis_connector.client
 
     event_bus = get_event_bus(redis_url)
     await event_bus.connect()
@@ -41,7 +42,7 @@ async def lifespan(app):
     yield
 
     await event_bus.disconnect()
-    await app.state.redis.aclose()
+    await redis_connector.disconnect()
     await engine.dispose()
 
 

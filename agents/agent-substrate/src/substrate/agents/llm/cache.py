@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis
 
+from substrate.agents.storage.vector import cosine_similarity
 from substrate.logger import setup_logging
 
 if TYPE_CHECKING:
@@ -37,15 +38,6 @@ if TYPE_CHECKING:
 logger = setup_logging()
 
 _CACHE_PREFIX = "semcache:"
-
-
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = sum(x * x for x in a) ** 0.5
-    norm_b = sum(x * x for x in b) ** 0.5
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
 
 
 def _pack_embedding(embedding: list[float]) -> bytes:
@@ -109,7 +101,7 @@ class SemanticCache:
             ):
                 continue
             cached_embedding = _unpack_embedding(cached_emb_bytes)
-            score = _cosine_similarity(query_embedding, cached_embedding)
+            score = cosine_similarity(query_embedding, cached_embedding)
             if score > best_score:
                 best_score = score
                 best_response = cached_response.decode("utf-8")

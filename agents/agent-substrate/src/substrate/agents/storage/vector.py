@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from substrate.kernel.llm import EmbeddingClient
 
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
+def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Cosine similarity of two equal-length vectors (0.0 if either is zero)."""
     if len(a) != len(b):
         return 0.0
@@ -152,7 +152,7 @@ class InMemoryVectorStore:
         for doc in bucket.values():
             if doc.embedding is None or not self._matches_filter(doc, filter):
                 continue
-            score = _cosine_similarity(query_embedding, doc.embedding)
+            score = cosine_similarity(query_embedding, doc.embedding)
             scored.append(
                 SearchResult(
                     id=doc.id,
@@ -174,4 +174,4 @@ class InMemoryVectorStore:
         return len(bucket) if bucket else 0
 
 
-__all__ = ["InMemoryVectorStore"]
+__all__ = ["InMemoryVectorStore", "cosine_similarity"]

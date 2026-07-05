@@ -101,14 +101,16 @@ class MiddlewareContext:
 
 
 class Middleware(Protocol):
-    """The one interceptor shape, typed against the concrete ``MiddlewareContext``.
+    """The one interceptor shape every middleware in the framework implements,
+    typed against the concrete ``MiddlewareContext`` above.
 
-    Structurally the same interceptor shape as
-    ``substrate.kernel.agent.middleware.Middleware``, but typed against the
-    concrete dataclass above instead of the kernel's minimal
-    ``MiddlewareContextProtocol`` — the agents layer is where
-    ``MiddlewareContext`` lives, so real middleware implementations can be
-    typed precisely here without the kernel needing to import this module.
+    This — not a kernel-level duplicate — is the Protocol real middleware
+    implementations and ``MiddlewarePipeline`` are typed against.
+    ``MiddlewareContext`` carries real stage-specific fields
+    (``turn_result``/``chat_result``/``tool_result``) that only make sense
+    at this layer, so a kernel-minimal version of this Protocol would have
+    nothing to type-check against and no real consumer — kernel only keeps
+    ``MiddlewareStage`` (the enum), which is genuinely dependency-free.
     """
 
     async def process(

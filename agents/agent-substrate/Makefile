@@ -9,7 +9,7 @@ else
 RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) uv run pytest --tb=short -q --junitxml=test-results.xml
 endif
 
-.PHONY: sync lint lint-apply protocol-schema format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-down docker-up docker-down observability-up observability-down
+.PHONY: sync lint lint-apply lint-imports protocol-schema format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-down docker-up docker-down observability-up observability-down
 
 help:
 	@echo "Available targets:"
@@ -23,11 +23,12 @@ help:
 	@echo "  make observability-up   - start Tempo and Grafana via Docker Compose"
 	@echo "  make observability-down - stop Tempo and Grafana"
 	@echo "  make lint         - run Ruff lint and format checks"
-	@echo "  make typecheck    - run Pyright (soft fail remains in CI workflow)"
+	@echo "  make lint-imports - run import-linter (kernel independence + layer contracts)"
+	@echo "  make typecheck    - run Pyright (hard fail)"
 	@echo "  make test         - run pytest"
 	@echo "  make build        - build the backend Docker image manually"
-	@echo "  make security     - run pip-audit"
-	@echo "  make ci           - run the same local preflight used by CI (typecheck/security are non-blocking)"
+	@echo "  make security     - run pip-audit (hard fail; see Makefile for the documented ignore-list)"
+	@echo "  make ci           - run the same preflight used by CI (lint, lint-imports, typecheck, test, security — all blocking)"
 
 start:
 	uv run start
@@ -69,6 +70,9 @@ lint:
 
 format-check:
 	uv run ruff format --check .
+
+lint-imports:
+	uv run lint-imports
 
 typecheck:
 	uv run --with pyright pyright src/
@@ -122,6 +126,7 @@ ci:
 	$(MAKE) sync
 	$(MAKE) lint-apply
 	$(MAKE) lint
+	$(MAKE) lint-imports
 	$(MAKE) typecheck
 	$(MAKE) test-ci
 	$(MAKE) security

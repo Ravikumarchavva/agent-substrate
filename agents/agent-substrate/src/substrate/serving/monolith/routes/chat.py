@@ -52,7 +52,10 @@ from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.hooks import ChatContext, hooks
 from substrate.serving.monolith.schemas import ChatRequest
-from substrate.serving.monolith.services import get_owned_thread
+from substrate.serving.monolith.services import (
+    get_owned_thread,
+    load_messages_for_memory,
+)
 from substrate.serving.monolith.services.agent_service import persist_user_message
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
@@ -285,11 +288,12 @@ async def chat(
             )
 
         agent = await build_agent_for_thread(
-            db,
             body.thread_id,
             model_client=deps["model_client"],
             tools=deps["tools"],
             system_instructions=deps["system_instructions"],
+            cfg=settings,
+            load_persisted_steps=lambda: load_messages_for_memory(db, body.thread_id),
             history=ctx.history,
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
             runtime=deps["runtime"],

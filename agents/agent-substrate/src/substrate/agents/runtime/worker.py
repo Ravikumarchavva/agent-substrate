@@ -24,7 +24,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
+from substrate.kernel.agent.runtime_context import RunMeta
+from substrate.agents.runtime.cancellation import CancellationToken
 from substrate.kernel.runtime.ids import RunStatus
 from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.core.errors import CancellationError, SuspendInterrupt

@@ -1,66 +1,47 @@
-"""CancellationToken and RunMeta — execution-scoped runtime metadata.
+"""CancellationToken (Protocol) and RunMeta — execution-scoped runtime metadata.
 
-Both types are threaded through every kernel API call so that:
+Both are threaded through every kernel API call so that:
 
 - Any operation can be cancelled cooperatively (no global state).
 - Distributed traces, deadlines, and tenant scoping are available
   everywhere without adding individual parameters to each call.
 
-``CancellationToken`` is pure asyncio — no I/O, no threads.
-``RunMeta`` is a frozen value object; create one per run() call.
+``CancellationToken`` here is a Protocol only — the concrete implementation
+(real asyncio state: an ``Event``, a callback list) lives in
+``agents/runtime/cancellation.py``, since kernel holds contracts, not
+working implementations. ``RunMeta`` is a frozen value object; create one
+per run() call — always with an already-constructed token from that layer,
+never conjured here.
 """
 
 from __future__ import annotations
 
-import asyncio
 import uuid as _uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Awaitable, Callable, Protocol
 
 from substrate.kernel.core.errors import CancellationError
-from substrate.kernel.runtime.ids import new_run_id
 from substrate.kernel.agent.supervision import Supervision
 
 
-class CancellationToken:
+class CancellationToken(Protocol):
     """Cooperative cancellation signal for agent operations.
 
     Usage::
 
-        token = CancellationToken()
-
-        # From outside (orchestrator, timeout handler, user):
-        token.cancel()
-
-        # Inside any coroutine:
-        token.check()         # raises CancellationError if cancelled
-        await token.wait()    # blocks until cancelled
-
-        # Register a callback (called synchronously on cancel):
-        token.add_callback(lambda: ...)
+        token.cancel()                 # from outside: orchestrator, timeout, user
+        token.check()                  # inside a coroutine: raises CancellationError if cancelled
+        await token.wait()             # blocks until cancelled
+        token.add_callback(lambda: ...)  # called synchronously on cancel
     """
 
-    def __init__(self) -> None:
-        self._cancelled = False
-        self._event = asyncio.Event()
-        self._callbacks: list[Callable[[], None]] = []
+    @property
+    def is_cancelled(self) -> bool: ...
 
     def cancel(self, reason: str = "cancelled") -> None:
         """Signal cancellation. Idempotent — safe to call multiple times."""
-        if not self._cancelled:
-            self._cancelled = True
-            self._reason = reason
-            self._event.set()
-            for cb in self._callbacks:
-                try:
-                    cb()
-                except Exception:
-                    pass
-
-    @property
-    def is_cancelled(self) -> bool:
-        return self._cancelled
+        ...
 
     def check(self) -> None:
         """Raise ``CancellationError`` if this token has been cancelled.
@@ -68,28 +49,22 @@ class CancellationToken:
         Call at cooperative yield points: before LLM calls, before tool
         execution, between loop iterations.
         """
-        if self._cancelled:
-            raise CancellationError(getattr(self, "_reason", "cancelled"))
+        ...
 
-    async def wait(self) -> None:
+    def wait(self) -> Awaitable[None]:
         """Block until the token is cancelled."""
-        await self._event.wait()
+        ...
 
     def add_callback(self, callback: Callable[[], None]) -> None:
         """Register a callback invoked synchronously when ``cancel()`` is called."""
-        if self._cancelled:
-            callback()
-        else:
-            self._callbacks.append(callback)
+        ...
 
     def child(self) -> "CancellationToken":
         """Return a child token that is cancelled when this one is.
 
         Cancelling the child does NOT cancel the parent.
         """
-        child_token = CancellationToken()
-        self.add_callback(lambda: child_token.cancel("parent cancelled"))
-        return child_token
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,8 +74,7 @@ class RunMeta:
     ``run_id``       — globally unique identifier for this run; first-class so
                        every layer can key logs, effects, and EventLog entries
                        without digging into ``supervision``.  Populated from
-                       ``supervision.run_id`` when supervision is provided;
-                       generated fresh by ``standalone()``.
+                       ``supervision.run_id`` when supervision is provided.
     ``cancellation`` — cooperative cancellation; call ``check()`` at yield points.
     ``supervision``  — agent position in the execution tree; ``None`` for standalone runs.
     ``deadline``     — wall-clock expiry; agents and tools should honour it.
@@ -118,24 +92,6 @@ class RunMeta:
     deadline: datetime | None = None
     trace_id: str = field(default_factory=lambda: _uuid.uuid4().hex)
     tenant_id: str | None = None
-
-    @classmethod
-    def standalone(
-        cls,
-        *,
-        run_id: str = "",
-        trace_id: str = "",
-        deadline: datetime | None = None,
-        tenant_id: str | None = None,
-    ) -> "RunMeta":
-        """Create a standalone RunMeta with a fresh CancellationToken."""
-        return cls(
-            run_id=run_id or new_run_id(),
-            cancellation=CancellationToken(),
-            deadline=deadline,
-            trace_id=trace_id or _uuid.uuid4().hex,
-            tenant_id=tenant_id,
-        )
 
     def check(self) -> None:
         """Raise CancellationError if cancelled or deadline expired."""

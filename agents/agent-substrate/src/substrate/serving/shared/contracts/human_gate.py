@@ -32,8 +32,10 @@ class HITLInputRequest(BaseModel):
 class HITLResponse(BaseModel):
     """User response to an HITL request."""
 
-    # For tool approval
-    action: Optional[Literal["approve", "deny", "modify"]] = None
+    # For tool approval (approve / deny / modify) or human-input signal (answered / skipped / cancelled)
+    action: Optional[
+        Literal["approve", "deny", "modify", "answered", "skipped", "cancelled"]
+    ] = None
     modified_arguments: Optional[Dict[str, Any]] = None
     reason: Optional[str] = None
     # For human input

@@ -8,22 +8,13 @@ embeddings when available; falls back to naive keyword matching.
 from __future__ import annotations
 from substrate.logger import setup_logging
 
-import math
 from typing import List, Tuple
 
+from substrate.agents.storage.vector import cosine_similarity
 from substrate.kernel.tools import ToolExecutionResult, ToolType
 from substrate.kernel import TextBlock
 
 logger = setup_logging()
-
-
-def _cosine_similarity(a: List[float], b: List[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
 
 
 class KnowledgeSearchTool:
@@ -180,7 +171,7 @@ class KnowledgeSearchTool:
 
             scored: List[Tuple[float, str, str]] = []
             for doc_label, chunk, emb in self._index:
-                sim = _cosine_similarity(query_embedding, emb)
+                sim = cosine_similarity(query_embedding, emb)
                 scored.append((sim, doc_label, chunk))
             scored.sort(key=lambda x: -x[0])
 

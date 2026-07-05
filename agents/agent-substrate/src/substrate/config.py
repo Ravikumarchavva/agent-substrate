@@ -96,11 +96,6 @@ class SubstrateConfig(BaseSettings):
     CI_HEADLESS_SERVICE: str = ""
     CI_REPLICAS: int = 1
 
-    # ── Third-party connectors ───────────────────────────────────────────────
-    SPOTIFY_CLIENT_ID: str = ""
-    SPOTIFY_CLIENT_SECRET: str = ""
-    SPOTIFY_REDIRECT_URI: str = ""
-
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 
     model_config = SettingsConfigDict(

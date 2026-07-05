@@ -26,7 +26,19 @@ jobs:
       - name: Lint
         run: make sync lint
 
-  # ── Type Check (if mypy/pyright configured) ──────────────────────────
+  # ── Import Boundaries (kernel independence + layer contracts) ────────
+  lint-imports:
+    name: "Import Boundaries"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - name: Check import boundaries
+        run: make sync lint-imports
+
+  # ── Type Check ────────────────────────────────────────────────────────
   typecheck:
     name: "Type Check"
     runs-on: ubuntu-latest
@@ -36,8 +48,7 @@ jobs:
         with:
           version: "latest"
       - name: Type check with pyright
-        run: make sync typecheck || true
-        # Soft fail for now — remove || true once type errors are fixed
+        run: make sync typecheck
 
   # ── Unit Tests ──────────────────────────────────────────────────────
   test:
@@ -96,4 +107,4 @@ jobs:
         with:
           version: "latest"
       - name: Check for known vulnerabilities
-        run: make sync security || true
+        run: make sync security

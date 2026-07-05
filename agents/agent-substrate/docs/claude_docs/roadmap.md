@@ -39,13 +39,24 @@ check .` · `uv run pytest` · `uv run lint-imports`.
 
 ## Carried-forward items not in the program (opportunistic)
 
-- **`agents/core/react.py` `_react()` refactor** (~150 lines; extract
-  guardrail + tool-concurrency helpers) — do when touching that file.
-- **Connectors framework** (user-managed integrations via MCP, replaces
-  hardcoded `spotify_oauth.py` pattern) — not started, post-program.
-- **Docs debt**: root `CLAUDE.md` HITL section + mkdocs pages still describe
-  pre-signal HITL; root CLAUDE.md tech-debt table still calls TaskStore
-  in-memory-only (stale — `PgTaskStore` is live under Postgres backend).
+- ~~`agents/core/react.py` `_react()` refactor~~ — **Done** (2026-07-05):
+  `_react_loop` split into `_generate_turn` (LLM call + hooks + budget) and
+  `_execute_tool_calls` (per-call invoke + record building).
+- ~~Connectors framework~~ — **Done** (2026-07-05), taken further than
+  planned: rather than building a full connectors framework, the entire
+  framework-maintained Spotify integration was deleted
+  (`integrations/spotify/` — both `SpotifyAuthService` and `SpotifyService`
+  had zero importers; the `spotify_oauth.py` route referenced here was
+  already gone). The `spotify-player` skill's own `SKILL.md` already assumed
+  Spotify is delivered as external `mcp_spotify_*` MCP tools with tokens
+  from "the backend credential store" — never the framework's Python client.
+  The generic `serving/monolith/routes/connector_tokens.py` (project-scoped
+  Redis cache, `ravi` owns OAuth) already exists for this pattern if a
+  framework-side token cache is needed by a future connector.
+- ~~Docs debt~~ — **Done** (2026-07-05): root `CLAUDE.md` tech-debt table's
+  stale TaskStore-in-memory line removed (`PgTaskStore` has been live under
+  Postgres since before this check). HITL section / mkdocs pre-signal
+  language not yet re-audited.
 - **Test coverage gaps** outside the program's new suites: guardrails,
   middleware, MCP adapter, `fabric/evals`.
 

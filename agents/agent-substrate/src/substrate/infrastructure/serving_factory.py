@@ -14,9 +14,9 @@ import os
 import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import Any, List, Optional, cast
+from typing import TYPE_CHECKING, Any, List, Optional, cast
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from substrate.config import SubstrateConfig
 from substrate.kernel.llm import EmbeddingClient, LLMClient
@@ -28,6 +28,9 @@ from substrate.kernel.tools import (
     is_provider_defined_tool,
 )
 from substrate.logger import setup_logging
+
+if TYPE_CHECKING:
+    from substrate.agents.factory import PersistedStepLoader
 
 logger = setup_logging()
 
@@ -538,12 +541,13 @@ async def resume_pending_runs(runtime: Any, *, registry: Any, model_client: Any)
 
 
 async def build_agent_for_thread(
-    db: AsyncSession,
     thread_id: uuid.UUID,
     *,
     model_client: LLMClient,
     tools: List[Tool],
     system_instructions: str,
+    cfg: SubstrateConfig,
+    load_persisted_steps: "PersistedStepLoader",
     history: Optional[HistoryProvider] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
@@ -555,51 +559,24 @@ async def build_agent_for_thread(
     Returns a ``ReActAgent`` or ``OrchestratorAgent``.  Serving code
     must treat the return type as ``Any``; the concrete type lives in
     agents/ and must not be imported from serving/.
+
+    Agent topology (the fixed researcher/calculator/clock orchestrator, and
+    the default single-assistant shape) lives in ``agents/factory.py`` —
+    this function only decides which one to build from ``cfg.AGENT_MODE``
+    and registers the result(s) with ``runtime``. ``cfg`` and
+    ``load_persisted_steps`` are passed in rather than imported from
+    ``substrate.serving.*`` — this module (``infrastructure/``) must not
+    reach into ``serving/``, only the reverse.
     """
-    from substrate.agents.context import (
-        CompactionPipeline,
-        ContextConfig,
-        InMemoryHistoryProvider,
-        SelectiveToolCallCompactionStrategy,
-        TokenBudgetComposedStrategy,
-        ToolResultCompactionStrategy,
-        TruncationStrategy,
+    from substrate.agents.factory import (
+        build_research_orchestrator,
+        build_token_budget_pipeline,
+        create_assistant_agent,
+        load_session_memory,
     )
-    from substrate.agents.core import OrchestratorAgent, ReActAgent, SubAgentConfig
-    from substrate.agents.factory import load_session_memory
-    from substrate.agents.tools.toolbox import Toolbox
-    from substrate.capabilities.tools import (
-        CalculatorTool,
-        CurrentTimeTool,
-    )
-    from substrate.capabilities.tools.web.read_url import ReadUrlTool
-    from substrate.capabilities.tools.web.search import WebSearchTool
-    from substrate.serving.shared.settings import settings as _settings
 
     if runtime is None:
         raise ValueError("build_agent_for_thread() requires a runtime.")
-
-    def _make_token_pipeline() -> CompactionPipeline:
-        return CompactionPipeline(
-            [
-                TokenBudgetComposedStrategy(
-                    strategies=[
-                        ToolResultCompactionStrategy(max_chars=1500),
-                        SelectiveToolCallCompactionStrategy(keep_recent_groups=5),
-                        TruncationStrategy(max_chars=200_000),
-                    ],
-                    token_budget=50_000,
-                )
-            ]
-        )
-
-    def _make_context() -> ContextConfig:
-        return ContextConfig(
-            InMemoryHistoryProvider(),
-            pipeline=_make_token_pipeline(),
-        )
-
-    from substrate.serving.monolith.services import load_messages_for_memory
 
     session_id = str(thread_id)
     memory = await load_session_memory(
@@ -608,86 +585,37 @@ async def build_agent_for_thread(
         history=history,
         include_mcp_app_context=True,
         cold_store_name="Postgres",
-        load_persisted_steps=lambda: load_messages_for_memory(db, thread_id),
+        load_persisted_steps=load_persisted_steps,
     )
 
-    if _settings.AGENT_MODE.lower() == "orchestrator":
+    if cfg.AGENT_MODE.lower() == "orchestrator":
+        from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool
+        from substrate.capabilities.tools.web.read_url import ReadUrlTool
+        from substrate.capabilities.tools.web.search import WebSearchTool
 
-        def _registry(*tool_instances) -> Toolbox:
-            tb = Toolbox()
-            for t in tool_instances:
-                tb.add(t)
-            return tb
-
-        researcher = ReActAgent(
-            "researcher",
-            model=model_client,
-            tools=_registry(
-                WebSearchTool(
-                    exa_api_key=_settings.EXA_API_KEY or None,
-                    tavily_api_key=_settings.TAVILY_API_KEY or None,
-                ),
-                ReadUrlTool(
-                    tavily_api_key=_settings.TAVILY_API_KEY or None,
-                    exa_api_key=_settings.EXA_API_KEY or None,
-                ),
-            ),
-            context=_make_context(),
-            system_instructions="You are a research specialist.",
-            max_iterations=5,
-        )
-        calculator = ReActAgent(
-            "calculator",
-            model=model_client,
-            tools=_registry(CalculatorTool()),
-            context=_make_context(),
-            system_instructions="You are a calculation specialist.",
-            max_iterations=3,
-        )
-        clock = ReActAgent(
-            "clock",
-            model=model_client,
-            tools=_registry(CurrentTimeTool()),
-            context=_make_context(),
-            system_instructions="You are a time specialist.",
-            max_iterations=2,
-        )
-        orchestrator = OrchestratorAgent(
-            "coordinator",
-            model=model_client,
-            sub_agents=[
-                SubAgentConfig(
-                    researcher, description="Searches the web.", ask_timeout=60.0
-                ),
-                SubAgentConfig(
-                    calculator, description="Performs calculations.", ask_timeout=30.0
-                ),
-                SubAgentConfig(
-                    clock, description="Reports the current time.", ask_timeout=10.0
-                ),
+        exa_api_key = cfg.EXA_API_KEY or None
+        tavily_api_key = cfg.TAVILY_API_KEY or None
+        research = build_research_orchestrator(
+            model_client=model_client,
+            researcher_tools=[
+                WebSearchTool(exa_api_key=exa_api_key, tavily_api_key=tavily_api_key),
+                ReadUrlTool(tavily_api_key=tavily_api_key, exa_api_key=exa_api_key),
             ],
-            max_iterations=15,
-            context=_make_context(),
+            calculator_tools=[CalculatorTool()],
+            clock_tools=[CurrentTimeTool()],
         )
-        researcher.name = "Researcher"
-        calculator.name = "Calculator"
-        clock.name = "Clock"
-        orchestrator.name = "Coordinator"
-        for agent in [researcher, calculator, clock, orchestrator]:
+        for agent in research.all_agents:
             await runtime.register(agent)
-        return orchestrator
+        return research.coordinator
 
-    toolbox = Toolbox()
-    for t in tools:
-        toolbox.add(t)
-
-    agent = ReActAgent(
-        "assistant",
+    agent = create_assistant_agent(
+        name="assistant",
         session_id=session_id,
-        model=model_client,
-        tools=toolbox,
-        context=ContextConfig(memory, pipeline=_make_token_pipeline()),
+        model_client=model_client,
+        tools=tools,
         system_instructions=system_instructions,
+        memory=memory,
+        model_context=build_token_budget_pipeline(),
         max_iterations=max_iterations,
         initial_tool_choice=initial_tool_choice,
     )

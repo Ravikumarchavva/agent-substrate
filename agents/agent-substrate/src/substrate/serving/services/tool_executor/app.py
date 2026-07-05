@@ -9,8 +9,7 @@ from substrate.logger import setup_logging
 import os
 from contextlib import asynccontextmanager
 
-import redis.asyncio as aioredis
-
+from substrate.infrastructure.cache.redis import RedisConnector
 from substrate.serving.services.base import create_service_app
 from substrate.serving.services.tool_executor.executor import ToolRegistry
 from substrate.serving.services.tool_executor.routes import router
@@ -67,7 +66,9 @@ async def lifespan(app):
     artifact_url = os.environ.get("ARTIFACT_SERVICE_URL", "http://localhost:8018")
 
     # Redis + EventBus
-    app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
+    redis_connector = RedisConnector(redis_url)
+    await redis_connector.connect()
+    app.state.redis = redis_connector.client
 
     event_bus = get_event_bus(redis_url)
     await event_bus.connect()
@@ -116,7 +117,7 @@ async def lifespan(app):
     if ci_client:
         await ci_client.close()
     await app.state.event_bus.disconnect()
-    await app.state.redis.aclose()
+    await redis_connector.disconnect()
 
 
 app = create_service_app(

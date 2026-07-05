@@ -192,3 +192,54 @@ async def test_fold_error_then_success_at_same_effect_id_ends_up_cached() -> Non
     assert result is not None
     assert result.status == "ok"
     assert result.value == {"result": "done"}
+
+
+async def test_retry_and_suspension_are_reflected_in_otel_counters() -> None:
+    """The Scheduler backends emit substrate.runtime.retries/.suspensions
+    counters (see infrastructure/observability/runtime_metrics.py) — this is
+    the only place they're exercised end-to-end. Uses a temporary
+    MeterProvider with InMemoryMetricReader so it doesn't depend on (or
+    pollute) any real OTLP configuration."""
+    from opentelemetry import metrics as otel_metrics
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
+
+    reader = InMemoryMetricReader()
+    provider = MeterProvider(metric_readers=[reader])
+    original_provider = otel_metrics.get_meter_provider()
+    otel_metrics.set_meter_provider(provider)
+    try:
+        agent = _FlakyAgent(_agent_id("flaky-metrics"))
+        async with Runtime() as rt:
+            await rt.register(agent)
+            run_id = await rt.submit(
+                agent.id,
+                _msg(agent.id),
+                retry_policy=RunRetryPolicy(max_retries=1, backoff_s=0.01),
+            )
+            await _run_to_terminal(rt, run_id)
+
+        # A plain SUSPENDED release (not via retry) — exercise the other counter.
+        sched = InMemoryScheduler()
+        from substrate.kernel.runtime.ids import RunStatus, new_run_id
+
+        suspend_run_id = new_run_id()
+        sched.register_run(suspend_run_id, _agent_id("suspend-metrics"))
+        await sched.enqueue(suspend_run_id, priority=5, tenant="default")
+        leases = await sched.lease(worker_id="w1", capacity=10)
+        lease = next(lease for lease in leases if lease.run_id == suspend_run_id)
+        await sched.release(lease, status=RunStatus.SUSPENDED)
+
+        data = reader.get_metrics_data()
+        counter_names: set[str] = set()
+        for rm in data.resource_metrics:
+            for sm in rm.scope_metrics:
+                for metric in sm.metrics:
+                    counter_names.add(metric.name)
+
+        assert "substrate.runtime.retries" in counter_names
+        assert "substrate.runtime.suspensions" in counter_names
+    finally:
+        otel_metrics.set_meter_provider(original_provider)

@@ -31,20 +31,6 @@ class _ImagePayload:
 MediaType = str | _ImagePayload
 
 
-def _serialize_attached_file(meta: Any) -> dict[str, Any]:
-    """Return a JSON-safe attachment descriptor for message metadata."""
-    props = meta.props or {}
-    return {
-        "id": str(meta.id),
-        "thread_id": str(meta.thread_id) if meta.thread_id else None,
-        "name": meta.original_name,
-        "mime": meta.content_type,
-        "size": meta.size_bytes,
-        "document_type": props.get("document_type"),
-        "document_class": props.get("document_class"),
-    }
-
-
 def _build_tool_meta_map(tools: list) -> dict:
     """Build a mapping of tool_name → { risk, color, ui? } for event enrichment."""
     from substrate.kernel.tools import ToolRisk
@@ -144,7 +130,6 @@ class _WirePersister:
 __all__ = [
     "_ImagePayload",
     "MediaType",
-    "_serialize_attached_file",
     "_build_tool_meta_map",
     "_WirePersister",
 ]

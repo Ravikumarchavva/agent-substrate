@@ -35,7 +35,7 @@ uv sync
 # Start infrastructure (Postgres, Redis, MinIO, observability, MCP server)
 make infra-up
 
-# Start monolith backend (port 8001)
+# Start monolith backend (port 8000)
 uv run start
 
 # With hot-reload
@@ -430,7 +430,7 @@ RUNTIME_BACKEND=postgres
 | PostgreSQL | 5432 | `DATABASE_URL` uses `localhost:5432` |
 | Redis | 6379 | `REDIS_URL` uses `localhost:6379` |
 | MCP demo server | 9000 | SSE at `localhost:9000/sse` |
-| Monolith backend | 8001 | `uv run start` |
+| Monolith backend | 8000 | `uv run start` |
 | Tempo | 4318 | OTLP HTTP |
 | Grafana | 3001 | Dashboard |
 

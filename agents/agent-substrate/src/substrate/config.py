@@ -45,7 +45,7 @@ class SubstrateConfig(BaseSettings):
     REDIS_SESSION_TTL: int = 3600
 
     # ── Agent runtime backend ────────────────────────────────────────────────
-    # "postgres" — durable (EventLog/Inbox/Scheduler in Postgres + Redis journal)
+    # "postgres" — durable (EventLog/Inbox/Scheduler/SignalBus/Supervisor in Postgres)
     # "memory"   — in-process, no durability; lighter for dev / tests
     RUNTIME_BACKEND: str = "postgres"
 

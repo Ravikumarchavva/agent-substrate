@@ -51,29 +51,27 @@ make infra-up
 
 ### Your First Agent
 
+`Runtime.run(agent, prompt)` is the one-shot entry point: it registers the
+agent, submits the prompt, and returns a `RunOutcome` once the agent's final
+answer is available.
+
 ```python
 import asyncio
 from substrate.agents import ReActAgent, Runtime
-from substrate.agents.context import ContextConfig, InMemoryHistoryProvider
 from substrate.integrations.llm import LLMFactory
 
 async def main():
-    runtime = Runtime()
-    await runtime.start()
-
-    llm = LLMFactory("gpt-4o", api_key="...").build()
+    llm = LLMFactory("gpt-4o", api_key="sk-...").build()
 
     agent = ReActAgent(
-        id="assistant",
-        llm=llm,
-        system="You are a helpful assistant.",
-        context_config=ContextConfig(history=InMemoryHistoryProvider()),
+        "assistant",
+        model=llm,
+        system_instructions="You are a helpful assistant.",
     )
 
-    result = await runtime.run(agent, "Write a Python function to compute Fibonacci numbers.")
-    print(result.output)
-
-    await runtime.stop()
+    async with Runtime() as runtime:
+        result = await runtime.run(agent, "Write a Python function to compute Fibonacci numbers.")
+        print(result.output)
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -84,45 +82,31 @@ if __name__ == "__main__":
 ```python
 import asyncio
 from substrate.agents import ReActAgent, Runtime
+from substrate.capabilities.tools.compute.calculator import CalculatorTool
 from substrate.integrations.llm import LLMFactory
-from substrate.kernel.tools import ToolExecutionResult
-from substrate.kernel.core.content import TextBlock
-
-class CalculatorTool:
-    name = "calculator"
-    description = "Evaluates a mathematical expression."
-    input_schema = {
-        "type": "object",
-        "properties": {"expression": {"type": "string"}},
-        "required": ["expression"],
-    }
-
-    async def execute(self, *, ctx=None, expression: str) -> ToolExecutionResult:
-        try:
-            result = eval(expression, {"__builtins__": {}}, {})
-            return ToolExecutionResult(content=[TextBlock(text=str(result))])
-        except Exception as e:
-            return ToolExecutionResult(content=[TextBlock(text=f"Error: {e}")], is_error=True)
 
 async def main():
-    runtime = Runtime()
-    await runtime.start()
+    llm = LLMFactory("gpt-4o", api_key="sk-...").build()
 
-    llm = LLMFactory("gpt-4o", api_key="...").build()
     agent = ReActAgent(
-        id="math_expert",
-        llm=llm,
+        "math_expert",
+        model=llm,
         tools=[CalculatorTool()],
-        system="Always use the calculator tool to solve math problems.",
+        system_instructions="Always use the calculator tool to solve math problems.",
     )
 
-    result = await runtime.run(agent, "Calculate 1234 * 5678.")
-    print(result.output)
-    await runtime.stop()
+    async with Runtime() as runtime:
+        result = await runtime.run(agent, "Calculate 1234 * 5678.")
+        print(result.output)
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+`CalculatorTool` evaluates arithmetic via a whitelisted AST walk — no
+`eval()` — so LLM-controlled input can never reach arbitrary code. Writing
+your own tool that evaluates expressions? Reuse `substrate.capabilities.
+tools.compute.calculator.safe_eval` rather than calling `eval()` yourself.
 
 ---
 
@@ -206,50 +190,77 @@ results = await pipeline.query("What is X?", collection="kb")
 
 ### OrchestratorAgent — Hub & Spoke
 
+`OrchestratorAgent` delegates to sub-agents via an LLM-driven tool call, and
+also works with `Runtime.run()` — its final synthesized answer streams
+through the same mechanism as `ReActAgent`'s.
+
 ```python
-from substrate.agents import OrchestratorAgent, SubAgentConfig
+from substrate.agents import OrchestratorAgent, SubAgentConfig, ReActAgent
+
+researcher = ReActAgent("researcher", model=llm, system_instructions="Research the web.")
+writer = ReActAgent("writer", model=llm, system_instructions="Write content.")
 
 orchestrator = OrchestratorAgent(
-    id="coordinator",
-    llm=llm,
+    "coordinator",
+    model=llm,
     sub_agents=[
         SubAgentConfig(agent=researcher, description="Web research"),
         SubAgentConfig(agent=writer, description="Content writing"),
     ],
 )
+
+async with Runtime() as runtime:
+    result = await runtime.run(orchestrator, "Research and draft a blog post about Rust vs Go.")
+    print(result.output)
 ```
 
-### SequentialFlow — Linear Pipeline
+### Flows — Coordination Primitives
+
+`SequentialFlow`, `ParallelFlow`, and `ConditionalFlow` (in `fabric/flows/`)
+are `Agent`-shaped coordinators: instead of streaming text via an LLM call,
+they reply to their caller via `ctx.reply()` — the same mechanism any agent
+uses to answer an `ctx.ask()`. Use **`Runtime.ask()`**, not `Runtime.run()`,
+to invoke one directly and read its result — register each step with the
+`Runtime` first:
 
 ```python
+from substrate.agents.runtime import Runtime
 from substrate.fabric.flows import SequentialFlow
+from substrate.kernel.core.identity import AgentId
 
-pipeline = SequentialFlow(steps=[fetcher_agent, parser_agent, formatter_agent])
-result = await runtime.run(pipeline, "Process this document.")
+class FetchStep:
+    id = AgentId(type="step", key="fetch")
+    async def run(self, ctx, inbox):
+        for msg in inbox:
+            await ctx.reply(msg, {"text": "Fetched 3 records."})
+
+class AnalyzeStep:
+    id = AgentId(type="step", key="analyze")
+    async def run(self, ctx, inbox):
+        for msg in inbox:
+            await ctx.reply(msg, {"text": "Analysis: all records valid."})
+
+async def main():
+    fetch, analyze = FetchStep(), AnalyzeStep()
+    pipeline = SequentialFlow(steps=[fetch, analyze], name="demo_pipeline")
+
+    async with Runtime() as runtime:
+        await runtime.register(fetch)
+        await runtime.register(analyze)
+        result = await runtime.ask(pipeline, "Process the latest dataset.")
+        print(result.output)
+        # Process the latest dataset.
+        #
+        # Fetched 3 records.
+        #
+        # Analysis: all records valid.
 ```
 
-### ParallelFlow — Concurrent Execution
-
-```python
-from substrate.fabric.flows import ParallelFlow
-
-evaluator = ParallelFlow(
-    branches=[security_auditor, legal_checker, grammar_advisor],
-    merge="concat",
-)
-```
-
-### ConditionalFlow — Dynamic Routing
-
-```python
-from substrate.fabric.flows import ConditionalFlow
-
-router = ConditionalFlow(
-    predicate=lambda text: "bug" in text.lower(),
-    if_true=bug_tracker_agent,
-    if_false=general_inbox_agent,
-)
-```
+`SequentialFlow`'s reply is the **full accumulated trace** (input + every
+step's output, joined by blank lines) — not just the last step's output.
+`ParallelFlow` (`branches=[...]`, `merge="concat"|"vote"|callable`) and
+`ConditionalFlow` (`predicate`, `if_true`, `if_false`) follow the same
+`Runtime.ask()` pattern.
 
 ---
 
@@ -274,6 +285,9 @@ JWT_SECRET=<32+ char random string>
 # Observability
 OTLP_ENDPOINT=http://localhost:4318
 ```
+
+The monolith server (`uv run start` / `substrate start`) listens on port
+**8000** by default.
 
 ---
 

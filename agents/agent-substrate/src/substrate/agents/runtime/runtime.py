@@ -277,7 +277,66 @@ class Runtime:
                 )
             elif kind == "run.cancelled":
                 return RunOutcome(run_id=run_id, status=RunStatus.CANCELLED)
-        return RunOutcome(run_id=run_id, status=RunStatus.COMPLETED, output=text_acc or None)
+        return RunOutcome(
+            run_id=run_id, status=RunStatus.COMPLETED, output=text_acc or None
+        )
+
+    async def ask(
+        self,
+        agent: Agent,
+        prompt: str,
+        *,
+        timeout: float = 120.0,
+        tenant: str = "default",
+    ) -> RunOutcome:
+        """Run an ask/reply-style ``agent`` (e.g. a ``fabric.flows`` pipeline) and
+        wait for its ``ctx.reply()`` result.
+
+        Coordination primitives (``SequentialFlow``, ``ParallelFlow``,
+        ``ConditionalFlow``, or any hand-written agent that calls
+        ``ctx.reply(msg, ...)`` instead of streaming text via ``ctx.llm()``)
+        don't produce ``text.delta`` log entries, so :meth:`run` can't capture
+        their output. This method mirrors how one agent invokes another via
+        ``ctx.ask()``: the entry message carries a synthetic ``reply_to``, and
+        the result is read directly off the ``SignalBus`` — the same
+        mechanism ``ctx.ask()`` itself consumes.
+
+        Register any of ``agent``'s dependencies (e.g. a flow's ``steps``)
+        with ``Runtime.register()`` before calling this.
+        """
+        import asyncio
+
+        from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+        from substrate.kernel.messaging.message import ChatPayload
+
+        await self.register(agent)
+        sentinel = new_run_id()
+        msg = Message(
+            target=agent.id,
+            sender=AgentId(type="user", key="ask"),
+            payload=ChatPayload(
+                message=ChatMessage(role=Role.USER, content=[TextBlock(text=prompt)])
+            ),
+            reply_to=sentinel,
+        )
+        run_id = await self.submit(agent.id, msg, tenant=tenant, max_retries=0)
+
+        deadline = asyncio.get_event_loop().time() + timeout
+        while asyncio.get_event_loop().time() < deadline:
+            payload = await self._signal_bus.consume(
+                sentinel, f"reply:{msg.correlation_id}", f"runtime-ask:{sentinel}"
+            )
+            if payload is not None:
+                return RunOutcome(
+                    run_id=run_id,
+                    status=RunStatus.COMPLETED,
+                    output=payload.get("text") or None,
+                    error=payload.get("error") or None,
+                )
+            await asyncio.sleep(0.02)
+        return RunOutcome(
+            run_id=run_id, status=RunStatus.FAILED, error="timed out waiting for reply"
+        )
 
     async def follow(
         self, follower: AgentId, topic_type: str, topic_source: str

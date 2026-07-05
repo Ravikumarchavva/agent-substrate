@@ -195,12 +195,12 @@ The `KnowledgeSearchTool` (`capabilities/tools/ai/knowledge_search.py`) accepts 
 
 ## Reranker
 
-`capabilities/knowledge/reranker.py` provides a cross-encoder reranker that can post-process `VectorStore.search()` results before they are passed to the LLM. It is optional — use it when recall quality matters more than latency.
+`capabilities/knowledge/reranker.py` provides `LLMReranker` — it uses an existing LLM client as a cross-encoder-style relevance judge (no external reranking model to download or serve) to post-process `VectorStore.search()` results before they are passed to the LLM. It retrieves top-K*3 candidates, asks the LLM to score each one's relevance to the query, and returns the top-K by score. It is optional — use it when recall quality matters more than latency (an extra LLM call per rerank).
 
 ```python
-from substrate.capabilities.knowledge.reranker import Reranker
+from substrate.capabilities.knowledge.reranker import LLMReranker
 
-reranker = Reranker(model="cross-encoder/ms-marco-MiniLM-L-6-v2")
+reranker = LLMReranker(model_client=client)
 reranked = await reranker.rerank(query, results, top_k=3)
 ```
 

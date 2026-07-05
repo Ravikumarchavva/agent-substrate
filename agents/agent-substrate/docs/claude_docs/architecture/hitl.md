@@ -58,14 +58,31 @@ explicitly marked as needing this migration via `# TODO: L4-hitl` comments:
 `capabilities/tools/code_interpreter/code_interpreter/k8s_tool.py` (all
 `risk = "critical"` or `"sensitive"`).
 
-## 3. `human_gate` microservice — separate Postgres + Redis pub/sub
+## 3. `human_gate` microservice — Postgres + Redis pub/sub, now signal-converged
 
 **Where:** `serving/services/human_gate/` (`HITLRequest` ORM model).
 
-Independent implementation for the microservices deployment mode. Not
-reconciled with either of the above. If you're working in microservices mode,
-this is the one you'll hit — don't assume the monolith's signal-based pattern
-applies there.
+**Updated 2026-07-05:** the divergence described here has narrowed. As of
+Phase 4 (2026-07-03, see `roadmap.md`), `human_gate`'s `resolve_request()`/
+`cancel_pending_for_thread()` accept a `signal_bus` and fire the *same*
+`hitl:{request_id}` signal `AskHumanTool`'s signal-suspend path
+(mechanism #1 above) waits on via `ctx.sleep_until_signal` — alongside the
+existing Redis pub/sub publish. `POST /hitl/request` also now exists (it
+didn't before — `create_request()` was previously unreachable). So the wire
+protocol has converged onto the same signal mechanism; what's still missing
+is wiring `agent_runtime` to actually construct an `AskHumanTool` with a
+`suspends_via_signal=True` handler against it — `app.state.tools` there is
+still a single static list built once at lifespan startup, with no per-run
+tool customization (explicitly deferred, see `roadmap.md`'s "Explicitly
+deferred" section). Also unresolved: `human_gate`'s own response body shape
+(`HITLResponseBody`: `approved`/`value`/`responded_by`, in
+`serving/services/human_gate/routes.py`) and `AskHumanTool._shape_result()`'s
+expected payload shape (`action`/`value`) were built independently and don't
+fully align — `resolve_request()`'s signal payload does a best-effort mapping
+that hasn't been validated against a real `AskHumanTool` call. If you're
+working in microservices mode: the signal wire-format now matches the
+monolith's, but the tool-side wiring to actually use it doesn't exist yet —
+don't assume a working end-to-end HITL flow through `agent_runtime`.
 
 ## Rule of thumb for new HITL-shaped tools
 

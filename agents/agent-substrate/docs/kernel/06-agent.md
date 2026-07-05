@@ -21,7 +21,7 @@ Think of one agent run as a **small company spun up to finish one project**:
 | Whether your notes are shredded, kept for the project, or filed forever | `HistoryRetention` |
 | The clerk who trims a fat email thread before you read it | `CompactionStrategy` |
 | Your employee ID badge with a shift deadline | `RunMeta` |
-| Airport-style security layers wrapping every model call | `Middleware` |
+| Airport-style security layers wrapping every model call | `Middleware` (contract lives one layer up, in `agents/`) |
 
 !!! note "This is the contract-level companion to two higher-level pages"
     For the *story* of how these are enforced at runtime — the `SpawnTracker`,
@@ -36,10 +36,12 @@ The kernel ships four small files, and we cover each:
 
 1. **`supervision.py`** — the org chart (`Supervision`) and the two budgets.
 2. **`runtime_context.py`** — the ID badge with a deadline (`RunMeta`) and the
-   stop button (`CancellationToken`).
+   stop button (`CancellationToken`, a Protocol only — see below).
 3. **`context.py`** — how an agent's prompt window is assembled
    (`AgentContextProtocol`, `CompactionStrategy`).
-4. **`middleware.py`** — the interceptor contract (`Middleware`).
+4. **`middleware.py`** — just the `MiddlewareStage` enum. The `Middleware`
+   interceptor Protocol itself lives one layer up, in `agents/` — see the note
+   at the end of this page for why.
 
 ---
 
@@ -316,19 +318,17 @@ class RunMeta:
 ```
 
 `RunMeta` is immutable — you **thread it down** the call stack rather than
-mutating it. Two ways to get one:
-
-- `RunMeta.standalone(...)` — a fresh badge with a brand-new
-  `CancellationToken`, for a run that has no supervision tree.
-- Built per-run by the runtime, where `run_id` is populated from
-  `supervision.run_id`.
+mutating it. Construct one per `run()` call with an already-built
+`CancellationToken` (`run_id` is populated from `supervision.run_id` when
+supervision is provided).
 
 ### The stop button: `CancellationToken`
 
-A `CancellationToken` is a pure-asyncio cooperative cancellation signal — no
-threads, no global state. Someone on the outside (an orchestrator, a timeout
-handler, the user clicking "stop") calls `token.cancel()`; code on the inside
-politely *checks* at safe points.
+In the kernel, `CancellationToken` is a **Protocol only** — `is_cancelled`,
+`cancel()`, `check()`, `wait()`, `add_callback()`, `child()`. The concrete
+implementation (real asyncio state: an `Event`, a callback list) lives in
+`agents/runtime/cancellation.py`, not in kernel — kernel holds the contract,
+`agents/` holds the working cancellation primitive built against it.
 
 ```python
 token.cancel("user stopped")   # from outside — idempotent
@@ -423,15 +423,21 @@ those into a composable layer — like the **layered checkpoints at airport
 security**: each layer can inspect you on the way in, wave you through to the
 next, then inspect you again on the way out.
 
-The kernel defines one interceptor Protocol — not one per level. Every
-middleware in the framework, regardless of which of the three moments
-(agent-turn, chat, tool) it wraps, implements this exact shape:
+Unlike every other type on this page, the `Middleware` Protocol and its
+`MiddlewareContext` do **not** live in kernel. Every real middleware
+implementation needs the concrete context's stage-specific fields
+(`messages`, `arguments`, `turn_result`/`chat_result`/`tool_result`, …), which
+are dataclass fields defined in `agents/middleware/_contracts.py` — a
+kernel-minimal duplicate of the Protocol would have zero real consumers (an
+earlier version of this module had one; nothing outside kernel's own
+re-export ever imported it). So the interceptor shape lives one layer up:
 
 ```python
+# agents/middleware/_contracts.py
 class Middleware(Protocol):
     async def process(
         self,
-        context: MiddlewareContextProtocol,
+        context: MiddlewareContext,
         call_next: Callable[[], Awaitable[None]],
     ) -> None: ...
 ```
@@ -460,8 +466,10 @@ flowchart TB
     style L3 fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
 ```
 
-The kernel also defines `MiddlewareStage` — an enum, not a type parameter —
-saying which of the three moments a given context represents:
+The one piece of middleware machinery the kernel *does* define is
+`MiddlewareStage` — a plain, dependency-free enum every middleware
+implementation across the agents layer needs, saying which of the three
+moments a given context represents:
 
 ```python
 class MiddlewareStage(str, Enum):
@@ -470,30 +478,25 @@ class MiddlewareStage(str, Enum):
     TOOL = "tool"   # one tool.execute() call
 ```
 
-And a **minimal context protocol** describing only the attributes the kernel
-itself needs to type-check against, without importing the concrete
-`MiddlewareContext` dataclass the `agents/` layer actually constructs:
-
-```python
-class MiddlewareContextProtocol(Protocol):
-    stage: MiddlewareStage
-    agent_name: str
-    run_id: str
-    metadata: dict[str, Any]
-```
-
-That's it — one Protocol, one enum, no per-level type aliases. The concrete
-`MiddlewareContext` at the `agents/` layer carries the full set of
-stage-specific fields (`messages`, `arguments`, `turn_result`, …); see
+That's it — one enum, no Protocol, no per-level type aliases. The concrete
+`MiddlewareContext` at the `agents/` layer carries the `stage` field plus the
+full set of stage-specific fields (`messages`, `arguments`,
+`turn_result`/`chat_result`/`tool_result`, …); see
 [Middleware](../concepts/middleware.md) for that shape and
-`agents/core/react.py`/`agents/runtime/context.py` for where each stage is
+`agents/core/react.py`/`agents/runtime/context/` for where each stage is
 actually dispatched.
 
-!!! note "Contracts here, behaviour next door"
-    This page documents only the *interceptor shape*. The `MiddlewarePipeline`
-    that threads layers together, and the built-ins (`Cache`, `Retry`,
-    `RateLimiter`, guardrails …), live in `agents/middleware/` — see
-    [Middleware](../concepts/middleware.md) for the full onion and the catalogue.
+!!! note "Why `Middleware` isn't a kernel contract"
+    Every other Protocol on this page is here because kernel needs to
+    typecheck against it without importing a concrete, richer class from
+    `agents/`. `Middleware` doesn't have that problem — nothing outside
+    `agents/middleware/` and its callers ever needs to reference the
+    interceptor shape independently of the concrete context, so keeping a
+    second, kernel-minimal Protocol around was pure duplication with no real
+    consumers. The `MiddlewarePipeline` that threads layers together, and the
+    built-ins (`Cache`, `Retry`, `RateLimiter`, guardrails …), live in
+    `agents/middleware/` — see [Middleware](../concepts/middleware.md) for the
+    full onion and the catalogue.
 
 ---
 
@@ -507,11 +510,11 @@ actually dispatched.
 | `Priority` | `int` enum | branch weight `BACKGROUND(0)…CRITICAL(8)` for allocation + preemption |
 | `HistoryRetention` | `str` enum | `NONE` / `RUN` / `PERMANENT` history lifetime |
 | `RunMeta` | frozen dataclass | per-run badge: `run_id`, cancellation, deadline, trace, tenant; `check()` enforces stop + deadline |
-| `CancellationToken` | class (pure asyncio) | cooperative stop button: `cancel()`, `check()`, `wait()`, `child()` |
+| `CancellationToken` | Protocol (kernel); concrete class in `agents/runtime/cancellation.py` | cooperative stop button: `cancel()`, `check()`, `wait()`, `child()` |
 | `CompactionStrategy` | Protocol | trims raw history into a prompt window |
 | `AgentContextProtocol` | Protocol | minimal context the loop sees: `agent_id` + `get_prompt_window()` |
-| `Middleware` | Protocol | one `process(context, call_next)` interceptor shape, used for all three stages |
-| `MiddlewareStage` | `str` enum | `TURN` / `CHAT` / `TOOL` — which moment a `MiddlewareContext` represents |
+| `Middleware` | Protocol — lives in `agents/middleware/_contracts.py`, not kernel | one `process(context, call_next)` interceptor shape, used for all three stages |
+| `MiddlewareStage` | `str` enum (kernel) | `TURN` / `CHAT` / `TOOL` — which moment a `MiddlewareContext` represents |
 
 !!! tip "The one rule to remember"
     The kernel only *states* policy — frozen shapes with no behaviour. The
@@ -527,14 +530,16 @@ actually dispatched.
 | Piece | Location |
 |---|---|
 | `Supervision`, `SpawnBudget`, `ExecutionBudget`, `Priority`, `HistoryRetention` | `kernel/agent/supervision.py` |
-| `RunMeta`, `CancellationToken` | `kernel/agent/runtime_context.py` |
+| `RunMeta`, `CancellationToken` (Protocol) | `kernel/agent/runtime_context.py` |
 | `CompactionStrategy`, `AgentContextProtocol` | `kernel/agent/context.py` |
-| `Middleware`, `MiddlewareStage`, `MiddlewareContextProtocol` | `kernel/agent/middleware.py` |
+| `MiddlewareStage` | `kernel/agent/middleware.py` |
 | `AgentId`, `TopicId` (ids carried by `Supervision`) | `kernel/core/identity.py` |
 | `ChatMessage` (compaction payload) | `kernel/core/content.py` |
 | `CancellationError`, `BudgetExhaustedError`, `MiddlewareTermination` | `kernel/core/errors.py` |
 | `SpawnTracker` (headcount + preemption) | `agents/supervision/budget.py` |
 | `ExecutionTracker` (per-agent spend) | `agents/resources/budget.py` |
+| `CancellationToken` (concrete implementation) | `agents/runtime/cancellation.py` |
+| `Middleware`, `MiddlewareContext` | `agents/middleware/_contracts.py` |
 | `MiddlewarePipeline` + built-in middlewares | `agents/middleware/` |
 
 **Next:** [The Durable Runtime](07-runtime.md) — the contracts that make a run

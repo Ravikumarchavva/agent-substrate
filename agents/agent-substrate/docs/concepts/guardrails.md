@@ -151,7 +151,8 @@ See [Middleware](middleware.md) for the full picture of how one pipeline dispatc
 | Guardrail middlewares | `agents/middleware/guardrails/` |
 | `MiddlewareTermination` | `kernel/core/errors.py` |
 | `MiddlewarePipeline` | `agents/middleware/pipeline.py` |
-| `Middleware` Protocol, `MiddlewareStage` enum | `kernel/agent/middleware.py` |
+| `MiddlewareStage` enum | `kernel/agent/middleware.py` |
+| `Middleware` Protocol | `agents/middleware/_contracts.py` |
 | Trip handling (`is_guardrail` → `status: "guardrail_tripped"`) | `agents/runtime/worker.py` |
 | Default tracing + guardrail wiring via `create_assistant_agent()` | `agents/factory.py` |
 

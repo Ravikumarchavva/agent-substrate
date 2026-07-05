@@ -30,7 +30,7 @@ import asyncio
 import logging
 from collections import defaultdict, deque
 from enum import Enum
-from typing import Awaitable, Callable, Deque, Dict, List, Union
+from typing import Awaitable, Callable
 
 from substrate.kernel.core.content import JsonObject
 from substrate.logger import setup_logging
@@ -63,10 +63,10 @@ class HookEvent(str, Enum):
 
 # Type alias for hook callbacks — both async and sync callables are accepted;
 # sync callables are wrapped in asyncio.to_thread before dispatch.
-HookCallback = Union[
-    Callable[[JsonObject], Awaitable[None]],
-    Callable[[JsonObject], None],
-]
+HookCallback = (
+    Callable[[JsonObject], Awaitable[None]]
+    | Callable[[JsonObject], None]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ class HookManager:
     """
 
     def __init__(self):
-        self._hooks: Dict[HookEvent, List[HookCallback]] = defaultdict(list)
+        self._hooks: dict[HookEvent, list[HookCallback]] = defaultdict(list)
 
     def on(self, event: HookEvent):
         """Decorator to register a hook for an event.
@@ -162,7 +162,7 @@ class HookManager:
         return bool(self._hooks.get(event))
 
     @property
-    def registered_events(self) -> List[HookEvent]:
+    def registered_events(self) -> list[HookEvent]:
         """Return events that have at least one hook registered."""
         return [e for e, hooks in self._hooks.items() if hooks]
 
@@ -258,7 +258,7 @@ class RunLogger:
     def __init__(self, level: int = logging.DEBUG, maxlen: int = 500):
         self.level = level
         # Bounded deque prevents unbounded memory growth on long-running agents.
-        self.events: Deque[JsonObject] = deque(maxlen=maxlen)
+        self.events: deque[JsonObject] = deque(maxlen=maxlen)
 
     async def log(self, ctx: JsonObject) -> None:
         event = ctx.get("event", "unknown")

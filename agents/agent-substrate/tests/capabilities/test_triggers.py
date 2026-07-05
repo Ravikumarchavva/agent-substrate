@@ -177,7 +177,17 @@ async def test_condition_trigger_dispatch(redis_url):
     )
     await monitor.add_condition(condition)
     await monitor.start()
-    await asyncio.sleep(0.2)  # Allow background subscription task to connect to Redis
+    
+    # Wait for the consumer group to be created in Redis
+    stream_key = f"events:{condition.event_type}"
+    for _ in range(50):
+        try:
+            groups = await bus._client.xinfo_groups(stream_key)
+            if any(g["name"] == "condition-monitor" for g in groups):
+                break
+        except Exception:
+            pass
+        await asyncio.sleep(0.1)
 
     # Publish matching event
     envelope = EventEnvelope(

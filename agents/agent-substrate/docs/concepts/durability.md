@@ -137,11 +137,13 @@ graph LR
 
 The whole point of putting these behind kernel Protocols is that the agent never knows which backend is live:
 
-| Backend | Dev (Stage 0) | Production (Stage 1) |
+| Backend | Dev (Stage 0) | Production |
 |---|---|---|
 | Event Log | in-memory | Postgres append-only table, `(run_id, seq)` PK |
-| Journal | in-memory dict | Redis keyed by `effect_id` |
+| Effect dedup (at-most-once) | in-memory `EffectCache` fold | same `EffectCache`, folded from the Postgres EventLog — no separate Journal/Redis store |
 | Scheduler / Inbox | in-memory asyncio | Postgres queue with leases |
+| Supervisor (spawn/join tree) | in-memory | `PostgresSupervisor` — `ravi_run_tree`/`ravi_spawn_effects` tables |
+| SignalBus (suspend/resume wakeups) | in-memory | `PostgresSignalBus` — `ravi_signals` table, exactly-once consume-based fencing |
 
 ```python
 # Dev — everything in-process, no infra needed
@@ -150,11 +152,11 @@ async with Runtime() as rt:
 
 # Production — durable backends injected by the infrastructure factory
 from substrate.infrastructure.runtime import build_postgres_runtime
-async with build_postgres_runtime(postgres_url=..., redis_url=...) as rt:
+async with build_postgres_runtime(postgres_url=...) as rt:
     ...
 ```
 
-Same agent. Same call site. The durability guarantees turn on with the backend swap.
+Same agent. Same call site. The durability guarantees turn on with the backend swap. There is no separate Redis journal in the production path anymore — effect-result durability for LLM/tool call dedup comes from the EventLog itself, folded into an `EffectCache` per lease (see `agents/runtime/effect_cache.py`); this closed a real gap the old TTL'd Redis store had (a run suspended past the TTL used to come back to a journal miss on every effect).
 
 ---
 
@@ -164,9 +166,10 @@ Same agent. Same call site. The durability guarantees turn on with the backend s
 |---|---|
 | `Effect`, `EffectResult`, `Journal` Protocol | `kernel/runtime/effects.py` |
 | `RunLogEntry`, `EventLog` Protocol | `kernel/runtime/log_entry.py` |
-| `_journaled()` wrapper | `agents/runtime/context.py` |
+| `EffectCache` (folds `EventLog` into effect-dedup state per lease) | `agents/runtime/effect_cache.py` |
+| `_journaled()` wrapper | `agents/runtime/context/journal.py` |
 | Worker run loop | `agents/runtime/worker.py` |
 | In-memory backends | `agents/runtime/backends/` |
-| Postgres / Redis backends | `infrastructure/runtime/` |
+| Postgres backends (`EventLog`/`Inbox`/`Scheduler`/`SignalBus`/`Supervisor`) + `build_postgres_runtime` factory | `infrastructure/runtime/` |
 
 **Next:** [Human-in-the-Loop](human-in-the-loop.md) — how a run pauses for a human and resumes later (durability is what makes the wait free).

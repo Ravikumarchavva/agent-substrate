@@ -96,11 +96,18 @@ class Worker:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def cancel(self, run_id: str) -> None:
-        """Cancel a running or pending task by run_id."""
-        status_map = getattr(self._scheduler, "_status", None)
-        if status_map is not None:
-            status_map[run_id] = RunStatus.CANCELLED
+        """Cancel a running or pending task by run_id.
 
+        Local fast path only: cancels this worker's own Task/CancellationToken
+        if it holds one. If it doesn't, that does NOT mean the run is idle —
+        on a durable multi-replica backend it may be actively leased by
+        another worker right now. ``cancel_pending()`` atomically checks and
+        transitions in one step, so only a genuinely non-running run gets
+        force-terminalized here; a RUNNING run is left alone for
+        ``Supervisor.cancel()``'s durable ``cancel_requested`` flag (observed
+        by the owning worker's own heartbeat) to handle instead — forcing
+        completion here would race that worker's real completion.
+        """
         task = self._tasks.get(run_id)
         if task is not None and not task.done():
             task.cancel()
@@ -108,7 +115,7 @@ class Worker:
         if token is not None:
             token.cancel("cancelled-externally")
 
-        if task is None:
+        if task is None and await self._scheduler.cancel_pending(run_id):
             from substrate.kernel.runtime.log_entry import RunLogEntry
 
             try:

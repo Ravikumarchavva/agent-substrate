@@ -251,6 +251,19 @@ class PostgresScheduler:
             )
         return _STATUS_MAP.get(row) if row else None
 
+    async def cancel_pending(self, run_id: RunId) -> bool:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchval(
+                """
+                UPDATE substrate_run_queue
+                SET status = 'cancelled'
+                WHERE run_id = $1 AND status IN ('pending', 'suspended')
+                RETURNING 1
+                """,
+                run_id,
+            )
+        return row is not None
+
     async def find_run_for_agent(
         self, agent_id: AgentId
     ) -> tuple[RunId, RunStatus] | None:

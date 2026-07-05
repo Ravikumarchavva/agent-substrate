@@ -47,7 +47,20 @@ async def _runtime_cm(backend: str, pg_url: str):
 
 
 async def _cancel_listener(runtime: object, event_bus: object) -> None:
-    """Consume job.cancel_requested events and cancel the local runtime run."""
+    """Consume job.cancel_requested events and cancel the run.
+
+    Each event is consumer-grouped to exactly one ``agent_runtime`` replica,
+    which is not necessarily the replica actually leasing this run (the
+    durable Postgres backend is shared across replicas). ``runtime.cancel()``
+    is only a same-process fast path — it no-ops for a run leased elsewhere
+    (see ``Worker.cancel``/``Scheduler.cancel_pending``). ``supervisor.cancel()``
+    is what's actually cross-replica-safe: it sets the durable
+    ``cancel_requested`` flag the owning replica's own heartbeat observes,
+    same as the monolith's ``POST /chat/{id}/cancel`` (see routes/cancel.py).
+    """
+    from substrate.kernel.core.identity import AgentId
+    from substrate.kernel.runtime.supervisor import RunHandle
+
     try:
         async for envelope in event_bus.subscribe(  # type: ignore[union-attr]
             "job.cancel_requested",
@@ -58,6 +71,12 @@ async def _cancel_listener(runtime: object, event_bus: object) -> None:
                 logger.info("Cancelling run %s via event bus", run_id)
                 try:
                     await runtime.cancel(run_id)  # type: ignore[union-attr]
+                    handle = RunHandle(
+                        run_id=run_id,
+                        agent_id=AgentId(type="", key=""),
+                        parent_run="",
+                    )
+                    await runtime.supervisor.cancel(handle, reason="user_requested")  # type: ignore[union-attr]
                 except Exception:
                     logger.exception("Failed to cancel run %s", run_id)
     except asyncio.CancelledError:

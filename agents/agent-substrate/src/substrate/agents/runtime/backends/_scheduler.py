@@ -214,6 +214,12 @@ class InMemoryScheduler:
     async def get_status(self, run_id: RunId) -> RunStatus | None:
         return self._status.get(run_id)
 
+    async def cancel_pending(self, run_id: RunId) -> bool:
+        if self._status.get(run_id) == RunStatus.RUNNING:
+            return False
+        self._status[run_id] = RunStatus.CANCELLED
+        return True
+
     async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:
         """Re-enqueue a suspended run (called by SignalBus/Inbox when a wakeup fires)."""
         if self._status.get(run_id) == RunStatus.SUSPENDED:

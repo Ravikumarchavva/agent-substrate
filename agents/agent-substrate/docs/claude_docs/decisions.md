@@ -413,3 +413,43 @@ passed to `ReActAgent(middleware=...)`. Add an end-to-end test in
 `Runtime`, not just a hand-built context) — a unit test that calls
 `.process()` directly with a hand-built context proves the guardrail's logic
 but not that it's actually reachable at its real call site.
+
+---
+
+## A dependency audit must check runtime string-based loading, not just `import` statements
+
+**Decision:** before removing a package from `[project.dependencies]` as
+"unused," grep for more than direct Python imports — also check config/DSN
+strings, plugin-name registries, and anything else that names a package by
+string rather than importing it, since those never show up in an
+`import`/`from` grep.
+
+**Why:** during the v1 remediation dependency-hygiene pass (2026-07-05),
+`psycopg[binary]` was deleted from base dependencies because `grep -rn
+"import psycopg"` returned zero hits in `src/`. It was still load-bearing:
+`serving/monolith/database.py::init_db()` calls `create_async_engine(settings
+.DATABASE_URL)`, and `DATABASE_URL` is a `postgresql+psycopg://` DSN —
+SQLAlchemy resolves and imports the `psycopg` driver *by the DSN scheme
+string* at connection time, not via a static import anywhere in this
+codebase's own source. The removal shipped, and the only reason it was
+caught before landing was `tests/serving/test_scheduled.py` happening to
+spin up the real monolith lifespan against an actual Postgres connection —
+a test relying on incidental integration coverage, not a targeted check.
+
+**Ruled out:** trusting `grep -rn "import X"` / an IDE's "unused import"
+pass as sufficient evidence a dependency is dead. It is necessary but not
+sufficient — it only proves the package isn't imported *by name in Python
+source*, not that nothing in the system names it another way (a connection
+string's scheme, a plugin registry's string key, an entry-point name, a
+subprocess command).
+
+**How to apply:** when auditing dependencies for removal, in addition to the
+import grep: (1) grep the same package/driver name across `.env`/config
+defaults and any `Settings`/`Config` class field values (DSN schemes are the
+sharpest case — `postgresql+psycopg`, `redis+ssl`, etc.); (2) actually run
+the test suite against a real backend (not just mocks) after removing a
+package, before considering the removal verified — a green `pytest` run
+with only in-memory/mocked backends will not catch this class of bug; (3) if
+a removal is in the same pass as several others, don't assume catching one
+mistake clears the rest — re-run the full check against each remaining
+removal candidate, don't stop at the first one that turns out fine.

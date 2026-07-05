@@ -520,7 +520,7 @@ runner.export_markdown()
 
 | Area | Issue |
 |---|---|
-| Test coverage | Gaps in: guardrails, middleware, MCP adapter, most microservices, fabric/evals |
+| Test coverage | `guardrails`/`middleware`/MCP adapter/`fabric/evals` have real (if not exhaustive) coverage as of 2026-07-05 — the genuinely thin area is **microservices business logic** (`identity`, `policy`, `job_controller`, `tool_executor`, `code_interpreter`): only health/smoke tests exist (`tests/server/test_services_health.py`), no per-service behavior tests. See `docs/claude_docs/roadmap.md` "Recently shipped" (v1 remediation) for what else shipped that session and its known gaps. |
 
 ---
 

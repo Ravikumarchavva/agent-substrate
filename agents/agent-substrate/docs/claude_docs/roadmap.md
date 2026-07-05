@@ -104,13 +104,26 @@ so the decision is visible, not silently dropped.
   been validated against a real `AskHumanTool` call. This is a genuine new
   feature (new handler class + per-run tool wiring + payload-shape
   reconciliation + its own test suite), not a coordination-layer fix.
-- **Feature-parity porting** (files/RAG → triggers/scheduled, incl. moving
-  the APScheduler job store off `MemoryDataStore` → pipelines → MCP apps)
-  and **k8s replica-policy tuning**. Both are explicitly called out in the
-  original plan as a long tail — genuinely multi-week feature/ops work, not
-  architecture remediation. Per-service k8s manifests already exist
-  (`deployment/k8s/base/runtime/*.yaml`) and are not a monolith-only
+- **Feature-parity porting** (files/RAG → triggers/scheduled → pipelines →
+  MCP apps) and **k8s replica-policy tuning**. Both are explicitly called out
+  in the original plan as a long tail — genuinely multi-week feature/ops
+  work, not architecture remediation. Per-service k8s manifests already
+  exist (`deployment/k8s/base/runtime/*.yaml`) and are not a monolith-only
   deployment; nothing here blocks scaling replicas today.
+  **Update (2026-07-05, v1 remediation):** moving `TriggerScheduler` off
+  `MemoryDataStore` is no longer just "long tail" — it's actively blocked.
+  The Makefile's `PYSEC-2026-282` (apscheduler RCE) ignore is justified
+  entirely by "we only ever construct `MemoryDataStore`"
+  (`capabilities/triggers/scheduler.py` module docstring); switching to a
+  persistent job store to fix multi-replica duplicate-firing would reopen
+  that CVE. A real fix needs the CVE resolved (or a from-scratch trusted-
+  deserializer patch) first. `tests/capabilities/test_triggers.py::
+  test_scheduler_uses_memory_data_store_not_a_persistent_one` fails loudly
+  if anyone changes the data store without addressing this. Until then:
+  **do not run more than one replica of a process that calls
+  `TriggerScheduler.start()`** — every replica runs its own independent copy
+  of every schedule, so a cron trigger fires once per replica, not once
+  total. This is documented in code, not fixed.
 - **Event-log snapshot/compaction (`Checkpoint`).** Evaluated during Phase 5
   (2026-07-04): `sweep_terminal_runs` (`infrastructure/runtime/retention.py`,
   shipped in PR8) already handles retention — deleting EventLog/signals/
@@ -122,8 +135,127 @@ so the decision is visible, not silently dropped.
   speculatively is exactly the kind of premature abstraction the project's
   coding standards warn against. Revisit if fold latency is ever profiled
   and found to matter.
+  **Update (2026-07-05, v1 remediation):** the stakes of this changed —
+  `sweep_terminal_runs` now deletes a thread's *only* copy of its
+  conversation history, not just internal coordination rows, because the
+  EventLog is the sole source of truth for both (see the "Persistence
+  collapsed onto the EventLog" entry below). The function's docstring
+  carries an operational warning, but nothing *enforces* a minimum
+  retention window or warns an operator before they run it against threads
+  users still expect to reload. Needs either a configurable minimum-age
+  floor with a sane default, or an explicit "this deletes chat history"
+  confirmation in whatever calls it in production — not addressed yet.
+- **History-replay pagination/snapshotting for `project_thread()` /
+  `step_rows_from_log()`.** Both (`serving/stream/history.py`,
+  `agents/factory.py`) replay a thread's *entire* EventLog — every run, every
+  entry — from scratch on every history load, reconnect-cold-start, and
+  memory-seed. Fine at today's scale; for a thread with hundreds of turns
+  this is unbounded work on every page load with no pagination, incremental
+  cache, or snapshot. Not measured, not fixed — flagged during the v1
+  remediation session (2026-07-05) as a scalability gap the "single source
+  of truth" redesign introduced without a mitigation. Revisit if thread
+  history load time is ever profiled and found to matter (same "measure
+  first" standard as event-log compaction above).
 
 ## Recently shipped (prune over time)
+
+- **v1 remediation program** (2026-07-05 — separate from, and after, the
+  Phase 0-5 program above; triggered by a pre-first-release production-
+  readiness audit). Eight workstreams, all shipped and gated on `uv run
+  ruff check .`/`lint-imports` 5/5/`pyright src/` 0 errors/full suite green
+  (505 tests; one pre-existing Redis-timing flake in
+  `test_condition_trigger_dispatch`, confirmed unrelated and passes in
+  isolation) after every commit:
+  - **Calculator RCE** — `capabilities/tools/compute/calculator.py`'s
+    `eval()` (escapable via `().__class__.__base__.__subclasses__()`)
+    replaced with a whitelisted-AST evaluator.
+  - **Retry correctness** — `EffectCache.fold()` was rehydrating *error*
+    effects as cache hits, so a scheduler retry replayed the same cached
+    failure forever instead of re-executing (verified: 1 LLM call across 3
+    "retries" before the fix). Fixed in `agents/runtime/effect_cache.py`;
+    added exponential backoff (`RunRetryPolicy.max_backoff_s`) and
+    retryable-vs-`PermanentError` classification (`kernel/core/errors.py`).
+    Also fixed an ordering bug in `worker.py`: `run.failed`/
+    `Supervisor.finish_run()` used to fire on the *first* transient error
+    even when a retry was about to succeed, telling a parent's `ctx.join()`
+    about a failure prematurely.
+  - **Persistence collapsed onto the EventLog** — the largest piece. The
+    `steps` table (a second, hand-written conversation store populated from
+    the SSE connection) drifted from the EventLog on crash-mid-run: a run
+    that resumed on another worker completed durably but its post-crash
+    turns never reached `steps`. Deleted the `steps` table, the `Step`
+    model, and all its readers/writers entirely. `user.message` is now a
+    proper log kind (`agents/core/_loop.py::log_user_message`);
+    `serving/stream/history.py::project_thread()` is the one canonical
+    history projection powering live streaming, reconnect, AND the history
+    endpoint; `agents/factory.py::step_rows_from_log()` is the sibling
+    projection feeding agent-memory-seed through the same unchanged
+    `rebuild_messages_from_steps()`. substrate-ui's `history-fold.ts` folds
+    the same wire-event stream for history as it does for live SSE.
+    Verified end-to-end by `test_pg_project_thread_survives_crash_and_resume`.
+    **Known gaps this introduced, not yet closed** (see "Explicitly
+    deferred" above for detail): retention (`sweep_terminal_runs`) now also
+    deletes chat history, with no enforced minimum-retention floor; history
+    replay has no pagination/snapshotting and re-folds the entire log on
+    every load. `Feedback.for_id` was NOT re-anchored to a log-derived id as
+    the original plan called for — investigation found it was never
+    actually FK'd to `Step` and substrate-ui has zero live callers of
+    `POST /feedbacks` right now, so the re-anchoring work was judged
+    speculative and skipped; revisit if that endpoint gets a real caller.
+  - **Journal retired** — `RedisJournal` (dead, never wired to a real path)
+    and `InMemoryJournal` (only consumer was `InMemorySupervisor.spawn()`'s
+    dedup) both deleted; spawn dedup now uses a plain dict, mirroring
+    `PostgresSupervisor`'s own `substrate_spawn_effects` table. One
+    durability primitive (EventLog), zero Journal.
+  - **`Worker.cancel()` ownership bug** — it used to poke
+    `scheduler._status` (a private attribute) and, whenever this worker held
+    no local Task for a run_id, unconditionally force-append `run.cancelled`
+    + call `Supervisor.finish_run()` — including for a run genuinely RUNNING
+    on *another* replica, racing that replica's real completion. Added
+    `Scheduler.cancel_pending(run_id) -> bool` (atomic, both backends) as a
+    proper gate; only a non-RUNNING run gets force-terminalized locally now.
+    Also fixed the `agent_runtime` microservice's cancel listener, which had
+    the same gap (only called the local fast path, never the durable
+    `Supervisor.cancel()` cascade).
+  - **Dependency hygiene** — heavy tool stacks (`web`/`code`/`rag`/`s3`) moved
+    to `[project.optional-dependencies]` extras; dead hard-deps
+    (`markitdown-ocr`, `ipykernel`, `ipywidgets`, `pgvector`) deleted.
+    **Caught one real mistake in this same pass**: `psycopg[binary]` was
+    also deleted as "zero direct imports," but SQLAlchemy loads it
+    dynamically for the monolith's `postgresql+psycopg://` DATABASE_URL —
+    grepping for `import X` doesn't catch string/DSN-driven dynamic loading.
+    Caught by `test_scheduled.py` failing against a real Postgres lifespan,
+    not by the audit itself. See the decisions.md entry on dependency-audit
+    methodology — the rest of this pass's removals were not systematically
+    re-checked against the same blind spot.
+  - **Public API + docs** — `Runtime.run()`/`Runtime.ask()` added as the
+    ergonomic one-shot entry points the README now actually demonstrates;
+    `substrate/__init__.py`/`agents/__init__.py` `__all__` curated to a
+    stable v1 surface; README rewritten against the real API and gated by
+    `tests/test_readme_examples.py` (executes every example against a stub
+    LLM so it can't silently drift again).
+  - **`ravi` → `substrate`/`agent-substrate` rename** — DB tables, indexes,
+    NOTIFY channels, Redis key prefixes, CLI branding (`substrate
+    start`/`stop`, single word), and a full `ravi-ui` → `substrate-ui`
+    rename across both repos (directory, remote, CSS classes, localStorage
+    keys, JWT claims — one malformed email artifact from an earlier partial
+    rename fixed along the way).
+  - **Operational metrics** — `substrate.runtime.retries`/`.suspensions` OTel
+    counters added (`infrastructure/observability/runtime_metrics.py`),
+    tagged by backend. **Only half the ask**: queue depth and lease age
+    (arguably more useful for "is this falling behind") need periodic
+    polling rather than a call-site increment and were deliberately not
+    built in this pass — don't treat this item as fully closed.
+  - **TriggerScheduler honesty** — see the updated "Feature-parity porting"
+    bullet above; documented as single-instance-only with a CVE-guardrail
+    test, not fixed.
+
+  **Process note:** this was a large amount of change (kernel through
+  serving, the DB schema, the dependency tree, two frontend repos) landed on
+  one branch in one continuous session, self-verified by the same agent that
+  wrote it. Justified by the explicit "no backward compatibility, break
+  freely" pre-release mandate, but it has not yet had a human review pass —
+  treat the branch as "believed correct, gated green" rather than "reviewed."
 
 - **CI hardening + full architecture-boundary audit** (2026-07-05). `make ci`
   and `.github/workflows/ci.yml` had independent `|| true`/soft-fail bypasses

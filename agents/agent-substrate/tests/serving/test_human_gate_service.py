@@ -4,7 +4,7 @@ SignalBus signal alongside the legacy Redis pub/sub publish).
 
 Uses the real Postgres test DB (skips if unreachable) — human_gate is
 SQLAlchemy-ORM-backed (its own hitl_requests table), separate from the
-asyncpg-based ravi_* tables PostgresSignalBus itself uses, but both point at
+asyncpg-based substrate_* tables PostgresSignalBus itself uses, but both point at
 the same physical database (see human_gate/app.py's lifespan docstring).
 """
 

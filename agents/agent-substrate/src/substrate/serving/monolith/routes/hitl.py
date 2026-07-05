@@ -80,7 +80,7 @@ async def hitl_status(
 
     # In-memory bridge has nothing (e.g. the monolith process restarted —
     # BridgeRegistry._bridges is not durable, only the run itself is). The
-    # run's own suspension IS durable (ravi_run_queue.status='suspended'),
+    # run's own suspension IS durable (substrate_run_queue.status='suspended'),
     # and its input.requested card content lives in the EventLog (logged
     # exactly once now via ctx.log_once — see agents/runtime/context.py),
     # so reconstruct the card from there instead of just returning empty.

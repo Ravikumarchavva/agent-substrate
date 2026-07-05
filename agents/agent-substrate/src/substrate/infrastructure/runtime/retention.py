@@ -5,7 +5,7 @@ one-off maintenance script. A run's full history (EventLog, spawn tree,
 signals) has no automatic expiry otherwise, so left unswept these tables grow
 without bound for the lifetime of the deployment.
 
-Only ``ravi_run_queue`` rows with ``terminated_at`` older than the cutoff are
+Only ``substrate_run_queue`` rows with ``terminated_at`` older than the cutoff are
 candidates — a row with ``terminated_at IS NULL`` is still live (pending,
 running, or suspended) and is never touched, no matter how old
 ``enqueued_at`` is.
@@ -24,10 +24,10 @@ async def sweep_terminal_runs(pool: asyncpg.Pool, *, older_than: timedelta) -> i
     """Delete all durable state for runs terminal for longer than ``older_than``.
 
     Deletes, per candidate run_id, across every table keyed by run_id:
-    ``ravi_event_log``, ``ravi_signals``, ``ravi_spawn_effects`` (keyed by
+    ``substrate_event_log``, ``substrate_signals``, ``substrate_spawn_effects`` (keyed by
     effect_id, not run_id — swept via the child_run_id it maps to),
-    ``ravi_run_tree``, ``ravi_agent_runs``, and finally ``ravi_run_queue``
-    itself. Deliberately does NOT touch ``ravi_inbox`` — it's keyed by
+    ``substrate_run_tree``, ``substrate_agent_runs``, and finally ``substrate_run_queue``
+    itself. Deliberately does NOT touch ``substrate_inbox`` — it's keyed by
     ``agent_id``, not ``run_id`` (one agent can have many runs over its
     lifetime, and its inbox is a shared queue across all of them, drained by
     whichever run is currently active), so there is no safe way to scope an
@@ -40,7 +40,7 @@ async def sweep_terminal_runs(pool: asyncpg.Pool, *, older_than: timedelta) -> i
         async with conn.transaction():
             rows = await conn.fetch(
                 """
-                SELECT run_id FROM ravi_run_queue
+                SELECT run_id FROM substrate_run_queue
                 WHERE terminated_at IS NOT NULL AND terminated_at < now() - $1::interval
                 """,
                 older_than,
@@ -50,22 +50,22 @@ async def sweep_terminal_runs(pool: asyncpg.Pool, *, older_than: timedelta) -> i
                 return 0
 
             await conn.execute(
-                "DELETE FROM ravi_event_log WHERE run_id = ANY($1)", run_ids
+                "DELETE FROM substrate_event_log WHERE run_id = ANY($1)", run_ids
             )
             await conn.execute(
-                "DELETE FROM ravi_signals WHERE run_id = ANY($1)", run_ids
+                "DELETE FROM substrate_signals WHERE run_id = ANY($1)", run_ids
             )
             await conn.execute(
-                "DELETE FROM ravi_spawn_effects WHERE child_run_id = ANY($1)", run_ids
+                "DELETE FROM substrate_spawn_effects WHERE child_run_id = ANY($1)", run_ids
             )
             await conn.execute(
-                "DELETE FROM ravi_run_tree WHERE run_id = ANY($1)", run_ids
+                "DELETE FROM substrate_run_tree WHERE run_id = ANY($1)", run_ids
             )
             await conn.execute(
-                "DELETE FROM ravi_agent_runs WHERE run_id = ANY($1)", run_ids
+                "DELETE FROM substrate_agent_runs WHERE run_id = ANY($1)", run_ids
             )
             await conn.execute(
-                "DELETE FROM ravi_run_queue WHERE run_id = ANY($1)", run_ids
+                "DELETE FROM substrate_run_queue WHERE run_id = ANY($1)", run_ids
             )
     return len(run_ids)
 

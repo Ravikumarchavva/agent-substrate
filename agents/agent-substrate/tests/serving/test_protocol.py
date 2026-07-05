@@ -88,7 +88,7 @@ def test_tool_error_result_marks_not_ok() -> None:
 
 def test_schema_export_is_valid_and_versioned() -> None:
     schema = build_schema()
-    assert schema["title"] == "RaviProtocol"
+    assert schema["title"] == "SubstrateProtocol"
     assert schema["x-protocol-version"] == PROTOCOL_VERSION
     # All event models must appear in $defs so codegen emits every interface.
     defs = schema["$defs"]

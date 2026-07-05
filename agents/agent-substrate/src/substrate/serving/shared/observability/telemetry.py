@@ -154,7 +154,7 @@ def shutdown_opentelemetry():
 
 
 class Tracer:
-    def __init__(self, name: str = "ravi"):
+    def __init__(self, name: str = "substrate"):
         self._tracer = trace.get_tracer(name)
 
     @contextmanager
@@ -176,7 +176,7 @@ class Tracer:
 
 
 class Metrics:
-    def __init__(self, name: str = "ravi"):
+    def __init__(self, name: str = "substrate"):
         self._meter = metrics.get_meter(name)
         self._counters = {}
         self._histograms = {}

@@ -67,7 +67,7 @@ class RedisHistoryProvider:
         redis_url: str = "redis://localhost:6379/0",
         ttl: int = 3600,
         max_messages: int = 200,
-        key_prefix: str = "ravi:hist",
+        key_prefix: str = "substrate:hist",
     ) -> None:
         self._ttl = ttl
         self._max_messages = max_messages

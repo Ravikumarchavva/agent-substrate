@@ -20,7 +20,7 @@ from substrate.serving.monolith.models import Base
 # only creates missing tables, never alters existing ones), so a column
 # added to a model here never reaches an already-provisioned dev/staging DB
 # without this. Mirrors the same additive-migration pattern used for
-# ravi_run_queue in infrastructure/runtime/pg_scheduler.py.
+# substrate_run_queue in infrastructure/runtime/pg_scheduler.py.
 _MIGRATE_COLUMNS: list[tuple[str, str, str]] = [
     ("threads", "tenant_id", "VARCHAR"),
 ]

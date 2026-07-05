@@ -81,7 +81,7 @@ Repository = "https://github.com/Ravikumarchavva/agent-substrate"
 Issues = "https://github.com/Ravikumarchavva/agent-substrate/issues"
 
 [project.scripts]
-agent-substrate = "substrate.cli:main"
+substrate = "substrate.cli:main"
 start = "substrate.cli:start_main"
 
 [build-system]

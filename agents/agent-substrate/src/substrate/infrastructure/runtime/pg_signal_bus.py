@@ -2,7 +2,7 @@
 
 Schema::
 
-    CREATE TABLE ravi_signals (
+    CREATE TABLE substrate_signals (
         id          BIGSERIAL PRIMARY KEY,
         run_id      TEXT NOT NULL,
         name        TEXT NOT NULL,
@@ -15,7 +15,7 @@ Schema::
 Buffered, exactly-once-per-effect_id semantics — see the kernel ``SignalBus``
 Protocol docstring for the guarantees. Coupled with ``PostgresScheduler`` by
 design: ``signal()`` wakes a matching suspended run in the same transaction
-as the buffer insert (``ravi_run_queue.wake_signals``), and
+as the buffer insert (``substrate_run_queue.wake_signals``), and
 ``PostgresScheduler.release(SUSPENDED)`` double-checks this table for an
 already-arrived signal before actually parking — both sides of the
 lost-wakeup race are closed by sharing one database, one transaction each.
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     import asyncpg
 
 _CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS ravi_signals (
+CREATE TABLE IF NOT EXISTS substrate_signals (
     id          BIGSERIAL PRIMARY KEY,
     run_id      TEXT NOT NULL,
     name        TEXT NOT NULL,
@@ -43,11 +43,11 @@ CREATE TABLE IF NOT EXISTS ravi_signals (
     consumed_at TIMESTAMPTZ,
     consumed_by TEXT
 );
-CREATE INDEX IF NOT EXISTS ravi_signals_pending_idx
-    ON ravi_signals (run_id, name)
+CREATE INDEX IF NOT EXISTS substrate_signals_pending_idx
+    ON substrate_signals (run_id, name)
     WHERE consumed_at IS NULL;
-CREATE INDEX IF NOT EXISTS ravi_signals_consumer_idx
-    ON ravi_signals (consumed_by)
+CREATE INDEX IF NOT EXISTS substrate_signals_consumer_idx
+    ON substrate_signals (consumed_by)
     WHERE consumed_by IS NOT NULL;
 """
 
@@ -67,7 +67,7 @@ class PostgresSignalBus:
             async with conn.transaction():
                 await conn.execute(
                     """
-                    INSERT INTO ravi_signals (run_id, name, payload)
+                    INSERT INTO substrate_signals (run_id, name, payload)
                     VALUES ($1, $2, $3::jsonb)
                     """,
                     run_id,
@@ -80,14 +80,14 @@ class PostgresSignalBus:
                 # pointless replay.
                 await conn.execute(
                     """
-                    UPDATE ravi_run_queue
+                    UPDATE substrate_run_queue
                     SET status = 'pending', worker_id = NULL, expires_at = NULL
                     WHERE run_id = $1 AND status = 'suspended' AND $2 = ANY(wake_signals)
                     """,
                     run_id,
                     name,
                 )
-                await conn.execute("SELECT pg_notify('ravi_sched', $1)", run_id)
+                await conn.execute("SELECT pg_notify('substrate_sched', $1)", run_id)
 
     async def consume(
         self, run_id: RunId, name: str, effect_id: str
@@ -98,7 +98,7 @@ class PostgresSignalBus:
                 # must get back the SAME payload it already consumed, not a
                 # different (or absent) one.
                 row = await conn.fetchrow(
-                    "SELECT payload FROM ravi_signals WHERE consumed_by = $1",
+                    "SELECT payload FROM substrate_signals WHERE consumed_by = $1",
                     effect_id,
                 )
                 if row is not None:
@@ -106,10 +106,10 @@ class PostgresSignalBus:
 
                 row = await conn.fetchrow(
                     """
-                    UPDATE ravi_signals
+                    UPDATE substrate_signals
                     SET consumed_at = now(), consumed_by = $1
                     WHERE id = (
-                        SELECT id FROM ravi_signals
+                        SELECT id FROM substrate_signals
                         WHERE run_id = $2 AND name = $3 AND consumed_at IS NULL
                         ORDER BY id
                         LIMIT 1
@@ -132,7 +132,7 @@ class PostgresSignalBus:
         """
         async with self._pool.acquire() as conn:
             await conn.execute(
-                "UPDATE ravi_run_queue SET wake_at = $1 WHERE run_id = $2",
+                "UPDATE substrate_run_queue SET wake_at = $1 WHERE run_id = $2",
                 at,
                 run_id,
             )

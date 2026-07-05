@@ -2,7 +2,7 @@
 
 Schema::
 
-    CREATE TABLE ravi_inbox (
+    CREATE TABLE substrate_inbox (
         agent_id   TEXT        NOT NULL,
         msg_id     TEXT        NOT NULL,
         sender_key TEXT        NOT NULL DEFAULT '__anon__',
@@ -12,7 +12,7 @@ Schema::
         PRIMARY KEY (agent_id, msg_id)
     );
 
-    CREATE TABLE ravi_dead_letters (
+    CREATE TABLE substrate_dead_letters (
         agent_id   TEXT        NOT NULL,
         msg_id     TEXT        NOT NULL,
         reason     TEXT        NOT NULL,
@@ -28,7 +28,7 @@ Delivery guarantees
 - ``deliver`` is idempotent via ON CONFLICT DO NOTHING (dedup by msg_id).
 - ``drain`` returns messages in per-sender FIFO order (sender_key, created_at).
 - ``nack`` increments the attempt counter; after ``max_retries`` the message
-  is moved to ravi_dead_letters.
+  is moved to substrate_dead_letters.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     import asyncpg
 
 _CREATE_TABLES = """
-CREATE TABLE IF NOT EXISTS ravi_inbox (
+CREATE TABLE IF NOT EXISTS substrate_inbox (
     agent_id   TEXT        NOT NULL,
     msg_id     TEXT        NOT NULL,
     sender_key TEXT        NOT NULL DEFAULT '__anon__',
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS ravi_inbox (
     PRIMARY KEY (agent_id, msg_id)
 );
 
-CREATE TABLE IF NOT EXISTS ravi_dead_letters (
+CREATE TABLE IF NOT EXISTS substrate_dead_letters (
     agent_id   TEXT        NOT NULL,
     msg_id     TEXT        NOT NULL,
     reason     TEXT        NOT NULL,
@@ -96,7 +96,7 @@ class PostgresInbox:
         async with self._pool.acquire() as conn:
             result = await conn.fetchrow(
                 """
-                INSERT INTO ravi_inbox (agent_id, msg_id, sender_key, payload)
+                INSERT INTO substrate_inbox (agent_id, msg_id, sender_key, payload)
                 VALUES ($1, $2, $3, $4::jsonb)
                 ON CONFLICT (agent_id, msg_id) DO NOTHING
                 RETURNING msg_id
@@ -117,7 +117,7 @@ class PostgresInbox:
             rows = await conn.fetch(
                 """
                 SELECT payload
-                FROM ravi_inbox
+                FROM substrate_inbox
                 WHERE agent_id = $1
                 ORDER BY sender_key, created_at
                 LIMIT $2
@@ -130,7 +130,7 @@ class PostgresInbox:
     async def ack(self, agent_id: AgentId, msg_id: str) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM ravi_inbox WHERE agent_id = $1 AND msg_id = $2",
+                "DELETE FROM substrate_inbox WHERE agent_id = $1 AND msg_id = $2",
                 str(agent_id),
                 msg_id,
             )
@@ -146,7 +146,7 @@ class PostgresInbox:
             async with conn.transaction():
                 row = await conn.fetchrow(
                     """
-                    UPDATE ravi_inbox
+                    UPDATE substrate_inbox
                     SET attempts = attempts + 1
                     WHERE agent_id = $1 AND msg_id = $2
                     RETURNING attempts, payload
@@ -160,7 +160,7 @@ class PostgresInbox:
                 if attempts >= self._max_retries:
                     await conn.execute(
                         """
-                        INSERT INTO ravi_dead_letters
+                        INSERT INTO substrate_dead_letters
                             (agent_id, msg_id, reason, attempts, last_error, payload)
                         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
                         ON CONFLICT (agent_id, msg_id) DO UPDATE
@@ -175,7 +175,7 @@ class PostgresInbox:
                         row["payload"],
                     )
                     await conn.execute(
-                        "DELETE FROM ravi_inbox WHERE agent_id = $1 AND msg_id = $2",
+                        "DELETE FROM substrate_inbox WHERE agent_id = $1 AND msg_id = $2",
                         str(agent_id),
                         msg_id,
                     )
@@ -185,7 +185,7 @@ class PostgresInbox:
             rows = await conn.fetch(
                 """
                 SELECT msg_id, reason, attempts, last_error, payload
-                FROM ravi_dead_letters
+                FROM substrate_dead_letters
                 WHERE agent_id = $1
                 ORDER BY created_at
                 """,
@@ -211,7 +211,7 @@ class PostgresInbox:
         async with self._pool.acquire() as conn:
             return (
                 await conn.fetchval(
-                    "SELECT COUNT(*) FROM ravi_inbox WHERE agent_id = $1",
+                    "SELECT COUNT(*) FROM substrate_inbox WHERE agent_id = $1",
                     str(agent_id),
                 )
                 or 0

@@ -60,7 +60,7 @@ class HttpRequestTool:
 
         method = method.upper()
         req_headers = dict(headers) if headers else {}
-        req_headers.setdefault("User-Agent", "agent-framework/1.0")
+        req_headers.setdefault("User-Agent", "agent-substrate/1.0")
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:

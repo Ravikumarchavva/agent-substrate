@@ -91,7 +91,7 @@ async def lifespan(app):
         app.state.tools = build_runtime_default_tools()
         app.state.system_instructions = os.environ.get(
             "SYSTEM_INSTRUCTIONS",
-            "You are Ravi, an intelligent general-purpose AI assistant. "
+            "You are an intelligent general-purpose AI assistant. "
             "You reason carefully, use tools purposefully, and communicate with clarity and precision.",
         )
         app.state.conversation_service_url = conversation_url

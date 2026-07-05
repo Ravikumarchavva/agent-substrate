@@ -34,12 +34,12 @@ router = APIRouter(tags=["mcp-apps"], dependencies=[Depends(get_current_user)])
 
 _ui_resources: Dict[str, Path] = {}
 
-# Built-in apps directory — bundled MCP App HTML lives under ravi/adapters/mcp/apps.
-# __file__ = ravi/serving/monolith/routes/mcp_apps.py → parents[3] = ravi/
+# Built-in apps directory — bundled MCP App HTML lives under substrate/adapters/mcp/apps.
+# __file__ = substrate/serving/monolith/routes/mcp_apps.py → parents[3] = substrate/
 _APPS_DIR = Path(__file__).resolve().parents[3] / "adapters" / "mcp" / "apps"
 
 _MCP_APP_THEME_STYLE = """
-<style id="ravi-mcp-theme-vars">
+<style id="substrate-mcp-theme-vars">
 :root {
     color-scheme: dark;
     --mcp-bg: #171717;
@@ -112,9 +112,9 @@ button, input, select, textarea {
 """
 
 _MCP_APP_THEME_SCRIPT = """
-<script id="ravi-mcp-theme-bridge">
+<script id="substrate-mcp-theme-bridge">
 (function () {
-    if (window.__RAVI_MCP_THEME_BRIDGE__) {
+    if (window.__SUBSTRATE_MCP_THEME_BRIDGE__) {
         return;
     }
 
@@ -125,7 +125,7 @@ _MCP_APP_THEME_SCRIPT = """
             document.documentElement.setAttribute("data-theme", resolved);
         },
         requestInit() {
-            this.initRequestId = "ravi-theme-init-" + Math.random().toString(36).slice(2);
+            this.initRequestId = "substrate-theme-init-" + Math.random().toString(36).slice(2);
             window.parent.postMessage(
                 { jsonrpc: "2.0", id: this.initRequestId, method: "ui/initialize" },
                 "*"
@@ -133,7 +133,7 @@ _MCP_APP_THEME_SCRIPT = """
         },
     };
 
-    window.__RAVI_MCP_THEME_BRIDGE__ = bridge;
+    window.__SUBSTRATE_MCP_THEME_BRIDGE__ = bridge;
 
     if (window.matchMedia) {
         bridge.applyTheme(
@@ -177,7 +177,7 @@ _MCP_APP_THEME_SCRIPT = """
 
 
 def _inject_theme_bridge(html: str) -> str:
-    if "ravi-mcp-theme-bridge" in html:
+    if "substrate-mcp-theme-bridge" in html:
         return html
 
     injection = f"{_MCP_APP_THEME_STYLE}\n{_MCP_APP_THEME_SCRIPT}"

@@ -118,7 +118,7 @@ async def chat(
         raise HTTPException(status_code=404, detail="Thread not found")
 
     # 2. Single-flight: only one active stream per thread at a time.
-    # Durable and cross-replica: a unique partial index on ravi_run_queue
+    # Durable and cross-replica: a unique partial index on substrate_run_queue
     # (see PostgresScheduler) is the actual enforcement, at Runtime.submit()
     # time — this is a cheap pre-check so the common case still gets a clean
     # 409 before the (comparatively expensive) agent build below runs, same
@@ -404,7 +404,7 @@ async def chat(
         All concurrency (agent run, HITL merge, cancel/disconnect, persistence)
         lives in `AgentStreamSession`; this only frames events for the transport.
         Single-flight is enforced durably by Runtime.submit() itself (a unique
-        index on ravi_run_queue), not by anything this generator owns, so
+        index on substrate_run_queue), not by anything this generator owns, so
         there's no per-thread lock left to release here.
         """
         _thread_id_token = current_thread_id.set(str(body.thread_id))

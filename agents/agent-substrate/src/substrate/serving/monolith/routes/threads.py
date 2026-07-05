@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from substrate.serving.monolith.dependencies import ServerDependencies, get_ctx
 from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.schemas import (
-    StepOut,
     ThreadCreate,
     ThreadOut,
     ThreadUpdate,
@@ -30,10 +29,10 @@ from substrate.serving.monolith.services import (
     create_thread,
     delete_thread,
     get_owned_thread,
-    get_steps,
     list_threads,
     update_thread,
 )
+from substrate.serving.stream import project_thread
 
 router = APIRouter(
     prefix="/threads",
@@ -153,37 +152,35 @@ async def delete_thread_endpoint(
         raise HTTPException(status_code=404, detail="Thread not found")
 
 
-@router.get("/{thread_id}/messages", response_model=List[StepOut])
+@router.get("/{thread_id}/messages")
 async def get_thread_messages(
     thread_id: uuid.UUID,
+    ctx: ServerDependencies = Depends(get_ctx),
     db: AsyncSession = Depends(get_db),
     user: AuthClaims = Depends(get_current_user),
-):
-    """Get all messages (steps) for a thread in chronological order."""
+) -> List[dict]:
+    """Return a thread's full conversation, projected from the EventLog.
+
+    The EventLog is the single source of truth — there is no separate,
+    independently-written history table. This concatenates every run ever
+    submitted for this thread (oldest first) through the same
+    ``wire_from_log`` mapping that powers live streaming (``POST /chat``)
+    and reconnect (``GET /stream/{thread_id}``): all three are views over
+    the same underlying data.
+
+    Returns a flat list of wire events (``{"type": "user.message", ...}``,
+    ``{"type": "text.delta", ...}``, ``{"type": "tool.call", ...}``, etc.)
+    rather than the ``StepOut`` shape this endpoint used to return — a
+    client folds these into displayed messages the same way it folds a
+    live SSE stream, since they're the same event vocabulary.
+    """
     thread = await get_owned_thread(db, thread_id, user)
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    steps = await get_steps(
-        db,
-        thread_id,
-        types=["user_message", "assistant_message", "tool_call", "tool_result"],
-    )
-    return [
-        StepOut(
-            id=s.id,
-            type=s.type,
-            name=s.name,
-            thread_id=s.thread_id,
-            parent_id=s.parent_id,
-            input=s.input,
-            output=s.output,
-            is_error=s.is_error,
-            metadata=s.metadata_,
-            generation=s.generation,
-            created_at=s.created_at,
-            start_time=s.start_time,
-            end_time=s.end_time,
-        )
-        for s in steps
-    ]
+    runtime = ctx.runtime
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
+
+    events = await project_thread(runtime.event_log, runtime.scheduler, str(thread_id))
+    return [event.model_dump(mode="json") for event in events]

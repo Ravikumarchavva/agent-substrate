@@ -1,8 +1,8 @@
 /**
- * Catch-all proxy: /api/backend/* → ravi-engine
+ * Catch-all proxy: /api/backend/* → agent-substrate
  *
  * Adds an engine-scoped JWT so the engine's auth middleware is satisfied.
- * The JWT is signed with ENGINE_JWT_SECRET (same value as ravi-engine JWT_SECRET).
+ * The JWT is signed with ENGINE_JWT_SECRET (same value as agent-substrate JWT_SECRET).
  * A new token is generated per request (short-lived, signed as service account).
  */
 import { NextRequest } from "next/server";

@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { MessageBubble } from "@/components/MessageBubble";
-import { RaviMark } from "@/components/RaviMark";
+import { SubstrateMark } from "@/components/SubstrateMark";
 import { ToolApprovalCard } from "@/components/ToolApprovalCard";
 import { HumanInputCard } from "@/components/HumanInputCard";
 import { MaxIterationsCard } from "@/components/MaxIterationsCard";
@@ -43,7 +43,7 @@ import { useTaskBoards } from "@/hooks/useTaskBoards";
 import { PlanCardStack } from "@/components/PlanCard";
 import { Send, Plus, Music2, Mail, ListTodo, Clock, BarChart2, StopCircle, Loader2, X, Radio, ChevronDown, Settings2, AudioLines, ArrowUp, type LucideIcon } from "lucide-react";
 
-const LAST_ACTIVE_THREAD_STORAGE_KEY = "ravi:last-active-thread";
+const LAST_ACTIVE_THREAD_STORAGE_KEY = "substrate:last-active-thread";
 
 function readLastActiveThreadId(): string | null {
   if (typeof window === "undefined") {
@@ -1248,23 +1248,23 @@ function ChatPageContent() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background px-4">
         <div className="text-center space-y-6 max-w-sm w-full">
-          <div className="ravi-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-xl font-bold bg-foreground text-background">
+          <div className="substrate-fade-up w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-xl font-bold bg-foreground text-background">
             R
           </div>
-          <div className="ravi-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
+          <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
             <h1 className="text-2xl font-semibold">Welcome</h1>
             <p className="text-sm mt-2 text-(--muted)">
               Sign in to start chatting with your AI assistant
             </p>
           </div>
           {authNotice && (
-            <div className="ravi-fade-up rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" style={{ '--stagger': 2 } as React.CSSProperties}>
+            <div className="substrate-fade-up rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" style={{ '--stagger': 2 } as React.CSSProperties}>
               {authNotice}
             </div>
           )}
           <button
             onClick={loginWithGoogle}
-            className="ravi-fade-up ravi-press flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
+            className="substrate-fade-up substrate-press flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
             style={{ '--stagger': 3, boxShadow: "var(--shadow-md)" } as React.CSSProperties}
           >
             {/* Google G */}
@@ -1276,7 +1276,7 @@ function ChatPageContent() {
             </svg>
             Continue with Google
           </button>
-          <p className="ravi-fade-up text-xs text-(--muted)" style={{ '--stagger': 4 } as React.CSSProperties}>
+          <p className="substrate-fade-up text-xs text-(--muted)" style={{ '--stagger': 4 } as React.CSSProperties}>
             Your conversations are private and secure
           </p>
         </div>
@@ -1354,8 +1354,8 @@ function ChatPageContent() {
                   <div className="flex h-full items-center justify-center">
                     <div className="w-full max-w-2xl px-4 text-center sm:px-6">
                       <div className="space-y-5">
-                        <RaviMark className="ravi-fade-up mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
-                        <div className="ravi-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
+                        <SubstrateMark className="substrate-fade-up mx-auto h-10 w-10 text-foreground sm:h-12 sm:w-12" />
+                        <div className="substrate-fade-up" style={{ '--stagger': 1 } as React.CSSProperties}>
                           <h2 className="text-xl font-semibold sm:text-2xl">How can I help you today?</h2>
                           <p className="mt-2 text-sm text-(--muted)">
                             Ask me anything and I&apos;ll keep the working area clean and focused.
@@ -1373,7 +1373,7 @@ function ChatPageContent() {
                             <button
                               key={idx}
                               onClick={() => doSendMessage(text)}
-                              className="ravi-pop-in ravi-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover) sm:p-3.5"
+                              className="substrate-pop-in substrate-press flex cursor-pointer items-center gap-3 rounded-2xl p-3 text-left text-sm text-(--muted) transition-colors hover:bg-(--card-hover) sm:p-3.5"
                               style={{ '--stagger': idx + 2, background: "var(--card)", boxShadow: "var(--shadow-sm)" } as React.CSSProperties}
                             >
                               <Icon className="h-4 w-4 shrink-0 text-foreground" />
@@ -1403,7 +1403,7 @@ function ChatPageContent() {
                                       });
                                       setPanelCollapsed(false);
                                     }}
-                                    className="ravi-press flex items-center gap-1.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 text-xs text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
+                                    className="substrate-press flex items-center gap-1.5 rounded-xl border border-(--border) bg-(--card) px-3 py-1.5 text-xs text-(--muted) transition-colors hover:bg-(--card-hover) hover:text-foreground cursor-pointer"
                                     style={{ boxShadow: "var(--shadow-sm)" }}
                                   >
                                     <span className="h-1.5 w-1.5 rounded-full bg-(--accent) opacity-60" />
@@ -1613,7 +1613,7 @@ function ChatPageContent() {
                             <button
                               type="button"
                               onClick={handleStop}
-                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-colors"
+                              className="btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-colors"
                               aria-label="Stop"
                             >
                               <StopCircle className="h-4 w-4" />
@@ -1622,7 +1622,7 @@ function ChatPageContent() {
                             <button
                               type="submit"
                               disabled={!input.trim()}
-                              className="btn-icon ravi-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all disabled:cursor-not-allowed disabled:opacity-10"
+                              className="btn-icon substrate-press flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all disabled:cursor-not-allowed disabled:opacity-10"
                               aria-label="Send"
                             >
                               <ArrowUp className="h-5 w-5" />
@@ -1679,7 +1679,7 @@ function ChatPageContent() {
 
       {/* Mobile Sidebar Drawer */}
       {mobileSidebarOpen && (
-        <div className="ravi-fade-in fixed inset-0 z-40 lg:hidden">
+        <div className="substrate-fade-in fixed inset-0 z-40 lg:hidden">
           {/* Backdrop */}
           <button
             type="button"
@@ -1690,7 +1690,7 @@ function ChatPageContent() {
           />
           {/* Sidebar sheet — slides in from the left */}
           <div
-            className="ravi-slide-in-left relative flex h-full flex-col"
+            className="substrate-slide-in-left relative flex h-full flex-col"
             style={{ width: "min(360px, 88vw)" }}
           >
             <Sidebar

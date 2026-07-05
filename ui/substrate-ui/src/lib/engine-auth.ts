@@ -1,7 +1,7 @@
 /**
  * Engine authentication helpers.
- * Generates a short-lived JWT signed with ENGINE_JWT_SECRET (= ravi-engine JWT_SECRET)
- * for server-side calls to the ravi-engine API.
+ * Generates a short-lived JWT signed with ENGINE_JWT_SECRET (= agent-substrate JWT_SECRET)
+ * for server-side calls to the agent-substrate API.
  */
 import jwt from "jsonwebtoken";
 
@@ -10,7 +10,7 @@ const ENGINE_JWT_SECRET = process.env.ENGINE_JWT_SECRET ?? "";
 export function makeEngineToken(): string {
   if (!ENGINE_JWT_SECRET) return "";
   return jwt.sign(
-    { sub: "ravi-ui", email: "ui@agent_substratelocal", type: "access" },
+    { sub: "substrate-ui", email: "ui@substrate-ui.local", type: "access" },
     ENGINE_JWT_SECRET,
     { expiresIn: "1h" }
   );

@@ -1,8 +1,8 @@
 /* eslint-disable */
 /**
  * GENERATED — DO NOT EDIT.
- * Source: ravi-engine/src/ravi/serving/protocol/ (Pydantic).
- * Regenerate: cd ../ravi-engine && make protocol-schema && cd ../ravi-ui && pnpm gen:protocol
+ * Source: agent-substrate/src/substrate/serving/protocol/ (Pydantic).
+ * Regenerate: cd ../agent-substrate && make protocol-schema && cd ../substrate-ui && pnpm gen:protocol
  * Protocol version: 1.0.0
  */
 
@@ -70,7 +70,7 @@ export type Message = string;
 export type Code1 = string | null;
 export type Type14 = "ping";
 
-export interface RaviProtocol {
+export interface SubstrateProtocol {
   WireEvent?:
     | HelloEvent
     | TextDeltaEvent

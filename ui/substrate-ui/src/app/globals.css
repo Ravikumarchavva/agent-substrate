@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ─── Shared Ravi tokens ─────────────────────────────────────────────────── */
+/* ─── Shared design tokens ───────────────────────────────────────────────── */
 :root {
   --background: #ffffff;
   --foreground: #0d0d0d;
@@ -270,9 +270,9 @@ select {
 .writing-mode-vertical { writing-mode:vertical-rl; text-orientation:mixed; }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
-/* ─── Ravi Motion System ─────────────────────────────────────────────────── */
+/* ─── Substrate UI Motion System ────────────────────────────────────────── */
 /* Shared animation tokens, keyframes, and utility classes used across       */
-/* all Ravi products for a consistent, premium feel.                         */
+/* Substrate UI for a consistent, premium feel.                              */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -290,42 +290,42 @@ select {
 }
 
 /* ─── Keyframes ──────────────────────────────────────────────────────────── */
-@keyframes ravi-fade-in {
+@keyframes substrate-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
-@keyframes ravi-fade-up {
+@keyframes substrate-fade-up {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes ravi-fade-down {
+@keyframes substrate-fade-down {
   from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes ravi-slide-in-left {
+@keyframes substrate-slide-in-left {
   from { transform: translateX(-100%); opacity: 0; }
   to   { transform: translateX(0);     opacity: 1; }
 }
 
-@keyframes ravi-slide-in-right {
+@keyframes substrate-slide-in-right {
   from { transform: translateX(24px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
 
-@keyframes ravi-slide-down {
+@keyframes substrate-slide-down {
   from { transform: translateY(-6px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
 
-@keyframes ravi-scale-in {
+@keyframes substrate-scale-in {
   from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
 }
 
-@keyframes ravi-pop-in {
+@keyframes substrate-pop-in {
   from { opacity: 0; transform: scale(0.9) translateY(4px); }
   to   { opacity: 1; transform: scale(1)   translateY(0); }
 }
@@ -333,61 +333,61 @@ select {
 /* ─── Utility classes ────────────────────────────────────────────────────── */
 /* All support optional --stagger delay: set --stagger on the element.       */
 /* e.g. style="--stagger: 1" → 60ms delay (index × 60ms)                    */
-.ravi-fade-in {
-  animation: ravi-fade-in var(--duration-normal) var(--ease-out-expo) both;
+.substrate-fade-in {
+  animation: substrate-fade-in var(--duration-normal) var(--ease-out-expo) both;
   animation-delay: calc(var(--stagger, 0) * 60ms);
 }
 
-.ravi-fade-up {
-  animation: ravi-fade-up var(--duration-slow) var(--ease-out-expo) both;
+.substrate-fade-up {
+  animation: substrate-fade-up var(--duration-slow) var(--ease-out-expo) both;
   animation-delay: calc(var(--stagger, 0) * 60ms);
 }
 
-.ravi-fade-down {
-  animation: ravi-fade-down var(--duration-normal) var(--ease-out-expo) both;
+.substrate-fade-down {
+  animation: substrate-fade-down var(--duration-normal) var(--ease-out-expo) both;
   animation-delay: calc(var(--stagger, 0) * 60ms);
 }
 
-.ravi-slide-in-left {
-  animation: ravi-slide-in-left var(--duration-normal) var(--ease-spring) both;
+.substrate-slide-in-left {
+  animation: substrate-slide-in-left var(--duration-normal) var(--ease-spring) both;
 }
 
-.ravi-slide-in-right {
-  animation: ravi-slide-in-right var(--duration-slow) var(--ease-out-expo) both;
+.substrate-slide-in-right {
+  animation: substrate-slide-in-right var(--duration-slow) var(--ease-out-expo) both;
   animation-delay: calc(var(--stagger, 0) * 60ms);
 }
 
-.ravi-slide-down {
-  animation: ravi-slide-down var(--duration-normal) var(--ease-out-expo) both;
+.substrate-slide-down {
+  animation: substrate-slide-down var(--duration-normal) var(--ease-out-expo) both;
   animation-delay: calc(var(--stagger, 0) * 40ms);
 }
 
-.ravi-scale-in {
-  animation: ravi-scale-in var(--duration-normal) var(--ease-out-back) both;
+.substrate-scale-in {
+  animation: substrate-scale-in var(--duration-normal) var(--ease-out-back) both;
 }
 
-.ravi-pop-in {
-  animation: ravi-pop-in var(--duration-normal) var(--ease-out-back) both;
+.substrate-pop-in {
+  animation: substrate-pop-in var(--duration-normal) var(--ease-out-back) both;
   animation-delay: calc(var(--stagger, 0) * 50ms);
 }
 
 /* ─── Interaction helpers ────────────────────────────────────────────────── */
-.ravi-hover-lift {
+.substrate-hover-lift {
   transition: transform var(--duration-normal) var(--ease-out-expo),
               box-shadow var(--duration-normal) var(--ease-out-expo);
 }
-.ravi-hover-lift:hover {
+.substrate-hover-lift:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
-.ravi-hover-lift:active {
+.substrate-hover-lift:active {
   transform: translateY(0);
 }
 
-.ravi-press {
+.substrate-press {
   transition: transform 120ms var(--ease-in-out);
 }
-.ravi-press:active {
+.substrate-press:active {
   transform: scale(0.97);
 }
 

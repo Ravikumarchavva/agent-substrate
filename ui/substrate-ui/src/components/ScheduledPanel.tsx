@@ -375,7 +375,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
       {!selectedTask ? (
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
           {/* Scheduling Input Bar */}
-          <form onSubmit={handleNLPSubmit} className="relative ravi-fade-up max-w-3xl mx-auto">
+          <form onSubmit={handleNLPSubmit} className="relative substrate-fade-up max-w-3xl mx-auto">
             <div className="relative flex items-center overflow-hidden rounded-2xl border border-(--border) bg-(--card) shadow-md focus-within:border-violet-500/50 focus-within:ring-1 focus-within:ring-violet-500/20 transition-all duration-300">
               <Sparkles className="absolute left-4 w-4 h-4 text-violet-500 animate-pulse" />
               <input
@@ -410,7 +410,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
               <span className="text-xs font-semibold uppercase tracking-wider">Loading schedules...</span>
             </div>
           ) : tasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-6 border border-(--border) rounded-2xl bg-(--card) shadow-sm max-w-xl mx-auto text-center ravi-fade-up">
+            <div className="flex flex-col items-center justify-center py-16 px-6 border border-(--border) rounded-2xl bg-(--card) shadow-sm max-w-xl mx-auto text-center substrate-fade-up">
               <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center mb-6 text-violet-500">
                 <CalendarClock className="w-8 h-8" />
               </div>
@@ -426,7 +426,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                   key={task.id}
                   onClick={() => setSelectedTask(task)}
                   style={{ "--stagger": idx } as React.CSSProperties}
-                  className="p-5 rounded-2xl border border-(--border) bg-(--card) hover:border-(--border-hover) hover:shadow-md transition-all duration-300 flex flex-col justify-between group cursor-pointer ravi-hover-lift"
+                  className="p-5 rounded-2xl border border-(--border) bg-(--card) hover:border-(--border-hover) hover:shadow-md transition-all duration-300 flex flex-col justify-between group cursor-pointer substrate-hover-lift"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -620,7 +620,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                         <div
                           key={run.id}
                           style={{ "--stagger": idx } as React.CSSProperties}
-                          className="relative pl-6 py-1 text-xs text-(--muted) flex items-center gap-2.5 ravi-fade-up"
+                          className="relative pl-6 py-1 text-xs text-(--muted) flex items-center gap-2.5 substrate-fade-up"
                         >
                           <div className="absolute -left-[23px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-(--border) border-4 border-(--background)" />
                           <span className="font-bold text-(--foreground)/80">{dateStr}</span>
@@ -635,7 +635,7 @@ export function ScheduledPanel({ onBack }: ScheduledPanelProps) {
                       <div
                         key={run.id}
                         style={{ "--stagger": idx } as React.CSSProperties}
-                        className="relative pl-6 ravi-fade-up"
+                        className="relative pl-6 substrate-fade-up"
                       >
                         {/* Timeline dot */}
                         <div

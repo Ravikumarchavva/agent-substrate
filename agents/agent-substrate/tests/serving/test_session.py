@@ -454,10 +454,7 @@ async def test_tail_wire_events_skips_non_streamable_kinds_without_crashing() ->
             await asyncio.sleep(0.01)
         assert status is not None and status.value == "completed"
 
-        events = [
-            ev
-            async for ev in tail_wire_events(rt.event_log, run_id, from_seq=0)
-        ]
+        events = [ev async for ev in tail_wire_events(rt.event_log, run_id, from_seq=0)]
 
     assert any(isinstance(e, RunCompletedEvent) for e in events)
     text_events = [e for e in events if getattr(e, "type", None) == "text.delta"]
@@ -490,10 +487,7 @@ async def test_tail_wire_events_maps_run_failed() -> None:
             await asyncio.sleep(0.01)
         assert status is not None and status.value == "failed"
 
-        events = [
-            ev
-            async for ev in tail_wire_events(rt.event_log, run_id, from_seq=0)
-        ]
+        events = [ev async for ev in tail_wire_events(rt.event_log, run_id, from_seq=0)]
 
     assert len(events) == 1
     assert isinstance(events[0], RunFailedEvent)

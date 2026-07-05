@@ -168,7 +168,9 @@ class PgTaskStore:
             created = row[0]
             task_list = dataclasses.replace(
                 task_list,
-                created_at=created.isoformat() if hasattr(created, "isoformat") else str(created),
+                created_at=created.isoformat()
+                if hasattr(created, "isoformat")
+                else str(created),
             )
         return task_list
 

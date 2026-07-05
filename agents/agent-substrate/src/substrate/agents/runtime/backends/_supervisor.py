@@ -111,7 +111,10 @@ class InMemorySupervisor:
                     run_id=parent,
                     seq=seq + 1,
                     kind="child.spawned",
-                    payload={"child_run_id": child_run_id, "child_agent": str(child_agent)},
+                    payload={
+                        "child_run_id": child_run_id,
+                        "child_agent": str(child_agent),
+                    },
                 ),
                 expected_seq=seq,
             )

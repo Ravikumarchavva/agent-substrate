@@ -85,9 +85,7 @@ async def test_unowned_legacy_thread_claimed_on_access(db: AsyncSession) -> None
 
 async def test_list_threads_scoped_by_owner(db: AsyncSession) -> None:
     mine = await create_thread(db, name="mine-scoped", user_identifier=OWNER.sub)
-    theirs = await create_thread(
-        db, name="theirs-scoped", user_identifier=STRANGER.sub
-    )
+    theirs = await create_thread(db, name="theirs-scoped", user_identifier=STRANGER.sub)
     try:
         rows = await list_threads(db, user_identifier=OWNER.sub, limit=200)
         ids = {str(r["id"]) for r in rows}

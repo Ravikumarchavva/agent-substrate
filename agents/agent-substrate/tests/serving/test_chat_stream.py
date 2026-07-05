@@ -39,7 +39,9 @@ def override_auth(mock_user_claims: AuthClaims):
 @pytest.mark.asyncio
 async def test_stream_thread_404_for_unknown_thread() -> None:
     async with app.router.lifespan_context(app):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
             resp = await client.get(f"/stream/{uuid.uuid4()}")
             assert resp.status_code == 404
 
@@ -49,7 +51,9 @@ async def test_stream_thread_done_immediately_when_no_active_run() -> None:
     """A thread that exists but has no active run (never started, or already
     finished) gets a clean [DONE] — not a hang, not a 500."""
     async with app.router.lifespan_context(app):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
             create_resp = await client.post("/threads", json={"name": "Reconnect test"})
             assert create_resp.status_code == 201
             thread_id = create_resp.json()["id"]

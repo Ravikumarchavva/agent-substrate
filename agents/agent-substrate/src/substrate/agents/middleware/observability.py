@@ -133,7 +133,9 @@ class ChatTracingMiddleware:
             else:
                 await call_next()
             elapsed_ms = (time.monotonic() - t0) * 1000
-            tokens = context.chat_result.usage.total_tokens if context.chat_result else 0
+            tokens = (
+                context.chat_result.usage.total_tokens if context.chat_result else 0
+            )
             if span is not None:
                 span.set_attribute("llm.tokens", tokens)  # type: ignore[attr-defined]
             logger.debug(
@@ -217,4 +219,8 @@ class FunctionTracingMiddleware:
             raise
 
 
-__all__ = ["AgentTracingMiddleware", "ChatTracingMiddleware", "FunctionTracingMiddleware"]
+__all__ = [
+    "AgentTracingMiddleware",
+    "ChatTracingMiddleware",
+    "FunctionTracingMiddleware",
+]

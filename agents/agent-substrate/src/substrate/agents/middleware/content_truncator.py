@@ -25,7 +25,10 @@ class ContentTruncatorMiddleware:
     ) -> None:
         await call_next()
 
-        if context.tool_result is None or len(context.tool_result.text) <= self.max_chars:
+        if (
+            context.tool_result is None
+            or len(context.tool_result.text) <= self.max_chars
+        ):
             return
 
         # InvocationResult is frozen — rebuild rather than mutate in place.

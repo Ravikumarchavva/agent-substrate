@@ -35,7 +35,9 @@ from substrate.kernel.runtime.log_entry import RunLogEntry
 # ---------------------------------------------------------------------------
 
 
-async def _make_ctx(run_id: str, event_log: InMemoryEventLog, *, blob_store=None) -> RunContext:
+async def _make_ctx(
+    run_id: str, event_log: InMemoryEventLog, *, blob_store=None
+) -> RunContext:
     """Build a standalone RunContext sharing *event_log*, with a fresh fold.
 
     Every other collaborator is a fresh in-memory backend — the tests below
@@ -71,7 +73,9 @@ class _InMemoryBlobStore:
         self._blobs: dict[str, bytes] = {}
         self._n = 0
 
-    async def store(self, data, *, content_type: str = "application/octet-stream") -> str:
+    async def store(
+        self, data, *, content_type: str = "application/octet-stream"
+    ) -> str:
         self._n += 1
         ref = f"blob://{self._n}"
         self._blobs[ref] = data.encode() if isinstance(data, str) else data
@@ -186,11 +190,14 @@ async def test_crash_and_replay_llm_effect_does_not_rebill() -> None:
     class FakeLLMClient:
         model = "fake-model"
 
-        async def generate_stream(self, messages, *, options=GenerationOptions(), ctx=None):
+        async def generate_stream(
+            self, messages, *, options=GenerationOptions(), ctx=None
+        ):
             nonlocal call_count
             call_count += 1
             yield CompletionEvent(
-                content=[TextBlock(text="hello")], usage=Usage(input_tokens=1, output_tokens=1)
+                content=[TextBlock(text="hello")],
+                usage=Usage(input_tokens=1, output_tokens=1),
             )
 
     run_id = "run-llm-replay"

@@ -63,10 +63,7 @@ class HookEvent(str, Enum):
 
 # Type alias for hook callbacks — both async and sync callables are accepted;
 # sync callables are wrapped in asyncio.to_thread before dispatch.
-HookCallback = (
-    Callable[[JsonObject], Awaitable[None]]
-    | Callable[[JsonObject], None]
-)
+HookCallback = Callable[[JsonObject], Awaitable[None]] | Callable[[JsonObject], None]
 
 
 # ---------------------------------------------------------------------------

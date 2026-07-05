@@ -159,7 +159,9 @@ class PostgresSupervisor:
                 )
                 await self._inbox.deliver(child_agent, boot_with_reply, notify=False)
                 self._scheduler.register_run(child_run_id, child_agent)
-                await self._scheduler.enqueue(child_run_id, priority=5, tenant="default")
+                await self._scheduler.enqueue(
+                    child_run_id, priority=5, tenant="default"
+                )
 
                 # Log spawn in the parent's own EventLog — ONLY on a genuine
                 # new spawn; logging unconditionally would duplicate this
@@ -284,7 +286,9 @@ class PostgresSupervisor:
                 subtree_ids,
             )
         for row in suspended_rows:
-            await self.finish_run(RunId(row["run_id"]), RunStatus.CANCELLED, error=reason)
+            await self.finish_run(
+                RunId(row["run_id"]), RunStatus.CANCELLED, error=reason
+            )
 
     def children_of(self, parent: RunId) -> AsyncIterator[RunHandle]:
         return self._children_iter(parent)

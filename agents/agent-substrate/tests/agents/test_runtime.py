@@ -585,3 +585,39 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
             f"— got {log_call_count}. If this is 1, the test setup is wrong "
             "and isn't exercising the replay path log_once is meant to guard."
         )
+
+
+# ---------------------------------------------------------------------------
+# Scheduler.cancel_pending() — the gate Worker.cancel() relies on
+# ---------------------------------------------------------------------------
+
+
+async def test_inmemory_cancel_pending_transitions_pending_run() -> None:
+    from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
+    from substrate.kernel.runtime.ids import RunStatus, new_run_id
+
+    sched = InMemoryScheduler()
+    run_id = new_run_id()
+    sched.register_run(run_id, _agent_id("cancel-pending-a"))
+    await sched.enqueue(run_id, priority=5, tenant="default")
+
+    assert await sched.get_status(run_id) == RunStatus.PENDING
+    changed = await sched.cancel_pending(run_id)
+    assert changed is True
+    assert await sched.get_status(run_id) == RunStatus.CANCELLED
+
+
+async def test_inmemory_cancel_pending_leaves_running_run_alone() -> None:
+    from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
+    from substrate.kernel.runtime.ids import RunStatus, new_run_id
+
+    sched = InMemoryScheduler()
+    run_id = new_run_id()
+    sched.register_run(run_id, _agent_id("cancel-pending-b"))
+    await sched.enqueue(run_id, priority=5, tenant="default")
+    await sched.lease(worker_id="w1", capacity=10)  # PENDING -> RUNNING
+
+    assert await sched.get_status(run_id) == RunStatus.RUNNING
+    changed = await sched.cancel_pending(run_id)
+    assert changed is False, "a RUNNING run must not be cancel_pending-eligible"
+    assert await sched.get_status(run_id) == RunStatus.RUNNING

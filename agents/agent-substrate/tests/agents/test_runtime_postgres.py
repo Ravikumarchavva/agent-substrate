@@ -40,7 +40,7 @@ async def _pg_reachable() -> bool:
 
 @pytest.fixture()
 async def pg_runtime():
-    """Runtime backed by Postgres only (in-memory journal)."""
+    """Runtime backed by Postgres only."""
     if not await _pg_reachable():
         pytest.skip("Postgres not reachable")
     from substrate.infrastructure.runtime import build_postgres_runtime
@@ -734,6 +734,70 @@ async def test_pg_cancel_cascade(pg_runtime) -> None:
             [child.child_run_id, root.child_run_id],
         )
     assert all(r["status"] == "cancelled" for r in tree_status)
+
+
+class BusyAgent:
+    """Holds its lease with a real RUNNING status — no suspend — until told to stop."""
+
+    def __init__(self, agent_id: AgentId) -> None:
+        self.id = agent_id
+        self.started = asyncio.Event()
+        self.stop = asyncio.Event()
+
+    async def run(self, ctx: object, inbox: list[Message]) -> None:
+        self.started.set()
+        await self.stop.wait()
+
+
+async def test_pg_cancel_pending_leaves_a_running_run_alone(pg_runtime) -> None:
+    """Scheduler.cancel_pending() must not force-terminalize a run another
+    worker is actively leasing — that's the bug Worker.cancel()'s old
+    getattr(scheduler, "_status") poke had: it force-appended run.cancelled
+    and finish_run() for ANY run this worker had no local Task for, even one
+    genuinely RUNNING (leased) elsewhere. Regression test for that gate."""
+    agent_id = _agent_id("pg-cancel-pending-running")
+    agent = BusyAgent(agent_id)
+    await pg_runtime.register(agent)
+    run_id = await pg_runtime.submit(agent_id, _msg(agent_id, {}))
+
+    await asyncio.wait_for(agent.started.wait(), timeout=8.0)
+
+    async def _status_of() -> str | None:
+        async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
+            return await conn.fetchval(
+                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+            )
+
+    assert await _status_of() == "running"
+    changed = await pg_runtime.scheduler.cancel_pending(run_id)
+    assert changed is False, "a RUNNING run must not be cancel_pending-eligible"
+    assert await _status_of() == "running", "status must be untouched"
+
+    agent.stop.set()
+
+
+async def test_pg_cancel_pending_marks_suspended_run_cancelled(pg_runtime) -> None:
+    agent_id = _agent_id("pg-cancel-pending-suspended")
+    agent = SleepForeverAgent(agent_id)
+    await pg_runtime.register(agent)
+    run_id = await pg_runtime.submit(agent_id, _msg(agent_id, {}))
+
+    async def _status_of() -> str | None:
+        async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
+            return await conn.fetchval(
+                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
+            )
+
+    for _ in range(100):
+        if await _status_of() == "suspended":
+            break
+        await asyncio.sleep(0.05)
+    else:
+        raise AssertionError(f"{run_id} never reached suspended")
+
+    changed = await pg_runtime.scheduler.cancel_pending(run_id)
+    assert changed is True
+    assert await _status_of() == "cancelled"
 
 
 class DeadlineAgent:

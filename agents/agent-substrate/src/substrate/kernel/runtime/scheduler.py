@@ -239,6 +239,24 @@ class Scheduler(Protocol):
         """Return the current status of ``run_id``, or ``None`` if not found."""
         ...
 
+    async def cancel_pending(self, run_id: RunId) -> bool:
+        """Atomically mark ``run_id`` CANCELLED iff it is not currently RUNNING.
+
+        Returns ``True`` if the transition happened (the run was PENDING or
+        SUSPENDED), ``False`` otherwise (RUNNING — some worker, possibly on
+        another replica, owns the lease — or already terminal/unknown).
+
+        This is the gate a Worker's local, best-effort ``cancel()`` needs: a
+        run this worker has no local Task for is not necessarily idle — on a
+        durable multi-replica backend it may be actively leased elsewhere.
+        Forcibly terminalizing it locally in that case would race the owning
+        worker's own eventual completion. Cross-replica cancellation of a
+        genuinely RUNNING run goes through ``Supervisor.cancel()``'s durable
+        ``cancel_requested`` flag instead (observed by that worker's own
+        heartbeat), not through this method.
+        """
+        ...
+
     async def find_run_for_agent(
         self, agent_id: AgentId
     ) -> tuple[RunId, RunStatus] | None:

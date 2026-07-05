@@ -404,7 +404,9 @@ async def test_pg_reclaim_orphans() -> None:
             status = await conn.fetchval(
                 "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
             )
-            await conn.execute("DELETE FROM substrate_run_queue WHERE run_id = $1", run_id)
+            await conn.execute(
+                "DELETE FROM substrate_run_queue WHERE run_id = $1", run_id
+            )
         assert status == "pending"
     finally:
         await pool.close()
@@ -763,7 +765,9 @@ async def test_pg_deadline_enforcement(pg_runtime) -> None:
 
         past = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
         await conn.execute(
-            "UPDATE substrate_run_queue SET deadline = $1 WHERE run_id = $2", past, run_id
+            "UPDATE substrate_run_queue SET deadline = $1 WHERE run_id = $2",
+            past,
+            run_id,
         )
 
         for _ in range(100):
@@ -850,7 +854,8 @@ async def test_pg_signal_gc_on_finish(pg_runtime) -> None:
     async with pg_runtime.event_log._pool.acquire() as conn:  # type: ignore[attr-defined]
         for _ in range(50):
             row = await conn.fetchrow(
-                "SELECT run_id FROM substrate_agent_runs WHERE agent_id = $1", str(asker_id)
+                "SELECT run_id FROM substrate_agent_runs WHERE agent_id = $1",
+                str(asker_id),
             )
             if row is not None:
                 asker_run_id = row["run_id"]

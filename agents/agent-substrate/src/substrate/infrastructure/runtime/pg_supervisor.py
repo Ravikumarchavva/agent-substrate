@@ -217,7 +217,9 @@ class PostgresSupervisor:
             # this run was ever in substrate_run_tree (a top-level submit() run
             # never is, but can still have accumulated signals as an ask()
             # target or sleep_until_signal() waiter).
-            await conn.execute("DELETE FROM substrate_signals WHERE run_id = $1", run_id)
+            await conn.execute(
+                "DELETE FROM substrate_signals WHERE run_id = $1", run_id
+            )
         if row is None:
             return  # this run was never spawned via ctx.spawn() (a top-level submit())
         parent_run = row["parent_run"]

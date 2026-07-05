@@ -2,6 +2,11 @@
 
 POST /chat – send a message, receive SSE stream of agent response
 including tool approval requests, human input requests, and tool results.
+
+Intent-routing heuristics, wire-event helpers, and per-request dependency
+assembly live in ``chat_intents.py``, ``chat_wire.py``, and
+``chat_context.py`` respectively — this module holds only the two route
+handlers.
 """
 
 from __future__ import annotations
@@ -9,10 +14,8 @@ from substrate.logger import setup_logging
 
 import json
 import substrate
-import re
 import uuid
-from dataclasses import dataclass
-from typing import Any, AsyncIterator
+from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -29,17 +32,12 @@ from substrate.integrations.llm.factory import (
     resolve_vision_model_for_available_credentials,
     strip_provider_prefix,
 )
-from substrate.infrastructure.serving_factory import (
-    build_agent_for_thread,
-    build_chat_tools,
-)
+from substrate.infrastructure.serving_factory import build_agent_for_thread
 
 # current_thread_id: ContextVar that scopes TaskManagerTool to the active thread.
 # Defined in capabilities; both serving and capabilities need it — tracked as an
 # explicit exception in the import-linter "serving boundary" contract.
 from substrate.capabilities.tools.task_manager.tool import current_thread_id
-from substrate.kernel import ChatMessage
-from substrate.kernel.core.content import TextBlock, ToolUseBlock
 from substrate.kernel.core.content import (
     ChatMessage as _ChatMessage,
     Role,
@@ -55,435 +53,37 @@ from substrate.serving.monolith.database import get_db
 from substrate.serving.monolith.hooks import ChatContext, hooks
 from substrate.serving.monolith.schemas import ChatRequest
 from substrate.serving.monolith.services import get_owned_thread
-from substrate.serving.monolith.services.agent_service import (
-    persist_assistant_message,
-    persist_tool_result,
-    persist_user_message,
-)
+from substrate.serving.monolith.services.agent_service import persist_user_message
 from substrate.serving.monolith.security.deps import AuthClaims, get_current_user
 from substrate.serving.monolith.sse.bridge import WebHITLBridge
 from substrate.serving.shared.rate_limit import rate_limit
-from substrate.serving.protocol import (
-    PROTOCOL_VERSION,
-    HelloEvent,
-    TurnCompletedEvent,
-    ToolResultEvent,
-)
+from substrate.serving.protocol import PROTOCOL_VERSION, HelloEvent
 from substrate.serving.stream import AgentStreamSession, tail_wire_events
 
+from substrate.serving.monolith.routes.chat_intents import (
+    ATTACHMENT_ANALYSIS_INSTRUCTIONS,
+    _tool_name,
+    _should_allow_task_planning,
+    _should_force_task_planning,
+    _configure_workspace_mail_request,
+    _configure_calendar_write_request,
+)
+from substrate.serving.monolith.routes.chat_wire import (
+    MediaType,
+    _build_tool_meta_map,
+    _WirePersister,
+)
+from substrate.serving.monolith.routes.chat_context import (
+    _get_agent_deps,
+    _build_file_context,
+)
+
 logger = setup_logging()
-
-
-@dataclass
-class _ImagePayload:
-    """Raw image binary for multimodal user messages."""
-
-    data: bytes
-    media_type: str
-
-
-MediaType = str | _ImagePayload
 
 router = APIRouter(
     tags=["chat"],
     dependencies=[Depends(rate_limit), Depends(get_current_user)],
 )
-
-ATTACHMENT_ANALYSIS_INSTRUCTIONS = (
-    "When the user asks about attached files, images, or documents, inspect the "
-    "attachment directly and answer in a normal assistant response. Avoid "
-    "creating task lists, plans, or workflow-style tool loops unless the user "
-    "explicitly asks for planning, task tracking, or automation. "
-    "When presenting structured data, always use proper Markdown tables with "
-    "pipe (|) syntax and header separator rows (|---|). Never use plain text "
-    "or HTML tags like <br> for tabular data."
-)
-
-ATTACHMENT_PLANNING_KEYWORDS = (
-    "plan",
-    "planning",
-    "task",
-    "tasks",
-    "todo",
-    "to-do",
-    "checklist",
-    "workflow",
-    "steps",
-    "roadmap",
-    "organize",
-    "organise",
-)
-
-# Stronger phrases that warrant forcing manage_tasks as the first tool call
-# (model may ignore system prompt instructions on weaker models).
-TASK_FORCE_PHRASES = (
-    "plan tasks",
-    "plan the tasks",
-    "create tasks",
-    "create a task",
-    "task list",
-    "todo list",
-    "to-do list",
-    "checklist for",
-    "plan for",
-    "plan a ",
-    "plan the ",
-    "plan to ",
-    "plan my ",
-    "organise tasks",
-    "organize tasks",
-    "break down",
-    "break this down",
-    "step by step plan",
-    "steps to ",
-    "steps for ",
-    "roadmap for",
-)
-
-WORKSPACE_MAIL_NOUNS = (
-    "email",
-    "emails",
-    "mail",
-    "mails",
-    "gmail",
-    "inbox",
-    "mailbox",
-)
-
-WORKSPACE_MAIL_ACTIONS = (
-    "summarize",
-    "summarise",
-    "analyze",
-    "analyse",
-    "review",
-    "check",
-    "read",
-    "scan",
-    "show",
-    "list",
-)
-
-WORKSPACE_MAIL_TOOL_NAMES = {"ask_human", "google_workspace"}
-
-WORKSPACE_MAIL_INSTRUCTIONS = (
-    "If the user asks about their Gmail, inbox, or recent emails and the "
-    "google_workspace tool is available, you must call google_workspace before "
-    "answering. Do not claim you lack inbox access and do not ask the user to "
-    "paste emails until after the tool has been attempted. For requests about "
-    "recent or latest emails, call google_workspace with service='gmail' and an "
-    "empty query string, then summarize the five most recent relevant messages "
-    "from the tool output unless the user asked for a different number."
-)
-
-WORKSPACE_CALENDAR_NOUNS = (
-    "calendar",
-    "event",
-    "meeting",
-    "appointment",
-    "schedule",
-    "reminder",
-)
-
-WORKSPACE_CALENDAR_WRITE_ACTIONS = (
-    "create",
-    "add",
-    "schedule",
-    "set up",
-    "make",
-    "book",
-    "cancel",
-    "delete",
-    "remove",
-)
-
-WORKSPACE_CALENDAR_WRITE_INSTRUCTIONS = (
-    "The user wants to create or cancel a calendar event using Google Calendar. "
-    "Use the google_workspace tool with action='create_event' or action='cancel_event'. "
-    "For create_event, provide title, start_time as ISO 8601 with timezone offset "
-    "(e.g. '2026-04-20T19:00:00+05:30' for 7 PM IST), and optionally end_time. "
-    "IST is UTC+05:30. If no end time is specified, end_time may be omitted (defaults to 1 hour after start). "
-    "For cancel_event, you must first call google_workspace with service='calendar' "
-    "to list events and find the event_id, then call again with action='cancel_event'."
-)
-
-
-def _tool_name(tool: Any) -> str:
-    try:
-        return tool.get_schema().name
-    except Exception:
-        return str(getattr(tool, "name", ""))
-
-
-def _should_allow_task_planning(user_text: str) -> bool:
-    normalized = user_text.lower()
-    return any(keyword in normalized for keyword in ATTACHMENT_PLANNING_KEYWORDS)
-
-
-def _should_force_task_planning(user_text: str) -> bool:
-    """Return True when the request clearly asks to create a task list.
-
-    Used to force manage_tasks as the initial tool call so weaker models
-    don't ignore the system prompt instruction.
-    """
-    normalized = user_text.lower()
-
-    # Explicit kanban/board request
-    if "kanban" in normalized or "task board" in normalized:
-        return True
-
-    # Phrase-based match
-    if any(phrase in normalized for phrase in TASK_FORCE_PHRASES):
-        return True
-
-    # Numbered task list pattern: "1. foo 2. bar 3. baz"
-    # Matches when the user pastes/types a numbered list of 2+ items
-    if len(re.findall(r"\b\d+[\.\)]\s+\S", user_text)) >= 2:
-        return True
-
-    return False
-
-
-def _should_route_workspace_mail_request(user_text: str) -> bool:
-    normalized = user_text.lower()
-    if not any(keyword in normalized for keyword in WORKSPACE_MAIL_NOUNS):
-        return False
-
-    if any(keyword in normalized for keyword in WORKSPACE_MAIL_ACTIONS):
-        return True
-
-    return any(keyword in normalized for keyword in ("recent", "latest", "last "))
-
-
-def _configure_workspace_mail_request(
-    user_text: str,
-    tools: list[Any],
-    system_instructions: str,
-) -> tuple[list[Any], str, str | None]:
-    if not _should_route_workspace_mail_request(user_text):
-        return tools, system_instructions, None
-
-    if not any(_tool_name(tool) == "google_workspace" for tool in tools):
-        return tools, system_instructions, None
-
-    routed_tools = [
-        tool for tool in tools if _tool_name(tool) in WORKSPACE_MAIL_TOOL_NAMES
-    ]
-    updated_instructions = (
-        system_instructions
-        + "\n\n---\n**Google Workspace mail instructions:**\n"
-        + WORKSPACE_MAIL_INSTRUCTIONS
-    )
-    return routed_tools, updated_instructions, "google_workspace"
-
-
-def _should_route_calendar_write_request(user_text: str) -> bool:
-    normalized = user_text.lower()
-    if not any(noun in normalized for noun in WORKSPACE_CALENDAR_NOUNS):
-        return False
-    return any(action in normalized for action in WORKSPACE_CALENDAR_WRITE_ACTIONS)
-
-
-def _configure_calendar_write_request(
-    user_text: str,
-    tools: list[Any],
-    system_instructions: str,
-) -> tuple[list[Any], str, str | None]:
-    if not _should_route_calendar_write_request(user_text):
-        return tools, system_instructions, None
-
-    if not any(_tool_name(tool) == "google_workspace" for tool in tools):
-        return tools, system_instructions, None
-
-    routed_tools = [
-        tool for tool in tools if _tool_name(tool) in WORKSPACE_MAIL_TOOL_NAMES
-    ]
-    updated_instructions = (
-        system_instructions
-        + "\n\n---\n**Google Workspace calendar instructions:**\n"
-        + WORKSPACE_CALENDAR_WRITE_INSTRUCTIONS
-    )
-    return routed_tools, updated_instructions, "google_workspace"
-
-
-def _serialize_attached_file(meta: Any) -> dict[str, Any]:
-    """Return a JSON-safe attachment descriptor for message metadata."""
-    props = meta.props or {}
-    return {
-        "id": str(meta.id),
-        "thread_id": str(meta.thread_id) if meta.thread_id else None,
-        "name": meta.original_name,
-        "mime": meta.content_type,
-        "size": meta.size_bytes,
-        "document_type": props.get("document_type"),
-        "document_class": props.get("document_class"),
-    }
-
-
-async def _get_agent_deps(ctx: ServerDependencies, thread_id: str):
-    """Assemble per-request agent dependencies with an isolated HITL bridge."""
-    bridge = await ctx.bridge_registry.acquire(str(thread_id))
-    # Cancel any signal-based HITL from a prior run on this thread so the old
-    # suspended run can finish cleanly (tool_use → tool_result stays balanced).
-    await bridge.cancel_signal_requests("new_message")
-    tools = build_chat_tools(ctx.tools, bridge)
-    return {
-        "model_client": ctx.model_client,
-        "tools": tools,
-        "system_instructions": ctx.system_instructions,
-        "tools_requiring_approval": ctx.tools_requiring_approval,
-        "tool_timeout": ctx.tool_timeout,
-        "bridge": bridge,
-        "runtime": ctx.runtime,
-    }
-
-
-def _build_tool_meta_map(tools: list) -> dict:
-    """Build a mapping of tool_name → { risk, color, ui? } for event enrichment."""
-    from substrate.kernel.tools import ToolRisk
-
-    meta_map: dict = {}
-    for tool in tools:
-        name = getattr(tool, "name", None)
-        if not name:
-            continue
-        risk = getattr(tool, "risk", ToolRisk.SAFE)
-        color = (
-            "red"
-            if risk == ToolRisk.CRITICAL
-            else "yellow"
-            if risk == ToolRisk.HIGH
-            else "green"
-        )
-        entry: dict = {"risk": str(risk), "color": color}
-        ui = getattr(tool, "ui", None)
-        if ui:
-            entry["ui"] = ui
-        meta_map[name] = entry
-    return meta_map
-
-
-class _WirePersister:
-    """Persists wire events to Postgres inline as the run streams.
-
-    Implements the ``stream.Persister`` protocol. ``persist_turn`` writes the
-    assistant message (text + tool calls, enriched with MCP-App UI metadata via
-    ``tool_meta_map``); ``persist_tool`` records error tool results so reloads
-    can show failures. Each write opens its own DB session so a slow write never
-    blocks the stream's own transaction.
-    """
-
-    def __init__(
-        self,
-        *,
-        session_factory: Any,
-        thread_id: Any,
-        tool_meta_map: dict,
-        attachments: list | None = None,
-    ) -> None:
-        self._session_factory = session_factory
-        self._thread_id = thread_id
-        self._tool_meta_map = tool_meta_map
-        self._attachments = attachments or []
-
-    async def persist_turn(self, event: TurnCompletedEvent) -> None:
-        content: list[Any] = []
-        if event.text:
-            content.append(TextBlock(text=event.text))
-        for tc in event.tool_calls:
-            content.append(
-                ToolUseBlock(call_id=tc.id, tool_name=tc.name, arguments=tc.args)
-            )
-        if not content:
-            return
-        message = ChatMessage(role="assistant", content=content)
-        metadata = {"attachments": self._attachments} if self._attachments else None
-        try:
-            async with self._session_factory() as db:
-                await persist_assistant_message(
-                    db,
-                    self._thread_id,
-                    message,
-                    tool_meta_map=self._tool_meta_map,
-                    metadata=metadata,
-                )
-                await db.commit()
-        except Exception:
-            logger.exception("Failed to persist assistant turn")
-
-    async def persist_tool(self, event: ToolResultEvent) -> None:
-        # ask_human results carry the user's answer; persist them (even on
-        # success) so the answered HITL card can be rebuilt on reload. All other
-        # successful results are reconstructed from the assistant turn.
-        is_ask_human = event.tool_name == "ask_human"
-        if event.ok and not is_ask_human:
-            return
-        output = event.output if event.ok else (event.error or "")
-        try:
-            async with self._session_factory() as db:
-                await persist_tool_result(
-                    db,
-                    self._thread_id,
-                    event.call_id,
-                    event.tool_name,
-                    output,
-                    is_error=not event.ok,
-                )
-                await db.commit()
-        except Exception:
-            logger.exception("Failed to persist tool result")
-
-
-async def _build_file_context(
-    db: AsyncSession,
-    body: ChatRequest,
-    request: Request,
-    ctx: ServerDependencies,
-) -> tuple[str, list[_ImagePayload], list[dict[str, Any]]]:
-    """Resolve file_ids to text/image/attachment context for the chat turn."""
-    if not body.file_ids or ctx.file_store is None:
-        return "", [], []
-
-    from sqlalchemy import select
-
-    from substrate.serving.monolith.models import FileMetadata
-
-    rows = (
-        (
-            await db.execute(
-                select(FileMetadata).where(
-                    FileMetadata.id.in_(body.file_ids),
-                    FileMetadata.deleted_at.is_(None),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-    text_parts: list[str] = []
-    image_inputs: list[_ImagePayload] = []
-    attachments: list[dict[str, Any]] = []
-
-    for meta in rows:
-        data = await ctx.file_store.download(meta.object_key)
-        if meta.content_type.startswith("image/"):
-            image_inputs.append(_ImagePayload(data=data, media_type=meta.content_type))
-        elif meta.content_type.startswith("text/"):
-            text_parts.append(
-                f"[File: {meta.original_name}]\n"
-                + data.decode("utf-8", errors="replace")
-            )
-        else:
-            attachments.append(
-                {
-                    "id": str(meta.id),
-                    "name": meta.original_name,
-                    "mime": meta.content_type,
-                    "size": meta.size_bytes,
-                }
-            )
-
-    return "\n\n".join(text_parts), image_inputs, attachments
 
 
 @router.post("/chat")

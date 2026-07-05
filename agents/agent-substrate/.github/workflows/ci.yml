@@ -82,6 +82,7 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
       REDIS_URL: redis://localhost:6379/0
       OPENAI_API_KEY: sk-test-placeholder
+      JWT_SECRET: test-jwt-secret-not-for-production-use-0000000000
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4

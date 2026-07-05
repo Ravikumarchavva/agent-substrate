@@ -2,11 +2,12 @@ PYTHON_VERSION ?= 3.13
 TEST_DATABASE_URL ?= postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb
 TEST_REDIS_URL ?= redis://localhost:6379/0
 TEST_OPENAI_API_KEY ?= sk-test-placeholder
+TEST_JWT_SECRET ?= test-jwt-secret-not-for-production-use-0000000000
 
 ifeq ($(OS),Windows_NT)
-RUN_TEST_CI = cmd /C "set VIRTUAL_ENV=&&set DATABASE_URL=$(TEST_DATABASE_URL)&&set REDIS_URL=$(TEST_REDIS_URL)&&set OPENAI_API_KEY=$(TEST_OPENAI_API_KEY)&&uv run python -m pytest --tb=short -q --junitxml=test-results.xml"
+RUN_TEST_CI = cmd /C "set VIRTUAL_ENV=&&set DATABASE_URL=$(TEST_DATABASE_URL)&&set REDIS_URL=$(TEST_REDIS_URL)&&set OPENAI_API_KEY=$(TEST_OPENAI_API_KEY)&&set JWT_SECRET=$(TEST_JWT_SECRET)&&uv run python -m pytest --tb=short -q --junitxml=test-results.xml"
 else
-RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) uv run pytest --tb=short -q --junitxml=test-results.xml
+RUN_TEST_CI = DATABASE_URL=$(TEST_DATABASE_URL) REDIS_URL=$(TEST_REDIS_URL) OPENAI_API_KEY=$(TEST_OPENAI_API_KEY) JWT_SECRET=$(TEST_JWT_SECRET) uv run pytest --tb=short -q --junitxml=test-results.xml
 endif
 
 .PHONY: sync lint lint-apply lint-imports protocol-schema format-check typecheck typecheck-soft test test-ci build security security-soft ci help start start-reload infra-up infra-down docker-up docker-down observability-up observability-down

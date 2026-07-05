@@ -51,7 +51,6 @@ dependencies = [
     { name = "crawl4ai" },
     { name = "cryptography" },
     { name = "ddgs" },
-    { name = "docling" },
     { name = "exa-py" },
     { name = "fastapi" },
     { name = "google-genai" },
@@ -86,6 +85,11 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
+[package.optional-dependencies]
+docs = [
+    { name = "docling" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "import-linter" },
@@ -110,7 +114,7 @@ requires-dist = [
     { name = "crawl4ai", specifier = ">=0.8.7" },
     { name = "cryptography", specifier = ">=46.0.6" },
     { name = "ddgs", specifier = ">=9.14.4" },
-    { name = "docling", specifier = ">=2.0.0" },
+    { name = "docling", marker = "extra == 'docs'", specifier = ">=2.0.0" },
     { name = "exa-py", specifier = ">=2.14.0" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "google-genai", specifier = ">=1.73.0" },
@@ -144,6 +148,7 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.12.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
+provides-extras = ["docs"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -119,9 +119,7 @@ class InMemoryScheduler:
         # dict insertion order approximates enqueue order for Stage 0 — good
         # enough for the in-memory/test backend; Postgres orders by
         # enqueued_at explicitly.
-        return [
-            run_id for run_id, tid in self._threads.items() if tid == thread_id
-        ]
+        return [run_id for run_id, tid in self._threads.items() if tid == thread_id]
 
     async def lease(self, *, worker_id: str, capacity: int) -> list[Lease]:
         leases: list[Lease] = []

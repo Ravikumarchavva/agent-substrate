@@ -65,6 +65,24 @@ class AgentCrashError(KernelError):
         self.agent_id = agent_id
 
 
+class PermanentError(KernelError):
+    """Raised by agent/tool code to mark a failure as never worth retrying.
+
+    The Worker's failure handler treats this (along with
+    ``MiddlewareTermination`` and ``BudgetExhaustedError``, which are always
+    permanent) as a signal to skip the Scheduler's retry policy entirely and
+    terminal-fail the run on the first attempt. Any other exception defaults
+    to retryable — the framework can't safely assume an unclassified error is
+    permanent, so it errs toward retrying (see ``RunRetryPolicy``).
+
+    Raise this (or subclass it) for failures a retry can never fix: invalid
+    credentials, malformed tool arguments the LLM won't spontaneously
+    correct, a resource that doesn't exist. Don't raise it for anything
+    transient (timeouts, rate limits, connection resets) — those are exactly
+    what retries are for.
+    """
+
+
 class BudgetExhaustedError(KernelError):
     """Raised when an agent headcount or token/cost/turn budget is exhausted.
 
@@ -189,6 +207,7 @@ __all__ = [
     "AgentNotFoundError",
     "HandlerError",
     "AgentCrashError",
+    "PermanentError",
     "BudgetExhaustedError",
     "MiddlewareTermination",
     "CancellationError",

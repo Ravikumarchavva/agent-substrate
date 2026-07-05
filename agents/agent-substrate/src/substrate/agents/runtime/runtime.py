@@ -43,7 +43,7 @@ from substrate.kernel.runtime.follow_graph import FollowGraph
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.inbox import Inbox
 from substrate.kernel.runtime.log_entry import EventLog
-from substrate.kernel.runtime.scheduler import Scheduler
+from substrate.kernel.runtime.scheduler import RunRetryPolicy, Scheduler
 from substrate.kernel.runtime.supervisor import Supervisor
 from substrate.kernel.runtime.wakeup import SignalBus
 
@@ -178,6 +178,7 @@ class Runtime:
         priority: int = 5,
         tenant: str = "default",
         max_retries: int = 3,
+        retry_policy: RunRetryPolicy | None = None,
         thread_id: str | None = None,
     ) -> RunId:
         """Deliver ``msg`` to ``agent_id`` and enqueue a run.
@@ -185,6 +186,10 @@ class Runtime:
         Returns the new run_id.  The run starts when the Worker next polls.
         Pass ``max_retries=0`` for interactive runs where the journal-replay
         retry loop would cause repeated failures on the same journaled error.
+
+        ``retry_policy``, if given, is used verbatim (``max_retries`` is
+        ignored) — for callers that need to tune ``backoff_s``/
+        ``max_backoff_s`` rather than just the retry count.
 
         ``thread_id`` (optional) enforces durable, cross-replica single-flight
         for the conversation thread this run belongs to — a second
@@ -202,8 +207,6 @@ class Runtime:
         the orphaned inbox entry is picked up by the next legitimate run for
         this agent_id, same as an unsolicited delivery would be.
         """
-        from substrate.kernel.runtime.scheduler import RunRetryPolicy
-
         run_id = new_run_id()
         self._scheduler.register_run(run_id, agent_id)
         # Deliver with notify=False: this submit() explicitly enqueues its own
@@ -217,7 +220,7 @@ class Runtime:
             run_id,
             priority=priority,
             tenant=tenant,
-            retry_policy=RunRetryPolicy(max_retries=max_retries),
+            retry_policy=retry_policy or RunRetryPolicy(max_retries=max_retries),
             thread_id=thread_id,
         )
         return run_id

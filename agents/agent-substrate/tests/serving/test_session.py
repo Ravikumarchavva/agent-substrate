@@ -478,7 +478,11 @@ async def test_tail_wire_events_maps_run_failed() -> None:
                 message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
             ),
         )
-        run_id = await rt.submit(agent.id, msg)
+        # max_retries=0: this test is about tail_wire_events mapping
+        # run.failed, not retry semantics — a default retry policy would
+        # back the run off and retry rather than terminal-failing on the
+        # first attempt.
+        run_id = await rt.submit(agent.id, msg, max_retries=0)
 
         for _ in range(200):
             status = await rt.scheduler.get_status(run_id)

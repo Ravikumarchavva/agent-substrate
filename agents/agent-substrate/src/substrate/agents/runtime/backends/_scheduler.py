@@ -22,6 +22,14 @@ from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
 from substrate.kernel.runtime.wakeup import Wakeup
 
 
+def _retry_backoff_seconds(retry_count: int, policy: RunRetryPolicy) -> float:
+    """Exponential backoff: ``backoff_s * 2**(retry_count-1)``, capped at
+    ``max_backoff_s``. ``retry_count`` is already post-increment (1 on the
+    first retry), so the first backoff is exactly ``backoff_s``."""
+    delay = policy.backoff_s * (2 ** max(retry_count - 1, 0))
+    return min(delay, policy.max_backoff_s)
+
+
 class InMemoryScheduler:
     """Single-process scheduler backed by an asyncio.PriorityQueue.
 
@@ -146,25 +154,47 @@ class InMemoryScheduler:
         *,
         status: RunStatus,
         wake_on: Wakeup | None = None,
-    ) -> None:
+        retryable: bool = True,
+    ) -> bool:
         self._leases.pop(lease.run_id, None)
         self._status[lease.run_id] = status
 
-        if status == RunStatus.FAILED:
+        if status == RunStatus.FAILED and retryable:
             policy = self._retry_policies.get(lease.run_id, RunRetryPolicy())
-            count = self._retry_counts.get(lease.run_id, 0)
-            if count < policy.max_retries:
-                self._retry_counts[lease.run_id] = count + 1
-                await self.enqueue(
-                    lease.run_id, priority=5, tenant="default", wake=wake_on
+            count = self._retry_counts.get(lease.run_id, 0) + 1
+            if count <= policy.max_retries:
+                self._retry_counts[lease.run_id] = count
+                # Exponential backoff: park as SUSPENDED for the delay, then
+                # re-enqueue — mirrors PostgresScheduler's wake_at mechanism,
+                # just via asyncio.sleep since Stage 0 has no durable timer.
+                self._status[lease.run_id] = RunStatus.SUSPENDED
+                delay = _retry_backoff_seconds(count, policy)
+                asyncio.create_task(
+                    self._delayed_retry_enqueue(lease.run_id, delay, wake_on)
                 )
-                return
+                return False
 
         if status == RunStatus.SUSPENDED and wake_on:
             self._wakeups[lease.run_id] = wake_on
             # For timer wakeups the SignalBus will call enqueue when it fires.
             # For signal wakeups same.  For message wakeups the Inbox on_deliver
             # hook calls enqueue.  Do NOT enqueue here — that would defeat dormancy.
+
+        return status != RunStatus.SUSPENDED
+
+    async def _delayed_retry_enqueue(
+        self, run_id: RunId, delay: float, wake_on: Wakeup | None
+    ) -> None:
+        await asyncio.sleep(delay)
+        # Skip if something else already moved this run on (e.g. cancelled
+        # while backing off) — only a still-SUSPENDED-for-retry run resumes.
+        if self._status.get(run_id) == RunStatus.SUSPENDED:
+            await self.enqueue(
+                run_id,
+                priority=5,
+                tenant=self._tenants.get(run_id, "default"),
+                wake=wake_on,
+            )
 
     async def pending_runs(self, *, tenant: str | None = None) -> AsyncIterator[RunId]:
         return self._pending_iter()

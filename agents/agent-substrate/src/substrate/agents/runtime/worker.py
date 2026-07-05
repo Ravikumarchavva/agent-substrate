@@ -383,45 +383,76 @@ class Worker:
                 AgentCrashError,
                 BudgetExhaustedError,
                 MiddlewareTermination,
+                PermanentError,
             )
 
             is_guardrail = isinstance(exc, MiddlewareTermination)
             is_budget = isinstance(exc, BudgetExhaustedError)
-            is_crash = not is_guardrail and not is_budget
+            is_permanent = isinstance(exc, PermanentError)
+            is_crash = not is_guardrail and not is_budget and not is_permanent
+            # Guardrail trips and budget exhaustion are deterministic policy
+            # decisions — a retry replays the same effects and hits the same
+            # decision again, wasting a lease cycle. PermanentError is agent/
+            # tool code explicitly saying the same thing about its own
+            # failure. Anything else defaults to retryable: an unclassified
+            # exception might be transient, and the framework can't safely
+            # assume otherwise.
+            retryable = not (is_guardrail or is_budget or is_permanent)
 
             if is_crash:
                 logger.exception("Agent %s run %s crashed", agent.id, run_id)
             else:
                 logger.warning("Agent %s run %s stopped: %s", agent.id, run_id, exc)
 
-            if is_guardrail or is_budget:
+            if is_guardrail or is_budget or is_permanent:
                 for msg in inbox_msgs:
                     await self._inbox.ack(agent.id, msg.id)
             else:
                 for msg in inbox_msgs:
                     await self._inbox.nack(agent.id, msg.id, error=str(exc))
 
-            final_seq = await self._event_log.last_seq(run_id)
-            if is_guardrail:
-                payload = {
-                    "error": f"Request blocked: {exc.message}",
-                    "status": "guardrail_tripped",
-                }  # type: ignore[union-attr]
-            elif is_budget:
-                payload = {"error": str(exc), "status": "budget_exhausted"}
-            else:
-                crash = AgentCrashError(str(exc), run_id=run_id, agent_id=agent.id)
-                payload = {"error": str(crash), "status": "agent_crashed"}
-
-            await self._event_log.append(
-                run_id,
-                RunLogEntry(
-                    run_id=run_id, seq=final_seq + 1, kind="run.failed", payload=payload
-                ),
-                expected_seq=final_seq,
+            # Decide retry-vs-terminal FIRST: release() is the authoritative
+            # call (it atomically bumps retry_count and picks pending/
+            # suspended-backoff vs terminal in one transaction). Only once we
+            # know the outcome is actually terminal do we append run.failed
+            # to the EventLog or tell the Supervisor — appending run.failed
+            # unconditionally would make any tailer (AgentStreamSession's
+            # loop checks `kind == "run.failed"` directly) think the run is
+            # over on the FIRST transient failure, even though the Worker is
+            # about to retry it. Same reasoning for finish_run(): a parent
+            # watching via ctx.ask/ctx.join must not be told the child failed
+            # until it's genuinely done retrying.
+            terminal = await self._scheduler.release(
+                lease, status=RunStatus.FAILED, retryable=retryable
             )
-            await self._scheduler.release(lease, status=RunStatus.FAILED)
-            await self._supervisor.finish_run(run_id, RunStatus.FAILED, error=str(exc))
+            if terminal:
+                if is_guardrail:
+                    payload = {
+                        "error": f"Request blocked: {exc.message}",
+                        "status": "guardrail_tripped",
+                    }  # type: ignore[union-attr]
+                elif is_budget:
+                    payload = {"error": str(exc), "status": "budget_exhausted"}
+                elif is_permanent:
+                    payload = {"error": str(exc), "status": "permanent_error"}
+                else:
+                    crash = AgentCrashError(str(exc), run_id=run_id, agent_id=agent.id)
+                    payload = {"error": str(crash), "status": "agent_crashed"}
+
+                final_seq = await self._event_log.last_seq(run_id)
+                await self._event_log.append(
+                    run_id,
+                    RunLogEntry(
+                        run_id=run_id,
+                        seq=final_seq + 1,
+                        kind="run.failed",
+                        payload=payload,
+                    ),
+                    expected_seq=final_seq,
+                )
+                await self._supervisor.finish_run(
+                    run_id, RunStatus.FAILED, error=str(exc)
+                )
         finally:
             heartbeat_task.cancel()
             try:

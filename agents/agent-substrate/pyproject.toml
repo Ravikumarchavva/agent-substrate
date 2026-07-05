@@ -41,6 +41,11 @@ dependencies = [
     "redis[hiredis]>=5.0.0",
     "sqlalchemy>=2.0.46",
     "asyncpg>=0.30.0",
+    # Never imported directly in src/ — SQLAlchemy loads it dynamically for
+    # the monolith's `postgresql+psycopg://` DATABASE_URL (the ORM engine
+    # behind Thread/ScheduledTask/Feedback). `asyncpg` above is the separate,
+    # directly-used driver for the durable runtime's raw asyncpg pool.
+    "psycopg[binary]>=3.2.0",
     "uvicorn[standard]>=0.34.0",
     "pyyaml>=6.0",
     "python-multipart>=0.0.9",

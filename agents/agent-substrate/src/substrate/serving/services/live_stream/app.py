@@ -10,8 +10,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
-import redis.asyncio as aioredis
-
+from substrate.infrastructure.cache.redis import RedisConnector
 from substrate.serving.services.base import create_service_app
 from substrate.serving.services.live_stream.projector import StreamProjector
 from substrate.serving.services.live_stream.routes import router
@@ -24,7 +23,9 @@ logger = setup_logging()
 async def lifespan(app):
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
-    app.state.redis = aioredis.from_url(redis_url, decode_responses=True)
+    redis_connector = RedisConnector(redis_url)
+    await redis_connector.connect()
+    app.state.redis = redis_connector.client
 
     event_bus = get_event_bus(redis_url)
     await event_bus.connect()
@@ -49,7 +50,7 @@ async def lifespan(app):
         pass
 
     await event_bus.disconnect()
-    await app.state.redis.aclose()
+    await redis_connector.disconnect()
 
 
 app = create_service_app(

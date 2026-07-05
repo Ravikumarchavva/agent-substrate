@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from substrate.logger import setup_logging
+from substrate.serving.shared.settings import settings
 from substrate.serving.monolith.models import ScheduledTask, ScheduledTaskRun
 from substrate.infrastructure.serving_factory import (
     build_agent_for_thread,
@@ -20,6 +21,7 @@ from substrate.serving.monolith.services.agent_service import (
     persist_assistant_message,
     persist_user_message,
 )
+from substrate.serving.monolith.services.thread_service import load_messages_for_memory
 from substrate.kernel.messaging.message import Message, ChatPayload
 from substrate.kernel.core.content import (
     ChatMessage as KernelChatMessage,
@@ -109,11 +111,14 @@ async def execute_scheduled_task(
 
             # 5. Build agent for the thread
             agent = await build_agent_for_thread(
-                db,
                 task.thread_id,
                 model_client=app_state.model_client,
                 tools=tools,
                 system_instructions=scheduled_instructions,
+                cfg=settings,
+                load_persisted_steps=lambda: load_messages_for_memory(
+                    db, task.thread_id
+                ),
                 history=app_state.history,
                 runtime=app_state.runtime,
             )

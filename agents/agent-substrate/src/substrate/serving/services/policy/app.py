@@ -9,8 +9,7 @@ from substrate.logger import setup_logging
 import os
 from contextlib import asynccontextmanager
 
-import redis.asyncio as aioredis
-
+from substrate.infrastructure.cache.redis import RedisConnector
 from substrate.serving.services.base import create_service_app, init_service_db
 from substrate.serving.services.policy.routes import router
 from substrate.serving.shared.database.base import ServiceBase
@@ -32,7 +31,9 @@ async def lifespan(app):
 
     # Redis cache for policy decisions
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    app.state.redis_client = aioredis.from_url(redis_url, decode_responses=True)
+    redis_connector = RedisConnector(redis_url)
+    await redis_connector.connect()
+    app.state.redis_client = redis_connector.client
 
     app.state.jwt_secret = os.environ.get(
         "JWT_SECRET",
@@ -51,7 +52,7 @@ async def lifespan(app):
     logger.info("Policy Authorization Service started")
     yield
 
-    await app.state.redis_client.aclose()
+    await redis_connector.disconnect()
     await engine.dispose()
 
 

@@ -13,7 +13,7 @@ from substrate.kernel.core.content import (
     ToolUseBlock,
 )
 from substrate.kernel.core.identity import AgentId, TopicId
-from substrate.kernel.llm.llm import GenerationOptions
+from substrate.kernel.llm.llm import GenerationOptions, LLMResponse
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.storage.history import HistoryProvider
 from substrate.kernel.tools import ToolRegistry
@@ -156,6 +156,62 @@ class ReActAgent:
 
         await self.middleware.execute(call_ctx, _final)
 
+    async def _generate_turn(
+        self, ctx: RunContext, messages: list[ChatMessage], options: GenerationOptions
+    ) -> LLMResponse:
+        """One LLM call for the loop: dispatch hooks, compact, call, track budget."""
+        if self.hooks:
+            await self.hooks.dispatch(
+                HookEvent.LLM_START, {"agent_name": self.name, "run_id": ctx.run_id}
+            )
+        # Compact before each LLM call so tool results don't inflate the
+        # context unboundedly across iterations.  We compact a *view* of
+        # messages here and keep the full list intact for persistence.
+        llm_messages = await self._context.pipeline.compact(messages)
+        resp = await ctx.llm(llm_messages, options=options)
+        if self.hooks:
+            await self.hooks.dispatch(
+                HookEvent.LLM_END,
+                {"agent_name": self.name, "run_id": ctx.run_id, "usage": resp.usage},
+            )
+        if self._execution_budget is not None:
+            self._execution_budget.consume(
+                tokens=resp.usage.total_tokens if resp.usage else 0,
+                turns=1,
+            )
+        return resp
+
+    async def _execute_tool_calls(
+        self, ctx: RunContext, tool_calls: list[ToolUseBlock]
+    ) -> tuple[list[ToolResultBlock], list[ToolCallRecord]]:
+        """Invoke each requested tool call in turn, building wire results + records."""
+        results: list[ToolResultBlock] = []
+        records: list[ToolCallRecord] = []
+        for tc in tool_calls:
+            ctx.check()
+            t0 = time.monotonic()
+            inv_result = await ctx.tool(tc.tool_name, **tc.arguments)
+            duration_ms = (time.monotonic() - t0) * 1000
+            is_error = inv_result.status != "ok"
+            results.append(
+                ToolResultBlock(
+                    call_id=tc.call_id,
+                    content=[TextBlock(text=inv_result.text or "")],
+                    is_error=is_error,
+                )
+            )
+            records.append(
+                ToolCallRecord(
+                    name=tc.tool_name,
+                    call_id=tc.call_id,
+                    arguments=tc.arguments,
+                    result=inv_result.text or "",
+                    is_error=is_error,
+                    duration_ms=duration_ms,
+                )
+            )
+        return results, records
+
     async def _react_loop(
         self,
         ctx: RunContext,
@@ -184,33 +240,10 @@ class ReActAgent:
 
         for _ in range(self._max_iterations):
             ctx.check()
-            if self.hooks:
-                await self.hooks.dispatch(
-                    HookEvent.LLM_START, {"agent_name": self.name, "run_id": ctx.run_id}
-                )
-            # Compact before each LLM call so tool results don't inflate the
-            # context unboundedly across iterations.  We compact a *view* of
-            # messages here and keep the full list intact for persistence.
-            llm_messages = await self._context.pipeline.compact(messages)
-            resp = await ctx.llm(llm_messages, options=options)
+            resp = await self._generate_turn(ctx, messages, options)
             # Drop the forced tool_choice after the first call so subsequent
             # iterations can freely choose to respond with text or more tools.
             options = base_options
-            if self.hooks:
-                await self.hooks.dispatch(
-                    HookEvent.LLM_END,
-                    {
-                        "agent_name": self.name,
-                        "run_id": ctx.run_id,
-                        "usage": resp.usage,
-                    },
-                )
-
-            if self._execution_budget is not None:
-                self._execution_budget.consume(
-                    tokens=resp.usage.total_tokens if resp.usage else 0,
-                    turns=1,
-                )
 
             assistant_turn = ChatMessage(role=Role.ASSISTANT, content=resp.content)
             messages.append(assistant_turn)
@@ -219,31 +252,8 @@ class ReActAgent:
             if not tool_calls:
                 break
 
-            results: list[ToolResultBlock] = []
-            for tc in tool_calls:
-                ctx.check()
-                t0 = time.monotonic()
-                inv_result = await ctx.tool(tc.tool_name, **tc.arguments)
-                duration_ms = (time.monotonic() - t0) * 1000
-                is_error = inv_result.status != "ok"
-                results.append(
-                    ToolResultBlock(
-                        call_id=tc.call_id,
-                        content=[TextBlock(text=inv_result.text or "")],
-                        is_error=is_error,
-                    )
-                )
-                tool_call_records.append(
-                    ToolCallRecord(
-                        name=tc.tool_name,
-                        call_id=tc.call_id,
-                        arguments=tc.arguments,
-                        result=inv_result.text or "",
-                        is_error=is_error,
-                        duration_ms=duration_ms,
-                    )
-                )
-
+            results, records = await self._execute_tool_calls(ctx, tool_calls)
+            tool_call_records.extend(records)
             messages.append(ChatMessage(role=Role.TOOL, content=results))  # type: ignore[arg-type]
         else:
             from substrate.kernel.core.errors import BudgetExhaustedError

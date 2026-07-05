@@ -138,8 +138,7 @@ src/substrate/
 │   ├── llm/              LLMFactory, provider clients (openai/, anthropic/, gemini/), encoders/
 │   ├── tools/            protocol bridges — MCP (MCPClient, MCPTool), A2A (planned)
 │   ├── events/           EventBus (Redis pub/sub) + EventEnvelope (wire format)
-│   ├── connectors/       external service connectors (email, google_calendar)
-│   └── spotify/          Spotify API client
+│   └── connectors/       external service connectors (email, google_calendar)
 │
 ├── infrastructure/ built-in standard backends for the engine itself (orthogonal to layers)
 │   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
@@ -213,7 +212,7 @@ fabric (L3)       How agents are orchestrated: flows, evals, durable execution.
 implement kernel Protocols and wire all layers together in lifespan. They are not
 part of the stack hierarchy. Distinction: `infrastructure/` holds built-in
 standard backends the engine runs on (Postgres, Redis, MinIO + durable runtime);
-`integrations/` holds external third-party adapters (LLM providers, MCP, Spotify,
+`integrations/` holds external third-party adapters (LLM providers, MCP,
 email/calendar connectors).
 
 **Dependency rule** (strictly downward; enforced by `uv run lint-imports`):
@@ -402,11 +401,6 @@ SESSION_AUTO_CHECKPOINT=50
 CHAT_MODEL=openai/gpt-5.4-mini
 EMBEDDING_MODEL=text-embedding-3-small
 
-# Spotify (optional — only if using SpotifyPlayerTool)
-SPOTIFY_CLIENT_ID=...
-SPOTIFY_CLIENT_SECRET=...
-SPOTIFY_REDIRECT_URI=http://localhost:8001/auth/spotify/callback
-
 # CORS (comma-separated origins)
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3002
 
@@ -522,9 +516,6 @@ runner.export_markdown()
 
 | Area | Issue |
 |---|---|
-| `serving/monolith/routes/spotify_oauth.py` | Uses a single `"spotify:token:default"` Redis key — fine for single-user ravi-ui instances, needs per-user keying for multi-tenant SaaS |
-| `agents/storage/tasks.py` | `TaskStore` is in-memory only — should be Postgres-backed for persistence across restarts |
-| `agents/core/react.py` | `_react()` is ~150 lines — guardrail checks and tool-concurrency drain could be extracted into helpers |
 | Test coverage | Gaps in: guardrails, middleware, MCP adapter, most microservices, fabric/evals |
 
 ---

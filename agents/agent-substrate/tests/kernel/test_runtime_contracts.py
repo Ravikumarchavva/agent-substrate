@@ -25,7 +25,8 @@ import pytest
 from substrate.kernel.core.identity import AgentId, TopicId
 from substrate.kernel.messaging.message import Message, DataPayload
 from substrate.kernel.core.errors import ConcurrentAppendError, SpawnDenied
-from substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
+from substrate.kernel.agent.runtime_context import RunMeta
+from substrate.agents.runtime.cancellation import CancellationToken
 from substrate.kernel.agent.supervision import Supervision
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.log_entry import RunLogEntry
@@ -585,20 +586,26 @@ class TestSpawnDenied:
 # ---------------------------------------------------------------------------
 
 
+def _standalone_meta(*, run_id: str = "") -> RunMeta:
+    """RunMeta with a fresh id/token — mirrors the deleted RunMeta.standalone(),
+    which lived in kernel but needed the agents-layer CancellationToken."""
+    return RunMeta(run_id=run_id or new_run_id(), cancellation=CancellationToken())
+
+
 class TestRunMeta:
     def test_standalone_generates_run_id(self) -> None:
-        meta = RunMeta.standalone()
+        meta = _standalone_meta()
         assert isinstance(meta.run_id, str)
         assert len(meta.run_id) > 0
 
     def test_standalone_accepts_explicit_run_id(self) -> None:
         rid = new_run_id()
-        meta = RunMeta.standalone(run_id=rid)
+        meta = _standalone_meta(run_id=rid)
         assert meta.run_id == rid
 
     def test_two_standalone_have_different_run_ids(self) -> None:
-        m1 = RunMeta.standalone()
-        m2 = RunMeta.standalone()
+        m1 = _standalone_meta()
+        m2 = _standalone_meta()
         assert m1.run_id != m2.run_id
 
     def test_run_id_from_supervision(self) -> None:

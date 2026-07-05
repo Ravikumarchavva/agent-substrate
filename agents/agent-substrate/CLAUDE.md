@@ -415,6 +415,10 @@ CODE_INTERPRETER_URL=...
 
 # Agent runtime backend: "postgres" (default, durable) or "memory" (in-process, no infra)
 RUNTIME_BACKEND=postgres
+
+# Durable runtime's own asyncpg pool (separate from the ORM engine's pool)
+RUNTIME_PG_POOL_MIN_SIZE=2
+RUNTIME_PG_POOL_MAX_SIZE=10
 ```
 
 **Rule:** Never add inline comments after integer values.

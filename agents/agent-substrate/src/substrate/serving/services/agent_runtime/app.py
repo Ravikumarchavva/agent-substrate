@@ -29,7 +29,13 @@ async def _runtime_cm(backend: str, pg_url: str):
     if backend == "postgres" and pg_url:
         from substrate.infrastructure.runtime import build_postgres_runtime
 
-        async with build_postgres_runtime(postgres_url=pg_url) as rt:
+        pool_min_size = int(os.environ.get("RUNTIME_PG_POOL_MIN_SIZE", "2"))
+        pool_max_size = int(os.environ.get("RUNTIME_PG_POOL_MAX_SIZE", "10"))
+        async with build_postgres_runtime(
+            postgres_url=pg_url,
+            pool_min_size=pool_min_size,
+            pool_max_size=pool_max_size,
+        ) as rt:
             logger.info("Agent Runtime: durable (Postgres EventLog)")
             yield rt
     else:

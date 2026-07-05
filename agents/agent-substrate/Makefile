@@ -57,7 +57,7 @@ observability-down:
 
 sync:
 	uv python install $(PYTHON_VERSION)
-	uv sync
+	uv sync --extra server
 
 lint-apply:
 	uv run ruff check . --fix

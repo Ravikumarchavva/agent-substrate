@@ -123,6 +123,20 @@ class Attachment(BaseModel):
     url: str | None = None
 
 
+class UserMessageEvent(BaseModel):
+    """The user's turn that started this run — logged once, at run start, so
+    the EventLog is a self-complete record of the conversation (the single
+    source of truth history is projected from; see ``serving/stream/
+    history.py``). ``text`` is the display text the user actually typed/saw,
+    which may differ from the LLM-input content a route augments with file
+    context — see ``ReActAgent``/``OrchestratorAgent``'s ``_handle_message``.
+    """
+
+    type: Literal["user.message"] = "user.message"
+    text: str = ""
+    attachments: list["Attachment"] = Field(default_factory=list)
+
+
 class TurnCompletedEvent(BaseModel):
     """One assistant turn finished. If ``tool_calls`` is non-empty the agent will
     continue after the tools run (another turn follows); otherwise this is the
@@ -239,6 +253,7 @@ WireEvent = Annotated[
         ToolCallEvent,
         ToolResultEvent,
         HandoffEvent,
+        UserMessageEvent,
         TurnCompletedEvent,
         RunCompletedEvent,
         RunFailedEvent,
@@ -262,6 +277,7 @@ __all__ = [
     "HandoffEvent",
     "ToolCallSummary",
     "Attachment",
+    "UserMessageEvent",
     "TurnCompletedEvent",
     "RunCompletedEvent",
     "RunFailedEvent",

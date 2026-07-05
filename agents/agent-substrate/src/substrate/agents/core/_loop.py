@@ -32,6 +32,32 @@ def message_to_chat(msg: Message) -> ChatMessage:
     return ChatMessage(role=Role.USER, content=[TextBlock(text=text)])
 
 
+async def log_user_message(ctx: RunContext, msg: Message, user_turn: ChatMessage) -> None:
+    """Journal the turn that started this run as a ``user.message`` EventLog
+    entry, so the log is a self-complete record of the conversation (history
+    is projected from it — see ``serving/stream/history.py``).
+
+    ``msg.metadata["display_text"]``/``["attachments"]`` (set by the serving
+    layer when it augments the LLM-input content with file context) win when
+    present — the user should see what they actually typed, not the
+    augmented prompt the model received. Falls back to the plain turn text
+    for any caller that doesn't set that metadata (e.g. ``Runtime.run()``).
+    ``log_once``, not ``_log``: this call itself re-executes on every replay
+    attempt (it happens before any suspension point), so it must be at-most-
+    once across attempts like any other side effect.
+    """
+    display_text = msg.metadata.get("display_text")
+    if display_text is None:
+        display_text = content_blocks_to_str(user_turn.content)  # type: ignore[arg-type]
+    await ctx.log_once(
+        "user.message",
+        {
+            "text": display_text,
+            "attachments": msg.metadata.get("attachments") or [],
+        },
+    )
+
+
 async def load_history(
     ctx_cfg: ContextConfig, agent_id: AgentId, session_id: str
 ) -> list[ChatMessage]:

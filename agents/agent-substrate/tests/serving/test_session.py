@@ -19,8 +19,6 @@ from substrate.serving.protocol import (
     HelloEvent,
     RunCompletedEvent,
     RunFailedEvent,
-    ToolResultEvent,
-    TurnCompletedEvent,
     WireEvent,
     RunCancelledEvent,
 )
@@ -63,8 +61,8 @@ class _StubBridge:
 class ReplyAgent:
     """Replies to every message with a fixed text string.
 
-    Logs a ``text.delta`` entry so the session persister accumulates text —
-    mirroring what ``ctx.llm()`` does in a real ``ReActAgent`` run.
+    Logs a ``text.delta`` entry mirroring what ``ctx.llm()`` does in a real
+    ``ReActAgent`` run.
     """
 
     reply: str
@@ -151,64 +149,27 @@ async def test_error_emits_run_failed() -> None:
     assert "crash" in (failed.error or "").lower() or failed.error
 
 
-async def test_persister_called_on_turn_complete() -> None:
-    persist_calls: list[TurnCompletedEvent] = []
+async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
+    """The scenario that used to cause data loss: a run suspends on
+    ask_human, the browser disconnects (a refresh does this), the human
+    answers some time LATER, the run resumes and only then produces its
+    final response — which must still land in the EventLog (the single
+    source of truth for conversation history — see
+    serving/stream/history.py::project_thread()) even though nothing is
+    watching this specific SSE connection anymore.
 
-    class _FakePersister:
-        async def persist_turn(self, event: TurnCompletedEvent) -> None:
-            persist_calls.append(event)
-
-        async def persist_tool(self, event: ToolResultEvent) -> None:
-            pass
-
-    async with Runtime() as rt:
-        agent = ReplyAgent(reply="persisted text", name="persist_agent")
-        msg = _make_msg(agent.id)
-        session = AgentStreamSession(
-            runtime=rt,
-            agent=agent,
-            msg=msg,
-            bridge=_StubBridge(),
-            persister=_FakePersister(),
-        )
-        await _collect(session)
-
-    assert len(persist_calls) == 1
-    assert "persisted text" in persist_calls[0].text
-
-
-async def test_persistence_survives_disconnect_through_suspend_and_resume() -> None:
-    """The core data-loss bug, reproducing the EXACT real-world scenario:
-    a run suspends on ask_human, the browser disconnects (a refresh does
-    this), the human answers some time LATER, the run resumes and only then
-    produces its final response — which must still be persisted.
-
-    agent_task does both event-relay AND persist_turn/persist_tool — the
-    only place persistence happens. The run itself is durable and keeps
-    executing regardless of the SSE connection, but persistence only
-    happens while something tails the EventLog. Two bugs had to be fixed
-    for this to work:
+    Two properties must hold for this to work:
       1. _check_disconnect must not Runtime.cancel() the run on a mere
          disconnect (a refresh isn't a cancel).
-      2. events()'s cleanup must not cancel agent_task — the previous code
-         did `await wait_for(gather(agent_task, ...), timeout=5.0)`, which
-         CANCELS agent_task ~5s after disconnect, i.e. before a human
-         typically answers. It must instead detach it so it keeps tailing/
-         persisting until the run reaches a terminal state.
+      2. events()'s cleanup must not cancel agent_task — cancelling it
+         could abort it mid-register()/submit(), before the run is even
+         enqueued. It must instead detach it so register()+submit()+tailing
+         complete naturally regardless of this connection's fate.
 
     This test deliberately keeps the run suspended across the disconnect
-    (nothing is sleeping on a wall-clock timer that would let it slip under
-    the old 5s window) and only fires the resume signal after confirming
-    the SSE generator has already returned and the task is detached-alive."""
-    persist_calls: list[TurnCompletedEvent] = []
-
-    class _FakePersister:
-        async def persist_turn(self, event: TurnCompletedEvent) -> None:
-            persist_calls.append(event)
-
-        async def persist_tool(self, event: ToolResultEvent) -> None:
-            pass
-
+    (nothing is sleeping on a wall-clock timer) and only fires the resume
+    signal after confirming the SSE generator has already returned and the
+    run is durably suspended (not cancelled)."""
     signal_name = "resume-me"
 
     @dataclass
@@ -241,27 +202,22 @@ async def test_persistence_survives_disconnect_through_suspend_and_resume() -> N
             msg=msg,
             bridge=_StubBridge(),
             is_disconnected=check_disconnected,
-            persister=_FakePersister(),
             poll_interval=0.01,
         )
 
         async for ev in session.events():
             if isinstance(ev, HelloEvent):
                 # Disconnect while the run is still suspended (before answer).
-                # _run_id isn't set yet at hello time (the detached agent_task
-                # sets it only after submit) — read it after the loop.
                 is_disconnected = True
 
         # events() has returned. The run is suspended, NOT cancelled, and the
-        # detached agent_task is still alive tailing it — persistence hasn't
-        # fired yet because the human hasn't "answered".
+        # detached agent_task is still alive tailing it.
         for _ in range(100):
             if session._run_id is not None:
                 break
             await asyncio.sleep(0.02)
         run_id = session._run_id
         assert run_id is not None
-        assert not persist_calls
         for _ in range(100):
             status = await rt.scheduler.get_status(run_id)
             if status is not None and status.value == "suspended":
@@ -271,21 +227,23 @@ async def test_persistence_survives_disconnect_through_suspend_and_resume() -> N
             "run should be suspended (not cancelled) after a mere disconnect"
         )
 
-        # Now the human answers — well after the old 5s cancel window would
-        # have killed agent_task. The detached task must still be tailing to
-        # persist the resumed run's output.
+        # Now the human answers. The detached task must still be tailing (or
+        # the run resumes on its own via a fresh lease either way) for the
+        # post-resume reply to land durably in the EventLog.
         await rt.signal_bus.signal(run_id, signal_name, {})
 
+        found_reply = False
         for _ in range(200):
-            if persist_calls:
+            entries = [e async for e in rt.event_log.read(run_id)]
+            if any(
+                e.kind == "text.delta"
+                and e.payload.get("text") == "post-resume reply"
+                for e in entries
+            ):
+                found_reply = True
                 break
             await asyncio.sleep(0.02)
-
-    assert len(persist_calls) == 1, (
-        "persist_turn never fired for the resumed run — persistence died "
-        "with the connection instead of surviving suspend→answer→resume"
-    )
-    assert "post-resume reply" in persist_calls[0].text
+        assert found_reply, "post-resume reply must land in the EventLog"
 
 
 async def test_durable_cancel_ends_session() -> None:

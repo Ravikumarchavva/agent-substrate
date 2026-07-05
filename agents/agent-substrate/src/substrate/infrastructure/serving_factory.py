@@ -14,7 +14,7 @@ import os
 import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, Optional, cast
+from typing import Any, List, Optional, cast
 
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
@@ -28,9 +28,6 @@ from substrate.kernel.tools import (
     is_provider_defined_tool,
 )
 from substrate.logger import setup_logging
-
-if TYPE_CHECKING:
-    from substrate.agents.factory import PersistedStepLoader
 
 logger = setup_logging()
 
@@ -547,7 +544,6 @@ async def build_agent_for_thread(
     tools: List[Tool],
     system_instructions: str,
     cfg: SubstrateConfig,
-    load_persisted_steps: "PersistedStepLoader",
     history: Optional[HistoryProvider] = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
@@ -563,16 +559,23 @@ async def build_agent_for_thread(
     Agent topology (the fixed researcher/calculator/clock orchestrator, and
     the default single-assistant shape) lives in ``agents/factory.py`` —
     this function only decides which one to build from ``cfg.AGENT_MODE``
-    and registers the result(s) with ``runtime``. ``cfg`` and
-    ``load_persisted_steps`` are passed in rather than imported from
-    ``substrate.serving.*`` — this module (``infrastructure/``) must not
-    reach into ``serving/``, only the reverse.
+    and registers the result(s) with ``runtime``. ``cfg`` is passed in
+    rather than imported from ``substrate.serving.*`` — this module
+    (``infrastructure/``) must not reach into ``serving/``, only the reverse.
+
+    Cold-store memory-seeding reads straight off ``runtime``'s EventLog
+    (``agents.factory.step_rows_from_log`` — the EventLog is the single
+    source of truth for conversation history, not a separate steps table;
+    see ``serving/stream/history.py::project_thread()``, the sibling
+    projection for UI display) rather than taking an injected loader
+    callback — the monolith has exactly one cold-store mechanism now.
     """
     from substrate.agents.factory import (
         build_research_orchestrator,
         build_token_budget_pipeline,
         create_assistant_agent,
         load_session_memory,
+        step_rows_from_log,
     )
 
     if runtime is None:
@@ -584,8 +587,10 @@ async def build_agent_for_thread(
         system_instructions=system_instructions,
         history=history,
         include_mcp_app_context=True,
-        cold_store_name="Postgres",
-        load_persisted_steps=load_persisted_steps,
+        cold_store_name="EventLog",
+        load_persisted_steps=lambda: step_rows_from_log(
+            runtime.event_log, runtime.scheduler, session_id
+        ),
     )
 
     if cfg.AGENT_MODE.lower() == "orchestrator":

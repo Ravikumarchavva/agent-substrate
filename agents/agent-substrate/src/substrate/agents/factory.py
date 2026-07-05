@@ -35,6 +35,8 @@ from substrate.agents.middleware.pipeline import MiddlewarePipeline
 
 if TYPE_CHECKING:
     from substrate.agents.core import ReActAgent, OrchestratorAgent
+    from substrate.kernel.runtime.log_entry import EventLog
+    from substrate.kernel.runtime.scheduler import Scheduler
 
 logger = setup_logging()
 
@@ -57,7 +59,17 @@ async def rebuild_messages_from_steps(
     *,
     include_mcp_app_context: bool = False,
 ) -> list[ChatMessage]:
-    """Rebuild framework messages from persisted step rows using unified ChatMessage."""
+    """Rebuild framework messages from step-row dicts using unified ChatMessage.
+
+    ``step_rows`` doesn't have to come from an actual ``steps`` database row —
+    it's a plain schema (``type``/``input``/``output``/``generation``/
+    ``metadata``/``name``) that any cold-store source can project into. The
+    monolith projects it from the EventLog (see ``step_rows_from_log``); the
+    microservices ``agent_runtime`` service projects it from the
+    ``conversation`` service's own independent store via HTTP — both funnel
+    through this one conversion so there's a single place that knows how a
+    step-row maps to a ``ChatMessage``.
+    """
     messages: list[ChatMessage] = []
     if system_instructions:
         messages.append(
@@ -148,6 +160,98 @@ async def rebuild_messages_from_steps(
             )
 
     return messages
+
+
+async def step_rows_from_log(
+    event_log: EventLog, scheduler: Scheduler, thread_id: str
+) -> list[dict]:
+    """Project a thread's EventLog into ``rebuild_messages_from_steps``'s
+    step-row schema — the monolith's cold-store source, now that the EventLog
+    (not a separate ``steps`` table) is the single source of truth for
+    conversation history (see ``serving/stream/history.py::project_thread()``,
+    the sibling projection for UI display).
+
+    Turn-boundary rule matches ``project_thread``'s UI-facing counterpart
+    (substrate-ui's ``history-fold.ts``): a ``text.delta``/``tool.call``
+    arriving after a ``tool.result`` starts a new ``assistant_message`` row —
+    each real LLM generation's text + tool-use calls land in one row, exactly
+    matching how the live react loop actually shaped them.
+    """
+    rows: list[dict] = []
+    current: dict | None = None
+    saw_tool_result = False
+
+    def _flush() -> None:
+        nonlocal current, saw_tool_result
+        if current is not None:
+            rows.append(current)
+        current = None
+        saw_tool_result = False
+
+    run_ids = await scheduler.find_all_runs_for_thread(thread_id)
+    for run_id in run_ids:
+        async for entry in event_log.read(run_id):
+            kind = entry.kind
+            payload = entry.payload or {}
+
+            if kind == "user.message":
+                _flush()
+                rows.append({"type": "user_message", "input": payload.get("text", "")})
+                continue
+
+            if kind == "text.delta":
+                if saw_tool_result:
+                    _flush()
+                if current is None:
+                    current = {"type": "assistant_message", "output": "", "generation": {}}
+                current["output"] = (current.get("output") or "") + payload.get(
+                    "text", ""
+                )
+                continue
+
+            if kind == "tool.call":
+                if saw_tool_result:
+                    _flush()
+                if current is None:
+                    current = {"type": "assistant_message", "output": "", "generation": {}}
+                tool_calls = current.setdefault("generation", {}).setdefault(
+                    "tool_calls", []
+                )
+                tool_calls.append(
+                    {
+                        "call_id": payload.get("call_id", ""),
+                        "tool_name": payload.get("tool_name", ""),
+                        "arguments": payload.get("args") or {},
+                    }
+                )
+                continue
+
+            if kind == "tool.result":
+                rows.append(
+                    {
+                        "type": "tool_result",
+                        "name": payload.get("tool_name", ""),
+                        "output": payload.get("output", ""),
+                        "is_error": not payload.get("ok", True),
+                        "metadata": {"tool_call_id": payload.get("call_id", "")},
+                    }
+                )
+                saw_tool_result = True
+                continue
+
+            if kind == "mcp_app_context":
+                _flush()
+                rows.append(
+                    {
+                        "type": "mcp_app_context",
+                        "name": payload.get("tool_name", "mcp_app"),
+                        "output": payload.get("context", ""),
+                    }
+                )
+                continue
+
+    _flush()
+    return rows
 
 
 async def load_session_memory(

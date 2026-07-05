@@ -17,11 +17,6 @@ from substrate.infrastructure.serving_factory import (
     build_agent_for_thread,
     build_chat_tools,
 )
-from substrate.serving.monolith.services.agent_service import (
-    persist_assistant_message,
-    persist_user_message,
-)
-from substrate.serving.monolith.services.thread_service import load_messages_for_memory
 from substrate.kernel.messaging.message import Message, ChatPayload
 from substrate.kernel.core.content import (
     ChatMessage as KernelChatMessage,
@@ -116,9 +111,6 @@ async def execute_scheduled_task(
                 tools=tools,
                 system_instructions=scheduled_instructions,
                 cfg=settings,
-                load_persisted_steps=lambda: load_messages_for_memory(
-                    db, task.thread_id
-                ),
                 history=app_state.history,
                 runtime=app_state.runtime,
             )
@@ -137,7 +129,13 @@ async def execute_scheduled_task(
 
             start = time.monotonic()
             await app_state.runtime.register(agent)
-            run_id = await app_state.runtime.submit(agent.id, msg)
+            # thread_id=: tags this run so it appears in the thread's history
+            # via project_thread() (the EventLog is the single source of
+            # truth for conversation history — see serving/stream/history.py
+            # — there's no separate steps-table write needed here anymore).
+            run_id = await app_state.runtime.submit(
+                agent.id, msg, thread_id=str(task.thread_id)
+            )
 
             output_text = ""
             async for entry in app_state.runtime.event_log.tail(run_id):
@@ -164,16 +162,16 @@ async def execute_scheduled_task(
             )
             db.add(run)
 
-            # 8. Persist messages in thread
+            # The run's user.message/text.delta are already durably in the
+            # EventLog (ReActAgent logs them unconditionally) and will show
+            # up via project_thread() since the run is thread_id-tagged
+            # above — no separate persistence needed. The old "don't show
+            # silent monitoring checks in chat" filter is now a display-time
+            # concern (skip an assistant turn whose text is exactly
+            # "[SILENT_CHECK]") rather than a write-time one, since the
+            # EventLog can't be filtered retroactively — see
+            # substrate-ui's history-fold.ts.
             if not is_silent:
-                # Save user prompt
-                await persist_user_message(db, task.thread_id, task.prompt)
-                # Save assistant response
-                assistant_msg = KernelChatMessage(
-                    role=Role.ASSISTANT, content=[KernelTextBlock(text=output_text)]
-                )
-                await persist_assistant_message(db, task.thread_id, assistant_msg)
-
                 # Auto-disable if one-shot
                 if task.auto_disable:
                     task.status = "completed"

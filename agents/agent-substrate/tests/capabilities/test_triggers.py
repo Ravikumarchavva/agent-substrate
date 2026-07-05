@@ -26,6 +26,34 @@ class MockRuntime:
 
 
 @pytest.mark.asyncio
+async def test_scheduler_uses_memory_data_store_not_a_persistent_one():
+    """Guardrail for the apscheduler CVE ignore in the Makefile.
+
+    PYSEC-2026-282 (RCE via unmarshal_object) is ignored there ONLY because
+    a persistent job store's deserialize round-trip never runs — we always
+    construct AsyncScheduler(data_store=MemoryDataStore()). If this ever
+    changes (e.g. someone "fixes" the durability gap documented in
+    scheduler.py's module docstring by switching to a SQLAlchemy job store),
+    that justification silently stops being true and the CVE becomes
+    reachable. This test fails loudly the moment that happens instead of
+    relying on someone remembering to re-check the Makefile comment.
+    """
+    from apscheduler.datastores.memory import MemoryDataStore
+
+    scheduler = TriggerScheduler(runtime=MockRuntime())
+    await scheduler.start()
+    try:
+        assert isinstance(scheduler._scheduler.data_store, MemoryDataStore), (
+            "TriggerScheduler must use MemoryDataStore — switching to a "
+            "persistent job store reopens PYSEC-2026-282 (see the "
+            "SECURITY_IGNORES comment in the Makefile and re-audit before "
+            "changing this)"
+        )
+    finally:
+        await scheduler.stop()
+
+
+@pytest.mark.asyncio
 async def test_scheduler_trigger_dispatch():
     rt = MockRuntime()
     scheduler = TriggerScheduler(runtime=rt)

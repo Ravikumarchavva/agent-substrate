@@ -307,6 +307,20 @@ class PostgresScheduler:
             return None
         return (RunId(row["run_id"]), _STATUS_MAP[row["status"]])
 
+    async def find_all_runs_for_thread(self, thread_id: str) -> list[RunId]:
+        """Every run_id ever tagged with thread_id, oldest first — the basis
+        for projecting a thread's full conversation history from the log."""
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT run_id FROM substrate_run_queue
+                WHERE thread_id = $1
+                ORDER BY enqueued_at ASC
+                """,
+                thread_id,
+            )
+        return [RunId(row["run_id"]) for row in rows]
+
     async def wake_agent(self, agent_id: AgentId, *, priority: int = 5) -> None:
         """Re-enqueue the active suspended run for agent_id, if any."""
         async with self._pool.acquire() as conn:

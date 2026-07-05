@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from substrate.serving.stream.history import project_thread
 from substrate.serving.stream.session import (
     AgentStreamSession,
     Persister,
@@ -12,4 +13,5 @@ __all__ = [
     "AgentStreamSession",
     "Persister",
     "tail_wire_events",
+    "project_thread",
 ]

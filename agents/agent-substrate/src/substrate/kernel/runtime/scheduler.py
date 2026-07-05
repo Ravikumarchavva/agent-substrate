@@ -280,6 +280,17 @@ class Scheduler(Protocol):
         """
         ...
 
+    async def find_all_runs_for_thread(self, thread_id: str) -> list[RunId]:
+        """Return every run_id ever tagged with ``thread_id``, oldest first.
+
+        Unlike ``find_run_for_thread`` (the single *active* run, used for
+        cancel/single-flight), this is the full history — the basis for
+        projecting a thread's conversation from the EventLog: concatenate
+        each returned run's ``EventLog.read()`` in this order and the result
+        is the complete, chronological turn-by-turn record.
+        """
+        ...
+
     async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:
         """Transition a SUSPENDED run back to PENDING so a worker re-leases it."""
         ...

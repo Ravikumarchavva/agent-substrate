@@ -111,6 +111,14 @@ class InMemoryScheduler:
                     return (run_id, status)
         return None
 
+    async def find_all_runs_for_thread(self, thread_id: str) -> list[RunId]:
+        # dict insertion order approximates enqueue order for Stage 0 — good
+        # enough for the in-memory/test backend; Postgres orders by
+        # enqueued_at explicitly.
+        return [
+            run_id for run_id, tid in self._threads.items() if tid == thread_id
+        ]
+
     async def lease(self, *, worker_id: str, capacity: int) -> list[Lease]:
         leases: list[Lease] = []
         while len(leases) < capacity:

@@ -1290,3 +1290,81 @@ async def test_pg_permanent_error_skips_retry(pg_runtime) -> None:
 
     assert outcome == "run.failed"
     assert agent.attempts == 1, "a PermanentError must not be retried at all"
+
+
+# ---------------------------------------------------------------------------
+# 9. History projection survives a crash-and-resume (the WS4 motivation)
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_project_thread_survives_crash_and_resume(pg_runtime) -> None:
+    """The scenario that motivated collapsing to a single source of truth:
+    a thread's conversation spans two separate runs (simulating a crash
+    between them — the single-flight index only blocks a SECOND concurrent
+    run, not a later one after the first went terminal) and project_thread()
+    must see both runs' turns, in order, with no steps table involved."""
+    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.core.usage import Usage
+    from substrate.kernel.messaging.message import ChatPayload
+    from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
+    from substrate.serving.protocol.events import TextDeltaEvent, UserMessageEvent
+    from substrate.serving.stream.history import project_thread
+
+    class ScriptedLLM:
+        def __init__(self, answer: str) -> None:
+            self.model = "stub"
+            self._answer = answer
+
+        async def generate_stream(self, messages, *, options, ctx=None):
+            yield TextDelta(text=self._answer)
+            yield CompletionEvent(
+                content=[TextBlock(text=self._answer)], usage=Usage()
+            )
+
+    from substrate.agents.core.react import ReActAgent
+
+    agent1 = ReActAgent(
+        "pg-crash-resume-agent", model=ScriptedLLM("first answer")
+    )
+    thread_id = f"thread-crash-resume-{_agent_id('x').key}"
+
+    await pg_runtime.register(agent1)
+    msg1 = Message(
+        target=agent1.id,
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text="turn one")])
+        ),
+        correlation_id=thread_id,
+    )
+    run1 = await pg_runtime.submit(
+        agent1.id, msg1, thread_id=thread_id, max_retries=0
+    )
+    async for entry in pg_runtime.event_log.tail(run1):
+        if entry.kind == "run.completed":
+            break
+
+    # Simulate the "post-crash resume" run: a fresh agent object standing in
+    # for a fresh worker process, same agent_id, submitting the thread's
+    # second turn after the first is already terminal.
+    agent2 = ReActAgent("pg-crash-resume-agent", model=ScriptedLLM("second answer"))
+    await pg_runtime.register(agent2)
+    msg2 = Message(
+        target=agent2.id,
+        payload=ChatPayload(
+            message=ChatMessage(role=Role.USER, content=[TextBlock(text="turn two")])
+        ),
+        correlation_id=thread_id,
+    )
+    run2 = await pg_runtime.submit(
+        agent2.id, msg2, thread_id=thread_id, max_retries=0
+    )
+    async for entry in pg_runtime.event_log.tail(run2):
+        if entry.kind == "run.completed":
+            break
+
+    events = await project_thread(pg_runtime.event_log, pg_runtime.scheduler, thread_id)
+
+    user_texts = [e.text for e in events if isinstance(e, UserMessageEvent)]
+    assistant_texts = [e.text for e in events if isinstance(e, TextDeltaEvent)]
+    assert user_texts == ["turn one", "turn two"]
+    assert assistant_texts == ["first answer", "second answer"]

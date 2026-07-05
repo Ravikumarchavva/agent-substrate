@@ -32,6 +32,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, AsyncIterator
 
+from substrate.infrastructure.observability.runtime_metrics import (
+    retry_counter,
+    suspension_counter,
+)
 from substrate.kernel.core.identity import AgentId
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
@@ -592,6 +596,7 @@ class PostgresScheduler:
                                 lease.run_id,
                                 wake_at,
                             )
+                            retry_counter.add(1, {"backend": "postgres"})
                             return False
 
                 if status == RunStatus.SUSPENDED:
@@ -620,6 +625,7 @@ class PostgresScheduler:
                         wake_at,
                         lease.run_id,
                     )
+                    suspension_counter.add(1, {"backend": "postgres"})
                     if wake_signals:
                         # Close the lost-wakeup race: a signal may have
                         # arrived between the miss inside RunContext (which

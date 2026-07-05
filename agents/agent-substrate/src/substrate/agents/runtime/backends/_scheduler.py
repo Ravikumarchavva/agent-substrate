@@ -16,6 +16,10 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator
 
+from substrate.infrastructure.observability.runtime_metrics import (
+    retry_counter,
+    suspension_counter,
+)
 from substrate.kernel.core.identity import AgentId
 from substrate.kernel.runtime.ids import RunId, RunStatus
 from substrate.kernel.runtime.scheduler import Lease, RunRetryPolicy
@@ -180,6 +184,7 @@ class InMemoryScheduler:
                 asyncio.create_task(
                     self._delayed_retry_enqueue(lease.run_id, delay, wake_on)
                 )
+                retry_counter.add(1, {"backend": "memory"})
                 return False
 
         if status == RunStatus.SUSPENDED and wake_on:
@@ -187,6 +192,9 @@ class InMemoryScheduler:
             # For timer wakeups the SignalBus will call enqueue when it fires.
             # For signal wakeups same.  For message wakeups the Inbox on_deliver
             # hook calls enqueue.  Do NOT enqueue here — that would defeat dormancy.
+
+        if status == RunStatus.SUSPENDED:
+            suspension_counter.add(1, {"backend": "memory"})
 
         return status != RunStatus.SUSPENDED
 

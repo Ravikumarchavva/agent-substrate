@@ -39,7 +39,7 @@ an ask-only turn's tool_calls entirely (verified in production: a 3-question
 turn persisted all 3 `tool_result` rows but an *empty* `tool_calls` array on
 the assistant_message). The fix: `_shape_result()` embeds the original
 question/options under a `_card` key directly in the `tool_result` JSON, which
-*is* reliably persisted every time. `ravi-ui/src/lib/api/messages.ts`
+*is* reliably persisted every time. `substrate-ui/src/lib/api/messages.ts`
 reconstructs cards from `tool_result` rows using `_card`, never from
 `assistant_message.tool_calls`.
 

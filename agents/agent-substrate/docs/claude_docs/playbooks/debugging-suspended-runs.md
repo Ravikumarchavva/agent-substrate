@@ -29,7 +29,7 @@ BridgeRegistry: no pending request for id=<id>        ← click FAILED to find i
 Also just watch the raw request log — a `POST /chat/respond/{id}` returning
 `200 OK` followed by fresh `POST https://api.openai.com/...` calls within a
 second or two means **the backend resumed correctly**. If you see that,
-stop looking at the backend — the bug is in `ravi-ui`'s rendering of
+stop looking at the backend — the bug is in `substrate-ui`'s rendering of
 loading/pending state, not the suspend/resume mechanism.
 
 ## Step 2 — inspect the actual persisted state

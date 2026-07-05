@@ -22,7 +22,7 @@ Most "agent" libraries help you wrap a model call in a loop. Agent Substrate is 
 
     ---
 
-    RAG-backed chatbots with streaming responses, persistent memory, and human-in-the-loop approval cards. The `ravi-ui` template deploys as a ready-made chat shell.
+    RAG-backed chatbots with streaming responses, persistent memory, and human-in-the-loop approval cards. The `substrate-ui` template deploys as a ready-made chat shell.
 
 -   :material-sitemap-outline: **Multi-agent workflows**
 

@@ -451,7 +451,7 @@ async def stream_thread(
     save the same turns twice.
 
     A still-pending HITL card is NOT re-sent here — GET /hitl/status/{id}
-    (called on page load, see ravi-ui's loadMessages) already restores that
+    (called on page load, see substrate-ui's loadMessages) already restores that
     from the EventLog. This endpoint picks up from whatever's already known
     (``last_seq`` at connect time) onward, so the two are complementary, not
     duplicative.

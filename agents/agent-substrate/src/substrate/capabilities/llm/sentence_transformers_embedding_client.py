@@ -51,7 +51,7 @@ class SentenceTransformersEmbeddingClient:
 
         if device is None:
             try:
-                import torch
+                import torch  # pyright: ignore[reportMissingImports]
 
                 device = "cuda" if torch.cuda.is_available() else "cpu"
             except ImportError:

@@ -36,6 +36,7 @@ from substrate.agents.core._loop import (
     deliver,
     final_text,
     load_history,
+    log_user_message,
     message_to_chat,
     persist_turns,
 )
@@ -132,6 +133,7 @@ class OrchestratorAgent:
 
         history_messages = await load_history(self._context, self.id, session_id)
         user_turn = message_to_chat(msg)
+        await log_user_message(ctx, msg, user_turn)
         messages: list[ChatMessage] = history_messages + [user_turn]
         n_loaded = len(history_messages)
 

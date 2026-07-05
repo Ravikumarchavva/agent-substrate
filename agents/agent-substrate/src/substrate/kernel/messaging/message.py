@@ -142,7 +142,7 @@ class Message(BaseModel):
     sender: AgentId | None = None
     correlation_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     causation_id: str | None = None
-    metadata: dict[str, str] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
     reply_to: str | None = None  # run_id of the asker; set by RunContext.ask()
 
     model_config = {"arbitrary_types_allowed": True}

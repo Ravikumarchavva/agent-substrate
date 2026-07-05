@@ -365,6 +365,12 @@ async def chat(
             message=_ChatMessage(role=Role.USER, content=_user_blocks)
         ),
         correlation_id=str(body.thread_id),
+        # display_content is what the user actually typed/saw; user_content
+        # may be augmented with file_block for the LLM. Read back by
+        # log_user_message() (agents/core/_loop.py) when journaling
+        # user.message, so history shows the real turn, not the augmented
+        # prompt.
+        metadata={"display_text": display_content, "attachments": attachments},
     )
 
     _agent_spec = {

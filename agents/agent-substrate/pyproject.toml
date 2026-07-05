@@ -21,6 +21,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 requires-python = ">=3.11"
+# Base install: the agent loop, LLM provider clients, and the FastAPI/Postgres/
+# Redis serving stack. Everything a tool lazily imports only when that specific
+# capability is used (web browsing/search, the K8s code interpreter, PDF/RAG
+# loaders, S3 storage) lives in `[project.optional-dependencies]` below instead
+# — install the matching extra, or accept that tool's clean "not installed"
+# error at call time rather than a hard dependency on every install.
 dependencies = [
     "httpx>=0.27.0",
     "mcp>=1.0.0",
@@ -44,27 +50,38 @@ dependencies = [
     "apscheduler>=4.0.0a5",
     "anthropic>=0.95.0",
     "google-genai>=1.73.0",
-    "k8s-agent-sandbox>=0.4.6",
     "msgspec>=0.21.1",
     "pillow>=10.4.0",
-    "markitdown-ocr>=0.1.0",
-    "ipywidgets>=8.1.8",
     "opentelemetry-exporter-otlp<1.20",
     "opentelemetry-instrumentation-fastapi<0.60b1",
-    "ipykernel>=7.2.0",
-    "playwright>=1.60.0",
-    "psycopg[binary]>=3.3.4",
-    "pgvector>=0.4.2",
-    "ddgs>=9.14.4",
-    "crawl4ai>=0.8.7",
-    "pypdf>=6.13.0",
-    "aiobotocore>=3.7.0",
-    "botocore>=1.43.0",
-    "exa-py>=2.14.0",
-    "tavily-python>=0.7.26",
 ]
 
 [project.optional-dependencies]
+# Web browsing/search tools (WebSearchTool DuckDuckGo fallback, ReadUrlTool
+# crawl4ai fallback, WebSurferTool). Playwright alone is ~140MB; crawl4ai pulls
+# a further ~250MB of transitive deps (scipy/pandas/onnxruntime via its own
+# extras) for what is only ever the free-tier fallback behind Tavily/Exa.
+web = [
+    "ddgs>=9.14.4",
+    "crawl4ai>=0.8.7",
+    "playwright>=1.60.0",
+    "exa-py>=2.14.0",
+    "tavily-python>=0.7.26",
+]
+# Firecracker/K8s sandboxed code execution (K8sSandboxCodeInterpreterTool).
+# Pulls the full kubernetes + kubernetes_asyncio client libraries (~85MB) —
+# only needed if you're actually running the sandbox against a real cluster.
+code = ["k8s-agent-sandbox>=0.4.6"]
+# PDF loading for the knowledge/RAG pipeline (PDFLoader, DoclingLoader's
+# pypdf-based fallback path).
+rag = ["pypdf>=6.13.0"]
+# S3-compatible object storage backend for FILE_STORE_BACKEND=s3 (the default,
+# "local", needs neither of these).
+s3 = ["aiobotocore>=3.7.0", "botocore>=1.43.0"]
+# Everything the reference monolith server (`make infra-up && uv run start`)
+# constructs by default — install this if you're running agent-substrate
+# itself, not just importing it as a library. `make sync` uses this.
+server = ["agent-substrate[web,code,rag,s3]"]
 # Structure-aware document parsing (PDF/DOCX/PPTX layout, tables, OCR) via
 # DoclingLoader (capabilities/knowledge/loaders/docling_loader.py). Pulls in
 # torch + transformers + accelerate for local layout/table-structure models —
@@ -72,7 +89,7 @@ dependencies = [
 # for CPU-only use, since that's what the default PyPI torch wheel bundles.
 # Not needed unless you actually parse documents with Docling — the base
 # install already covers CSV/JSON/text/pypdf-based PDF loading without it.
-docs = ["docling>=2.0.0"]
+docling = ["docling>=2.0.0"]
 
 [project.urls]
 Homepage = "https://docs.agent-substrate.com"

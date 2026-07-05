@@ -9,6 +9,15 @@ Only ``substrate_run_queue`` rows with ``terminated_at`` older than the cutoff a
 candidates — a row with ``terminated_at IS NULL`` is still live (pending,
 running, or suspended) and is never touched, no matter how old
 ``enqueued_at`` is.
+
+**Operational note:** conversation history is projected directly from the
+EventLog (``serving/stream/history.py::project_thread()``) — there is no
+separate, independently-retained chat-history table anymore. Sweeping a
+thread's terminal runs deletes their EventLog entries, which means their
+conversation history is gone too, not just runtime bookkeeping. If a
+deployment ever wires this into an automatic cron job, size the retention
+window with that in mind — it now doubles as the chat-history retention
+policy.
 """
 
 from __future__ import annotations

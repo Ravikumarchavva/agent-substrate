@@ -46,7 +46,7 @@ if TYPE_CHECKING:
         ToolCallValidationMiddleware,
         MiddlewarePipeline,
     )
-    from substrate.agents.runtime import Runtime
+    from substrate.agents.runtime import Runtime, RunOutcome
     from substrate.kernel.tools import Skill
     from substrate.kernel.core.errors import MiddlewareTermination
     from substrate.kernel import ChatMessage, TextBlock, ToolExecutionResult
@@ -69,6 +69,7 @@ __all__ = [
     "PersonalFeedAgent",
     # runtime
     "Runtime",
+    "RunOutcome",
     # supporting types
     "AgentRunResult",
     "Skill",
@@ -122,6 +123,7 @@ _LAZY: dict[str, tuple[str, str]] = {
     ),
     # runtime
     "Runtime": ("substrate.agents.runtime", "Runtime"),
+    "RunOutcome": ("substrate.agents.runtime", "RunOutcome"),
     # supporting
     "AgentRunResult": ("substrate.agents.middleware", "AgentRunResult"),
     "Skill": ("substrate.kernel.tools", "Skill"),

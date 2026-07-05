@@ -56,7 +56,8 @@ async def sweep_terminal_runs(pool: asyncpg.Pool, *, older_than: timedelta) -> i
                 "DELETE FROM substrate_signals WHERE run_id = ANY($1)", run_ids
             )
             await conn.execute(
-                "DELETE FROM substrate_spawn_effects WHERE child_run_id = ANY($1)", run_ids
+                "DELETE FROM substrate_spawn_effects WHERE child_run_id = ANY($1)",
+                run_ids,
             )
             await conn.execute(
                 "DELETE FROM substrate_run_tree WHERE run_id = ANY($1)", run_ids

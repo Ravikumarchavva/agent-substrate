@@ -7,7 +7,7 @@ File map
 --------
 ids.py            RunId, RunStatus, new_run_id
 log_entry.py      RunLogEntry, EventLog  (the append-only durable spine)
-effects.py        Effect, EffectResult, Journal  (at-most-once external effects)
+effects.py        Effect, EffectResult  (at-most-once external effects)
 inbox.py          Inbox, DeadLetterEntry, DeadLetterReason  (durable mailbox)
 follow_graph.py   FollowGraph  (social follow-graph — NOT the RAG knowledge graph)
 fanout.py         FanoutStrategy  (how an emit reaches all followers)
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
 from substrate.kernel.runtime.log_entry import EventLog, RunLogEntry
-from substrate.kernel.runtime.effects import Effect, EffectResult, Journal
+from substrate.kernel.runtime.effects import Effect, EffectResult
 from substrate.kernel.runtime.inbox import DeadLetterEntry, DeadLetterReason, Inbox
 from substrate.kernel.runtime.follow_graph import FollowGraph
 from substrate.kernel.runtime.fanout import FanoutStrategy
@@ -43,7 +43,6 @@ __all__ = [
     # effects
     "Effect",
     "EffectResult",
-    "Journal",
     # inbox
     "DeadLetterReason",
     "DeadLetterEntry",

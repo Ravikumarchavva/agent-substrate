@@ -6,7 +6,6 @@ from substrate.infrastructure.runtime.pg_inbox import PostgresInbox
 from substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
 from substrate.infrastructure.runtime.pg_signal_bus import PostgresSignalBus
 from substrate.infrastructure.runtime.pg_supervisor import PostgresSupervisor
-from substrate.infrastructure.runtime.redis_journal import RedisJournal
 from substrate.infrastructure.runtime.retention import sweep_terminal_runs
 
 __all__ = [
@@ -16,6 +15,5 @@ __all__ = [
     "PostgresScheduler",
     "PostgresSignalBus",
     "PostgresSupervisor",
-    "RedisJournal",
     "sweep_terminal_runs",
 ]

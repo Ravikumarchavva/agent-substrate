@@ -279,40 +279,7 @@ class TestEffect:
             e.kind = "y"  # type: ignore[misc]
 
 
-class InMemoryJournal:
-    def __init__(self) -> None:
-        self._store: dict[str, EffectResult] = {}
-
-    async def lookup(self, effect_id: str) -> EffectResult | None:
-        return self._store.get(effect_id)
-
-    async def record(self, result: EffectResult) -> None:
-        self._store.setdefault(result.effect_id, result)  # write-once
-
-
-class TestJournal:
-    async def test_lookup_miss_returns_none(self) -> None:
-        j = InMemoryJournal()
-        assert await j.lookup("nonexistent") is None
-
-    async def test_record_then_lookup(self) -> None:
-        j = InMemoryJournal()
-        result = EffectResult(effect_id="eid1", status="ok", value={"sent": True})
-        await j.record(result)
-        hit = await j.lookup("eid1")
-        assert hit is not None
-        assert hit.status == "ok"
-
-    async def test_record_write_once(self) -> None:
-        j = InMemoryJournal()
-        r1 = EffectResult(effect_id="eid2", status="ok", value={"v": 1})
-        r2 = EffectResult(effect_id="eid2", status="error", value={"v": 2})
-        await j.record(r1)
-        await j.record(r2)
-        hit = await j.lookup("eid2")
-        assert hit is not None
-        assert hit.status == "ok"  # first wins
-
+class TestEffectResult:
     async def test_result_round_trip_json(self) -> None:
         r = EffectResult(effect_id="x", status="error", value={"err": "timeout"})
         restored = EffectResult.model_validate_json(r.model_dump_json())

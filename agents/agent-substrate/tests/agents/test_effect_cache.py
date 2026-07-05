@@ -17,7 +17,6 @@ from substrate.agents.runtime.backends._event_log import InMemoryEventLog
 from substrate.agents.runtime.backends._fanout import PushAllFanout
 from substrate.agents.runtime.backends._follow_graph import InMemoryFollowGraph
 from substrate.agents.runtime.backends._inbox import InMemoryInbox
-from substrate.agents.runtime.backends._journal import InMemoryJournal
 from substrate.agents.runtime.backends._scheduler import InMemoryScheduler
 from substrate.agents.runtime.backends._signal_bus import InMemorySignalBus
 from substrate.agents.runtime.backends._supervisor import InMemorySupervisor
@@ -47,7 +46,6 @@ async def _make_ctx(
     sharing only the durable EventLog (i.e. a crash-and-replay simulation).
     """
     inbox = InMemoryInbox()
-    journal = InMemoryJournal()
     scheduler = InMemoryScheduler()
     signal_bus = InMemorySignalBus(scheduler)
     meta = RunMeta(run_id=run_id, cancellation=CancellationToken())
@@ -61,7 +59,7 @@ async def _make_ctx(
         follow_graph=InMemoryFollowGraph(),
         fanout=PushAllFanout(),
         scheduler=scheduler,
-        supervisor=InMemorySupervisor(event_log, inbox, journal, scheduler, signal_bus),
+        supervisor=InMemorySupervisor(event_log, inbox, scheduler, signal_bus),
         signal_bus=signal_bus,
     )
 

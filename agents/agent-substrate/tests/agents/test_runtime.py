@@ -6,7 +6,7 @@ Covers:
 3. Social fan-out — producer emits to a topic; followers are woken and receive it.
 4. Spawn — parent spawns a child; child receives its boot message.
 5. Timeout discrimination — slow agent produces AskOutcome(kind="timed_out"), not "target_failed".
-6. Journal at-most-once — write-once record; second record for same effect_id is ignored.
+6. Effect dedup via RunContext — a journaled effect isn't re-executed on replay.
 """
 
 from __future__ import annotations
@@ -17,9 +17,7 @@ import asyncio
 from substrate.kernel.core.identity import AgentId, TopicId
 from substrate.kernel.messaging.message import DataPayload, Message
 from substrate.kernel.runtime.communication import AskOutcome
-from substrate.kernel.runtime.effects import Effect, EffectResult
 from substrate.agents.runtime import Runtime, RunContext
-from substrate.agents.runtime.backends import InMemoryJournal
 
 
 # ---------------------------------------------------------------------------
@@ -274,31 +272,12 @@ async def test_ask_timeout_is_not_target_failed() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6. Journal at-most-once (write-once semantics)
+# 6. Effect dedup via RunContext
 # ---------------------------------------------------------------------------
 
 
-async def test_journal_write_once() -> None:
-    journal = InMemoryJournal()
-    effect_id = Effect.make_id("run-abc", "0", "send_email", {"to": "user@example.com"})
-
-    first = EffectResult(effect_id=effect_id, status="ok", value={"sent": True})
-    second = EffectResult(
-        effect_id=effect_id, status="ok", value={"sent": False, "duplicate": True}
-    )
-
-    await journal.record(first)
-    await journal.record(second)  # must be silently ignored
-
-    cached = await journal.lookup(effect_id)
-    assert cached is not None
-    assert cached.value == {"sent": True}, (
-        "Journal must not overwrite an existing result"
-    )
-
-
 async def test_journal_dedup_via_context() -> None:
-    """_journaled() does not re-execute fn if the effect_id is already in the journal."""
+    """_journaled() does not re-execute fn if the effect_id is already cached."""
 
     class CountingAgent:
         def __init__(self, agent_id: AgentId) -> None:

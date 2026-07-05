@@ -23,7 +23,7 @@ the email isn't re-sent.
 
 AgentRunContext (kernel-visible slice)
 --------------------------------------
-The full ``RunContext`` lives at L1 (agents/) — it composes Journal,
+The full ``RunContext`` lives at L1 (agents/) — it composes the EffectCache,
 EventLog, Supervisor, and capability clients.  The kernel only sees the minimal
 slice it needs to define the contract: ``run_id``, ``tenant_id``, ``check()``.
 The author's actual ctx at runtime IS a ``RunContext`` (L1) and has all the

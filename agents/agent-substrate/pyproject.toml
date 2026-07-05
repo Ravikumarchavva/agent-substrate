@@ -58,12 +58,21 @@ dependencies = [
     "ddgs>=9.14.4",
     "crawl4ai>=0.8.7",
     "pypdf>=6.13.0",
-    "docling>=2.0.0",
     "aiobotocore>=3.7.0",
     "botocore>=1.43.0",
     "exa-py>=2.14.0",
     "tavily-python>=0.7.26",
 ]
+
+[project.optional-dependencies]
+# Structure-aware document parsing (PDF/DOCX/PPTX layout, tables, OCR) via
+# DoclingLoader (capabilities/knowledge/loaders/docling_loader.py). Pulls in
+# torch + transformers + accelerate for local layout/table-structure models —
+# on Linux this drags in the full NVIDIA CUDA/cuDNN/NCCL runtime (~4GB) even
+# for CPU-only use, since that's what the default PyPI torch wheel bundles.
+# Not needed unless you actually parse documents with Docling — the base
+# install already covers CSV/JSON/text/pypdf-based PDF loading without it.
+docs = ["docling>=2.0.0"]
 
 [project.urls]
 Homepage = "https://docs.agent-substrate.com"

@@ -51,7 +51,6 @@ dependencies = [
     "ipywidgets>=8.1.8",
     "opentelemetry-exporter-otlp<1.20",
     "opentelemetry-instrumentation-fastapi<0.60b1",
-    "paddleocr[all]",
     "ipykernel>=7.2.0",
     "playwright>=1.60.0",
     "psycopg[binary]>=3.3.4",
@@ -184,9 +183,6 @@ ignore_imports = [
     "substrate.serving.services.code_interpreter.app -> substrate.capabilities.tools.code_interpreter.session_manager",
     "substrate.serving.services.code_interpreter.schemas -> substrate.capabilities.tools.code_interpreter.schemas",
 ]
-
-[tool.uv.sources]
-paddleocr = { git = "https://github.com/PaddlePaddle/PaddleOCR.git" }
 
 # Orthogonal peers (not part of the layer stack):
 # integrations/ — concrete I/O ports (LLM clients, memory backends, vector stores)

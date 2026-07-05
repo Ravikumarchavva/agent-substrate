@@ -85,8 +85,35 @@ test-ci:
 build:
 	docker build -f ./deployment/docker/backend.Dockerfile .
 
+# Ignored CVEs below are all confirmed blocked by a hard version pin in an
+# upstream dependency we can't override without dropping the feature that
+# needs it (verified via `uv lock` with a forcing constraint — each fails
+# with an explicit "X depends on Y<Z" resolution error). Re-check by removing
+# an entry and running `make security` after bumping the blocking package.
+# (paddleocr[all] was removed entirely — it was an unused dependency and the
+# sole reason the langchain/langchain-openai/langchain-text-splitters CVEs
+# were in the tree at all.)
+#   PYSEC-2026-282 (apscheduler, RCE via unmarshal_object) — no fix version
+#     exists upstream yet. Not reachable today: we only ever construct
+#     AsyncScheduler(data_store=MemoryDataStore()) (capabilities/triggers/
+#     scheduler.py) — no persistent data store, so the vulnerable
+#     serialize/deserialize round-trip never runs. Re-audit if the data
+#     store is ever changed to a persistent backend.
+#   PYSEC-2026-87 (lxml, XXE-style local file read via default entity
+#     resolution) — pulled in transitively via crawl4ai, which pins
+#     lxml<6.dev0 (the fixed version is 6.1.0). We never import lxml
+#     directly or construct our own parser with custom entity-resolution
+#     settings.
+#   PYSEC-2026-597 (nltk, path traversal in url2pathname) — no fix version
+#     exists upstream yet. Pulled in transitively via crawl4ai only; we
+#     never import nltk directly or call its data-download helpers.
+SECURITY_IGNORES = \
+	--ignore-vuln PYSEC-2026-282 \
+	--ignore-vuln PYSEC-2026-87 \
+	--ignore-vuln PYSEC-2026-597
+
 security:
-	uv run --with pip-audit pip-audit
+	uv run --with pip-audit pip-audit $(SECURITY_IGNORES)
 
 security-soft:
 	@$(MAKE) security || echo "Non-blocking: security findings ignored by ci target"
@@ -97,4 +124,4 @@ ci:
 	$(MAKE) lint
 	$(MAKE) typecheck
 	$(MAKE) test-ci
-	$(MAKE) security-soft
+	$(MAKE) security

@@ -40,6 +40,7 @@ from substrate.serving.monolith.schemas import (
 )
 from substrate.serving.monolith.services.scheduled_service import execute_scheduled_task
 from substrate.serving.monolith.services.thread_service import create_thread
+from substrate.serving.stream import append_user_message
 
 logger = setup_logging()
 
@@ -512,14 +513,22 @@ async def add_scheduled_task_feedback(
     task_id: uuid.UUID,
     body: ScheduledTaskFeedbackRequest,
     db: AsyncSession = Depends(get_db),
+    ctx: ServerDependencies = Depends(get_ctx),
 ):
     """Add user feedback/message directly to a scheduled task's thread for lookback context."""
     task = await db.get(ScheduledTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    from substrate.serving.monolith.services.agent_service import persist_user_message
-
-    await persist_user_message(db, task.thread_id, body.content)
-    await db.commit()
+    runtime = ctx.runtime
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Runtime not configured")
+    attached = await append_user_message(
+        runtime.event_log, runtime.scheduler, str(task.thread_id), body.content
+    )
+    if not attached:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This task hasn't run yet — there's no run to attach feedback to.",
+        )
     return {"status": "success"}

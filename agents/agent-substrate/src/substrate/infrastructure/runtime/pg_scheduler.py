@@ -2,7 +2,7 @@
 
 Schema::
 
-    CREATE TABLE ravi_run_queue (
+    CREATE TABLE substrate_run_queue (
         run_id       TEXT        NOT NULL PRIMARY KEY,
         priority     INTEGER     NOT NULL DEFAULT 5,
         tenant       TEXT        NOT NULL DEFAULT 'default',
@@ -16,11 +16,11 @@ Schema::
         enqueued_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
-    CREATE TABLE ravi_agent_runs (
+    CREATE TABLE substrate_agent_runs (
         run_id   TEXT NOT NULL PRIMARY KEY,
         agent_id TEXT NOT NULL
     );
-    CREATE INDEX ravi_agent_runs_agent_idx ON ravi_agent_runs(agent_id);
+    CREATE INDEX substrate_agent_runs_agent_idx ON substrate_agent_runs(agent_id);
 
 Lease acquisition uses ``SELECT … FOR UPDATE SKIP LOCKED`` to let multiple
 workers poll concurrently without contention.  Expired leases are reclaimed
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 _LEASE_SECONDS = 30
 _CREATE_TABLES = """
-CREATE TABLE IF NOT EXISTS ravi_run_queue (
+CREATE TABLE IF NOT EXISTS substrate_run_queue (
     run_id       TEXT        NOT NULL PRIMARY KEY,
     priority     INTEGER     NOT NULL DEFAULT 5,
     tenant       TEXT        NOT NULL DEFAULT 'default',
@@ -59,17 +59,17 @@ CREATE TABLE IF NOT EXISTS ravi_run_queue (
     cancel_requested BOOLEAN NOT NULL DEFAULT false,
     deadline     TIMESTAMPTZ
 );
-CREATE INDEX IF NOT EXISTS ravi_run_queue_pending_idx
-    ON ravi_run_queue (priority, enqueued_at)
+CREATE INDEX IF NOT EXISTS substrate_run_queue_pending_idx
+    ON substrate_run_queue (priority, enqueued_at)
     WHERE status = 'pending';
 
-CREATE TABLE IF NOT EXISTS ravi_agent_runs (
+CREATE TABLE IF NOT EXISTS substrate_agent_runs (
     run_id   TEXT NOT NULL PRIMARY KEY,
     agent_id TEXT NOT NULL,
     spec     JSONB
 );
-CREATE INDEX IF NOT EXISTS ravi_agent_runs_agent_idx
-    ON ravi_agent_runs (agent_id);
+CREATE INDEX IF NOT EXISTS substrate_agent_runs_agent_idx
+    ON substrate_agent_runs (agent_id);
 """
 
 # Columns added after the original table shape shipped — additive migration
@@ -94,18 +94,18 @@ _MIGRATE_COLUMNS: list[tuple[str, str]] = [
 ]
 
 _CREATE_INDEXES_POST_MIGRATION = """
-CREATE INDEX IF NOT EXISTS ravi_run_queue_wake_at_idx
-    ON ravi_run_queue (wake_at)
+CREATE INDEX IF NOT EXISTS substrate_run_queue_wake_at_idx
+    ON substrate_run_queue (wake_at)
     WHERE status = 'suspended';
-CREATE INDEX IF NOT EXISTS ravi_run_queue_terminated_at_idx
-    ON ravi_run_queue (terminated_at)
+CREATE INDEX IF NOT EXISTS substrate_run_queue_terminated_at_idx
+    ON substrate_run_queue (terminated_at)
     WHERE terminated_at IS NOT NULL;
 -- Durable single-flight: at most one non-terminal run per thread_id. A
 -- suspended run (e.g. waiting on ask_human) still "owns" the thread — a
 -- second POST /chat for the same thread must not start a competing run
 -- while the first is dormant waiting for a HITL reply.
-CREATE UNIQUE INDEX IF NOT EXISTS ravi_run_queue_thread_singleflight_idx
-    ON ravi_run_queue (thread_id)
+CREATE UNIQUE INDEX IF NOT EXISTS substrate_run_queue_thread_singleflight_idx
+    ON substrate_run_queue (thread_id)
     WHERE thread_id IS NOT NULL AND status IN ('pending', 'running', 'suspended');
 """
 
@@ -135,7 +135,7 @@ class PostgresScheduler:
             await conn.execute(_CREATE_TABLES)
             for col, defn in _MIGRATE_COLUMNS:
                 await conn.execute(
-                    f"ALTER TABLE ravi_run_queue ADD COLUMN IF NOT EXISTS {col} {defn}"
+                    f"ALTER TABLE substrate_run_queue ADD COLUMN IF NOT EXISTS {col} {defn}"
                 )
             await conn.execute(_CREATE_INDEXES_POST_MIGRATION)
 
@@ -146,7 +146,7 @@ class PostgresScheduler:
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO ravi_agent_runs (run_id, agent_id, spec)
+                INSERT INTO substrate_agent_runs (run_id, agent_id, spec)
                 VALUES ($1, '', $2::jsonb)
                 ON CONFLICT (run_id) DO UPDATE SET spec = EXCLUDED.spec
                 """,
@@ -163,7 +163,7 @@ class PostgresScheduler:
         """
         async with self._pool.acquire() as conn:
             await conn.execute(
-                "UPDATE ravi_run_queue SET status = 'failed', worker_id = NULL "
+                "UPDATE substrate_run_queue SET status = 'failed', worker_id = NULL "
                 "WHERE run_id = $1 AND status = 'pending'",
                 run_id,
             )
@@ -180,8 +180,8 @@ class PostgresScheduler:
             rows = await conn.fetch(
                 """
                 SELECT rq.run_id, ar.agent_id, ar.spec
-                FROM ravi_run_queue rq
-                JOIN ravi_agent_runs ar USING (run_id)
+                FROM substrate_run_queue rq
+                JOIN substrate_agent_runs ar USING (run_id)
                 WHERE rq.status = 'pending' AND ar.spec IS NOT NULL
                 """
             )
@@ -215,7 +215,7 @@ class PostgresScheduler:
         async with self._pool.acquire() as conn:
             result = await conn.execute(
                 f"""
-                UPDATE ravi_run_queue
+                UPDATE substrate_run_queue
                 SET status = 'pending', worker_id = NULL, expires_at = NULL
                 WHERE {where}
                 """
@@ -239,7 +239,7 @@ class PostgresScheduler:
     async def get_status(self, run_id: RunId) -> RunStatus | None:
         async with self._pool.acquire() as conn:
             row = await conn.fetchval(
-                "SELECT status FROM ravi_run_queue WHERE run_id = $1", run_id
+                "SELECT status FROM substrate_run_queue WHERE run_id = $1", run_id
             )
         return _STATUS_MAP.get(row) if row else None
 
@@ -251,8 +251,8 @@ class PostgresScheduler:
             row = await conn.fetchrow(
                 """
                 SELECT rq.run_id, rq.status
-                FROM ravi_run_queue rq
-                JOIN ravi_agent_runs ar USING (run_id)
+                FROM substrate_run_queue rq
+                JOIN substrate_agent_runs ar USING (run_id)
                 WHERE ar.agent_id = $1 AND rq.status NOT IN ('completed','failed','cancelled')
                 ORDER BY rq.enqueued_at DESC
                 LIMIT 1
@@ -267,7 +267,7 @@ class PostgresScheduler:
         async with self._pool.acquire() as conn:
             row = await conn.fetchval(
                 """
-                SELECT run_id FROM ravi_run_queue
+                SELECT run_id FROM substrate_run_queue
                 WHERE status = 'suspended' AND $1 = ANY(wake_signals)
                 LIMIT 1
                 """,
@@ -282,13 +282,13 @@ class PostgresScheduler:
 
         Durable, cross-replica: any replica handling a cancel request for
         this thread resolves the same run_id, since ``thread_id`` and
-        ``status`` both live in ``ravi_run_queue`` — no in-process registry
+        ``status`` both live in ``substrate_run_queue`` — no in-process registry
         involved.
         """
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT run_id, status FROM ravi_run_queue
+                SELECT run_id, status FROM substrate_run_queue
                 WHERE thread_id = $1 AND status NOT IN ('completed','failed','cancelled')
                 ORDER BY enqueued_at DESC
                 LIMIT 1
@@ -304,11 +304,11 @@ class PostgresScheduler:
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """
-                UPDATE ravi_run_queue rq
+                UPDATE substrate_run_queue rq
                 SET status = 'pending', worker_id = NULL, expires_at = NULL
                 WHERE rq.status = 'suspended'
                   AND rq.run_id IN (
-                      SELECT run_id FROM ravi_agent_runs WHERE agent_id = $1
+                      SELECT run_id FROM substrate_agent_runs WHERE agent_id = $1
                   )
                 """,
                 str(agent_id),
@@ -319,7 +319,7 @@ class PostgresScheduler:
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """
-                UPDATE ravi_run_queue
+                UPDATE substrate_run_queue
                 SET status = 'pending', worker_id = NULL, expires_at = NULL
                 WHERE run_id = $1 AND status = 'suspended'
                 """,
@@ -352,7 +352,7 @@ class PostgresScheduler:
                 if agent_id is not None:
                     await conn.execute(
                         """
-                        INSERT INTO ravi_agent_runs (run_id, agent_id)
+                        INSERT INTO substrate_agent_runs (run_id, agent_id)
                         VALUES ($1, $2)
                         ON CONFLICT (run_id) DO NOTHING
                         """,
@@ -362,12 +362,12 @@ class PostgresScheduler:
                 try:
                     await conn.execute(
                         """
-                        INSERT INTO ravi_run_queue
+                        INSERT INTO substrate_run_queue
                             (run_id, priority, tenant, status, wakeup, retry_policy, deadline, thread_id)
                         VALUES ($1, $2, $3, 'pending', $4::jsonb, $5::jsonb, $6, $7)
                         ON CONFLICT (run_id) DO UPDATE
-                            SET wakeup = COALESCE(EXCLUDED.wakeup, ravi_run_queue.wakeup)
-                            WHERE ravi_run_queue.status NOT IN ('pending','running')
+                            SET wakeup = COALESCE(EXCLUDED.wakeup, substrate_run_queue.wakeup)
+                            WHERE substrate_run_queue.status NOT IN ('pending','running')
                         """,
                         run_id,
                         priority,
@@ -392,7 +392,7 @@ class PostgresScheduler:
                 # Reclaim expired leases
                 await conn.execute(
                     """
-                    UPDATE ravi_run_queue
+                    UPDATE substrate_run_queue
                     SET status = 'pending', worker_id = NULL, expires_at = NULL
                     WHERE status = 'running' AND expires_at < now()
                     """
@@ -404,7 +404,7 @@ class PostgresScheduler:
                 # yet, immediately re-suspend on the next iteration).
                 await conn.execute(
                     """
-                    UPDATE ravi_run_queue
+                    UPDATE substrate_run_queue
                     SET status = 'pending', worker_id = NULL, expires_at = NULL
                     WHERE status = 'suspended' AND wake_at IS NOT NULL AND wake_at <= now()
                     """
@@ -416,7 +416,7 @@ class PostgresScheduler:
                 # runs are caught by heartbeat() instead (see there).
                 await conn.execute(
                     """
-                    UPDATE ravi_run_queue
+                    UPDATE substrate_run_queue
                     SET status = 'failed', worker_id = NULL, expires_at = NULL,
                         wake_signals = NULL, wake_at = NULL, terminated_at = now()
                     WHERE status IN ('pending', 'suspended')
@@ -424,7 +424,7 @@ class PostgresScheduler:
                     """
                 )
                 # Claim up to capacity pending runs — fairly, not strict FIFO.
-                # ravi_run_queue.tenant partitions the ranking: each tenant's
+                # substrate_run_queue.tenant partitions the ranking: each tenant's
                 # Nth-oldest-by-priority run competes for a slot against every
                 # other tenant's Nth-oldest, so one tenant flooding the queue
                 # can never starve another's first run indefinitely (weighted
@@ -442,21 +442,21 @@ class PostgresScheduler:
                             ROW_NUMBER() OVER (
                                 PARTITION BY tenant ORDER BY priority, enqueued_at
                             ) AS rn
-                        FROM ravi_run_queue
+                        FROM substrate_run_queue
                         WHERE status = 'pending'
                     ),
                     candidates AS (
                         SELECT run_id FROM ranked ORDER BY rn, run_id LIMIT $3
                     )
-                    UPDATE ravi_run_queue rq
+                    UPDATE substrate_run_queue rq
                     SET status = 'running', worker_id = $1, expires_at = $2
                     WHERE rq.run_id IN (
-                        SELECT run_id FROM ravi_run_queue
+                        SELECT run_id FROM substrate_run_queue
                         WHERE run_id IN (SELECT run_id FROM candidates)
                         FOR UPDATE SKIP LOCKED
                     )
                     RETURNING rq.run_id, rq.attempt, rq.tenant,
-                        (SELECT agent_id FROM ravi_agent_runs WHERE run_id = rq.run_id) AS agent_id
+                        (SELECT agent_id FROM substrate_agent_runs WHERE run_id = rq.run_id) AS agent_id
                     """,
                     worker_id,
                     expires_at,
@@ -486,7 +486,7 @@ class PostgresScheduler:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                UPDATE ravi_run_queue
+                UPDATE substrate_run_queue
                 SET expires_at = $1
                 WHERE run_id = $2 AND worker_id = $3 AND status = 'running'
                 RETURNING cancel_requested, deadline
@@ -517,7 +517,7 @@ class PostgresScheduler:
                 if status == RunStatus.FAILED:
                     row = await conn.fetchrow(
                         """
-                        UPDATE ravi_run_queue
+                        UPDATE substrate_run_queue
                         SET retry_count = retry_count + 1
                         WHERE run_id = $1
                         RETURNING retry_count, retry_policy
@@ -538,7 +538,7 @@ class PostgresScheduler:
                         if row["retry_count"] <= policy.max_retries:
                             await conn.execute(
                                 """
-                                UPDATE ravi_run_queue
+                                UPDATE substrate_run_queue
                                 SET status = 'pending', worker_id = NULL, expires_at = NULL
                                 WHERE run_id = $1
                                 """,
@@ -558,7 +558,7 @@ class PostgresScheduler:
                     wake_at = wake_on.at if wake_on else None
                     await conn.execute(
                         """
-                        UPDATE ravi_run_queue
+                        UPDATE substrate_run_queue
                         SET status = 'suspended',
                             worker_id = NULL,
                             expires_at = NULL,
@@ -580,7 +580,7 @@ class PostgresScheduler:
                         # on a wakeup that already happened.
                         pending = await conn.fetchval(
                             """
-                            SELECT 1 FROM ravi_signals
+                            SELECT 1 FROM substrate_signals
                             WHERE run_id = $1 AND name = ANY($2)
                               AND consumed_at IS NULL
                             LIMIT 1
@@ -591,7 +591,7 @@ class PostgresScheduler:
                         if pending:
                             await conn.execute(
                                 """
-                                UPDATE ravi_run_queue
+                                UPDATE substrate_run_queue
                                 SET status = 'pending', worker_id = NULL, expires_at = NULL
                                 WHERE run_id = $1
                                 """,
@@ -604,7 +604,7 @@ class PostgresScheduler:
                 # stamp terminated_at for the retention sweep's cutoff.
                 await conn.execute(
                     """
-                    UPDATE ravi_run_queue
+                    UPDATE substrate_run_queue
                     SET status = $1,
                         worker_id = NULL,
                         expires_at = NULL,
@@ -625,7 +625,7 @@ class PostgresScheduler:
         return self._pending_iter(tenant)
 
     async def _pending_iter(self, tenant: str | None) -> AsyncIterator[RunId]:  # type: ignore[return]
-        q = "SELECT run_id FROM ravi_run_queue WHERE status = 'pending'"
+        q = "SELECT run_id FROM substrate_run_queue WHERE status = 'pending'"
         args: list[object] = []
         if tenant is not None:
             q += " AND tenant = $1"

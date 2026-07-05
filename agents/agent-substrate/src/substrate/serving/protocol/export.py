@@ -45,7 +45,7 @@ def build_schema() -> dict:
     union_no_defs = {k: v for k, v in event_schema.items() if k != "$defs"}
     return {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "title": "RaviProtocol",
+        "title": "SubstrateProtocol",
         "x-protocol-version": PROTOCOL_VERSION,
         "type": "object",
         "properties": {"WireEvent": union_no_defs},

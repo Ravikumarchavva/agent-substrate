@@ -135,14 +135,14 @@ def setup_logging(
     max_bytes: int = 10 * 1024 * 1024,
     backup_count: int = 5,
 ) -> logging.Logger:
-    """Configure ``ravi`` logger namespace and return a module logger.
+    """Configure ``substrate`` logger namespace and return a module logger.
 
     Safe to call from every module at import time::
 
         from substrate.logger import setup_logging
         logger = setup_logging()
 
-    The first call configures the ``ravi`` namespace. Subsequent calls are
+    The first call configures the ``substrate`` namespace. Subsequent calls are
     constant-time and return a logger bound to the caller module.
 
     Parameters
@@ -150,7 +150,7 @@ def setup_logging(
     name:
         Explicit logger name. If omitted, inferred from caller module.
     level:
-        Minimum log level for the ``ravi`` namespace.
+        Minimum log level for the ``substrate`` namespace.
     mode:
         ``"json"``   — structured JSON (server / production).
         ``"pretty"`` — concise coloured lines (CLI / notebook).

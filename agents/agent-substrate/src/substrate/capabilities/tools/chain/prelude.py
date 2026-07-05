@@ -6,7 +6,7 @@ helper inside the sandbox.
 
 The prelude must be:
 - stdlib-only (no external imports beyond ``requests``, already in the VM)
-- self-contained (no ravi imports — runs inside the isolated VM)
+- self-contained (no substrate imports — runs inside the isolated VM)
 - small (shipped on every chain run; latency-sensitive)
 
 Design

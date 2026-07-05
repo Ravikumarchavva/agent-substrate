@@ -23,7 +23,7 @@ class ServerDependencies:
     ``cancel_registry``/``thread_locks`` (per-process cancel Events and
     single-flight asyncio.Locks) were removed — both single-flight and
     cancel are now enforced durably by the Runtime itself (a unique index
-    on ``ravi_run_queue`` and ``Supervisor.cancel()`` respectively), which
+    on ``substrate_run_queue`` and ``Supervisor.cancel()`` respectively), which
     holds correctly across replicas instead of only within one process. See
     ``routes/chat.py`` and ``routes/cancel.py``.
     """

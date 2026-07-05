@@ -2,7 +2,7 @@
 
 Schema (auto-created via setup())::
 
-    CREATE TABLE ravi_task_lists (
+    CREATE TABLE substrate_task_lists (
         id              TEXT        NOT NULL PRIMARY KEY,
         conversation_id TEXT        NOT NULL,
         agent_id        TEXT        NOT NULL DEFAULT '',
@@ -14,7 +14,7 @@ Schema (auto-created via setup())::
         UNIQUE (conversation_id, agent_id)
     );
 
-NOTE: if you have an existing ravi_task_lists table it must be dropped
+NOTE: if you have an existing substrate_task_lists table it must be dropped
 before starting — there is no migration framework; schema is declarative.
 """
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 _CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS ravi_task_lists (
+CREATE TABLE IF NOT EXISTS substrate_task_lists (
     id              TEXT        NOT NULL PRIMARY KEY,
     conversation_id TEXT        NOT NULL,
     agent_id        TEXT        NOT NULL DEFAULT '',
@@ -48,21 +48,21 @@ CREATE TABLE IF NOT EXISTS ravi_task_lists (
 
 _SELECT_BY_ID = """
 SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
-FROM ravi_task_lists WHERE id = :id
+FROM substrate_task_lists WHERE id = :id
 """
 
 _SELECT_BY_CONV_AGENT = """
 SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
-FROM ravi_task_lists WHERE conversation_id = :cid AND agent_id = :aid
+FROM substrate_task_lists WHERE conversation_id = :cid AND agent_id = :aid
 """
 
 _SELECT_ALL_BY_CONV = """
 SELECT id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks, created_at
-FROM ravi_task_lists WHERE conversation_id = :cid
+FROM substrate_task_lists WHERE conversation_id = :cid
 """
 
 _UPDATE_TASKS = """
-UPDATE ravi_task_lists SET tasks = CAST(:tasks AS jsonb), updated_at = now() WHERE id = :id
+UPDATE substrate_task_lists SET tasks = CAST(:tasks AS jsonb), updated_at = now() WHERE id = :id
 """
 
 
@@ -86,15 +86,15 @@ class PgTaskStore:
             ]:
                 await session.execute(
                     text(
-                        f"ALTER TABLE ravi_task_lists ADD COLUMN IF NOT EXISTS {col} {defn}"
+                        f"ALTER TABLE substrate_task_lists ADD COLUMN IF NOT EXISTS {col} {defn}"
                     )
                 )
             # Add unique constraint if missing (safe to run repeatedly via DO block).
             await session.execute(
                 text(
                     "DO $$ BEGIN "
-                    "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ravi_task_lists_conversation_id_agent_id_key') THEN "
-                    "ALTER TABLE ravi_task_lists ADD CONSTRAINT ravi_task_lists_conversation_id_agent_id_key UNIQUE (conversation_id, agent_id); "
+                    "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'substrate_task_lists_conversation_id_agent_id_key') THEN "
+                    "ALTER TABLE substrate_task_lists ADD CONSTRAINT substrate_task_lists_conversation_id_agent_id_key UNIQUE (conversation_id, agent_id); "
                     "END IF; END $$"
                 )
             )
@@ -139,7 +139,7 @@ class PgTaskStore:
             result = await session.execute(
                 text(
                     """
-                    INSERT INTO ravi_task_lists
+                    INSERT INTO substrate_task_lists
                         (id, conversation_id, agent_id, agent_label, parent_agent_id, max_retries, tasks)
                     VALUES (:id, :cid, :aid, :alabel, :paid, :max_retries, CAST(:tasks AS jsonb))
                     ON CONFLICT (conversation_id, agent_id) DO UPDATE

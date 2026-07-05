@@ -1,12 +1,12 @@
-"""ravi CLI
+"""substrate CLI
 
 Usage:
-    ravi start          # start server on default port 8000
-    ravi start --port 9000 --reload
-    ravi stop           # stop a running server (via PID file)
-    ravi status         # check if server is running
-    ravi chat           # interactive CLI chat with default agent
-    ravi chat --model gpt-4o-mini --no-tools
+    substrate start          # start server on default port 8000
+    substrate start --port 9000 --reload
+    substrate stop           # stop a running server (via PID file)
+    substrate status         # check if server is running
+    substrate chat           # interactive CLI chat with default agent
+    substrate chat --model gpt-4o-mini --no-tools
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-_PID_DIR = Path.home() / ".ravi"
+_PID_DIR = Path.home() / ".substrate"
 _PID_FILE = _PID_DIR / "server.pid"
 
 
@@ -75,7 +75,7 @@ def cmd_start(args: argparse.Namespace) -> None:
     pid = _read_pid()
     if pid and _is_running(pid):
         print(f"Agent Framework is already running (PID {pid}).")
-        print("  Run `ravi stop` to stop it first.")
+        print("  Run `substrate stop` to stop it first.")
         sys.exit(1)
 
     host = args.host
@@ -167,7 +167,7 @@ def cmd_start(args: argparse.Namespace) -> None:
 
     if confirmed:
         print(f" OK  (http://{host}:{port})")
-        print("  Stop with  : ravi stop")
+        print("  Stop with  : substrate stop")
     else:
         # After deadline: differentiate between dead process vs slow startup
         if not _is_running(proc.pid):
@@ -188,7 +188,7 @@ def cmd_start(args: argparse.Namespace) -> None:
                 f" TIMEOUT  (process alive but port {port} still not responding after 15s)"
             )
             print(f"  Check logs : {log_file}")
-            print("  Stop with  : ravi stop")
+            print("  Stop with  : substrate stop")
 
 
 def cmd_stop(args: argparse.Namespace) -> None:
@@ -224,7 +224,7 @@ def cmd_stop(args: argparse.Namespace) -> None:
             print(f"Agent Framework (PID {pid}) stopped.")
             return
 
-    print(f"Process {pid} did not exit. Use `ravi stop --force` to kill it.")
+    print(f"Process {pid} did not exit. Use `substrate stop --force` to kill it.")
     sys.exit(1)
 
 
@@ -317,7 +317,7 @@ def _load_mcp_tools(server_urls: list[str]) -> list:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="ravi",
+        prog="substrate",
         description="Agent Framework server manager",
     )
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
@@ -404,13 +404,13 @@ def main() -> None:
 def start_main() -> None:
     """Dedicated entry point for ``uv run start``.
 
-    Unlike ``ravi start``, this wrapper defaults to foreground mode so it is
+    Unlike ``substrate start``, this wrapper defaults to foreground mode so it is
     suitable as a simple local dev command and as a container entrypoint.
     """
 
     parser = argparse.ArgumentParser(
         prog="start",
-        description="Start the Ravi engine server",
+        description="Start the Agent Substrate server",
     )
     parser.add_argument(
         "--host", default="0.0.0.0", help="Bind host  (default: 0.0.0.0)"

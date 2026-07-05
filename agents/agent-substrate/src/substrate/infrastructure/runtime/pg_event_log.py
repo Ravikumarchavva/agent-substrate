@@ -2,7 +2,7 @@
 
 Schema (created on setup())::
 
-    CREATE TABLE ravi_event_log (
+    CREATE TABLE substrate_event_log (
         run_id  TEXT        NOT NULL,
         seq     INTEGER     NOT NULL,
         kind    TEXT        NOT NULL,
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     import asyncpg
 
 _CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS ravi_event_log (
+CREATE TABLE IF NOT EXISTS substrate_event_log (
     run_id  TEXT        NOT NULL,
     seq     INTEGER     NOT NULL,
     kind    TEXT        NOT NULL,
@@ -46,14 +46,14 @@ CREATE TABLE IF NOT EXISTS ravi_event_log (
     ts      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (run_id, seq)
 );
-CREATE INDEX IF NOT EXISTS ravi_event_log_run_seq
-    ON ravi_event_log (run_id, seq);
+CREATE INDEX IF NOT EXISTS substrate_event_log_run_seq
+    ON substrate_event_log (run_id, seq);
 """
 
 # Safety backstop: even with LISTEN/NOTIFY, re-poll this often in case a
 # notification is ever dropped (e.g. listener connection blip).
 _TAIL_FALLBACK_INTERVAL = 2.0  # seconds
-_CHANNEL = "ravi_evlog"  # NOTIFY channel; payload is the run_id
+_CHANNEL = "substrate_evlog"  # NOTIFY channel; payload is the run_id
 
 
 class PostgresEventLog:
@@ -123,7 +123,7 @@ class PostgresEventLog:
             async with conn.transaction():
                 await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
                 current: int = await conn.fetchval(
-                    "SELECT COALESCE(MAX(seq), -1) FROM ravi_event_log WHERE run_id = $1",
+                    "SELECT COALESCE(MAX(seq), -1) FROM substrate_event_log WHERE run_id = $1",
                     run_id,
                 )
                 if current != expected_seq:
@@ -136,7 +136,7 @@ class PostgresEventLog:
                 new_seq = current + 1
                 await conn.execute(
                     """
-                    INSERT INTO ravi_event_log (run_id, seq, kind, payload, ts)
+                    INSERT INTO substrate_event_log (run_id, seq, kind, payload, ts)
                     VALUES ($1, $2, $3, $4::jsonb, $5)
                     """,
                     run_id,
@@ -160,7 +160,7 @@ class PostgresEventLog:
             rows = await conn.fetch(
                 """
                 SELECT seq, kind, payload, ts
-                FROM ravi_event_log
+                FROM substrate_event_log
                 WHERE run_id = $1 AND seq >= $2
                 ORDER BY seq
                 """,
@@ -189,7 +189,7 @@ class PostgresEventLog:
                     rows = await conn.fetch(
                         """
                         SELECT seq, kind, payload, ts
-                        FROM ravi_event_log
+                        FROM substrate_event_log
                         WHERE run_id = $1 AND seq >= $2
                         ORDER BY seq
                         LIMIT 100
@@ -218,7 +218,7 @@ class PostgresEventLog:
     async def last_seq(self, run_id: RunId) -> int:
         async with self._pool.acquire() as conn:
             result: int | None = await conn.fetchval(
-                "SELECT MAX(seq) FROM ravi_event_log WHERE run_id = $1",
+                "SELECT MAX(seq) FROM substrate_event_log WHERE run_id = $1",
                 run_id,
             )
         return result if result is not None else -1

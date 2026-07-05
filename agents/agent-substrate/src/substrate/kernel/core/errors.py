@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class KernelError(Exception):
-    """Base class for all ravi kernel errors.
+    """Base class for all substrate kernel errors.
 
     Catching ``KernelError`` is sufficient to intercept any typed error
     raised by the runtime, routing, or budget layers.

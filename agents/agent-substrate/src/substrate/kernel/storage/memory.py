@@ -7,7 +7,7 @@ Two distinct memory scopes:
                         Backed by: Redis HASH, Postgres JSONB, in-memory dict.
 
     LongTermMemory    — extracted facts that persist across sessions forever.
-                        "The user prefers Python", "User's name is Ravi".
+                        "The user prefers Python", "User's name is Alex".
                         Backed by: Postgres full-text, vector store (semantic),
                                    graph store (entity/relationship traversal),
                                    or hybrid.

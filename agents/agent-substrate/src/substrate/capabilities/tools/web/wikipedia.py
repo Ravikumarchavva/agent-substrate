@@ -60,7 +60,7 @@ class WikipediaTool:
         try:
             async with httpx.AsyncClient(
                 timeout=10.0,
-                headers={"User-Agent": "ravi-agent/1.0"},
+                headers={"User-Agent": "agent-substrate/1.0"},
             ) as client:
                 # Search for the best matching article title
                 search_resp = await client.get(

@@ -15,8 +15,6 @@ class and adds server-only fields (JWT, CORS, rate limits, observability) with
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -83,10 +81,10 @@ class SubstrateConfig(BaseSettings):
     FILE_STORE_BACKEND: str = "local"
     FILE_STORE_ROOT: str = ""
     FILE_STORE_BUCKET: str = "agent-files"
-    FILE_STORE_ENDPOINT: Optional[str] = None
+    FILE_STORE_ENDPOINT: str | None = None
     FILE_STORE_REGION: str = "us-east-1"
-    FILE_STORE_ACCESS_KEY: Optional[str] = None
-    FILE_STORE_SECRET_KEY: Optional[str] = None
+    FILE_STORE_ACCESS_KEY: str | None = None
+    FILE_STORE_SECRET_KEY: str | None = None
     FILE_STORE_PREFIX: str = ""
     FILE_ENCRYPTION_MODE: str = "none"
     FILE_KEK_HEX: str = ""

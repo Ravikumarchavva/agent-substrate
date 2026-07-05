@@ -9,7 +9,7 @@ from substrate.logger import setup_logging
 
 import base64
 import secrets
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
@@ -51,7 +51,7 @@ class SpotifyAuthService:
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
-        self.state_store: Dict[str, bool] = {}  # Use Redis in production
+        self.state_store: dict[str, bool] = {}  # Use Redis in production
 
     def get_authorization_url(self) -> tuple[str, str]:
         """Generate OAuth authorization URL for user login.
@@ -91,7 +91,7 @@ class SpotifyAuthService:
             return True
         return False
 
-    async def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
+    async def exchange_code_for_token(self, code: str) -> dict[str, Any]:
         """Exchange authorization code for access + refresh tokens.
 
         Args:
@@ -130,7 +130,7 @@ class SpotifyAuthService:
         )
         return token_data
 
-    async def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
+    async def refresh_access_token(self, refresh_token: str) -> dict[str, Any]:
         """Refresh an expired access token using refresh token.
 
         Args:

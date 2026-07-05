@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from substrate.kernel.core.errors import MiddlewareTermination
 
 
 class AgentError(Exception):
     """Base exception for all errors in the Agent Framework."""
 
-    def __init__(self, message: str, details: Optional[dict] = None):
+    def __init__(self, message: str, details: dict | None = None):
         super().__init__(message)
         self.message = message
         self.details = details or {}
@@ -35,7 +33,7 @@ class ContextLimitExceededError(ModelProviderError):
 class ToolError(AgentError):
     """Base class for tool-related errors."""
 
-    def __init__(self, message: str, tool_name: str, details: Optional[dict] = None):
+    def __init__(self, message: str, tool_name: str, details: dict | None = None):
         super().__init__(message, details)
         self.tool_name = tool_name
 

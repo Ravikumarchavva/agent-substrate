@@ -39,15 +39,17 @@ if TYPE_CHECKING:
     from substrate.kernel.runtime.wakeup import SignalBus
 
 from substrate.capabilities.tools.human_input import (
-    CallbackApprovalHandler,
     CallbackHumanHandler,
     HumanInputRequest,
     HumanInputResponse,
+    HumanInputHandler,
+)
+from substrate.capabilities.tools.tool_approval import (
+    CallbackApprovalHandler,
     ToolApprovalAction,
     ToolApprovalHandler,
     ToolApprovalRequest,
     ToolApprovalResponse,
-    HumanInputHandler,
 )
 
 logger = setup_logging()
@@ -122,7 +124,9 @@ class WebHITLBridge:
         requests are registered in ``_signal_requests`` for the same reason.
     """
 
-    def __init__(self, response_timeout: float = 300.0, signal_bus: Optional["SignalBus"] = None):
+    def __init__(
+        self, response_timeout: float = 300.0, signal_bus: Optional["SignalBus"] = None
+    ):
         self._outgoing: asyncio.Queue[Any] = asyncio.Queue()
         self._pending: Dict[str, asyncio.Future[Dict[str, Any]]] = {}
         self._pending_payloads: Dict[str, Dict[str, Any]] = {}
@@ -254,7 +258,9 @@ class WebHITLBridge:
                 )
                 logger.info(
                     "Bridge: cancelled signal HITL %s (run=%s, reason=%s)",
-                    request_id, run_id, reason,
+                    request_id,
+                    run_id,
+                    reason,
                 )
         self._signal_requests.clear()
 
@@ -289,7 +295,8 @@ class WebHITLBridge:
             self._pending_payloads.pop(request_id, None)
             if self._signal_bus is None:
                 logger.warning(
-                    "Bridge: signal HITL %s has no signal_bus — cannot resolve", request_id
+                    "Bridge: signal HITL %s has no signal_bus — cannot resolve",
+                    request_id,
                 )
                 return False
             await self._signal_bus.signal(run_id, f"hitl:{request_id}", data)

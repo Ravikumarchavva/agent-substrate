@@ -39,18 +39,23 @@ suspended in between.
 Capability surface (``ctx.llm()``, ``ctx.tool()``, messaging, spawn/join,
 suspension primitives) is split across mixins as submodules of this package
 (``journal.py``, ``messaging.py``, ``supervision.py``, ``llm.py``,
-``tool.py``) — this ``__init__.py`` holds only the ``Agent`` Protocol,
+``tool.py``) — this ``__init__.py`` holds the ``Agent`` alias,
 ``RunContext.__init__``, and the properties that don't belong to any one
 capability.
+
+``Agent`` here is not its own Protocol — it's ``kernel.runtime.agent.Agent``
+(generic over its context type) parametrized with the concrete
+``RunContext``, so agent authors get IDE/type-check support for the full
+journaled surface (``ctx.llm()``, ``ctx.tool()``, ``ctx.spawn()``, …)
+without a second, hand-maintained Protocol declaration.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, TypeAlias
 
 from substrate.kernel.agent.runtime_context import RunMeta
-from substrate.kernel.core.identity import AgentId
-from substrate.kernel.messaging.message import Message
+from substrate.kernel.runtime.agent import Agent as _KernelAgent
 
 from substrate.agents.runtime.effect_cache import EffectCache
 from substrate.agents.runtime.context.journal import _JournalMixin
@@ -70,25 +75,6 @@ if TYPE_CHECKING:
     from substrate.kernel.runtime.follow_graph import FollowGraph
     from substrate.kernel.storage.blob import BlobStore
     from substrate.agents.tools.invoker import InvokerSession, ToolInvoker
-
-
-class Agent(Protocol):
-    """The one interceptor shape real agents implement, typed against the
-    concrete ``RunContext`` rather than the kernel's minimal
-    ``AgentRunContext``.
-
-    Structurally the same contract as ``substrate.kernel.runtime.agent.Agent``
-    (``id`` + ``run(ctx, inbox)``) — see that Protocol's docstring: agent
-    authors are meant to type-hint ``ctx: RunContext`` for the full journaled
-    capability surface (``ctx.llm()``, ``ctx.tool()``, ``ctx.spawn()``, …),
-    which the kernel Protocol can't reference directly without importing the
-    agents layer. This Protocol is what ``Runtime``/``Worker`` actually use to
-    type concrete agents like ``ReActAgent``.
-    """
-
-    id: AgentId
-
-    async def run(self, ctx: "RunContext", inbox: list[Message]) -> None: ...
 
 
 class RunContext(
@@ -173,6 +159,14 @@ class RunContext(
     def check(self) -> None:
         """Raise CancellationError if this run has been cancelled or deadline exceeded."""
         self._meta.check()
+
+
+Agent: TypeAlias = _KernelAgent[RunContext]
+"""The one interceptor shape real agents implement — kernel's ``Agent``
+Protocol parametrized with the concrete ``RunContext`` instead of the
+kernel-minimal ``AgentRunContext``, so ``Runtime``/``Worker`` and agent
+authors get IDE/type-check support for the full journaled surface. See
+``kernel.runtime.agent.Agent``'s docstring for why this is generic."""
 
 
 __all__ = ["Agent", "RunContext"]

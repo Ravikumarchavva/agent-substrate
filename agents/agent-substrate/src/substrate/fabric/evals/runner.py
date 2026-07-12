@@ -1,8 +1,10 @@
 """EvalRunner — execute evaluation suites against kernel-native agents.
 
-Accepts any kernel Agent (``id: AgentId``, ``run(ctx, inbox) -> None``).
-Drives the agent through an in-memory Runtime, collects the reply via the
-signal bus, and returns a structured EvalReport.
+Accepts any real ``Agent`` (``id: AgentId``, ``run(ctx: RunContext, inbox) ->
+None``) — drives it through a real in-memory ``Runtime``, so it needs the
+concrete ``RunContext``-typed agent, not just kernel's minimal ``Agent``
+bound. Collects the reply via the signal bus and returns a structured
+EvalReport.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from substrate.fabric.evals.models import (
 )
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.agent import Agent
+    from substrate.agents.runtime.context import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +50,11 @@ class _Trace:
 
 
 class EvalRunner:
-    """Execute an eval dataset against a kernel Agent and return a structured report.
+    """Execute an eval dataset against an agent and return a structured report.
 
     Parameters
     ----------
-    agent:       Kernel Agent (``id: AgentId``, ``run(ctx, inbox) -> None``).
+    agent:       Agent (``id: AgentId``, ``run(ctx: RunContext, inbox) -> None``).
     judge:       Optional LLMJudge for scoring outputs.
     concurrency: Number of cases to run in parallel (default 1 = sequential).
     timeout:     Per-case timeout in seconds.  ``None`` = no timeout.

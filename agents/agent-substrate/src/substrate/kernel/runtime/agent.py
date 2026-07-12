@@ -28,11 +28,21 @@ EventLog, Supervisor, and capability clients.  The kernel only sees the minimal
 slice it needs to define the contract: ``run_id``, ``tenant_id``, ``check()``.
 The author's actual ctx at runtime IS a ``RunContext`` (L1) and has all the
 journaled methods (ctx.llm, ctx.tool, ctx.spawn, ctx.join, etc.).
+
+``Agent`` is generic over its context type (``CtxT``, bound to
+``AgentRunContext``) precisely so there's one definition, not two. A
+consumer that only needs the minimal shape (e.g. ``fabric/evals``) types
+against ``Agent[AgentRunContext]``; L1, which needs IDE/type-check support
+for the full journaled surface, types against ``Agent[RunContext]`` instead
+of redeclaring its own structurally-identical Protocol. Protocol parameter
+types are contravariant, so a plain (non-generic) ``Agent`` typed against
+``AgentRunContext`` could not be narrowed to ``RunContext`` in place —
+making the contract itself generic is what avoids that fork.
 """
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
 
 from substrate.kernel.core.identity import AgentId
 from substrate.kernel.messaging.message import Message
@@ -58,8 +68,15 @@ class AgentRunContext(Protocol):
         ...
 
 
+CtxT = TypeVar("CtxT", bound=AgentRunContext, contravariant=True)
+"""``ctx`` only ever appears in an input position (``run``'s parameter), so
+``Agent`` is contravariant in it: ``Agent[AgentRunContext]`` (accepts the
+widest ctx) is usable wherever ``Agent[RunContext]`` (accepts only the
+narrower, richer ctx) is expected — not the other way around."""
+
+
 @runtime_checkable
-class Agent(Protocol):
+class Agent(Protocol[CtxT]):
     """Contract every agent must satisfy.
 
     ``id`` — stable routing identity; used by the Inbox and Scheduler to
@@ -80,13 +97,17 @@ class Agent(Protocol):
     The function returns ``None`` — the final output (if any) is written to the
     EventLog as the ``run.completed`` entry and surfaced as ``RunResult.output``
     to the parent or the caller of ``Supervisor.join``.
+
+    ``isinstance(x, Agent)`` (bare, unparametrized) still works —
+    ``runtime_checkable`` Protocol checks are structural on member names and
+    ignore the type parameter, same as before this became generic.
     """
 
     id: AgentId
 
     async def run(
         self,
-        ctx: AgentRunContext,
+        ctx: CtxT,
         inbox: list[Message],
     ) -> None: ...
 

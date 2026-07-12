@@ -16,6 +16,7 @@ from substrate.kernel.core.content import (
     TextBlock,
     ToolUseBlock,
     DataBlock,
+    ReasoningBlock,
 )
 from substrate.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from substrate.integrations.llm.encoders.anthropic import (
@@ -190,7 +191,16 @@ class AnthropicClient(LLMClient):
         has_tool_calls = False
         for block in response.content:
             if block.type == "thinking":
-                pass  # reasoning blocks not surfaced in non-streaming generate()
+                final_blocks.append(
+                    ReasoningBlock(
+                        text=getattr(block, "thinking", ""),
+                        signature=getattr(block, "signature", None),
+                    )
+                )
+            elif block.type == "redacted_thinking":
+                final_blocks.append(
+                    ReasoningBlock(text=getattr(block, "data", ""), redacted=True)
+                )
             elif block.type == "text":
                 final_blocks.append(TextBlock(text=block.text))
             elif block.type == "tool_use":
@@ -291,10 +301,17 @@ class AnthropicClient(LLMClient):
 
         # Accumulate for final message
         text_parts: list[str] = []
+        collected_reasoning: list[ReasoningBlock] = []
         collected_tool_calls: list[ToolUseBlock] = []
         current_tool_id: Optional[str] = None
         current_tool_name: Optional[str] = None
         current_tool_json: str = ""
+        # Thinking-block accumulation (a thinking block streams as
+        # content_block_start → thinking_delta* → signature_delta →
+        # content_block_stop; a redacted_thinking block arrives whole at start).
+        current_thinking_parts: list[str] = []
+        current_thinking_signature: Optional[str] = None
+        in_thinking_block = False
         _input_tokens = 0
         _output_tokens = 0
         stop_reason: Optional[str] = None
@@ -318,22 +335,48 @@ class AnthropicClient(LLMClient):
                         current_tool_id = block.id
                         current_tool_name = block.name
                         current_tool_json = ""
+                    elif block.type == "thinking":
+                        in_thinking_block = True
+                        current_thinking_parts = []
+                        current_thinking_signature = None
+                    elif block.type == "redacted_thinking":
+                        # Redacted blocks carry an opaque ``data`` payload whole;
+                        # preserve it verbatim so continuation can replay it.
+                        collected_reasoning.append(
+                            ReasoningBlock(
+                                text=getattr(block, "data", ""), redacted=True
+                            )
+                        )
 
                 elif event_type == "content_block_delta":
                     delta = event_any.delta
                     if delta.type == "thinking_delta":
                         thinking_text = getattr(delta, "thinking", "")
                         if thinking_text:
+                            current_thinking_parts.append(thinking_text)
                             yield ReasoningDelta(text=thinking_text)
+                    elif delta.type == "signature_delta":
+                        # Opaque per-thinking-block token; MUST be replayed
+                        # verbatim on continuation with tool use.
+                        current_thinking_signature = getattr(delta, "signature", None)
                     elif delta.type == "text_delta":
                         text_parts.append(delta.text)
                         yield TextDelta(text=delta.text)
                     elif delta.type == "input_json_delta":
                         current_tool_json += delta.partial_json
-                    # signature_delta is intentionally ignored (opaque)
 
                 elif event_type == "content_block_stop":
-                    if current_tool_id and current_tool_name:
+                    if in_thinking_block:
+                        collected_reasoning.append(
+                            ReasoningBlock(
+                                text="".join(current_thinking_parts),
+                                signature=current_thinking_signature,
+                            )
+                        )
+                        in_thinking_block = False
+                        current_thinking_parts = []
+                        current_thinking_signature = None
+                    elif current_tool_id and current_tool_name:
                         try:
                             args = (
                                 json.loads(current_tool_json)
@@ -363,9 +406,13 @@ class AnthropicClient(LLMClient):
                 elif event_type == "message_stop":
                     pass  # Handled below
 
-        # Build final message
+        # Build final message. Anthropic requires thinking blocks to appear
+        # first in the assistant turn (before text/tool_use) when continuing a
+        # tool-use loop with thinking enabled — preserve that order here.
         final_text = "".join(text_parts) if text_parts else ""
         final_blocks: list[ContentBlock] = []
+
+        final_blocks.extend(collected_reasoning)
 
         if final_text:
             final_blocks.append(TextBlock(text=final_text))

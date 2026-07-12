@@ -177,8 +177,71 @@ so the decision is visible, not silently dropped.
   history load time is ever profiled and found to matter (same "measure
   first" standard as event-log compaction above).
 
+- **Microservices event architecture: mostly unbuilt past job start/fail.**
+  Found 2026-07-12 via a new AST-based dead-symbol scanner
+  (`scripts/find_dead_symbols.py`) run against the whole codebase, not just
+  kernel. Of `serving/shared/events/types.py`'s ~28 domain-event factory
+  functions, only 3 have a real producer anywhere: `session_started`
+  (`identity/service.py`), `workflow_started` and `workflow_failed`
+  (`job_controller/service.py::dispatch_run`). The other 25 — including
+  `workflow_completed`/`workflow_cancelled`, every `agent_*` streaming
+  event, every `tool_call_*`/`hitl_*` event, `thread_created`/
+  `message_persisted`, `task_*`, `artifact_*` — are defined but never
+  called. `live_stream` (the SSE projector service, per this doc's own
+  services table) exists to turn these into real-time client updates the
+  same way the monolith's SSE bridge does; with 25 of 28 producers missing,
+  a microservices-deployed chat session gets essentially no real-time
+  updates beyond a run starting or hard-failing — no streaming text, no
+  visible tool calls, no HITL cards, no thread/message persistence signal.
+  Concretely blocking on this: **`job_controller::complete_run` is dead
+  because nothing ever publishes `workflow_completed`** — not
+  `job_controller` itself, not `agent_runtime` (which per `dispatch_run`'s
+  docstring is supposed to "execute the agent, publishing progress events
+  back," but doesn't). A run that finishes successfully in the
+  microservices deployment has no code path that ever marks it
+  `completed` — it either fails explicitly or stays `running` forever.
+  This is not a "wire up an existing handler" fix like the kernel audit's
+  tool-approval finding; it requires designing what `agent_runtime`
+  publishes at each step of its own run loop first. Scoped out of the
+  2026-07-12 investigation as multi-service, multi-day work — this is the
+  single largest concrete gap between "microservices exist" and
+  "microservices are feature-complete with the monolith." Two small,
+  unambiguous pieces of the same investigation *were* fixed directly (see
+  "Recently shipped"): `admin::write_audit_log` wired into
+  `create_tenant_endpoint` (previously the audit log was read-only — no
+  action ever wrote an entry), and `tool_executor::execute_and_publish`
+  wired into `POST /tools/execute` (previously always called bare
+  `execute_tool`, so `tool.execution_completed` never fired even though
+  the publishing code existed and was correct).
+
 ## Recently shipped (prune over time)
 
+- **Whole-codebase dead-symbol scan** (2026-07-12, same day as the kernel
+  audit below, follow-on session). New `scripts/find_dead_symbols.py`
+  (`make audit-dead-symbols`) — AST-based, module-level only, deliberately
+  not method-level after a knowledge-graph tool (graphify) evaluated the
+  same day was shown to false-positive on real live code
+  (`Supervision.spawn_child`) via incomplete cross-file method resolution.
+  Two tuning passes against real output cut false positives 259 → 58 → 54:
+  followed `import X as _X` aliases (common in the LLM client modules),
+  skipped decorator-dispatched defs (FastAPI routes, auto-discovered
+  tools), and treated any string-literal match as a reference (catches
+  SQLAlchemy's `Mapped["User"]`/`relationship("User")` string forward-refs,
+  which don't produce an `ast.Name`). Confirmed findings deleted:
+  `integrations/llm/encoders/storage.py` (whole file — zero importers,
+  `postgres_history.py`/`redis_history.py` each independently reimplement
+  the same serialize/deserialize logic instead of using it),
+  `mcp_apps.py::resolve_ui_uri` (resolves a `ui://` URI nothing ever
+  produces — all UI resources are pre-registered by static file-scan),
+  `identity/service.py::get_user_by_id` (no route ever needed it — `GET
+  /auth/me` reads JWT claims directly). Two half-wired bugs of the same
+  shape as the kernel audit's tool-approval finding were fixed directly:
+  `admin::write_audit_log` and `tool_executor::execute_and_publish` (see
+  the deferred item above for the third, much bigger one —
+  `job_controller::complete_run` / the microservices event architecture —
+  which was scoped out as multi-service work, not fixed). Left as a manual
+  target, not CI-gated; the 54 remaining CONFIRMED and 86 SUSPECT symbols
+  from this pass haven't all been reviewed by hand yet.
 - **Kernel foundation audit** (2026-07-12 — full findings in
   `docs/claude_docs/kernel/2026-07-12-audit.md`; requested directly by the
   user as a ground-up rethink of `kernel/` after the v1 remediation program,

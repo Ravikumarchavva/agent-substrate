@@ -46,18 +46,6 @@ async def get_or_create_user(
     return user
 
 
-async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[IdentityUser]:
-    """Look up a user by UUID string."""
-    import uuid
-
-    try:
-        uid = uuid.UUID(user_id)
-    except ValueError:
-        return None
-    result = await db.execute(select(IdentityUser).where(IdentityUser.id == uid))
-    return result.scalar_one_or_none()
-
-
 async def exchange_frontend_token(
     db: AsyncSession,
     frontend_token: str,

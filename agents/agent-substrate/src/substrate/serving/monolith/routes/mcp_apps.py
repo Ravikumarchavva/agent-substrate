@@ -212,17 +212,6 @@ def get_resource_http_url(name: str, base_url: str = "") -> str:
     return f"{base_url}/ui/{name}"
 
 
-def resolve_ui_uri(uri: str, base_url: str = "") -> str | None:
-    """Convert ``ui://name`` → ``http://host/ui/name``.
-
-    Returns None if the URI is not a ui:// scheme.
-    """
-    if not uri.startswith("ui://"):
-        return None
-    name = uri.removeprefix("ui://")
-    return get_resource_http_url(name, base_url)
-
-
 # ── Auto-discover built-in apps ─────────────────────────────────────────────
 
 

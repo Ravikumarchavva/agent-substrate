@@ -25,6 +25,7 @@ help:
 	@echo "  make observability-down - stop Tempo and Grafana"
 	@echo "  make lint         - run Ruff lint and format checks"
 	@echo "  make lint-imports - run import-linter (kernel independence + layer contracts)"
+	@echo "  make audit-dead-symbols - scan for module-level functions/classes with no real usage (manual, not in ci)"
 	@echo "  make typecheck    - run Pyright (hard fail)"
 	@echo "  make test         - run pytest"
 	@echo "  make build        - build the backend Docker image manually"
@@ -74,6 +75,9 @@ format-check:
 
 lint-imports:
 	uv run lint-imports
+
+audit-dead-symbols:
+	uv run python scripts/find_dead_symbols.py
 
 typecheck:
 	uv run --with pyright pyright src/

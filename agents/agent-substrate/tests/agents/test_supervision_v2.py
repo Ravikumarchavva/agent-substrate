@@ -43,7 +43,13 @@ async def test_crash_records_agent_crashed_status() -> None:
     bomb = BombAgent()
     async with Runtime() as rt:
         await rt.register(bomb)
-        run_id = await rt.submit(bomb.id, _msg(bomb.id))
+        # max_retries=0: a bare RuntimeError is unclassified and therefore
+        # retryable by default (see worker.py's exception handler) — without
+        # this the run backs off and retries 3 times (5s/10s/20s exponential
+        # backoff) before finally recording run.failed, since BombAgent
+        # always raises the same way on every attempt. This test cares about
+        # crash classification, not retry behavior.
+        run_id = await rt.submit(bomb.id, _msg(bomb.id), max_retries=0)
 
         async for entry in rt.event_log.tail(run_id):
             if entry.kind in ("run.completed", "run.failed", "run.cancelled"):

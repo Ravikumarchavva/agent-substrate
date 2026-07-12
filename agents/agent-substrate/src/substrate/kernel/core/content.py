@@ -254,6 +254,38 @@ class DocumentBlock(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class ReasoningBlock(BaseModel):
+    """Model reasoning / extended-thinking trace, persisted in message content.
+
+    Emitted live as a transient ``ReasoningDelta`` during streaming; this is
+    the durable form that lands in ``ChatMessage.content`` so reasoning
+    survives history replay and — critically — can be sent back to the
+    provider on continuation.
+
+    ``signature`` carries the provider's opaque verification token (Anthropic
+    extended thinking returns one per thinking block; it MUST be replayed
+    verbatim in the assistant turn when continuing a tool-use loop with
+    thinking enabled, or the API rejects the request). ``None`` for providers
+    that don't sign reasoning (e.g. OpenAI reasoning summaries).
+
+    ``redacted`` marks a block the provider returned in encrypted/redacted
+    form (Anthropic ``redacted_thinking``): the ``text`` is not human-readable
+    but must still be round-tripped intact for continuation.
+    """
+
+    type: Literal["reasoning"] = "reasoning"
+    text: str
+    signature: str | None = None
+    redacted: bool = False
+
+    model_config = {"frozen": True}
+
+    def to_text_repr(self) -> str:
+        if self.redacted:
+            return "[Reasoning: redacted]"
+        return f"[Reasoning] {self.text}"
+
+
 class ToolUseBlock(BaseModel):
     """Tool invocation request — inline in a content stream."""
 
@@ -346,6 +378,7 @@ ContentBlock = Annotated[
     | DataBlock
     | CodeBlock
     | ErrorBlock
+    | ReasoningBlock
     | ToolUseBlock
     | ToolResultBlock,
     Field(discriminator="type"),
@@ -368,6 +401,7 @@ _BLOCK_REGISTRY: dict[str, type[BaseModel]] = {
     "data": DataBlock,
     "code": CodeBlock,
     "error": ErrorBlock,
+    "reasoning": ReasoningBlock,
     "tool_use": ToolUseBlock,
     "tool_result": ToolResultBlock,
 }
@@ -420,6 +454,7 @@ __all__ = [
     "DataBlock",
     "CodeBlock",
     "ErrorBlock",
+    "ReasoningBlock",
     "ToolUseBlock",
     "ToolResultBlock",
     "UnknownBlock",

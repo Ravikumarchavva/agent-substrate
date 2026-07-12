@@ -26,6 +26,7 @@ from substrate.kernel.core.content import (
     ToolUseBlock,
     DataBlock,
     ToolResultBlock,
+    ReasoningBlock,
 )
 from substrate.kernel.messaging.stream import TextDelta, ReasoningDelta, CompletionEvent
 from substrate.integrations.llm.encoders.openai import (
@@ -604,6 +605,7 @@ class OpenAIClient(LLMClient):
 
         # Stream and yield deltas, collect final Response object
         final_response = None
+        reasoning_parts: list[str] = []
 
         stream = await self.client.responses.create(**params)
         async for event in stream:
@@ -617,6 +619,7 @@ class OpenAIClient(LLMClient):
             elif isinstance(event, ResponseReasoningSummaryTextDeltaEvent):
                 reasoning = event.delta if hasattr(event, "delta") else ""
                 if reasoning:
+                    reasoning_parts.append(reasoning)
                     yield ReasoningDelta(text=reasoning)
 
             # Capture final Response object
@@ -641,6 +644,11 @@ class OpenAIClient(LLMClient):
             final_response.output_text if hasattr(final_response, "output_text") else ""
         )
         final_blocks: list[ContentBlock] = []
+        # Persist the reasoning summary (unsigned — OpenAI continuation uses the
+        # Responses API's own reasoning-item mechanism, not message content) so
+        # it survives history replay. Reasoning precedes the answer.
+        if reasoning_parts:
+            final_blocks.append(ReasoningBlock(text="".join(reasoning_parts)))
         if final_content_text:
             final_blocks.append(TextBlock(text=final_content_text))
 

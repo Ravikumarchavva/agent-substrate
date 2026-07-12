@@ -10,6 +10,7 @@ from substrate.kernel.core.content import (
     ImageBlock,
     ToolUseBlock,
     ToolResultBlock,
+    ReasoningBlock,
     content_blocks_to_str,
     content_block_from_dict,
 )
@@ -79,6 +80,32 @@ def test_tool_result_block():
     assert result.call_id == "call1"
     assert result.is_error is False
     assert result.to_text_repr() == "[ToolResult: call1] done"
+
+
+def test_reasoning_block():
+    block = ReasoningBlock(text="let me think", signature="sig-abc")
+    assert block.type == "reasoning"
+    assert block.text == "let me think"
+    assert block.signature == "sig-abc"
+    assert block.redacted is False
+    assert block.to_text_repr() == "[Reasoning] let me think"
+
+
+def test_reasoning_block_redacted():
+    block = ReasoningBlock(text="opaque-payload", redacted=True)
+    assert block.redacted is True
+    assert block.to_text_repr() == "[Reasoning: redacted]"
+
+
+def test_reasoning_block_round_trips_through_registry():
+    # The signature must survive serialize → deserialize so it can be replayed
+    # to the provider on continuation (Anthropic rejects an unsigned thinking
+    # block).
+    block = ReasoningBlock(text="chain of thought", signature="sig-xyz")
+    restored = content_block_from_dict(block.model_dump(mode="json"))
+    assert isinstance(restored, ReasoningBlock)
+    assert restored.text == "chain of thought"
+    assert restored.signature == "sig-xyz"
 
 
 def test_content_block_from_dict():

@@ -33,6 +33,7 @@ from substrate.kernel.core.content import (
     ErrorBlock,
     DataBlock,
     CodeBlock,
+    ReasoningBlock,
 )
 
 
@@ -132,7 +133,24 @@ def _encode_assistant(msg: ChatMessage) -> dict[str, Any] | None:
     blocks: list[dict[str, Any]] = []
 
     for item in msg.content:
-        if isinstance(item, TextBlock):
+        if isinstance(item, ReasoningBlock):
+            # Anthropic requires thinking blocks first in the assistant turn
+            # (they already are, from the client's assembly order) and rejects
+            # a ``thinking`` block without a valid ``signature`` — so only
+            # replay signed or redacted reasoning. Unsigned reasoning (e.g.
+            # originating from another provider) is dropped rather than sent
+            # invalid.
+            if item.redacted:
+                blocks.append({"type": "redacted_thinking", "data": item.text})
+            elif item.signature:
+                blocks.append(
+                    {
+                        "type": "thinking",
+                        "thinking": item.text,
+                        "signature": item.signature,
+                    }
+                )
+        elif isinstance(item, TextBlock):
             if item.text.strip():
                 blocks.append(_encode_text(item.text))
         elif isinstance(item, ToolUseBlock):

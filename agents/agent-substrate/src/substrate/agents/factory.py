@@ -25,6 +25,8 @@ from substrate.kernel import (
     Tool,
 )
 from substrate.kernel.core.identity import AgentId
+from substrate.kernel.tools.approval import ApprovalHandler
+from substrate.kernel.tools.tools import ToolRisk
 from substrate.agents.middleware._contracts import Middleware
 from substrate.agents.middleware.observability import (
     AgentTracingMiddleware,
@@ -429,6 +431,8 @@ def create_assistant_agent(
     session_id: str | None = None,
     middleware: list[Middleware] | None = None,
     initial_tool_choice: str | None = None,
+    approval_handler: ApprovalHandler | None = None,
+    approval_required_risk: ToolRisk | None = None,
 ) -> ReActAgent:
     """Create a configured ``ReActAgent``.
 
@@ -468,6 +472,15 @@ def create_assistant_agent(
             still produces an ERROR-tagged span.
         initial_tool_choice: Forces this exact tool name on the agent's
             first LLM call only; dropped after (see ``ReActAgent``).
+        approval_handler: Satisfies ``kernel.tools.approval.ApprovalHandler``
+            — pauses a tool call whose risk exceeds ``approval_required_risk``
+            for a human decision. ``None`` means CRITICAL/HIGH-risk tools
+            fail closed with "no ApprovalHandler configured" (see
+            ``ToolInvoker``) rather than executing unguarded.
+        approval_required_risk: The highest ``ToolRisk`` that executes
+            without approval; anything above it requires one. ``None``
+            leaves ``ToolInvoker``'s own default (see
+            ``worker.py::_build_tool_invoker``).
     """
     from substrate.agents.core import ReActAgent
     from substrate.agents.tools.toolbox import Toolbox
@@ -495,6 +508,8 @@ def create_assistant_agent(
         max_iterations=max_iterations,
         session_id=session_id,
         initial_tool_choice=initial_tool_choice,
+        approval_handler=approval_handler,
+        approval_required_risk=approval_required_risk,
         middleware=MiddlewarePipeline(
             [
                 AgentTracingMiddleware(),

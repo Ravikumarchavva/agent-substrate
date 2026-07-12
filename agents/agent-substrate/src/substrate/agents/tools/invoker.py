@@ -28,6 +28,7 @@ from substrate.kernel.tools.approval import (
     ApprovalDecision,
     ApprovalHandler,
     ApprovalRequest,
+    ApprovalResult,
 )
 from substrate.kernel.storage.blob import BlobStore
 from substrate.kernel.tools.chain import (
@@ -239,7 +240,7 @@ class ToolInvoker:
                 context={"source": "tool_chain"},
             )
             try:
-                decision = await asyncio.wait_for(
+                result: ApprovalResult = await asyncio.wait_for(
                     self._approval.request(approval_req),
                     timeout=policy.approval_timeout_s,
                 )
@@ -252,7 +253,9 @@ class ToolInvoker:
                         "Call this tool directly outside the chain for interactive approval."
                     ),
                 )
-            if decision != ApprovalDecision.APPROVED:
+            if result.decision == ApprovalDecision.MODIFIED:
+                call = call.model_copy(update={"arguments": result.modified_args or {}})
+            elif result.decision != ApprovalDecision.APPROVED:
                 return InvocationResult(
                     status="denied",
                     text=f"Approval denied for tool '{tool_name}'.",

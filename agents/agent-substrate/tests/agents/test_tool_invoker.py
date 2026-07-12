@@ -8,7 +8,11 @@ from typing import Any
 
 from substrate.agents.tools.invoker import ToolInvoker
 from substrate.agents.tools.toolbox import Toolbox
-from substrate.kernel.tools.approval import ApprovalDecision, ApprovalRequest
+from substrate.kernel.tools.approval import (
+    ApprovalDecision,
+    ApprovalRequest,
+    ApprovalResult,
+)
 from substrate.kernel.tools.chain import ChainPolicy
 from substrate.kernel.core.content import ImageBlock, TextBlock
 from substrate.kernel.tools import ToolCallRequest, ToolExecutionResult, ToolRisk
@@ -81,19 +85,26 @@ class ImageTool:
 
 
 class FakeApprovalAllow:
-    async def request(self, req: ApprovalRequest) -> ApprovalDecision:
-        return ApprovalDecision.APPROVED
+    async def request(self, req: ApprovalRequest) -> ApprovalResult:
+        return ApprovalResult(decision=ApprovalDecision.APPROVED)
 
 
 class FakeApprovalDeny:
-    async def request(self, req: ApprovalRequest) -> ApprovalDecision:
-        return ApprovalDecision.DENIED
+    async def request(self, req: ApprovalRequest) -> ApprovalResult:
+        return ApprovalResult(decision=ApprovalDecision.DENIED)
+
+
+class FakeApprovalModify:
+    async def request(self, req: ApprovalRequest) -> ApprovalResult:
+        return ApprovalResult(
+            decision=ApprovalDecision.MODIFIED, modified_args={"to": "safe@example.com"}
+        )
 
 
 class FakeApprovalSlow:
-    async def request(self, req: ApprovalRequest) -> ApprovalDecision:
+    async def request(self, req: ApprovalRequest) -> ApprovalResult:
         await asyncio.sleep(999)
-        return ApprovalDecision.APPROVED
+        return ApprovalResult(decision=ApprovalDecision.APPROVED)
 
 
 class FakeArtifactStore:
@@ -256,6 +267,23 @@ async def test_high_risk_tool_denied_by_handler():
             make_call("send_email", to="a@b.com"), session=session
         )
     assert result.status == "denied"
+
+
+async def test_high_risk_tool_modified_by_handler_executes_with_new_args():
+    """MODIFIED substitutes the handler's edited arguments before execute()."""
+    registry = make_registry(HighRiskTool())
+    invoker = ToolInvoker(
+        registry=registry,
+        approval_handler=FakeApprovalModify(),
+        policy=ChainPolicy(max_risk_unapproved=ToolRisk.SAFE),
+    )
+    async with invoker.open_session() as session:
+        result = await invoker.invoke(
+            make_call("send_email", to="dangerous@evil.com"), session=session
+        )
+    assert result.status == "ok"
+    assert "safe@example.com" in result.text
+    assert "dangerous@evil.com" not in result.text
 
 
 async def test_approval_timeout_returns_denied():

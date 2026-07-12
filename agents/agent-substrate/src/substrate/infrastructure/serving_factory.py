@@ -551,6 +551,7 @@ async def build_agent_for_thread(
     max_iterations: int = 30,
     runtime: Any = None,
     initial_tool_choice: str | None = None,
+    bridge: Any = None,
 ) -> Any:
     """Build and register a kernel Agent for this thread.
 
@@ -571,6 +572,13 @@ async def build_agent_for_thread(
     see ``serving/stream/history.py::project_thread()``, the sibling
     projection for UI display) rather than taking an injected loader
     callback — the monolith has exactly one cold-store mechanism now.
+
+    ``bridge`` (the per-thread ``WebHITLBridge``, when given) wires
+    ``approval_handler=SSEApprovalHandler(bridge)`` so a CRITICAL/HIGH-risk
+    tool call actually pauses for a human decision over SSE instead of
+    either running unguarded (no handler configured) or failing closed —
+    this is the one real implementation of kernel's ``ApprovalHandler``
+    Protocol; see ``serving/monolith/sse/approval.py``.
     """
     from substrate.agents.factory import (
         build_research_orchestrator,
@@ -582,6 +590,12 @@ async def build_agent_for_thread(
 
     if runtime is None:
         raise ValueError("build_agent_for_thread() requires a runtime.")
+
+    approval_handler = None
+    if bridge is not None:
+        from substrate.serving.monolith.sse.approval import SSEApprovalHandler
+
+        approval_handler = SSEApprovalHandler(bridge)
 
     session_id = str(thread_id)
     memory = await load_session_memory(
@@ -625,6 +639,7 @@ async def build_agent_for_thread(
         model_context=build_token_budget_pipeline(),
         max_iterations=max_iterations,
         initial_tool_choice=initial_tool_choice,
+        approval_handler=approval_handler,
     )
     await runtime.register(agent)
     return agent

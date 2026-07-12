@@ -68,17 +68,21 @@
   #k-root.on .bus-flow{opacity:.95;animation:flow 2.6s linear infinite}
   @keyframes flow{to{stroke-dashoffset:-98}}
 
+  /* Layout mirrors a real board's priorities: the CPU+RAM cluster (Agent +
+     Storage) is the dominant, tightly-coupled center. Tools (PCIe/GPU-style
+     expansion) sit in their own column, deliberately apart -- powerful, but
+     optional, not on the CPU's own bus. */
   .k-grid{position:relative;display:grid;z-index:1;
-    grid-template-columns:minmax(190px,1fr) minmax(300px,1.5fr) minmax(160px,.85fr);
-    grid-template-areas:"storage storage storage" "llm cpu tools" "agentp content tools";
-    gap:30px}
-  @media(max-width:820px){
+    grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) minmax(180px,1fr) minmax(150px,.55fr);
+    grid-template-areas:"runtime runtime runtime tools" "llm     agentp  content tools";
+    gap:16px 30px}
+  @media(max-width:900px){
     .k-grid{grid-template-columns:1fr;
-      grid-template-areas:"storage" "cpu" "llm" "tools" "agentp" "content"}
+      grid-template-areas:"runtime" "llm" "agentp" "content" "tools"}
   }
 
   .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:9px 11px 11px;min-width:0}
-  .z-storage{grid-area:storage}.z-llm{grid-area:llm}.z-cpu{grid-area:cpu}
+  .z-runtime{grid-area:runtime}.z-llm{grid-area:llm}
   .z-tools{grid-area:tools;display:flex;flex-direction:column;gap:12px}
   .z-agentp{grid-area:agentp}.z-content{grid-area:content}
 
@@ -117,8 +121,11 @@
   .cpu-seat .t1{font-size:12px;font-weight:700;color:var(--silk)}
   .cpu-seat .t2{font-size:7.5px;letter-spacing:.08em;color:var(--L1);margin-top:3px}
   .cpu-cap{font-size:8.5px;letter-spacing:.14em;color:var(--gold);text-align:center}
-  .cpu-rows{display:flex;gap:22px;width:100%;justify-content:center}
+  .cpu-cluster{display:flex;gap:16px;width:100%;justify-content:center;flex-wrap:wrap;align-items:flex-start}
   .cpu-col{display:flex;flex-direction:column;gap:7px;width:120px}
+  .dimm-col{display:flex;flex-direction:column;gap:7px;width:132px}
+  .dimm-col .dimm{padding:6px 8px}
+  .dimm-col .dimm .lbl{font-size:9px}
 
   /* -- IC: small chipset/support chips -- */
   .ic{position:relative;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
@@ -135,8 +142,7 @@
     transition:opacity .35s,transform .35s}
   #k-root.pop .ic.plugged .ic-fill{opacity:1;transform:scaleX(1)}
 
-  /* -- DIMM: storage slots -- */
-  .dimms{display:flex;flex-direction:column;gap:8px}
+  /* -- DIMM: storage slots, flanking the CPU cluster -- */
   .dimm{position:relative;display:flex;align-items:center;gap:8px;border:1.2px solid var(--copper);
     border-radius:2px;background:var(--chip);padding:6px 9px;transition:border-color .16s}
   .dimm:hover{border-color:var(--gold)}
@@ -447,33 +453,36 @@ function zone(cls,c,n,r,inner){
 
 const grid=document.getElementById("k-grid");
 grid.innerHTML =
-  zone("z-storage","A","STORAGE BUS","pluggable backends — S0–S5",
-    `<div class="dimms">${["history","vector","graph","blob","tasks","memory"].map(renderDIMM).join("")}</div>`)
-+ zone("z-llm","B","LLM PHY","provider-neutral",
-    `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}</div>
-     <div class="sub">STREAM</div><div class="smds">${renderSMD("stream")}</div>`)
-+ zone("z-cpu","C","RUNTIME CHIPSET","event-sourced core — Agent[CtxT] socket",
+  zone("z-runtime","A","RUNTIME CHIPSET","Agent[CtxT] + storage, one cluster",
     `<div class="cpu-wrap">
-       <div class="cpu-rows">
+       <div class="cpu-cluster">
+         <div class="dimm-col">${["history","vector","graph"].map(renderDIMM).join("")}</div>
          <div class="cpu-col">${renderIC("signalbus")}${renderIC("supervisor")}${renderSMD("effect")}</div>
          <div class="cpu" data-id="agent" tabindex="0" role="button" aria-label="Agent[CtxT] — PROTOCOL, implemented by ReActAgent">
            <div class="cpu-label"><span class="t1">AGENT&#91;CTXT&#93;</span><span class="t2">SOCKET CTX-0</span></div>
            <div class="cpu-seat"><div><span class="t1">ReActAgent</span><br><span class="t2">L1</span></div></div></div>
          <div class="cpu-col">${renderIC("eventlog")}${renderIC("scheduler")}${renderIC("inbox")}</div>
+         <div class="dimm-col">${["blob","tasks","memory"].map(renderDIMM).join("")}</div>
        </div>
      </div>`)
-+ zone("z-tools","D","TOOL EXPANSION","structural typing",
-    `<div class="pcies">${["tool","hosted","provdef"].map(renderPCIE).join("")}</div>
-     <div class="smds" style="flex-direction:column">${renderIC("toolreg")}${renderIC("approval")}</div>`)
-+ zone("z-agentp","E","AGENT & POLICY","supervision surface",
++ zone("z-llm","B","LLM PHY","provider-neutral",
+    `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}</div>
+     <div class="sub">STREAM</div><div class="smds">${renderSMD("stream")}</div>`)
++ zone("z-agentp","C","AGENT & POLICY","supervision surface",
     `<div class="smds">${["supervision","runmeta","middleware","compaction","agentctx"].map(renderSMD).join("")}</div>`)
-+ zone("z-content","F","CONTENT","multimodal payload",
++ zone("z-content","D","CONTENT","multimodal payload",
     `${renderCells("content")}<div class="sub">FAULT PROTECTION</div>${renderFuse("errors")}
-     <div class="smds" style="margin-top:8px">${renderSMD("ids")}</div>`);
+     <div class="smds" style="margin-top:8px">${renderSMD("ids")}</div>`)
++ zone("z-tools","E","TOOL EXPANSION","off the CPU's own bus",
+    `<div class="pcies">${["tool","hosted","provdef"].map(renderPCIE).join("")}</div>
+     <div class="smds" style="flex-direction:column">${renderIC("toolreg")}${renderIC("approval")}</div>`);
 
-/* ---- bus traces: computed from real rendered positions, not guessed ---- */
+/* ---- bus traces: computed from real rendered positions, not guessed.
+   Storage no longer gets a trace of its own -- it's soldered right onto the
+   CPU cluster now, same as a real board's RAM slots. Only zones genuinely
+   apart from the CPU need a routed wire. ---- */
 const board=document.getElementById("k-board"), svg=document.getElementById("bus-svg");
-const BUS_ZONES=[".z-storage",".z-llm",".z-tools",".z-agentp",".z-content"];
+const BUS_ZONES=[".z-llm",".z-tools",".z-agentp",".z-content"];
 function layoutBuses(){
   const bRect=board.getBoundingClientRect();
   const cr0=document.querySelector(".cpu").getBoundingClientRect();

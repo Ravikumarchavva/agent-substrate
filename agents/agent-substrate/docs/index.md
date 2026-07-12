@@ -148,8 +148,21 @@ graph TB
 
 `integrations` (LLM providers, MCP, connectors), `infrastructure` (Postgres, Redis, MinIO, durable runtime), and `serving` (the monolith + 12 microservices) sit orthogonal to the stack — they implement kernel Protocols and wire everything together at startup.
 
-[Explore the Kernel Contract Board :material-arrow-right:](kernel-board.html){ .md-button }
-: An interactive, one-page map of every Layer 0 contract — Protocols, dataclasses, and enums — and what actually implements it, traced against real call paths rather than docstrings.
+**The Kernel Contract Board** — every Layer 0 contract as a clickable node, the trace to what actually implements it, grounded in the codebase rather than docstrings.
+
+<iframe id="kboard-frame" src="kernel-board.html" title="Kernel Contract Board"
+  style="width:100%;height:520px;border:1px solid var(--md-default-fg-color--lightest);border-radius:8px;display:block;"
+  loading="lazy"></iframe>
+<script>
+  window.addEventListener("message", (e) => {
+    if (e.data && typeof e.data.kboardHeight === "number") {
+      const f = document.getElementById("kboard-frame");
+      if (f) f.style.height = e.data.kboardHeight + "px";
+    }
+  });
+</script>
+
+[Open full page :material-arrow-right:](kernel-board.html){ .md-button }
 
 ---
 

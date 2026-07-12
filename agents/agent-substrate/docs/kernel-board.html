@@ -4,145 +4,229 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SUBSTRATE — Kernel Contract Board</title>
-<meta name="description" content="One-page schematic of the agent-substrate kernel (Layer 0): every dashed outline is a contract, every solid chip is a traced implementation.">
+<meta name="description" content="A motherboard-style diagram of the agent-substrate kernel (Layer 0): the Agent as CPU, storage as DIMM slots, tools as PCIe cards — every socket traced to its real implementation.">
 <style>
   html,body{margin:0;padding:0}
   :root{
-    --paper:#ece9df; --board:#f6f4ec; --panel:#f8f6ef;
-    --ink:#20241f; --ink-2:#5a6058; --ink-3:#8d9289;
-    --rule:#cbc8ba; --rule-2:#dcd9cc;
-    --copper:#9c5730; --key:#af8140;
-    --L1:#2f6a72; --L2:#6a5586; --INT:#3f7350; --INFRA:#a5673a; --SRV:#7c6b28;
-    --new:#9c5730; --review:#b0402c;
+    --ground:#081109; --board:#0f2317; --board-edge:#1d3d2c; --panel:#122a1c;
+    --silk:#d7e4da; --silk-dim:#8fa596; --rule:#1f3d2b;
+    --copper:#8a6a3f; --gold:#cfa552; --lit:#e8a84c; --glow:#f0bd6f;
+    --chip:#151c18; --chip-edge:#2c3a30; --chip-label:#aeb8ba;
+    --L1:#5ea8d8; --L2:#a98fd8; --INT:#4fb8a8; --INFRA:#d8775a; --SRV:#d8c05a;
+    --new:#e8a84c; --review:#e0685a;
     --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
     --sans:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
   }
   *{box-sizing:border-box}
-  #k-root{background:var(--paper);color:var(--ink);font-family:var(--mono);
-    -webkit-font-smoothing:antialiased;padding:22px 22px 26px}
-  #k-wrap{max-width:1180px;margin:0 auto}
+  #k-root{background:var(--ground);color:var(--silk);font-family:var(--mono);
+    -webkit-font-smoothing:antialiased;padding:20px 20px 26px}
+  #k-wrap{max-width:1220px;margin:0 auto}
 
   /* ---- header ---- */
-  .k-top{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:12px}
-  .k-id h1{font-family:var(--mono);font-size:19px;font-weight:700;letter-spacing:.36em;margin:0}
-  .k-id p{font-family:var(--sans);font-size:11.5px;color:var(--ink-2);margin:4px 0 0;letter-spacing:.01em;max-width:52ch}
-  .k-ctrl{display:flex;align-items:center;gap:8px;flex:none}
-  .seg{display:flex;border:1.5px solid var(--ink);border-radius:3px;overflow:hidden}
-  .seg button{font-family:var(--mono);font-size:10px;letter-spacing:.12em;padding:6px 11px;border:0;
-    background:var(--board);color:var(--ink-2);cursor:pointer}
-  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
-  .seg button:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
-  .k-replay{font-family:var(--mono);font-size:10px;letter-spacing:.12em;padding:6px 11px;
-    background:none;border:1.5px solid var(--rule);border-radius:3px;color:var(--ink-2);cursor:pointer}
-  .k-replay:hover{border-color:var(--ink);color:var(--ink)}
-  .k-replay:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+  .k-top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;
+    padding-bottom:12px;border-bottom:1px solid var(--rule);margin-bottom:12px}
+  .k-id h1{font-size:18px;font-weight:700;letter-spacing:.38em;margin:0;color:var(--silk)}
+  .k-id p{font-family:var(--sans);font-size:11px;color:var(--silk-dim);margin:4px 0 0;max-width:56ch}
+  .k-ctrl{display:flex;align-items:center;gap:14px;flex:none}
+  .leds{display:flex;gap:12px;align-items:center}
+  .led{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.1em;color:var(--silk-dim)}
+  .led i{width:6px;height:6px;border-radius:50%;background:var(--silk-dim);opacity:.3;transition:opacity .3s,background .3s}
+  #k-root.on .led.pwr i{opacity:1;background:var(--lit)}
+  #k-root.on .led.act i{opacity:1;background:var(--L2);animation:blink 1.6s steps(2) infinite}
+  #k-root.on .led.lnt i{opacity:1;background:#7ec98f}
+  @keyframes blink{50%{opacity:.2}}
+  .seg{display:flex;border:1px solid var(--copper);border-radius:3px;overflow:hidden}
+  .seg button{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;padding:6px 10px;border:0;
+    background:transparent;color:var(--silk-dim);cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--lit);color:var(--ground)}
+  .seg button:focus-visible{outline:2px solid var(--glow);outline-offset:1px}
+  .k-replay{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;padding:6px 10px;
+    background:none;border:1px solid var(--rule);border-radius:3px;color:var(--silk-dim);cursor:pointer}
+  .k-replay:hover{border-color:var(--copper);color:var(--silk)}
+  .k-replay:focus-visible{outline:2px solid var(--glow);outline-offset:1px}
 
-  /* ---- one-line combined legend ---- */
-  .k-key{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:12px;
-    font-size:10px;letter-spacing:.02em;color:var(--ink-2);padding-bottom:10px;border-bottom:1px solid var(--rule)}
+  /* ---- legend ---- */
+  .k-key{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:12px;
+    font-size:9.5px;letter-spacing:.02em;color:var(--silk-dim)}
   .k-key .kk{display:flex;align-items:center;gap:6px;white-space:nowrap}
-  .k-key b{color:var(--ink);font-weight:600}
-  .gl-out{width:15px;height:11px;border:1.3px dashed var(--ink-3);border-radius:2px;flex:none}
-  .gl-fill{width:15px;height:11px;border:1.3px solid var(--ink);border-radius:2px;flex:none;position:relative;background:var(--board)}
-  .gl-fill::after{content:"";position:absolute;left:2px;right:2px;bottom:-1px;height:2px;background:var(--key)}
-  .dot{width:7px;height:7px;border-radius:2px;flex:none;display:inline-block}
-  .ring{width:7px;height:7px;border-radius:50%;border:1.4px solid var(--review);flex:none;display:inline-block}
+  .dot{width:6px;height:6px;border-radius:1px;flex:none;display:inline-block}
+  .ring{width:6px;height:6px;border-radius:50%;border:1.2px solid var(--review);flex:none;display:inline-block}
 
   /* ---- board ---- */
-  .k-board{border:1.5px solid var(--ink);border-radius:5px;background:var(--board);padding:14px 14px 4px;position:relative}
-  .corner{position:absolute;width:9px;height:9px;opacity:.5}
-  .corner.tl{top:6px;left:6px;border-top:1.5px solid var(--ink);border-left:1.5px solid var(--ink)}
-  .corner.tr{top:6px;right:6px;border-top:1.5px solid var(--ink);border-right:1.5px solid var(--ink)}
-  .corner.bl{bottom:6px;left:6px;border-bottom:1.5px solid var(--ink);border-left:1.5px solid var(--ink)}
-  .corner.br{bottom:6px;right:6px;border-bottom:1.5px solid var(--ink);border-right:1.5px solid var(--ink)}
+  .k-board{position:relative;border:1px solid var(--board-edge);border-radius:8px;background:var(--board);
+    padding:16px;
+    background-image:radial-gradient(var(--rule) 1px,transparent 1px);
+    background-size:16px 16px}
+  .k-board .hole{position:absolute;width:9px;height:9px;border-radius:50%;border:1.2px solid var(--gold);opacity:.55}
+  .k-board .hole::after{content:"";position:absolute;inset:2.5px;border-radius:50%;background:var(--ground)}
+  .hole.tl{top:8px;left:8px}.hole.tr{top:8px;right:8px}.hole.bl{bottom:8px;left:8px}.hole.br{bottom:8px;right:8px}
 
-  .zones{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  @media(max-width:860px){.zones{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:540px){.zones{grid-template-columns:1fr}}
+  #bus-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:2}
+  .bus{fill:none;stroke:var(--copper);stroke-width:1.6;opacity:.75}
+  .bus-via{fill:var(--ground);stroke:var(--gold);stroke-width:1.3}
+  .bus-flow{fill:none;stroke:var(--glow);stroke-width:1.8;stroke-dasharray:8 90;opacity:0;pointer-events:none}
+  #k-root.on .bus-flow{opacity:.95;animation:flow 2.6s linear infinite}
+  @keyframes flow{to{stroke-dashoffset:-98}}
 
-  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:9px 10px 10px;margin-bottom:10px;
-    background-image:
-      linear-gradient(var(--rule-2) 1px,transparent 1px),
-      linear-gradient(90deg,var(--rule-2) 1px,transparent 1px);
-    background-size:13px 13px;background-position:-1px -1px;background-repeat:repeat}
-  .zone-h{display:flex;align-items:baseline;gap:7px;margin-bottom:8px}
-  .zone-h .zc{font-size:9px;color:var(--copper);letter-spacing:.08em;font-weight:700;
-    border:1px solid var(--copper);border-radius:50%;width:14px;height:14px;display:inline-flex;
+  .k-grid{position:relative;display:grid;z-index:1;
+    grid-template-columns:minmax(190px,1fr) minmax(300px,1.5fr) minmax(160px,.85fr);
+    grid-template-areas:"storage storage storage" "llm cpu tools" "agentp content tools";
+    gap:30px}
+  @media(max-width:820px){
+    .k-grid{grid-template-columns:1fr;
+      grid-template-areas:"storage" "cpu" "llm" "tools" "agentp" "content"}
+  }
+
+  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:9px 11px 11px;min-width:0}
+  .z-storage{grid-area:storage}.z-llm{grid-area:llm}.z-cpu{grid-area:cpu}
+  .z-tools{grid-area:tools;display:flex;flex-direction:column;gap:12px}
+  .z-agentp{grid-area:agentp}.z-content{grid-area:content}
+
+  .zone-h{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
+  .zone-h .zc{font-size:8.5px;color:var(--gold);letter-spacing:.06em;font-weight:700;
+    border:1px solid var(--gold);border-radius:50%;width:13px;height:13px;display:inline-flex;
     align-items:center;justify-content:center;flex:none}
-  .zone-h .zn{font-size:11px;letter-spacing:.13em;font-weight:700}
-  .zone-h .zr{font-family:var(--sans);font-size:9.5px;color:var(--ink-3);margin-left:auto;text-align:right}
-  .nodes{display:flex;flex-wrap:wrap;row-gap:13px;column-gap:7px;padding-top:2px}
+  .zone-h .zn{font-size:10.5px;letter-spacing:.13em;font-weight:700;color:var(--silk)}
+  .zone-h .zr{font-family:var(--sans);font-size:9px;color:var(--silk-dim);margin-left:auto;text-align:right}
 
-  /* ---- node chip: a socket (pins) with a chip that seats into it ---- */
-  .node{position:relative;display:inline-flex;align-items:center;gap:6px;
-    border:1.3px dashed var(--ink-3);border-radius:3px;background:transparent;
-    padding:5px 8px 6px;cursor:pointer;font-size:10.5px;line-height:1.1;white-space:nowrap;
-    transform:translateY(0);
-    transition:border-color .16s,background-color .16s,box-shadow .3s,transform .4s cubic-bezier(.3,1.4,.4,1)}
-  .node:hover{border-color:var(--ink);background:#fff}
-  .node:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
-  .node .kd{width:13px;height:13px;border-radius:50%;border:1px solid var(--ink-3);color:var(--ink-3);
-    font-size:7.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
-  .node .nm{font-weight:600;color:var(--ink)}
-  /* pin row -- always present on the socket, like solder pads on the board */
-  .node::before{content:"";position:absolute;left:7px;right:7px;top:-3px;height:2px;
-    background-image:repeating-linear-gradient(90deg,var(--ink-3) 0 3px,transparent 3px 7px);
-    opacity:.65;transition:opacity .3s,background-image .3s}
-  /* connector edge -- the layer-colored strip a plugged chip contacts */
-  .node .lb{position:absolute;left:5px;right:5px;bottom:-1.5px;height:2.6px;border-radius:2px;background:var(--l);
-    opacity:0;transform:scaleX(.3);transition:opacity .35s,transform .35s}
-  .node .mk{position:absolute;top:-4px;right:-4px;width:8px;height:8px}
-  .mk.new{background:var(--new);border-radius:2px;border:1.5px solid var(--board)}
-  .mk.rev{border:1.5px solid var(--review);border-radius:50%;background:var(--board)}
+  /* ===================== component shapes ===================== */
 
-  /* populated state -- the chip drops in, pins darken (live), connector lights up */
-  #k-root.pop .node{border-style:solid}
-  #k-root.pop .node::before{opacity:1;background-image:repeating-linear-gradient(90deg,var(--ink) 0 3px,transparent 3px 7px)}
-  #k-root.pop .node.plugged{background:var(--board);box-shadow:0 1.5px 0 rgba(32,36,31,.16)}
-  #k-root.pop .node.plugged .lb{opacity:1;transform:scaleX(1)}
-  #k-root.pop .node.plugged:hover{background:#fff}
-  #k-root:not(.pop) .node.plugged{transform:translateY(-3px)}
+  /* -- generic node: name, kind glyph, click target -- */
+  [data-id]{cursor:pointer}
+  [data-id]:focus-visible{outline:2px solid var(--glow);outline-offset:2px;border-radius:2px}
+  .lbl{font-weight:600;color:var(--silk);font-size:10px}
+  .kd{font-size:7px;letter-spacing:.06em;color:var(--silk-dim)}
+  .mk{position:absolute;top:-4px;right:-4px;width:6px;height:6px;z-index:1}
+  .mk.new{background:var(--new);border-radius:1px}
+  .mk.rev{border:1.2px solid var(--review);border-radius:50%;background:var(--panel)}
 
-  /* ---- bus ---- */
-  .k-bus{display:flex;align-items:center;gap:10px;margin:4px 2px 10px;padding-top:8px}
-  .k-bus svg{flex:none}
-  .k-bus .bl{font-size:9.5px;letter-spacing:.1em;color:var(--ink-2)}
-  .k-bus .bl b{color:var(--ink);font-weight:700}
-  .bus-line{stroke:var(--rule);stroke-width:1.5}
-  .bus-line.flow{stroke:var(--key);stroke-dasharray:4 5;opacity:.7}
+  /* -- CPU: the Agent socket -- */
+  .cpu-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:6px 0 2px}
+  .cpu{position:relative;width:150px;height:150px;border:1.6px solid var(--gold);border-radius:6px;
+    background:var(--chip);transition:background .3s}
+  .cpu::before{content:"";position:absolute;inset:14px;border-radius:3px;
+    background-image:radial-gradient(var(--gold) 1.1px,transparent 1.3px);background-size:13px 13px;opacity:.4}
+  .cpu-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;text-align:center;padding:0 10px}
+  .cpu-label .t1{font-size:11.5px;letter-spacing:.03em;font-weight:700;color:var(--chip-label)}
+  .cpu-label .t2{font-size:8px;letter-spacing:.05em;color:#5c6660}
+  .cpu-seat{position:absolute;inset:20px;border-radius:3px;background:var(--ground);border:1px solid var(--gold);
+    display:flex;align-items:center;justify-content:center;text-align:center;padding:6px;
+    opacity:0;transform:scale(.85);transition:opacity .4s,transform .4s cubic-bezier(.3,1.3,.4,1)}
+  #k-root.pop .cpu-seat{opacity:1;transform:scale(1)}
+  .cpu-seat .t1{font-size:12px;font-weight:700;color:var(--silk)}
+  .cpu-seat .t2{font-size:7.5px;letter-spacing:.08em;color:var(--L1);margin-top:3px}
+  .cpu-cap{font-size:8.5px;letter-spacing:.14em;color:var(--gold);text-align:center}
+  .cpu-rows{display:flex;gap:22px;width:100%;justify-content:center}
+  .cpu-col{display:flex;flex-direction:column;gap:7px;width:120px}
 
-  .k-foot{display:flex;justify-content:flex-end;margin-top:8px}
-  .k-foot span{font-family:var(--sans);font-size:9.5px;color:var(--ink-3);letter-spacing:.02em}
+  /* -- IC: small chipset/support chips -- */
+  .ic{position:relative;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
+    padding:5px 7px 6px;transition:border-color .16s,background .16s}
+  .ic:hover{border-color:var(--gold)}
+  .ic::before,.ic::after{content:"";position:absolute;left:6px;right:6px;height:2px;
+    background-image:repeating-linear-gradient(90deg,var(--copper) 0 3px,transparent 3px 7px);opacity:.7}
+  .ic::before{top:-3px}.ic::after{bottom:-3px}
+  #k-root.on .ic::before,#k-root.on .ic::after{
+    background-image:repeating-linear-gradient(90deg,var(--gold) 0 3px,transparent 3px 7px);opacity:1}
+  .ic .lbl{display:block}
+  .ic .kd{display:block;margin-top:1px}
+  .ic-fill{margin-top:4px;height:3px;border-radius:2px;background:var(--l);opacity:0;transform:scaleX(.3);
+    transition:opacity .35s,transform .35s}
+  #k-root.pop .ic.plugged .ic-fill{opacity:1;transform:scaleX(1)}
+
+  /* -- DIMM: storage slots -- */
+  .dimms{display:flex;flex-direction:column;gap:8px}
+  .dimm{position:relative;display:flex;align-items:center;gap:8px;border:1.2px solid var(--copper);
+    border-radius:2px;background:var(--chip);padding:6px 9px;transition:border-color .16s}
+  .dimm:hover{border-color:var(--gold)}
+  .dimm .teeth{position:absolute;left:8px;right:8px;bottom:-3px;height:3px;
+    background-image:repeating-linear-gradient(90deg,var(--copper) 0 4px,transparent 4px 8px);opacity:.7}
+  #k-root.on .dimm .teeth{background-image:repeating-linear-gradient(90deg,var(--gold) 0 4px,transparent 4px 8px);opacity:1}
+  .dimm .cap{width:5px;align-self:stretch;border-radius:1px;background:var(--l);opacity:0;transition:opacity .35s}
+  #k-root.pop .dimm.plugged .cap{opacity:1}
+  .dimm .txt{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .dimm .lbl{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* -- PCIe: tool expansion cards -- */
+  .pcies{display:flex;gap:7px;align-items:stretch;height:150px}
+  .pcie{position:relative;flex:1;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
+    display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;transition:border-color .16s}
+  .pcie:hover{border-color:var(--gold)}
+  .pcie .teeth{position:absolute;top:6px;bottom:6px;left:-3px;width:3px;
+    background-image:repeating-linear-gradient(180deg,var(--copper) 0 4px,transparent 4px 8px);opacity:.7}
+  #k-root.on .pcie .teeth{background-image:repeating-linear-gradient(180deg,var(--gold) 0 4px,transparent 4px 8px);opacity:1}
+  .pcie .cap{position:absolute;top:-4px;left:6px;right:6px;height:5px;border-radius:1px;background:var(--l);
+    opacity:0;transition:opacity .35s}
+  #k-root.pop .pcie.plugged .cap{opacity:1}
+  .pcie .lbl{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;white-space:nowrap;letter-spacing:.03em}
+
+  /* -- SMD: small surface-mount contracts -- */
+  .smds{display:flex;flex-wrap:wrap;gap:6px}
+  .smd{position:relative;border:1.2px dashed var(--copper);border-radius:2px;padding:4px 7px;
+    font-size:9.5px;transition:border-color .16s,background .16s}
+  .smd:hover{border-color:var(--gold)}
+  #k-root.on .smd{border-style:solid}
+  .smd .cap{position:absolute;left:3px;right:3px;bottom:-2px;height:2px;border-radius:2px;background:var(--l);
+    opacity:0;transition:opacity .35s}
+  #k-root.pop .smd.plugged{background:rgba(207,165,82,.05)}
+  #k-root.pop .smd.plugged .cap{opacity:1}
+
+  /* -- fuse row (errors) -- */
+  .fuses{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .fuse{display:flex;align-items:center;gap:0;cursor:pointer}
+  .fuse .body{width:20px;height:9px;border-radius:5px;border:1.2px solid var(--gold);background:var(--chip)}
+  .fuse .leg{width:4px;height:1.4px;background:var(--copper)}
+  .fuse-cap{font-family:var(--sans);font-size:9px;color:var(--silk-dim);margin-left:6px}
+
+  /* -- content-block cell strip -- */
+  .cells{display:flex;flex-wrap:wrap;gap:4px;cursor:pointer}
+  .cell{border:1.1px solid var(--copper);border-radius:2px;padding:3px 6px;font-size:8px;letter-spacing:.03em;
+    color:var(--silk-dim);transition:border-color .16s,color .16s}
+  .cells:hover .cell{border-color:var(--gold);color:var(--silk)}
+  .cell.hero{color:var(--new);border-color:var(--new)}
+
+  .sub{font-size:8.5px;letter-spacing:.14em;color:var(--silk-dim);margin:11px 0 6px;
+    border-bottom:1px solid var(--rule);padding-bottom:4px}
+
+  /* ---- bus caption + footer ---- */
+  .k-bus{margin-top:12px;padding-top:10px;border-top:1px solid var(--rule);
+    font-size:9.5px;letter-spacing:.08em;color:var(--silk-dim);display:flex;justify-content:space-between;
+    flex-wrap:wrap;gap:8px}
+  .k-bus b{color:var(--silk);font-weight:700}
+  .k-foot{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:10px;
+    font-family:var(--sans);font-size:9.5px;color:var(--silk-dim)}
 
   /* ---- detail panel ---- */
-  #k-scrim{position:fixed;inset:0;z-index:39;background:rgba(20,26,24,.14);opacity:0;pointer-events:none;transition:opacity .28s}
+  #k-scrim{position:fixed;inset:0;z-index:39;background:rgba(4,8,5,.45);opacity:0;pointer-events:none;transition:opacity .28s}
   #k-scrim.on{opacity:1;pointer-events:auto}
-  #k-panel{position:fixed;top:0;right:0;bottom:0;width:min(400px,94vw);z-index:40;background:var(--panel);
-    border-left:1.5px solid var(--ink);padding:22px 24px 30px;overflow-y:auto;
-    transform:translateX(103%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:-14px 0 30px rgba(20,26,24,.10)}
+  #k-panel{position:fixed;top:0;right:0;bottom:0;width:min(400px,94vw);z-index:40;background:#0d1f16;
+    border-left:1px solid var(--board-edge);padding:22px 24px 30px;overflow-y:auto;color:var(--silk);
+    transform:translateX(103%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:-14px 0 30px rgba(0,0,0,.35)}
   #k-panel.open{transform:translateX(0)}
   #k-panel .x{position:absolute;top:13px;right:15px;background:none;border:0;font-family:var(--mono);
-    font-size:14px;color:var(--ink-3);cursor:pointer;padding:4px 7px}
-  #k-panel .x:hover{color:var(--ink)}
-  .pk{display:inline-block;font-size:9px;letter-spacing:.14em;color:var(--paper);background:var(--ink);
+    font-size:14px;color:var(--silk-dim);cursor:pointer;padding:4px 7px}
+  #k-panel .x:hover{color:var(--silk)}
+  .pk{display:inline-block;font-size:9px;letter-spacing:.14em;color:var(--ground);background:var(--lit);
     border-radius:2px;padding:3px 8px;margin-bottom:11px}
-  .pk.rev{background:var(--review)}
-  #pk-name{font-size:20px;font-weight:700;letter-spacing:.005em;margin:0 0 4px;text-wrap:balance}
-  #pk-mod{font-size:10px;color:var(--copper);letter-spacing:.02em;word-break:break-all;margin-bottom:14px}
-  #pk-blurb{font-family:var(--sans);font-size:13px;line-height:1.62;color:#333e39;margin:0;max-width:60ch}
-  .ph{font-size:8.5px;letter-spacing:.18em;color:var(--ink-3);margin:17px 0 8px;border-bottom:1px solid var(--rule-2);padding-bottom:5px}
+  .pk.rev{background:var(--review);color:#1a0e0b}
+  #pk-name{font-size:20px;font-weight:700;margin:0 0 4px;text-wrap:balance;color:var(--silk)}
+  #pk-mod{font-size:10px;color:var(--gold);letter-spacing:.02em;word-break:break-all;margin-bottom:14px}
+  #pk-blurb{font-family:var(--sans);font-size:13px;line-height:1.62;color:#c3d2c7;margin:0;max-width:60ch}
+  .ph{font-size:8.5px;letter-spacing:.18em;color:var(--silk-dim);margin:17px 0 8px;border-bottom:1px solid var(--rule);padding-bottom:5px}
   .ph.hide{display:none}
   #pk-methods{list-style:none;margin:0;padding:0}
-  #pk-methods li{font-family:var(--mono);font-size:10.5px;color:var(--ink);padding:3.5px 0;border-bottom:1px dotted var(--rule)}
+  #pk-methods li{font-family:var(--mono);font-size:10.5px;color:var(--lit);padding:3.5px 0;border-bottom:1px dotted var(--rule)}
   #pk-impls{list-style:none;margin:0;padding:0}
-  #pk-impls li{display:flex;align-items:center;gap:8px;font-size:11.5px;padding:5px 0;border-bottom:1px dotted var(--rule)}
+  #pk-impls li{display:flex;align-items:center;gap:8px;font-size:11.5px;padding:5px 0;border-bottom:1px dotted var(--rule);color:var(--silk)}
   #pk-impls i{width:7px;height:7px;border-radius:2px;flex:none}
-  #pk-impls .ly{margin-left:auto;font-size:8px;letter-spacing:.08em;color:var(--ink-3)}
-  #pk-note{font-family:var(--sans);font-size:12px;line-height:1.58;color:#6b4a2e;margin:15px 0 0;
+  #pk-impls .ly{margin-left:auto;font-size:8px;letter-spacing:.08em;color:var(--silk-dim)}
+  #pk-note{font-family:var(--sans);font-size:12px;line-height:1.58;color:#d8b98a;margin:15px 0 0;
     border-left:2px solid var(--copper);padding-left:12px;max-width:58ch}
   #pk-note.hide{display:none}
 
-  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}
+    .bus-flow{opacity:.35!important}}
 </style>
 </head>
 <body>
@@ -152,20 +236,28 @@
   <div class="k-top">
    <div class="k-id">
     <h1>SUBSTRATE</h1>
-    <p>Kernel · Layer 0 — the frozen contract board. Every dashed outline is a Protocol; solid fill means something above has plugged in.</p>
+    <p>The Agent is the CPU. The kernel is the board it sits on — sockets for memory, storage, and tools, wired to one chipset. Everything above Layer 0 is a part that plugs in.</p>
    </div>
    <div class="k-ctrl">
-    <div class="seg" role="group" aria-label="Board state">
-     <button id="b-bare" aria-pressed="false">BARE</button>
-     <button id="b-pop" aria-pressed="true">POPULATED</button>
+    <div class="leds">
+      <span class="led pwr"><i></i>PWR</span>
+      <span class="led act"><i></i>ACT</span>
+      <span class="led lnt"><i></i>LNT 5/5</span>
     </div>
-    <button class="k-replay" id="b-replay">↻ REPLAY</button>
+    <div class="seg" role="group" aria-label="Power">
+     <button id="b-off" aria-pressed="false">OFF</button>
+     <button id="b-on" aria-pressed="true">POWER</button>
+    </div>
+    <div class="seg" role="group" aria-label="Population">
+     <button id="b-bare" aria-pressed="false">BARE</button>
+     <button id="b-pop" aria-pressed="true">CHIPS</button>
+    </div>
+    <button class="k-replay" id="b-replay">↻ REBOOT</button>
    </div>
   </div>
 
   <div class="k-key">
-   <span class="kk"><span class="gl-out"></span><b>socket</b> — kernel contract</span>
-   <span class="kk"><span class="gl-fill"></span><b>chip</b> — real implementation</span>
+   <span class="kk">dashed = kernel socket · solid = real chip</span>
    <span class="kk"><span class="dot" style="background:var(--L1)"></span>L1 agents</span>
    <span class="kk"><span class="dot" style="background:var(--L2)"></span>L2 capabilities</span>
    <span class="kk"><span class="dot" style="background:var(--INT)"></span>integrations</span>
@@ -173,21 +265,19 @@
    <span class="kk"><span class="dot" style="background:var(--SRV)"></span>serving</span>
    <span class="kk"><span class="dot" style="background:var(--new)"></span>changed 07-12</span>
    <span class="kk"><span class="ring"></span>under review</span>
-   <span class="kk" style="margin-left:auto;color:var(--ink-3)">click any node</span>
+   <span class="kk" style="margin-left:auto;color:var(--silk-dim)">click any part</span>
   </div>
 
-  <div class="k-board">
-   <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
-   <div class="zones" id="k-zones"></div>
-   <div class="k-bus">
-    <svg width="120" height="10" viewBox="0 0 120 10" aria-hidden="true">
-      <line class="bus-line" x1="0" y1="5" x2="120" y2="5"/>
-      <line class="bus-line flow" x1="0" y1="5" x2="120" y2="5"/>
-    </svg>
-    <span class="bl"><b>CONSUMER BUS</b> — imports flow downward only, agents → capabilities → fabric</span>
-   </div>
+  <div class="k-board" id="k-board">
+   <span class="hole tl"></span><span class="hole tr"></span><span class="hole bl"></span><span class="hole br"></span>
+   <svg id="bus-svg"></svg>
+   <div class="k-grid" id="k-grid"></div>
+   <div class="k-bus"><b>PROTO AREA</b> — reserved, zero-deps, pure-type sockets only: a contract earns a place here only when ≥2 layers above need it.</div>
   </div>
-  <div class="k-foot"><span>src/substrate/kernel — 40 files, 4.9K LOC</span></div>
+  <div class="k-foot">
+   <span>src/substrate/kernel — 40 files, 4.9K LOC</span>
+   <span>import-linter 5/5 · pyright 0 err</span>
+  </div>
  </div>
 </div>
 
@@ -210,141 +300,250 @@
 (function(){
 const LY={L1:["var(--L1)","L1 agents"],L2:["var(--L2)","L2 capabilities"],INT:["var(--INT)","integrations"],
   INFRA:["var(--INFRA)","infrastructure"],SRV:["var(--SRV)","serving"]};
-const KD={PROTOCOL:"P",DATACLASS:"D",ENUM:"E",UNION:"U",ERRORS:"X","UNDER REVIEW":"?"};
+const KD={PROTOCOL:"PROTOCOL",DATACLASS:"DATACLASS",ENUM:"ENUM",UNION:"UNION",ERRORS:"ERRORS","UNDER REVIEW":"UNDER REVIEW"};
 
-/* ---- data model: extend by adding an entry + listing its id in a zone ---- */
+/* ---- data model: shape drives which renderer places the node ---- */
 const S={
- eventlog:{n:"EventLog",k:"PROTOCOL",impls:[["PostgresEventLog","INFRA"],["InMemoryEventLog","L1"]],
-   blurb:"Append-only log — the single source of truth. Fold it to reconstruct any run; effects already recorded are never re-run. Conversation history and runtime coordination share this one substrate.",
-   methods:["append(run_id, entry)","read(run_id)","tail(run_id)"]},
- scheduler:{n:"Scheduler",k:"PROTOCOL",impls:[["PostgresScheduler","INFRA"],["InMemoryScheduler","L1"]],
-   blurb:"Run lifecycle: submit → lease → release. Suspension is release(SUSPENDED, wake_on=…) — a dormant run costs zero RAM and zero CPU until a signal or deadline wakes it.",
-   methods:["submit()","lease()","release(status, wake_on)","cancel_pending()"]},
- inbox:{n:"Inbox",k:"PROTOCOL",impls:[["PostgresInbox","INFRA"],["InMemoryInbox","L1"]],
-   blurb:"Durable per-agent mailbox. Messages accumulate while the agent sleeps and drain as one batch at wake.",methods:["put(agent_id, msg)","drain(agent_id)"]},
- signalbus:{n:"SignalBus",k:"PROTOCOL",impls:[["PostgresSignalBus","INFRA"],["InMemorySignalBus","L1"]],
-   blurb:"At-most-once signal claims — the wake mechanism behind ask_human, timers and join(). consume() either claims the signal or the caller suspends until it arrives.",methods:["fire(run_id, name, payload)","consume(run_id, name, effect_id)"]},
- supervisor:{n:"Supervisor",k:"PROTOCOL",impls:[["Runtime backends","L1"]],
-   blurb:"Spawn-tree bookkeeping: parent/child runs, join semantics, and cancel cascade down the tree.",methods:["spawn()","join()","children()"]},
- effect:{n:"Effect/Result",k:"DATACLASS",impls:[],
-   blurb:"The journaled unit of work. A deterministic effect_id is the at-most-once key: replay hits the cache, the live path appends to the log.",methods:["Effect.make_id(run_id, path, kind, args)"]},
-
- agent:{n:"Agent[CtxT]",k:"PROTOCOL",mark:"new",impls:[["ReActAgent","L1"],["OrchestratorAgent","L1"],["UserProxyAgent","L1"]],
+ agent:{n:"Agent[CtxT]",k:"PROTOCOL",shape:"cpu",mark:"new",impls:[["ReActAgent","L1"],["OrchestratorAgent","L1"],["UserProxyAgent","L1"]],
    blurb:"The one contract every agent satisfies: a stable id and run(ctx, inbox), called each time the agent wakes. On crash or resume the coroutine re-runs from the top and journaled calls return cached results — durability is transparent.",
    methods:["id: AgentId","async run(ctx: CtxT, inbox) -> None"],
    note:"Unified 2026-07-12: two structurally-identical Agent Protocols (kernel + L1) became one generic contract. L1's Agent is now just Agent[RunContext] — a type alias, not a second declaration."},
- supervision:{n:"Supervision",k:"DATACLASS",mark:"new",impls:[["SpawnTracker","L1"],["ExecutionTracker","L1"]],
+
+ eventlog:{n:"EventLog",k:"PROTOCOL",shape:"ic",impls:[["PostgresEventLog","INFRA"],["InMemoryEventLog","L1"]],
+   blurb:"Append-only log — the single source of truth. Fold it to reconstruct any run; effects already recorded are never re-run. Conversation history and runtime coordination share this one substrate.",
+   methods:["append(run_id, entry)","read(run_id)","tail(run_id)"]},
+ scheduler:{n:"Scheduler",k:"PROTOCOL",shape:"ic",impls:[["PostgresScheduler","INFRA"],["InMemoryScheduler","L1"]],
+   blurb:"Run lifecycle: submit → lease → release. Suspension is release(SUSPENDED, wake_on=…) — a dormant run costs zero RAM and zero CPU until a signal or deadline wakes it.",
+   methods:["submit()","lease()","release(status, wake_on)","cancel_pending()"]},
+ inbox:{n:"Inbox",k:"PROTOCOL",shape:"ic",impls:[["PostgresInbox","INFRA"],["InMemoryInbox","L1"]],
+   blurb:"Durable per-agent mailbox. Messages accumulate while the agent sleeps and drain as one batch at wake.",methods:["put(agent_id, msg)","drain(agent_id)"]},
+ signalbus:{n:"SignalBus",k:"PROTOCOL",shape:"ic",impls:[["PostgresSignalBus","INFRA"],["InMemorySignalBus","L1"]],
+   blurb:"At-most-once signal claims — the wake mechanism behind ask_human, timers and join(). consume() either claims the signal or the caller suspends until it arrives.",methods:["fire(run_id, name, payload)","consume(run_id, name, effect_id)"]},
+ supervisor:{n:"Supervisor",k:"PROTOCOL",shape:"ic",impls:[["Runtime backends","L1"]],
+   blurb:"Spawn-tree bookkeeping: parent/child runs, join semantics, and cancel cascade down the tree.",methods:["spawn()","join()","children()"]},
+ effect:{n:"Effect/Result",k:"DATACLASS",shape:"smd",impls:[],
+   blurb:"The journaled unit of work. A deterministic effect_id is the at-most-once key: replay hits the cache, the live path appends to the log.",methods:["Effect.make_id(run_id, path, kind, args)"]},
+
+ supervision:{n:"Supervision",k:"DATACLASS",shape:"smd",mark:"new",impls:[["SpawnTracker","L1"],["ExecutionTracker","L1"]],
    blurb:"An agent's position in the org chart plus frozen policy: headcount caps, priority preemption, token/cost budget — inherited down the tree via ctx.spawn().",
    methods:["spawn_child()","is_root()","priority"],note:"ExecutionBudget enforcement wired 2026-07-12: it propagated to children but nothing built the tracker. Now resolved fresh per run."},
- runmeta:{n:"RunMeta",k:"DATACLASS",impls:[["CancellationToken","L1"]],
+ runmeta:{n:"RunMeta",k:"DATACLASS",shape:"smd",impls:[["CancellationToken","L1"]],
    blurb:"Execution-scoped metadata threaded through every kernel call: run_id, tenant, deadline, trace, cancellation, supervision. check() raises at cooperative cancellation points.",methods:["check()","is_expired()","child_token()"]},
- middleware:{n:"MiddlewareStage",k:"ENUM",impls:[["25 consumers","L1"]],
+ middleware:{n:"MiddlewareStage",k:"ENUM",shape:"smd",impls:[["25 consumers","L1"]],
    blurb:"Kernel keeps only the stage enum. The Middleware Protocol itself lives at L1 — it types against MiddlewareContext, which only exists there. A deliberate split, not drift.",methods:["TURN_START","PRE_LLM · POST_LLM","PRE_TOOL · POST_TOOL","TURN_END"]},
- compaction:{n:"Compaction",k:"PROTOCOL",impls:[["strategies/","L1"]],
+ compaction:{n:"CompactionStrategy",k:"PROTOCOL",shape:"smd",impls:[["strategies/","L1"]],
    blurb:"Turns raw history into a prompt window that fits. Concrete strategies live in agents/context/compaction.",methods:["compact(messages, budget)"]},
- agentctx:{n:"AgentContextProtocol",k:"UNDER REVIEW",mark:"rev",impls:[],
+ agentctx:{n:"AgentContextProtocol",k:"UNDER REVIEW",shape:"smd",mark:"rev",impls:[],
    blurb:"Flagged by the dead-symbol scan (2026-07-12): no traced consumer anywhere in src or tests. A socket nothing has ever plugged into — a candidate for deletion in the next audit pass.",methods:[]},
 
- llmclient:{n:"LLMClient",k:"PROTOCOL",impls:[["AnthropicClient","INT"],["OpenAIClient","INT"],["GeminiClient","INT"],["OpenAIChatCompletionClient","L2"],["FallbackClient","L1"]],
+ llmclient:{n:"LLMClient",k:"PROTOCOL",shape:"ic",impls:[["AnthropicClient","INT"],["OpenAIClient","INT"],["GeminiClient","INT"],["OpenAIChatCompletionClient","L2"],["FallbackClient","L1"]],
    blurb:"Provider-neutral chat contract. Streams TextDelta | ReasoningDelta | CompletionEvent; the assembled response is a list of content blocks, never provider dicts.",
    methods:["generate(messages, options)","generate_stream(messages, options)","count_tokens(messages)"]},
- embed:{n:"EmbeddingClient",k:"PROTOCOL",impls:[["OpenAIEmbeddingClient","INT"]],
+ embed:{n:"EmbeddingClient",k:"PROTOCOL",shape:"ic",impls:[["OpenAIEmbeddingClient","INT"]],
    blurb:"Vector-embedding contract used by the RAG pipelines.",methods:["embed(text)","embed_batch(texts)"]},
- stream:{n:"Stream types",k:"DATACLASS",mark:"new",impls:[],
+ stream:{n:"Stream types",k:"DATACLASS",shape:"smd",mark:"new",impls:[],
    blurb:"The token stream: TextDelta and ReasoningDelta arrive live; CompletionEvent carries the assembled content blocks; AgentProgress is the supervision-tree feed, one topic per run.",
    methods:["TextDelta","ReasoningDelta","CompletionEvent","StreamDone","AgentProgress"],
    note:"ReasoningDelta now lands in persisted content as a ReasoningBlock (2026-07-12) — reasoning survives replay instead of being streamed and discarded."},
 
- history:{n:"HistoryProvider",k:"PROTOCOL",impls:[["PostgresHistoryProvider","L2"],["RedisHistoryProvider","L2"],["InMemoryHistoryProvider","L1"]],
+ history:{n:"HistoryProvider",k:"PROTOCOL",shape:"dimm",impls:[["PostgresHistoryProvider","L2"],["RedisHistoryProvider","L2"],["InMemoryHistoryProvider","L1"]],
    blurb:"Conversation history per session — append and load, always async.",methods:["append(session_id, msg)","get_history(session_id)"]},
- vector:{n:"VectorStore",k:"PROTOCOL",impls:[["PgVectorStore","L2"],["InMemoryVectorStore","L1"]],
+ vector:{n:"VectorStore",k:"PROTOCOL",shape:"dimm",impls:[["PgVectorStore","L2"],["InMemoryVectorStore","L1"]],
    blurb:"Similarity search over Documents. A Document (a RAG chunk) is distinct from a DocumentBlock (LLM message content) — never conflated.",methods:["upsert(docs, collection)","search(query_vec, limit)","delete(ids)"]},
- graph:{n:"GraphStore",k:"PROTOCOL",impls:[["AGEGraphStore","L2"],["InMemoryGraphStore","L1"]],
+ graph:{n:"GraphStore",k:"PROTOCOL",shape:"dimm",impls:[["AGEGraphStore","L2"],["InMemoryGraphStore","L1"]],
    blurb:"Entity / relationship graph behind GraphRAG. CypherCapable is the optional query extension.",methods:["add_entity()","add_relationship()","subgraph(seed)"]},
- blob:{n:"BlobStore",k:"PROTOCOL",impls:[["S3FileStore","L2"],["InMemoryFileStore","L1"]],
+ blob:{n:"BlobStore",k:"PROTOCOL",shape:"dimm",impls:[["S3FileStore","L2"],["InMemoryFileStore","L1"]],
    blurb:"Opaque file / object storage for uploads and tool artifacts.",methods:["put(data)","get(file_id)","url(file_id)","delete(file_id)"]},
- tasks:{n:"TaskStore",k:"PROTOCOL",impls:[["PgTaskStore","INFRA"],["GlobalTaskStore","L1"]],
+ tasks:{n:"TaskStore",k:"PROTOCOL",shape:"dimm",impls:[["PgTaskStore","INFRA"],["GlobalTaskStore","L1"]],
    blurb:"Kanban board state, driven by TaskManagerTool and rendered live in the chat UI.",methods:["add()","update()","list()"]},
- memory:{n:"Memory",k:"PROTOCOL",impls:[["RedisSessionStore","L2"],["PostgresMemoryStore","L2"]],
+ memory:{n:"Memory",k:"PROTOCOL",shape:"dimm",impls:[["RedisSessionStore","L2"],["PostgresMemoryStore","L2"]],
    blurb:"Session-scoped (ShortTermMemory) and durable (LongTermMemory) contracts an agent reads at context-build time.",methods:["remember()","recall()","forget()"]},
 
- tool:{n:"Tool",k:"PROTOCOL",impls:[["CalculatorTool +19","L2"],["SkillTool","L2"],["MCPTool","INT"]],
+ tool:{n:"Tool",k:"PROTOCOL",shape:"pcie",impls:[["CalculatorTool +19","L2"],["SkillTool","L2"],["MCPTool","INT"]],
    blurb:"Structural typing is the whole trick: any class with name, description, input_schema and async execute(**kwargs) fits this slot. Drop it in capabilities/tools/ — the scanner discovers it. No base class, no registration.",
    methods:["name · description · input_schema · risk","async execute(*, ctx=None, **kwargs)"]},
- hosted:{n:"HostedTool",k:"PROTOCOL",impls:[["Provider-side (OpenAI…)","INT"]],
+ hosted:{n:"HostedTool",k:"PROTOCOL",shape:"pcie",impls:[["Provider-side (OpenAI…)","INT"]],
    blurb:"Provider declares and executes — web_search, code_interpreter, file_search. The agent loop never calls execute(); results come back inside the conversation.",methods:["provider_specs: dict[provider_id, JsonObject]"]},
- provdef:{n:"ProviderDefinedTool",k:"PROTOCOL",impls:[["Local handle_call() tools","L2"]],
+ provdef:{n:"ProviderDefinedTool",k:"PROTOCOL",shape:"pcie",impls:[["Local handle_call() tools","L2"]],
    blurb:"Provider defines the call shape; you execute locally via handle_call(). Dispatch checks is_provider_defined_tool() before is_hosted_tool() — both carry provider_specs.",methods:["provider_specs","async handle_call(call, ctx)"]},
- toolreg:{n:"ToolRegistry",k:"PROTOCOL",impls:[["Toolbox","L1"]],
+ toolreg:{n:"ToolRegistry",k:"PROTOCOL",shape:"ic",impls:[["Toolbox","L1"]],
    blurb:"A name-keyed collection of tools. Four operations — the agent loop needs nothing more.",methods:["get(name)","all()","names()","add(tool)"],
    note:"2026-07-12: Toolbox's dead schemas()/deferred_schemas()/schema_for() removed — zero callers. Wire-encoding lives per-provider in integrations/."},
- approval:{n:"ApprovalHandler",k:"PROTOCOL",mark:"new",impls:[["SSEApprovalHandler","SRV"],["CallbackAdapter","L1"]],
+ approval:{n:"ApprovalHandler",k:"PROTOCOL",shape:"ic",mark:"new",impls:[["SSEApprovalHandler","SRV"],["CallbackAdapter","L1"]],
    blurb:"The human gate for risky tool calls. ToolInvoker consults it at dispatch time for anything above the policy's risk ceiling; the run genuinely blocks until a decision arrives.",
    methods:["async request(req) -> ApprovalResult","APPROVED · DENIED · MODIFIED"],
    note:"Wired for real 2026-07-12. Before: three parallel approval abstractions existed and none reached a live agent — a CRITICAL-risk tool executed unguarded. Consolidated on this socket."},
 
- content:{n:"ContentBlock",k:"UNION",mark:"new",impls:[],
+ content:{n:"ContentBlock",k:"UNION",shape:"cells",mark:"new",impls:[],
    blurb:"The universal multimodal payload — every message, tool result and event is list[ContentBlock]. Discriminated on the type field; unknown types round-trip losslessly.",
    methods:["Text · Image · Audio · Video · Document","Data · Code · Error · Reasoning","ToolUse · ToolResult"],
    note:"ReasoningBlock added 2026-07-12 — with the signature field extended-thinking round-trips require (the old ThinkingBlock lacked it). UIResourceBlock stayed deleted: the live MCP-app UI uses _meta.ui.resourceUri instead."},
- errors:{n:"Error taxonomy",k:"ERRORS",impls:[],
+ errors:{n:"Error taxonomy",k:"ERRORS",shape:"fuse",impls:[],
    blurb:"Classification drives retry: PermanentError never retries, BudgetExhaustedError kills the branch, SuspendInterrupt is a BaseException so agent code can't accidentally swallow a suspension.",
    methods:["KernelError · AgentCrashError","PermanentError · BudgetExhaustedError","MiddlewareTermination · CancellationError","SuspendInterrupt · ConcurrentAppend · ThreadBusy"]},
- ids:{n:"Message/Ids/Usage",k:"DATACLASS",impls:[],
+ ids:{n:"Message/Ids/Usage",k:"DATACLASS",shape:"smd",impls:[],
    blurb:"Addressing and accounting. Message carries target/payload/reply_to; Usage tracks reasoning_tokens alongside input/output, so extended-thinking spend is first-class.",
    methods:["Message(target, payload, reply_to)","AgentId · TopicId","Usage.__add__ (accumulates)"]},
 };
 
-const ZONES=[
- {c:"A",n:"RUNTIME",r:"event-sourced core",socks:["eventlog","scheduler","inbox","signalbus","supervisor","effect"]},
- {c:"B",n:"AGENT",r:"intelligence & policy",socks:["agent","supervision","runmeta","middleware","compaction","agentctx"]},
- {c:"C",n:"LLM",r:"provider-neutral",socks:["llmclient","embed","stream"]},
- {c:"D",n:"STORAGE",r:"pluggable backends",socks:["history","vector","graph","blob","tasks","memory"]},
- {c:"E",n:"TOOLS",r:"structural typing",socks:["tool","hosted","provdef","toolreg","approval"]},
- {c:"F",n:"CONTENT",r:"multimodal payload",socks:["content","errors","ids"]},
-];
+const CELL_TYPES=["Text","Image","Audio","Video","Document","Data","Code","Error","Reasoning","ToolUse","ToolResult"];
 
-/* ---- render ---- */
-const zwrap=document.getElementById("k-zones");
-for(const z of ZONES){
-  const zEl=document.createElement("div");zEl.className="zone";
-  zEl.innerHTML=`<div class="zone-h"><span class="zc">${z.c}</span><span class="zn">${z.n}</span><span class="zr">${z.r}</span></div>`;
-  const nEl=document.createElement("div");nEl.className="nodes";
-  for(const id of z.socks){
-    const sk=S[id];
-    const p=sk.impls&&sk.impls.length?sk.impls[0]:null;
-    const card=document.createElement("div");
-    card.className="node"+(p?" plugged":"");
-    if(p) card.style.setProperty("--l",LY[p[1]][0]);
-    card.tabIndex=0;card.setAttribute("role","button");card.dataset.id=id;
-    card.setAttribute("aria-label",sk.n+" — "+sk.k+(p?", implemented by "+p[0]:""));
-    const mk=sk.mark?`<span class="mk ${sk.mark}"></span>`:"";
-    card.innerHTML=`${mk}<span class="kd">${KD[sk.k]||"?"}</span><span class="nm">${sk.n}</span>${p?'<span class="lb"></span>':""}`;
-    nEl.appendChild(card);
-  }
-  zEl.appendChild(nEl);zwrap.appendChild(zEl);
+const MOD={eventlog:"runtime/log_entry.py",scheduler:"runtime/scheduler.py",inbox:"runtime/inbox.py",signalbus:"runtime/wakeup.py",
+ supervisor:"runtime/supervisor.py",effect:"runtime/effects.py",agent:"runtime/agent.py",supervision:"agent/supervision.py",
+ runmeta:"agent/runtime_context.py",middleware:"agent/middleware.py",compaction:"agent/context.py",agentctx:"agent/context.py",
+ llmclient:"llm/llm.py",embed:"llm/llm.py",stream:"messaging/stream.py",history:"storage/history.py",vector:"storage/vector.py",
+ graph:"storage/graph.py",blob:"storage/blob.py",tasks:"storage/tasks.py",memory:"storage/memory.py",tool:"tools/tools.py",
+ hosted:"tools/tools.py",provdef:"tools/tools.py",toolreg:"tools/tools.py",approval:"tools/approval.py",content:"core/content.py",
+ errors:"core/errors.py",ids:"core/ + messaging/message.py"};
+for(const k in MOD) if(S[k]) S[k].mod=MOD[k];
+
+/* ---- helpers ---- */
+function primaryLayer(id){const im=S[id].impls;return im&&im.length?im[0][1]:null;}
+function markHTML(id){const m=S[id].mark;return m?`<span class="mk ${m==='rev'?'rev':'new'}"></span>`:"";}
+function plugClass(id){return primaryLayer(id)?" plugged":"";}
+function plugStyle(id){const ly=primaryLayer(id);return ly?` style="--l:${LY[ly][0]}"`:"";}
+
+function renderIC(id){
+  return `<div class="ic${plugClass(id)}" data-id="${id}" tabindex="0" role="button"${plugStyle(id)}
+    aria-label="${S[id].n} — ${S[id].k}">${markHTML(id)}
+    <span class="lbl">${S[id].n}</span><span class="kd">${S[id].k}</span>
+    <div class="ic-fill"></div></div>`;
+}
+function renderDIMM(id){
+  return `<div class="dimm${plugClass(id)}" data-id="${id}" tabindex="0" role="button"${plugStyle(id)}
+    aria-label="${S[id].n} — ${S[id].k}">${markHTML(id)}
+    <span class="cap"></span>
+    <span class="txt"><span class="lbl">${S[id].n}</span><span class="kd">${S[id].k}</span></span>
+    <span class="teeth"></span></div>`;
+}
+function renderPCIE(id){
+  return `<div class="pcie${plugClass(id)}" data-id="${id}" tabindex="0" role="button"${plugStyle(id)}
+    aria-label="${S[id].n} — ${S[id].k}">${markHTML(id)}
+    <span class="teeth"></span><span class="cap"></span>
+    <span class="lbl">${S[id].n}</span></div>`;
+}
+function renderSMD(id){
+  return `<div class="smd${plugClass(id)}" data-id="${id}" tabindex="0" role="button"${plugStyle(id)}
+    aria-label="${S[id].n} — ${S[id].k}">${markHTML(id)}${S[id].n}<span class="cap"></span></div>`;
+}
+function renderFuse(id){
+  const items=(S[id].methods.length?9:9);
+  let row="";
+  for(let i=0;i<9;i++) row+=`<span class="fuse"><span class="leg"></span><span class="body"></span><span class="leg"></span></span>`;
+  return `<div class="fuses" data-id="${id}" tabindex="0" role="button" aria-label="${S[id].n}">${row}
+    <span class="fuse-cap">F0–F8 · ${S[id].n}</span></div>`;
+}
+function renderCells(id){
+  let row="";
+  CELL_TYPES.forEach(t=>{row+=`<span class="cell${t==='Reasoning'?' hero':''}">${t}</span>`;});
+  return `<div class="cells" data-id="${id}" tabindex="0" role="button" aria-label="${S[id].n}">${row}</div>`;
 }
 
-/* ---- state toggle ---- */
+/* ---- zone builder ---- */
+function zone(cls,c,n,r,inner){
+  return `<section class="zone ${cls}"><div class="zone-h"><span class="zc">${c}</span>
+    <span class="zn">${n}</span><span class="zr">${r}</span></div>${inner}</section>`;
+}
+
+const grid=document.getElementById("k-grid");
+grid.innerHTML =
+  zone("z-storage","A","STORAGE BUS","pluggable backends — S0–S5",
+    `<div class="dimms">${["history","vector","graph","blob","tasks","memory"].map(renderDIMM).join("")}</div>`)
++ zone("z-llm","B","LLM PHY","provider-neutral",
+    `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}</div>
+     <div class="sub">STREAM</div><div class="smds">${renderSMD("stream")}</div>`)
++ zone("z-cpu","C","RUNTIME CHIPSET","event-sourced core — Agent[CtxT] socket",
+    `<div class="cpu-wrap">
+       <div class="cpu-rows">
+         <div class="cpu-col">${renderIC("signalbus")}${renderIC("supervisor")}${renderSMD("effect")}</div>
+         <div class="cpu" data-id="agent" tabindex="0" role="button" aria-label="Agent[CtxT] — PROTOCOL, implemented by ReActAgent">
+           <div class="cpu-label"><span class="t1">AGENT&#91;CTXT&#93;</span><span class="t2">SOCKET CTX-0</span></div>
+           <div class="cpu-seat"><div><span class="t1">ReActAgent</span><br><span class="t2">L1</span></div></div></div>
+         <div class="cpu-col">${renderIC("eventlog")}${renderIC("scheduler")}${renderIC("inbox")}</div>
+       </div>
+     </div>`)
++ zone("z-tools","D","TOOL EXPANSION","structural typing",
+    `<div class="pcies">${["tool","hosted","provdef"].map(renderPCIE).join("")}</div>
+     <div class="smds" style="flex-direction:column">${renderIC("toolreg")}${renderIC("approval")}</div>`)
++ zone("z-agentp","E","AGENT & POLICY","supervision surface",
+    `<div class="smds">${["supervision","runmeta","middleware","compaction","agentctx"].map(renderSMD).join("")}</div>`)
++ zone("z-content","F","CONTENT","multimodal payload",
+    `${renderCells("content")}<div class="sub">FAULT PROTECTION</div>${renderFuse("errors")}
+     <div class="smds" style="margin-top:8px">${renderSMD("ids")}</div>`);
+
+/* ---- bus traces: computed from real rendered positions, not guessed ---- */
+const board=document.getElementById("k-board"), svg=document.getElementById("bus-svg");
+const BUS_ZONES=[".z-storage",".z-llm",".z-tools",".z-agentp",".z-content"];
+function layoutBuses(){
+  const bRect=board.getBoundingClientRect();
+  const cr0=document.querySelector(".cpu").getBoundingClientRect();
+  const cr={left:cr0.left-bRect.left,right:cr0.right-bRect.left,top:cr0.top-bRect.top,bottom:cr0.bottom-bRect.top};
+  cr.cx=(cr.left+cr.right)/2; cr.cy=(cr.top+cr.bottom)/2;
+  svg.innerHTML="";
+  const ns="http://www.w3.org/2000/svg";
+  BUS_ZONES.forEach(sel=>{
+    const z=document.querySelector(sel); if(!z) return;
+    const r0=z.getBoundingClientRect();
+    const r={left:r0.left-bRect.left,right:r0.right-bRect.left,top:r0.top-bRect.top,bottom:r0.bottom-bRect.top};
+    r.cx=(r.left+r.right)/2; r.cy=(r.top+r.bottom)/2;
+
+    // Decide relation by which axis the two rects overlap more on: heavy
+    // x-overlap means they're stacked (connect top/bottom); heavy y-overlap
+    // means they're side-by-side (connect left/right).
+    const xOverlap=Math.min(r.right,cr.right)-Math.max(r.left,cr.left);
+    const yOverlap=Math.min(r.bottom,cr.bottom)-Math.max(r.top,cr.top);
+    let sx,sy,ex,ey,bendX,bendY;
+    if(xOverlap>yOverlap){
+      sx=r.cx; ex=cr.cx;
+      if(r.top<cr.top){ sy=r.bottom; ey=cr.top; } else { sy=r.top; ey=cr.bottom; }
+      bendY=(sy+ey)/2; bendX=null;
+    } else {
+      sy=r.cy; ey=cr.cy;
+      if(r.left<cr.left){ sx=r.right; ex=cr.left; } else { sx=r.left; ex=cr.right; }
+      bendX=(sx+ex)/2; bendY=null;
+    }
+    const d = bendY!==null
+      ? `M${sx},${sy} L${sx},${bendY} L${ex},${bendY} L${ex},${ey}`
+      : `M${sx},${sy} L${bendX},${sy} L${bendX},${ey} L${ex},${ey}`;
+
+    const p=document.createElementNS(ns,"path"); p.setAttribute("d",d); p.setAttribute("class","bus");
+    const f=document.createElementNS(ns,"path"); f.setAttribute("d",d); f.setAttribute("class","bus-flow");
+    f.style.animationDelay=(-Math.random()*2.6).toFixed(2)+"s";
+    const via=document.createElementNS(ns,"circle"); via.setAttribute("cx",sx); via.setAttribute("cy",sy);
+    via.setAttribute("r",3); via.setAttribute("class","bus-via");
+    svg.appendChild(p); svg.appendChild(f); svg.appendChild(via);
+  });
+}
+let raf;
+function scheduleLayout(){cancelAnimationFrame(raf);raf=requestAnimationFrame(layoutBuses);}
+addEventListener("resize",scheduleLayout);
+addEventListener("load",scheduleLayout);
+requestAnimationFrame(()=>requestAnimationFrame(layoutBuses));
+
+/* ---- power / population toggles ---- */
 const root=document.getElementById("k-root");
+const bOff=document.getElementById("b-off"),bOn=document.getElementById("b-on");
 const bBare=document.getElementById("b-bare"),bPop=document.getElementById("b-pop");
+function setPower(on){root.classList.toggle("on",on);bOff.setAttribute("aria-pressed",!on);bOn.setAttribute("aria-pressed",on);}
 function setPop(pop,animate){
   if(animate){
-    const nodes=[...document.querySelectorAll(".node.plugged")];
-    nodes.forEach((n,i)=>n.style.transitionDelay=(i*16)+"ms");
-    setTimeout(()=>nodes.forEach(n=>n.style.transitionDelay=""),nodes.length*16+420);
+    const nodes=[...document.querySelectorAll(".plugged")];
+    nodes.forEach((n,i)=>n.style.transitionDelay=(i*18)+"ms");
+    setTimeout(()=>nodes.forEach(n=>n.style.transitionDelay=""),nodes.length*18+450);
   }
-  root.classList.toggle("pop",pop);
-  bBare.setAttribute("aria-pressed",!pop);bPop.setAttribute("aria-pressed",pop);
+  root.classList.toggle("pop",pop);bBare.setAttribute("aria-pressed",!pop);bPop.setAttribute("aria-pressed",pop);
 }
-bBare.onclick=()=>setPop(false,true);
-bPop.onclick=()=>setPop(true,true);
+bOff.onclick=()=>setPower(false); bOn.onclick=()=>setPower(true);
+bBare.onclick=()=>setPop(false,true); bPop.onclick=()=>setPop(true,true);
 document.getElementById("b-replay").onclick=()=>{
-  setPop(false,false);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>setPop(true,true)));
+  setPower(false); setPop(false,false);
+  setTimeout(()=>setPop(true,true),200);
+  setTimeout(()=>setPower(true),650);
 };
+
 const reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-if(reduce){ setPop(true,false); } else { setPop(false,false); setTimeout(()=>setPop(true,true),380); }
+if(reduce){ setPower(true); setPop(true,false); }
+else { setPower(false); setPop(false,false); setTimeout(()=>setPop(true,true),300); setTimeout(()=>setPower(true),900); }
 
 /* ---- detail panel ---- */
 const panel=document.getElementById("k-panel"),scrim=document.getElementById("k-scrim");
@@ -366,24 +565,20 @@ function open(id){
   panel.classList.add("open");panel.setAttribute("aria-hidden","false");scrim.classList.add("on");
 }
 function close(){panel.classList.remove("open");panel.setAttribute("aria-hidden","true");scrim.classList.remove("on");}
-zwrap.addEventListener("click",e=>{const c=e.target.closest(".node");if(c)open(c.dataset.id);});
-zwrap.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){const c=e.target.closest(".node");if(c){e.preventDefault();open(c.dataset.id);}}});
+document.body.addEventListener("click",e=>{
+  const c=e.target.closest("[data-id]");
+  if(c) open(c.dataset.id);
+  else if(!e.target.closest("#k-panel")) close();
+});
+document.body.addEventListener("keydown",e=>{
+  if(e.key==="Enter"||e.key===" "){const c=e.target.closest("[data-id]");if(c){e.preventDefault();open(c.dataset.id);}}
+});
 document.getElementById("pk-x").onclick=close;scrim.onclick=close;
 addEventListener("keydown",e=>{if(e.key==="Escape")close();});
 
-const MOD={eventlog:"runtime/log_entry.py",scheduler:"runtime/scheduler.py",inbox:"runtime/inbox.py",signalbus:"runtime/wakeup.py",
- supervisor:"runtime/supervisor.py",effect:"runtime/effects.py",agent:"runtime/agent.py",supervision:"agent/supervision.py",
- runmeta:"agent/runtime_context.py",middleware:"agent/middleware.py",compaction:"agent/context.py",agentctx:"agent/context.py",
- llmclient:"llm/llm.py",embed:"llm/llm.py",stream:"messaging/stream.py",history:"storage/history.py",vector:"storage/vector.py",
- graph:"storage/graph.py",blob:"storage/blob.py",tasks:"storage/tasks.py",memory:"storage/memory.py",tool:"tools/tools.py",
- hosted:"tools/tools.py",provdef:"tools/tools.py",toolreg:"tools/tools.py",approval:"tools/approval.py",content:"core/content.py",
- errors:"core/errors.py",ids:"core/ + messaging/message.py"};
-for(const k in MOD) if(S[k]) S[k].mod=MOD[k];
-
 /* ---- report height to a parent iframe (docs/index.md embeds this page) ---- */
 if(window.parent && window.parent!==window){
-  const report=()=>window.parent.postMessage(
-    {kboardHeight:document.documentElement.scrollHeight},"*");
+  const report=()=>window.parent.postMessage({kboardHeight:document.documentElement.scrollHeight},"*");
   new ResizeObserver(report).observe(document.body);
   addEventListener("load",report);
 }

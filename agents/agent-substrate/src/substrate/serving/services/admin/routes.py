@@ -26,6 +26,7 @@ from substrate.serving.services.admin.service import (
     get_platform_stats,
     get_tenant,
     list_tenants,
+    write_audit_log,
 )
 
 logger = setup_logging()
@@ -118,6 +119,14 @@ async def create_tenant_endpoint(
         slug=body.slug,
         plan=body.plan,
         settings=body.settings,
+    )
+    await write_audit_log(
+        db,
+        action="tenant.created",
+        tenant_id=str(tenant.id),
+        resource_type="tenant",
+        resource_id=str(tenant.id),
+        details={"name": tenant.name, "slug": tenant.slug, "plan": tenant.plan},
     )
     return TenantOut(
         id=str(tenant.id),

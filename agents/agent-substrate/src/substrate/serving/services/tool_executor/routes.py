@@ -23,7 +23,10 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from substrate.serving.services.tool_executor.executor import execute_tool
+from substrate.serving.services.tool_executor.executor import (
+    execute_and_publish,
+    execute_tool,
+)
 
 logger = setup_logging()
 
@@ -161,13 +164,25 @@ async def execute_tool_endpoint(body: ToolExecuteBody, request: Request):
     the Artifact service and replaced with file_id references.
     """
     registry = request.app.state.tool_registry
-    result = await execute_tool(
-        registry=registry,
-        tool_name=body.tool_name,
-        arguments=body.arguments,
-        tool_call_id=body.tool_call_id,
-        timeout=body.timeout,
-    )
+    if body.run_id and body.thread_id:
+        result = await execute_and_publish(
+            registry=registry,
+            tool_name=body.tool_name,
+            arguments=body.arguments,
+            tool_call_id=body.tool_call_id,
+            run_id=body.run_id,
+            thread_id=body.thread_id,
+            event_bus=request.app.state.event_bus,
+            timeout=body.timeout,
+        )
+    else:
+        result = await execute_tool(
+            registry=registry,
+            tool_name=body.tool_name,
+            arguments=body.arguments,
+            tool_call_id=body.tool_call_id,
+            timeout=body.timeout,
+        )
 
     # File output bridge: save CI-generated files to Artifact service
     if (

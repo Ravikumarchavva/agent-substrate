@@ -254,3 +254,6 @@ Thumbs.db
 # Logs & temp files
 logs/
 *.tmp
+
+# Graphify knowledge-graph output (generated, multi-MB)
+graphify-out/

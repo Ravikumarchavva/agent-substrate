@@ -13,8 +13,8 @@ on each model config handles the round-trip automatically.
 
 Adding a new block type:
   1. Define the class (frozen pydantic model, Literal ``type`` field).
-  2. Call ``register_block_type(YourBlock)`` — or add to the curated union
-     below if it is a first-class protocol primitive.
+  2. Add it to the ``ContentBlock`` discriminated union and ``_BLOCK_REGISTRY``
+     below.
   3. Add to ``__all__``.
 
 Provider adapters in ``integrations/`` handle the final wire-format conversion
@@ -292,52 +292,6 @@ class ToolResultBlock(BaseModel):
         return f"{prefix}: {self.call_id}] {inner}"
 
 
-class ThinkingBlock(BaseModel):
-    """Agent reasoning / chain-of-thought trace.
-
-    Extended-thinking models expose thinking tokens.
-    Storing them typed lets consumers render, redact, or skip cleanly.
-    """
-
-    type: Literal["thinking"] = "thinking"
-    text: str
-    redacted: bool = False
-
-    model_config = {"frozen": True}
-
-    def to_text_repr(self) -> str:
-        if self.redacted:
-            return "[Thinking: redacted]"
-        return f"[Thinking] {self.text}"
-
-
-class UIResourceBlock(BaseModel):
-    """An interactive UI rendered in a sandboxed iframe.
-
-    The narrow waist for any rich tool UI. A tool emits a single
-    self-describing reference: a ``ui://`` resource URI plus opaque
-    structured data. The host renders the resource in a sandboxed
-    iframe; ``structured_content`` is UI-facing and model-invisible.
-
-    - ``uri``                 the ``ui://name`` resource to render
-    - ``structured_content``  opaque data passed to the iframe
-    - ``text``                model-facing fallback (LLM cannot see pixels)
-    - ``render``              host placement hint
-    """
-
-    type: Literal["ui_resource"] = "ui_resource"
-    uri: str
-    mime_type: str = "text/html;profile=mcp-app"
-    structured_content: JsonObject = Field(default_factory=dict)
-    text: str = ""
-    render: Literal["inline", "panel", "fullscreen"] = "inline"
-
-    model_config = {"frozen": True}
-
-    def to_text_repr(self) -> str:
-        return self.text or f"[interactive UI: {self.uri}]"
-
-
 class UnknownBlock(BaseModel):
     """Lossless carrier for block types not recognized by this version.
 
@@ -393,9 +347,7 @@ ContentBlock = Annotated[
     | CodeBlock
     | ErrorBlock
     | ToolUseBlock
-    | ToolResultBlock
-    | ThinkingBlock
-    | UIResourceBlock,
+    | ToolResultBlock,
     Field(discriminator="type"),
 ]
 """Universal multimodal payload primitive.
@@ -403,23 +355,8 @@ ContentBlock = Annotated[
 Every agent message and tool result is a ``list[ContentBlock]``.
 """
 
-CONTENT_BLOCK_TYPES: tuple[type, ...] = (
-    TextBlock,
-    ImageBlock,
-    AudioBlock,
-    VideoBlock,
-    DocumentBlock,
-    DataBlock,
-    CodeBlock,
-    ErrorBlock,
-    ToolUseBlock,
-    ToolResultBlock,
-    ThinkingBlock,
-    UIResourceBlock,
-)
-
 # ---------------------------------------------------------------------------
-# Block registry — extensible, public
+# Block registry
 # ---------------------------------------------------------------------------
 
 _BLOCK_REGISTRY: dict[str, type[BaseModel]] = {
@@ -433,31 +370,7 @@ _BLOCK_REGISTRY: dict[str, type[BaseModel]] = {
     "error": ErrorBlock,
     "tool_use": ToolUseBlock,
     "tool_result": ToolResultBlock,
-    "thinking": ThinkingBlock,
-    "ui_resource": UIResourceBlock,
 }
-
-
-def register_block_type(cls: type[BaseModel]) -> None:
-    """Register a custom block type for use in ``content_block_from_dict``.
-
-    ``cls`` must have a ``type`` class attribute (the string discriminator).
-    Call this once at module load time, before any deserialization happens.
-
-    Example::
-
-        class ChartBlock(BaseModel):
-            type: Literal["chart"] = "chart"
-            data: dict
-
-        register_block_type(ChartBlock)
-    """
-    type_name = getattr(cls, "type", None)
-    if type_name is None:
-        type_name = getattr(cls.model_fields.get("type"), "default", None)
-    if not isinstance(type_name, str):
-        raise TypeError(f"{cls.__name__} must have a string 'type' class attribute")
-    _BLOCK_REGISTRY[type_name] = cls
 
 
 # ---------------------------------------------------------------------------
@@ -509,12 +422,8 @@ __all__ = [
     "ErrorBlock",
     "ToolUseBlock",
     "ToolResultBlock",
-    "ThinkingBlock",
-    "UIResourceBlock",
     "UnknownBlock",
     "ContentBlock",
-    "CONTENT_BLOCK_TYPES",
-    "register_block_type",
     "content_block_from_dict",
     "content_blocks_to_str",
     "ChatMessage",

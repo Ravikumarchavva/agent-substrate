@@ -170,22 +170,6 @@ def test_message_round_trip() -> None:
     assert restored.payload.message.role == "user"
 
 
-def test_event_round_trip() -> None:
-    """Event must serialize/deserialize cleanly."""
-    from substrate.kernel.messaging.events import Event
-    from substrate.kernel.core.identity import AgentId
-
-    agent = AgentId(type="test", key="a")
-    ev = Event.create("agent.started", source=agent, data={"step": 1})
-
-    json_str = ev.model_dump_json()
-    restored = Event.model_validate_json(json_str)
-
-    assert restored.id == ev.id
-    assert restored.type == "agent.started"
-    assert restored.data["step"] == 1
-
-
 def test_content_block_unknown_preserved() -> None:
     """Unknown block types must be preserved as UnknownBlock, not silently mangled."""
     from substrate.kernel.core.content import content_block_from_dict, UnknownBlock
@@ -209,31 +193,3 @@ def test_content_block_invalid_raises() -> None:
         assert False, "Should have raised BlockValidationError"
     except BlockValidationError:
         pass
-
-
-def test_custom_payload_serialization_round_trip() -> None:
-    """A custom payload registered via register_payload_type is correctly deserialized from JSON."""
-    from typing import Literal
-    from substrate.kernel.core.identity import AgentId
-    from substrate.kernel.messaging.message import Message, register_payload_type
-    from substrate.kernel.tools import PayloadBase
-
-    class CustomTestPayload(PayloadBase):
-        kind: Literal["custom_test"] = "custom_test"
-        info: str
-
-    register_payload_type(CustomTestPayload)
-
-    agent = AgentId(type="test", key="custom")
-    payload = CustomTestPayload(info="hello world")
-    msg = Message(target=agent, payload=payload)
-
-    # Convert to JSON string
-    json_str = msg.model_dump_json()
-
-    # Deserialize back
-    restored = Message.model_validate_json(json_str)
-
-    assert restored.payload.kind == "custom_test"
-    assert isinstance(restored.payload, CustomTestPayload)
-    assert restored.payload.info == "hello world"

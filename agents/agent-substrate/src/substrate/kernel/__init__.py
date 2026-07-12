@@ -20,13 +20,9 @@ from substrate.kernel.core.content import (
     ErrorBlock,
     ToolUseBlock,
     ToolResultBlock,
-    ThinkingBlock,
-    UIResourceBlock,
     UnknownBlock,
     ChatMessage,
     ContentBlock,
-    CONTENT_BLOCK_TYPES,
-    register_block_type,
     content_block_from_dict,
     content_blocks_to_str,
 )
@@ -44,14 +40,9 @@ from substrate.kernel.agent.supervision import (
 from substrate.kernel.tools.tools import (
     ToolRisk,
     ToolType,
-    ToolExecution,
     ToolUI,
     ToolCallRequest,
     ToolExecutionResult,
-    FunctionSpec,
-    ProviderSpec,
-    ToolSpec,
-    spec_of,
     Tool,
     HostedTool,
     ProviderDefinedTool,
@@ -63,10 +54,7 @@ from substrate.kernel.tools.tools import (
 from substrate.kernel.messaging.message import (
     ChatPayload,
     DataPayload,
-    ControlPayload,
-    ProgressPayload,
     Payload,
-    register_payload_type,
     Message,
     Subscription,
 )
@@ -84,14 +72,11 @@ from substrate.kernel.agent.context import CompactionStrategy, AgentContextProto
 from substrate.kernel.agent.middleware import MiddlewareStage
 from substrate.kernel.core.errors import (
     KernelError,
-    AgentNotFoundError,
-    HandlerError,
     AgentCrashError,
     BudgetExhaustedError,
     MiddlewareTermination,
     CancellationError,
     ConcurrentAppendError,
-    SpawnDenied,
 )
 from substrate.kernel.messaging.stream import (
     TextDelta,
@@ -112,12 +97,6 @@ from substrate.kernel.storage.graph import (
 )
 from substrate.kernel.storage.memory import Memory, ShortTermMemory, LongTermMemory
 from substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
-from substrate.kernel.messaging.events import (
-    Event,
-    EventHandler,
-    EventPublisher,
-    EventSubscriber,
-)
 from substrate.kernel.tools.approval import (
     ApprovalDecision,
     ApprovalRequest,
@@ -172,13 +151,9 @@ __all__ = [
     "ErrorBlock",
     "ToolUseBlock",
     "ToolResultBlock",
-    "ThinkingBlock",
-    "UIResourceBlock",
     "UnknownBlock",
     "ChatMessage",
     "ContentBlock",
-    "CONTENT_BLOCK_TYPES",
-    "register_block_type",
     "content_block_from_dict",
     "content_blocks_to_str",
     # Identity
@@ -193,14 +168,9 @@ __all__ = [
     # Tools
     "ToolRisk",
     "ToolType",
-    "ToolExecution",
     "ToolUI",
     "ToolCallRequest",
     "ToolExecutionResult",
-    "FunctionSpec",
-    "ProviderSpec",
-    "ToolSpec",
-    "spec_of",
     "Tool",
     "HostedTool",
     "ProviderDefinedTool",
@@ -211,10 +181,7 @@ __all__ = [
     # Payload types
     "ChatPayload",
     "DataPayload",
-    "ControlPayload",
-    "ProgressPayload",
     "Payload",
-    "register_payload_type",
     # Messaging
     "Message",
     "Subscription",
@@ -236,14 +203,11 @@ __all__ = [
     "MiddlewareStage",
     # Errors
     "KernelError",
-    "AgentNotFoundError",
-    "HandlerError",
     "AgentCrashError",
     "BudgetExhaustedError",
     "MiddlewareTermination",
     "CancellationError",
     "ConcurrentAppendError",
-    "SpawnDenied",
     # Token stream
     "TextDelta",
     "ReasoningDelta",
@@ -270,11 +234,6 @@ __all__ = [
     # Execution context
     "CancellationToken",
     "RunMeta",
-    # Events (generic pub/sub envelope)
-    "Event",
-    "EventHandler",
-    "EventPublisher",
-    "EventSubscriber",
     # HITL
     "ApprovalDecision",
     "ApprovalRequest",

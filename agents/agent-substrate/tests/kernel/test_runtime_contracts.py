@@ -24,7 +24,7 @@ import pytest
 
 from substrate.kernel.core.identity import AgentId, TopicId
 from substrate.kernel.messaging.message import Message, DataPayload
-from substrate.kernel.core.errors import ConcurrentAppendError, SpawnDenied
+from substrate.kernel.core.errors import ConcurrentAppendError
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.agents.runtime.cancellation import CancellationToken
 from substrate.kernel.agent.supervision import Supervision
@@ -539,13 +539,6 @@ class TestConcurrentAppendError:
         assert err.expected_seq == 2
         assert err.actual_seq == 5
         assert "race" in str(err)
-
-
-class TestSpawnDenied:
-    def test_fields(self) -> None:
-        err = SpawnDenied("budget hit", parent_run="p1", budget=50)
-        assert err.parent_run == "p1"
-        assert err.budget == 50
 
 
 # ---------------------------------------------------------------------------

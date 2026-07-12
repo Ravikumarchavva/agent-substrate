@@ -9,12 +9,6 @@ the message to its target and returns the recipient's reply.
     ToolCallRequest     — a request to execute a tool       (defined in tools.py)
     ToolExecutionResult — the result of a tool execution    (defined in tools.py)
     DataPayload         — arbitrary JSON-serializable structured data
-    ControlPayload      — runtime control signals (pause, cancel, handoff)
-    ProgressPayload     — an AgentProgress event
-
-Use ``register_payload_type()`` to add custom payload kinds at runtime.
-Custom types **must** subclass ``PayloadBase`` — this is enforced at
-registration time so deserialization is always safe.
 
 All message types are pydantic models so ``message.model_dump_json()``
 round-trips cleanly for any transport (Kafka, NATS, Redis Streams, etc.).
@@ -30,7 +24,6 @@ from pydantic import BaseModel, Field, SerializeAsAny, field_validator
 
 from substrate.kernel.core.content import ChatMessage, JsonObject
 from substrate.kernel.core.identity import AgentId, TopicId
-from substrate.kernel.messaging.stream import AgentProgress
 from substrate.kernel.tools import PayloadBase, ToolCallRequest, ToolExecutionResult
 
 
@@ -57,22 +50,6 @@ class DataPayload(PayloadBase):
     data: JsonObject
 
 
-class ControlPayload(PayloadBase):
-    """Runtime control signal — pause, cancel, handoff, etc."""
-
-    kind: Literal["control"] = "control"  # pyright: ignore[reportIncompatibleVariableOverride]
-    signal: str
-    data: JsonObject = Field(default_factory=dict)
-
-
-class ProgressPayload(PayloadBase):
-    """Payload carrying an agent progress event."""
-
-    kind: Literal["progress"] = "progress"  # pyright: ignore[reportIncompatibleVariableOverride]
-    progress: AgentProgress
-    model_config = {"frozen": True, "arbitrary_types_allowed": True}
-
-
 # ---------------------------------------------------------------------------
 # Payload type alias
 #
@@ -91,25 +68,7 @@ _PAYLOAD_REGISTRY: dict[str, type[PayloadBase]] = {
     "tool_call": ToolCallRequest,
     "tool_result": ToolExecutionResult,
     "data": DataPayload,
-    "control": ControlPayload,
-    "progress": ProgressPayload,
 }
-
-
-def register_payload_type(cls: type[BaseModel]) -> None:
-    """Register a custom payload kind for runtime deserialization.
-
-    ``cls`` must subclass ``PayloadBase`` and have a ``kind`` Literal field.
-    Call once at module load time, before any messages of that kind arrive.
-    """
-    if not (isinstance(cls, type) and issubclass(cls, PayloadBase)):
-        raise TypeError(f"{cls.__name__} must subclass PayloadBase")
-    kind = getattr(cls, "kind", None)
-    if kind is None:
-        kind = getattr(cls.model_fields.get("kind"), "default", None)
-    if not isinstance(kind, str):
-        raise TypeError(f"{cls.__name__} must have a string 'kind' class attribute")
-    _PAYLOAD_REGISTRY[kind] = cls
 
 
 # ---------------------------------------------------------------------------
@@ -190,10 +149,7 @@ __all__ = [
     "PayloadBase",
     "ChatPayload",
     "DataPayload",
-    "ControlPayload",
-    "ProgressPayload",
     "Payload",
-    "register_payload_type",
     "ToolCallRequest",
     "ToolExecutionResult",
     "Message",

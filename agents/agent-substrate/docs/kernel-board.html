@@ -6,7 +6,7 @@
 <title>SUBSTRATE — Kernel Contract Board</title>
 <meta name="description" content="A motherboard-style diagram of the agent-substrate kernel (Layer 0): the Agent as CPU, storage as DIMM slots, tools as PCIe cards — every socket traced to its real implementation.">
 <style>
-  html,body{margin:0;padding:0;background:#081109;min-height:100vh}
+  html,body{margin:0;padding:0;background:#081109;min-height:100%}
   :root{
     --ground:#081109; --board:#0f2317; --board-edge:#1d3d2c; --panel:#122a1c;
     --silk:#d7e4da; --silk-dim:#8fa596; --rule:#1f3d2b;
@@ -19,13 +19,40 @@
   }
   *{box-sizing:border-box}
   #k-root{background:var(--ground);color:var(--silk);font-family:var(--mono);
-    -webkit-font-smoothing:antialiased;padding:clamp(5px,1vh,10px) 14px;
-    display:flex;flex-direction:column}
-  #k-wrap{width:100%;flex:1;display:flex;flex-direction:column;position:relative}
+    -webkit-font-smoothing:antialiased;padding:20px 20px 26px;min-height:100vh}
+  #k-wrap{max-width:1220px;margin:0 auto}
+
+  /* ---- header ---- */
+  .k-top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;
+    padding-bottom:12px;border-bottom:1px solid var(--rule);margin-bottom:12px}
+  .k-id h1{font-size:17px;font-weight:700;letter-spacing:.06em;margin:0;color:var(--silk);
+    display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .k-id h1 span{font-family:var(--sans);font-size:10.5px;font-weight:400;letter-spacing:.1em;color:var(--silk-dim)}
+  .k-ctrl{display:flex;align-items:center;gap:14px;flex:none}
+  .leds{display:flex;gap:12px;align-items:center}
+  .led{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.1em;color:var(--silk-dim)}
+  .led i{width:6px;height:6px;border-radius:50%;background:var(--silk-dim);opacity:.3;transition:opacity .3s,background .3s}
+  #k-root.on .led.pwr i{opacity:1;background:var(--lit)}
+  #k-root.on .led.act i{opacity:1;background:var(--L2);animation:blink 1.6s steps(2) infinite}
+  #k-root.on .led.lnt i{opacity:1;background:#7ec98f}
+  @keyframes blink{50%{opacity:.2}}
+  .seg{display:flex;border:1px solid var(--copper);border-radius:3px;overflow:hidden}
+  .seg button{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;padding:6px 10px;border:0;
+    background:transparent;color:var(--silk-dim);cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--lit);color:var(--ground)}
+  .seg button:focus-visible{outline:2px solid var(--glow);outline-offset:1px}
+  .k-replay{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;padding:6px 10px;
+    background:none;border:1px solid var(--rule);border-radius:3px;color:var(--silk-dim);cursor:pointer}
+  .k-replay:hover{border-color:var(--copper);color:var(--silk)}
+  .k-replay:focus-visible{outline:2px solid var(--glow);outline-offset:1px}
+
+  /* ---- legend glyphs (rule lives near k-foot at the bottom of the page) ---- */
+  .dot{width:6px;height:6px;border-radius:1px;flex:none;display:inline-block}
+  .ring{width:6px;height:6px;border-radius:50%;border:1.2px solid var(--review);flex:none;display:inline-block}
 
   /* ---- board ---- */
   .k-board{position:relative;border:1px solid var(--board-edge);border-radius:8px;background:var(--board);
-    padding:clamp(8px,1.6vh,16px) 22px;flex:1;display:flex;flex-direction:column;justify-content:center;
+    padding:22px;
     background-image:radial-gradient(var(--rule) 1px,transparent 1px);
     background-size:16px 16px}
   .k-board .hole{position:absolute;width:9px;height:9px;border-radius:50%;border:1.2px solid var(--gold);opacity:.55}
@@ -39,51 +66,50 @@
   #k-root.on .bus-flow{opacity:.95;animation:flow 2.6s linear infinite}
   @keyframes flow{to{stroke-dashoffset:-98}}
 
-  /* Seven subsystems, one job each -- the same discipline a real board
-     uses to separate CPU/RAM from chipset from storage controllers from
-     GPU from VRM from I/O shield. Core (CPU+RAM) is the dominant,
-     tightly-coupled center. Slots (PCIe/GPU-style expansion) sit in their
-     own column, deliberately apart -- powerful, but optional, not on the
-     CPU's own bus. */
-  .k-grid{position:relative;display:grid;z-index:1;width:100%;
-    grid-template-columns:minmax(220px,1.3fr) minmax(180px,1fr) minmax(180px,1fr) minmax(160px,.55fr);
-    grid-template-areas:"core    core   chipset slots" "storage accel  power   slots" "io      io     io      slots";
-    gap:clamp(10px,2vh,20px) 44px}
+  /* Eight zones: storage bus + tool expansion frame the board top-to-bottom
+     on the outside; LLM PHY feeds the chipset from the left; the runtime
+     chipset (with the Agent socket at its center) is the dominant middle;
+     supervision/messaging/content sit underneath as the policy + payload
+     layer; proto area is reserved, deliberately near-empty. */
+  .k-grid{position:relative;display:grid;z-index:1;
+    grid-template-columns:minmax(190px,1fr) minmax(190px,1fr) minmax(190px,1fr) minmax(160px,.6fr);
+    grid-template-areas:
+      "storage storage storage tools"
+      "llmphy  chipset chipset tools"
+      "superv  messaging content proto";
+    gap:16px 30px}
   @media(max-width:900px){
     .k-grid{grid-template-columns:1fr;
-      grid-template-areas:"core" "chipset" "storage" "accel" "power" "io" "slots"}
+      grid-template-areas:"storage" "llmphy" "chipset" "superv" "messaging" "content" "tools" "proto"}
   }
 
-  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;
-    padding:clamp(8px,1.4vh,16px) 26px clamp(8px,1.4vh,16px);
-    min-width:0;display:flex;flex-direction:column}
-  .zone-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px}
-  .z-core{grid-area:core}.z-chipset{grid-area:chipset}
-  .z-storage{grid-area:storage}.z-accel{grid-area:accel}.z-power{grid-area:power}
-  .z-io{grid-area:io}
-  .z-slots{grid-area:slots;display:flex;flex-direction:column;gap:12px}
+  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:12px 14px 14px;min-width:0}
+  .z-storage{grid-area:storage}.z-llmphy{grid-area:llmphy}.z-chipset{grid-area:chipset}
+  .z-tools{grid-area:tools;display:flex;flex-direction:column;gap:12px}
+  .z-superv{grid-area:superv}.z-messaging{grid-area:messaging}.z-content{grid-area:content}
+  .z-proto{grid-area:proto;display:flex;flex-direction:column}
 
-  .zone-h{display:flex;align-items:baseline;gap:7px;margin-bottom:clamp(3px,.8vh,6px)}
+  .zone-h{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
   .zone-h .zc{font-size:8.5px;color:var(--gold);letter-spacing:.06em;font-weight:700;
     border:1px solid var(--gold);border-radius:50%;width:13px;height:13px;display:inline-flex;
     align-items:center;justify-content:center;flex:none}
-  .zone-h .zn{font-size:12.5px;letter-spacing:.13em;font-weight:700;color:var(--silk)}
-  .zone-h .zr{font-family:var(--sans);font-size:10.5px;color:var(--silk-dim);margin-left:auto;text-align:right}
+  .zone-h .zn{font-size:10.5px;letter-spacing:.13em;font-weight:700;color:var(--silk)}
+  .zone-h .zr{font-family:var(--sans);font-size:9px;color:var(--silk-dim);margin-left:auto;text-align:right}
 
   /* ===================== component shapes ===================== */
 
   /* -- generic node: name, kind glyph, click target -- */
   [data-id]{cursor:pointer}
   [data-id]:focus-visible{outline:2px solid var(--glow);outline-offset:2px;border-radius:2px}
-  .lbl{font-weight:600;color:var(--silk);font-size:12px}
-  .kd{font-size:8.5px;letter-spacing:.06em;color:var(--silk-dim)}
+  .lbl{font-weight:600;color:var(--silk);font-size:10px}
+  .kd{font-size:7px;letter-spacing:.06em;color:var(--silk-dim)}
   .mk{position:absolute;top:-4px;right:-4px;width:6px;height:6px;z-index:1}
   .mk.new{background:var(--new);border-radius:1px}
   .mk.rev{border:1.2px solid var(--review);border-radius:50%;background:var(--panel)}
 
   /* -- CPU: the Agent socket -- */
-  .cpu-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:clamp(3px,.6vh,6px) 0 clamp(1px,.3vh,2px)}
-  .cpu{position:relative;width:clamp(120px,16vh,220px);height:clamp(120px,16vh,220px);flex:none;border:1.6px solid var(--gold);border-radius:6px;
+  .cpu-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:6px 0 2px}
+  .cpu{position:relative;width:174px;height:174px;border:1.6px solid var(--gold);border-radius:6px;
     background:var(--chip);transition:background .3s}
   .cpu::before{content:"";position:absolute;inset:14px;border-radius:3px;
     background-image:radial-gradient(var(--gold) 1.1px,transparent 1.3px);background-size:13px 13px;opacity:.4}
@@ -98,42 +124,13 @@
   .cpu-seat .t1{font-size:12px;font-weight:700;color:var(--silk)}
   .cpu-seat .t2{font-size:7.5px;letter-spacing:.08em;color:var(--L1);margin-top:3px}
   .cpu-cap{font-size:8.5px;letter-spacing:.14em;color:var(--gold);text-align:center}
-  .cpu-cluster{display:flex;gap:30px;width:100%;justify-content:center;flex-wrap:wrap;align-items:center}
-  .dimm-col{display:flex;flex-direction:column;gap:12px;flex:1 1 200px;max-width:300px}
-  .dimm-col .dimm{padding:clamp(5px,.9vh,8px) 12px}
-  .dimm-col .dimm .lbl{font-size:10.5px}
-
-  /* -- IC: small chipset/support chips -- */
-  .ic{position:relative;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
-    padding:clamp(5px,1.1vh,9px) 15px clamp(5px,1.1vh,9px);transition:border-color .16s,background .16s}
-  .ic:hover{border-color:var(--gold)}
-  .ic::before,.ic::after{content:"";position:absolute;left:6px;right:6px;height:2px;
-    background-image:repeating-linear-gradient(90deg,var(--copper) 0 3px,transparent 3px 7px);opacity:.7}
-  .ic::before{top:-3px}.ic::after{bottom:-3px}
-  #k-root.on .ic::before,#k-root.on .ic::after{
-    background-image:repeating-linear-gradient(90deg,var(--gold) 0 3px,transparent 3px 7px);opacity:1}
-  .ic .lbl{display:block}
-  .ic .kd{display:block;margin-top:1px}
-  .ic-fill{margin-top:4px;height:3px;border-radius:2px;background:var(--l);opacity:0;transform:scaleX(.3);
-    transition:opacity .35s,transform .35s}
-  #k-root.pop .ic.plugged .ic-fill{opacity:1;transform:scaleX(1)}
-
-  /* -- DIMM: storage slots, flanking the CPU cluster -- */
-  .dimm{position:relative;display:flex;align-items:center;gap:10px;border:1.2px solid var(--copper);
-    border-radius:2px;background:var(--chip);padding:clamp(6px,1.1vh,10px) 17px;transition:border-color .16s}
-  .dimm:hover{border-color:var(--gold)}
-  .dimm .teeth{position:absolute;left:8px;right:8px;bottom:-3px;height:3px;
-    background-image:repeating-linear-gradient(90deg,var(--copper) 0 4px,transparent 4px 8px);opacity:.7}
-  #k-root.on .dimm .teeth{background-image:repeating-linear-gradient(90deg,var(--gold) 0 4px,transparent 4px 8px);opacity:1}
-  .dimm .cap{width:6px;align-self:stretch;border-radius:1px;background:var(--l);opacity:0;transition:opacity .35s}
-  #k-root.pop .dimm.plugged .cap{opacity:1}
-  .dimm .txt{display:flex;flex-direction:column;gap:1px;min-width:0}
-  .dimm .lbl{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cpu-cluster{display:flex;gap:16px;width:100%;justify-content:center;flex-wrap:wrap;align-items:flex-start}
+  .cpu-col{display:flex;flex-direction:column;gap:7px;width:132px}
 
   /* -- PCIe: tool expansion cards -- */
-  .pcies{display:flex;gap:10px;align-items:stretch;flex:1;min-height:clamp(110px,16vh,200px)}
+  .pcies{display:flex;gap:7px;align-items:stretch;height:150px}
   .pcie{position:relative;flex:1;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
-    display:flex;align-items:flex-end;justify-content:center;padding-bottom:12px;transition:border-color .16s}
+    display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;transition:border-color .16s}
   .pcie:hover{border-color:var(--gold)}
   .pcie .teeth{position:absolute;top:6px;bottom:6px;left:-3px;width:3px;
     background-image:repeating-linear-gradient(180deg,var(--copper) 0 4px,transparent 4px 8px);opacity:.7}
@@ -141,12 +138,12 @@
   .pcie .cap{position:absolute;top:-4px;left:6px;right:6px;height:5px;border-radius:1px;background:var(--l);
     opacity:0;transition:opacity .35s}
   #k-root.pop .pcie.plugged .cap{opacity:1}
-  .pcie .lbl{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;white-space:nowrap;letter-spacing:.03em}
+  .pcie .lbl{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;white-space:nowrap;letter-spacing:.03em}
 
   /* -- SMD: small surface-mount contracts -- */
-  .smds{display:flex;flex-wrap:wrap;gap:9px}
-  .smd{position:relative;border:1.2px dashed var(--copper);border-radius:2px;padding:clamp(5px,.9vh,9px) 16px;
-    font-size:13px;transition:border-color .16s,background .16s}
+  .smds{display:flex;flex-wrap:wrap;gap:6px}
+  .smd{position:relative;border:1.2px dashed var(--copper);border-radius:2px;padding:4px 7px;
+    font-size:9.5px;transition:border-color .16s,background .16s}
   .smd:hover{border-color:var(--gold)}
   #k-root.on .smd{border-style:solid}
   .smd .cap{position:absolute;left:3px;right:3px;bottom:-2px;height:2px;border-radius:2px;background:var(--l);
@@ -155,21 +152,62 @@
   #k-root.pop .smd.plugged .cap{opacity:1}
 
   /* -- fuse row (errors) -- */
-  .fuses{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+  .fuses{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .fuse{display:flex;align-items:center;gap:0;cursor:pointer}
-  .fuse .body{width:26px;height:12px;border-radius:6px;border:1.2px solid var(--gold);background:var(--chip)}
-  .fuse .leg{width:5px;height:1.6px;background:var(--copper)}
-  .fuse-cap{font-family:var(--sans);font-size:10.5px;color:var(--silk-dim);margin-left:8px}
+  .fuse .body{width:20px;height:9px;border-radius:5px;border:1.2px solid var(--gold);background:var(--chip)}
+  .fuse .leg{width:4px;height:1.4px;background:var(--copper)}
+  .fuse-cap{font-family:var(--sans);font-size:9px;color:var(--silk-dim);margin-left:6px}
 
   /* -- content-block cell strip -- */
-  .cells{display:flex;flex-wrap:wrap;gap:6px;cursor:pointer}
-  .cell{border:1.1px solid var(--copper);border-radius:2px;padding:clamp(4px,.7vh,7px) 14px;font-size:12.5px;letter-spacing:.03em;
+  .cells{display:flex;flex-wrap:wrap;gap:4px;cursor:pointer}
+  .cell{border:1.1px solid var(--copper);border-radius:2px;padding:3px 6px;font-size:8px;letter-spacing:.03em;
     color:var(--silk-dim);transition:border-color .16s,color .16s}
   .cells:hover .cell{border-color:var(--gold);color:var(--silk)}
   .cell.hero{color:var(--new);border-color:var(--new)}
 
-  .sub{font-size:10px;letter-spacing:.14em;color:var(--silk-dim);margin:clamp(5px,1vh,9px) 0 clamp(3px,.6vh,5px);
-    border-bottom:1px solid var(--rule);padding-bottom:5px}
+  .sub{font-size:8.5px;letter-spacing:.14em;color:var(--silk-dim);margin:11px 0 6px;
+    border-bottom:1px solid var(--rule);padding-bottom:4px}
+
+  /* ---- consumer bus strip ---- */
+  .consumer-bus{position:relative;z-index:1;margin-top:14px;padding-top:12px;border-top:1px solid var(--rule);
+    display:flex;flex-direction:column;gap:6px}
+  .cb-ticks{display:flex;gap:3px;height:4px}
+  .cb-ticks span{flex:1;background:var(--copper);opacity:.55;border-radius:1px;transition:background .3s,opacity .3s}
+  #k-root.on .cb-ticks span{background:var(--gold);opacity:.9}
+  .cb-cap{font-size:9px;letter-spacing:.1em;color:var(--silk-dim);text-align:center}
+
+  /* ---- F.R.U. tray ---- */
+  .fru-tray{margin-top:14px;border:1px dashed var(--board-edge);border-radius:8px;min-height:64px;
+    background-image:radial-gradient(var(--rule) 1px,transparent 1px);background-size:16px 16px;
+    display:flex;align-items:flex-start;padding:10px 16px}
+  .fru-cap{font-size:9.5px;letter-spacing:.06em;color:var(--silk-faint)}
+
+  /* ---- socket: dashed empty pad + solid real-chip beneath ---- */
+  .sock-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+  .sock{position:relative;display:flex;flex-direction:column;gap:3px;cursor:pointer}
+  .sock:focus-visible{outline:2px solid var(--glow);outline-offset:2px;border-radius:2px}
+  .sock-cap{font-size:8px;letter-spacing:.08em;color:var(--silk-dim)}
+  .sock-empty{height:6px;border:1px dashed var(--copper);border-radius:2px;opacity:.55;transition:opacity .2s}
+  .sock:hover .sock-empty{opacity:.9;border-color:var(--gold)}
+  .sock-chip{display:flex;align-items:center;gap:6px;border:1.2px solid var(--copper);border-radius:2px;
+    background:var(--chip);padding:6px 9px;font-size:10.5px;font-weight:600;color:var(--silk);
+    transition:border-color .16s}
+  .sock:hover .sock-chip{border-color:var(--gold)}
+  .sock-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--l,var(--rule));flex:none;
+    box-shadow:0 0 5px var(--l,transparent)}
+  .sock-chip.empty{color:var(--silk-faint);font-style:italic;font-weight:400}
+
+  /* ---- proto area: reserved, deliberately empty ---- */
+  .proto-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;flex:1}
+  .proto-dot{aspect-ratio:1;border:1px dashed var(--rule);border-radius:2px;opacity:.5}
+  .proto-note{font-family:var(--sans);font-size:9.5px;color:var(--silk-faint);line-height:1.5;margin:10px 0 0}
+
+  /* ---- bus caption + footer ---- */
+  .k-key{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;
+    font-size:9.5px;letter-spacing:.02em;color:var(--silk-dim)}
+  .k-key .kk{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .k-foot{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:8px;
+    font-family:var(--sans);font-size:9.5px;color:var(--silk-dim)}
 
   /* ---- detail panel ---- */
   #k-scrim{position:fixed;inset:0;z-index:39;background:rgba(4,8,5,.45);opacity:0;pointer-events:none;transition:opacity .28s}
@@ -205,12 +243,54 @@
 </head>
 <body>
 
-<div id="k-root" class="on pop">
+<div id="k-root">
  <div id="k-wrap">
+  <div class="k-top">
+   <div class="k-id">
+    <h1>SUBSTRATE-K0 <span>KERNEL L0 · CONTRACT BOARD · PROTOCOLS ARE SOCKETS</span></h1>
+   </div>
+   <div class="k-ctrl">
+    <div class="leds">
+      <span class="led pwr"><i></i>PWR</span>
+      <span class="led act"><i></i>ACT</span>
+      <span class="led lnt"><i></i>LNT 5/5</span>
+    </div>
+    <div class="seg" role="group" aria-label="Power">
+     <button id="b-off" aria-pressed="false">OFF</button>
+     <button id="b-on" aria-pressed="true">POWER</button>
+    </div>
+    <div class="seg" role="group" aria-label="Population">
+     <button id="b-bare" aria-pressed="false">BARE</button>
+     <button id="b-pop" aria-pressed="true">CHIPS</button>
+    </div>
+    <button class="k-replay" id="b-replay">↻ REBOOT</button>
+   </div>
+  </div>
+
   <div class="k-board" id="k-board">
    <span class="hole tl"></span><span class="hole tr"></span><span class="hole bl"></span><span class="hole br"></span>
    <svg id="bus-svg"></svg>
    <div class="k-grid" id="k-grid"></div>
+   <div class="consumer-bus">
+    <div class="cb-ticks" id="cb-ticks"></div>
+    <span class="cb-cap">CONSUMER BUS — L1 AGENTS · L2 CAPABILITIES · L3 FABRIC (IMPORTS FLOW DOWN ONLY)</span>
+   </div>
+  </div>
+
+  <div class="fru-tray"><span class="fru-cap">F.R.U. TRAY — FIELD-REPLACEABLE UNITS (EJECTED IMPLEMENTATIONS)</span></div>
+
+  <div class="k-key">
+   <span class="kk"><span class="dot" style="background:var(--L1)"></span>L1 agents</span>
+   <span class="kk"><span class="dot" style="background:var(--L2)"></span>L2 capabilities</span>
+   <span class="kk"><span class="dot" style="background:var(--INT)"></span>integrations</span>
+   <span class="kk"><span class="dot" style="background:var(--INFRA)"></span>infrastructure</span>
+   <span class="kk"><span class="dot" style="background:var(--SRV)"></span>serving</span>
+   <span class="kk"><span class="dot" style="background:var(--new)"></span>changed 07-12</span>
+   <span class="kk"><span class="ring"></span>under review</span>
+  </div>
+  <div class="k-foot">
+   <span>src/substrate/kernel — 40 files, 4.9K LOC · import-linter 5/5 · pyright 0 err</span>
+   <span>tests 499 pass</span>
   </div>
  </div>
 </div>
@@ -257,6 +337,8 @@ const S={
    blurb:"Spawn-tree bookkeeping: parent/child runs, join semantics, and cancel cascade down the tree.",methods:["spawn()","join()","children()"]},
  effect:{n:"Effect/Result",k:"DATACLASS",shape:"smd",impls:[],
    blurb:"The journaled unit of work. A deterministic effect_id is the at-most-once key: replay hits the cache, the live path appends to the log.",methods:["Effect.make_id(run_id, path, kind, args)"]},
+ fanout:{n:"Fanout/Follow",k:"DATACLASS",shape:"smd",impls:[],
+   blurb:"How a signal or completion propagates to watchers. FollowGraph tracks who's waiting on a run; FanoutStrategy decides whether they're notified one at a time or all at once.",methods:["FollowGraph.add(watcher)","FanoutStrategy.ALL · FIRST"]},
 
  supervision:{n:"Supervision",k:"DATACLASS",shape:"smd",mark:"new",impls:[["SpawnTracker","L1"],["ExecutionTracker","L1"]],
    blurb:"An agent's position in the org chart plus frozen policy: headcount caps, priority preemption, token/cost budget — inherited down the tree via ctx.spawn().",
@@ -315,20 +397,27 @@ const S={
  errors:{n:"Error taxonomy",k:"ERRORS",shape:"fuse",impls:[],
    blurb:"Classification drives retry: PermanentError never retries, BudgetExhaustedError kills the branch, SuspendInterrupt is a BaseException so agent code can't accidentally swallow a suspension.",
    methods:["KernelError · AgentCrashError","PermanentError · BudgetExhaustedError","MiddlewareTermination · CancellationError","SuspendInterrupt · ConcurrentAppend · ThreadBusy"]},
- ids:{n:"Message/Ids/Usage",k:"DATACLASS",shape:"smd",impls:[],
-   blurb:"Addressing and accounting. Message carries target/payload/reply_to; Usage tracks reasoning_tokens alongside input/output, so extended-thinking spend is first-class.",
-   methods:["Message(target, payload, reply_to)","AgentId · TopicId","Usage.__add__ (accumulates)"]},
+ message:{n:"Message",k:"DATACLASS",shape:"smd",impls:[],
+   blurb:"The addressed envelope every inbox drains: a target, a payload, and an optional reply_to for request/response round-trips.",
+   methods:["target: AgentId","payload: Payload","reply_to: AgentId | None"]},
+ subscription:{n:"Subscription",k:"DATACLASS",shape:"smd",impls:[],
+   blurb:"A standing interest registration — who gets fanned out to when a topic fires, independent of any single message.",
+   methods:["topic: TopicId","subscriber: AgentId"]},
+ ids:{n:"Ids/Usage",k:"DATACLASS",shape:"smd",impls:[],
+   blurb:"Addressing and accounting primitives. AgentId/TopicId are the address space; Usage tracks reasoning_tokens alongside input/output, so extended-thinking spend is first-class.",
+   methods:["AgentId · TopicId","Usage.__add__ (accumulates)"]},
 };
 
-const CELL_TYPES=["Text","Image","Audio","Video","Document","Data","Code","Error","Reasoning","ToolUse","ToolResult"];
+const CELL_TYPES=["Text","Image","Audio","Video","Document","Data","Code","Error","Reasoning","ToolUse","ToolResult","Unknown"];
 
 const MOD={eventlog:"runtime/log_entry.py",scheduler:"runtime/scheduler.py",inbox:"runtime/inbox.py",signalbus:"runtime/wakeup.py",
- supervisor:"runtime/supervisor.py",effect:"runtime/effects.py",agent:"runtime/agent.py",supervision:"agent/supervision.py",
+ supervisor:"runtime/supervisor.py",effect:"runtime/effects.py",fanout:"runtime/fanout.py + runtime/follow_graph.py",
+ agent:"runtime/agent.py",supervision:"agent/supervision.py",
  runmeta:"agent/runtime_context.py",middleware:"agent/middleware.py",compaction:"agent/context.py",agentctx:"agent/context.py",
  llmclient:"llm/llm.py",embed:"llm/llm.py",stream:"messaging/stream.py",history:"storage/history.py",vector:"storage/vector.py",
  graph:"storage/graph.py",blob:"storage/blob.py",tasks:"storage/tasks.py",memory:"storage/memory.py",tool:"tools/tools.py",
  hosted:"tools/tools.py",provdef:"tools/tools.py",toolreg:"tools/tools.py",approval:"tools/approval.py",content:"core/content.py",
- errors:"core/errors.py",ids:"core/ + messaging/message.py"};
+ errors:"core/errors.py",message:"messaging/message.py",subscription:"messaging/message.py",ids:"core/identity.py + core/usage.py"};
 for(const k in MOD) if(S[k]) S[k].mod=MOD[k];
 
 /* ---- helpers ---- */
@@ -337,18 +426,16 @@ function markHTML(id){const m=S[id].mark;return m?`<span class="mk ${m==='rev'?'
 function plugClass(id){return primaryLayer(id)?" plugged":"";}
 function plugStyle(id){const ly=primaryLayer(id);return ly?` style="--l:${LY[ly][0]}"`:"";}
 
-function renderIC(id){
-  return `<div class="ic${plugClass(id)}" data-id="${id}" tabindex="0" role="button"${plugStyle(id)}
-    aria-label="${S[id].n} — ${S[id].k}">${markHTML(id)}
-    <span class="lbl">${S[id].n}</span><span class="kd">${S[id].k}</span>
-    <div class="ic-fill"></div></div>`;
-}
-function renderDIMM(id){
-  return `<div class="dimm${plugClass(id)}" data-id="${id}" tabindex="0" role="button"${plugStyle(id)}
-    aria-label="${S[id].n} — ${S[id].k}">${markHTML(id)}
-    <span class="cap"></span>
-    <span class="txt"><span class="lbl">${S[id].n}</span><span class="kd">${S[id].k}</span></span>
-    <span class="teeth"></span></div>`;
+function renderSocket(id,slot){
+  const d=S[id]; const impl=d.impls&&d.impls[0]; const ly=impl?impl[1]:null;
+  const cap=(slot!==undefined?`S${slot} · `:"")+d.n.toUpperCase();
+  const chip=impl
+    ? `<div class="sock-chip" style="--l:${LY[ly][0]}"><span class="dot"></span>${impl[0]}</div>`
+    : `<div class="sock-chip empty">— unplugged —</div>`;
+  return `<div class="sock" data-id="${id}" tabindex="0" role="button" aria-label="${d.n} — ${d.k}">${markHTML(id)}
+    <span class="sock-cap">${cap}</span>
+    <span class="sock-empty"></span>
+    ${chip}</div>`;
 }
 function renderPCIE(id){
   return `<div class="pcie${plugClass(id)}" data-id="${id}" tabindex="0" role="button"${plugStyle(id)}
@@ -376,44 +463,52 @@ function renderCells(id){
 /* ---- zone builder ---- */
 function zone(cls,c,n,r,inner){
   return `<section class="zone ${cls}"><div class="zone-h"><span class="zc">${c}</span>
-    <span class="zn">${n}</span><span class="zr">${r}</span></div>
-    <div class="zone-body">${inner}</div></section>`;
+    <span class="zn">${n}</span><span class="zr">${r}</span></div>${inner}</section>`;
 }
 
 const grid=document.getElementById("k-grid");
 grid.innerHTML =
-  zone("z-core","A","RUNTIME CORE","Agent[CtxT] + working memory, one cluster",
+  zone("z-storage","A","STORAGE BUS","DIMM slots S0–S5",
+    `<div class="sock-grid">${
+      [["history",0],["vector",1],["graph",2],["blob",3],["tasks",4],["memory",5]]
+        .map(([id,slot])=>renderSocket(id,slot)).join("")}</div>`)
++ zone("z-llmphy","B","LLM PHY","the CPU calls out for compute — swappable like a GPU brand",
+    `<div class="sock-grid" style="grid-template-columns:1fr">${renderSocket("llmclient")}${renderSocket("embed")}</div>`)
++ zone("z-chipset","C","RUNTIME CHIPSET — EVENT-SOURCED CORE","socket CTX-0 · Agent[CtxT] — one contract, parametrized",
     `<div class="cpu-wrap">
        <div class="cpu-cluster">
-         <div class="dimm-col">${["history"].map(renderDIMM).join("")}</div>
+         <div class="cpu-col">${renderSocket("signalbus")}${renderSocket("supervisor")}${renderSMD("effect")}${renderSMD("fanout")}</div>
          <div class="cpu" data-id="agent" tabindex="0" role="button" aria-label="Agent[CtxT] — PROTOCOL, implemented by ReActAgent">
            <div class="cpu-label"><span class="t1">AGENT&#91;CTXT&#93;</span><span class="t2">SOCKET CTX-0</span></div>
            <div class="cpu-seat"><div><span class="t1">ReActAgent</span><br><span class="t2">L1</span></div></div></div>
-         <div class="dimm-col">${["memory"].map(renderDIMM).join("")}</div>
+         <div class="cpu-col">${renderSocket("eventlog")}${renderSocket("scheduler")}${renderSocket("inbox")}</div>
        </div>
      </div>`)
-+ zone("z-chipset","B","SYSTEM CHIPSET","routing & coordination — invisible, always on",
-    `<div class="smds" style="flex-direction:column">${["eventlog","scheduler","inbox","signalbus","supervisor"].map(renderIC).join("")}</div>
-     <div class="smds" style="margin-top:8px">${renderSMD("effect")}</div>`)
-+ zone("z-storage","C","STORAGE CONTROLLERS","persistent stores behind a protocol",
-    `<div class="smds" style="flex-direction:column">${["vector","graph","blob","tasks"].map(renderDIMM).join("")}</div>`)
-+ zone("z-accel","D","COMPUTE ACCELERATOR","external compute, swappable brand",
-    `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}</div>
-     <div class="sub">STREAM</div><div class="smds">${renderSMD("stream")}</div>`)
-+ zone("z-power","E","POWER & GOVERNANCE","governs spend, not data",
++ zone("z-superv","D","SUPERVISION & RUN CONTEXT","supervision surface",
     `<div class="smds">${["supervision","runmeta","middleware","compaction","agentctx"].map(renderSMD).join("")}</div>`)
-+ zone("z-io","F","FRONT I/O","world-facing payload + fault protection",
++ zone("z-messaging","E","MESSAGING / STREAM BUS","addressing + live token stream",
+    `<div class="smds">${renderSMD("message")}${renderSMD("subscription")}</div>
+     <div class="smds" style="margin-top:8px">${renderSMD("stream")}</div>`)
++ zone("z-content","F","CORE — CONTENT CELL LIBRARY","multimodal payload",
     `${renderCells("content")}<div class="sub">FAULT PROTECTION</div>${renderFuse("errors")}
      <div class="smds" style="margin-top:8px">${renderSMD("ids")}</div>`)
-+ zone("z-slots","G","EXPANSION SLOTS","off the CPU's own bus",
++ zone("z-tools","G","TOOL EXPANSION","off the CPU's own bus",
     `<div class="pcies">${["tool","hosted","provdef"].map(renderPCIE).join("")}</div>
-     <div class="smds" style="flex-direction:column">${renderIC("toolreg")}${renderIC("approval")}</div>`);
+     <div class="sock-grid" style="grid-template-columns:1fr;margin-top:10px">${renderSocket("toolreg")}${renderSocket("approval")}</div>`)
++ zone("z-proto","H","PROTO AREA","reserved — zero-deps, pure-type sockets only",
+    `<div class="proto-grid">${Array.from({length:9}).map(()=>'<span class="proto-dot"></span>').join("")}</div>
+     <p class="proto-note">A contract earns a place here only when ≥2 layers above need it.</p>`);
 
-/* ---- bus traces: computed from real rendered positions, not guessed.
-   Everything outside the Core box gets a routed wire back to the CPU --
-   one rule, no special cases. ---- */
+/* ---- consumer bus ticks ---- */
+document.getElementById("cb-ticks").innerHTML = Array.from({length:44}).map(()=>"<span></span>").join("");
+
+/* ---- bus traces: computed from real rendered positions, not guessed. ---- */
 const board=document.getElementById("k-board"), svg=document.getElementById("bus-svg");
-const BUS_ZONES=[".z-chipset",".z-storage",".z-accel",".z-power",".z-io",".z-slots"];
+/* llmphy and tools sit directly beside the chipset zone -- a straight line
+   from either into the CPU's center would cut through the chipset's own
+   flanking sockets. They're visually adjacent already; only zones genuinely
+   separated by open board space (a full grid row) get a routed wire. */
+const BUS_ZONES=[".z-storage",".z-superv",".z-messaging",".z-content",".z-proto"];
 function layoutBuses(){
   const bRect=board.getBoundingClientRect();
   const cr0=document.querySelector(".cpu").getBoundingClientRect();
@@ -427,30 +522,15 @@ function layoutBuses(){
     const r={left:r0.left-bRect.left,right:r0.right-bRect.left,top:r0.top-bRect.top,bottom:r0.bottom-bRect.top};
     r.cx=(r.left+r.right)/2; r.cy=(r.top+r.bottom)/2;
 
-    // Decide relation by which axis the two rects overlap more on: heavy
-    // x-overlap means they're stacked (connect top/bottom); heavy y-overlap
-    // means they're side-by-side (connect left/right).
-    const xOverlap=Math.min(r.right,cr.right)-Math.max(r.left,cr.left);
-    const yOverlap=Math.min(r.bottom,cr.bottom)-Math.max(r.top,cr.top);
-    let sx,sy,ex,ey,bendX,bendY;
-    if(xOverlap>yOverlap){
-      sx=r.cx; ex=cr.cx;
-      if(r.top<cr.top){ sy=r.bottom; ey=cr.top; } else { sy=r.top; ey=cr.bottom; }
-      bendY=(sy+ey)/2; bendX=null;
-    } else {
-      // Enter right at the header/body seam rather than at the geometric
-      // vertical center -- for a tall zone the center can land mid-chip
-      // and the via dot collides with a label. Measured from the real
-      // zone-body element so it stays correct if header sizing changes.
-      const zb=z.querySelector(".zone-body");
-      const zbTop=zb?zb.getBoundingClientRect().top-bRect.top:r.top+30;
-      sy=Math.max(r.top+14,Math.min(zbTop-6,r.bottom)); ey=cr.cy;
-      if(r.left<cr.left){ sx=r.right; ex=cr.left; } else { sx=r.left; ex=cr.right; }
-      bendX=(sx+ex)/2; bendY=null;
-    }
-    const d = bendY!==null
-      ? `M${sx},${sy} L${sx},${bendY} L${ex},${bendY} L${ex},${ey}`
-      : `M${sx},${sy} L${bendX},${sy} L${bendX},${ey} L${ex},${ey}`;
+    // Every remaining zone sits strictly above or strictly below the
+    // chipset row -- never beside it. Route vertically only: the chipset's
+    // flanking sockets occupy its left/right space, but the lane directly
+    // above/below the CPU's own horizontal center is always clear.
+    let sx,sy,ex,ey,bendY;
+    sx=r.cx; ex=cr.cx;
+    if(r.cy<cr.cy){ sy=r.bottom; ey=cr.top; } else { sy=r.top; ey=cr.bottom; }
+    bendY=(sy+ey)/2;
+    const d = `M${sx},${sy} L${sx},${bendY} L${ex},${bendY} L${ex},${ey}`;
 
     const p=document.createElementNS(ns,"path"); p.setAttribute("d",d); p.setAttribute("class","bus");
     const f=document.createElementNS(ns,"path"); f.setAttribute("d",d); f.setAttribute("class","bus-flow");
@@ -466,18 +546,30 @@ addEventListener("resize",scheduleLayout);
 addEventListener("load",scheduleLayout);
 requestAnimationFrame(()=>requestAnimationFrame(layoutBuses));
 
-/* ---- one-time chip seat-in on load (no toggle -- always populated) ---- */
+/* ---- power / population toggles ---- */
 const root=document.getElementById("k-root");
-const reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-if(!reduce){
-  root.classList.remove("pop");
-  const nodes=[...document.querySelectorAll(".plugged")];
-  nodes.forEach((n,i)=>n.style.transitionDelay=(i*18)+"ms");
-  setTimeout(()=>{
-    root.classList.add("pop");
+const bOff=document.getElementById("b-off"),bOn=document.getElementById("b-on");
+const bBare=document.getElementById("b-bare"),bPop=document.getElementById("b-pop");
+function setPower(on){root.classList.toggle("on",on);bOff.setAttribute("aria-pressed",!on);bOn.setAttribute("aria-pressed",on);}
+function setPop(pop,animate){
+  if(animate){
+    const nodes=[...document.querySelectorAll(".plugged")];
+    nodes.forEach((n,i)=>n.style.transitionDelay=(i*18)+"ms");
     setTimeout(()=>nodes.forEach(n=>n.style.transitionDelay=""),nodes.length*18+450);
-  },300);
+  }
+  root.classList.toggle("pop",pop);bBare.setAttribute("aria-pressed",!pop);bPop.setAttribute("aria-pressed",pop);
 }
+bOff.onclick=()=>setPower(false); bOn.onclick=()=>setPower(true);
+bBare.onclick=()=>setPop(false,true); bPop.onclick=()=>setPop(true,true);
+document.getElementById("b-replay").onclick=()=>{
+  setPower(false); setPop(false,false);
+  setTimeout(()=>setPop(true,true),200);
+  setTimeout(()=>setPower(true),650);
+};
+
+const reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+if(reduce){ setPower(true); setPop(true,false); }
+else { setPower(false); setPop(false,false); setTimeout(()=>setPop(true,true),300); setTimeout(()=>setPower(true),900); }
 
 /* ---- detail panel ---- */
 const panel=document.getElementById("k-panel"),scrim=document.getElementById("k-scrim");

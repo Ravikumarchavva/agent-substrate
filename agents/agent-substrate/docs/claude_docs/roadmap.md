@@ -27,8 +27,8 @@ retried safely — at enterprise scale.
 |---|---|---|
 | **0** | Audit record; IDOR fix (thread ownership); stable advisory-lock key; rate-limiter fail-closed | **Done** (2026-07-02) — `get_owned_thread` + ownership on chat/cancel/hitl-status/threads/tasks/mcp-context; ownership stamped at creation; list scoped per user; legacy NULL-owner threads claim-on-first-access; sha256 `_lock_key`; `RATE_LIMIT_FAIL_OPEN=False` default (503 when Redis down); tests in `tests/serving/test_thread_ownership.py` |
 | **1** | Durable coordination core: hierarchical effect paths (**PR2 done**) → event-log-as-journal + fold (**PR3 done**) → PostgresSignalBus + scheduler columns (**PR4 done**) → durable suspend/resume via `SuspendInterrupt` (**PR5 done**) → PostgresSupervisor (**PR6 done**) → cancel cascade + deadlines + crash fast-path (**PR7 done**) → cleanup/GC/docs (**PR8 done**) | **Done** (2026-07-03) — all 7 PRs shipped; Phase 2 (horizontally scalable serving) is next |
-| **2** | Horizontally scalable serving: scheduler-enforced single-flight (kill `thread_locks`); cancel via durable signal (kill `cancel_registry`); HITL cross-replica via PostgresSignalBus; SSE-from-any-replica verification; memory-seed idempotency | **Done** (2026-07-03) — see "Recently shipped". Future-based tool-approval → signal migration (kills `WebHITLBridge._pending`) explicitly deferred (see below) |
-| **3** | Full multi-tenancy: `tenant_id` through thread ownership + `RunMeta`; per-tenant fair scheduling in `lease()`; wire `Supervision.execution_budget`/`spawn_child()` (was dead code) | **Done** (2026-07-03) — see "Recently shipped". `RedisHistoryProvider`/`GlobalTaskStore` tenant-keying and tenant-level quota aggregation/rate limits explicitly deferred (see below) |
+| **2** | Horizontally scalable serving: scheduler-enforced single-flight (kill `thread_locks`); cancel via durable signal (kill `cancel_registry`); HITL cross-replica via PostgresSignalBus; SSE-from-any-replica verification; memory-seed idempotency | **Done** (2026-07-03) — see "Recently shipped". Tool-approval durability/wiring: see the "Explicitly deferred" entries below — the 2026-07-12 kernel audit found this was worse than "Future-based," it wasn't wired to a live agent at all; now wired (kernel-Protocol-based), still Future-based (signal migration still open) |
+| **3** | Full multi-tenancy: `tenant_id` through thread ownership + `RunMeta`; per-tenant fair scheduling in `lease()`; wire `Supervision.execution_budget`/`spawn_child()` (was dead code) | **Done** (2026-07-03) — see "Recently shipped". `RedisHistoryProvider`/`GlobalTaskStore` tenant-keying and tenant-level quota aggregation/rate limits explicitly deferred (see below). **Correction (2026-07-12, kernel audit):** "wire execution_budget" here only ever meant the *propagation* half (`Supervision.spawn_child()` correctly threading the field through) — the *enforcement* half (actually building an `ExecutionTracker` from it for the spawned child) was still dead code until the kernel audit's Tier B fixed it. See `docs/claude_docs/kernel/2026-07-12-audit.md`. |
 | **4** | Microservices as the scale path: converge `human_gate` onto the Phase-1 signal bus | **Partially done** (2026-07-03) — signal convergence shipped; wiring `agent_runtime` to actually run an HITL-capable tool against it is deferred (see below). Feature-parity porting (files/RAG → triggers/scheduled → pipelines → MCP apps) and k8s replica policy tuning not started — long tail, out of this program's architecture-remediation scope |
 | **5** | Enterprise hardening: tracing spans on agent runs/LLM calls/tool calls; webhook idempotency keys + HMAC; agent versioning guard on replay; event-log retention/compaction | **Done** (2026-07-04) — see "Recently shipped". `ChatTracingMiddleware` deleted rather than installed (see below); most of the pre-existing guardrail/infra middleware family found unwireable in its current form (see below) |
 
@@ -68,13 +68,33 @@ than the surrounding architecture fix, or because the real risk it addresses
 turned out to be negligible given how the code actually works. Recorded here
 so the decision is visible, not silently dropped.
 
-- **Future-based tool-approval → signal migration** (kills
-  `WebHITLBridge._pending`/`ToolApprovalHandler`'s Futures). The signal-based
-  `ask_human` path was already migrated (pre-program); tool-approval is a
-  separate, comparably-sized migration of its own (new suspend-based
-  approval primitive, `human_gate` wiring, its own test suite) — not
-  attempted alongside the single-flight/cancel/HITL-resolution fixes that
-  made up the rest of Phase 2.
+- ~~Future-based tool-approval → signal migration~~ — **superseded**
+  (2026-07-12, kernel audit — see
+  `docs/claude_docs/kernel/2026-07-12-audit.md` Tier C). This entry assumed
+  tool-approval worked but used Futures instead of signals; the actual
+  finding was worse — it wasn't connected to a live agent at all (three
+  independently-built approval abstractions, none wired to `ReActAgent` in
+  the real construction path, so a CRITICAL-risk tool call executed
+  completely unguarded). Fixed by consolidating on the kernel
+  `ApprovalHandler` Protocol and wiring `SSEApprovalHandler`
+  (`serving/monolith/sse/approval.py`) through
+  `build_agent_for_thread(bridge=...)`. Still Future-based (`WebHITLBridge.
+  request_and_wait()`), not signal-based — that migration (to survive a
+  process restart mid-approval, matching how `ask_human` already works) is
+  still open and now tracked as its own item below, not blocking on
+  "connect it at all" anymore.
+- **Tool-approval: Future-based → signal-based** (new, 2026-07-12). Now that
+  approval is actually wired and working, it has the same durability gap
+  `ask_human` had before its own signal migration: a pending approval
+  Future lives only in the owning replica's process memory
+  (`WebHITLBridge._pending`) — a process restart while a CRITICAL tool call
+  is paused loses the pending request (the run stays suspended, per
+  `SuspendInterrupt`, but nothing can ever resolve it). Mirroring
+  `ask_human`'s fix: have `SSEApprovalHandler` suspend via
+  `ctx.sleep_until_signal()` instead of blocking on a Future, firing
+  `hitl:{request_id}` through the `SignalBus` the same way. New, comparably
+  scoped work (not attempted alongside the audit's wiring fix) — its own
+  session.
 - **`RedisHistoryProvider._key`/`GlobalTaskStore` tenant-namespacing.**
   Evaluated and scoped out: both are keyed by `session_id`/`conversation_id`,
   which are UUIDs in every real call path — two different tenants can never
@@ -159,6 +179,36 @@ so the decision is visible, not silently dropped.
 
 ## Recently shipped (prune over time)
 
+- **Kernel foundation audit** (2026-07-12 — full findings in
+  `docs/claude_docs/kernel/2026-07-12-audit.md`; requested directly by the
+  user as a ground-up rethink of `kernel/` after the v1 remediation program,
+  on the hypothesis that rot above kernel kept recurring because kernel
+  itself wasn't rigorously curated). Every symbol `kernel/__init__.py`
+  exports traced against real call paths, not import counts. Deleted ~10
+  fully dead contracts (kernel shrank 5295 → ~4840 LOC): a whole parallel
+  `Event`/`EventPublisher`/`EventSubscriber` pub/sub contract superseded
+  before ever being implemented by `integrations/events/envelope.py`'s
+  independently-built `EventEnvelope`; a `ToolSpec`/`spec_of()` tool-spec
+  encoding taxonomy the one real consumer (`Toolbox.schemas()`) was never
+  migrated to use; `ThinkingBlock`/`UIResourceBlock` content-block types no
+  producer ever emits; three error classes never raised; two dead
+  extension-registration hooks. Fixed `Supervision.execution_budget`, which
+  propagated through spawn but was never converted into an enforced
+  `ExecutionTracker` for the child. **Headline finding:** tool-approval had
+  three independently-built, unconnected implementations (kernel Protocol,
+  a capabilities module, an SSE bridge with real `hitl_mode` logic) — traced
+  end to end and confirmed a CRITICAL-risk tool call was not gated on human
+  approval anywhere in the live monolith. Consolidated on the kernel
+  `ApprovalHandler` Protocol (user-confirmed direction), added
+  `ApprovalDecision.MODIFIED`, deleted the other two implementations, wired
+  a new `SSEApprovalHandler` through the real `build_agent_for_thread()`
+  construction path, and added an end-to-end test that exercises that real
+  path rather than a hand-built agent (the gap that let the disconnect go
+  unnoticed). Also found and fixed, incidentally: a genuine ~35s test
+  "hang" (`test_supervision_v2.py`) that was actually correct exponential
+  backoff behavior on an under-configured `max_retries` — pre-existing, not
+  a regression, just never triggered by anyone running that one test in
+  isolation before.
 - **v1 remediation program** (2026-07-05 — separate from, and after, the
   Phase 0-5 program above; triggered by a pre-first-release production-
   readiness audit). Eight workstreams, all shipped and gated on `uv run

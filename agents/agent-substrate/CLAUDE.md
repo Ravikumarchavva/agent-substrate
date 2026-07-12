@@ -78,15 +78,14 @@ src/substrate/
 │   │                     identity.py (AgentId, TopicId), usage.py (Usage), errors.py
 │   ├── llm/              llm.py — LLMClient, EmbeddingClient Protocols
 │   ├── messaging/        message.py (Message, Subscription), stream.py (TextDelta,
-│   │                     ReasoningDelta, CompletionEvent, StreamDone, AgentProgress),
-│   │                     events.py (Event)
+│   │                     ReasoningDelta, CompletionEvent, StreamDone, AgentProgress)
 │   ├── storage/          blob.py (BlobStore), history.py (HistoryProvider),
 │   │                     vector.py (VectorStore, Document), graph.py (GraphStore),
 │   │                     memory.py (SessionStore)
-│   ├── tools/            tools.py (Tool/HostedTool/ProviderDefinedTool, ToolSpec,
-│   │                     spec_of, ToolRisk, ToolExecutionResult), chain.py (chain
+│   ├── tools/            tools.py (Tool/HostedTool/ProviderDefinedTool, AnyTool,
+│   │                     ToolRegistry, ToolRisk, ToolExecutionResult), chain.py (chain
 │   │                     contracts: ChainPolicy, InvocationResult, ChainRunResult),
-│   │                     skills.py, approval.py
+│   │                     skills.py, approval.py (ApprovalHandler, ApprovalResult)
 │   ├── agent/            context.py (CompactionStrategy), middleware.py (Interceptor),
 │   │                     supervision.py (Supervision, SpawnBudget, Priority),
 │   │                     runtime_context.py (RunMeta)
@@ -272,8 +271,11 @@ class MyTool:
 
 `substrate.kernel.tools` re-exports the full taxonomy: `Tool` (LOCAL, `execute()`),
 `HostedTool` (provider-executed, `provider_specs`), `ProviderDefinedTool`
-(provider call-shape + local `handle_call()`), plus `ToolSpec`/`spec_of` for
-encoders. Use `is_hosted_tool` / `is_provider_defined_tool` to branch at dispatch.
+(provider call-shape + local `handle_call()`). Use `is_hosted_tool` /
+`is_provider_defined_tool` to branch at dispatch. Wire-dict encoding for each
+provider lives in `integrations/llm/<provider>_client.py::_tools_from_options`
++ `integrations/llm/encoders/<provider>.py::encode_tools` — no shared kernel
+encoder type; each provider client builds its own dicts.
 
 Placed at `capabilities/tools/my_tool/tool.py` — `CatalogScanner` discovers it automatically.
 
@@ -589,3 +591,13 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

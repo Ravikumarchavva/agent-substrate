@@ -65,17 +65,3 @@ def test_tool_registry():
     # Test by_risk
     assert registry.by_risk(ToolRisk.HIGH) == [tool]
     assert registry.by_risk(ToolRisk.SAFE) == []
-
-    # Test schema_for
-    schema = registry.schema_for("mock_tool")
-    assert schema is not None
-    assert schema["name"] == "mock_tool"
-    assert schema["description"] == "A mock tool for testing."
-    assert schema["parameters"] == tool.input_schema
-
-    # Test deferred schemas
-    defs = registry.deferred_schemas(include_tool_search=True)
-    assert len(defs) == 2
-    assert defs[0]["name"] == "mock_tool"
-    assert defs[0]["defer_loading"] is True
-    assert defs[1] == {"type": "tool_search"}

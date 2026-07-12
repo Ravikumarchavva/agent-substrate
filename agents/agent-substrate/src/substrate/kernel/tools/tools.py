@@ -12,9 +12,9 @@ Tool execution model (two orthogonal axes)
 ``Tool`` (LOCAL)
     Standard function tools.  Developer declares the JSON schema; the agent
     loop calls ``tool.execute(**kwargs)`` locally.  Schema is sent to the
-    provider as a ``function`` entry.  Per-tool ``defer_loading=True``
-    withholds the full parameter schema until the model requests it via
-    ``tool_search``.
+    provider as a ``function`` entry.  Dynamic/lazy tool discovery (avoiding
+    a full-schema context dump) is handled by ``ToolSearchTool`` and
+    ``SkillTool`` (capabilities layer), not by this contract.
 
 ``HostedTool`` (PROVIDER)
     Provider declares and executes.  The agent loop never calls ``execute()``;
@@ -198,8 +198,6 @@ class Tool(Protocol):
     ``risk`` defaults to ``ToolRisk.SAFE`` when absent.
     ``ui`` is an optional ``ToolUI`` declaration.
     ``tool_type`` defaults to ``ToolType.FUNCTION`` when absent.
-    ``defer_loading`` may be set to ``True`` to withhold the full parameter
-    schema until the LLM requests it via ``tool_search``.
 
     ``execute`` receives keyword arguments matching the tool's ``input_schema``
     and returns a ``ToolExecutionResult``.  ``ctx`` carries the execution

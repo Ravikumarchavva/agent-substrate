@@ -384,9 +384,6 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
     - ``{"type":"tool_search"}``  or  ``{"type":"tool_search","execution":"client"}``
     - ``{"type":"namespace", "name":..., "tools":[...]}``  — passed through as-is
 
-    Tools may carry ``defer_loading: true`` to tell OpenAI (gpt-5.4+) to skip
-    sending the full parameter schema upfront and load it on demand via tool_search.
-
     Returns ``None`` when *tools* is falsy.
     """
     if not tools:
@@ -396,18 +393,14 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
         tool_name: str,
         description: str,
         parameters: dict[str, Any],
-        defer_loading: bool = False,
     ) -> dict[str, Any]:
-        entry: dict[str, Any] = {
+        return {
             "type": "function",
             "name": tool_name,
             "description": description,
             "parameters": ensure_strict_tool_schema(parameters),
             "strict": True,
         }
-        if defer_loading:
-            entry["defer_loading"] = True
-        return entry
 
     result: list[dict[str, Any]] = []
     for tool in tools:
@@ -420,8 +413,6 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
             result.append(tool)
             continue
 
-        defer = bool(tool.get("defer_loading", False))
-
         # Already flattened Responses-API format
         if tool_type in ("function",) and "name" in tool and "parameters" in tool:
             result.append(
@@ -431,7 +422,6 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
                     parameters=tool.get(
                         "parameters", {"type": "object", "properties": {}}
                     ),
-                    defer_loading=defer,
                 )
             )
         # Named tool without explicit type (framework format)
@@ -441,7 +431,6 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
                     tool_name=tool["name"],
                     description=tool.get("description", ""),
                     parameters=tool["parameters"],
-                    defer_loading=defer,
                 )
             )
         # OpenAI nested Chat-Completions format  {"type":"function","function":{...}}
@@ -454,7 +443,6 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
                     parameters=fn.get(
                         "parameters", {"type": "object", "properties": {}}
                     ),
-                    defer_loading=defer,
                 )
             )
         # MCP format  {"name":..., "inputSchema":...}
@@ -464,7 +452,6 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
                     tool_name=tool["name"],
                     description=tool.get("description", ""),
                     parameters=tool["inputSchema"],
-                    defer_loading=defer,
                 )
             )
         # Generic named tool — best-effort
@@ -478,7 +465,6 @@ def encode_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | N
                         or tool.get("inputSchema")
                         or {"type": "object", "properties": {}}
                     ),
-                    defer_loading=defer,
                 )
             )
         else:

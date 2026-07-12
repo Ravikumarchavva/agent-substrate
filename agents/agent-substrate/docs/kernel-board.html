@@ -60,36 +60,48 @@
   @media(max-width:860px){.zones{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:540px){.zones{grid-template-columns:1fr}}
 
-  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:9px 10px 10px;margin-bottom:10px}
+  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:9px 10px 10px;margin-bottom:10px;
+    background-image:
+      linear-gradient(var(--rule-2) 1px,transparent 1px),
+      linear-gradient(90deg,var(--rule-2) 1px,transparent 1px);
+    background-size:13px 13px;background-position:-1px -1px;background-repeat:repeat}
   .zone-h{display:flex;align-items:baseline;gap:7px;margin-bottom:8px}
   .zone-h .zc{font-size:9px;color:var(--copper);letter-spacing:.08em;font-weight:700;
     border:1px solid var(--copper);border-radius:50%;width:14px;height:14px;display:inline-flex;
     align-items:center;justify-content:center;flex:none}
   .zone-h .zn{font-size:11px;letter-spacing:.13em;font-weight:700}
   .zone-h .zr{font-family:var(--sans);font-size:9.5px;color:var(--ink-3);margin-left:auto;text-align:right}
-  .nodes{display:flex;flex-wrap:wrap;gap:6px}
+  .nodes{display:flex;flex-wrap:wrap;row-gap:13px;column-gap:7px;padding-top:2px}
 
-  /* ---- node chip ---- */
+  /* ---- node chip: a socket (pins) with a chip that seats into it ---- */
   .node{position:relative;display:inline-flex;align-items:center;gap:6px;
     border:1.3px dashed var(--ink-3);border-radius:3px;background:transparent;
     padding:5px 8px 6px;cursor:pointer;font-size:10.5px;line-height:1.1;white-space:nowrap;
-    transition:border-color .16s,background-color .16s,transform .16s}
+    transform:translateY(0);
+    transition:border-color .16s,background-color .16s,box-shadow .3s,transform .4s cubic-bezier(.3,1.4,.4,1)}
   .node:hover{border-color:var(--ink);background:#fff}
   .node:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
   .node .kd{width:13px;height:13px;border-radius:50%;border:1px solid var(--ink-3);color:var(--ink-3);
     font-size:7.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
   .node .nm{font-weight:600;color:var(--ink)}
-  .node .lb{position:absolute;left:5px;right:5px;bottom:-1.5px;height:2.4px;border-radius:2px;background:var(--l);
+  /* pin row -- always present on the socket, like solder pads on the board */
+  .node::before{content:"";position:absolute;left:7px;right:7px;top:-3px;height:2px;
+    background-image:repeating-linear-gradient(90deg,var(--ink-3) 0 3px,transparent 3px 7px);
+    opacity:.65;transition:opacity .3s,background-image .3s}
+  /* connector edge -- the layer-colored strip a plugged chip contacts */
+  .node .lb{position:absolute;left:5px;right:5px;bottom:-1.5px;height:2.6px;border-radius:2px;background:var(--l);
     opacity:0;transform:scaleX(.3);transition:opacity .35s,transform .35s}
   .node .mk{position:absolute;top:-4px;right:-4px;width:8px;height:8px}
   .mk.new{background:var(--new);border-radius:2px;border:1.5px solid var(--board)}
   .mk.rev{border:1.5px solid var(--review);border-radius:50%;background:var(--board)}
 
-  /* populated state */
+  /* populated state -- the chip drops in, pins darken (live), connector lights up */
   #k-root.pop .node{border-style:solid}
-  #k-root.pop .node.plugged{background:var(--board)}
+  #k-root.pop .node::before{opacity:1;background-image:repeating-linear-gradient(90deg,var(--ink) 0 3px,transparent 3px 7px)}
+  #k-root.pop .node.plugged{background:var(--board);box-shadow:0 1.5px 0 rgba(32,36,31,.16)}
   #k-root.pop .node.plugged .lb{opacity:1;transform:scaleX(1)}
   #k-root.pop .node.plugged:hover{background:#fff}
+  #k-root:not(.pop) .node.plugged{transform:translateY(-3px)}
 
   /* ---- bus ---- */
   .k-bus{display:flex;align-items:center;gap:10px;margin:4px 2px 10px;padding-top:8px}

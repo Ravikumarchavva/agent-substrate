@@ -6,7 +6,7 @@
 <title>SUBSTRATE — Kernel Contract Board</title>
 <meta name="description" content="A motherboard-style diagram of the agent-substrate kernel (Layer 0): the Agent as CPU, storage as DIMM slots, tools as PCIe cards — every socket traced to its real implementation.">
 <style>
-  html,body{margin:0;padding:0;background:#081109;min-height:100%}
+  html,body{margin:0;padding:0;background:#081109;min-height:100vh}
   :root{
     --ground:#081109; --board:#0f2317; --board-edge:#1d3d2c; --panel:#122a1c;
     --silk:#d7e4da; --silk-dim:#8fa596; --rule:#1f3d2b;
@@ -19,13 +19,13 @@
   }
   *{box-sizing:border-box}
   #k-root{background:var(--ground);color:var(--silk);font-family:var(--mono);
-    -webkit-font-smoothing:antialiased;padding:14px;min-height:100vh;
+    -webkit-font-smoothing:antialiased;padding:clamp(5px,1vh,10px) 14px;
     display:flex;flex-direction:column}
   #k-wrap{width:100%;flex:1;display:flex;flex-direction:column;position:relative}
 
   /* ---- board ---- */
   .k-board{position:relative;border:1px solid var(--board-edge);border-radius:8px;background:var(--board);
-    padding:22px;flex:1;display:flex;flex-direction:column;justify-content:center;
+    padding:clamp(8px,1.6vh,16px) 22px;flex:1;display:flex;flex-direction:column;justify-content:center;
     background-image:radial-gradient(var(--rule) 1px,transparent 1px);
     background-size:16px 16px}
   .k-board .hole{position:absolute;width:9px;height:9px;border-radius:50%;border:1.2px solid var(--gold);opacity:.55}
@@ -39,27 +39,31 @@
   #k-root.on .bus-flow{opacity:.95;animation:flow 2.6s linear infinite}
   @keyframes flow{to{stroke-dashoffset:-98}}
 
-  /* Layout mirrors a real board's priorities: the CPU+RAM cluster (Agent +
-     Storage) is the dominant, tightly-coupled center. Tools (PCIe/GPU-style
-     expansion) sit in their own column, deliberately apart -- powerful, but
-     optional, not on the CPU's own bus. */
+  /* Seven subsystems, one job each -- the same discipline a real board
+     uses to separate CPU/RAM from chipset from storage controllers from
+     GPU from VRM from I/O shield. Core (CPU+RAM) is the dominant,
+     tightly-coupled center. Slots (PCIe/GPU-style expansion) sit in their
+     own column, deliberately apart -- powerful, but optional, not on the
+     CPU's own bus. */
   .k-grid{position:relative;display:grid;z-index:1;width:100%;
-    grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) minmax(180px,1fr) minmax(160px,.55fr);
-    grid-template-areas:"runtime runtime runtime tools" "llm     agentp  content tools";
-    gap:30px 44px}
+    grid-template-columns:minmax(220px,1.3fr) minmax(180px,1fr) minmax(180px,1fr) minmax(160px,.55fr);
+    grid-template-areas:"core    core   chipset slots" "storage accel  power   slots" "io      io     io      slots";
+    gap:clamp(10px,2vh,20px) 44px}
   @media(max-width:900px){
     .k-grid{grid-template-columns:1fr;
-      grid-template-areas:"runtime" "llm" "agentp" "content" "tools"}
+      grid-template-areas:"core" "chipset" "storage" "accel" "power" "io" "slots"}
   }
 
-  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:22px 26px 26px;
+  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;
+    padding:clamp(8px,1.4vh,16px) 26px clamp(8px,1.4vh,16px);
     min-width:0;display:flex;flex-direction:column}
   .zone-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px}
-  .z-runtime{grid-area:runtime}.z-llm{grid-area:llm}
-  .z-tools{grid-area:tools;display:flex;flex-direction:column;gap:12px}
-  .z-agentp{grid-area:agentp}.z-content{grid-area:content}
+  .z-core{grid-area:core}.z-chipset{grid-area:chipset}
+  .z-storage{grid-area:storage}.z-accel{grid-area:accel}.z-power{grid-area:power}
+  .z-io{grid-area:io}
+  .z-slots{grid-area:slots;display:flex;flex-direction:column;gap:12px}
 
-  .zone-h{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
+  .zone-h{display:flex;align-items:baseline;gap:7px;margin-bottom:clamp(3px,.8vh,6px)}
   .zone-h .zc{font-size:8.5px;color:var(--gold);letter-spacing:.06em;font-weight:700;
     border:1px solid var(--gold);border-radius:50%;width:13px;height:13px;display:inline-flex;
     align-items:center;justify-content:center;flex:none}
@@ -78,8 +82,8 @@
   .mk.rev{border:1.2px solid var(--review);border-radius:50%;background:var(--panel)}
 
   /* -- CPU: the Agent socket -- */
-  .cpu-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:6px 0 2px}
-  .cpu{position:relative;width:250px;height:250px;flex:none;border:1.6px solid var(--gold);border-radius:6px;
+  .cpu-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:clamp(3px,.6vh,6px) 0 clamp(1px,.3vh,2px)}
+  .cpu{position:relative;width:clamp(120px,16vh,220px);height:clamp(120px,16vh,220px);flex:none;border:1.6px solid var(--gold);border-radius:6px;
     background:var(--chip);transition:background .3s}
   .cpu::before{content:"";position:absolute;inset:14px;border-radius:3px;
     background-image:radial-gradient(var(--gold) 1.1px,transparent 1.3px);background-size:13px 13px;opacity:.4}
@@ -94,15 +98,14 @@
   .cpu-seat .t1{font-size:12px;font-weight:700;color:var(--silk)}
   .cpu-seat .t2{font-size:7.5px;letter-spacing:.08em;color:var(--L1);margin-top:3px}
   .cpu-cap{font-size:8.5px;letter-spacing:.14em;color:var(--gold);text-align:center}
-  .cpu-cluster{display:flex;gap:30px;width:100%;justify-content:space-between;flex-wrap:wrap;align-items:center}
-  .cpu-col{display:flex;flex-direction:column;gap:12px;flex:1 1 160px;max-width:230px}
-  .dimm-col{display:flex;flex-direction:column;gap:12px;flex:1 1 180px;max-width:270px}
-  .dimm-col .dimm{padding:9px 12px}
+  .cpu-cluster{display:flex;gap:30px;width:100%;justify-content:center;flex-wrap:wrap;align-items:center}
+  .dimm-col{display:flex;flex-direction:column;gap:12px;flex:1 1 200px;max-width:300px}
+  .dimm-col .dimm{padding:clamp(5px,.9vh,8px) 12px}
   .dimm-col .dimm .lbl{font-size:10.5px}
 
   /* -- IC: small chipset/support chips -- */
   .ic{position:relative;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
-    padding:13px 15px 14px;transition:border-color .16s,background .16s}
+    padding:clamp(5px,1.1vh,9px) 15px clamp(5px,1.1vh,9px);transition:border-color .16s,background .16s}
   .ic:hover{border-color:var(--gold)}
   .ic::before,.ic::after{content:"";position:absolute;left:6px;right:6px;height:2px;
     background-image:repeating-linear-gradient(90deg,var(--copper) 0 3px,transparent 3px 7px);opacity:.7}
@@ -117,7 +120,7 @@
 
   /* -- DIMM: storage slots, flanking the CPU cluster -- */
   .dimm{position:relative;display:flex;align-items:center;gap:10px;border:1.2px solid var(--copper);
-    border-radius:2px;background:var(--chip);padding:14px 17px;transition:border-color .16s}
+    border-radius:2px;background:var(--chip);padding:clamp(6px,1.1vh,10px) 17px;transition:border-color .16s}
   .dimm:hover{border-color:var(--gold)}
   .dimm .teeth{position:absolute;left:8px;right:8px;bottom:-3px;height:3px;
     background-image:repeating-linear-gradient(90deg,var(--copper) 0 4px,transparent 4px 8px);opacity:.7}
@@ -128,7 +131,7 @@
   .dimm .lbl{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* -- PCIe: tool expansion cards -- */
-  .pcies{display:flex;gap:10px;align-items:stretch;flex:1;min-height:260px}
+  .pcies{display:flex;gap:10px;align-items:stretch;flex:1;min-height:clamp(110px,16vh,200px)}
   .pcie{position:relative;flex:1;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
     display:flex;align-items:flex-end;justify-content:center;padding-bottom:12px;transition:border-color .16s}
   .pcie:hover{border-color:var(--gold)}
@@ -142,7 +145,7 @@
 
   /* -- SMD: small surface-mount contracts -- */
   .smds{display:flex;flex-wrap:wrap;gap:9px}
-  .smd{position:relative;border:1.2px dashed var(--copper);border-radius:2px;padding:11px 16px;
+  .smd{position:relative;border:1.2px dashed var(--copper);border-radius:2px;padding:clamp(5px,.9vh,9px) 16px;
     font-size:13px;transition:border-color .16s,background .16s}
   .smd:hover{border-color:var(--gold)}
   #k-root.on .smd{border-style:solid}
@@ -160,12 +163,12 @@
 
   /* -- content-block cell strip -- */
   .cells{display:flex;flex-wrap:wrap;gap:6px;cursor:pointer}
-  .cell{border:1.1px solid var(--copper);border-radius:2px;padding:9px 14px;font-size:12.5px;letter-spacing:.03em;
+  .cell{border:1.1px solid var(--copper);border-radius:2px;padding:clamp(4px,.7vh,7px) 14px;font-size:12.5px;letter-spacing:.03em;
     color:var(--silk-dim);transition:border-color .16s,color .16s}
   .cells:hover .cell{border-color:var(--gold);color:var(--silk)}
   .cell.hero{color:var(--new);border-color:var(--new)}
 
-  .sub{font-size:10px;letter-spacing:.14em;color:var(--silk-dim);margin:14px 0 8px;
+  .sub{font-size:10px;letter-spacing:.14em;color:var(--silk-dim);margin:clamp(5px,1vh,9px) 0 clamp(3px,.6vh,5px);
     border-bottom:1px solid var(--rule);padding-bottom:5px}
 
   /* ---- detail panel ---- */
@@ -379,36 +382,38 @@ function zone(cls,c,n,r,inner){
 
 const grid=document.getElementById("k-grid");
 grid.innerHTML =
-  zone("z-runtime","A","RUNTIME CHIPSET","Agent[CtxT] + working memory, one cluster",
+  zone("z-core","A","RUNTIME CORE","Agent[CtxT] + working memory, one cluster",
     `<div class="cpu-wrap">
        <div class="cpu-cluster">
          <div class="dimm-col">${["history"].map(renderDIMM).join("")}</div>
-         <div class="cpu-col">${renderIC("signalbus")}${renderIC("supervisor")}${renderSMD("effect")}</div>
          <div class="cpu" data-id="agent" tabindex="0" role="button" aria-label="Agent[CtxT] — PROTOCOL, implemented by ReActAgent">
            <div class="cpu-label"><span class="t1">AGENT&#91;CTXT&#93;</span><span class="t2">SOCKET CTX-0</span></div>
            <div class="cpu-seat"><div><span class="t1">ReActAgent</span><br><span class="t2">L1</span></div></div></div>
-         <div class="cpu-col">${renderIC("eventlog")}${renderIC("scheduler")}${renderIC("inbox")}</div>
          <div class="dimm-col">${["memory"].map(renderDIMM).join("")}</div>
        </div>
      </div>`)
-+ zone("z-llm","B","COMPUTE ACCELERATORS","generation & retrieval — swappable like a GPU brand",
-    `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}${renderIC("vector")}${renderIC("graph")}</div>
++ zone("z-chipset","B","SYSTEM CHIPSET","routing & coordination — invisible, always on",
+    `<div class="smds" style="flex-direction:column">${["eventlog","scheduler","inbox","signalbus","supervisor"].map(renderIC).join("")}</div>
+     <div class="smds" style="margin-top:8px">${renderSMD("effect")}</div>`)
++ zone("z-storage","C","STORAGE CONTROLLERS","persistent stores behind a protocol",
+    `<div class="smds" style="flex-direction:column">${["vector","graph","blob","tasks"].map(renderDIMM).join("")}</div>`)
++ zone("z-accel","D","COMPUTE ACCELERATOR","external compute, swappable brand",
+    `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}</div>
      <div class="sub">STREAM</div><div class="smds">${renderSMD("stream")}</div>`)
-+ zone("z-agentp","C","AGENT & POLICY","supervision + task state",
-    `<div class="smds">${["supervision","runmeta","middleware","compaction","agentctx","tasks"].map(renderSMD).join("")}</div>`)
-+ zone("z-content","D","CONTENT","multimodal payload + blob storage",
++ zone("z-power","E","POWER & GOVERNANCE","governs spend, not data",
+    `<div class="smds">${["supervision","runmeta","middleware","compaction","agentctx"].map(renderSMD).join("")}</div>`)
++ zone("z-io","F","FRONT I/O","world-facing payload + fault protection",
     `${renderCells("content")}<div class="sub">FAULT PROTECTION</div>${renderFuse("errors")}
-     <div class="smds" style="margin-top:8px">${renderSMD("ids")}${renderSMD("blob")}</div>`)
-+ zone("z-tools","E","TOOL EXPANSION","off the CPU's own bus",
+     <div class="smds" style="margin-top:8px">${renderSMD("ids")}</div>`)
++ zone("z-slots","G","EXPANSION SLOTS","off the CPU's own bus",
     `<div class="pcies">${["tool","hosted","provdef"].map(renderPCIE).join("")}</div>
      <div class="smds" style="flex-direction:column">${renderIC("toolreg")}${renderIC("approval")}</div>`);
 
 /* ---- bus traces: computed from real rendered positions, not guessed.
-   Storage no longer gets a trace of its own -- it's soldered right onto the
-   CPU cluster now, same as a real board's RAM slots. Only zones genuinely
-   apart from the CPU need a routed wire. ---- */
+   Everything outside the Core box gets a routed wire back to the CPU --
+   one rule, no special cases. ---- */
 const board=document.getElementById("k-board"), svg=document.getElementById("bus-svg");
-const BUS_ZONES=[".z-llm",".z-tools",".z-agentp",".z-content"];
+const BUS_ZONES=[".z-chipset",".z-storage",".z-accel",".z-power",".z-io",".z-slots"];
 function layoutBuses(){
   const bRect=board.getBoundingClientRect();
   const cr0=document.querySelector(".cpu").getBoundingClientRect();
@@ -433,7 +438,13 @@ function layoutBuses(){
       if(r.top<cr.top){ sy=r.bottom; ey=cr.top; } else { sy=r.top; ey=cr.bottom; }
       bendY=(sy+ey)/2; bendX=null;
     } else {
-      sy=r.cy; ey=cr.cy;
+      // Enter right at the header/body seam rather than at the geometric
+      // vertical center -- for a tall zone the center can land mid-chip
+      // and the via dot collides with a label. Measured from the real
+      // zone-body element so it stays correct if header sizing changes.
+      const zb=z.querySelector(".zone-body");
+      const zbTop=zb?zb.getBoundingClientRect().top-bRect.top:r.top+30;
+      sy=Math.max(r.top+14,Math.min(zbTop-6,r.bottom)); ey=cr.cy;
       if(r.left<cr.left){ sx=r.right; ex=cr.left; } else { sx=r.left; ex=cr.right; }
       bendX=(sx+ex)/2; bendY=null;
     }

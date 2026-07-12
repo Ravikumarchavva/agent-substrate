@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SUBSTRATE — Kernel Contract Board</title>
+<meta name="description" content="One-page schematic of the agent-substrate kernel (Layer 0): every dashed outline is a contract, every solid chip is a traced implementation.">
+<style>
+  html,body{margin:0;padding:0}
+  :root{
+    --paper:#ece9df; --board:#f6f4ec; --panel:#f8f6ef;
+    --ink:#20241f; --ink-2:#5a6058; --ink-3:#8d9289;
+    --rule:#cbc8ba; --rule-2:#dcd9cc;
+    --copper:#9c5730; --key:#af8140;
+    --L1:#2f6a72; --L2:#6a5586; --INT:#3f7350; --INFRA:#a5673a; --SRV:#7c6b28;
+    --new:#9c5730; --review:#b0402c;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  #k-root{background:var(--paper);color:var(--ink);font-family:var(--mono);
+    -webkit-font-smoothing:antialiased;padding:22px 22px 26px}
+  #k-wrap{max-width:1180px;margin:0 auto}
+
+  /* ---- header ---- */
+  .k-top{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:12px}
+  .k-id h1{font-family:var(--mono);font-size:19px;font-weight:700;letter-spacing:.36em;margin:0}
+  .k-id p{font-family:var(--sans);font-size:11.5px;color:var(--ink-2);margin:4px 0 0;letter-spacing:.01em;max-width:52ch}
+  .k-ctrl{display:flex;align-items:center;gap:8px;flex:none}
+  .seg{display:flex;border:1.5px solid var(--ink);border-radius:3px;overflow:hidden}
+  .seg button{font-family:var(--mono);font-size:10px;letter-spacing:.12em;padding:6px 11px;border:0;
+    background:var(--board);color:var(--ink-2);cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .seg button:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+  .k-replay{font-family:var(--mono);font-size:10px;letter-spacing:.12em;padding:6px 11px;
+    background:none;border:1.5px solid var(--rule);border-radius:3px;color:var(--ink-2);cursor:pointer}
+  .k-replay:hover{border-color:var(--ink);color:var(--ink)}
+  .k-replay:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+
+  /* ---- one-line combined legend ---- */
+  .k-key{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:12px;
+    font-size:10px;letter-spacing:.02em;color:var(--ink-2);padding-bottom:10px;border-bottom:1px solid var(--rule)}
+  .k-key .kk{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .k-key b{color:var(--ink);font-weight:600}
+  .gl-out{width:15px;height:11px;border:1.3px dashed var(--ink-3);border-radius:2px;flex:none}
+  .gl-fill{width:15px;height:11px;border:1.3px solid var(--ink);border-radius:2px;flex:none;position:relative;background:var(--board)}
+  .gl-fill::after{content:"";position:absolute;left:2px;right:2px;bottom:-1px;height:2px;background:var(--key)}
+  .dot{width:7px;height:7px;border-radius:2px;flex:none;display:inline-block}
+  .ring{width:7px;height:7px;border-radius:50%;border:1.4px solid var(--review);flex:none;display:inline-block}
+
+  /* ---- board ---- */
+  .k-board{border:1.5px solid var(--ink);border-radius:5px;background:var(--board);padding:14px 14px 4px;position:relative}
+  .corner{position:absolute;width:9px;height:9px;opacity:.5}
+  .corner.tl{top:6px;left:6px;border-top:1.5px solid var(--ink);border-left:1.5px solid var(--ink)}
+  .corner.tr{top:6px;right:6px;border-top:1.5px solid var(--ink);border-right:1.5px solid var(--ink)}
+  .corner.bl{bottom:6px;left:6px;border-bottom:1.5px solid var(--ink);border-left:1.5px solid var(--ink)}
+  .corner.br{bottom:6px;right:6px;border-bottom:1.5px solid var(--ink);border-right:1.5px solid var(--ink)}
+
+  .zones{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  @media(max-width:860px){.zones{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:540px){.zones{grid-template-columns:1fr}}
+
+  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:9px 10px 10px;margin-bottom:10px}
+  .zone-h{display:flex;align-items:baseline;gap:7px;margin-bottom:8px}
+  .zone-h .zc{font-size:9px;color:var(--copper);letter-spacing:.08em;font-weight:700;
+    border:1px solid var(--copper);border-radius:50%;width:14px;height:14px;display:inline-flex;
+    align-items:center;justify-content:center;flex:none}
+  .zone-h .zn{font-size:11px;letter-spacing:.13em;font-weight:700}
+  .zone-h .zr{font-family:var(--sans);font-size:9.5px;color:var(--ink-3);margin-left:auto;text-align:right}
+  .nodes{display:flex;flex-wrap:wrap;gap:6px}
+
+  /* ---- node chip ---- */
+  .node{position:relative;display:inline-flex;align-items:center;gap:6px;
+    border:1.3px dashed var(--ink-3);border-radius:3px;background:transparent;
+    padding:5px 8px 6px;cursor:pointer;font-size:10.5px;line-height:1.1;white-space:nowrap;
+    transition:border-color .16s,background-color .16s,transform .16s}
+  .node:hover{border-color:var(--ink);background:#fff}
+  .node:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+  .node .kd{width:13px;height:13px;border-radius:50%;border:1px solid var(--ink-3);color:var(--ink-3);
+    font-size:7.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+  .node .nm{font-weight:600;color:var(--ink)}
+  .node .lb{position:absolute;left:5px;right:5px;bottom:-1.5px;height:2.4px;border-radius:2px;background:var(--l);
+    opacity:0;transform:scaleX(.3);transition:opacity .35s,transform .35s}
+  .node .mk{position:absolute;top:-4px;right:-4px;width:8px;height:8px}
+  .mk.new{background:var(--new);border-radius:2px;border:1.5px solid var(--board)}
+  .mk.rev{border:1.5px solid var(--review);border-radius:50%;background:var(--board)}
+
+  /* populated state */
+  #k-root.pop .node{border-style:solid}
+  #k-root.pop .node.plugged{background:var(--board)}
+  #k-root.pop .node.plugged .lb{opacity:1;transform:scaleX(1)}
+  #k-root.pop .node.plugged:hover{background:#fff}
+
+  /* ---- bus ---- */
+  .k-bus{display:flex;align-items:center;gap:10px;margin:4px 2px 10px;padding-top:8px}
+  .k-bus svg{flex:none}
+  .k-bus .bl{font-size:9.5px;letter-spacing:.1em;color:var(--ink-2)}
+  .k-bus .bl b{color:var(--ink);font-weight:700}
+  .bus-line{stroke:var(--rule);stroke-width:1.5}
+  .bus-line.flow{stroke:var(--key);stroke-dasharray:4 5;opacity:.7}
+
+  .k-foot{display:flex;justify-content:flex-end;margin-top:8px}
+  .k-foot span{font-family:var(--sans);font-size:9.5px;color:var(--ink-3);letter-spacing:.02em}
+
+  /* ---- detail panel ---- */
+  #k-scrim{position:fixed;inset:0;z-index:39;background:rgba(20,26,24,.14);opacity:0;pointer-events:none;transition:opacity .28s}
+  #k-scrim.on{opacity:1;pointer-events:auto}
+  #k-panel{position:fixed;top:0;right:0;bottom:0;width:min(400px,94vw);z-index:40;background:var(--panel);
+    border-left:1.5px solid var(--ink);padding:22px 24px 30px;overflow-y:auto;
+    transform:translateX(103%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:-14px 0 30px rgba(20,26,24,.10)}
+  #k-panel.open{transform:translateX(0)}
+  #k-panel .x{position:absolute;top:13px;right:15px;background:none;border:0;font-family:var(--mono);
+    font-size:14px;color:var(--ink-3);cursor:pointer;padding:4px 7px}
+  #k-panel .x:hover{color:var(--ink)}
+  .pk{display:inline-block;font-size:9px;letter-spacing:.14em;color:var(--paper);background:var(--ink);
+    border-radius:2px;padding:3px 8px;margin-bottom:11px}
+  .pk.rev{background:var(--review)}
+  #pk-name{font-size:20px;font-weight:700;letter-spacing:.005em;margin:0 0 4px;text-wrap:balance}
+  #pk-mod{font-size:10px;color:var(--copper);letter-spacing:.02em;word-break:break-all;margin-bottom:14px}
+  #pk-blurb{font-family:var(--sans);font-size:13px;line-height:1.62;color:#333e39;margin:0;max-width:60ch}
+  .ph{font-size:8.5px;letter-spacing:.18em;color:var(--ink-3);margin:17px 0 8px;border-bottom:1px solid var(--rule-2);padding-bottom:5px}
+  .ph.hide{display:none}
+  #pk-methods{list-style:none;margin:0;padding:0}
+  #pk-methods li{font-family:var(--mono);font-size:10.5px;color:var(--ink);padding:3.5px 0;border-bottom:1px dotted var(--rule)}
+  #pk-impls{list-style:none;margin:0;padding:0}
+  #pk-impls li{display:flex;align-items:center;gap:8px;font-size:11.5px;padding:5px 0;border-bottom:1px dotted var(--rule)}
+  #pk-impls i{width:7px;height:7px;border-radius:2px;flex:none}
+  #pk-impls .ly{margin-left:auto;font-size:8px;letter-spacing:.08em;color:var(--ink-3)}
+  #pk-note{font-family:var(--sans);font-size:12px;line-height:1.58;color:#6b4a2e;margin:15px 0 0;
+    border-left:2px solid var(--copper);padding-left:12px;max-width:58ch}
+  #pk-note.hide{display:none}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="k-root">
+ <div id="k-wrap">
+  <div class="k-top">
+   <div class="k-id">
+    <h1>SUBSTRATE</h1>
+    <p>Kernel · Layer 0 — the frozen contract board. Every dashed outline is a Protocol; solid fill means something above has plugged in.</p>
+   </div>
+   <div class="k-ctrl">
+    <div class="seg" role="group" aria-label="Board state">
+     <button id="b-bare" aria-pressed="false">BARE</button>
+     <button id="b-pop" aria-pressed="true">POPULATED</button>
+    </div>
+    <button class="k-replay" id="b-replay">↻ REPLAY</button>
+   </div>
+  </div>
+
+  <div class="k-key">
+   <span class="kk"><span class="gl-out"></span><b>socket</b> — kernel contract</span>
+   <span class="kk"><span class="gl-fill"></span><b>chip</b> — real implementation</span>
+   <span class="kk"><span class="dot" style="background:var(--L1)"></span>L1 agents</span>
+   <span class="kk"><span class="dot" style="background:var(--L2)"></span>L2 capabilities</span>
+   <span class="kk"><span class="dot" style="background:var(--INT)"></span>integrations</span>
+   <span class="kk"><span class="dot" style="background:var(--INFRA)"></span>infrastructure</span>
+   <span class="kk"><span class="dot" style="background:var(--SRV)"></span>serving</span>
+   <span class="kk"><span class="dot" style="background:var(--new)"></span>changed 07-12</span>
+   <span class="kk"><span class="ring"></span>under review</span>
+   <span class="kk" style="margin-left:auto;color:var(--ink-3)">click any node</span>
+  </div>
+
+  <div class="k-board">
+   <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+   <div class="zones" id="k-zones"></div>
+   <div class="k-bus">
+    <svg width="120" height="10" viewBox="0 0 120 10" aria-hidden="true">
+      <line class="bus-line" x1="0" y1="5" x2="120" y2="5"/>
+      <line class="bus-line flow" x1="0" y1="5" x2="120" y2="5"/>
+    </svg>
+    <span class="bl"><b>CONSUMER BUS</b> — imports flow downward only, agents → capabilities → fabric</span>
+   </div>
+  </div>
+  <div class="k-foot"><span>src/substrate/kernel — 40 files, 4.9K LOC</span></div>
+ </div>
+</div>
+
+<div id="k-scrim"></div>
+<aside id="k-panel" aria-hidden="true" aria-label="Contract detail">
+ <button class="x" id="pk-x" aria-label="Close">✕</button>
+ <span class="pk" id="pk-kind">PROTOCOL</span>
+ <h2 id="pk-name"></h2>
+ <div id="pk-mod"></div>
+ <p id="pk-blurb"></p>
+ <div class="ph" id="pk-mh">CONTRACT SURFACE</div>
+ <ul id="pk-methods"></ul>
+ <div class="ph" id="pk-ih">PLUGS IN — TRACED IMPLEMENTATIONS</div>
+ <ul id="pk-impls"></ul>
+ <p id="pk-note"></p>
+</aside>
+
+<script>
+"use strict";
+(function(){
+const LY={L1:["var(--L1)","L1 agents"],L2:["var(--L2)","L2 capabilities"],INT:["var(--INT)","integrations"],
+  INFRA:["var(--INFRA)","infrastructure"],SRV:["var(--SRV)","serving"]};
+const KD={PROTOCOL:"P",DATACLASS:"D",ENUM:"E",UNION:"U",ERRORS:"X","UNDER REVIEW":"?"};
+
+/* ---- data model: extend by adding an entry + listing its id in a zone ---- */
+const S={
+ eventlog:{n:"EventLog",k:"PROTOCOL",impls:[["PostgresEventLog","INFRA"],["InMemoryEventLog","L1"]],
+   blurb:"Append-only log — the single source of truth. Fold it to reconstruct any run; effects already recorded are never re-run. Conversation history and runtime coordination share this one substrate.",
+   methods:["append(run_id, entry)","read(run_id)","tail(run_id)"]},
+ scheduler:{n:"Scheduler",k:"PROTOCOL",impls:[["PostgresScheduler","INFRA"],["InMemoryScheduler","L1"]],
+   blurb:"Run lifecycle: submit → lease → release. Suspension is release(SUSPENDED, wake_on=…) — a dormant run costs zero RAM and zero CPU until a signal or deadline wakes it.",
+   methods:["submit()","lease()","release(status, wake_on)","cancel_pending()"]},
+ inbox:{n:"Inbox",k:"PROTOCOL",impls:[["PostgresInbox","INFRA"],["InMemoryInbox","L1"]],
+   blurb:"Durable per-agent mailbox. Messages accumulate while the agent sleeps and drain as one batch at wake.",methods:["put(agent_id, msg)","drain(agent_id)"]},
+ signalbus:{n:"SignalBus",k:"PROTOCOL",impls:[["PostgresSignalBus","INFRA"],["InMemorySignalBus","L1"]],
+   blurb:"At-most-once signal claims — the wake mechanism behind ask_human, timers and join(). consume() either claims the signal or the caller suspends until it arrives.",methods:["fire(run_id, name, payload)","consume(run_id, name, effect_id)"]},
+ supervisor:{n:"Supervisor",k:"PROTOCOL",impls:[["Runtime backends","L1"]],
+   blurb:"Spawn-tree bookkeeping: parent/child runs, join semantics, and cancel cascade down the tree.",methods:["spawn()","join()","children()"]},
+ effect:{n:"Effect/Result",k:"DATACLASS",impls:[],
+   blurb:"The journaled unit of work. A deterministic effect_id is the at-most-once key: replay hits the cache, the live path appends to the log.",methods:["Effect.make_id(run_id, path, kind, args)"]},
+
+ agent:{n:"Agent[CtxT]",k:"PROTOCOL",mark:"new",impls:[["ReActAgent","L1"],["OrchestratorAgent","L1"],["UserProxyAgent","L1"]],
+   blurb:"The one contract every agent satisfies: a stable id and run(ctx, inbox), called each time the agent wakes. On crash or resume the coroutine re-runs from the top and journaled calls return cached results — durability is transparent.",
+   methods:["id: AgentId","async run(ctx: CtxT, inbox) -> None"],
+   note:"Unified 2026-07-12: two structurally-identical Agent Protocols (kernel + L1) became one generic contract. L1's Agent is now just Agent[RunContext] — a type alias, not a second declaration."},
+ supervision:{n:"Supervision",k:"DATACLASS",mark:"new",impls:[["SpawnTracker","L1"],["ExecutionTracker","L1"]],
+   blurb:"An agent's position in the org chart plus frozen policy: headcount caps, priority preemption, token/cost budget — inherited down the tree via ctx.spawn().",
+   methods:["spawn_child()","is_root()","priority"],note:"ExecutionBudget enforcement wired 2026-07-12: it propagated to children but nothing built the tracker. Now resolved fresh per run."},
+ runmeta:{n:"RunMeta",k:"DATACLASS",impls:[["CancellationToken","L1"]],
+   blurb:"Execution-scoped metadata threaded through every kernel call: run_id, tenant, deadline, trace, cancellation, supervision. check() raises at cooperative cancellation points.",methods:["check()","is_expired()","child_token()"]},
+ middleware:{n:"MiddlewareStage",k:"ENUM",impls:[["25 consumers","L1"]],
+   blurb:"Kernel keeps only the stage enum. The Middleware Protocol itself lives at L1 — it types against MiddlewareContext, which only exists there. A deliberate split, not drift.",methods:["TURN_START","PRE_LLM · POST_LLM","PRE_TOOL · POST_TOOL","TURN_END"]},
+ compaction:{n:"Compaction",k:"PROTOCOL",impls:[["strategies/","L1"]],
+   blurb:"Turns raw history into a prompt window that fits. Concrete strategies live in agents/context/compaction.",methods:["compact(messages, budget)"]},
+ agentctx:{n:"AgentContextProtocol",k:"UNDER REVIEW",mark:"rev",impls:[],
+   blurb:"Flagged by the dead-symbol scan (2026-07-12): no traced consumer anywhere in src or tests. A socket nothing has ever plugged into — a candidate for deletion in the next audit pass.",methods:[]},
+
+ llmclient:{n:"LLMClient",k:"PROTOCOL",impls:[["AnthropicClient","INT"],["OpenAIClient","INT"],["GeminiClient","INT"],["OpenAIChatCompletionClient","L2"],["FallbackClient","L1"]],
+   blurb:"Provider-neutral chat contract. Streams TextDelta | ReasoningDelta | CompletionEvent; the assembled response is a list of content blocks, never provider dicts.",
+   methods:["generate(messages, options)","generate_stream(messages, options)","count_tokens(messages)"]},
+ embed:{n:"EmbeddingClient",k:"PROTOCOL",impls:[["OpenAIEmbeddingClient","INT"]],
+   blurb:"Vector-embedding contract used by the RAG pipelines.",methods:["embed(text)","embed_batch(texts)"]},
+ stream:{n:"Stream types",k:"DATACLASS",mark:"new",impls:[],
+   blurb:"The token stream: TextDelta and ReasoningDelta arrive live; CompletionEvent carries the assembled content blocks; AgentProgress is the supervision-tree feed, one topic per run.",
+   methods:["TextDelta","ReasoningDelta","CompletionEvent","StreamDone","AgentProgress"],
+   note:"ReasoningDelta now lands in persisted content as a ReasoningBlock (2026-07-12) — reasoning survives replay instead of being streamed and discarded."},
+
+ history:{n:"HistoryProvider",k:"PROTOCOL",impls:[["PostgresHistoryProvider","L2"],["RedisHistoryProvider","L2"],["InMemoryHistoryProvider","L1"]],
+   blurb:"Conversation history per session — append and load, always async.",methods:["append(session_id, msg)","get_history(session_id)"]},
+ vector:{n:"VectorStore",k:"PROTOCOL",impls:[["PgVectorStore","L2"],["InMemoryVectorStore","L1"]],
+   blurb:"Similarity search over Documents. A Document (a RAG chunk) is distinct from a DocumentBlock (LLM message content) — never conflated.",methods:["upsert(docs, collection)","search(query_vec, limit)","delete(ids)"]},
+ graph:{n:"GraphStore",k:"PROTOCOL",impls:[["AGEGraphStore","L2"],["InMemoryGraphStore","L1"]],
+   blurb:"Entity / relationship graph behind GraphRAG. CypherCapable is the optional query extension.",methods:["add_entity()","add_relationship()","subgraph(seed)"]},
+ blob:{n:"BlobStore",k:"PROTOCOL",impls:[["S3FileStore","L2"],["InMemoryFileStore","L1"]],
+   blurb:"Opaque file / object storage for uploads and tool artifacts.",methods:["put(data)","get(file_id)","url(file_id)","delete(file_id)"]},
+ tasks:{n:"TaskStore",k:"PROTOCOL",impls:[["PgTaskStore","INFRA"],["GlobalTaskStore","L1"]],
+   blurb:"Kanban board state, driven by TaskManagerTool and rendered live in the chat UI.",methods:["add()","update()","list()"]},
+ memory:{n:"Memory",k:"PROTOCOL",impls:[["RedisSessionStore","L2"],["PostgresMemoryStore","L2"]],
+   blurb:"Session-scoped (ShortTermMemory) and durable (LongTermMemory) contracts an agent reads at context-build time.",methods:["remember()","recall()","forget()"]},
+
+ tool:{n:"Tool",k:"PROTOCOL",impls:[["CalculatorTool +19","L2"],["SkillTool","L2"],["MCPTool","INT"]],
+   blurb:"Structural typing is the whole trick: any class with name, description, input_schema and async execute(**kwargs) fits this slot. Drop it in capabilities/tools/ — the scanner discovers it. No base class, no registration.",
+   methods:["name · description · input_schema · risk","async execute(*, ctx=None, **kwargs)"]},
+ hosted:{n:"HostedTool",k:"PROTOCOL",impls:[["Provider-side (OpenAI…)","INT"]],
+   blurb:"Provider declares and executes — web_search, code_interpreter, file_search. The agent loop never calls execute(); results come back inside the conversation.",methods:["provider_specs: dict[provider_id, JsonObject]"]},
+ provdef:{n:"ProviderDefinedTool",k:"PROTOCOL",impls:[["Local handle_call() tools","L2"]],
+   blurb:"Provider defines the call shape; you execute locally via handle_call(). Dispatch checks is_provider_defined_tool() before is_hosted_tool() — both carry provider_specs.",methods:["provider_specs","async handle_call(call, ctx)"]},
+ toolreg:{n:"ToolRegistry",k:"PROTOCOL",impls:[["Toolbox","L1"]],
+   blurb:"A name-keyed collection of tools. Four operations — the agent loop needs nothing more.",methods:["get(name)","all()","names()","add(tool)"],
+   note:"2026-07-12: Toolbox's dead schemas()/deferred_schemas()/schema_for() removed — zero callers. Wire-encoding lives per-provider in integrations/."},
+ approval:{n:"ApprovalHandler",k:"PROTOCOL",mark:"new",impls:[["SSEApprovalHandler","SRV"],["CallbackAdapter","L1"]],
+   blurb:"The human gate for risky tool calls. ToolInvoker consults it at dispatch time for anything above the policy's risk ceiling; the run genuinely blocks until a decision arrives.",
+   methods:["async request(req) -> ApprovalResult","APPROVED · DENIED · MODIFIED"],
+   note:"Wired for real 2026-07-12. Before: three parallel approval abstractions existed and none reached a live agent — a CRITICAL-risk tool executed unguarded. Consolidated on this socket."},
+
+ content:{n:"ContentBlock",k:"UNION",mark:"new",impls:[],
+   blurb:"The universal multimodal payload — every message, tool result and event is list[ContentBlock]. Discriminated on the type field; unknown types round-trip losslessly.",
+   methods:["Text · Image · Audio · Video · Document","Data · Code · Error · Reasoning","ToolUse · ToolResult"],
+   note:"ReasoningBlock added 2026-07-12 — with the signature field extended-thinking round-trips require (the old ThinkingBlock lacked it). UIResourceBlock stayed deleted: the live MCP-app UI uses _meta.ui.resourceUri instead."},
+ errors:{n:"Error taxonomy",k:"ERRORS",impls:[],
+   blurb:"Classification drives retry: PermanentError never retries, BudgetExhaustedError kills the branch, SuspendInterrupt is a BaseException so agent code can't accidentally swallow a suspension.",
+   methods:["KernelError · AgentCrashError","PermanentError · BudgetExhaustedError","MiddlewareTermination · CancellationError","SuspendInterrupt · ConcurrentAppend · ThreadBusy"]},
+ ids:{n:"Message/Ids/Usage",k:"DATACLASS",impls:[],
+   blurb:"Addressing and accounting. Message carries target/payload/reply_to; Usage tracks reasoning_tokens alongside input/output, so extended-thinking spend is first-class.",
+   methods:["Message(target, payload, reply_to)","AgentId · TopicId","Usage.__add__ (accumulates)"]},
+};
+
+const ZONES=[
+ {c:"A",n:"RUNTIME",r:"event-sourced core",socks:["eventlog","scheduler","inbox","signalbus","supervisor","effect"]},
+ {c:"B",n:"AGENT",r:"intelligence & policy",socks:["agent","supervision","runmeta","middleware","compaction","agentctx"]},
+ {c:"C",n:"LLM",r:"provider-neutral",socks:["llmclient","embed","stream"]},
+ {c:"D",n:"STORAGE",r:"pluggable backends",socks:["history","vector","graph","blob","tasks","memory"]},
+ {c:"E",n:"TOOLS",r:"structural typing",socks:["tool","hosted","provdef","toolreg","approval"]},
+ {c:"F",n:"CONTENT",r:"multimodal payload",socks:["content","errors","ids"]},
+];
+
+/* ---- render ---- */
+const zwrap=document.getElementById("k-zones");
+for(const z of ZONES){
+  const zEl=document.createElement("div");zEl.className="zone";
+  zEl.innerHTML=`<div class="zone-h"><span class="zc">${z.c}</span><span class="zn">${z.n}</span><span class="zr">${z.r}</span></div>`;
+  const nEl=document.createElement("div");nEl.className="nodes";
+  for(const id of z.socks){
+    const sk=S[id];
+    const p=sk.impls&&sk.impls.length?sk.impls[0]:null;
+    const card=document.createElement("div");
+    card.className="node"+(p?" plugged":"");
+    if(p) card.style.setProperty("--l",LY[p[1]][0]);
+    card.tabIndex=0;card.setAttribute("role","button");card.dataset.id=id;
+    card.setAttribute("aria-label",sk.n+" — "+sk.k+(p?", implemented by "+p[0]:""));
+    const mk=sk.mark?`<span class="mk ${sk.mark}"></span>`:"";
+    card.innerHTML=`${mk}<span class="kd">${KD[sk.k]||"?"}</span><span class="nm">${sk.n}</span>${p?'<span class="lb"></span>':""}`;
+    nEl.appendChild(card);
+  }
+  zEl.appendChild(nEl);zwrap.appendChild(zEl);
+}
+
+/* ---- state toggle ---- */
+const root=document.getElementById("k-root");
+const bBare=document.getElementById("b-bare"),bPop=document.getElementById("b-pop");
+function setPop(pop,animate){
+  if(animate){
+    const nodes=[...document.querySelectorAll(".node.plugged")];
+    nodes.forEach((n,i)=>n.style.transitionDelay=(i*16)+"ms");
+    setTimeout(()=>nodes.forEach(n=>n.style.transitionDelay=""),nodes.length*16+420);
+  }
+  root.classList.toggle("pop",pop);
+  bBare.setAttribute("aria-pressed",!pop);bPop.setAttribute("aria-pressed",pop);
+}
+bBare.onclick=()=>setPop(false,true);
+bPop.onclick=()=>setPop(true,true);
+document.getElementById("b-replay").onclick=()=>{
+  setPop(false,false);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>setPop(true,true)));
+};
+const reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+if(reduce){ setPop(true,false); } else { setPop(false,false); setTimeout(()=>setPop(true,true),380); }
+
+/* ---- detail panel ---- */
+const panel=document.getElementById("k-panel"),scrim=document.getElementById("k-scrim");
+function open(id){
+  const d=S[id];if(!d)return;
+  const kEl=document.getElementById("pk-kind");
+  kEl.textContent=d.k;kEl.className="pk"+(d.k==="UNDER REVIEW"?" rev":"");
+  document.getElementById("pk-name").textContent=d.n;
+  document.getElementById("pk-mod").textContent="kernel/"+(d.mod||"");
+  document.getElementById("pk-blurb").textContent=d.blurb;
+  const mh=document.getElementById("pk-mh"),ml=document.getElementById("pk-methods");
+  ml.innerHTML="";(d.methods||[]).forEach(m=>{const li=document.createElement("li");li.textContent=m;ml.appendChild(li);});
+  mh.classList.toggle("hide",!(d.methods&&d.methods.length));
+  const ih=document.getElementById("pk-ih"),il=document.getElementById("pk-impls");
+  il.innerHTML="";(d.impls||[]).forEach(([n,ly])=>{const li=document.createElement("li");
+    li.innerHTML=`<i style="background:${LY[ly][0]}"></i>${n}<span class="ly">${LY[ly][1]}</span>`;il.appendChild(li);});
+  ih.classList.toggle("hide",!(d.impls&&d.impls.length));
+  const nt=document.getElementById("pk-note");nt.textContent=d.note||"";nt.classList.toggle("hide",!d.note);
+  panel.classList.add("open");panel.setAttribute("aria-hidden","false");scrim.classList.add("on");
+}
+function close(){panel.classList.remove("open");panel.setAttribute("aria-hidden","true");scrim.classList.remove("on");}
+zwrap.addEventListener("click",e=>{const c=e.target.closest(".node");if(c)open(c.dataset.id);});
+zwrap.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){const c=e.target.closest(".node");if(c){e.preventDefault();open(c.dataset.id);}}});
+document.getElementById("pk-x").onclick=close;scrim.onclick=close;
+addEventListener("keydown",e=>{if(e.key==="Escape")close();});
+
+const MOD={eventlog:"runtime/log_entry.py",scheduler:"runtime/scheduler.py",inbox:"runtime/inbox.py",signalbus:"runtime/wakeup.py",
+ supervisor:"runtime/supervisor.py",effect:"runtime/effects.py",agent:"runtime/agent.py",supervision:"agent/supervision.py",
+ runmeta:"agent/runtime_context.py",middleware:"agent/middleware.py",compaction:"agent/context.py",agentctx:"agent/context.py",
+ llmclient:"llm/llm.py",embed:"llm/llm.py",stream:"messaging/stream.py",history:"storage/history.py",vector:"storage/vector.py",
+ graph:"storage/graph.py",blob:"storage/blob.py",tasks:"storage/tasks.py",memory:"storage/memory.py",tool:"tools/tools.py",
+ hosted:"tools/tools.py",provdef:"tools/tools.py",toolreg:"tools/tools.py",approval:"tools/approval.py",content:"core/content.py",
+ errors:"core/errors.py",ids:"core/ + messaging/message.py"};
+for(const k in MOD) if(S[k]) S[k].mod=MOD[k];
+})();
+</script>
+</body>
+</html>

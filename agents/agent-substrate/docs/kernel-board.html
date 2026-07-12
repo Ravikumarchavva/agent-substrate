@@ -19,42 +19,13 @@
   }
   *{box-sizing:border-box}
   #k-root{background:var(--ground);color:var(--silk);font-family:var(--mono);
-    -webkit-font-smoothing:antialiased;padding:20px 20px 26px;min-height:100vh}
-  #k-wrap{max-width:1220px;margin:0 auto}
-
-  /* ---- header ---- */
-  .k-top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;
-    padding-bottom:12px;border-bottom:1px solid var(--rule);margin-bottom:12px}
-  .k-id h1{font-size:18px;font-weight:700;letter-spacing:.38em;margin:0;color:var(--silk)}
-  .k-id p{font-family:var(--sans);font-size:11px;color:var(--silk-dim);margin:4px 0 0;max-width:56ch}
-  .k-ctrl{display:flex;align-items:center;gap:14px;flex:none}
-  .leds{display:flex;gap:12px;align-items:center}
-  .led{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.1em;color:var(--silk-dim)}
-  .led i{width:6px;height:6px;border-radius:50%;background:var(--silk-dim);opacity:.3;transition:opacity .3s,background .3s}
-  #k-root.on .led.pwr i{opacity:1;background:var(--lit)}
-  #k-root.on .led.act i{opacity:1;background:var(--L2);animation:blink 1.6s steps(2) infinite}
-  #k-root.on .led.lnt i{opacity:1;background:#7ec98f}
-  @keyframes blink{50%{opacity:.2}}
-  .seg{display:flex;border:1px solid var(--copper);border-radius:3px;overflow:hidden}
-  .seg button{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;padding:6px 10px;border:0;
-    background:transparent;color:var(--silk-dim);cursor:pointer}
-  .seg button[aria-pressed="true"]{background:var(--lit);color:var(--ground)}
-  .seg button:focus-visible{outline:2px solid var(--glow);outline-offset:1px}
-  .k-replay{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;padding:6px 10px;
-    background:none;border:1px solid var(--rule);border-radius:3px;color:var(--silk-dim);cursor:pointer}
-  .k-replay:hover{border-color:var(--copper);color:var(--silk)}
-  .k-replay:focus-visible{outline:2px solid var(--glow);outline-offset:1px}
-
-  /* ---- legend ---- */
-  .k-key{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:12px;
-    font-size:9.5px;letter-spacing:.02em;color:var(--silk-dim)}
-  .k-key .kk{display:flex;align-items:center;gap:6px;white-space:nowrap}
-  .dot{width:6px;height:6px;border-radius:1px;flex:none;display:inline-block}
-  .ring{width:6px;height:6px;border-radius:50%;border:1.2px solid var(--review);flex:none;display:inline-block}
+    -webkit-font-smoothing:antialiased;padding:14px;min-height:100vh;
+    display:flex;flex-direction:column}
+  #k-wrap{width:100%;flex:1;display:flex;flex-direction:column;position:relative}
 
   /* ---- board ---- */
   .k-board{position:relative;border:1px solid var(--board-edge);border-radius:8px;background:var(--board);
-    padding:22px;
+    padding:22px;flex:1;display:flex;flex-direction:column;justify-content:center;
     background-image:radial-gradient(var(--rule) 1px,transparent 1px);
     background-size:16px 16px}
   .k-board .hole{position:absolute;width:9px;height:9px;border-radius:50%;border:1.2px solid var(--gold);opacity:.55}
@@ -72,16 +43,18 @@
      Storage) is the dominant, tightly-coupled center. Tools (PCIe/GPU-style
      expansion) sit in their own column, deliberately apart -- powerful, but
      optional, not on the CPU's own bus. */
-  .k-grid{position:relative;display:grid;z-index:1;
+  .k-grid{position:relative;display:grid;z-index:1;width:100%;
     grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) minmax(180px,1fr) minmax(160px,.55fr);
     grid-template-areas:"runtime runtime runtime tools" "llm     agentp  content tools";
-    gap:22px 36px}
+    gap:30px 44px}
   @media(max-width:900px){
     .k-grid{grid-template-columns:1fr;
       grid-template-areas:"runtime" "llm" "agentp" "content" "tools"}
   }
 
-  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:12px 14px 14px;min-width:0}
+  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:22px 26px 26px;
+    min-width:0;display:flex;flex-direction:column}
+  .zone-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px}
   .z-runtime{grid-area:runtime}.z-llm{grid-area:llm}
   .z-tools{grid-area:tools;display:flex;flex-direction:column;gap:12px}
   .z-agentp{grid-area:agentp}.z-content{grid-area:content}
@@ -90,23 +63,23 @@
   .zone-h .zc{font-size:8.5px;color:var(--gold);letter-spacing:.06em;font-weight:700;
     border:1px solid var(--gold);border-radius:50%;width:13px;height:13px;display:inline-flex;
     align-items:center;justify-content:center;flex:none}
-  .zone-h .zn{font-size:10.5px;letter-spacing:.13em;font-weight:700;color:var(--silk)}
-  .zone-h .zr{font-family:var(--sans);font-size:9px;color:var(--silk-dim);margin-left:auto;text-align:right}
+  .zone-h .zn{font-size:12.5px;letter-spacing:.13em;font-weight:700;color:var(--silk)}
+  .zone-h .zr{font-family:var(--sans);font-size:10.5px;color:var(--silk-dim);margin-left:auto;text-align:right}
 
   /* ===================== component shapes ===================== */
 
   /* -- generic node: name, kind glyph, click target -- */
   [data-id]{cursor:pointer}
   [data-id]:focus-visible{outline:2px solid var(--glow);outline-offset:2px;border-radius:2px}
-  .lbl{font-weight:600;color:var(--silk);font-size:10px}
-  .kd{font-size:7px;letter-spacing:.06em;color:var(--silk-dim)}
+  .lbl{font-weight:600;color:var(--silk);font-size:12px}
+  .kd{font-size:8.5px;letter-spacing:.06em;color:var(--silk-dim)}
   .mk{position:absolute;top:-4px;right:-4px;width:6px;height:6px;z-index:1}
   .mk.new{background:var(--new);border-radius:1px}
   .mk.rev{border:1.2px solid var(--review);border-radius:50%;background:var(--panel)}
 
   /* -- CPU: the Agent socket -- */
   .cpu-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:6px 0 2px}
-  .cpu{position:relative;width:174px;height:174px;border:1.6px solid var(--gold);border-radius:6px;
+  .cpu{position:relative;width:250px;height:250px;flex:none;border:1.6px solid var(--gold);border-radius:6px;
     background:var(--chip);transition:background .3s}
   .cpu::before{content:"";position:absolute;inset:14px;border-radius:3px;
     background-image:radial-gradient(var(--gold) 1.1px,transparent 1.3px);background-size:13px 13px;opacity:.4}
@@ -121,15 +94,15 @@
   .cpu-seat .t1{font-size:12px;font-weight:700;color:var(--silk)}
   .cpu-seat .t2{font-size:7.5px;letter-spacing:.08em;color:var(--L1);margin-top:3px}
   .cpu-cap{font-size:8.5px;letter-spacing:.14em;color:var(--gold);text-align:center}
-  .cpu-cluster{display:flex;gap:16px;width:100%;justify-content:center;flex-wrap:wrap;align-items:flex-start}
-  .cpu-col{display:flex;flex-direction:column;gap:7px;width:120px}
-  .dimm-col{display:flex;flex-direction:column;gap:7px;width:132px}
-  .dimm-col .dimm{padding:6px 8px}
-  .dimm-col .dimm .lbl{font-size:9px}
+  .cpu-cluster{display:flex;gap:30px;width:100%;justify-content:space-between;flex-wrap:wrap;align-items:center}
+  .cpu-col{display:flex;flex-direction:column;gap:12px;flex:1 1 160px;max-width:230px}
+  .dimm-col{display:flex;flex-direction:column;gap:12px;flex:1 1 180px;max-width:270px}
+  .dimm-col .dimm{padding:9px 12px}
+  .dimm-col .dimm .lbl{font-size:10.5px}
 
   /* -- IC: small chipset/support chips -- */
   .ic{position:relative;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
-    padding:5px 7px 6px;transition:border-color .16s,background .16s}
+    padding:13px 15px 14px;transition:border-color .16s,background .16s}
   .ic:hover{border-color:var(--gold)}
   .ic::before,.ic::after{content:"";position:absolute;left:6px;right:6px;height:2px;
     background-image:repeating-linear-gradient(90deg,var(--copper) 0 3px,transparent 3px 7px);opacity:.7}
@@ -143,21 +116,21 @@
   #k-root.pop .ic.plugged .ic-fill{opacity:1;transform:scaleX(1)}
 
   /* -- DIMM: storage slots, flanking the CPU cluster -- */
-  .dimm{position:relative;display:flex;align-items:center;gap:8px;border:1.2px solid var(--copper);
-    border-radius:2px;background:var(--chip);padding:6px 9px;transition:border-color .16s}
+  .dimm{position:relative;display:flex;align-items:center;gap:10px;border:1.2px solid var(--copper);
+    border-radius:2px;background:var(--chip);padding:14px 17px;transition:border-color .16s}
   .dimm:hover{border-color:var(--gold)}
   .dimm .teeth{position:absolute;left:8px;right:8px;bottom:-3px;height:3px;
     background-image:repeating-linear-gradient(90deg,var(--copper) 0 4px,transparent 4px 8px);opacity:.7}
   #k-root.on .dimm .teeth{background-image:repeating-linear-gradient(90deg,var(--gold) 0 4px,transparent 4px 8px);opacity:1}
-  .dimm .cap{width:5px;align-self:stretch;border-radius:1px;background:var(--l);opacity:0;transition:opacity .35s}
+  .dimm .cap{width:6px;align-self:stretch;border-radius:1px;background:var(--l);opacity:0;transition:opacity .35s}
   #k-root.pop .dimm.plugged .cap{opacity:1}
   .dimm .txt{display:flex;flex-direction:column;gap:1px;min-width:0}
-  .dimm .lbl{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dimm .lbl{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* -- PCIe: tool expansion cards -- */
-  .pcies{display:flex;gap:7px;align-items:stretch;height:150px}
+  .pcies{display:flex;gap:10px;align-items:stretch;flex:1;min-height:260px}
   .pcie{position:relative;flex:1;border:1.2px solid var(--copper);border-radius:2px;background:var(--chip);
-    display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;transition:border-color .16s}
+    display:flex;align-items:flex-end;justify-content:center;padding-bottom:12px;transition:border-color .16s}
   .pcie:hover{border-color:var(--gold)}
   .pcie .teeth{position:absolute;top:6px;bottom:6px;left:-3px;width:3px;
     background-image:repeating-linear-gradient(180deg,var(--copper) 0 4px,transparent 4px 8px);opacity:.7}
@@ -165,12 +138,12 @@
   .pcie .cap{position:absolute;top:-4px;left:6px;right:6px;height:5px;border-radius:1px;background:var(--l);
     opacity:0;transition:opacity .35s}
   #k-root.pop .pcie.plugged .cap{opacity:1}
-  .pcie .lbl{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;white-space:nowrap;letter-spacing:.03em}
+  .pcie .lbl{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;white-space:nowrap;letter-spacing:.03em}
 
   /* -- SMD: small surface-mount contracts -- */
-  .smds{display:flex;flex-wrap:wrap;gap:6px}
-  .smd{position:relative;border:1.2px dashed var(--copper);border-radius:2px;padding:4px 7px;
-    font-size:9.5px;transition:border-color .16s,background .16s}
+  .smds{display:flex;flex-wrap:wrap;gap:9px}
+  .smd{position:relative;border:1.2px dashed var(--copper);border-radius:2px;padding:11px 16px;
+    font-size:13px;transition:border-color .16s,background .16s}
   .smd:hover{border-color:var(--gold)}
   #k-root.on .smd{border-style:solid}
   .smd .cap{position:absolute;left:3px;right:3px;bottom:-2px;height:2px;border-radius:2px;background:var(--l);
@@ -179,29 +152,21 @@
   #k-root.pop .smd.plugged .cap{opacity:1}
 
   /* -- fuse row (errors) -- */
-  .fuses{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .fuses{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
   .fuse{display:flex;align-items:center;gap:0;cursor:pointer}
-  .fuse .body{width:20px;height:9px;border-radius:5px;border:1.2px solid var(--gold);background:var(--chip)}
-  .fuse .leg{width:4px;height:1.4px;background:var(--copper)}
-  .fuse-cap{font-family:var(--sans);font-size:9px;color:var(--silk-dim);margin-left:6px}
+  .fuse .body{width:26px;height:12px;border-radius:6px;border:1.2px solid var(--gold);background:var(--chip)}
+  .fuse .leg{width:5px;height:1.6px;background:var(--copper)}
+  .fuse-cap{font-family:var(--sans);font-size:10.5px;color:var(--silk-dim);margin-left:8px}
 
   /* -- content-block cell strip -- */
-  .cells{display:flex;flex-wrap:wrap;gap:4px;cursor:pointer}
-  .cell{border:1.1px solid var(--copper);border-radius:2px;padding:3px 6px;font-size:8px;letter-spacing:.03em;
+  .cells{display:flex;flex-wrap:wrap;gap:6px;cursor:pointer}
+  .cell{border:1.1px solid var(--copper);border-radius:2px;padding:9px 14px;font-size:12.5px;letter-spacing:.03em;
     color:var(--silk-dim);transition:border-color .16s,color .16s}
   .cells:hover .cell{border-color:var(--gold);color:var(--silk)}
   .cell.hero{color:var(--new);border-color:var(--new)}
 
-  .sub{font-size:8.5px;letter-spacing:.14em;color:var(--silk-dim);margin:11px 0 6px;
-    border-bottom:1px solid var(--rule);padding-bottom:4px}
-
-  /* ---- bus caption + footer ---- */
-  .k-bus{margin-top:12px;padding-top:10px;border-top:1px solid var(--rule);
-    font-size:9.5px;letter-spacing:.08em;color:var(--silk-dim);display:flex;justify-content:space-between;
-    flex-wrap:wrap;gap:8px}
-  .k-bus b{color:var(--silk);font-weight:700}
-  .k-foot{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:10px;
-    font-family:var(--sans);font-size:9.5px;color:var(--silk-dim)}
+  .sub{font-size:10px;letter-spacing:.14em;color:var(--silk-dim);margin:14px 0 8px;
+    border-bottom:1px solid var(--rule);padding-bottom:5px}
 
   /* ---- detail panel ---- */
   #k-scrim{position:fixed;inset:0;z-index:39;background:rgba(4,8,5,.45);opacity:0;pointer-events:none;transition:opacity .28s}
@@ -237,52 +202,12 @@
 </head>
 <body>
 
-<div id="k-root">
+<div id="k-root" class="on pop">
  <div id="k-wrap">
-  <div class="k-top">
-   <div class="k-id">
-    <h1>SUBSTRATE</h1>
-    <p>The Agent is the CPU — it owns the execution loop and calls out for everything else. The LLM is the accelerator card it calls into for compute, swappable like a GPU brand. The kernel is the board underneath: sockets for memory, storage, and tools, wired to one chipset.</p>
-   </div>
-   <div class="k-ctrl">
-    <div class="leds">
-      <span class="led pwr"><i></i>PWR</span>
-      <span class="led act"><i></i>ACT</span>
-      <span class="led lnt"><i></i>LNT 5/5</span>
-    </div>
-    <div class="seg" role="group" aria-label="Power">
-     <button id="b-off" aria-pressed="false">OFF</button>
-     <button id="b-on" aria-pressed="true">POWER</button>
-    </div>
-    <div class="seg" role="group" aria-label="Population">
-     <button id="b-bare" aria-pressed="false">BARE</button>
-     <button id="b-pop" aria-pressed="true">CHIPS</button>
-    </div>
-    <button class="k-replay" id="b-replay">↻ REBOOT</button>
-   </div>
-  </div>
-
-  <div class="k-key">
-   <span class="kk">dashed = kernel socket · solid = real chip</span>
-   <span class="kk"><span class="dot" style="background:var(--L1)"></span>L1 agents</span>
-   <span class="kk"><span class="dot" style="background:var(--L2)"></span>L2 capabilities</span>
-   <span class="kk"><span class="dot" style="background:var(--INT)"></span>integrations</span>
-   <span class="kk"><span class="dot" style="background:var(--INFRA)"></span>infrastructure</span>
-   <span class="kk"><span class="dot" style="background:var(--SRV)"></span>serving</span>
-   <span class="kk"><span class="dot" style="background:var(--new)"></span>changed 07-12</span>
-   <span class="kk"><span class="ring"></span>under review</span>
-   <span class="kk" style="margin-left:auto;color:var(--silk-dim)">click any part</span>
-  </div>
-
   <div class="k-board" id="k-board">
    <span class="hole tl"></span><span class="hole tr"></span><span class="hole bl"></span><span class="hole br"></span>
    <svg id="bus-svg"></svg>
    <div class="k-grid" id="k-grid"></div>
-   <div class="k-bus"><b>PROTO AREA</b> — reserved, zero-deps, pure-type sockets only: a contract earns a place here only when ≥2 layers above need it.</div>
-  </div>
-  <div class="k-foot">
-   <span>src/substrate/kernel — 40 files, 4.9K LOC</span>
-   <span>import-linter 5/5 · pyright 0 err</span>
   </div>
  </div>
 </div>
@@ -448,31 +373,32 @@ function renderCells(id){
 /* ---- zone builder ---- */
 function zone(cls,c,n,r,inner){
   return `<section class="zone ${cls}"><div class="zone-h"><span class="zc">${c}</span>
-    <span class="zn">${n}</span><span class="zr">${r}</span></div>${inner}</section>`;
+    <span class="zn">${n}</span><span class="zr">${r}</span></div>
+    <div class="zone-body">${inner}</div></section>`;
 }
 
 const grid=document.getElementById("k-grid");
 grid.innerHTML =
-  zone("z-runtime","A","RUNTIME CHIPSET","Agent[CtxT] + storage, one cluster",
+  zone("z-runtime","A","RUNTIME CHIPSET","Agent[CtxT] + working memory, one cluster",
     `<div class="cpu-wrap">
        <div class="cpu-cluster">
-         <div class="dimm-col">${["history","vector","graph"].map(renderDIMM).join("")}</div>
+         <div class="dimm-col">${["history"].map(renderDIMM).join("")}</div>
          <div class="cpu-col">${renderIC("signalbus")}${renderIC("supervisor")}${renderSMD("effect")}</div>
          <div class="cpu" data-id="agent" tabindex="0" role="button" aria-label="Agent[CtxT] — PROTOCOL, implemented by ReActAgent">
            <div class="cpu-label"><span class="t1">AGENT&#91;CTXT&#93;</span><span class="t2">SOCKET CTX-0</span></div>
            <div class="cpu-seat"><div><span class="t1">ReActAgent</span><br><span class="t2">L1</span></div></div></div>
          <div class="cpu-col">${renderIC("eventlog")}${renderIC("scheduler")}${renderIC("inbox")}</div>
-         <div class="dimm-col">${["blob","tasks","memory"].map(renderDIMM).join("")}</div>
+         <div class="dimm-col">${["memory"].map(renderDIMM).join("")}</div>
        </div>
      </div>`)
-+ zone("z-llm","B","LLM ACCELERATOR","the CPU calls out for compute — swappable like a GPU brand",
-    `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}</div>
++ zone("z-llm","B","COMPUTE ACCELERATORS","generation & retrieval — swappable like a GPU brand",
+    `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}${renderIC("vector")}${renderIC("graph")}</div>
      <div class="sub">STREAM</div><div class="smds">${renderSMD("stream")}</div>`)
-+ zone("z-agentp","C","AGENT & POLICY","supervision surface",
-    `<div class="smds">${["supervision","runmeta","middleware","compaction","agentctx"].map(renderSMD).join("")}</div>`)
-+ zone("z-content","D","CONTENT","multimodal payload",
++ zone("z-agentp","C","AGENT & POLICY","supervision + task state",
+    `<div class="smds">${["supervision","runmeta","middleware","compaction","agentctx","tasks"].map(renderSMD).join("")}</div>`)
++ zone("z-content","D","CONTENT","multimodal payload + blob storage",
     `${renderCells("content")}<div class="sub">FAULT PROTECTION</div>${renderFuse("errors")}
-     <div class="smds" style="margin-top:8px">${renderSMD("ids")}</div>`)
+     <div class="smds" style="margin-top:8px">${renderSMD("ids")}${renderSMD("blob")}</div>`)
 + zone("z-tools","E","TOOL EXPANSION","off the CPU's own bus",
     `<div class="pcies">${["tool","hosted","provdef"].map(renderPCIE).join("")}</div>
      <div class="smds" style="flex-direction:column">${renderIC("toolreg")}${renderIC("approval")}</div>`);
@@ -529,30 +455,18 @@ addEventListener("resize",scheduleLayout);
 addEventListener("load",scheduleLayout);
 requestAnimationFrame(()=>requestAnimationFrame(layoutBuses));
 
-/* ---- power / population toggles ---- */
+/* ---- one-time chip seat-in on load (no toggle -- always populated) ---- */
 const root=document.getElementById("k-root");
-const bOff=document.getElementById("b-off"),bOn=document.getElementById("b-on");
-const bBare=document.getElementById("b-bare"),bPop=document.getElementById("b-pop");
-function setPower(on){root.classList.toggle("on",on);bOff.setAttribute("aria-pressed",!on);bOn.setAttribute("aria-pressed",on);}
-function setPop(pop,animate){
-  if(animate){
-    const nodes=[...document.querySelectorAll(".plugged")];
-    nodes.forEach((n,i)=>n.style.transitionDelay=(i*18)+"ms");
-    setTimeout(()=>nodes.forEach(n=>n.style.transitionDelay=""),nodes.length*18+450);
-  }
-  root.classList.toggle("pop",pop);bBare.setAttribute("aria-pressed",!pop);bPop.setAttribute("aria-pressed",pop);
-}
-bOff.onclick=()=>setPower(false); bOn.onclick=()=>setPower(true);
-bBare.onclick=()=>setPop(false,true); bPop.onclick=()=>setPop(true,true);
-document.getElementById("b-replay").onclick=()=>{
-  setPower(false); setPop(false,false);
-  setTimeout(()=>setPop(true,true),200);
-  setTimeout(()=>setPower(true),650);
-};
-
 const reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-if(reduce){ setPower(true); setPop(true,false); }
-else { setPower(false); setPop(false,false); setTimeout(()=>setPop(true,true),300); setTimeout(()=>setPower(true),900); }
+if(!reduce){
+  root.classList.remove("pop");
+  const nodes=[...document.querySelectorAll(".plugged")];
+  nodes.forEach((n,i)=>n.style.transitionDelay=(i*18)+"ms");
+  setTimeout(()=>{
+    root.classList.add("pop");
+    setTimeout(()=>nodes.forEach(n=>n.style.transitionDelay=""),nodes.length*18+450);
+  },300);
+}
 
 /* ---- detail panel ---- */
 const panel=document.getElementById("k-panel"),scrim=document.getElementById("k-scrim");

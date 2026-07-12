@@ -158,8 +158,37 @@ class ReActAgent:
 
         await self.middleware.execute(call_ctx, _final)
 
+    def _resolve_execution_budget(self, ctx: RunContext) -> ExecutionTracker | None:
+        """Effective budget for this run: the run's inherited ``Supervision.
+        execution_budget`` (set when this agent was ``ctx.spawn()``'d under a
+        budget, propagated via ``Supervision.spawn_child()``) takes priority
+        over the constructor-supplied default.
+
+        Built fresh per call rather than cached on ``self`` — an ``Agent``
+        instance is registered once and reused across every run of its
+        ``agent_id`` (see ``Runtime.register()``); a shared, mutating
+        ``ExecutionTracker`` on ``self`` would let concurrent runs of the same
+        registered agent corrupt each other's usage counters. Rebuilding per
+        call is also replay-safe: a resumed run re-enters this loop from the
+        top and reprocesses every prior turn (cache hits included), so a
+        fresh tracker still ends up with the correct cumulative total.
+        """
+        supervision = ctx.meta.supervision
+        budget = supervision.execution_budget if supervision else None
+        if budget is not None:
+            return ExecutionTracker(
+                max_tokens=budget.max_tokens,
+                max_cost_usd=budget.max_cost_usd,
+                max_turns=budget.max_turns,
+            )
+        return self._execution_budget
+
     async def _generate_turn(
-        self, ctx: RunContext, messages: list[ChatMessage], options: GenerationOptions
+        self,
+        ctx: RunContext,
+        messages: list[ChatMessage],
+        options: GenerationOptions,
+        tracker: ExecutionTracker | None,
     ) -> LLMResponse:
         """One LLM call for the loop: dispatch hooks, compact, call, track budget."""
         if self.hooks:
@@ -176,8 +205,8 @@ class ReActAgent:
                 HookEvent.LLM_END,
                 {"agent_name": self.name, "run_id": ctx.run_id, "usage": resp.usage},
             )
-        if self._execution_budget is not None:
-            self._execution_budget.consume(
+        if tracker is not None:
+            tracker.consume(
                 tokens=resp.usage.total_tokens if resp.usage else 0,
                 turns=1,
             )
@@ -237,12 +266,13 @@ class ReActAgent:
             if self._initial_tool_choice
             else base_options
         )
+        tracker = self._resolve_execution_budget(ctx)
 
         tool_call_records: list[ToolCallRecord] = []
 
         for _ in range(self._max_iterations):
             ctx.check()
-            resp = await self._generate_turn(ctx, messages, options)
+            resp = await self._generate_turn(ctx, messages, options, tracker)
             # Drop the forced tool_choice after the first call so subsequent
             # iterations can freely choose to respond with text or more tools.
             options = base_options

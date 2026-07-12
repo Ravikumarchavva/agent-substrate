@@ -163,3 +163,100 @@ async def test_react_agent_respects_execution_budget() -> None:
                 assert entry.kind == "run.failed"
                 assert "Token budget exceeded" in (entry.payload or {}).get("error", "")
                 break
+
+
+async def test_spawned_child_inherits_execution_budget_from_supervision() -> None:
+    """A child ctx.spawn()'d under a tight Supervision.execution_budget must
+    have it enforced even though the child's own ReActAgent was constructed
+    with NO execution_budget at all — this is the gap ExecutionBudget's
+    propagation-without-enforcement left open (see kernel/agent/supervision.py
+    and docs/claude_docs/kernel's audit): Supervision.execution_budget flowed
+    through ctx.spawn()/spawn_child() but nothing ever converted it into an
+    enforced ExecutionTracker for the spawned run."""
+    from substrate.agents.core.react import ReActAgent
+    from substrate.agents.runtime import Runtime
+    from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
+    from substrate.kernel.core.content import ChatMessage, Role, TextBlock
+    from substrate.kernel.core.identity import AgentId
+    from substrate.kernel.core.usage import Usage
+    from substrate.kernel.messaging.message import ChatPayload, DataPayload, Message
+    from substrate.kernel.messaging.stream import CompletionEvent
+
+    class MockLLMClient:
+        model = "mock-model"
+
+        async def generate_stream(
+            self,
+            messages: list[ChatMessage],
+            *,
+            options: object = None,
+            ctx: object = None,
+        ):  # type: ignore[override]
+            yield CompletionEvent(
+                content=[TextBlock(text="hello")],
+                usage=Usage(input_tokens=60, output_tokens=60),
+            )
+
+    llm = MockLLMClient()
+    child_id = AgentId(type="agent", key="budget-child")
+    parent_id = AgentId(type="agent", key="budget-parent")
+
+    # No execution_budget passed here — proves the enforcement comes from
+    # the inherited Supervision, not a constructor default.
+    child = ReActAgent("ChildBot", model=llm, max_iterations=5)
+    child.id = child_id
+
+    class SpawningParent:
+        id = parent_id
+
+        async def run(self, ctx: object, inbox: list[Message]) -> None:
+            boot = Message(
+                target=child_id,
+                payload=DataPayload(data={}),
+            )
+            tight_supervision = Supervision.root(
+                child_id, execution_budget=ExecutionBudget(max_tokens=100)
+            )
+            await ctx.spawn(  # type: ignore[attr-defined]
+                child_id, boot=boot, supervision=tight_supervision
+            )
+
+    parent = SpawningParent()
+
+    async with Runtime() as rt:
+        await rt.register(parent)
+        await rt.register(child)
+
+        msg = Message(
+            target=parent_id,
+            sender=AgentId(type="proxy", key="user"),
+            payload=ChatPayload(
+                message=ChatMessage(role=Role.USER, content=[TextBlock(text="hi")])
+            ),
+        )
+        await rt.submit(parent_id, msg)
+
+        found_child_run = False
+        async for run_id in _poll_for_child_run(rt, child_id):
+            found_child_run = True
+            async for entry in rt.event_log.tail(run_id):
+                if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
+                    assert entry.kind == "run.failed"
+                    assert "Token budget exceeded" in (entry.payload or {}).get(
+                        "error", ""
+                    )
+                    return
+            break
+        assert found_child_run, "child run was never spawned"
+
+
+async def _poll_for_child_run(rt, child_id):
+    """Yield once the child agent's run_id is discoverable, then stop."""
+    import asyncio
+
+    for _ in range(100):
+        found = await rt.scheduler.find_run_for_agent(child_id)
+        if found is not None:
+            yield found[0]
+            return
+        await asyncio.sleep(0.02)

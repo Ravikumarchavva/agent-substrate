@@ -4,9 +4,13 @@
 Method: collect every top-level (module-scope) ``def``/``class`` name across
 src/substrate/, excluding underscore-prefixed and dunder names. Then walk
 every .py file under src/substrate/ and tests/, counting each identifier's
-appearances as an ast.Name in Load context (i.e. actually referenced —
-called, instantiated, used as a type, passed around — not just imported or
-listed in __all__, since `from x import Foo` and `"Foo"` are not Name nodes).
+appearances as an ast.Name in Load context (called, instantiated, used as a
+type, passed around), plus two non-Name reference forms that are common here
+and would otherwise read as false positives: `import X as _X` aliases (the
+LLM client modules), and string forward-refs like SQLAlchemy's
+`Mapped["User"]` / `relationship("User")` — this also means any name quoted
+verbatim anywhere (a docstring mention, an `__all__` entry) counts as a
+reference, which trades a few false negatives for far fewer false positives.
 
 A symbol with zero Name-Load occurrences anywhere is CONFIRMED unused: the
 identifier string never appears as a real reference in the entire codebase.
@@ -116,55 +120,30 @@ def _collect_usages(files: list[Path]) -> UsageIndex:
                 for alias in node.names:
                     if alias.asname and alias.asname != alias.name:
                         index.record(alias.name, file)
+            # String forward-refs, e.g. SQLAlchemy `Mapped["User"]` /
+            # `relationship("User")` or a quoted type annotation — these
+            # are real references but never produce an ast.Name node.
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                index.record(node.value, file)
     return index
 
 
-def _collect_all_exports(files: list[Path]) -> set[str]:
-    """Names listed in any top-level ``__all__ = [...]`` — explicit public API.
-
-    Not a usage in the "someone calls this" sense, but a deliberate signal
-    that the symbol is meant to be consumed by external users of this
-    framework, who this scan can't see (no import of `substrate` outside
-    this repo). Kept as a separate bucket, not folded into "confirmed dead."
-    """
-    exported: set[str] = set()
-    for file in files:
-        try:
-            tree = ast.parse(file.read_text(encoding="utf-8"), filename=str(file))
-        except SyntaxError:
-            continue
-        for node in tree.body:
-            if not isinstance(node, ast.Assign):
-                continue
-            if not any(
-                isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets
-            ):
-                continue
-            if isinstance(node.value, (ast.List, ast.Tuple)):
-                for elt in node.value.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                        exported.add(elt.value)
-    return exported
-
-
-def find_dead_symbols() -> tuple[list[Symbol], list[Symbol], list[Symbol]]:
+def find_dead_symbols() -> tuple[list[Symbol], list[Symbol]]:
     src_files = _iter_py_files(SRC_ROOT)
     all_files = src_files + _iter_py_files(TESTS_ROOT)
 
     symbols = _collect_top_level_symbols(src_files)
     usage = _collect_usages(all_files)
-    exported = _collect_all_exports(src_files)
 
     confirmed: list[Symbol] = []
     suspect: list[Symbol] = []
-    public_api: list[Symbol] = []
     for sym in symbols:
         count = usage.counts.get(sym.name, 0)
         if count == 0:
-            (public_api if sym.name in exported else confirmed).append(sym)
+            confirmed.append(sym)
         elif usage.own_file_only.get(sym.name) == {sym.file}:
             suspect.append(sym)
-    return confirmed, suspect, public_api
+    return confirmed, suspect
 
 
 def main() -> int:
@@ -174,7 +153,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    confirmed, suspect, public_api = find_dead_symbols()
+    confirmed, suspect = find_dead_symbols()
 
     def _to_dicts(items: list[Symbol]) -> list[dict[str, object]]:
         return [
@@ -191,15 +170,11 @@ def main() -> int:
         payload = {
             "confirmed": _to_dicts(confirmed),
             "suspect": _to_dicts(suspect),
-            "public_api": _to_dicts(public_api),
         }
         print(json.dumps(payload, indent=2))
         return 0
 
-    print(
-        f"# Dead symbol scan — {len(confirmed)} confirmed, {len(suspect)} suspect, "
-        f"{len(public_api)} public-API (excluded from confirmed)\n"
-    )
+    print(f"# Dead symbol scan — {len(confirmed)} confirmed, {len(suspect)} suspect\n")
 
     print(
         "## CONFIRMED — identifier never referenced anywhere in src/substrate or tests"

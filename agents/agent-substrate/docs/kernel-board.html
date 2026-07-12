@@ -367,6 +367,14 @@ const MOD={eventlog:"runtime/log_entry.py",scheduler:"runtime/scheduler.py",inbo
  hosted:"tools/tools.py",provdef:"tools/tools.py",toolreg:"tools/tools.py",approval:"tools/approval.py",content:"core/content.py",
  errors:"core/errors.py",ids:"core/ + messaging/message.py"};
 for(const k in MOD) if(S[k]) S[k].mod=MOD[k];
+
+/* ---- report height to a parent iframe (docs/index.md embeds this page) ---- */
+if(window.parent && window.parent!==window){
+  const report=()=>window.parent.postMessage(
+    {kboardHeight:document.documentElement.scrollHeight},"*");
+  new ResizeObserver(report).observe(document.body);
+  addEventListener("load",report);
+}
 })();
 </script>
 </body>

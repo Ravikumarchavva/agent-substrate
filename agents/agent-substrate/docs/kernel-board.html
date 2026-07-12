@@ -6,7 +6,7 @@
 <title>SUBSTRATE — Kernel Contract Board</title>
 <meta name="description" content="A motherboard-style diagram of the agent-substrate kernel (Layer 0): the Agent as CPU, storage as DIMM slots, tools as PCIe cards — every socket traced to its real implementation.">
 <style>
-  html,body{margin:0;padding:0}
+  html,body{margin:0;padding:0;background:#081109;min-height:100%}
   :root{
     --ground:#081109; --board:#0f2317; --board-edge:#1d3d2c; --panel:#122a1c;
     --silk:#d7e4da; --silk-dim:#8fa596; --rule:#1f3d2b;
@@ -19,7 +19,7 @@
   }
   *{box-sizing:border-box}
   #k-root{background:var(--ground);color:var(--silk);font-family:var(--mono);
-    -webkit-font-smoothing:antialiased;padding:20px 20px 26px}
+    -webkit-font-smoothing:antialiased;padding:20px 20px 26px;min-height:100vh}
   #k-wrap{max-width:1220px;margin:0 auto}
 
   /* ---- header ---- */
@@ -54,7 +54,7 @@
 
   /* ---- board ---- */
   .k-board{position:relative;border:1px solid var(--board-edge);border-radius:8px;background:var(--board);
-    padding:16px;
+    padding:22px;
     background-image:radial-gradient(var(--rule) 1px,transparent 1px);
     background-size:16px 16px}
   .k-board .hole{position:absolute;width:9px;height:9px;border-radius:50%;border:1.2px solid var(--gold);opacity:.55}
@@ -73,15 +73,15 @@
      expansion) sit in their own column, deliberately apart -- powerful, but
      optional, not on the CPU's own bus. */
   .k-grid{position:relative;display:grid;z-index:1;
-    grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) minmax(180px,1fr) minmax(150px,.55fr);
+    grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) minmax(180px,1fr) minmax(160px,.55fr);
     grid-template-areas:"runtime runtime runtime tools" "llm     agentp  content tools";
-    gap:16px 30px}
+    gap:22px 36px}
   @media(max-width:900px){
     .k-grid{grid-template-columns:1fr;
       grid-template-areas:"runtime" "llm" "agentp" "content" "tools"}
   }
 
-  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:9px 11px 11px;min-width:0}
+  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:12px 14px 14px;min-width:0}
   .z-runtime{grid-area:runtime}.z-llm{grid-area:llm}
   .z-tools{grid-area:tools;display:flex;flex-direction:column;gap:12px}
   .z-agentp{grid-area:agentp}.z-content{grid-area:content}
@@ -106,7 +106,7 @@
 
   /* -- CPU: the Agent socket -- */
   .cpu-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:6px 0 2px}
-  .cpu{position:relative;width:150px;height:150px;border:1.6px solid var(--gold);border-radius:6px;
+  .cpu{position:relative;width:174px;height:174px;border:1.6px solid var(--gold);border-radius:6px;
     background:var(--chip);transition:background .3s}
   .cpu::before{content:"";position:absolute;inset:14px;border-radius:3px;
     background-image:radial-gradient(var(--gold) 1.1px,transparent 1.3px);background-size:13px 13px;opacity:.4}
@@ -242,7 +242,7 @@
   <div class="k-top">
    <div class="k-id">
     <h1>SUBSTRATE</h1>
-    <p>The Agent is the CPU. The kernel is the board it sits on — sockets for memory, storage, and tools, wired to one chipset. Everything above Layer 0 is a part that plugs in.</p>
+    <p>The Agent is the CPU — it owns the execution loop and calls out for everything else. The LLM is the accelerator card it calls into for compute, swappable like a GPU brand. The kernel is the board underneath: sockets for memory, storage, and tools, wired to one chipset.</p>
    </div>
    <div class="k-ctrl">
     <div class="leds">
@@ -465,7 +465,7 @@ grid.innerHTML =
          <div class="dimm-col">${["blob","tasks","memory"].map(renderDIMM).join("")}</div>
        </div>
      </div>`)
-+ zone("z-llm","B","LLM PHY","provider-neutral",
++ zone("z-llm","B","LLM ACCELERATOR","the CPU calls out for compute — swappable like a GPU brand",
     `<div class="smds" style="flex-direction:column">${renderIC("llmclient")}${renderIC("embed")}</div>
      <div class="sub">STREAM</div><div class="smds">${renderSMD("stream")}</div>`)
 + zone("z-agentp","C","AGENT & POLICY","supervision surface",

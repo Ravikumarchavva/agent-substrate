@@ -131,7 +131,7 @@ fabric (L3)        ← Flows (Sequential/Parallel/Conditional), Evals, durable e
 
 Import-linter enforces the layer contract on every CI run (`uv run lint-imports`).
 
-**[→ Kernel Contract Board](docs/kernel-board.html)** — an interactive, one-page map of every Layer 0 contract (`Protocol`/dataclass/enum) and what actually implements it, traced against real call paths.
+**[→ Kernel Board](docs/kernel-board.html)** — the motherboard your agents run on: one kernel, six subsystems, every contract traced to its real implementation.
 
 ---
 

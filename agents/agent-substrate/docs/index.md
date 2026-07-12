@@ -148,9 +148,9 @@ graph TB
 
 `integrations` (LLM providers, MCP, connectors), `infrastructure` (Postgres, Redis, MinIO, durable runtime), and `serving` (the monolith + 12 microservices) sit orthogonal to the stack — they implement kernel Protocols and wire everything together at startup.
 
-**The Kernel Contract Board** — every Layer 0 contract as a clickable node, the trace to what actually implements it, grounded in the codebase rather than docstrings.
+**The Kernel Board** — the motherboard your agents run on. One kernel, six subsystems; click a subsystem for its contracts, click a contract for the real implementations that plug into it.
 
-<iframe id="kboard-frame" src="kernel-board.html" title="Kernel Contract Board"
+<iframe id="kboard-frame" src="kernel-board.html" title="Kernel Board"
   style="width:100%;height:520px;border:1px solid var(--md-default-fg-color--lightest);border-radius:8px;display:block;"
   loading="lazy"></iframe>
 <script>

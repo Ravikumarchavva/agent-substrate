@@ -18,26 +18,6 @@ class KernelError(Exception):
     """
 
 
-class AgentNotFoundError(KernelError):
-    """Raised when sending to an AgentId that has no registered handler."""
-
-    def __init__(self, message: str, *, agent_id: AgentId | None = None) -> None:
-        super().__init__(message)
-        self.agent_id = agent_id
-
-
-class HandlerError(KernelError):
-    """Raised when a message handler raises an exception.
-
-    Wraps the original exception so callers receive a typed error rather
-    than a bare exception or silent ``None``.
-    """
-
-    def __init__(self, message: str, *, cause: Exception | None = None) -> None:
-        super().__init__(message)
-        self.cause = cause
-
-
 class AgentCrashError(KernelError):
     """Raised when an agent's run fails with an unexpected exception.
 
@@ -164,28 +144,6 @@ class ConcurrentAppendError(KernelError):
         self.actual_seq = actual_seq
 
 
-class SpawnDenied(KernelError):
-    """Raised by ``Supervisor.spawn`` when the root run's SpawnBudget is exhausted.
-
-    Analogous to a denied tool approval — the agent author should handle this
-    explicitly (e.g. retry later, degrade gracefully, or surface to the user).
-
-    ``parent_run`` — the run that attempted the spawn.
-    ``budget``     — the budget ceiling that was hit.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        parent_run: str,
-        budget: int,
-    ) -> None:
-        super().__init__(message)
-        self.parent_run = parent_run
-        self.budget = budget
-
-
 class ThreadBusyError(KernelError):
     """Raised by ``Scheduler.enqueue`` when ``thread_id`` already has an
     active (PENDING/RUNNING/SUSPENDED) run.
@@ -204,8 +162,6 @@ class ThreadBusyError(KernelError):
 
 __all__ = [
     "KernelError",
-    "AgentNotFoundError",
-    "HandlerError",
     "AgentCrashError",
     "PermanentError",
     "BudgetExhaustedError",
@@ -213,6 +169,5 @@ __all__ = [
     "CancellationError",
     "SuspendInterrupt",
     "ConcurrentAppendError",
-    "SpawnDenied",
     "ThreadBusyError",
 ]

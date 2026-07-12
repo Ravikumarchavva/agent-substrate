@@ -31,12 +31,6 @@ Tool execution model (two orthogonal axes)
     output item.
     Examples: OpenAI local ``shell``, ``apply_patch``, ``computer_use``.
 
-``ToolSpec`` (``FunctionSpec | ProviderSpec``)
-    Typed, serialisable, JSON-round-trippable wire declaration.  Replaces
-    ad-hoc dict soup in encoders.  ``spec_of(tool, provider=...)`` derives
-    the correct spec for a given provider and returns ``None`` when the tool
-    has no spec for that provider (encoder drops it with a warning).
-
 ``ToolRegistry`` and ``Toolbox`` accept ``AnyTool = Tool | HostedTool | ProviderDefinedTool``.
 
 Use ``is_hosted_tool`` / ``is_provider_defined_tool`` to branch at dispatch time.
@@ -49,7 +43,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
-    Annotated,
     Any,
     Literal,
     Protocol,
@@ -100,20 +93,6 @@ class ToolType(str, Enum):
     KNOWLEDGE = "knowledge"
     CONNECTOR = "connector"
     PIPELINE = "pipeline"
-
-
-class ToolExecution(str, Enum):
-    """Where / how a tool is executed.
-
-    LOCAL            — framework calls ``tool.execute()`` locally.
-    PROVIDER         — provider executes natively; no local call.
-    PROVIDER_DEFINED — provider declares the call shape; developer executes
-                       locally via ``handle_call()``.
-    """
-
-    LOCAL = "local"
-    PROVIDER = "provider"
-    PROVIDER_DEFINED = "provider_defined"
 
 
 # ---------------------------------------------------------------------------
@@ -206,82 +185,6 @@ class ToolExecutionResult(PayloadBase):
     def text(self) -> str:
         """Plain-text rendering of all content blocks."""
         return content_blocks_to_str(self.content)
-
-
-# ---------------------------------------------------------------------------
-# ToolSpec — typed, serialisable wire declarations (replaces dict soup)
-# ---------------------------------------------------------------------------
-
-
-class FunctionSpec(BaseModel):
-    """Wire declaration for a locally-executed function tool.
-
-    Encoders consume ``list[ToolSpec]`` and never guess formats.
-    JSON-round-trippable → works for DB-backed registries and
-    the ``tool_executor`` microservice.
-
-    ``lazy_schema`` — when True, the encoder should withhold the full parameter
-    schema from the initial tool list; the model can request it on demand.
-    This is a provider-neutral flag; individual encoders map it to the
-    provider's mechanism (e.g. ``defer_loading`` for OpenAI).
-    """
-
-    kind: Literal["function"] = "function"
-    name: str
-    description: str = ""
-    parameters: JsonObject = Field(default_factory=dict)
-    lazy_schema: bool = False
-    strict: bool = True
-
-    model_config = {"frozen": True}
-
-
-class ProviderSpec(BaseModel):
-    """Wire declaration for a provider-hosted or provider-defined tool.
-
-    ``provider`` identifies which LLM vendor this spec targets
-    (e.g. ``"openai"``, ``"anthropic"``).  ``spec`` is passed verbatim
-    to that provider's tool list — the kernel never inspects it.
-    """
-
-    kind: Literal["provider"] = "provider"
-    name: str = ""
-    provider: str = ""
-    spec: JsonObject
-
-    model_config = {"frozen": True}
-
-
-ToolSpec = Annotated[FunctionSpec | ProviderSpec, Field(discriminator="kind")]
-"""Discriminated union of all tool wire declarations."""
-
-
-def spec_of(tool: AnyTool, *, provider: str) -> ToolSpec | None:
-    """Derive the correct ``ToolSpec`` for *tool* targeting *provider*.
-
-    - ``Tool`` (LOCAL) always produces a ``FunctionSpec``.
-    - ``HostedTool`` / ``ProviderDefinedTool`` produce a ``ProviderSpec``
-      when a spec for *provider* exists; otherwise returns ``None``
-      (the encoder should drop the tool and log a warning — never send
-      a malformed spec that would cause a provider 400).
-    """
-    if is_provider_defined_tool(tool) or is_hosted_tool(tool):
-        spec_dict = tool.provider_specs.get(provider)
-        if spec_dict is None:
-            return None
-        return ProviderSpec(
-            name=getattr(tool, "name", ""),
-            provider=provider,
-            spec=spec_dict,
-        )
-    # Local Tool — always has a FunctionSpec
-    local: Tool = tool  # type: ignore[assignment]
-    return FunctionSpec(
-        name=local.name,
-        description=local.description,
-        parameters=local.input_schema,
-        lazy_schema=bool(getattr(local, "lazy_schema", False)),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -444,14 +347,9 @@ class ToolRegistry(Protocol):
 __all__ = [
     "ToolRisk",
     "ToolType",
-    "ToolExecution",
     "ToolUI",
     "ToolCallRequest",
     "ToolExecutionResult",
-    "FunctionSpec",
-    "ProviderSpec",
-    "ToolSpec",
-    "spec_of",
     "Tool",
     "HostedTool",
     "ProviderDefinedTool",

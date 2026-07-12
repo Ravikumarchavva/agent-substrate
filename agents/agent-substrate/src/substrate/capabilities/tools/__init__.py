@@ -31,7 +31,6 @@ from substrate.capabilities.tools.files.document_analyzer import DocumentAnalyze
 from substrate.capabilities.tools.communication.email_sender import EmailSenderTool
 from substrate.capabilities.tools.communication.http_request import HttpRequestTool
 from substrate.capabilities.tools.human_input import AskHumanTool
-from substrate.capabilities.tools.tool_approval import ToolApprovalHandler
 from substrate.capabilities.tools.ai.image_generator import ImageGeneratorTool
 from substrate.capabilities.tools.files.invoice_extractor import InvoiceExtractorTool
 from substrate.capabilities.tools.ai.knowledge_search import KnowledgeSearchTool
@@ -56,7 +55,6 @@ __all__ = [
     "EmailSenderTool",
     "HttpRequestTool",
     "AskHumanTool",
-    "ToolApprovalHandler",
     "ImageGeneratorTool",
     "InvoiceExtractorTool",
     "KnowledgeSearchTool",

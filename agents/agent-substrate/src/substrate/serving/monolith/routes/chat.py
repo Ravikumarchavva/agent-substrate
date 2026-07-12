@@ -289,6 +289,7 @@ async def chat(
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
             runtime=deps["runtime"],
             initial_tool_choice=initial_tool_choice or None,
+            bridge=deps["bridge"],
         )
 
         # 4. Extract user content from last message

@@ -100,6 +100,7 @@ from substrate.kernel.agent.runtime_context import CancellationToken, RunMeta
 from substrate.kernel.tools.approval import (
     ApprovalDecision,
     ApprovalRequest,
+    ApprovalResult,
     ApprovalHandler,
 )
 from substrate.kernel.tools.chain import (
@@ -237,6 +238,7 @@ __all__ = [
     # HITL
     "ApprovalDecision",
     "ApprovalRequest",
+    "ApprovalResult",
     "ApprovalHandler",
     # Chain
     "ChainPolicy",

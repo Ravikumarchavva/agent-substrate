@@ -7,7 +7,11 @@ Slack bot, CLI prompt, or automated policy engine).
 
 ``ApprovalRequest`` is immutable and fully serializable so it can be stored,
 forwarded over pub/sub, and resumed after a restart.
-``ApprovalDecision`` is the typed response.
+``ApprovalDecision`` is the typed response; ``MODIFIED`` carries edited
+arguments via ``ApprovalResult.modified_args`` rather than a separate
+request/response vocabulary — this is the single approval contract for the
+framework (see ``serving/monolith/sse/approval.py::SSEApprovalHandler`` for
+the concrete web implementation).
 ``ApprovalHandler`` is the protocol any backend must implement.
 """
 
@@ -29,6 +33,7 @@ class ApprovalDecision(StrEnum):
     APPROVED = "approved"
     DENIED = "denied"
     SKIPPED = "skipped"
+    MODIFIED = "modified"
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,21 +58,40 @@ class ApprovalRequest:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ApprovalResult:
+    """The human's response to an ``ApprovalRequest``.
+
+    ``modified_args`` is only meaningful when ``decision == MODIFIED`` — the
+    edited arguments to execute the call with instead of the originally
+    requested ones. ``None`` for every other decision.
+    """
+
+    decision: ApprovalDecision
+    modified_args: JsonObject | None = None
+
+
 class ApprovalHandler(Protocol):
     """Protocol for approval backends.
 
     Implementations:
-    - ``WebApprovalHandler``  — sends request to the HITL web service, waits for decision
-    - ``AutoApprovalHandler`` — always approves (for testing)
-    - ``CliApprovalHandler``  — prompts the terminal operator
+    - ``SSEApprovalHandler`` (``serving/monolith/sse/approval.py``) — routes
+      through the web SSE stream, waits for the user's decision.
+    - A CLI/Slack/automated-policy handler can implement the same Protocol.
 
     The agent loop calls ``request()`` synchronously (it awaits it), then
-    uses the returned decision to proceed or cancel the tool call.
+    uses the returned ``ApprovalResult`` to proceed, cancel, or substitute
+    modified arguments for the tool call.
     """
 
-    async def request(self, req: ApprovalRequest) -> ApprovalDecision:
+    async def request(self, req: ApprovalRequest) -> ApprovalResult:
         """Block until an approval decision is made and return it."""
         ...
 
 
-__all__ = ["ApprovalDecision", "ApprovalRequest", "ApprovalHandler"]
+__all__ = [
+    "ApprovalDecision",
+    "ApprovalRequest",
+    "ApprovalResult",
+    "ApprovalHandler",
+]

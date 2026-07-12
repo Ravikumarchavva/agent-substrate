@@ -185,16 +185,23 @@ class Worker:
 
         approval = getattr(agent, "approval_handler", None)
         if approval is not None and not hasattr(approval, "request"):
-            from substrate.kernel.tools.approval import ApprovalDecision
+            from substrate.kernel.tools.approval import ApprovalDecision, ApprovalResult
 
             class CallbackApprovalHandlerAdapter:
+                """Adapts a bare ``async def callback(name, args) -> bool`` into
+                the kernel ``ApprovalHandler`` Protocol — for callers that hand
+                ``ReActAgent(approval_handler=...)`` a plain approve/deny
+                callback rather than a full Protocol implementation. Can only
+                ever produce APPROVED/DENIED — a bare bool has no way to
+                express MODIFIED."""
+
                 def __init__(self, callback):
                     self.callback = callback
 
                 async def request(self, req):
                     approved = await self.callback(req.call.name, req.call.arguments)
-                    return (
-                        ApprovalDecision.APPROVED
+                    return ApprovalResult(
+                        decision=ApprovalDecision.APPROVED
                         if approved
                         else ApprovalDecision.DENIED
                     )

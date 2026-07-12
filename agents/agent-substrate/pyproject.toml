@@ -194,9 +194,8 @@ allow_indirect_imports = "true"
 ignore_imports = [
     # current_thread_id ContextVar spans both chat.py and capabilities/task_manager
     "substrate.serving.monolith.routes.chat -> substrate.capabilities.tools.task_manager.tool",
-    # WebHITLBridge delivers human-input / tool-approval events; must know the capability types
+    # WebHITLBridge delivers human-input events; must know the capability type
     "substrate.serving.monolith.sse.bridge -> substrate.capabilities.tools.human_input",
-    "substrate.serving.monolith.sse.bridge -> substrate.capabilities.tools.tool_approval",
     # pipelines/triggers routes need DTOs defined in capabilities (PipelineDef, TriggerDef, ConditionDef)
     "substrate.serving.monolith.routes.pipelines -> substrate.capabilities.pipeline.engine",
     "substrate.serving.monolith.routes.triggers -> substrate.capabilities.triggers.conditions",

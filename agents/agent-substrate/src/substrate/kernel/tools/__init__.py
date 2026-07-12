@@ -14,7 +14,12 @@ from .tools import (
     ToolRegistry,
 )
 from .skills import Skill
-from .approval import ApprovalDecision, ApprovalRequest, ApprovalHandler
+from .approval import (
+    ApprovalDecision,
+    ApprovalRequest,
+    ApprovalResult,
+    ApprovalHandler,
+)
 from .chain import (
     ChainPolicy,
     ChainFile,
@@ -40,6 +45,7 @@ __all__ = [
     "Skill",
     "ApprovalDecision",
     "ApprovalRequest",
+    "ApprovalResult",
     "ApprovalHandler",
     "ChainPolicy",
     "ChainFile",

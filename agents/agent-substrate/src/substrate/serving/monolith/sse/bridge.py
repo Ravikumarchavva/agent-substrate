@@ -2,14 +2,16 @@
 
 The bridge is the glue between:
   - The agent (which blocks on ``await handler.request_input()`` or
-    ``await handler.request_approval()``)
+    ``await handler.request()`` — see ``kernel/tools/approval.py``)
   - The HTTP layer (which streams SSE events to the frontend and
     receives responses via a separate POST endpoint)
 
 Flow:
-  1. Agent calls a tool → approval handler fires →
-     ``bridge.request_and_wait()`` puts an event on the outgoing queue
-     and creates an ``asyncio.Future``.
+  1. Agent calls a CRITICAL/HIGH-risk tool → ``ToolInvoker`` calls
+     ``approval_handler.request()`` → ``SSEApprovalHandler``
+     (``serving/monolith/sse/approval.py``) calls
+     ``bridge.request_and_wait()``, which puts an event on the outgoing
+     queue and creates an ``asyncio.Future``.
   2. The SSE generator drains the outgoing queue and sends the event
      to the frontend.
   3. The frontend shows a UI card (ToolApprovalCard or HumanInputCard)
@@ -23,7 +25,7 @@ Usage::
     bridge = WebHITLBridge()
     agent = ReActAgent(
         ...,
-        tool_approval_handler=bridge.approval_handler,
+        approval_handler=SSEApprovalHandler(bridge),
         tools=[AskHumanTool(handler=bridge.human_handler), ...],
     )
 """
@@ -43,13 +45,6 @@ from substrate.capabilities.tools.human_input import (
     HumanInputRequest,
     HumanInputResponse,
     HumanInputHandler,
-)
-from substrate.capabilities.tools.tool_approval import (
-    CallbackApprovalHandler,
-    ToolApprovalAction,
-    ToolApprovalHandler,
-    ToolApprovalRequest,
-    ToolApprovalResponse,
 )
 
 logger = setup_logging()
@@ -112,11 +107,15 @@ class WebHITLBridge:
         ``resolve(request_id, data)`` completes the matching Future (tool
         approval) or fires ``SignalBus.signal()`` (signal-based human input).
 
-    Both ``approval_handler`` and ``human_handler`` are pre-built handler
-    instances that route through this bridge.  When ``signal_bus`` is
-    provided, the human handler is marked ``suspends_via_signal = True`` so
-    ``AskHumanTool`` suspends via ``ctx.sleep_until_signal()`` and the event
-    flows through the normal run-log tail instead of the bridge queue.
+    ``human_handler`` is a pre-built handler instance that routes through
+    this bridge. When ``signal_bus`` is provided, it's marked
+    ``suspends_via_signal = True`` so ``AskHumanTool`` suspends via
+    ``ctx.sleep_until_signal()`` and the event flows through the normal
+    run-log tail instead of the bridge queue. Tool approval has no
+    equivalent pre-built handler here — construct
+    ``SSEApprovalHandler(bridge)`` (``serving/monolith/sse/approval.py``)
+    and pass it directly as ``ReActAgent(approval_handler=...)``; it calls
+    ``bridge.request_and_wait()`` the same way ``_handle_human_input`` does.
 
     Lock-free HITL:
         For Future-based approval requests the bridge stays alive in the
@@ -135,10 +134,7 @@ class WebHITLBridge:
         # request_id → run_id for signal-based human input requests
         self._signal_requests: Dict[str, str] = {}
 
-        # Pre-built handlers wired to this bridge
-        self._approval_handler = CallbackApprovalHandler(
-            callback=self._handle_approval,
-        )
+        # Pre-built handler wired to this bridge
         self._human_handler = CallbackHumanHandler(
             callback=self._handle_human_input,
         )
@@ -149,11 +145,6 @@ class WebHITLBridge:
             self._human_handler.suspends_via_signal = True  # type: ignore[attr-defined]
 
     # -- Public properties ---------------------------------------------------
-
-    @property
-    def approval_handler(self) -> ToolApprovalHandler:
-        """ToolApprovalHandler to pass to the agent."""
-        return self._approval_handler
 
     @property
     def human_handler(self) -> HumanInputHandler:
@@ -316,9 +307,10 @@ class WebHITLBridge:
         logger.info(f"Resolved HITL request {request_id}")
         return True
 
-    # -- Internal: request-and-wait pattern ----------------------------------
+    # -- Request-and-wait pattern (used by SSEApprovalHandler and the
+    #    human-input callback below) ------------------------------------------
 
-    async def _request_and_wait(
+    async def request_and_wait(
         self,
         event_type: str,
         payload: Dict[str, Any],
@@ -359,98 +351,6 @@ class WebHITLBridge:
             logger.warning(f"HITL request {request_id} timed out")
             return {"timed_out": True}
 
-    # -- Callback: tool approval ---------------------------------------------
-
-    async def _handle_approval(
-        self, request: ToolApprovalRequest
-    ) -> ToolApprovalResponse:
-        """Called when the agent needs tool approval — routes through SSE.
-
-        Behaviour is driven by ``request.hitl_mode``:
-
-        FIRE_AND_CONTINUE
-            Puts the event on the outgoing SSE queue and immediately returns
-            APPROVE.  The agent does not wait for the user at all.
-
-        CONTINUE_ON_TIMEOUT
-            Waits up to ``request.hitl_timeout_seconds`` (default 30s).
-            If the user responds in time their decision is applied;
-            on timeout the tool is auto-approved with original arguments.
-
-        BLOCKING  (default)
-            Waits up to the bridge-wide ``response_timeout``.  On timeout
-            the tool is DENIED — missing a response is treated as a veto.
-        """
-        payload = {
-            "request_id": request.request_id,
-            "tool_name": request.tool_name,
-            "call_id": request.call_id,
-            "arguments": request.arguments,
-            "context": request.context,
-            "hitl_mode": request.hitl_mode,
-        }
-
-        # ── FIRE_AND_CONTINUE: publish event, never wait ───────────────────
-        if request.hitl_mode == "fire_and_continue":
-            await self._outgoing.put({"type": "tool_approval_request", **payload})
-            logger.info(
-                "HITL fire_and_continue: sent event for %s, not waiting",
-                request.tool_name,
-            )
-            return ToolApprovalResponse(
-                request_id=request.request_id,
-                action=ToolApprovalAction.APPROVE,
-                reason="Auto-approved (fire_and_continue mode)",
-            )
-
-        # ── CONTINUE_ON_TIMEOUT / BLOCKING: send event and wait ───────────
-        timeout = (
-            request.hitl_timeout_seconds or 30.0
-            if request.hitl_mode == "continue_on_timeout"
-            else self._response_timeout
-        )
-        data = await self._request_and_wait(
-            "tool_approval_request", payload, request.request_id, timeout=timeout
-        )
-
-        if data.get("session_disconnected"):
-            return ToolApprovalResponse(
-                request_id=request.request_id,
-                action=ToolApprovalAction.DENY,
-                reason="Session disconnected — tool denied",
-            )
-
-        if data.get("timed_out"):
-            if request.hitl_mode == "continue_on_timeout":
-                logger.info(
-                    "HITL continue_on_timeout: timed out for %s, auto-approving",
-                    request.tool_name,
-                )
-                return ToolApprovalResponse(
-                    request_id=request.request_id,
-                    action=ToolApprovalAction.APPROVE,
-                    reason="Auto-approved after timeout (continue_on_timeout mode)",
-                )
-            # BLOCKING mode: timeout → deny
-            return ToolApprovalResponse(
-                request_id=request.request_id,
-                action=ToolApprovalAction.DENY,
-                reason="Approval timed out — denied by default",
-            )
-
-        action_str = data.get("action", "deny")
-        try:
-            action = ToolApprovalAction(action_str)
-        except ValueError:
-            action = ToolApprovalAction.DENY
-
-        return ToolApprovalResponse(
-            request_id=request.request_id,
-            action=action,
-            modified_arguments=data.get("modified_arguments"),
-            reason=data.get("reason", ""),
-        )
-
     # -- Callback: human input -----------------------------------------------
 
     async def _handle_human_input(
@@ -468,7 +368,7 @@ class WebHITLBridge:
             "allow_freeform": request.allow_freeform,
         }
 
-        data = await self._request_and_wait(
+        data = await self.request_and_wait(
             "human_input_request", payload, request.request_id
         )
 

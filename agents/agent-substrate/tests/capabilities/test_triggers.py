@@ -182,7 +182,10 @@ async def _redis_reachable(url: str) -> bool:
     try:
         import redis.asyncio as aioredis
 
-        client = aioredis.from_url(url)
+        # Unbounded by default: a half-open connection would hang ping()
+        # indefinitely instead of letting this healthcheck fail fast and
+        # skip the test.
+        client = aioredis.from_url(url, socket_connect_timeout=5, socket_timeout=5)
         await client.ping()
         await client.aclose()
         return True

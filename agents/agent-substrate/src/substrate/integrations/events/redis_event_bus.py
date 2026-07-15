@@ -31,6 +31,14 @@ class EventBus:
         self._client = aioredis.from_url(
             self._redis_url,
             decode_responses=True,
+            # Without these, a dropped/half-open connection blocks the
+            # underlying socket read forever (bounded only by the OS TCP
+            # stack, which can be tens of minutes) -- subscribe()'s retry
+            # loop never gets a chance to run. socket_timeout must stay
+            # above subscribe()'s block_ms (1s) or every clean "no new
+            # messages" wait would itself look like a timeout.
+            socket_connect_timeout=5,
+            socket_timeout=10,
         )
 
     async def disconnect(self) -> None:

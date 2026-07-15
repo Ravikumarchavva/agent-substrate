@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import os
 import types
+import uuid
 
 import pytest
 
@@ -55,7 +56,10 @@ async def pg_runtime():
 
 
 def _agent_id(name: str) -> AgentId:
-    return AgentId(type=name, key=f"pg-test-{id(object())}")
+    # id(object()) is not safe here: CPython reuses freed memory addresses,
+    # so two unrelated tests can collide on the same "unique" key and trip
+    # each other's thread-singleflight guard. uuid4 is actually unique.
+    return AgentId(type=name, key=f"pg-test-{uuid.uuid4().hex}")
 
 
 def _msg(target: AgentId, data: dict | None = None) -> Message:

@@ -96,8 +96,15 @@ class ConditionMonitor:
         for task in self._tasks.values():
             task.cancel()
             try:
-                await task
-            except asyncio.CancelledError:
+                # cancel() only *requests* cancellation -- a task parked
+                # inside a blocking redis-py read (XREADGROUP ... BLOCK)
+                # doesn't reliably honor it promptly. Bound the wait so a
+                # slow-to-cancel consumer loop can never hang stop() itself;
+                # the task keeps running detached, which is harmless since
+                # self._running is already false and its EventBus will be
+                # disconnected below.
+                await asyncio.wait_for(task, timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
         self._tasks.clear()
 

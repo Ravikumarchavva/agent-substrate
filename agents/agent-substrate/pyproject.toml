@@ -57,7 +57,7 @@ dependencies = [
     "google-genai>=1.73.0",
     "msgspec>=0.21.1",
     "pillow>=10.4.0",
-    "opentelemetry-exporter-otlp<1.20",
+    "opentelemetry-exporter-otlp",
     "opentelemetry-instrumentation-fastapi<0.60b1",
 ]
 

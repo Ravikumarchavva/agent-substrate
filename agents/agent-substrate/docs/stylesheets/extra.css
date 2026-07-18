@@ -82,6 +82,23 @@ body, input {
   opacity: 0.85;
 }
 
+/* ── Secondary Button Customization ──
+   Material's default .md-button styling colors border/text with
+   --md-primary-fg-color, which this theme repoints to near-black (dark mode)
+   / near-white (light mode) for the header — making secondary buttons nearly
+   invisible against the page background. Use the accent orange instead, to
+   match link color and the primary button. */
+.md-typeset .md-button:not(.md-button--primary) {
+  color: var(--md-accent-fg-color) !important;
+  border-color: var(--md-accent-fg-color) !important;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.md-typeset .md-button:not(.md-button--primary):hover {
+  background-color: var(--md-accent-fg-color) !important;
+  color: #ffffff !important;
+  border-color: var(--md-accent-fg-color) !important;
+}
+
 /* ── Header & Tabs ── */
 .md-header {
   box-shadow: none !important;

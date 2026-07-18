@@ -56,7 +56,7 @@ Most "agent" libraries help you wrap a model call in a loop. Agent Substrate is 
 | **[Tools + MCP](concepts/tools.md)** | JSON-schema-validated tools with risk tiers and approval gating. Connect any [MCP](https://modelcontextprotocol.io) server and its tools appear to the agent automatically. |
 | **[Memory that scales](concepts/memory.md)** | Pluggable history providers plus advanced [vector](concepts/vector-memory.md), [graph](concepts/graph-memory.md), and [paged](concepts/paged-memory.md) strategies, so agents recall context beyond the window. |
 | **[Governance & guardrails](concepts/guardrails.md)** | Spawn budgets, token caps, content guardrails, and middleware pipelines enforce safety and cost limits at the runtime level. |
-| **One codebase, two deploy modes** | Run as a single FastAPI monolith for development, or split into 12 independent microservices for production — the same agent package powers both. |
+| [**One codebase, two deploy modes**](#how-its-built) | Run as a single FastAPI monolith for development, or split into 12 independent microservices for production — the same agent package powers both. |
 
 ---
 

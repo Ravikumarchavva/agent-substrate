@@ -178,7 +178,6 @@ spec:
           - job-controller
           - human-gate
           - live-stream
-          - file-store
     ports:
     - protocol: TCP
       port: 8012
@@ -188,8 +187,6 @@ spec:
       port: 8016
     - protocol: TCP
       port: 8017
-    - protocol: TCP
-      port: 8018
   policyTypes:
   - Egress
 ---
@@ -237,7 +234,6 @@ spec:
       - job-controller
       - human-gate
       - live-stream
-      - file-store
   ingress:
   - from:
     - namespaceSelector:
@@ -699,26 +695,6 @@ spec:
     ports:
     - protocol: TCP
       port: 8080
-  policyTypes:
-  - Egress
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-tool-executor-egress-to-file-store
-  namespace: af-runtime
-spec:
-  podSelector:
-    matchLabels:
-      app: tool-executor
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: file-store
-    ports:
-    - protocol: TCP
-      port: 8018
   policyTypes:
   - Egress
 ---

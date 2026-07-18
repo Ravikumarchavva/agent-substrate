@@ -82,12 +82,22 @@ class SubstrateConfig(BaseSettings):
     WEB_SEARCH_MAX_CHARS: int = 5000
     WEB_READ_MAX_CHARS: int = 6000
 
+    # ── Chat attachments ─────────────────────────────────────────────────────
+    # PDFs are extracted server-side (pypdf/pdfplumber) and inlined into the
+    # prompt like text/* attachments, capped so one large PDF can't blow the
+    # context window. See routes/chat_context.py::_build_file_context.
+    ATTACHMENT_PDF_MAX_CHARS: int = 20000
+
     # ── Tool behaviour ───────────────────────────────────────────────────────
     DISABLE_TOOL_APPROVALS: bool = False
 
     # ── File storage ─────────────────────────────────────────────────────────
+    # "local" (default) = WorkspaceFileStore, a per-user directory tree on
+    # server-side storage (local dir in dev, docker volume in compose, RWX PVC
+    # in k8s — see capabilities/storage/workspace.py). "s3" = MinIO/S3,
+    # opt-in. "memory" = InMemoryFileStore, tests only.
     FILE_STORE_BACKEND: str = "local"
-    FILE_STORE_ROOT: str = ""
+    FILE_STORE_ROOT: str = "./data/workspaces"
     FILE_STORE_BUCKET: str = "agent-files"
     FILE_STORE_ENDPOINT: str | None = None
     FILE_STORE_REGION: str = "us-east-1"
@@ -98,11 +108,22 @@ class SubstrateConfig(BaseSettings):
     FILE_KEK_HEX: str = ""
     FILE_MAX_UPLOAD_BYTES: int = 200 * 1024 * 1024
 
+    # ── Workspace (per-user filesystem: uploads + code-interpreter workdir) ───
+    WORKSPACE_USER_QUOTA_BYTES: int = 1024 * 1024 * 1024
+    WORKSPACE_USER_DELETE_ALLOWED: bool = True
+
     # ── Code interpreter sandbox ─────────────────────────────────────────────
     CODE_INTERPRETER_URL: str = ""
     CI_NAMESPACE: str = "agent-framework"
     CI_HEADLESS_SERVICE: str = ""
     CI_REPLICAS: int = 1
+    # Set only when the K8s agent-sandbox backend is wired to the shared
+    # workspace PVC (see capabilities/tools/code_interpreter/code_interpreter/
+    # sandbox_service.py::_ensure_user_template). Empty (the default) means
+    # the running code interpreter — Firecracker, local fallback, or an
+    # unconfigured K8s sandbox — has no view of uploaded files at all, so
+    # chat.py must not tell the model a workspace path is openable.
+    CI_WORKSPACE_PVC_CLAIM: str = ""
 
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 

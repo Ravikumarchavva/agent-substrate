@@ -180,9 +180,19 @@ def _init_file_store(cfg: SubstrateConfig) -> Any:
             bucket=cfg.FILE_STORE_BUCKET,
             region=cfg.FILE_STORE_REGION,
         )
-    from substrate.agents.storage.memory import InMemoryFileStore
+    if cfg.FILE_STORE_BACKEND == "memory":
+        from substrate.agents.storage.memory import InMemoryFileStore
 
-    return InMemoryFileStore()
+        return InMemoryFileStore()
+
+    # Default: "local" — a per-user directory tree on server-side storage
+    # (local dir in dev, docker volume in compose, RWX PVC in k8s).
+    from substrate.capabilities.storage.workspace import WorkspaceFileStore
+
+    return WorkspaceFileStore(
+        root=cfg.FILE_STORE_ROOT,
+        user_quota_bytes=cfg.WORKSPACE_USER_QUOTA_BYTES,
+    )
 
 
 async def init_infrastructure(
@@ -315,6 +325,7 @@ async def init_tool_registry(
         code_interpreter_tool = K8sSandboxCodeInterpreterTool(
             template=os.environ.get("CI_SANDBOX_TEMPLATE", "python-sandbox-template"),
             namespace=os.environ.get("CI_SANDBOX_NAMESPACE", "default"),
+            workspace_pvc_claim=cfg.CI_WORKSPACE_PVC_CLAIM or None,
         )
         logger.info("Kubernetes agent-sandbox Code Interpreter registered")
     except Exception as exc:

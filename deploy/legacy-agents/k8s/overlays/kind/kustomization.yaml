@@ -53,9 +53,6 @@ images:
   - name: ghcr.io/Ravikumarchavva/ravi/live-stream
     newName: agent-microservices-kind
     newTag: local
-  - name: ghcr.io/Ravikumarchavva/ravi/file-store
-    newName: agent-microservices-kind
-    newTag: local
   - name: ghcr.io/Ravikumarchavva/ravi/admin
     newName: agent-microservices-kind
     newTag: local
@@ -100,10 +97,6 @@ patches:
   - target:
       kind: Deployment
       name: live-stream
-    patch: *pullpolicy-patch
-  - target:
-      kind: Deployment
-      name: file-store
     patch: *pullpolicy-patch
   - target:
       kind: Deployment
@@ -176,13 +169,6 @@ patches:
         value: ["uvicorn", "agent_substrateservices.live_stream.app:app", "--host", "0.0.0.0", "--port", "8017"]
   - target:
       kind: Deployment
-      name: file-store
-    patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/command
-        value: ["uvicorn", "agent_substrateservices.file_store.app:app", "--host", "0.0.0.0", "--port", "8018"]
-  - target:
-      kind: Deployment
       name: admin
     patch: |
       - op: add
@@ -242,23 +228,8 @@ patches:
     patch: *otlp-patch
   - target:
       kind: Deployment
-      name: file-store
-    patch: *otlp-patch
-  - target:
-      kind: Deployment
       name: admin
     patch: *otlp-patch
-
-  # ── Remove file-store PVC (use emptyDir for Kind) ──
-  - target:
-      kind: Deployment
-      name: file-store
-    patch: |
-      - op: replace
-        path: /spec/template/spec/volumes/0
-        value:
-          name: file-store-data
-          emptyDir: {}
 
   # ── Set HPA minReplicas=1 for Kind (single-node cluster, no memory for 2x each) ──
   - target:

@@ -1,0 +1,31 @@
+# Shared per-user workspace — the single filesystem backing uploads, agent
+# artifacts, and the code interpreter's working directory (see
+# capabilities/storage/workspace.py, config.py::FILE_STORE_ROOT).
+#
+# Layout: users/{user_id}/sessions/{thread_id}/... , users/{user_id}/uploads/...
+#
+# Two very different mount shapes onto this ONE PVC:
+#   - Whichever deployment serves the monolith /files and /workspace routes
+#     mounts the WHOLE volume at FILE_STORE_ROOT (it needs to see every
+#     user, to upload/list/delete on their behalf).
+#   - Each user's code-interpreter sandbox pod mounts ONLY its own slice —
+#     `subPath: users/{user_id}` — generated per-user by
+#     CodeInterpreterService._ensure_user_template() (sandbox_service.py).
+#     That subPath is the isolation boundary: a sandbox pod cannot see any
+#     other user's files regardless of what code runs inside it.
+#
+# Phase 1 (current): this PVC is the sole system of record — back it up.
+# Phase 2 (future, not built): tier this behind object storage (MinIO/S3) as
+# the durable record, with the PVC as a rebuildable working-set cache
+# hydrated per session — see docs/claude_docs/decisions.md if that lands.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: user-workspaces
+  namespace: af-runtime
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi

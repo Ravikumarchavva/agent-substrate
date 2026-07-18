@@ -41,7 +41,6 @@ from substrate.capabilities.tools.task_manager.tool import current_thread_id
 from substrate.kernel.core.content import (
     ChatMessage as _ChatMessage,
     Role,
-    TextBlock as _TextBlock,
 )
 from substrate.kernel.core.identity import AgentId as _AgentId
 from substrate.kernel.messaging.message import (
@@ -67,7 +66,7 @@ from substrate.serving.monolith.routes.chat_intents import (
     _configure_workspace_mail_request,
     _configure_calendar_write_request,
 )
-from substrate.serving.monolith.routes.chat_wire import MediaType
+from substrate.serving.monolith.routes.chat_wire import build_user_blocks
 from substrate.serving.monolith.routes.chat_context import (
     _get_agent_deps,
     _build_file_context,
@@ -218,9 +217,33 @@ async def chat(
                 )
 
         if attachments:
+            # workspace_path (see _build_file_context) is only meaningful when
+            # the running code interpreter actually mounts the same shared
+            # workspace volume (CI_WORKSPACE_PVC_CLAIM configured — see
+            # sandbox_service.py::_ensure_user_template). Without that, the
+            # code interpreter is ephemeral (Firecracker or local fallback)
+            # and has never seen the uploaded bytes — telling the model a
+            # path exists there just causes it to open a nonexistent path
+            # and hallucinate a plausible-looking prefix (observed: model
+            # invented "/mnt/data/..." from ChatGPT-convention training
+            # bias). Only surface the hint when it's actually true, and
+            # phrase it as relative to the tool's own working directory so
+            # the model doesn't need to guess a root.
+            ci_has_workspace_access = bool(settings.CI_WORKSPACE_PVC_CLAIM)
+            attachment_lines = "\n".join(
+                f"- {a['name']} ({a['mime']})"
+                + (
+                    f" — readable via code_interpreter at the relative path: {a['workspace_path']}"
+                    if ci_has_workspace_access and "workspace_path" in a
+                    else ""
+                )
+                for a in attachments
+            )
             deps["system_instructions"] = (
                 deps["system_instructions"]
-                + "\n\n---\n**Attachment handling instructions:**\n"
+                + "\n\n---\n**Attached files:**\n"
+                + attachment_lines
+                + "\n\n**Attachment handling instructions:**\n"
                 + ATTACHMENT_ANALYSIS_INSTRUCTIONS
             )
 
@@ -297,12 +320,6 @@ async def chat(
         user_content = display_content
         if file_block:
             user_content = f"{file_block}\n\n---\n\n{user_content}"
-        user_input_content: list[MediaType] | None = None
-        if image_inputs:
-            user_input_content = []
-            if user_content:
-                user_input_content.append(user_content)
-            user_input_content.extend(image_inputs)
 
         # Fire on_message hook
         hook_ctx = ChatContext(
@@ -329,7 +346,12 @@ async def chat(
     # current_thread_id is set inside sse_generator (with reset) to scope it
     # to the streaming task and avoid leaking into the request handler scope.
 
-    _user_blocks: list = [_TextBlock(text=user_content)]
+    # image_inputs (see _build_file_context) were previously computed into
+    # a `user_input_content` list that nothing ever read — the model never
+    # actually received uploaded images despite a vision model being
+    # resolved for the request. build_user_blocks is the one place the
+    # message content that actually reaches the agent is built.
+    _user_blocks: list = build_user_blocks(user_content, image_inputs)
     _entry_msg = _Message(
         target=agent.id,
         sender=_AgentId(type="proxy", key="http"),
@@ -341,8 +363,14 @@ async def chat(
         # may be augmented with file_block for the LLM. Read back by
         # log_user_message() (agents/core/_loop.py) when journaling
         # user.message, so history shows the real turn, not the augmented
-        # prompt.
-        metadata={"display_text": display_content, "attachments": attachments},
+        # prompt. user_id is stamped into current_user_id inside
+        # ReActAgent._handle_message (agents/storage/tasks.py) so the
+        # code-interpreter tool can select the caller's workspace subPath.
+        metadata={
+            "display_text": display_content,
+            "attachments": attachments,
+            "user_id": user.sub,
+        },
     )
 
     _agent_spec = {

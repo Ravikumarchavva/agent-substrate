@@ -26,6 +26,9 @@ from substrate.serving.monolith.dependencies import ServerDependencies
 from substrate.serving.monolith.routes.admin import router as admin_router
 from substrate.serving.monolith.routes.audio import router as audio_router
 from substrate.serving.monolith.routes.auth import router as auth_router
+from substrate.serving.monolith.routes.workspace_oauth import (
+    router as workspace_oauth_router,
+)
 from substrate.serving.monolith.routes.cancel import router as cancel_router
 from substrate.serving.monolith.routes.chat import router as chat_router
 from substrate.serving.monolith.routes.code_interpreter import (
@@ -45,6 +48,7 @@ from substrate.serving.monolith.routes.tasks import router as tasks_router
 from substrate.serving.monolith.routes.threads import router as threads_router
 from substrate.serving.monolith.routes.triggers import router as triggers_router
 from substrate.serving.monolith.routes.scheduled import router as scheduled_router
+from substrate.serving.monolith.routes.workspace import router as workspace_router
 from substrate.serving.shared.observability.telemetry import (
     configure_opentelemetry,
     shutdown_opentelemetry,
@@ -175,6 +179,8 @@ async def lifespan(app: FastAPI):
         file_store=app.state.file_store,
         trigger_scheduler=app.state.trigger_scheduler,
         short_term_memory=app.state.short_term_memory,
+        workspace_user_quota_bytes=settings.WORKSPACE_USER_QUOTA_BYTES,
+        workspace_user_delete_allowed=settings.WORKSPACE_USER_DELETE_ALLOWED,
     )
 
     for name in ("httpx", "urllib3", "openai"):
@@ -250,6 +256,7 @@ def create_app() -> FastAPI:
 
     app.include_router(admin_router)
     app.include_router(auth_router)
+    app.include_router(workspace_oauth_router)
     app.include_router(threads_router)
     app.include_router(chat_router)
     app.include_router(cancel_router)
@@ -265,6 +272,7 @@ def create_app() -> FastAPI:
     app.include_router(scheduled_router)
     app.include_router(rag_router)
     app.include_router(files_router)
+    app.include_router(workspace_router)
     app.include_router(rate_limit_router)
 
     @app.get("/health", tags=["infra"])

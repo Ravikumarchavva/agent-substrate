@@ -28,7 +28,7 @@ resources:
   - runtime/code-interpreter.yaml
   - runtime/human-gate.yaml
   - runtime/live-stream.yaml
-  - runtime/file-store.yaml
+  - runtime/user-workspaces.yaml
   - runtime/admin.yaml
 
   # Policies

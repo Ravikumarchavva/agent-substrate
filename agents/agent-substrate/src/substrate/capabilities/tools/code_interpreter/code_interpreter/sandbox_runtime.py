@@ -47,6 +47,13 @@ class RunCodeRequest(BaseModel):
     code: str
     include_artifacts: bool = True
     close_figures: bool = True
+    # Conversation thread this run belongs to. When set (and the pod's
+    # WORKSPACE_DIR is a per-user PVC mount), execution cwd becomes
+    # sessions/{session_id}/ so agent-written files land in that thread's
+    # folder rather than the shared user root. Files elsewhere in the
+    # user's tree (other sessions, uploads/) remain reachable via absolute
+    # workspace-relative paths — this only changes the *default* cwd.
+    session_id: str | None = None
 
 
 class UploadRequest(BaseModel):
@@ -91,6 +98,10 @@ async def health_check() -> dict[str, str]:
 @app.post("/ci/run")
 def ci_run(request: RunCodeRequest) -> dict[str, Any]:
     """Execute Python in a persistent interpreter and return changed files."""
+    try:
+        run_dir = _session_run_dir(request.session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     with _execution_lock:
         os.makedirs(WORKSPACE_DIR, exist_ok=True)
@@ -106,7 +117,7 @@ def ci_run(request: RunCodeRequest) -> dict[str, Any]:
         exit_code = 0
 
         try:
-            os.chdir(WORKSPACE_DIR)
+            os.chdir(run_dir)
             sys.stdout = stdout_buf
             sys.stderr = stderr_buf
             compiled = compile(request.code, "<agent-code>", "exec")
@@ -450,6 +461,20 @@ def _resolve_workspace_path(path: str) -> str:
     if os.path.commonpath([real_workspace, real_path]) != real_workspace:
         raise ValueError("Path must be inside the workspace.")
     return real_path
+
+
+def _session_run_dir(session_id: str | None) -> str:
+    """Resolve (and create) the execution cwd for a run.
+
+    Reuses ``_resolve_workspace_path``'s traversal guard for the session_id
+    segment too — it's server-supplied (a thread id), but defense-in-depth
+    is cheap and matches every other path-accepting endpoint here.
+    """
+    if not session_id:
+        return os.path.realpath(WORKSPACE_DIR)
+    run_dir = _resolve_workspace_path(f"sessions/{session_id}")
+    os.makedirs(run_dir, exist_ok=True)
+    return run_dir
 
 
 def _workspace_relative(path: str) -> str:

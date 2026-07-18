@@ -47,6 +47,7 @@ from substrate.kernel import ImageBlock  # was ImageContent, MediaContent
 from substrate.kernel.agent.runtime_context import RunMeta
 from substrate.kernel.tools import ToolExecutionResult
 from substrate.kernel import TextBlock
+from substrate.agents.storage.tasks import current_user_id
 
 from .sandbox_service import CodeInterpreterConfig, CodeInterpreterService
 from .session_store import JsonSessionStore, SessionStore
@@ -83,6 +84,8 @@ class K8sSandboxCodeInterpreterTool:
         server_port: int = 8888,
         shutdown_after_seconds: int | None = None,
         warmpool: str | None = None,
+        workspace_pvc_claim: str | None = None,
+        workspace_mount_path: str = "/app/workspace",
     ) -> None:
         self.name = "code_interpreter"
         self.description = (
@@ -130,6 +133,12 @@ class K8sSandboxCodeInterpreterTool:
             resolved_namespace = namespace or os.environ.get(
                 "CI_SANDBOX_NAMESPACE", "default"
             )
+            resolved_pvc_claim = workspace_pvc_claim or os.environ.get(
+                "CI_WORKSPACE_PVC_CLAIM"
+            )
+            resolved_mount_path = workspace_mount_path or os.environ.get(
+                "CI_WORKSPACE_MOUNT_PATH", "/app/workspace"
+            )
 
             config = CodeInterpreterConfig(
                 template=resolved_template,
@@ -139,6 +148,8 @@ class K8sSandboxCodeInterpreterTool:
                 server_port=server_port,
                 shutdown_after_seconds=shutdown_after_seconds,
                 warmpool=warmpool,
+                workspace_pvc_claim=resolved_pvc_claim,
+                workspace_mount_path=resolved_mount_path,
             )
             self._service = CodeInterpreterService(config=config, store=store)
 
@@ -161,6 +172,7 @@ class K8sSandboxCodeInterpreterTool:
         """
         timeout = max(1, min(timeout, 300))
         session_id = self.session_id
+        user_id = current_user_id.get()
 
         logger.info(
             "k8s_sandbox[%s]: executing %d bytes (timeout=%ds)",
@@ -175,6 +187,7 @@ class K8sSandboxCodeInterpreterTool:
                 session_id,
                 code,
                 timeout,
+                user_id,
             )
             if result.get("status") != "ok":
                 raise RuntimeError(f"Sandbox run status is: {result.get('status')}")

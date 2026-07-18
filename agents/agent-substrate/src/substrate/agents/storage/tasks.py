@@ -33,6 +33,9 @@ current_agent_label: contextvars.ContextVar[str] = contextvars.ContextVar(
 current_parent_agent_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "task_manager_parent_agent_id", default=None
 )
+current_user_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "workspace_user_id", default=None
+)
 
 
 class TaskStore:

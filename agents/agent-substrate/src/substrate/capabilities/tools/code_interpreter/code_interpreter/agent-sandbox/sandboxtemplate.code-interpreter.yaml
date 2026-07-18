@@ -1,3 +1,10 @@
+# This is the BASE template. CodeInterpreterService._ensure_user_template()
+# (sandbox_service.py) reads this spec at runtime and clones it once per
+# user, adding a volume/volumeMount for the shared workspace PVC (see
+# deployment/k8s/base/runtime/user-workspaces.yaml) mounted with
+# `subPath: users/{user_id}` — that subPath is the isolation boundary
+# between users. This base template itself carries no volume and stays the
+# fallback used when no user identity / workspace PVC is configured.
 apiVersion: extensions.agents.x-k8s.io/v1alpha1
 kind: SandboxTemplate
 metadata:

@@ -117,17 +117,6 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: file-store
-  namespace: af-runtime
-spec:
-  minAvailable: 1
-  selector:
-    matchLabels:
-      app: file-store
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
   name: admin
   namespace: af-runtime
 spec:

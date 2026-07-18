@@ -44,6 +44,8 @@ class ServerDependencies:
     file_store: Optional[Any] = None
     trigger_scheduler: Optional[Any] = None
     short_term_memory: Optional[Any] = None
+    workspace_user_quota_bytes: int = 1024 * 1024 * 1024
+    workspace_user_delete_allowed: bool = True
 
 
 def get_ctx(request: Request) -> ServerDependencies:

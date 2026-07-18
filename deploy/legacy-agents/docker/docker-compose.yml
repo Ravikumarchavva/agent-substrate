@@ -39,11 +39,18 @@ services:
       dockerfile: deployment/docker/backend.Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      - workspaces:/data/workspaces
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agentdb
       REDIS_URL: redis://redis:6379/0
       OTLP_ENDPOINT: http://tempo:4318
-      FILE_STORE_BACKEND: s3
+      # "local" = per-user workspace filesystem (uploads + code-interpreter
+      # workdir, one source of truth — see capabilities/storage/workspace.py).
+      # Set FILE_STORE_BACKEND=s3 (and the FILE_STORE_* vars below) to use
+      # the minio service instead; both stay defined here for convenience.
+      FILE_STORE_BACKEND: ${FILE_STORE_BACKEND:-local}
+      FILE_STORE_ROOT: /data/workspaces
       FILE_STORE_BUCKET: agent-files
       FILE_STORE_ENDPOINT: http://minio:9000
       FILE_STORE_REGION: us-east-1
@@ -193,3 +200,4 @@ volumes:
   lokidata:
   promtaildata:
   miniodata:
+  workspaces:

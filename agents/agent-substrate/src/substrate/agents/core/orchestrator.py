@@ -31,6 +31,7 @@ from substrate.agents.storage.tasks import (
     current_agent_id as _task_agent_id,
     current_agent_label as _task_agent_label,
     current_parent_agent_id as _task_parent_agent_id,
+    current_user_id as _task_user_id,
 )
 from substrate.agents.core._loop import (
     deliver,
@@ -129,6 +130,9 @@ class OrchestratorAgent:
 
     async def _handle_message(self, ctx: RunContext, msg: Message) -> None:
         session_id = msg.correlation_id or ctx.run_id
+        # See ReActAgent._handle_message for why this must be stamped here
+        # (inside the Worker task) rather than upstream.
+        _task_user_id.set(msg.metadata.get("user_id") or None)
         spawn_tracker = SpawnTracker(self._spawn_budget)
 
         history_messages = await load_history(self._context, self.id, session_id)
@@ -197,7 +201,13 @@ class OrchestratorAgent:
                     # The subagent Worker runs in its own ContextVar context, so
                     # pass the parent id explicitly; the subagent stamps it as
                     # current_parent_agent_id so its board nests under this one.
-                    metadata={"parent_agent_id": str(self.id)},
+                    # user_id rides along the same way so a spawned subagent's
+                    # code-interpreter calls still resolve to the caller's
+                    # workspace subPath.
+                    metadata={
+                        "parent_agent_id": str(self.id),
+                        "user_id": _task_user_id.get(),
+                    },
                 )
                 try:
                     handle = await ctx.spawn(cfg.agent.id, boot=boot_msg)

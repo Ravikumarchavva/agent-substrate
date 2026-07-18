@@ -18,7 +18,15 @@ ATTACHMENT_ANALYSIS_INSTRUCTIONS = (
     "explicitly asks for planning, task tracking, or automation. "
     "When presenting structured data, always use proper Markdown tables with "
     "pipe (|) syntax and header separator rows (|---|). Never use plain text "
-    "or HTML tags like <br> for tabular data."
+    "or HTML tags like <br> for tabular data. "
+    "Non-text, non-image attachments (PDFs, spreadsheets, etc.) are NOT "
+    "automatically readable by you — you were not given a filesystem path to "
+    "them unless one is explicitly listed above. Never guess or invent a path "
+    "(e.g. '/mnt/data/...') and call code_interpreter on it; if no path was "
+    "given, you cannot open the file. In that case, say plainly that you can't "
+    "read this attachment's content directly, then offer to help once the user "
+    "pastes the relevant text. Never fabricate or guess at a file's contents — "
+    "answering with invented details is worse than admitting you can't read it."
 )
 
 ATTACHMENT_PLANNING_KEYWORDS = (

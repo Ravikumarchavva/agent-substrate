@@ -18,6 +18,7 @@ class SandboxSession:
     namespace: str
     template: str
     sandbox_id: str | None = None
+    user_id: str | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -35,6 +36,9 @@ class SandboxSession:
                 str(payload["sandbox_id"])
                 if payload.get("sandbox_id") is not None
                 else None
+            ),
+            user_id=(
+                str(payload["user_id"]) if payload.get("user_id") is not None else None
             ),
             created_at=float(payload.get("created_at") or time.time()),  # type: ignore[arg-type]
             updated_at=float(payload.get("updated_at") or time.time()),  # type: ignore[arg-type]

@@ -5,7 +5,7 @@ import hashlib
 import mimetypes
 import threading
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from k8s_agent_sandbox import SandboxClient
 from k8s_agent_sandbox.exceptions import SandboxRequestError
@@ -23,6 +23,13 @@ class CodeInterpreterConfig:
     server_port: int = 8888
     shutdown_after_seconds: int | None = None
     warmpool: str | None = None
+    # Per-user persistent workspace (see capabilities/storage/workspace.py).
+    # When workspace_pvc_claim is set, a per-user SandboxTemplate is generated
+    # on first use, mounting only users/{user_id} of the shared RWX PVC —
+    # this subPath is the isolation boundary between users' sandboxes.
+    # Unset (default) preserves the old shared-template, ephemeral behavior.
+    workspace_pvc_claim: str | None = None
+    workspace_mount_path: str = "/app/workspace"
 
 
 class CodeInterpreterService:
@@ -44,16 +51,22 @@ class CodeInterpreterService:
         self._handles: dict[str, Any] = {}
         self._locks: dict[str, threading.RLock] = {}
         self._guard = threading.RLock()
+        self._user_template_names: set[str] = set()
 
     def run_code(
         self,
         thread_id: str,
         code: str,
         timeout: int | None = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock_for_thread(thread_id):
-            sandbox, session = self._get_or_create_sandbox(thread_id)
-            payload = {"code": code}
+            sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
+            # session_id tells the pod's own execution cwd to become
+            # sessions/{thread_id}/ within the mounted per-user workspace
+            # (see sandbox_runtime.py::_session_run_dir) — a no-op when the
+            # pod isn't on a workspace-mounted template (runs at its root).
+            payload = {"code": code, "session_id": thread_id}
             data = self._runtime_json(
                 sandbox,
                 "POST",
@@ -70,9 +83,10 @@ class CodeInterpreterService:
         content_base64: str,
         overwrite: bool = True,
         timeout: int | None = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock_for_thread(thread_id):
-            sandbox, session = self._get_or_create_sandbox(thread_id)
+            sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
             payload = {
                 "filename": filename,
                 "content_base64": content_base64,
@@ -92,9 +106,10 @@ class CodeInterpreterService:
         thread_id: str,
         path: str,
         timeout: int | None = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock_for_thread(thread_id):
-            sandbox, session = self._get_or_create_sandbox(thread_id)
+            sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
             data = self._runtime_json(
                 sandbox,
                 "POST",
@@ -113,9 +128,10 @@ class CodeInterpreterService:
         path: str = ".",
         recursive: bool = False,
         timeout: int | None = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock_for_thread(thread_id):
-            sandbox, session = self._get_or_create_sandbox(thread_id)
+            sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
             data = self._runtime_json(
                 sandbox,
                 "POST",
@@ -129,9 +145,10 @@ class CodeInterpreterService:
         self,
         thread_id: str,
         timeout: int | None = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock_for_thread(thread_id):
-            sandbox, session = self._get_or_create_sandbox(thread_id)
+            sandbox, session = self._get_or_create_sandbox(thread_id, user_id=user_id)
             data = self._runtime_json(
                 sandbox,
                 "POST",
@@ -200,7 +217,9 @@ class CodeInterpreterService:
         sessions = [session.to_dict() for session in self.store.list()]
         return {"status": "ok", "action": "list_sessions", "sessions": sessions}
 
-    def _get_or_create_sandbox(self, thread_id: str) -> tuple[Any, SandboxSession]:
+    def _get_or_create_sandbox(
+        self, thread_id: str, *, user_id: str | None = None
+    ) -> tuple[Any, SandboxSession]:
         existing_session = self.store.get(thread_id)
         existing_handle = self._handles.get(thread_id)
         if existing_session is not None and self._is_handle_active(existing_handle):
@@ -224,8 +243,14 @@ class CodeInterpreterService:
                 self.store.delete(thread_id)
                 self._handles.pop(thread_id, None)
 
+        # No user identity, or no workspace PVC configured: fall back to the
+        # shared template — old ephemeral, non-persistent behavior.
+        template = self.config.template
+        if user_id is not None and self.config.workspace_pvc_claim is not None:
+            template = self._ensure_user_template(user_id)
+
         sandbox = self.client.create_sandbox(
-            template=self.config.template,
+            template=template,
             namespace=self.config.namespace,
             sandbox_ready_timeout=self.config.sandbox_ready_timeout,
             labels=self._labels_for_thread(thread_id),
@@ -237,11 +262,111 @@ class CodeInterpreterService:
             claim_name=sandbox.claim_name,
             sandbox_id=getattr(sandbox, "sandbox_id", None),
             namespace=self.config.namespace,
-            template=self.config.template,
+            template=template,
+            user_id=user_id,
         )
         self._handles[thread_id] = sandbox
         self.store.upsert(session)
         return sandbox, session
+
+    def _ensure_user_template(self, user_id: str) -> str:
+        """Return a per-user SandboxTemplate name, creating it on first use.
+
+        Clones the base ``self.config.template`` spec and adds a volume for
+        ``self.config.workspace_pvc_claim`` mounted at
+        ``self.config.workspace_mount_path`` with ``subPath: users/{user_id}``
+        — that subPath is what makes one user's sandbox physically unable to
+        read another user's files on the shared PVC.
+        """
+        name = f"python-sandbox-{hashlib.sha256(user_id.encode()).hexdigest()[:20]}"
+        if name in self._user_template_names:
+            return name
+
+        from kubernetes.client.rest import ApiException
+
+        from .k8s_helper import get_custom_objects_api
+
+        api = get_custom_objects_api()
+        group, version, plural = (
+            "extensions.agents.x-k8s.io",
+            "v1alpha1",
+            "sandboxtemplates",
+        )
+
+        try:
+            # get_namespaced_custom_object's overloaded signature (async_req)
+            # makes pyright infer a union that includes non-dict overloads;
+            # the sync call (default async_req=False) always returns a dict.
+            base = cast(
+                "dict[str, Any]",
+                api.get_namespaced_custom_object(
+                    group, version, self.config.namespace, plural, self.config.template
+                ),
+            )
+        except ApiException as exc:
+            raise RuntimeError(
+                f"Base SandboxTemplate {self.config.template!r} not found in "
+                f"namespace {self.config.namespace!r}: {exc}"
+            ) from exc
+
+        pod_spec = base["spec"]["podTemplate"]["spec"]
+        containers = pod_spec.setdefault("containers", [])
+        if not containers:
+            raise RuntimeError(
+                f"Base SandboxTemplate {self.config.template!r} has no containers "
+                "to attach the workspace volume to."
+            )
+
+        volume_name = "user-workspace"
+        pod_spec["volumes"] = [
+            v for v in pod_spec.get("volumes", []) if v.get("name") != volume_name
+        ] + [
+            {
+                "name": volume_name,
+                "persistentVolumeClaim": {"claimName": self.config.workspace_pvc_claim},
+            }
+        ]
+        for container in containers:
+            container["volumeMounts"] = [
+                m
+                for m in container.get("volumeMounts", [])
+                if m.get("name") != volume_name
+            ] + [
+                {
+                    "name": volume_name,
+                    "mountPath": self.config.workspace_mount_path,
+                    "subPath": f"users/{user_id}",
+                }
+            ]
+            container["env"] = [
+                e
+                for e in container.get("env", [])
+                if e.get("name") != "CODE_INTERPRETER_WORKSPACE"
+            ] + [
+                {
+                    "name": "CODE_INTERPRETER_WORKSPACE",
+                    "value": self.config.workspace_mount_path,
+                }
+            ]
+        pod_spec.setdefault("securityContext", {"runAsNonRoot": True})
+
+        body = {
+            "apiVersion": f"{group}/{version}",
+            "kind": "SandboxTemplate",
+            "metadata": {"name": name, "namespace": self.config.namespace},
+            "spec": {**base["spec"], "podTemplate": {"spec": pod_spec}},
+        }
+        try:
+            api.create_namespaced_custom_object(
+                group, version, self.config.namespace, plural, body
+            )
+        except ApiException as exc:
+            if exc.status != 409:  # already exists — fine, another request won the race
+                raise RuntimeError(
+                    f"Failed to create per-user SandboxTemplate {name!r}: {exc}"
+                ) from exc
+        self._user_template_names.add(name)
+        return name
 
     def _runtime_json(
         self,

@@ -35,6 +35,7 @@ from substrate.agents.storage.tasks import (
     current_agent_label as _task_agent_label,
     current_parent_agent_id as _task_parent_agent_id,
     current_thread_id as _task_thread_id,
+    current_user_id as _task_user_id,
 )
 from substrate.agents.core._loop import (
     deliver,
@@ -137,6 +138,11 @@ class ReActAgent:
         # cross into this Worker task) so this agent's board nests under its
         # parent in the UI. Absent metadata ⇒ root agent.
         _task_parent_agent_id.set(msg.metadata.get("parent_agent_id") or None)
+        # Same cross-task-boundary reasoning as thread_id/parent_agent_id above:
+        # the chat route stamps user_id into boot metadata, and the
+        # code-interpreter tool reads this ContextVar to pick the caller's
+        # workspace subPath (see agents/storage/tasks.py::current_user_id).
+        _task_user_id.set(msg.metadata.get("user_id") or None)
 
         history_messages = await load_history(self._context, self.id, session_id)
         user_turn = message_to_chat(msg)

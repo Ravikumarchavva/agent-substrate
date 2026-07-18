@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from substrate.kernel.core.content import ImageBlock, TextBlock
+
 
 @dataclass
 class _ImagePayload:
@@ -23,7 +25,23 @@ class _ImagePayload:
 MediaType = str | _ImagePayload
 
 
+def build_user_blocks(
+    text: str, image_inputs: list[_ImagePayload]
+) -> list[TextBlock | ImageBlock]:
+    """Assemble the content blocks for a user turn — text plus any attached
+    images. This is the one place that must include ``image_inputs``: a
+    caller that resolves a vision model but forgets this step silently
+    strips every uploaded image, since nothing else attaches them to the
+    message the agent actually sees."""
+    blocks: list[TextBlock | ImageBlock] = [TextBlock(text=text)]
+    blocks.extend(
+        ImageBlock(data=img.data, media_type=img.media_type) for img in image_inputs
+    )
+    return blocks
+
+
 __all__ = [
     "_ImagePayload",
     "MediaType",
+    "build_user_blocks",
 ]

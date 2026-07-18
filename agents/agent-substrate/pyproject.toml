@@ -212,6 +212,12 @@ ignore_imports = [
     "substrate.serving.services.code_interpreter.app -> substrate.capabilities.tools.code_interpreter.config",
     "substrate.serving.services.code_interpreter.app -> substrate.capabilities.tools.code_interpreter.session_manager",
     "substrate.serving.services.code_interpreter.schemas -> substrate.capabilities.tools.code_interpreter.schemas",
+    # files/workspace routes need WorkspaceFileStore/WorkspaceQuotaExceededError
+    "substrate.serving.monolith.routes.files -> substrate.capabilities.storage.workspace",
+    "substrate.serving.monolith.routes.workspace -> substrate.capabilities.storage.workspace",
+    # chat_context inlines PDF attachment text using the existing PDFLoader
+    # (pypdf/pdfplumber) rather than duplicating extraction logic
+    "substrate.serving.monolith.routes.chat_context -> substrate.capabilities.knowledge.loaders.pdf_loader",
 ]
 
 # Orthogonal peers (not part of the layer stack):

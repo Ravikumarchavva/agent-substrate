@@ -202,8 +202,6 @@ ignore_imports = [
     "substrate.serving.monolith.routes.triggers -> substrate.capabilities.triggers.scheduler",
     # agent_runtime: in-memory fallback Runtime (for RUNTIME_BACKEND=memory env)
     "substrate.serving.services.agent_runtime.app -> substrate.agents.runtime",
-    # agent_runtime service: load_session_memory is an L1 concern with no kernel protocol yet
-    "substrate.serving.services.agent_runtime.service -> substrate.agents.factory",
     # tool_executor and code_interpreter ARE capability executors by design
     "substrate.serving.services.tool_executor.app -> substrate.agents.storage.tasks",
     "substrate.serving.services.tool_executor.app -> substrate.capabilities.tools.code_interpreter.http_client",

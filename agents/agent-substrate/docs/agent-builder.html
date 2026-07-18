@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SUBSTRATE — Agent Builder</title>
+<meta name="description" content="Configure a real ReActAgent — memory, tools, guardrails, budgets — and get accurate, copy-pasteable Python that matches the actual constructor signatures in this repo.">
+<style>
+  html,body{margin:0;padding:0;background:#0a0a0c;min-height:100%}
+  :root{
+    --ground:#0a0a0c; --panel:#131316; --panel2:#18181c; --rule:#232328; --edge:#26262b;
+    --silk:#f2f2f5; --silk-dim:#9a9aa2; --silk-faint:#6b6b72;
+    --gold:#cfa552; --lit:#e8a84c; --glow:#f0bd6f;
+    --chip:#1a1a1e;
+    --L1:#5ea8d8; --L2:#a98fd8; --INT:#4fb8a8; --INFRA:#d8775a; --SRV:#d8c05a; --bad:#e0685a;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--silk);font-family:var(--mono);-webkit-font-smoothing:antialiased}
+  #app{display:grid;grid-template-columns:minmax(420px,1fr) minmax(420px,560px);min-height:100vh}
+  @media(max-width:900px){#app{grid-template-columns:1fr}}
+
+  /* ---- left: board ---- */
+  #board{padding:20px;overflow-y:auto;background-image:radial-gradient(var(--rule) 1px,transparent 1px);background-size:16px 16px}
+  .head{margin-bottom:18px}
+  .head .eyebrow{font-size:10px;letter-spacing:.14em;color:var(--silk-dim)}
+  .head h1{font-size:19px;margin:4px 0 4px;letter-spacing:.02em}
+  .head p{margin:0;font-family:var(--sans);font-size:12px;color:var(--silk-dim);max-width:56ch;line-height:1.5}
+
+  .zone{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:14px 16px 16px;margin-bottom:14px}
+  .zone-h{display:flex;align-items:baseline;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+  .zone-h .zc{font-size:9px;color:var(--gold);letter-spacing:.06em;font-weight:700;border:1px solid var(--gold);
+    border-radius:50%;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+  .zone-h .zn{font-size:11.5px;letter-spacing:.1em;font-weight:700}
+  .zone-h .zr{font-family:var(--sans);font-size:10px;color:var(--silk-dim);margin-left:auto}
+
+  .field{margin-bottom:10px}
+  .field:last-child{margin-bottom:0}
+  .field label{display:block;font-size:9.5px;letter-spacing:.06em;color:var(--silk-dim);margin-bottom:4px}
+  .field input[type=text],.field input[type=number],.field textarea,.field select{
+    width:100%;background:var(--panel2);border:1px solid var(--edge);border-radius:4px;color:var(--silk);
+    font-family:var(--mono);font-size:12px;padding:7px 9px;outline:none}
+  .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--gold)}
+  .field textarea{resize:vertical;min-height:44px}
+  .field-row{display:flex;gap:8px}
+  .field-row .field{flex:1}
+  .hint{font-family:var(--sans);font-size:10px;color:var(--silk-faint);margin-top:3px;line-height:1.4}
+
+  .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
+  @media(max-width:1200px){.opt-grid{grid-template-columns:1fr}}
+  .opt{border:1px solid var(--edge);border-radius:5px;background:var(--panel2);transition:border-color .15s}
+  .opt.on{border-color:var(--gold)}
+  .opt-h{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer}
+  .opt-h input{accent-color:var(--gold)}
+  .opt-h .n{font-size:11.5px;font-weight:600}
+  .opt-h .d{font-family:var(--sans);font-size:9.5px;color:var(--silk-faint);margin-left:auto;text-align:right}
+  .opt-body{display:none;padding:0 10px 10px;border-top:1px dashed var(--edge)}
+  .opt.on .opt-body{display:block;padding-top:8px}
+  .opt.warn .n::after{content:" ⚠";color:var(--bad)}
+
+  .radio-row{display:flex;flex-direction:column;gap:6px}
+  .radio-opt{border:1px solid var(--edge);border-radius:5px;background:var(--panel2)}
+  .radio-opt.on{border-color:var(--gold)}
+  .radio-h{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer}
+  .radio-h input{accent-color:var(--gold)}
+  .radio-h .n{font-size:11.5px;font-weight:600}
+  .radio-body{display:none;padding:0 10px 10px;border-top:1px dashed var(--edge)}
+  .radio-opt.on .radio-body{display:block;padding-top:8px}
+
+  /* ---- right: code panel ---- */
+  #codepane{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--ground);
+    border-left:1px solid var(--rule)}
+  #code-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--rule);flex:none}
+  #code-head .t{font-size:11px;letter-spacing:.1em;color:var(--silk-dim)}
+  #copy-btn{margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
+    background:var(--panel2);border:1px solid var(--edge);color:var(--silk);border-radius:4px;
+    padding:6px 12px;cursor:pointer}
+  #copy-btn:hover{border-color:var(--gold)}
+  #copy-btn.copied{border-color:var(--lit);color:var(--lit)}
+  #code-scroll{flex:1;overflow:auto;padding:16px}
+  #code{margin:0;font-size:12px;line-height:1.6;white-space:pre;color:var(--silk)}
+  .py-kw{color:var(--L1)}.py-str{color:var(--INT)}.py-com{color:var(--silk-faint)}.py-name{color:var(--gold)}
+
+  #flags{margin:0;padding:12px 16px;border-top:1px solid var(--rule);font-family:var(--sans);
+    font-size:10.5px;color:var(--silk-faint);line-height:1.6;flex:none;max-height:26vh;overflow:auto}
+  #flags b{color:var(--silk-dim)}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="board">
+    <div class="head">
+      <div class="eyebrow">SUBSTRATE · AGENT BUILDER</div>
+      <h1>Build a ReActAgent</h1>
+      <p>Configure real components below — the code on the right is generated from the actual constructor signatures in this repo, not a mockup. Copy it and run it.</p>
+    </div>
+
+    <section class="zone" id="z-core">
+      <div class="zone-h"><span class="zc">A</span><span class="zn">AGENT CORE</span><span class="zr">ReActAgent</span></div>
+      <div class="field">
+        <label>NAME</label>
+        <input type="text" id="f-name" value="assistant">
+      </div>
+      <div class="field">
+        <label>SYSTEM INSTRUCTIONS</label>
+        <textarea id="f-instructions">You are a helpful assistant.</textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>MAX ITERATIONS</label>
+          <input type="number" id="f-maxiter" value="10" min="1">
+        </div>
+      </div>
+    </section>
+
+    <section class="zone" id="z-llm">
+      <div class="zone-h"><span class="zc">B</span><span class="zn">COMPUTE</span><span class="zr">LLMFactory</span></div>
+      <div class="field">
+        <label>MODEL</label>
+        <input type="text" id="f-model" value="gpt-4o" list="model-list">
+        <datalist id="model-list">
+          <option value="gpt-4o">
+          <option value="claude-sonnet-5">
+          <option value="gemini-2.5-pro">
+          <option value="groq/llama-3.3-70b-versatile">
+          <option value="ollama/llama3.2">
+        </datalist>
+        <p class="hint">Provider is auto-detected from the model name prefix (openai/claude-/gemini-/groq/.../ollama/...).</p>
+      </div>
+      <div class="field">
+        <label>API KEY (placeholder — never put a real key in generated code)</label>
+        <input type="text" id="f-apikey" value="sk-...">
+      </div>
+    </section>
+
+    <section class="zone" id="z-memory">
+      <div class="zone-h"><span class="zc">C</span><span class="zn">MEMORY</span><span class="zr">HistoryProvider → ContextConfig</span></div>
+      <div class="radio-row" id="r-history"></div>
+    </section>
+
+    <section class="zone" id="z-tools">
+      <div class="zone-h"><span class="zc">D</span><span class="zn">TOOLS</span><span class="zr">tools=[...]</span></div>
+      <div class="opt-grid" id="g-tools"></div>
+    </section>
+
+    <section class="zone" id="z-guard">
+      <div class="zone-h"><span class="zc">E</span><span class="zn">GUARDRAILS</span><span class="zr">middleware=MiddlewarePipeline([...])</span></div>
+      <div class="opt-grid" id="g-guardrails"></div>
+    </section>
+
+    <section class="zone" id="z-gov">
+      <div class="zone-h"><span class="zc">F</span><span class="zn">GOVERNANCE</span><span class="zr">execution_budget · approval_required_risk</span></div>
+      <div class="field-row">
+        <div class="field"><label>MAX TOKENS</label><input type="number" id="f-maxtokens" placeholder="e.g. 100000"></div>
+        <div class="field"><label>MAX COST USD</label><input type="number" step="0.01" id="f-maxcost" placeholder="e.g. 2.00"></div>
+        <div class="field"><label>MAX TURNS</label><input type="number" id="f-maxturns" placeholder="e.g. 20"></div>
+      </div>
+      <div class="field">
+        <label>APPROVAL REQUIRED FOR RISK ≥</label>
+        <select id="f-risk">
+          <option value="">— none (no approval gate) —</option>
+          <option value="SAFE">SAFE</option>
+          <option value="HIGH">HIGH</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
+        <p class="hint">Setting this without wiring a real ApprovalHandler means matching tool calls are denied by default — the generated code notes this.</p>
+      </div>
+    </section>
+  </div>
+
+  <div id="codepane">
+    <div id="code-head">
+      <span class="t">GENERATED — agent.py</span>
+      <button id="copy-btn">COPY</button>
+    </div>
+    <div id="code-scroll"><pre id="code"></pre></div>
+    <div id="flags"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function(){
+
+const HISTORY = [
+  {id:"inmemory", n:"InMemoryHistoryProvider", cls:"InMemoryHistoryProvider", import:"substrate.agents.context",
+   desc:"No persistence, resets on restart.", fields:[], needsConnect:false},
+  {id:"redis", n:"RedisHistoryProvider", cls:"RedisHistoryProvider", import:"substrate.capabilities.history",
+   desc:"Redis-backed, TTL'd.", needsConnect:true,
+   fields:[
+     {name:"redis_url", label:"REDIS URL", type:"str", default:"redis://localhost:6379/0"},
+     {name:"ttl", label:"TTL (seconds)", type:"int", default:"3600"},
+     {name:"max_messages", label:"MAX MESSAGES", type:"int", default:"200"},
+   ]},
+  {id:"postgres", n:"PostgresHistoryProvider", cls:"PostgresHistoryProvider", import:"substrate.capabilities.history",
+   desc:"Durable, survives restarts.", needsConnect:true,
+   fields:[
+     {name:"database_url", label:"DATABASE URL", type:"str", positional:true, default:"postgresql+asyncpg://user:pass@localhost/db"},
+   ]},
+];
+
+const TOOLS = [
+  {id:"calculator", n:"CalculatorTool", desc:"Whitelisted arithmetic", fields:[]},
+  {id:"time", n:"CurrentTimeTool", desc:"Current date/time", fields:[]},
+  {id:"wikipedia", n:"WikipediaTool", desc:"Public Wikipedia REST API", fields:[]},
+  {id:"websearch", n:"WebSearchTool", desc:"Exa/Tavily web search", fields:[
+    {name:"tavily_api_key", label:"TAVILY API KEY", type:"str", default:""},
+    {name:"max_results", label:"MAX RESULTS", type:"int", default:"3"},
+  ]},
+  {id:"readurl", n:"ReadUrlTool", desc:"Fetch + extract a URL", fields:[
+    {name:"tavily_api_key", label:"TAVILY API KEY", type:"str", default:""},
+  ]},
+  {id:"websurfer", n:"WebSurferTool", desc:"Headless browser (needs Playwright)", fields:[
+    {name:"headless", label:"HEADLESS", type:"bool", default:"true"},
+  ]},
+  {id:"email", n:"EmailSenderTool", desc:"SMTP send", fields:[
+    {name:"smtp_host", label:"SMTP HOST", type:"str", default:""},
+    {name:"from_address", label:"FROM ADDRESS", type:"str", default:""},
+  ]},
+  {id:"http", n:"HttpRequestTool", desc:"Allowlisted HTTP requests", fields:[]},
+  {id:"image", n:"ImageGeneratorTool", desc:"DALL-E 3 image generation", fields:[
+    {name:"api_key", label:"OPENAI API KEY", type:"str", default:""},
+  ]},
+  {id:"knowledge", n:"KnowledgeSearchTool", desc:"In-memory embedding search", fields:[
+    {name:"api_key", label:"OPENAI API KEY", type:"str", default:""},
+  ]},
+  {id:"docanalyzer", n:"DocumentAnalyzerTool", desc:"Summarize/question documents", fields:[]},
+];
+
+const GUARDRAILS = [
+  {id:"contentfilter", n:"ContentFilterMiddleware", stage:"TURN", desc:"Blocks patterns/keywords", fields:[]},
+  {id:"promptinjection", n:"PromptInjectionMiddleware", stage:"TURN", desc:"Detects injection attempts", fields:[]},
+  {id:"maxtoken", n:"MaxTokenMiddleware", stage:"CHAT", desc:"Caps input tokens", fields:[
+    {name:"max_tokens", label:"MAX TOKENS", type:"int", default:"4096"},
+  ]},
+  {id:"llmjudge", n:"LLMJudgeMiddleware", stage:"CHAT", desc:"LLM-graded safety check (needs model_client)", fields:[]},
+  {id:"pii", n:"PIIDetectionMiddleware", stage:"TOOL", desc:"Redacts PII in tool args", fields:[]},
+  {id:"toolvalidation", n:"ToolCallValidationMiddleware", stage:"TOOL", desc:"Allow/block tool names", fields:[
+    {name:"allowed_tools", label:"ALLOWED TOOLS (comma-sep)", type:"strlist", default:""},
+  ]},
+];
+
+const state={
+  historyChoice:"inmemory",
+  historyFields:{},
+  tools:{},        // id -> {on, fields:{}}
+  guardrails:{},   // id -> {on, fields:{}}
+};
+
+/* ---- render: history radios ---- */
+const rHistory=document.getElementById("r-history");
+rHistory.innerHTML = HISTORY.map(h=>`
+  <div class="radio-opt${h.id==="inmemory"?" on":""}" data-hid="${h.id}">
+    <label class="radio-h"><input type="radio" name="history" value="${h.id}"${h.id==="inmemory"?" checked":""}>
+      <span class="n">${h.n}</span></label>
+    <div class="radio-body">
+      <p class="hint" style="margin:0 0 8px">${h.desc}</p>
+      ${h.fields.map(f=>`<div class="field"><label>${f.label}</label>
+        <input type="text" data-hfield="${f.name}" data-hid="${h.id}" value="${f.default}"></div>`).join("")}
+    </div>
+  </div>`).join("");
+
+rHistory.querySelectorAll('input[name="history"]').forEach(r=>r.addEventListener("change",()=>{
+  state.historyChoice=r.value;
+  rHistory.querySelectorAll(".radio-opt").forEach(o=>o.classList.toggle("on",o.dataset.hid===r.value));
+  render();
+}));
+rHistory.querySelectorAll("[data-hfield]").forEach(inp=>inp.addEventListener("input",()=>{
+  const hid=inp.dataset.hid;
+  state.historyFields[hid]=state.historyFields[hid]||{};
+  state.historyFields[hid][inp.dataset.hfield]=inp.value;
+  render();
+}));
+
+/* ---- render: tools ---- */
+const gTools=document.getElementById("g-tools");
+gTools.innerHTML = TOOLS.map(t=>{
+  state.tools[t.id]={on:false,fields:{}};
+  return `<div class="opt" data-tid="${t.id}">
+    <label class="opt-h"><input type="checkbox" data-toolcb="${t.id}"><span class="n">${t.n}</span><span class="d">${t.desc}</span></label>
+    <div class="opt-body">${t.fields.map(f=>`<div class="field"><label>${f.label}</label>
+      <input type="text" data-tfield="${f.name}" data-tid="${t.id}" value="${f.default}"></div>`).join("")}</div>
+  </div>`;
+}).join("");
+gTools.querySelectorAll("[data-toolcb]").forEach(cb=>cb.addEventListener("change",()=>{
+  const id=cb.dataset.toolcb; state.tools[id].on=cb.checked;
+  cb.closest(".opt").classList.toggle("on",cb.checked);
+  render();
+}));
+gTools.querySelectorAll("[data-tfield]").forEach(inp=>inp.addEventListener("input",()=>{
+  state.tools[inp.dataset.tid].fields[inp.dataset.tfield]=inp.value; render();
+}));
+
+/* ---- render: guardrails ---- */
+const gGuard=document.getElementById("g-guardrails");
+gGuard.innerHTML = GUARDRAILS.map(g=>{
+  state.guardrails[g.id]={on:false,fields:{}};
+  return `<div class="opt" data-gid="${g.id}">
+    <label class="opt-h"><input type="checkbox" data-gcb="${g.id}"><span class="n">${g.n}</span><span class="d">${g.stage}</span></label>
+    <div class="opt-body"><p class="hint" style="margin:0 0 8px">${g.desc}</p>
+      ${g.fields.map(f=>`<div class="field"><label>${f.label}</label>
+      <input type="text" data-gfield="${f.name}" data-gid="${g.id}" value="${f.default}"></div>`).join("")}</div>
+  </div>`;
+}).join("");
+gGuard.querySelectorAll("[data-gcb]").forEach(cb=>cb.addEventListener("change",()=>{
+  const id=cb.dataset.gcb; state.guardrails[id].on=cb.checked;
+  cb.closest(".opt").classList.toggle("on",cb.checked);
+  render();
+}));
+gGuard.querySelectorAll("[data-gfield]").forEach(inp=>inp.addEventListener("input",()=>{
+  state.guardrails[inp.dataset.gid].fields[inp.dataset.gfield]=inp.value; render();
+}));
+
+/* ---- core fields ---- */
+["f-name","f-instructions","f-maxiter","f-model","f-apikey","f-maxtokens","f-maxcost","f-maxturns","f-risk"]
+  .forEach(id=>document.getElementById(id).addEventListener("input",render));
+document.getElementById("f-risk").addEventListener("change",render);
+
+/* ---- python literal helpers ---- */
+function pyStr(s){ return `"${String(s).replace(/\\/g,"\\\\").replace(/"/g,'\\"')}"`; }
+function pyVal(v,type){
+  if(type==="int"){ return v===""||v==null ? null : String(parseInt(v,10)); }
+  if(type==="bool"){ return v==="true"||v===true ? "True":"False"; }
+  if(type==="strlist"){
+    const parts=String(v||"").split(",").map(s=>s.trim()).filter(Boolean);
+    return parts.length? `{${parts.map(pyStr).join(", ")}}` : null;
+  }
+  return v===""||v==null ? null : pyStr(v);
+}
+
+/* ---- code generation ---- */
+function generate(){
+  const name=document.getElementById("f-name").value||"assistant";
+  const instructions=document.getElementById("f-instructions").value||"";
+  const maxIter=document.getElementById("f-maxiter").value||"10";
+  const model=document.getElementById("f-model").value||"gpt-4o";
+  const apiKey=document.getElementById("f-apikey").value||"sk-...";
+  const maxTokens=document.getElementById("f-maxtokens").value;
+  const maxCost=document.getElementById("f-maxcost").value;
+  const maxTurns=document.getElementById("f-maxturns").value;
+  const risk=document.getElementById("f-risk").value;
+
+  const imports=new Map(); // "module" -> Set(names)
+  function imp(mod,name){ if(!imports.has(mod)) imports.set(mod,new Set()); imports.get(mod).add(name); }
+  const flags=[];
+  const pre=[]; // lines before agent construction, inside main()
+  const kwargs=[]; // ReActAgent kwargs
+
+  imp("substrate.agents","ReActAgent"); imp("substrate.agents","Runtime");
+  imp("substrate.integrations.llm","LLMFactory");
+
+  // history / memory
+  const h=HISTORY.find(x=>x.id===state.historyChoice);
+  imp(h.import,h.cls);
+  imp("substrate.agents.context","ContextConfig");
+  const hf=state.historyFields[h.id]||{};
+  const hargs=h.fields.map(f=>{
+    const raw=hf[f.name]!==undefined?hf[f.name]:f.default;
+    const val=f.type==="int"?(raw===""?null:parseInt(raw,10)):(raw===""?null:pyStr(raw));
+    if(val===null||val===undefined) return null;
+    return f.positional ? String(val) : `${f.name}=${val}`;
+  }).filter(Boolean);
+  pre.push(`history = ${h.cls}(${hargs.join(", ")})`);
+  if(h.needsConnect) pre.push(`await history.connect()`);
+  pre.push("");
+
+  // tools
+  const toolLines=[];
+  TOOLS.forEach(t=>{
+    const st=state.tools[t.id]; if(!st||!st.on) return;
+    imp("substrate.capabilities.tools",t.n);
+    const args=t.fields.map(f=>{
+      const raw=st.fields[f.name]!==undefined?st.fields[f.name]:f.default;
+      const val=pyVal(raw,f.type);
+      return val===null?null:`${f.name}=${val}`;
+    }).filter(Boolean);
+    toolLines.push(`${t.n}(${args.join(", ")})`);
+  });
+
+  // guardrails
+  const guardLines=[];
+  let anyGuard=false;
+  GUARDRAILS.forEach(g=>{
+    const st=state.guardrails[g.id]; if(!st||!st.on) return;
+    anyGuard=true;
+    imp("substrate.agents.middleware.guardrails",g.n);
+    const args=g.fields.map(f=>{
+      const raw=st.fields[f.name]!==undefined?st.fields[f.name]:f.default;
+      const val=pyVal(raw,f.type);
+      return val===null?null:`${f.name}=${val}`;
+    }).filter(Boolean);
+    if(g.id==="llmjudge") args.push("model_client=model");
+    guardLines.push(`${g.n}(${args.join(", ")})`);
+  });
+  if(anyGuard) imp("substrate.agents.middleware.pipeline","MiddlewarePipeline");
+
+  // budget
+  const budgetArgs=[];
+  if(maxTokens) budgetArgs.push(`max_tokens=${parseInt(maxTokens,10)}`);
+  if(maxCost) budgetArgs.push(`max_cost_usd=${parseFloat(maxCost)}`);
+  if(maxTurns) budgetArgs.push(`max_turns=${parseInt(maxTurns,10)}`);
+  if(budgetArgs.length){
+    imp("substrate.agents.resources.budget","ExecutionTracker");
+    kwargs.push(`execution_budget=ExecutionTracker(${budgetArgs.join(", ")})`);
+  }
+
+  // approval
+  if(risk){
+    imp("substrate.kernel.tools","ToolRisk");
+    kwargs.push(`approval_required_risk=ToolRisk.${risk}`);
+    flags.push(`<b>approval_required_risk=ToolRisk.${risk}</b> is set with no approval_handler wired — matching tool calls will be <b>denied by default</b>, not paused for a human. Wire a real ApprovalHandler (see kernel/tools/approval.py) if you want interactive approval.`);
+  }
+
+  kwargs.unshift(`context=ContextConfig(history)`);
+  if(toolLines.length) kwargs.unshift(`tools=[\n        ${toolLines.join(",\n        ")},\n    ]`);
+  kwargs.unshift(`model=model`);
+  if(anyGuard) kwargs.push(`middleware=MiddlewarePipeline([\n        ${guardLines.join(",\n        ")},\n    ])`);
+  kwargs.push(`system_instructions=${pyStr(instructions)}`);
+  kwargs.push(`max_iterations=${parseInt(maxIter,10)||10}`);
+
+  // some tools/guardrails need extra flags
+  if(state.tools.docanalyzer && state.tools.docanalyzer.on)
+    flags.push(`<b>DocumentAnalyzerTool</b> takes an optional model_client — left unset here (uses no LLM for extraction-only actions); pass model_client=model in the generated code if you want its summarize/question actions to work.`);
+  if(state.tools.websurfer && state.tools.websurfer.on)
+    flags.push(`<b>WebSurferTool</b> requires Playwright installed (uv sync --group browser) — raises ImportError otherwise.`);
+
+  // assemble source
+  let src="";
+  src+=`import asyncio\n`;
+  const sortedMods=[...imports.keys()].sort();
+  sortedMods.forEach(mod=>{
+    const names=[...imports.get(mod)].sort();
+    src+=`from ${mod} import ${names.join(", ")}\n`;
+  });
+  src+=`\n\nasync def main() -> None:\n`;
+  src+=`    model = LLMFactory(${pyStr(model)}, ${pyStr(apiKey)}).build()\n\n`;
+  pre.forEach(l=>{ src+= l===""? "\n" : `    ${l}\n`; });
+  src+=`    agent = ReActAgent(\n        ${pyStr(name)},\n        ${kwargs.join(",\n        ")},\n    )\n\n`;
+  src+=`    async with Runtime() as runtime:\n`;
+  src+=`        await runtime.register(agent)\n`;
+  src+=`        result = await runtime.run(agent, "Hello!")\n`;
+  src+=`        print(result.output)\n\n\n`;
+  src+=`if __name__ == "__main__":\n    asyncio.run(main())\n`;
+
+  return {src,flags};
+}
+
+/* ---- tiny syntax highlight (single-pass tokenizer -- sequential regex
+   replacement here would re-match text already inserted by an earlier
+   step, e.g. the class="py-kw" attribute's own quotes looking like a
+   Python string literal). ---- */
+function highlight(src){
+  const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const TOKEN=/(#.*)|("(?:[^"\\]|\\.)*")|(\b(?:import|from|async|def|await|with|as|if|__name__|__main__|return)\b)/g;
+  let out="", last=0, m;
+  TOKEN.lastIndex=0;
+  while((m=TOKEN.exec(src))){
+    out+=esc(src.slice(last,m.index));
+    const [full,com,str,kw]=m;
+    out+= com ? `<span class="py-com">${esc(com)}</span>`
+       : str ? `<span class="py-str">${esc(str)}</span>`
+       : `<span class="py-kw">${esc(kw)}</span>`;
+    last=m.index+full.length;
+  }
+  out+=esc(src.slice(last));
+  return out;
+}
+
+function render(){
+  const {src,flags}=generate();
+  document.getElementById("code").innerHTML=highlight(src);
+  const fl=document.getElementById("flags");
+  fl.innerHTML = flags.length ? flags.map(f=>`<p>⚠ ${f}</p>`).join("") : "<p>No warnings for the current configuration.</p>";
+}
+
+document.getElementById("copy-btn").addEventListener("click",()=>{
+  const {src}=generate();
+  navigator.clipboard.writeText(src).then(()=>{
+    const btn=document.getElementById("copy-btn");
+    btn.textContent="COPIED"; btn.classList.add("copied");
+    setTimeout(()=>{btn.textContent="COPY"; btn.classList.remove("copied");},1400);
+  });
+});
+
+render();
+
+})();
+</script>
+</body>
+</html>

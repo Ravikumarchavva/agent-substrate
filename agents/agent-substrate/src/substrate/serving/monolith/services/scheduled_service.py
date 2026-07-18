@@ -112,6 +112,7 @@ async def execute_scheduled_task(
                 system_instructions=scheduled_instructions,
                 cfg=settings,
                 history=app_state.history,
+                short_term_memory=app_state.short_term_memory,
                 runtime=app_state.runtime,
             )
 

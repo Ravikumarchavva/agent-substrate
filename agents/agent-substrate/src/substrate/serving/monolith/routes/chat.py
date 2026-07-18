@@ -286,6 +286,7 @@ async def chat(
             system_instructions=deps["system_instructions"],
             cfg=settings,
             history=ctx.history,
+            short_term_memory=ctx.short_term_memory,
             model_context_window=settings.MODEL_CONTEXT_WINDOW,
             runtime=deps["runtime"],
             initial_tool_choice=initial_tool_choice or None,

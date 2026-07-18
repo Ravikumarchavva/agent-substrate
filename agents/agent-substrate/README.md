@@ -131,7 +131,11 @@ fabric (L3)        ← Flows (Sequential/Parallel/Conditional), Evals, durable e
 
 Import-linter enforces the layer contract on every CI run (`uv run lint-imports`).
 
-**[→ Kernel Board](docs/kernel-board.html)** — the motherboard your agents run on: one kernel, six subsystems, every contract traced to its real implementation.
+**[→ Capability Map](docs/capability-map.html)** — the platform organized by concern: context (the RAM tier), memory (short-term + long-term with pluggable backends), storage, guardrails, governance, evals, observability, and tools. Every item names a real, shipped class.
+
+**[→ Kernel Board](docs/kernel-board.html)** — the contract-level view: every kernel protocol drawn as a socket, traced to the real implementations that plug into it.
+
+**[→ Agent Builder](docs/agent-builder.html)** — pick a memory backend, tools, guardrails, and budgets; get real, accurate `ReActAgent` construction code back, generated from the actual constructor signatures.
 
 ---
 

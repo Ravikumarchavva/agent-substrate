@@ -1,0 +1,15 @@
+flowchart LR
+  User["User / UI"] --> Gateway["Gateway + SSE"]
+  Gateway --> Postgres[("PostgreSQL: inbox, scheduler, event log")]
+  Postgres --> Runtime["Runtime + Worker"]
+  Runtime --> Guardrails{"Configured guardrails"}
+  Guardrails --> Agent["ReAct or Orchestrator agent"]
+  Agent <--> LLM["LLM provider"]
+  Agent <--> Skills["Skills"]
+  LLM <--> Tools["Tools / MCP / RAG"]
+  Tools <--> Code["Code executor"]
+  Tools <--> Human["Human approval"]
+  Agent --> Response["Response stream"] --> User
+  Runtime --> Observability["Traces + event log"]
+  Agent --> Observability
+  Tools --> Observability

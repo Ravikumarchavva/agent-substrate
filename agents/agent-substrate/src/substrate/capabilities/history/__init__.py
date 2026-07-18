@@ -8,10 +8,12 @@ from substrate.capabilities.history.postgres_history import (
     HistorySession,
     HistoryMessage,
 )
+from substrate.capabilities.history.cached_history import CachedHistoryProvider
 
 __all__ = [
     "RedisHistoryProvider",
     "PostgresHistoryProvider",
     "HistorySession",
     "HistoryMessage",
+    "CachedHistoryProvider",
 ]

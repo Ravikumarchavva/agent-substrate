@@ -86,6 +86,7 @@ async def lifespan(app: FastAPI):
         session_factory=session_factory,
     )
     app.state.history = infra.history
+    app.state.short_term_memory = infra.short_term_memory
     app.state.redis_client = infra.redis_client
     app.state.runtime = infra.runtime
     app.state.runtime_stack = infra.runtime_stack
@@ -173,6 +174,7 @@ async def lifespan(app: FastAPI):
         ci_client=app.state.ci_client,
         file_store=app.state.file_store,
         trigger_scheduler=app.state.trigger_scheduler,
+        short_term_memory=app.state.short_term_memory,
     )
 
     for name in ("httpx", "urllib3", "openai"):
@@ -214,6 +216,8 @@ async def lifespan(app: FastAPI):
         await app.state.ci_client.close()  # type: ignore[union-attr]
     if getattr(app.state, "history", None):
         await app.state.history.disconnect()
+    if getattr(app.state, "short_term_memory", None):
+        await app.state.short_term_memory.disconnect()
     if getattr(app.state, "redis_client", None):
         await app.state.redis_client.aclose()
     if getattr(app.state, "file_store", None):

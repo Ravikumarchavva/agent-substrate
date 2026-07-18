@@ -150,7 +150,7 @@ graph TB
 
 **The Capability Map** — the platform organized by *concern* rather than by code layer: context (the RAM tier), memory (short-term + long-term with pluggable backends), storage (the disk tier), guardrails, governance, evals, observability, and tools. Every item names a real, shipped class.
 
-[Open the Capability Map :material-arrow-right:](capability-map.html){ .md-button .md-button--primary }
+[Open the Capability Map :material-arrow-right:](capability-map.md){ .md-button .md-button--primary }
 
 **The Kernel Board** — the contract-level view of the frozen kernel. Every protocol is drawn as a socket around the `Agent[CtxT]` CPU; click a socket for its contract and the real implementations that plug into it — where several exist, you can swap which one is seated.
 

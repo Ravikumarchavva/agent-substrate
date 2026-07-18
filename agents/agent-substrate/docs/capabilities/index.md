@@ -2,7 +2,7 @@
 
 L2 is the **"what agents can do"** layer. Every concrete tool, knowledge pipeline, memory backend, storage adapter, and trigger lives here. Kernel (L0) defines the contracts; agents (L1) drive the ReAct loop; capabilities (L2) provides everything those agents can reach for.
 
-Prefer a visual, concern-organized tour instead? See the **[Capability Map](../capability-map.html)**.
+Prefer a visual, concern-organized tour instead? See the **[Capability Map](../capability-map.md)**.
 
 ## Ten sub-packages
 

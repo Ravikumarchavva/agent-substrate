@@ -18,7 +18,6 @@ from substrate.kernel.core.identity import AgentId
 from substrate.kernel.llm import GenerationOptions, LLMResponse, Usage
 from substrate.kernel.messaging.message import ChatPayload, Message
 from substrate.kernel.messaging.stream import CompletionEvent, TextDelta
-from substrate.agents.factory import load_session_memory
 
 
 # ---------------------------------------------------------------------------
@@ -118,58 +117,6 @@ async def run_agent(
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-
-
-async def test_load_session_memory_seeds_chat_messages_without_message_envelopes():
-    """Cold-store seeding should append ChatMessage objects to history."""
-
-    class CapturingHistory:
-        def __init__(self) -> None:
-            self.seen_message = None
-
-        async def append(self, agent_id, message, *, session_id, run_id="") -> None:
-            self.seen_message = message
-
-        async def append_many(
-            self, agent_id, messages, *, session_id, run_id=""
-        ) -> None:
-            self.seen_message = messages[0] if messages else None
-
-        async def get_messages(self, agent_id, *, session_id, limit=None, offset=None):
-            return [self.seen_message] if self.seen_message is not None else []
-
-        async def clear(self, agent_id, *, session_id) -> None:
-            self.seen_message = None
-
-        async def clear_run(self, agent_id, *, session_id, run_id) -> None:
-            self.seen_message = None
-
-        async def count_messages(self, agent_id, *, session_id) -> int:
-            return 1 if self.seen_message is not None else 0
-
-    history = CapturingHistory()
-
-    async def fake_steps():
-        return [
-            {
-                "type": "user_message",
-                "input": "hello",
-                "output": None,
-                "metadata": {},
-            }
-        ]
-
-    await load_session_memory(
-        session_id="session-seed",
-        system_instructions="system prompt",
-        load_persisted_steps=fake_steps,
-        history=history,
-    )
-
-    assert history.seen_message is not None
-    assert isinstance(history.seen_message, ChatMessage)
-    assert history.seen_message.role == "user"
-    assert history.seen_message.content[0].text == "hello"
 
 
 async def test_standalone_session_accumulates_across_runs():

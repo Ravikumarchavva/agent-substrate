@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from substrate.logger import setup_logging
 
-import asyncio
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -24,7 +22,6 @@ from substrate.kernel import (
     ToolResultBlock,
     Tool,
 )
-from substrate.kernel.core.identity import AgentId
 from substrate.kernel.tools.approval import ApprovalHandler
 from substrate.kernel.tools.tools import ToolRisk
 from substrate.agents.middleware._contracts import Middleware
@@ -41,13 +38,6 @@ if TYPE_CHECKING:
     from substrate.kernel.runtime.scheduler import Scheduler
 
 logger = setup_logging()
-
-
-# ---------------------------------------------------------------------------
-# Type aliases
-# ---------------------------------------------------------------------------
-
-PersistedStepLoader = Callable[[], Awaitable[list[dict]]]
 
 
 # ---------------------------------------------------------------------------
@@ -262,96 +252,6 @@ async def step_rows_from_log(
 
     _flush()
     return rows
-
-
-async def load_session_memory(
-    *,
-    session_id: str,
-    system_instructions: str,
-    load_persisted_steps: PersistedStepLoader,
-    history: HistoryProvider | None = None,
-    include_mcp_app_context: bool = False,
-    cold_store_name: str = "persisted store",
-) -> HistoryProvider:
-    """Ensure *session_id* is populated in a history provider and return it.
-
-    When *history* is provided (the shared, multi-session provider), a cold
-    session is seeded from the persisted cold store on a cache miss.  When it
-    is ``None``, a fresh in-process provider is returned seeded from the cold
-    store.
-    """
-    _aid = AgentId(type="assistant", key=session_id)
-
-    async def _seed(provider: HistoryProvider) -> None:
-        """Load cold-store ChatMessages into *provider* as Message envelopes."""
-        step_rows = await load_persisted_steps()
-        chat_messages = await rebuild_messages_from_steps(
-            step_rows,
-            system_instructions,
-            include_mcp_app_context=include_mcp_app_context,
-        )
-        # Seed the session history with the actual ChatMessage turns.
-        # The history provider contract stores ChatMessage objects directly,
-        # so we must not wrap them in Message envelopes here.
-        for chat_msg in chat_messages:
-            await provider.append(
-                _aid,
-                chat_msg,
-                session_id=session_id,
-                run_id="cold_store",
-            )
-        if chat_messages:
-            logger.debug(
-                "Seeded session %s with %d messages from %s",
-                session_id,
-                len(chat_messages),
-                cold_store_name,
-            )
-
-    if history is not None:
-        hit = await history.count_messages(_aid, session_id=session_id) > 0
-
-        if hit:
-            logger.debug("History hit for %s", session_id)
-            return history
-
-        logger.debug(
-            "History miss for %s — loading from %s", session_id, cold_store_name
-        )
-
-        # Idempotent seed: guard against two concurrent callers (two
-        # replicas, or two racing requests before any single-flight check
-        # engages) both observing the miss above and both seeding — a
-        # double-seed silently truncates older messages once the provider's
-        # per-session cap kicks in (see RedisHistoryProvider.
-        # try_acquire_seed_lock's docstring). Only providers that expose the
-        # lock primitive are guarded; others (in-memory, single-process
-        # test doubles) have no cross-process race to guard against.
-        acquire_lock = getattr(history, "try_acquire_seed_lock", None)
-        if acquire_lock is None:
-            await _seed(history)
-            return history
-
-        if await acquire_lock(_aid, session_id):
-            await _seed(history)
-            return history
-
-        # Lost the race — someone else is seeding (or just finished).
-        # Wait for their write to land instead of proceeding with a
-        # possibly-still-empty history.
-        for _ in range(50):
-            if await history.count_messages(_aid, session_id=session_id) > 0:
-                break
-            await asyncio.sleep(0.1)
-        else:
-            logger.warning(
-                "Timed out waiting for concurrent seed of session %s", session_id
-            )
-        return history
-
-    fallback = InMemoryHistoryProvider()
-    await _seed(fallback)
-    return fallback
 
 
 # ---------------------------------------------------------------------------

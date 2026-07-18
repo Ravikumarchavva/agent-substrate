@@ -56,6 +56,7 @@ class Infrastructure:
     bridge_registry: Any
     skill_manager: Any
     file_store: Any
+    short_term_memory: Any = None
     runtime_stack: AsyncExitStack | None = None
 
 
@@ -211,6 +212,12 @@ async def init_infrastructure(
     )
     await history.connect()
 
+    short_term_memory = await build_short_term_memory(
+        redis_url=cfg.REDIS_URL,
+        database_url=cfg.ASYNC_DATABASE_URL or cfg.DATABASE_URL,
+        ttl=cfg.REDIS_SESSION_TTL,
+    )
+
     redis_client = aioredis.from_url(cfg.REDIS_URL, decode_responses=True)
 
     runtime, runtime_stack = await init_runtime(cfg)
@@ -257,6 +264,7 @@ async def init_infrastructure(
         bridge_registry=bridge_registry,
         skill_manager=skill_manager,
         file_store=file_store,
+        short_term_memory=short_term_memory,
         runtime_stack=runtime_stack,
     )
 
@@ -547,6 +555,7 @@ async def build_agent_for_thread(
     system_instructions: str,
     cfg: SubstrateConfig,
     history: Optional[HistoryProvider] = None,
+    short_term_memory: Any = None,
     model_context_window: int = 40,
     max_iterations: int = 30,
     runtime: Any = None,
@@ -570,8 +579,11 @@ async def build_agent_for_thread(
     (``agents.factory.step_rows_from_log`` — the EventLog is the single
     source of truth for conversation history, not a separate steps table;
     see ``serving/stream/history.py::project_thread()``, the sibling
-    projection for UI display) rather than taking an injected loader
-    callback — the monolith has exactly one cold-store mechanism now.
+    projection for UI display). ``history`` (the shared, TTL'd Redis cache)
+    is wrapped in ``CachedHistoryProvider`` per request so it self-heals from
+    the EventLog on a cold cache — one contract any caller holding
+    ``memory: HistoryProvider`` benefits from, not a side-channel step a
+    caller has to remember to invoke first.
 
     ``bridge`` (the per-thread ``WebHITLBridge``, when given) wires
     ``approval_handler=SSEApprovalHandler(bridge)`` so a CRITICAL/HIGH-risk
@@ -580,13 +592,15 @@ async def build_agent_for_thread(
     this is the one real implementation of kernel's ``ApprovalHandler``
     Protocol; see ``serving/monolith/sse/approval.py``.
     """
+    from substrate.agents.context import InMemoryHistoryProvider
     from substrate.agents.factory import (
         build_research_orchestrator,
         build_token_budget_pipeline,
         create_assistant_agent,
-        load_session_memory,
+        rebuild_messages_from_steps,
         step_rows_from_log,
     )
+    from substrate.capabilities.history.cached_history import CachedHistoryProvider
 
     if runtime is None:
         raise ValueError("build_agent_for_thread() requires a runtime.")
@@ -598,16 +612,24 @@ async def build_agent_for_thread(
         approval_handler = SSEApprovalHandler(bridge)
 
     session_id = str(thread_id)
-    memory = await load_session_memory(
-        session_id=session_id,
-        system_instructions=system_instructions,
-        history=history,
-        include_mcp_app_context=True,
-        cold_store_name="EventLog",
-        load_persisted_steps=lambda: step_rows_from_log(
+
+    async def _reseed_from_event_log() -> list:
+        step_rows = await step_rows_from_log(
             runtime.event_log, runtime.scheduler, session_id
-        ),
+        )
+        return await rebuild_messages_from_steps(
+            step_rows, system_instructions, include_mcp_app_context=True
+        )
+
+    if history is None:
+        history = InMemoryHistoryProvider()
+    memory = CachedHistoryProvider(
+        cache=history, reseed=_reseed_from_event_log, cold_store_name="EventLog"
     )
+
+    memory_tool = build_memory_tool(session_id, short_term_memory)
+    if memory_tool is not None:
+        tools = [*tools, memory_tool]
 
     if cfg.AGENT_MODE.lower() == "orchestrator":
         from substrate.capabilities.tools import CalculatorTool, CurrentTimeTool
@@ -680,6 +702,72 @@ async def build_history_provider(redis_url: str) -> Any:
     provider = RedisHistoryProvider(redis_url=redis_url)
     await provider.connect()
     return provider
+
+
+async def build_short_term_memory(
+    *, redis_url: str, database_url: str, ttl: int = 3600
+) -> Any:
+    """Build and connect a durable-primary + fast-cache ShortTermMemory.
+
+    Thin pass-through to ``capabilities.memory.factory`` (the real
+    implementation, reusable outside serving/) — this module is only the
+    legal meeting point serving/ is allowed to import agents/capabilities
+    types through, per its own module docstring.
+    """
+    from substrate.capabilities.memory.factory import (
+        build_short_term_memory as _build,
+    )
+
+    return await _build(database_url, redis_url=redis_url, ttl=ttl)
+
+
+async def build_cached_history_for_thread(
+    thread_id: str,
+    *,
+    system_instructions: str,
+    history: Any,
+    conversation_service_url: str,
+) -> Any:
+    """Wrap the agent_runtime microservice's shared history cache so it
+    self-heals from the ``conversation`` service (its cold store — the
+    microservices deployment has no local EventLog, see
+    ``build_agent_for_thread``'s monolith equivalent) on a cold session."""
+    import httpx
+
+    from substrate.agents.context import InMemoryHistoryProvider
+    from substrate.agents.factory import rebuild_messages_from_steps
+    from substrate.capabilities.history.cached_history import CachedHistoryProvider
+
+    async def _reseed_from_conversation_service() -> list:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{conversation_service_url}/internal/threads/{thread_id}/memory"
+            )
+            response.raise_for_status()
+            step_rows = response.json()
+        return await rebuild_messages_from_steps(step_rows, system_instructions)
+
+    cache = history if history is not None else InMemoryHistoryProvider()
+    return CachedHistoryProvider(
+        cache=cache,
+        reseed=_reseed_from_conversation_service,
+        cold_store_name="Conversation service",
+    )
+
+
+def build_memory_tool(session_id: str, short_term_memory: Any) -> Any | None:
+    """Build a ``MemoryTool`` bound to *session_id*, or ``None`` if no
+    short-term memory backend is configured."""
+    if short_term_memory is None:
+        return None
+    from substrate.capabilities.tools.memory import MemoryTool
+    from substrate.kernel.core.identity import AgentId
+
+    return MemoryTool(
+        AgentId(type="assistant", key=session_id),
+        session_id,
+        short_term=short_term_memory,
+    )
 
 
 def build_runtime_default_tools() -> list[Any]:

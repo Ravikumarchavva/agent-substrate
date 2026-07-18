@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Substrate - System Explorer</title>
+  <style>
+    :root {
+      --ink: #142033;
+      --muted: #5f6f83;
+      --soft: #edf2f7;
+      --line: #d9e1ea;
+      --paper: #ffffff;
+      --page: #f7f9fb;
+      --blue: #316bff;
+      --cyan: #11a9d8;
+      --green: #18a66a;
+      --amber: #d88416;
+      --rose: #d84769;
+      --violet: #7657e6;
+      --shadow: 0 18px 44px rgba(20, 32, 51, .12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 0%, rgba(49, 107, 255, .10), transparent 34%),
+        radial-gradient(circle at 88% 16%, rgba(24, 166, 106, .11), transparent 32%),
+        var(--page);
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 26px 22px 48px;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 34px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: #142033;
+      border-radius: 8px;
+      box-shadow: 0 8px 22px rgba(20, 32, 51, .22);
+    }
+
+    .badge {
+      padding: 6px 10px;
+      color: #25624d;
+      background: #e8f7f0;
+      border: 1px solid #caeadb;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .hero {
+      max-width: 770px;
+      text-align: center;
+      margin: 0 auto 30px;
+    }
+
+    .eyebrow {
+      color: #316bff;
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: .12em;
+    }
+
+    h1 {
+      margin: 8px 0 12px;
+      font-size: clamp(34px, 4.8vw, 58px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 650px;
+      margin: 0 auto;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .scenario-bar {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+    }
+
+    .scenario {
+      appearance: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: #415168;
+      background: rgba(255, 255, 255, .75);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 750;
+      cursor: pointer;
+      transition: border-color .2s, background .2s, color .2s, transform .2s;
+    }
+
+    .scenario:hover { border-color: #a8b9ce; transform: translateY(-1px); }
+    .scenario.active { color: #fff; background: #142033; border-color: #142033; }
+
+    .shell {
+      overflow: hidden;
+      background: rgba(255, 255, 255, .92);
+      border: 1px solid rgba(201, 213, 226, .9);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .shell-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 22px;
+      border-bottom: 1px solid #e4ebf2;
+      background: linear-gradient(180deg, #fff, #f9fbfd);
+    }
+
+    .shell-title {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .live-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 5px rgba(24, 166, 106, .14);
+    }
+
+    .shell h2 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .shell-sub {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .play {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 13px;
+      color: #fff;
+      background: var(--blue);
+      box-shadow: 0 10px 24px rgba(49, 107, 255, .24);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+    }
+
+    .map {
+      min-height: 610px;
+      padding: 18px;
+      background:
+        linear-gradient(rgba(20, 32, 51, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20, 32, 51, .035) 1px, transparent 1px),
+        radial-gradient(circle at 50% 48%, rgba(49, 107, 255, .08), transparent 38%),
+        #fbfdff;
+      background-size: 28px 28px, 28px 28px, auto, auto;
+    }
+
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .activity {
+      border-left: 1px solid #e4ebf2;
+      padding: 22px 18px;
+      background: #f8fafc;
+    }
+
+    .activity h3 {
+      margin: 0 0 4px;
+      font-size: 13px;
+    }
+
+    .activity > p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .events {
+      display: grid;
+      gap: 10px;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 9px;
+      align-items: start;
+      min-height: 48px;
+      padding: 8px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      opacity: .52;
+      transition: opacity .24s, background .24s, border-color .24s, transform .24s;
+    }
+
+    .event.live {
+      opacity: 1;
+      background: #fff;
+      border-color: #dce7f4;
+      transform: translateX(2px);
+    }
+
+    .event-mark {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      color: #316bff;
+      background: #eaf1ff;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .event.live .event-mark { color: #126445; background: #ddf5ea; }
+    .event b { display: block; font-size: 12px; }
+    .event small { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; }
+
+    .note {
+      display: flex;
+      gap: 9px;
+      margin-top: 18px;
+      padding: 11px;
+      border-radius: 8px;
+      color: #566a80;
+      background: #eef4fb;
+      font-size: 11px;
+    }
+
+    .footer {
+      margin: 16px 2px 0;
+      color: #7d8b9c;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .lane {
+      fill: rgba(255, 255, 255, .62);
+      stroke: #e1e8f0;
+      stroke-width: 1;
+    }
+
+    .lane-title {
+      fill: #728298;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .10em;
+    }
+
+    .edge {
+      fill: none;
+      stroke: #bccbdc;
+      stroke-width: 2;
+      stroke-linecap: round;
+      opacity: .52;
+      transition: opacity .28s, stroke .28s, stroke-width .28s, filter .28s;
+    }
+
+    .edge.active {
+      stroke: var(--blue);
+      stroke-width: 3.2;
+      opacity: 1;
+      filter: drop-shadow(0 4px 7px rgba(49, 107, 255, .24));
+    }
+
+    .edge.wait { stroke: var(--amber); }
+    .edge.blocked { stroke: var(--rose); }
+
+    .node {
+      cursor: pointer;
+      outline: none;
+      opacity: .42;
+      transition: opacity .28s, transform .28s, filter .28s;
+    }
+
+    .node .card {
+      fill: #fff;
+      stroke: #d6e1ed;
+      stroke-width: 1.2;
+      filter: drop-shadow(0 8px 14px rgba(20, 32, 51, .10));
+      transition: fill .28s, stroke .28s, stroke-width .28s;
+    }
+
+    .node .icon {
+      fill: #e9f0fa;
+      transition: fill .28s;
+    }
+
+    .node .icon-text {
+      fill: #316bff;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .node .title {
+      fill: #18283d;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .node .sub {
+      fill: #65778d;
+      font-size: 10.5px;
+    }
+
+    .node.active { opacity: 1; }
+    .node.active .card { stroke: #316bff; stroke-width: 1.9; }
+    .node.active .icon { fill: #316bff; }
+    .node.active .icon-text { fill: #fff; }
+    .node.current { filter: drop-shadow(0 14px 22px rgba(49, 107, 255, .24)); }
+    .node.current .card { fill: #f8fbff; stroke-width: 2.8; }
+    .node:hover, .node:focus { opacity: 1; }
+    .node:hover .card, .node:focus .card { stroke: #8ab0f8; }
+
+    .hub .card { fill: #142033; stroke: #142033; }
+    .hub .title { fill: #fff; font-size: 15px; }
+    .hub .sub { fill: #b8c7d9; }
+    .hub .icon { fill: rgba(255, 255, 255, .12); }
+    .hub .icon-text { fill: #fff; }
+
+    .step-label {
+      opacity: 0;
+      transition: opacity .25s;
+    }
+
+    .step-label.live { opacity: 1; }
+    .step-bg { fill: #142033; }
+    .step-num { fill: #fff; font-size: 9px; font-weight: 850; }
+
+    .flow-token {
+      fill: #fff;
+      stroke: var(--blue);
+      stroke-width: 3;
+      filter: drop-shadow(0 5px 8px rgba(49, 107, 255, .35));
+    }
+
+    .flow-token.wait { stroke: var(--amber); }
+    .flow-token.blocked { stroke: var(--rose); }
+
+    @media (max-width: 900px) {
+      .content { grid-template-columns: 1fr; }
+      .activity { border-left: 0; border-top: 1px solid #e4ebf2; }
+      .map { min-height: 0; }
+      .events { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 560px) {
+      main { padding: 20px 14px 36px; }
+      .nav { margin-bottom: 26px; }
+      .badge { display: none; }
+      .hero p { font-size: 15px; }
+      .shell-head { align-items: flex-start; flex-direction: column; }
+      .events { grid-template-columns: 1fr; }
+      .map { padding: 8px; }
+      .node .sub { display: none; }
+      .node .title { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <nav class="nav">
+      <div class="brand"><span class="brand-mark">AS</span> Agent Substrate</div>
+      <span class="badge">SYSTEM EXPLORER</span>
+    </nav>
+
+    <header class="hero">
+      <div class="eyebrow">YOUR AGENT SYSTEM, MADE LEGIBLE</div>
+      <h1>Every interaction.<br>Visible by design.</h1>
+      <p>Follow a customer request across durable runtime, guardrails, intelligence, tools, observability, and the final response.</p>
+      <div class="scenario-bar" id="scenarios">
+        <button class="scenario active" data-flow="chat" type="button">Customer chat</button>
+        <button class="scenario" data-flow="tool" type="button">Tool execution</button>
+        <button class="scenario" data-flow="code" type="button">Code interpreter</button>
+        <button class="scenario" data-flow="approval" type="button">Human approval</button>
+        <button class="scenario" data-flow="multi" type="button">Multi-agent work</button>
+        <button class="scenario" data-flow="blocked" type="button">Blocked request</button>
+      </div>
+    </header>
+
+    <section class="shell">
+      <div class="shell-head">
+        <div class="shell-title">
+          <span class="live-dot"></span>
+          <div>
+            <h2 id="flow-title">Customer chat</h2>
+            <p class="shell-sub" id="flow-sub">A guarded, durable path from message to streamed answer.</p>
+          </div>
+        </div>
+        <button class="play" id="play" type="button">Replay flow</button>
+      </div>
+
+      <div class="content">
+        <div class="map">
+          <svg viewBox="0 0 930 560" role="img" aria-labelledby="graph-title graph-desc">
+            <title id="graph-title">Agent Substrate interactive system graph</title>
+            <desc id="graph-desc">A node graph showing the selected request path through Agent Substrate.</desc>
+
+            <rect class="lane" x="34" y="66" width="222" height="376" rx="18"></rect>
+            <rect class="lane" x="284" y="66" width="352" height="376" rx="18"></rect>
+            <rect class="lane" x="664" y="66" width="232" height="376" rx="18"></rect>
+            <text class="lane-title" x="60" y="95">CUSTOMER EXPERIENCE</text>
+            <text class="lane-title" x="360" y="95">DURABLE AGENT RUNTIME</text>
+            <text class="lane-title" x="708" y="95">CAPABILITIES</text>
+
+            <g class="edges">
+              <path id="e-user-gateway" class="edge" d="M165 178 C205 178 215 178 253 178"></path>
+              <path id="e-gateway-store" class="edge" d="M373 178 C405 178 418 178 448 178"></path>
+              <path id="e-store-runtime" class="edge" d="M568 178 C602 178 612 178 647 178"></path>
+              <path id="e-runtime-guard" class="edge" d="M718 213 C739 255 753 290 770 330"></path>
+              <path id="e-guard-agent" class="edge" d="M770 358 C705 377 657 376 602 350"></path>
+              <path id="e-runtime-agent" class="edge" d="M660 212 C621 248 584 282 548 315"></path>
+              <path id="e-agent-llm" class="edge" d="M513 385 C520 417 529 435 546 458"></path>
+              <path id="e-llm-response" class="edge" d="M494 490 C374 489 308 477 203 408"></path>
+              <path id="e-response-user" class="edge" d="M130 368 C97 315 91 248 104 212"></path>
+              <path id="e-agent-skills" class="edge" d="M428 350 C362 350 322 334 288 303"></path>
+              <path id="e-skills-agent" class="edge" d="M288 275 C334 248 396 250 450 313"></path>
+              <path id="e-llm-tools" class="edge" d="M618 490 C660 490 684 474 710 444"></path>
+              <path id="e-tools-llm" class="edge" d="M710 414 C668 406 632 424 594 458"></path>
+              <path id="e-tools-code" class="edge" d="M787 442 C787 463 775 481 748 493"></path>
+              <path id="e-code-tools" class="edge" d="M674 493 C651 470 670 446 710 426"></path>
+              <path id="e-tools-human" class="edge" d="M829 414 C862 381 872 329 858 285"></path>
+              <path id="e-human-tools" class="edge" d="M814 285 C784 326 779 371 787 408"></path>
+              <path id="e-runtime-observe" class="edge" d="M706 212 C689 252 667 271 630 286"></path>
+              <path id="e-agent-observe" class="edge" d="M575 326 C599 313 616 306 644 297"></path>
+              <path id="e-tools-observe" class="edge" d="M763 408 C727 353 684 317 630 295"></path>
+            </g>
+
+            <g id="step-labels"></g>
+            <g id="tokens"></g>
+
+            <g class="node" data-node="user" tabindex="0" transform="translate(63 142)">
+              <rect class="card" width="102" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">UI</text>
+              <text class="title" x="56" y="30">Customer</text>
+              <text class="sub" x="56" y="48">message</text>
+            </g>
+
+            <g class="node" data-node="gateway" tabindex="0" transform="translate(253 142)">
+              <rect class="card" width="120" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">GW</text>
+              <text class="title" x="56" y="30">Gateway</text>
+              <text class="sub" x="56" y="48">SSE session</text>
+            </g>
+
+            <g class="node" data-node="store" tabindex="0" transform="translate(448 142)">
+              <rect class="card" width="120" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">DB</text>
+              <text class="title" x="56" y="30">Postgres</text>
+              <text class="sub" x="56" y="48">runs + events</text>
+            </g>
+
+            <g class="node" data-node="runtime" tabindex="0" transform="translate(647 142)">
+              <rect class="card" width="124" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">RT</text>
+              <text class="title" x="56" y="30">Runtime</text>
+              <text class="sub" x="56" y="48">lease worker</text>
+            </g>
+
+            <g class="node" data-node="skills" tabindex="0" transform="translate(164 251)">
+              <rect class="card" width="124" height="64" rx="10"></rect>
+              <rect class="icon" x="12" y="14" width="32" height="32" rx="8"></rect>
+              <text class="icon-text" x="28" y="35" text-anchor="middle">SK</text>
+              <text class="title" x="54" y="28">Skills</text>
+              <text class="sub" x="54" y="45">context packs</text>
+            </g>
+
+            <g class="node hub" data-node="agent" tabindex="0" transform="translate(450 313)">
+              <rect class="card" width="152" height="74" rx="13"></rect>
+              <rect class="icon" x="14" y="17" width="38" height="38" rx="10"></rect>
+              <text class="icon-text" x="33" y="42" text-anchor="middle">AI</text>
+              <text class="title" x="64" y="31">Agent core</text>
+              <text class="sub" x="64" y="50">plan, reason, act</text>
+            </g>
+
+            <g class="node" data-node="guard" tabindex="0" transform="translate(768 317)">
+              <rect class="card" width="120" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">GD</text>
+              <text class="title" x="56" y="30">Guardrails</text>
+              <text class="sub" x="56" y="48">policy checks</text>
+            </g>
+
+            <g class="node" data-node="observe" tabindex="0" transform="translate(510 265)">
+              <rect class="card" width="120" height="56" rx="10"></rect>
+              <rect class="icon" x="11" y="12" width="30" height="30" rx="8"></rect>
+              <text class="icon-text" x="26" y="32" text-anchor="middle">OB</text>
+              <text class="title" x="51" y="25">Trace</text>
+              <text class="sub" x="51" y="41">logs + spans</text>
+            </g>
+
+            <g class="node" data-node="response" tabindex="0" transform="translate(86 358)">
+              <rect class="card" width="117" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">OK</text>
+              <text class="title" x="56" y="30">Response</text>
+              <text class="sub" x="56" y="48">streamed</text>
+            </g>
+
+            <g class="node" data-node="llm" tabindex="0" transform="translate(494 458)">
+              <rect class="card" width="124" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">LLM</text>
+              <text class="title" x="56" y="30">LLM</text>
+              <text class="sub" x="56" y="48">decide</text>
+            </g>
+
+            <g class="node" data-node="tools" tabindex="0" transform="translate(710 408)">
+              <rect class="card" width="119" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">TL</text>
+              <text class="title" x="56" y="30">Tools</text>
+              <text class="sub" x="56" y="48">MCP, RAG, APIs</text>
+            </g>
+
+            <g class="node" data-node="human" tabindex="0" transform="translate(782 215)">
+              <rect class="card" width="106" height="70" rx="10"></rect>
+              <rect class="icon" x="12" y="15" width="34" height="34" rx="8"></rect>
+              <text class="icon-text" x="29" y="37" text-anchor="middle">HM</text>
+              <text class="title" x="56" y="30">Human</text>
+              <text class="sub" x="56" y="48">approval</text>
+            </g>
+
+            <g class="node" data-node="code" tabindex="0" transform="translate(638 493)">
+              <rect class="card" width="110" height="48" rx="10"></rect>
+              <rect class="icon" x="10" y="9" width="30" height="30" rx="8"></rect>
+              <text class="icon-text" x="25" y="29" text-anchor="middle">&gt;_</text>
+              <text class="title" x="49" y="29">Code exec</text>
+            </g>
+          </svg>
+        </div>
+
+        <aside class="activity">
+          <h3>Trace activity</h3>
+          <p id="activity-copy">The events behind this customer moment.</p>
+          <div class="events" id="events"></div>
+          <div class="note"><span>*</span><div>Click a component to inspect its role, then replay the selected route.</div></div>
+        </aside>
+      </div>
+    </section>
+
+    <p class="footer">Capabilities are composable. Your deployment decides which adapters, tools, policies, and backends are enabled.</p>
+  </main>
+
+  <script>
+    const flows = {
+      chat: {
+        title: 'Customer chat',
+        sub: 'A guarded, durable path from message to streamed answer.',
+        nodes: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'llm', 'response', 'observe'],
+        edges: ['user-gateway', 'gateway-store', 'store-runtime', 'runtime-guard', 'guard-agent', 'agent-llm', 'llm-response', 'response-user', 'runtime-observe', 'agent-observe'],
+        steps: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'llm', 'response', 'user'],
+        events: [['Message accepted', 'The request enters a live session'], ['Run persisted', 'Postgres records inbox and event log'], ['Worker leased', 'Runtime starts the turn'], ['Policy passed', 'Guardrails allow the request'], ['Answer streamed', 'The response returns to the customer']]
+      },
+      tool: {
+        title: 'Tool execution',
+        sub: 'The agent can use trusted tools while policy and observability stay attached.',
+        nodes: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'llm', 'tools', 'response', 'observe'],
+        edges: ['user-gateway', 'gateway-store', 'store-runtime', 'runtime-guard', 'guard-agent', 'agent-llm', 'llm-tools', 'tools-llm', 'llm-response', 'response-user', 'agent-observe', 'tools-observe'],
+        steps: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'llm', 'tools', 'llm', 'response', 'user'],
+        events: [['Message accepted', 'A durable run is created'], ['Model selects tool', 'The LLM requests a capability'], ['Tool validated', 'Arguments are checked'], ['Result returned', 'Tool output becomes context'], ['Answer streamed', 'The final response returns']]
+      },
+      code: {
+        title: 'Code interpreter',
+        sub: 'Sandboxed code execution turns agent reasoning into computed results.',
+        nodes: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'llm', 'tools', 'code', 'response', 'observe'],
+        edges: ['user-gateway', 'gateway-store', 'store-runtime', 'runtime-guard', 'guard-agent', 'agent-llm', 'llm-tools', 'tools-code', 'code-tools', 'tools-llm', 'llm-response', 'response-user', 'tools-observe'],
+        steps: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'llm', 'tools', 'code', 'tools', 'llm', 'response', 'user'],
+        events: [['Request queued', 'The task is persisted'], ['Code requested', 'The model selects execution'], ['Sandbox runs', 'Code executes in isolation'], ['Artifact returned', 'Output is passed to the agent'], ['Result delivered', 'The answer is streamed']]
+      },
+      approval: {
+        title: 'Human approval',
+        sub: 'High-risk actions pause for a person without losing the durable run.',
+        nodes: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'llm', 'tools', 'human', 'response', 'observe'],
+        edges: ['user-gateway', 'gateway-store', 'store-runtime', 'runtime-guard', 'guard-agent', 'agent-llm', 'llm-tools', 'tools-human', 'human-tools', 'tools-llm', 'llm-response', 'response-user', 'tools-observe'],
+        wait: ['tools-human', 'human-tools'],
+        steps: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'llm', 'tools', 'human', 'tools', 'llm', 'response', 'user'],
+        events: [['Action proposed', 'The model requests a protected tool'], ['Approval requested', 'A decision card is created'], ['Run waits', 'State is preserved durably'], ['Decision received', 'The tool path resumes'], ['Response delivered', 'The agent completes the turn']]
+      },
+      multi: {
+        title: 'Multi-agent work',
+        sub: 'A coordinator activates specialized context and gathers delegated work.',
+        nodes: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'skills', 'llm', 'response', 'observe'],
+        edges: ['user-gateway', 'gateway-store', 'store-runtime', 'runtime-guard', 'guard-agent', 'agent-skills', 'skills-agent', 'agent-llm', 'llm-response', 'response-user', 'agent-observe'],
+        steps: ['user', 'gateway', 'store', 'runtime', 'guard', 'agent', 'skills', 'agent', 'llm', 'response', 'user'],
+        events: [['Coordinator started', 'The orchestration run is leased'], ['Skill activated', 'Focused context is selected'], ['Work delegated', 'Specialized work is performed'], ['Result collected', 'The coordinator resumes'], ['Response delivered', 'One answer reaches the user']]
+      },
+      blocked: {
+        title: 'Blocked request',
+        sub: 'Configured guardrails can stop unsafe input before model or tool use.',
+        nodes: ['user', 'gateway', 'store', 'runtime', 'guard', 'observe'],
+        edges: ['user-gateway', 'gateway-store', 'store-runtime', 'runtime-guard', 'runtime-observe'],
+        blocked: ['runtime-guard'],
+        steps: ['user', 'gateway', 'store', 'runtime', 'guard', 'observe'],
+        events: [['Message accepted', 'The request remains observable'], ['Run leased', 'A worker starts the turn'], ['Policy blocked', 'Guardrails stop the path'], ['Failure recorded', 'The event log preserves outcome'], ['Safe response', 'The user receives a clear result']]
+      }
+    };
+
+    const nodeCenters = {
+      user: [114, 177], gateway: [313, 177], store: [508, 177], runtime: [709, 177],
+      skills: [226, 283], agent: [526, 350], guard: [828, 352], observe: [570, 293],
+      response: [145, 393], llm: [556, 493], tools: [770, 443], human: [835, 250],
+      code: [693, 517]
+    };
+
+    const $ = selector => document.querySelector(selector);
+    const svg = $('svg');
+    const tokens = $('#tokens');
+    const labels = $('#step-labels');
+    let current = 'chat';
+    let timers = [];
+
+    function clearTimers() {
+      timers.forEach(clearTimeout);
+      timers = [];
+    }
+
+    function edgeKind(flow, edge) {
+      if (flow.wait?.includes(edge)) return ' wait';
+      if (flow.blocked?.includes(edge)) return ' blocked';
+      return '';
+    }
+
+    function render(name) {
+      clearTimers();
+      current = name;
+      tokens.innerHTML = '';
+      labels.innerHTML = '';
+      const flow = flows[name];
+
+      $('#flow-title').textContent = flow.title;
+      $('#flow-sub').textContent = flow.sub;
+      $('#play').textContent = 'Replay flow';
+
+      document.querySelectorAll('.scenario').forEach(button => {
+        button.classList.toggle('active', button.dataset.flow === name);
+      });
+
+      document.querySelectorAll('.node').forEach(node => {
+        node.classList.toggle('active', flow.nodes.includes(node.dataset.node));
+        node.classList.remove('current');
+      });
+
+      document.querySelectorAll('.edge').forEach(edge => {
+        const id = edge.id.slice(2);
+        edge.className.baseVal = 'edge' + (flow.edges.includes(id) ? ' active' : '') + edgeKind(flow, id);
+      });
+
+      $('#events').innerHTML = flow.events.map(([title, detail], index) => (
+        `<div class="event" data-event="${index}"><span class="event-mark">${index + 1}</span><div><b>${title}</b><small>${detail}</small></div></div>`
+      )).join('');
+
+      drawStepLabels(flow);
+    }
+
+    function drawStepLabels(flow) {
+      flow.edges.forEach((edge, index) => {
+        if (index >= 12) return;
+        const path = document.getElementById(`e-${edge}`);
+        if (!path) return;
+        const point = path.getPointAtLength(path.getTotalLength() * .52);
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.classList.add('step-label');
+        group.setAttribute('id', `s-${edge}`);
+        group.innerHTML = `<circle class="step-bg" cx="${point.x}" cy="${point.y}" r="10"></circle><text class="step-num" x="${point.x}" y="${point.y + 3}" text-anchor="middle">${index + 1}</text>`;
+        labels.appendChild(group);
+      });
+    }
+
+    function pulseNode(nodeName, delay) {
+      timers.push(setTimeout(() => {
+        document.querySelectorAll('.node.current').forEach(node => node.classList.remove('current'));
+        const node = document.querySelector(`.node[data-node="${nodeName}"]`);
+        if (node) node.classList.add('current');
+      }, delay));
+    }
+
+    function sendToken(edge, delay, flow) {
+      const path = document.getElementById(`e-${edge}`);
+      if (!path) return;
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('r', '6');
+      circle.setAttribute('class', `flow-token${edgeKind(flow, edge)}`);
+
+      const motion = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+      motion.setAttribute('dur', '820ms');
+      motion.setAttribute('begin', 'indefinite');
+      motion.setAttribute('fill', 'freeze');
+      motion.setAttribute('path', path.getAttribute('d'));
+      circle.appendChild(motion);
+      tokens.appendChild(circle);
+
+      timers.push(setTimeout(() => {
+        document.getElementById(`s-${edge}`)?.classList.add('live');
+        motion.beginElement();
+      }, delay));
+
+      timers.push(setTimeout(() => {
+        circle.remove();
+      }, delay + 1100));
+    }
+
+    function replay() {
+      render(current);
+      const flow = flows[current];
+      const rows = [...document.querySelectorAll('.event')];
+      $('#play').textContent = 'Playing...';
+
+      flow.steps.forEach((nodeName, index) => pulseNode(nodeName, index * 360));
+      flow.edges.forEach((edge, index) => sendToken(edge, index * 360, flow));
+
+      rows.forEach((row, index) => {
+        timers.push(setTimeout(() => {
+          rows.forEach(item => item.classList.remove('live'));
+          row.classList.add('live');
+        }, index * 760));
+      });
+
+      const doneAt = Math.max(flow.edges.length * 360, rows.length * 760) + 900;
+      timers.push(setTimeout(() => {
+        document.querySelectorAll('.node.current').forEach(node => node.classList.remove('current'));
+        rows.forEach(row => row.classList.remove('live'));
+        $('#play').textContent = 'Replay flow';
+      }, doneAt));
+    }
+
+    document.querySelectorAll('.scenario').forEach(button => {
+      button.addEventListener('click', () => render(button.dataset.flow));
+    });
+
+    $('#play').addEventListener('click', replay);
+
+    document.querySelectorAll('.node').forEach(node => {
+      const show = () => {
+        const title = node.querySelector('.title').textContent;
+        const sub = node.querySelector('.sub')?.textContent || 'Configured Agent Substrate capability.';
+        $('#flow-title').textContent = title;
+        $('#flow-sub').textContent = sub;
+      };
+      node.addEventListener('click', show);
+      node.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          show();
+        }
+      });
+    });
+
+    render(current);
+  </script>
+</body>
+</html>

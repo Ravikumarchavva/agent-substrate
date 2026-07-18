@@ -43,6 +43,7 @@ class ServerDependencies:
     ci_client: Optional[Any] = None
     file_store: Optional[Any] = None
     trigger_scheduler: Optional[Any] = None
+    short_term_memory: Optional[Any] = None
 
 
 def get_ctx(request: Request) -> ServerDependencies:

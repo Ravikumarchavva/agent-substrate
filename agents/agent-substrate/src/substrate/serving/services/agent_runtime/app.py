@@ -15,6 +15,7 @@ from substrate.infrastructure.cache.redis import RedisConnector
 from substrate.infrastructure.serving_factory import (
     build_history_provider,
     build_runtime_default_tools,
+    build_short_term_memory,
 )
 from substrate.integrations.llm.factory import create_model_client
 from substrate.serving.services.agent_runtime.routes import router
@@ -90,9 +91,10 @@ async def lifespan(app):
         "CONVERSATION_SERVICE_URL", "http://localhost:8012"
     )
     backend = os.environ.get("RUNTIME_BACKEND", "postgres").lower()
-    pg_url = (
-        os.environ.get("DATABASE_URL", "") or os.environ.get("ASYNC_DATABASE_URL", "")
-    ).replace("+asyncpg", "")
+    async_pg_url = os.environ.get("DATABASE_URL", "") or os.environ.get(
+        "ASYNC_DATABASE_URL", ""
+    )
+    pg_url = async_pg_url.replace("+asyncpg", "")
 
     async with _runtime_cm(backend, pg_url) as runtime:
         app.state.runtime = runtime
@@ -107,6 +109,14 @@ async def lifespan(app):
 
         history = await build_history_provider(redis_url)
         app.state.history = history
+
+        app.state.short_term_memory = (
+            await build_short_term_memory(
+                redis_url=redis_url, database_url=async_pg_url
+            )
+            if async_pg_url
+            else None
+        )
 
         app.state.model_client = create_model_client(
             os.environ.get("MODEL_NAME", "gpt-4o"),
@@ -139,6 +149,8 @@ async def lifespan(app):
             task.cancel()
 
         await history.disconnect()
+        if app.state.short_term_memory is not None:
+            await app.state.short_term_memory.disconnect()
         await app.state.event_bus.disconnect()
         await redis_connector.disconnect()
 

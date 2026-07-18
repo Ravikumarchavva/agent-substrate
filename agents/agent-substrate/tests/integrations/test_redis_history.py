@@ -96,11 +96,12 @@ async def test_try_acquire_seed_lock_is_exclusive():
 
 
 @pytest.mark.asyncio
-async def test_load_session_memory_concurrent_calls_seed_once():
-    """Two concurrent load_session_memory() calls for the same session (the
-    real-world race: two replicas, or two racing requests) must seed exactly
-    once — a double-seed would double every persisted message in history."""
-    from substrate.agents.factory import load_session_memory
+async def test_cached_history_provider_concurrent_reads_seed_once():
+    """Two concurrent CachedHistoryProvider reads for the same cold session
+    (the real-world race: two replicas, or two racing requests) must seed
+    exactly once — a double-seed would double every persisted message."""
+    from substrate.agents.factory import rebuild_messages_from_steps
+    from substrate.capabilities.history.cached_history import CachedHistoryProvider
 
     provider = RedisHistoryProvider(redis_url="redis://localhost:6379/0", ttl=60)
     try:
@@ -121,23 +122,19 @@ async def test_load_session_memory_concurrent_calls_seed_once():
         # whenever system_instructions is non-empty.
         expected_count = len(steps) + 1
 
-        async def _load_steps():
-            return steps
+        async def _reseed():
+            return await rebuild_messages_from_steps(steps, "You are helpful.")
+
+        cached = CachedHistoryProvider(
+            cache=provider, reseed=_reseed, cold_store_name="test cold store"
+        )
 
         import asyncio
 
         results = await asyncio.gather(
-            *[
-                load_session_memory(
-                    session_id=session_id,
-                    system_instructions="You are helpful.",
-                    load_persisted_steps=_load_steps,
-                    history=provider,
-                )
-                for _ in range(5)
-            ]
+            *[cached.get_messages(agent_id, session_id=session_id) for _ in range(5)]
         )
-        assert all(r is provider for r in results)
+        assert all(len(r) == expected_count for r in results)
 
         count = await provider.count_messages(agent_id, session_id=session_id)
         assert count == expected_count, (

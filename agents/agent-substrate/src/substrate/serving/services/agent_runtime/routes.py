@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from substrate.infrastructure.serving_factory import build_memory_tool
 from substrate.serving.services.agent_runtime.service import (
     create_agent,
     execute_agent_run,
@@ -48,6 +49,7 @@ async def start_agent_run(body: RunRequest, request: Request):
     model_client = request.app.state.model_client
     tools = request.app.state.tools
     history = request.app.state.history
+    short_term_memory = request.app.state.short_term_memory
     event_bus = request.app.state.event_bus
     runtime = request.app.state.runtime
     conversation_url = request.app.state.conversation_service_url
@@ -63,6 +65,10 @@ async def start_agent_run(body: RunRequest, request: Request):
         history=history,
         conversation_service_url=conversation_url,
     )
+
+    memory_tool = build_memory_tool(body.thread_id, short_term_memory)
+    if memory_tool is not None:
+        tools = [*tools, memory_tool]
 
     # Create agent
     agent = create_agent(

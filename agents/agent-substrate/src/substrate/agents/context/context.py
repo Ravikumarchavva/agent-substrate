@@ -7,7 +7,10 @@ from substrate.kernel.agent.context import AgentContextProtocol
 from substrate.kernel.agent.supervision import HistoryRetention
 from substrate.kernel.storage.history import HistoryProvider
 from substrate.kernel.core.identity import AgentId
+from substrate.logger import setup_logging
 from .compaction import SlidingWindowCompaction, CompactionPipeline
+
+logger = setup_logging()
 
 
 class ContextConfig:
@@ -49,6 +52,20 @@ class ContextConfig:
         self.pipeline: CompactionPipeline = pipeline or CompactionPipeline(
             [SlidingWindowCompaction()]
         )
+        if retention == HistoryRetention.PERMANENT:
+            ttl = getattr(history, "_ttl", None)
+            if isinstance(ttl, int) and ttl > 0:
+                logger.warning(
+                    "ContextConfig: retention=PERMANENT with a TTL'd history "
+                    "provider (%s, ttl=%ds) — history will silently expire "
+                    "after %ds of inactivity. Wrap it (e.g. "
+                    "CachedHistoryProvider) or use a durable provider "
+                    "directly, or lower retention to RUN/NONE if that's "
+                    "actually intended.",
+                    type(history).__name__,
+                    ttl,
+                    ttl,
+                )
 
     @classmethod
     def default(cls) -> "ContextConfig":

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from substrate.logger import setup_logging
 
-import httpx
-
-from substrate.infrastructure.serving_factory import build_agent_for_run
+from substrate.infrastructure.serving_factory import (
+    build_agent_for_run,
+    build_cached_history_for_thread,
+)
 from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 from substrate.kernel.core.content import ChatMessage, Role
@@ -25,23 +26,13 @@ async def load_memory_for_thread(
     history: HistoryProvider | None,
     conversation_service_url: str,
 ) -> object:
-    """Load agent history from the cache or the conversation service."""
-    from substrate.agents.factory import load_session_memory
-
-    async def _load_persisted_steps() -> list[dict]:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                f"{conversation_service_url}/internal/threads/{thread_id}/memory"
-            )
-            response.raise_for_status()
-            return response.json()
-
-    return await load_session_memory(
-        session_id=thread_id,
+    """Wrap the shared history cache so it self-heals from the conversation
+    service (the cold store for this microservice) on a cold session."""
+    return await build_cached_history_for_thread(
+        thread_id,
         system_instructions=system_instructions,
         history=history,
-        cold_store_name="Conversation service",
-        load_persisted_steps=_load_persisted_steps,
+        conversation_service_url=conversation_service_url,
     )
 
 

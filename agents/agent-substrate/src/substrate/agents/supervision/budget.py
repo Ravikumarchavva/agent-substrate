@@ -11,10 +11,13 @@ headcount  — ``max_agents`` is a shared pool for the whole run. Every agent
 
 priority   — When the pool is full, HIGH/CRITICAL agents can preempt
              lower-priority active agents by issuing them a cooperative pause
-             signal (``_paused``). The paused agent checks ``is_paused()``
-             before each LLM call and stops spawning new work. The slot is
-             reallocated to the higher-priority requester without waiting for
-             the victim to finish.
+             signal (``_paused``), reallocating the slot to the higher-priority
+             requester without waiting for the victim to finish. ``is_paused()``
+             is available for a caller to check and stop spawning further work
+             on the victim's behalf — no agent loop in this codebase consults
+             it automatically today, so the practical effect of a pause is
+             currently limited to slot reallocation, not the victim actually
+             stopping early.
 
 Usage::
 
@@ -123,8 +126,9 @@ class SpawnTracker:
     def is_paused(self, agent_id: AgentId) -> bool:
         """Return True if *agent_id* has been issued a cooperative pause signal.
 
-        Agents check this before each LLM call. When True they should stop
-        spawning new work and return a partial result (status="paused").
+        A caller that wants cooperative preemption (stop spawning new work,
+        return a partial result) should check this before each LLM call and
+        act on it — no agent loop in this codebase does so automatically yet.
         """
         with self._lock:
             return agent_id in self._paused

@@ -1,4 +1,4 @@
-"""PostgresSignalBus — Stage 1 durable SignalBus backed by asyncpg.
+"""SignalBus — Stage 1 durable implementation of SignalBusProtocol, backed by asyncpg.
 
 Schema::
 
@@ -12,11 +12,11 @@ Schema::
         consumed_by TEXT
     );
 
-Buffered, exactly-once-per-effect_id semantics — see the kernel ``SignalBus``
-Protocol docstring for the guarantees. Coupled with ``PostgresScheduler`` by
+Buffered, exactly-once-per-effect_id semantics — see the kernel ``SignalBusProtocol``
+Protocol docstring for the guarantees. Coupled with ``Scheduler`` by
 design: ``signal()`` wakes a matching suspended run in the same transaction
 as the buffer insert (``substrate_run_queue.wake_signals``), and
-``PostgresScheduler.release(SUSPENDED)`` double-checks this table for an
+``Scheduler.release(SUSPENDED)`` double-checks this table for an
 already-arrived signal before actually parking — both sides of the
 lost-wakeup race are closed by sharing one database, one transaction each.
 """
@@ -52,8 +52,8 @@ CREATE INDEX IF NOT EXISTS substrate_signals_consumer_idx
 """
 
 
-class PostgresSignalBus:
-    """Postgres-backed SignalBus implementing the kernel SignalBus Protocol."""
+class SignalBus:
+    """Postgres-backed SignalBus implementing the kernel SignalBusProtocol."""
 
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
@@ -75,7 +75,7 @@ class PostgresSignalBus:
                     json.dumps(payload),
                 )
                 # Wake the run only if it's suspended AND waiting on this
-                # specific name — matches PostgresScheduler.release()'s
+                # specific name — matches Scheduler.release()'s
                 # wake_signals column so an unrelated signal never causes a
                 # pointless replay.
                 await conn.execute(
@@ -128,7 +128,7 @@ class PostgresSignalBus:
 
         A DB row can't sleep; the scheduler's existing lease-poll cadence
         (every ``Worker.POLL_INTERVAL``) picks up any suspended row whose
-        ``wake_at`` has passed. See ``PostgresScheduler.lease()``.
+        ``wake_at`` has passed. See ``Scheduler.lease()``.
         """
         async with self._pool.acquire() as conn:
             await conn.execute(
@@ -142,4 +142,4 @@ def _decode(raw: object) -> JsonObject:
     return json.loads(raw) if isinstance(raw, str) else dict(raw)  # type: ignore[arg-type]
 
 
-__all__ = ["PostgresSignalBus"]
+__all__ = ["SignalBus"]

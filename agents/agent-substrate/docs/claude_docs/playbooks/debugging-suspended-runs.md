@@ -34,49 +34,51 @@ loading/pending state, not the suspend/resume mechanism.
 
 ## Step 2 — inspect the actual persisted state
 
-Find the thread:
+There is no separate `steps` table anymore — conversation history was
+collapsed onto the EventLog (`substrate_event_log`), which is now the single
+source of truth for both runtime replay *and* chat-history display (see
+`serving/stream/history.py::project_thread()`). Find the thread's run(s):
 
 ```bash
 docker exec agent-framework-postgres-1 psql -U postgres -d agentdb -t -c "
 SELECT id, updated_at FROM threads ORDER BY updated_at DESC LIMIT 5;"
-```
 
-Dump its steps in order — this is the ground truth for what actually
-happened, independent of anything the UI renders:
-
-```bash
 docker exec agent-framework-postgres-1 psql -U postgres -d agentdb -t -c "
-SELECT type, name, is_error, created_at, left(coalesce(output,input,''),120) AS content
-FROM steps
+SELECT run_id, status, worker_id, expires_at, wake_at, created_at
+FROM substrate_run_queue
 WHERE thread_id='<THREAD_ID>'
 ORDER BY created_at;"
 ```
 
+Dump the EventLog for a given `run_id` in order — this is the ground truth
+for what actually happened, independent of anything the UI renders:
+
+```bash
+docker exec agent-framework-postgres-1 psql -U postgres -d agentdb -t -c "
+SELECT seq, kind, ts, left(payload::text, 160) AS payload
+FROM substrate_event_log
+WHERE run_id='<RUN_ID>'
+ORDER BY seq;"
+```
+
 What to look for:
-- A `tool_result` row for `ask_human` immediately followed (same second or
-  two) by new `assistant_message` rows → **the run resumed correctly**, the
-  bug is elsewhere (frontend, or the LLM's own answer-processing logic).
-- An `assistant_message` with **empty `generation->'tool_calls'`** even though
-  the model clearly called a tool → this is the known turn-flush-drops-
-  tool_calls issue (see [`decisions.md`](../decisions.md#card-reconstruction-reads-from-tool_result-never-assistant_messagetool_calls)).
-  Don't try to reconstruct UI state from `tool_calls` for this reason.
-- Check the actual `tool_result` JSON for `ask_human` — if `user_choice` looks
-  like a template/placeholder rather than real data (e.g.
+- A `tool.result` entry for `ask_human` immediately followed (same second or
+  two) by fresh `text.delta`/`tool.call` entries in a *later* `run_id` for the
+  same thread → **the run resumed correctly** (each suspend/resume cycle gets
+  its own `run_id` — check `substrate_run_queue` for all runs on the thread,
+  not just the most recent), the bug is elsewhere (frontend, or the LLM's own
+  answer-processing logic).
+- Check the actual `tool.result` payload for `ask_human` — if the answer
+  looks like a template/placeholder rather than real data (e.g.
   `"Dine in • budget • food type • area • vibe"`), the *model* built a bad
   question/options, not a plumbing bug. See
   [`architecture/hitl.md`](../architecture/hitl.md) and the `AskHumanTool`
   description for the guardrail meant to prevent this.
-
-To see the full `generation.tool_calls` JSON for an assistant message (useful
-when checking whether calls were dropped):
-
-```bash
-docker exec agent-framework-postgres-1 psql -U postgres -d agentdb -t -c "
-SELECT type, name, is_error, generation->'tool_calls' AS tcs
-FROM steps
-WHERE thread_id='<THREAD_ID>'
-ORDER BY created_at;"
-```
+- Card-reconstruction rule still applies unchanged (see
+  [`decisions.md`](../decisions.md#card-reconstruction-reads-from-tool_result-never-assistant_messagetool_calls)):
+  UI state must be rebuilt from `tool.result` payloads, never from a
+  `tool.call` entry's arguments — the turn-flush logic can drop `tool_calls`
+  for ask-only turns.
 
 ## Step 3 — if the backend genuinely never resumed
 
@@ -85,11 +87,19 @@ Check these in order:
    (`ChainPolicy.call_timeout_s`, default 60s) will have cancelled the
    suspended coroutine before your answer arrived. See
    [`decisions.md`](../decisions.md#tools-that-suspend-must-declare-suspends--true).
-2. **Did the monolith process restart** between suspend and your click? See
-   the durability gap in
-   [`architecture/runtime-stages.md`](../architecture/runtime-stages.md#-known-gap-suspended-runs-are-not-actually-durable) —
-   currently, a restart silently orphans any suspended run. There's no
-   recovery for this yet; the fix is tracked in [`roadmap.md`](../roadmap.md) P0.
+2. **Did the monolith process restart** between suspend and your click? This
+   is fine for both HITL kinds now — suspended runs are durable (fixed
+   2026-07-03, see [`architecture/runtime-stages.md`](../architecture/runtime-stages.md)),
+   and tool-approval was migrated onto the same `ctx.sleep_until_signal()`
+   path `ask_human` already used (see `ToolInvoker._invoke_inner` in
+   `agents/tools/invoker.py` and `SSEApprovalHandler` in
+   `serving/monolith/sse/approval.py`). Any worker on any replica can
+   resume from `substrate_run_queue`/`substrate_event_log` after a full
+   restart, for either kind. If you still see a lost approval, that's a
+   real regression — check `substrate_event_log` for an
+   `approval.requested` entry with the request_id from the stale card, and
+   confirm `substrate_signals` has (or ever had) a matching
+   `hitl:{request_id}` row.
 3. **Is `run_id` actually reaching the frontend?** Check
    `InputRequestedEvent.run_id` isn't empty — `BridgeRegistry.register_signal_request()`
    only fires `if wire.run_id and run_id`. An empty `run_id` means the click

@@ -1,7 +1,7 @@
 """CachedShortTermMemory — durable-primary + fast-cache for session state.
 
 Unlike ``CachedHistoryProvider`` (which fronts an existing, independently
-written cold store — the EventLog), ``ShortTermMemory`` has no pre-existing
+written cold store — the EventLogProtocol), ``ShortTermMemory`` has no pre-existing
 durable owner: before this module, ``RedisSessionStore`` was the only
 implementation, standalone, with no durable backing at all. So this class
 composes two real ``ShortTermMemory`` peers — a durable ``primary`` and a
@@ -13,7 +13,7 @@ fall back to ``primary`` on a miss, repopulating ``cache``.
 Usage::
 
     memory = CachedShortTermMemory(
-        primary=PostgresSessionStore(database_url=db_url),
+        primary=DurableSessionStore(database_url=db_url),
         cache=RedisSessionStore(redis_url=redis_url),
     )
 """

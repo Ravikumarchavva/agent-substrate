@@ -8,14 +8,14 @@ alive across a suspension. When the agent awaits something not yet available
 ``_run_agent`` below. This Task then genuinely ends: the run is released
 with ``status=SUSPENDED`` and costs nothing until something wakes it. Resume
 is just a fresh lease: any worker (this one or another) picks it up, folds a
-new ``EffectCache`` from the EventLog, and calls ``agent.run()`` again from
+new ``EffectCache`` from the EventLogProtocol, and calls ``agent.run()`` again from
 the top — every already-completed effect and consumed signal replays as a
 cache hit, so execution fast-forwards silently back to the same wait point,
 which now succeeds. See ``agents/runtime/context.py`` module docstring for
 the full suspend/resume contract.
 
 Multiple agents can be in-flight concurrently because each is its own Task.
-The Scheduler's lease capacity controls how many are started per poll tick.
+The SchedulerProtocol's lease capacity controls how many are started per poll tick.
 """
 
 from __future__ import annotations
@@ -31,11 +31,11 @@ from substrate.kernel.runtime.log_entry import RunLogEntry
 from substrate.kernel.core.errors import CancellationError, SuspendInterrupt
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.log_entry import EventLog
-    from substrate.kernel.runtime.inbox import Inbox
-    from substrate.kernel.runtime.scheduler import Scheduler
-    from substrate.kernel.runtime.wakeup import SignalBus
-    from substrate.kernel.runtime.supervisor import Supervisor
+    from substrate.kernel.runtime.log_entry import EventLogProtocol
+    from substrate.kernel.runtime.inbox import InboxProtocol
+    from substrate.kernel.runtime.scheduler import SchedulerProtocol
+    from substrate.kernel.runtime.wakeup import SignalBusProtocol
+    from substrate.kernel.runtime.supervisor import SupervisorProtocol
     from substrate.agents.runtime.context import Agent
     from substrate.kernel.runtime.fanout import FanoutStrategy
     from substrate.kernel.runtime.follow_graph import FollowGraph
@@ -51,13 +51,13 @@ class Worker:
     def __init__(
         self,
         worker_id: str,
-        event_log: EventLog,
-        inbox: Inbox,
+        event_log: EventLogProtocol,
+        inbox: InboxProtocol,
         follow_graph: FollowGraph,
         fanout: FanoutStrategy,
-        scheduler: Scheduler,
-        supervisor: Supervisor,
-        signal_bus: SignalBus,
+        scheduler: SchedulerProtocol,
+        supervisor: SupervisorProtocol,
+        signal_bus: SignalBusProtocol,
         registry: dict,  # AgentId → Agent
     ) -> None:
         self._worker_id = worker_id
@@ -104,7 +104,7 @@ class Worker:
         another worker right now. ``cancel_pending()`` atomically checks and
         transitions in one step, so only a genuinely non-running run gets
         force-terminalized here; a RUNNING run is left alone for
-        ``Supervisor.cancel()``'s durable ``cancel_requested`` flag (observed
+        ``SupervisorProtocol.cancel()``'s durable ``cancel_requested`` flag (observed
         by the owning worker's own heartbeat) to handle instead — forcing
         completion here would race that worker's real completion.
         """
@@ -263,7 +263,7 @@ class Worker:
         tool_invoker = self._build_tool_invoker(agent)
         blob_store = getattr(agent, "blob_store", None)
 
-        # Fold the EventLog into the effect cache once per lease — this is
+        # Fold the EventLogProtocol into the effect cache once per lease — this is
         # the "replay" half of fold-is-truth: every effect.result this run
         # already recorded becomes a free in-memory lookup for the rest of
         # this invocation. last_seq also seeds RunContext's local seq
@@ -339,7 +339,7 @@ class Worker:
                     if cancel_requested:
                         # Durable cancel or deadline observed for this run —
                         # possibly requested by a DIFFERENT worker process
-                        # (Supervisor.cancel() has no reference to this
+                        # (SupervisorProtocol.cancel() has no reference to this
                         # process's live Task), so the heartbeat round-trip
                         # is how it reaches this token. ctx.check() picks it
                         # up cooperatively at the next yield point.
@@ -429,7 +429,7 @@ class Worker:
             # call (it atomically bumps retry_count and picks pending/
             # suspended-backoff vs terminal in one transaction). Only once we
             # know the outcome is actually terminal do we append run.failed
-            # to the EventLog or tell the Supervisor — appending run.failed
+            # to the EventLogProtocol or tell the SupervisorProtocol — appending run.failed
             # unconditionally would make any tailer (AgentStreamSession's
             # loop checks `kind == "run.failed"` directly) think the run is
             # over on the FIRST transient failure, even though the Worker is

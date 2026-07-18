@@ -44,7 +44,7 @@ Three backends ship, all interchangeable:
 |---|---|
 | `InMemoryHistoryProvider` | Dev, tests, throwaway sessions |
 | `RedisHistoryProvider` | Fast, TTL'd session memory |
-| `PostgresHistoryProvider` | Durable, queryable transcripts |
+| `DurableHistoryProvider` | Durable, queryable transcripts |
 
 ---
 

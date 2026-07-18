@@ -1,7 +1,7 @@
-"""Tests for EffectCache and the EventLog-as-journal replay path.
+"""Tests for EffectCache and the EventLogProtocol-as-journal replay path.
 
 Covers:
-1. EffectCache.fold() — pure reconstruction from EventLog entries.
+1. EffectCache.fold() — pure reconstruction from EventLogProtocol entries.
 2. Crash-and-replay — a fresh RunContext, built from a fresh fold() over the
    SAME event log, must not re-execute an already-journaled effect.
 3. Artifact offload — large effect values are stored via BlobStore and
@@ -43,7 +43,7 @@ async def _make_ctx(
     only exercise effect journaling, not inbox/fanout/spawn behavior. Folding
     fresh on every call is the point: it's what makes two RunContexts built
     for the same run_id behave like two independent process lifetimes
-    sharing only the durable EventLog (i.e. a crash-and-replay simulation).
+    sharing only the durable EventLogProtocol (i.e. a crash-and-replay simulation).
     """
     inbox = InMemoryInbox()
     scheduler = InMemoryScheduler()
@@ -158,7 +158,7 @@ def test_put_updates_cache_immediately() -> None:
 
 
 async def test_crash_and_replay_does_not_reexecute_journaled_effect() -> None:
-    """A fresh RunContext, built from a fresh fold() over the SAME EventLog
+    """A fresh RunContext, built from a fresh fold() over the SAME EventLogProtocol
     (simulating a brand-new process after a crash), must return the
     already-journaled uuid() value without generating a new one."""
     run_id = "run-crash-replay"
@@ -168,7 +168,7 @@ async def test_crash_and_replay_does_not_reexecute_journaled_effect() -> None:
     first = await ctx1.uuid()
 
     # Simulate a crash: ctx1 is discarded entirely, a fresh RunContext is
-    # built from scratch, sharing only the durable EventLog.
+    # built from scratch, sharing only the durable EventLogProtocol.
     ctx2 = await _make_ctx(run_id, event_log)
     replayed = await ctx2.uuid()
 
@@ -229,7 +229,7 @@ async def test_large_effect_value_offloaded_to_blob_store() -> None:
     big_value = {"data": "x" * 100_000}  # > _ARTIFACT_OFFLOAD_BYTES
     await ctx._record_effect("big-effect", "ok", big_value)
 
-    # The EventLog entry references a blob, not the inline payload.
+    # The EventLogProtocol entry references a blob, not the inline payload.
     entries = [e async for e in event_log.read(run_id)]
     effect_entries = [e for e in entries if e.kind == "effect.result"]
     assert len(effect_entries) == 1

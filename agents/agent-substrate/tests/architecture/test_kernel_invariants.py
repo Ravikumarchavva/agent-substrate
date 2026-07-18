@@ -64,7 +64,7 @@ def test_kernel_file_count_ceiling() -> None:
 
 
 _KERNEL_PERMITTED_SUBDIRS = {
-    "runtime",  # durable-runtime contracts (EventLog, Inbox, Scheduler, Supervisor, …)
+    "runtime",  # durable-runtime contracts (EventLogProtocol, InboxProtocol, SchedulerProtocol, SupervisorProtocol, …)
     "core",
     "messaging",
     "llm",
@@ -78,7 +78,7 @@ def test_kernel_is_flat() -> None:
     """Kernel must not contain unexpected subdirectories (other than __pycache__).
 
     ``kernel/runtime/`` is the one permitted subpackage — it groups the 10
-    durable-runtime contract files (EventLog, Inbox, Scheduler, Supervisor, …)
+    durable-runtime contract files (EventLogProtocol, InboxProtocol, SchedulerProtocol, SupervisorProtocol, …)
     that together form a coherent L0 sub-domain.  Any new subdirectory must be
     explicitly added to ``_KERNEL_PERMITTED_SUBDIRS``.
     """

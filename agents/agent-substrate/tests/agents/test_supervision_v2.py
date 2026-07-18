@@ -27,7 +27,7 @@ def _msg(target: AgentId) -> Message:
 
 
 # ---------------------------------------------------------------------------
-# 1. Crash → ``agent_crashed`` status in EventLog
+# 1. Crash → ``agent_crashed`` status in EventLogProtocol
 # ---------------------------------------------------------------------------
 
 

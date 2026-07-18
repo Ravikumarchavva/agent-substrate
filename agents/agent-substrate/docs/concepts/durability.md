@@ -109,7 +109,7 @@ Agent Substrate chooses **at-most-once**, not at-least-once: it does *not* retry
 
 You never invoke the protocol yourself. The **Worker** does, around every run:
 
-1. Lease a run from the **Scheduler** (with a heartbeat to keep long LLM calls from losing the lease).
+1. Lease a run from the **SchedulerProtocol** (with a heartbeat to keep long LLM calls from losing the lease).
 2. Append `run.started` to the event log, drain the agent's inbox.
 3. Build a fresh `RunContext` and call `agent.run(ctx, inbox)`.
 4. On success → append `run.completed`, release the lease.
@@ -140,10 +140,10 @@ The whole point of putting these behind kernel Protocols is that the agent never
 | Backend | Dev (Stage 0) | Production |
 |---|---|---|
 | Event Log | in-memory | Postgres append-only table, `(run_id, seq)` PK |
-| Effect dedup (at-most-once) | in-memory `EffectCache` fold | same `EffectCache`, folded from the Postgres EventLog — no separate Journal/Redis store |
-| Scheduler / Inbox | in-memory asyncio | Postgres queue with leases |
-| Supervisor (spawn/join tree) | in-memory | `PostgresSupervisor` — `ravi_run_tree`/`ravi_spawn_effects` tables |
-| SignalBus (suspend/resume wakeups) | in-memory | `PostgresSignalBus` — `ravi_signals` table, exactly-once consume-based fencing |
+| Effect dedup (at-most-once) | in-memory `EffectCache` fold | same `EffectCache`, folded from the Postgres EventLogProtocol — no separate Journal/Redis store |
+| SchedulerProtocol / InboxProtocol | in-memory asyncio | Postgres queue with leases |
+| SupervisorProtocol (spawn/join tree) | in-memory | `Supervisor` — `ravi_run_tree`/`ravi_spawn_effects` tables |
+| SignalBusProtocol (suspend/resume wakeups) | in-memory | `SignalBus` — `ravi_signals` table, exactly-once consume-based fencing |
 
 ```python
 # Dev — everything in-process, no infra needed
@@ -165,11 +165,11 @@ Same agent. Same call site. The durability guarantees turn on with the backend s
 | Piece | Location |
 |---|---|
 | `Effect`, `EffectResult`, `Journal` Protocol | `kernel/runtime/effects.py` |
-| `RunLogEntry`, `EventLog` Protocol | `kernel/runtime/log_entry.py` |
-| `EffectCache` (folds `EventLog` into effect-dedup state per lease) | `agents/runtime/effect_cache.py` |
+| `RunLogEntry`, `EventLogProtocol` Protocol | `kernel/runtime/log_entry.py` |
+| `EffectCache` (folds `EventLogProtocol` into effect-dedup state per lease) | `agents/runtime/effect_cache.py` |
 | `_journaled()` wrapper | `agents/runtime/context/journal.py` |
 | Worker run loop | `agents/runtime/worker.py` |
 | In-memory backends | `agents/runtime/backends/` |
-| Postgres backends (`EventLog`/`Inbox`/`Scheduler`/`SignalBus`/`Supervisor`) + `build_postgres_runtime` factory | `infrastructure/runtime/` |
+| Postgres backends (`EventLogProtocol`/`InboxProtocol`/`SchedulerProtocol`/`SignalBusProtocol`/`SupervisorProtocol`) + `build_postgres_runtime` factory | `infrastructure/runtime/` |
 
 **Next:** [Human-in-the-Loop](human-in-the-loop.md) — how a run pauses for a human and resumes later (durability is what makes the wait free).

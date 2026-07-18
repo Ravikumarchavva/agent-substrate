@@ -4,31 +4,31 @@ This is what the agent author receives as ``ctx`` in ``agent.run(ctx, inbox)``.
 
 Every capability method is journaled via the EffectCache + Effect system:
 - On the **live path**: the real operation runs; the result is appended to
-  the EventLog as an ``effect.result`` entry (durable) and cached in memory.
-- On the **replay path**: the EffectCache (folded from the EventLog at lease
+  the EventLogProtocol as an ``effect.result`` entry (durable) and cached in memory.
+- On the **replay path**: the EffectCache (folded from the EventLogProtocol at lease
   time — see ``agents/runtime/effect_cache.py``) returns the cached result;
   the real operation is skipped entirely.
 
 This gives the at-most-once guarantee: even if the worker crashes mid-run
-and a new worker replays from the EventLog, effects that already completed
-are never re-executed. Unlike a separately-TTL'd journal store, the EventLog
+and a new worker replays from the EventLogProtocol, effects that already completed
+are never re-executed. Unlike a separately-TTL'd journal store, the EventLogProtocol
 never silently expires an effect out from under a long-suspended run.
 
 Suspension: SuspendInterrupt + replay-from-top
 -----------------------------------------------
 ``ask``, ``sleep_until_signal``, ``sleep_until``, and ``join`` all suspend
 the SAME way: consume (a non-blocking, at-most-once claim against the
-SignalBus/deadline) fails to find what they're waiting for, so they raise
+SignalBusProtocol/deadline) fails to find what they're waiting for, so they raise
 ``SuspendInterrupt`` — a ``BaseException`` that unwinds straight past any
 ``except Exception`` handler in agent/tool code, out through the Worker.
-The Worker catches it, calls ``Scheduler.release(status=SUSPENDED,
+The Worker catches it, calls ``SchedulerProtocol.release(status=SUSPENDED,
 wake_on=...)``, and lets the Task end. Nothing is pickled or kept alive:
 this is a genuinely dormant run (zero RAM, zero CPU) for both the in-memory
 and Postgres backends alike.
 
 Resume works identically for both backends: something fires a signal (or a
-deadline/timer passes), the Scheduler flips the run back to ``pending``, any
-worker leases it, folds a fresh ``EffectCache`` from the EventLog, and calls
+deadline/timer passes), the SchedulerProtocol flips the run back to ``pending``, any
+worker leases it, folds a fresh ``EffectCache`` from the EventLogProtocol, and calls
 ``agent.run()`` again from the top. Every already-completed effect (LLM
 calls, tool calls, prior signal consumes) is a cache/consume hit, so replay
 fast-forwards silently back to the same wait point — which now succeeds
@@ -65,11 +65,11 @@ from substrate.agents.runtime.context.llm import _LLMMixin
 from substrate.agents.runtime.context.tool import _ToolMixin
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.log_entry import EventLog
-    from substrate.kernel.runtime.inbox import Inbox
-    from substrate.kernel.runtime.scheduler import Scheduler
-    from substrate.kernel.runtime.wakeup import SignalBus
-    from substrate.kernel.runtime.supervisor import Supervisor
+    from substrate.kernel.runtime.log_entry import EventLogProtocol
+    from substrate.kernel.runtime.inbox import InboxProtocol
+    from substrate.kernel.runtime.scheduler import SchedulerProtocol
+    from substrate.kernel.runtime.wakeup import SignalBusProtocol
+    from substrate.kernel.runtime.supervisor import SupervisorProtocol
     from substrate.kernel.llm.llm import LLMClient
     from substrate.kernel.runtime.fanout import FanoutStrategy
     from substrate.kernel.runtime.follow_graph import FollowGraph
@@ -107,14 +107,14 @@ class RunContext(
         self,
         *,
         meta: RunMeta,
-        event_log: EventLog,
+        event_log: EventLogProtocol,
         effect_cache: EffectCache,
-        inbox: Inbox,
+        inbox: InboxProtocol,
         follow_graph: FollowGraph,
         fanout: FanoutStrategy,
-        scheduler: Scheduler,
-        supervisor: Supervisor,
-        signal_bus: SignalBus,
+        scheduler: SchedulerProtocol,
+        supervisor: SupervisorProtocol,
+        signal_bus: SignalBusProtocol,
         blob_store: BlobStore | None = None,
         llm_client: LLMClient | None = None,
         tool_invoker: ToolInvoker | None = None,

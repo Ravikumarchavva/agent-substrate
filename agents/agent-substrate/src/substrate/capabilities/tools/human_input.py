@@ -439,7 +439,7 @@ class AskHumanTool:
 
         # ── Signal-based (dead suspend) path ──────────────────────────────────
         # When the handler opts in to signal mode, we log `input.requested` and
-        # suspend via SignalBus.  Zero compute is consumed while the human
+        # suspend via SignalBusProtocol.  Zero compute is consumed while the human
         # decides.  The signal payload carries the user's action and is mapped
         # to a ToolExecutionResult by _shape_result().
         if ctx is not None and getattr(self.handler, "suspends_via_signal", False):

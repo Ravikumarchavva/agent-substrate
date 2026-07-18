@@ -8,7 +8,7 @@ that remembered to invoke a separate seeding step first.
 
 This does NOT compose two ``HistoryProvider``s (a "primary" and a "cache").
 In this codebase the actual durable source of truth for conversation history
-is already the EventLog (monolith) or the ``conversation`` microservice —
+is already the EventLogProtocol (monolith) or the ``conversation`` microservice —
 written independently by the runtime's own step-logging, not through this
 protocol's ``append()`` at all (see ``serving/stream/history.py`` and
 ``agents/factory.py::rebuild_messages_from_steps``). Modeling that as a
@@ -25,7 +25,7 @@ Usage::
             await step_rows_from_log(runtime.event_log, runtime.scheduler, session_id),
             system_instructions,
         ),
-        cold_store_name="EventLog",
+        cold_store_name="EventLogProtocol",
     )
 """
 
@@ -52,7 +52,7 @@ class CachedHistoryProvider:
     the miss and double-seeding. It must return the full reconstructed
     transcript for the session. When ``reseed`` is ``None`` this is a thin
     passthrough to ``cache`` — appropriate for a session with no cold store
-    to fall back to (e.g. a script or test with no runtime/EventLog).
+    to fall back to (e.g. a script or test with no runtime/EventLogProtocol).
     """
 
     def __init__(

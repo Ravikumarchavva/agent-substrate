@@ -59,6 +59,7 @@ dependencies = [
     "pillow>=10.4.0",
     "opentelemetry-exporter-otlp",
     "opentelemetry-instrumentation-fastapi<0.60b1",
+    "httpx2>=2.7.0",
 ]
 
 [project.optional-dependencies]

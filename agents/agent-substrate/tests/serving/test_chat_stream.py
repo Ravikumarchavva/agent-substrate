@@ -3,7 +3,7 @@ original SSE connection while a run kept executing durably server-side.
 
 Route-level coverage only (auth/ownership/no-active-run wiring); the actual
 tail/terminal-event logic (the thing that used to crash on any non-streamable
-EventLog kind) is covered directly in tests/serving/test_session.py's
+EventLogProtocol kind) is covered directly in tests/serving/test_session.py's
 tail_wire_events tests.
 """
 

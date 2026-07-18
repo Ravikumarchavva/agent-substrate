@@ -11,8 +11,8 @@ from substrate.kernel.core.content import TextBlock
 from substrate.kernel.storage.vector import Document
 from substrate.kernel.tools import ToolExecutionResult, ToolCallRequest
 
-from substrate.capabilities.memory import PostgresMemoryStore
-from substrate.capabilities.history import PostgresHistoryProvider
+from substrate.capabilities.memory import DurableMemoryStore
+from substrate.capabilities.history import DurableHistoryProvider
 from substrate.capabilities.vector import PgVectorStore
 from substrate.capabilities.graph import AGEGraphStore
 
@@ -64,7 +64,7 @@ def test_tool_types_unification():
     assert req.call_id == "call-1"
 
 
-# ── 2. PostgresMemoryStore Tenancy Tests ─────────────────────────────────────
+# ── 2. DurableMemoryStore Tenancy Tests ─────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -73,7 +73,7 @@ async def test_postgres_memory_store_tenancy():
         pytest.skip("PostgreSQL database not available")
 
     db_url = get_db_url()
-    store = PostgresMemoryStore(db_url)
+    store = DurableMemoryStore(db_url)
     await store.connect()
     await store.create_tables()
 
@@ -115,7 +115,7 @@ async def test_postgres_memory_store_tenancy():
         await store.disconnect()
 
 
-# ── 3. PostgresHistoryProvider Protocol Tests ────────────────────────────────
+# ── 3. DurableHistoryProvider Protocol Tests ────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -124,7 +124,7 @@ async def test_postgres_history_provider_conformance():
         pytest.skip("PostgreSQL database not available")
 
     db_url = get_db_url()
-    provider = PostgresHistoryProvider(db_url)
+    provider = DurableHistoryProvider(db_url)
     await provider.connect()
 
     agent_id = AgentId(type="assistant", key="agent-history-test")

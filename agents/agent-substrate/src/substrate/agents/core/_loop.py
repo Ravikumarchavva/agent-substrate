@@ -35,7 +35,7 @@ def message_to_chat(msg: Message) -> ChatMessage:
 async def log_user_message(
     ctx: RunContext, msg: Message, user_turn: ChatMessage
 ) -> None:
-    """Journal the turn that started this run as a ``user.message`` EventLog
+    """Journal the turn that started this run as a ``user.message`` EventLogProtocol
     entry, so the log is a self-complete record of the conversation (history
     is projected from it — see ``serving/stream/history.py``).
 

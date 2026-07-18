@@ -6,18 +6,18 @@ import pytest
 
 from substrate.capabilities.memory import (
     CachedShortTermMemory,
-    PostgresSessionStore,
+    DurableSessionStore,
     RedisSessionStore,
 )
 
 pytestmark = [pytest.mark.requires_redis, pytest.mark.requires_postgres]
 
 
-async def _make_pair() -> tuple[PostgresSessionStore, RedisSessionStore]:
+async def _make_pair() -> tuple[DurableSessionStore, RedisSessionStore]:
     db_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentdb"
     )
-    primary = PostgresSessionStore(db_url)
+    primary = DurableSessionStore(db_url)
     await primary.connect()
     cache = RedisSessionStore(redis_url="redis://localhost:6379/0", ttl=60)
     await cache.connect()

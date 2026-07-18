@@ -2,7 +2,7 @@
 
 Split out of ``chat.py``. Inline persistence (``_WirePersister``,
 ``_build_tool_meta_map``) was removed: the agent itself durably logs its own
-conversation straight to the EventLog (the single source of truth for
+conversation straight to the EventLogProtocol (the single source of truth for
 conversation history — see ``serving/stream/history.py::project_thread()``),
 so no separate steps-table write is needed here anymore.
 """

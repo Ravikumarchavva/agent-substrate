@@ -311,7 +311,7 @@ async def update_mcp_context(
     user: AuthClaims = Depends(get_current_user),
     ctx: ServerDependencies = Depends(get_ctx),
 ):
-    """Log a model context update from an interactive MCP App to the EventLog.
+    """Log a model context update from an interactive MCP App to the EventLogProtocol.
 
     When a user interacts with an MCP App (e.g., drags tasks on a Kanban board),
     the app sends the updated state here. This is appended to the thread's

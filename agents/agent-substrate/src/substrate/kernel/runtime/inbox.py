@@ -1,7 +1,7 @@
-"""Inbox — durable per-agent mailbox.
+"""InboxProtocol — durable per-agent mailbox.
 
-The Inbox is the delivery half of the social fabric.  Delivering a message to
-a dormant agent is what *wakes* it — the Inbox notifies the Scheduler which
+The InboxProtocol is the delivery half of the social fabric.  Delivering a message to
+a dormant agent is what *wakes* it — the InboxProtocol notifies the SchedulerProtocol which
 enqueues a wakeup for the agent's run.
 
 Robustness guarantees (all implementations must honour)
@@ -9,7 +9,7 @@ Robustness guarantees (all implementations must honour)
 1. **Exactly-once delivery tracking (dedup by Message.id).**
    ``deliver`` is idempotent: re-delivering the same ``Message.id`` is a
    no-op.  At-least-once transports (Redis Streams, NATS) re-deliver on
-   subscriber restart; the Inbox absorbs the duplicates so the agent never
+   subscriber restart; the InboxProtocol absorbs the duplicates so the agent never
    processes the same message twice.
 
 2. **Per-sender FIFO ordering.**
@@ -27,7 +27,7 @@ Robustness guarantees (all implementations must honour)
 Caller flow
 -----------
 Worker drains inbox → processes each message → on success ``ack(msg_id)`` →
-on failure ``nack(msg_id, error=...)`` → Scheduler re-enqueues wakeup.
+on failure ``nack(msg_id, error=...)`` → SchedulerProtocol re-enqueues wakeup.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ class DeadLetterEntry(BaseModel):
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
 
-class Inbox(Protocol):
+class InboxProtocol(Protocol):
     """Durable per-agent mailbox.
 
     Implementations: in-memory dict of deques (Stage 0), Postgres table with
@@ -125,4 +125,4 @@ class Inbox(Protocol):
         ...
 
 
-__all__ = ["DeadLetterReason", "DeadLetterEntry", "Inbox"]
+__all__ = ["DeadLetterReason", "DeadLetterEntry", "InboxProtocol"]

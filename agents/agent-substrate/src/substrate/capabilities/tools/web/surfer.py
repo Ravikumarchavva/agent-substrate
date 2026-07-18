@@ -122,7 +122,7 @@ class WebSurferTool:
         },
         "required": ["action"],
     }
-    risk: str = "sensitive"  # TODO: L4-hitl  # external network reads
+    risk: str = "sensitive"  # external network reads
 
     def __init__(
         self,

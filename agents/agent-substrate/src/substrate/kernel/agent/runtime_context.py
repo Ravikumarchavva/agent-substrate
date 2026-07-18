@@ -72,7 +72,7 @@ class RunMeta:
     """Execution-scoped metadata threaded through every kernel call.
 
     ``run_id``       — globally unique identifier for this run; first-class so
-                       every layer can key logs, effects, and EventLog entries
+                       every layer can key logs, effects, and EventLogProtocol entries
                        without digging into ``supervision``.  Populated from
                        ``supervision.run_id`` when supervision is provided.
     ``cancellation`` — cooperative cancellation; call ``check()`` at yield points.

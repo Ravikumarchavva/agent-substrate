@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from substrate.capabilities.history.redis_history import RedisHistoryProvider
-from substrate.capabilities.history.postgres_history import (
-    PostgresHistoryProvider,
+from substrate.capabilities.history.durable_history import (
+    DurableHistoryProvider,
     HistorySession,
     HistoryMessage,
 )
@@ -12,7 +12,7 @@ from substrate.capabilities.history.cached_history import CachedHistoryProvider
 
 __all__ = [
     "RedisHistoryProvider",
-    "PostgresHistoryProvider",
+    "DurableHistoryProvider",
     "HistorySession",
     "HistoryMessage",
     "CachedHistoryProvider",

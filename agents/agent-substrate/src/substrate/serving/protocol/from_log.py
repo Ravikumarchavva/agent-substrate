@@ -29,6 +29,7 @@ STREAMING_KINDS = frozenset(
         "tool.call",
         "tool.result",
         "input.requested",
+        "approval.requested",
     }
 )
 

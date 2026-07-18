@@ -21,7 +21,7 @@ from substrate.integrations.events import EventBus
 from substrate.integrations.events.envelope import EventEnvelope
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.wakeup import SignalBus
+    from substrate.kernel.runtime.wakeup import SignalBusProtocol
 
 logger = setup_logging()
 
@@ -90,7 +90,7 @@ async def resolve_request(
     responded_by: Optional[str] = None,
     redis_client: Optional[aioredis.Redis] = None,
     event_bus: Optional[EventBus] = None,
-    signal_bus: Optional["SignalBus"] = None,
+    signal_bus: Optional["SignalBusProtocol"] = None,
 ) -> Optional[HITLRequest]:
     """Resolve a HITL request and notify the waiting agent.
 
@@ -98,7 +98,7 @@ async def resolve_request(
     Phase-1 durable runtime and nothing has migrated off Redis pub/sub yet:
     ``redis_client`` (legacy, for any consumer still watching
     ``HITL_RESPONSE_CHANNEL``) and ``signal_bus`` (the durable Phase-1
-    ``SignalBus`` — same ``hitl:{request_id}`` signal name
+    ``SignalBusProtocol`` — same ``hitl:{request_id}`` signal name
     ``AskHumanTool``'s signal-suspend path waits on via
     ``ctx.sleep_until_signal``, see ``capabilities/tools/human_input.py``).
     Both are optional and independent; pass whichever your deployment needs.
@@ -181,7 +181,7 @@ async def cancel_pending_for_thread(
     *,
     reason: str = "cancelled",
     redis_client: Optional[aioredis.Redis] = None,
-    signal_bus: Optional["SignalBus"] = None,
+    signal_bus: Optional["SignalBusProtocol"] = None,
 ) -> int:
     """Cancel all pending HITL requests for a thread. Returns count cancelled."""
     pending = await get_pending_for_thread(db, thread_id)

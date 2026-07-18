@@ -29,14 +29,14 @@ zooms into each one.
 | Contract | One-liner | Analogy |
 |---|---|---|
 | `Agent` | The single thing every agent implements: `id` + `run(ctx, inbox)` | a worker who shows up when called |
-| `RunLogEntry` / `EventLog` | Append-only history of one run | an immutable **ship's logbook** |
+| `RunLogEntry` / `EventLogProtocol` | Append-only history of one run | an immutable **ship's logbook** |
 | `Effect` / `Journal` | At-most-once cache for side-effects | a **receipts drawer** so you never pay twice |
 | `RunId` / `RunStatus` | A run's name and its lifecycle state | a job ticket with a status stamp |
-| `Inbox` | Durable per-agent mailbox | a **mailbox** on the porch |
-| `Scheduler` | Work-queue + leasing + admission control | a **dispatcher** handing jobs to drivers on a timer |
-| `Supervisor` | Spawn / join / cancel child runs | a **foreman** who hires and waits on helpers |
+| `InboxProtocol` | Durable per-agent mailbox | a **mailbox** on the porch |
+| `SchedulerProtocol` | Work-queue + leasing + admission control | a **dispatcher** handing jobs to drivers on a timer |
+| `SupervisorProtocol` | Spawn / join / cancel child runs | a **foreman** who hires and waits on helpers |
 | `FollowGraph` / `FanoutStrategy` | Who-follows-whom + delivering posts | a **newsletter** subscription list |
-| `Wakeup` / `SignalBus` | What stirs a sleeping run | a **pager** that wakes a napping worker |
+| `Wakeup` / `SignalBusProtocol` | What stirs a sleeping run | a **pager** that wakes a napping worker |
 | `AskOutcome` / `RunStatusSummary` | Results of asking another run | a **delivery receipt** with a status code |
 
 ```mermaid
@@ -47,13 +47,13 @@ flowchart TB
     classDef store fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C,font-weight:bold
 
     C(["Caller — submit(AgentId, Message)"]):::agent
-    INB["Inbox<br/>deliver / drain / ack"]:::runtime
-    SCH["Scheduler<br/>enqueue / lease / heartbeat / release"]:::runtime
+    INB["InboxProtocol<br/>deliver / drain / ack"]:::runtime
+    SCH["SchedulerProtocol<br/>enqueue / lease / heartbeat / release"]:::runtime
     WK["Worker<br/>(lives at L1, drives the loop)"]:::runtime
     AG["Agent.run(ctx, inbox)"]:::agent
-    EL[("EventLog<br/>append-only spine")]:::store
+    EL[("EventLogProtocol<br/>append-only spine")]:::store
     JN[("Journal<br/>at-most-once cache")]:::store
-    SUP["Supervisor<br/>spawn / join / cancel"]:::runtime
+    SUP["SupervisorProtocol<br/>spawn / join / cancel"]:::runtime
 
     C -->|"message"| INB
     INB -->|"wake"| SCH
@@ -91,13 +91,13 @@ class Agent(Protocol):
 ```
 
 - `id` is an `AgentId` (from [`kernel/core/identity.py`](01-core.md)) — a
-  stable routing address used by the Inbox and Scheduler to find this agent.
+  stable routing address used by the InboxProtocol and SchedulerProtocol to find this agent.
 - `run` is called by the **Worker** with two arguments: the execution context
   `ctx`, and `inbox` — the batch of messages drained for this wake-cycle. The
   batch **may be empty** when the wakeup was a timer, signal, or a child
   finishing rather than a new message.
 - It returns `None`. The agent's final output (if any) is written to the
-  EventLog as the `run.completed` entry and surfaced as `RunResult.output`.
+  EventLogProtocol as the `run.completed` entry and surfaced as `RunResult.output`.
 
 You never call `run()` yourself — see [the agent model](../concepts/agent-model.md).
 You hold an address and submit a message; the Worker invokes `run` when it leases
@@ -130,7 +130,7 @@ cleanly — without violating the at-most-once effect guarantee mid-flight.
 
 ---
 
-## The durable spine: `RunLogEntry` + `EventLog`
+## The durable spine: `RunLogEntry` + `EventLogProtocol`
 
 **What & why:** A run can crash at any instant. To recover, the runtime must be
 able to reconstruct *exactly where it was*. It does this by writing down every
@@ -138,7 +138,7 @@ meaningful step, in order, in an **append-only log** — and never editing or
 deleting an entry. The truth of a run is the **fold** of its log from `seq=0`.
 
 !!! tip "Analogy — the ship's logbook"
-    The EventLog is a ship's logbook. Entries are written in ink, in order, and
+    The EventLogProtocol is a ship's logbook. Entries are written in ink, in order, and
     never erased. If the captain is replaced mid-voyage, the new captain reads
     the log from page one and knows precisely where the ship is. A *checkpoint*
     is just a clean summary page so the new captain doesn't have to re-read all
@@ -180,10 +180,10 @@ payload. These are the conventions every backend writes:
 | `run.cancelled` | Terminal cancellation | reason + `orphans_resolved` |
 | `orphans.resolved` | Child disposition on permanent parent failure | dispositions |
 
-### `EventLog` — the append-only store
+### `EventLogProtocol` — the append-only store
 
 ```python
-class EventLog(Protocol):
+class EventLogProtocol(Protocol):
     async def append(self, run_id: RunId, entry: RunLogEntry, *, expected_seq: int) -> int: ...
     def read(self, run_id: RunId, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]: ...
     def tail(self, run_id: RunId, *, from_seq: int = 0) -> AsyncIterator[RunLogEntry]: ...
@@ -246,7 +246,7 @@ flowchart TD
 
 ## At-most-once effects: `Effect` + `Journal`
 
-**What & why:** The EventLog records *what happened*. But some steps touch the
+**What & why:** The EventLogProtocol records *what happened*. But some steps touch the
 outside world — charge a card, send an email, call an API — and the outside world
 doesn't join your transaction. You cannot make "send email" atomic with "write
 the log". The Journal is the safe approximation: an **idempotency cache** so an
@@ -367,7 +367,7 @@ class RunStatus(str, Enum):
 
 !!! tip "SUSPENDED is the superpower"
     A suspended run waiting three hours for human approval costs *nothing* — it
-    is not a parked thread, it is rows in a table. The Scheduler wakes it when a
+    is not a parked thread, it is rows in a table. The SchedulerProtocol wakes it when a
     message, timer, signal, or `child_done` arrives. This is what makes waiting
     free (see [Human-in-the-Loop](../concepts/human-in-the-loop.md)).
 
@@ -375,7 +375,7 @@ class RunStatus(str, Enum):
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8EAF6','primaryTextColor': '#1A237E','primaryBorderColor': '#3949AB','lineColor': '#546E7A','fontSize': '13px'}}}%%
 stateDiagram-v2
     [*] --> PENDING: submit / enqueue
-    PENDING --> RUNNING: Scheduler.lease -> Worker
+    PENDING --> RUNNING: SchedulerProtocol.lease -> Worker
     RUNNING --> SUSPENDED: ctx.sleep / join / wait_signal
     SUSPENDED --> PENDING: Wakeup (message/timer/signal/child_done)
     RUNNING --> COMPLETED: run() returns
@@ -389,20 +389,20 @@ stateDiagram-v2
 
 ---
 
-## Delivery & dispatch: `Inbox` and `Scheduler`
+## Delivery & dispatch: `InboxProtocol` and `SchedulerProtocol`
 
 These two are the plumbing that gets a message from "submitted" to "an agent is
 actually running it" — durably, exactly-once, and without melting the cluster.
 
-### `Inbox` — the durable mailbox
+### `InboxProtocol` — the durable mailbox
 
 **What & why:** Each agent has a mailbox. Delivering a message to a *dormant*
-agent is what **wakes** it: the Inbox notifies the Scheduler, which enqueues a
+agent is what **wakes** it: the InboxProtocol notifies the SchedulerProtocol, which enqueues a
 wakeup. It's a real mailbox — mail piles up safely until the agent processes it,
 and dropping the same letter in twice doesn't duplicate it.
 
 ```python
-class Inbox(Protocol):
+class InboxProtocol(Protocol):
     async def deliver(self, agent_id: AgentId, msg: Message, *, notify: bool = True) -> bool: ...
     async def drain(self, agent_id: AgentId, *, max: int = 100) -> list[Message]: ...
     async def ack(self, agent_id: AgentId, msg_id: str) -> None: ...
@@ -416,7 +416,7 @@ Three robustness guarantees every backend must honour:
 1. **Exactly-once delivery tracking (dedup by `Message.id`).** `deliver` is
    idempotent — re-delivering the same `msg.id` returns `False` and is a no-op.
    At-least-once transports (Redis Streams, NATS) re-deliver on restart; the
-   Inbox absorbs the duplicates.
+   InboxProtocol absorbs the duplicates.
 2. **Per-sender FIFO.** Messages from the same `Message.sender` drain in arrival
    order (so "post deleted" never beats "post created"); different senders may
    interleave.
@@ -433,9 +433,9 @@ failure**. Drained-but-unacked messages stay in the inbox and re-drain next time
     `Runtime.submit` — pass `notify=False` to suppress the hook and avoid
     spawning a *duplicate* run.
 
-### `Scheduler` — the dispatcher
+### `SchedulerProtocol` — the dispatcher
 
-**What & why:** The Scheduler is the coordination layer between the durable
+**What & why:** The SchedulerProtocol is the coordination layer between the durable
 stores and the stateless Workers. It knows *which* runs need attention and *which*
 worker should handle one — but it never runs agent logic itself.
 
@@ -445,7 +445,7 @@ worker should handle one — but it never runs agent logic itself.
     If the radio goes silent (the worker crashed), the dispatcher reclaims the
     job and gives it to someone else. No two drivers ever hold the same job.
 
-The Scheduler's methods, grouped by what they do:
+The SchedulerProtocol's methods, grouped by what they do:
 
 | Method | What it does |
 |---|---|
@@ -480,7 +480,7 @@ class RunRetryPolicy(BaseModel):     # what to do when a run ends FAILED
 Three guarantees that matter:
 
 - **Coalescing.** If a timer fires *and* a message arrives for an
-  already-pending run, the Scheduler merges the triggers into the one queue entry
+  already-pending run, the SchedulerProtocol merges the triggers into the one queue entry
   — a worker receives a run **at most once per wake-cycle**.
 - **Lease safety.** `lease` never returns a run already leased to another worker,
   and never more than `capacity` at once.
@@ -502,11 +502,11 @@ The Worker lives at L1, but its loop is the whole point of these contracts.
 %%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#E8EAF6','actorBorder': '#3949AB','actorTextColor': '#1A237E','noteBkgColor': '#FFFDE7','noteBorderColor': '#F57F17','signalColor': '#546E7A','fontSize': '12px'}}}%%
 sequenceDiagram
     autonumber
-    participant SCH as Scheduler
+    participant SCH as SchedulerProtocol
     participant WK as Worker
-    participant EL as EventLog
+    participant EL as EventLogProtocol
     participant AG as Agent.run
-    participant INB as Inbox
+    participant INB as InboxProtocol
 
     WK->>SCH: lease(worker_id, capacity)
     SCH-->>WK: [Lease(run_id, agent_id, expires_at)]
@@ -523,16 +523,16 @@ sequenceDiagram
     WK->>SCH: release(lease, status=COMPLETED)
 ```
 
-On a crash, the lease simply expires, the Scheduler re-enqueues the run, and a
+On a crash, the lease simply expires, the SchedulerProtocol re-enqueues the run, and a
 fresh worker replays the log — journaled effects return cached results. See the
 replay sequence in [Durability](../concepts/durability.md).
 
 ---
 
-## Spawning helpers: `Supervisor`, `RunHandle`, `RunResult`
+## Spawning helpers: `SupervisorProtocol`, `RunHandle`, `RunResult`
 
 **What & why:** An agent often needs help — an orchestrator delegating to a
-specialist, a flow fanning out subtasks. The `Supervisor` is the contract for an
+specialist, a flow fanning out subtasks. The `SupervisorProtocol` is the contract for an
 agent to **spawn** a child run, **join** (wait for) it, and **cancel** it. It is
 the runtime half of supervision; the *policy* half (tree position, budget,
 retention) lives in [`kernel/agent/supervision.py`](../concepts/supervision.md).
@@ -541,7 +541,7 @@ retention) lives in [`kernel/agent/supervision.py`](../concepts/supervision.md).
     A foreman hires a helper for a specific task (`spawn`), can wait at the door
     until that helper is done (`join`), and can call the whole crew off the job
     (`cancel`). The foreman never *becomes* the helper — the helper is its own
-    independent worker (its own run, its own EventLog) that any worker can pick
+    independent worker (its own run, its own EventLogProtocol) that any worker can pick
     up.
 
 ```python
@@ -559,7 +559,7 @@ class RunResult(BaseModel):     # terminal output of any run
 ```
 
 ```python
-class Supervisor(Protocol):
+class SupervisorProtocol(Protocol):
     async def spawn(self, child_agent: AgentId, *, parent: RunId,
                     supervision: Supervision, boot: Message) -> RunHandle: ...
     async def join(self, handle: RunHandle) -> RunResult: ...
@@ -599,7 +599,7 @@ personal agent that follows it wakes up with the finding.
 !!! tip "Analogy — the newsletter"
     The `FollowGraph` is the subscriber list — who signed up for which
     newsletter. The `FanoutStrategy` is the mailroom that, when an issue is
-    published, drops a copy into every subscriber's mailbox (`Inbox`).
+    published, drops a copy into every subscriber's mailbox (`InboxProtocol`).
 
 ### `FollowGraph` — the durable subscriber list
 
@@ -621,7 +621,7 @@ identity/record types.
   calls, in unspecified order with no duplicates.
 
 !!! warning "`followers_of` and `following` are SYNC defs returning `AsyncIterator`"
-    Just like `EventLog.read` / `EventLog.tail`, these two are plain `def`s that
+    Just like `EventLogProtocol.read` / `EventLogProtocol.tail`, these two are plain `def`s that
     *return* an async iterator — **not** `async def`. Do not `await` the call;
     `async for` over it:
     ```python
@@ -634,7 +634,7 @@ identity/record types.
 ```python
 class FanoutStrategy(Protocol):
     async def publish(self, topic: TopicId, msg: Message, *,
-                      graph: FollowGraph, inbox: Inbox) -> None: ...
+                      graph: FollowGraph, inbox: InboxProtocol) -> None: ...
 ```
 
 Fan-out is *always* initiated by `publish` — never by the agent directly. The
@@ -655,9 +655,9 @@ flowchart LR
     PUB(["Publisher agent — ctx.emit(topic, msg)"]):::agent
     FAN["FanoutStrategy.publish"]:::runtime
     FG[("FollowGraph<br/>followers_of(topic)")]:::store
-    IN1["Inbox of follower A"]:::runtime
-    IN2["Inbox of follower B"]:::runtime
-    IN3["Inbox of follower C"]:::runtime
+    IN1["InboxProtocol of follower A"]:::runtime
+    IN2["InboxProtocol of follower B"]:::runtime
+    IN3["InboxProtocol of follower C"]:::runtime
     F1(["Follower A wakes"]):::agent
     F2(["Follower B wakes"]):::agent
     F3(["Follower C wakes"]):::agent
@@ -672,7 +672,7 @@ flowchart LR
 
 ---
 
-## Waking a sleeper: `Wakeup` + `SignalBus`
+## Waking a sleeper: `Wakeup` + `SignalBusProtocol`
 
 **What & why:** A SUSPENDED run is asleep at zero cost. Four things can stir it,
 and `Wakeup` is the sealed value object describing *which*:
@@ -690,17 +690,17 @@ class Wakeup(BaseModel):
     model_config = {"frozen": True}
 ```
 
-`Wakeup` is carried by the Scheduler from the triggering event to the `release`
+`Wakeup` is carried by the SchedulerProtocol from the triggering event to the `release`
 call, and it is also the payload of the `run.suspended` log entry — so the cause
 of every suspension is **replayable**.
 
 !!! tip "Analogy — the pager"
-    The `SignalBus` is a pager clipped to a sleeping run. Page it by name and the
+    The `SignalBusProtocol` is a pager clipped to a sleeping run. Page it by name and the
     run wakes. Set a timer and it wakes at a wall-clock moment. It's how
     `ctx.wait_signal()` and `ctx.sleep_until()` actually work.
 
 ```python
-class SignalBus(Protocol):
+class SignalBusProtocol(Protocol):
     async def signal(self, run_id: RunId, name: str, payload: JsonObject) -> None: ...
     async def timer(self, run_id: RunId, at: datetime) -> None: ...
 ```
@@ -713,7 +713,7 @@ class SignalBus(Protocol):
   granularity — may fire a few seconds late under load, so don't rely on it for
   correctness.
 - **Coalescing:** if a timer fires *and* a message arrives while suspended, the
-  Scheduler merges them into one wakeup and enqueues once. The combined trigger
+  SchedulerProtocol merges them into one wakeup and enqueues once. The combined trigger
   order is unspecified; the agent drains its inbox and checks timers/signals in
   the same wake-cycle.
 
@@ -731,7 +731,7 @@ class AskOutcome(BaseModel):
     kind: Literal["replied", "timed_out", "target_failed", "target_cancelled"]
     result: RunResult | None = None   # set when kind == "replied"
     handle: RunHandle | None = None   # the still-live run when kind == "timed_out"
-    last_seq: int = -1                # target's EventLog progress at outcome time
+    last_seq: int = -1                # target's EventLogProtocol progress at outcome time
 
     model_config = {"frozen": True}
 ```
@@ -762,7 +762,7 @@ class RunStatusSummary(BaseModel):
 `RunStatusSummary` is returned by `RunContext.status(handle)` — a **batched peek,
 not a stream**. A parent calls it rarely and only with a reason (an LLM tool
 call, a supervision rule). A human/UI watching live progress uses the separate
-SSE path (`EventLog.tail`), which never touches the parent agent's context.
+SSE path (`EventLogProtocol.tail`), which never touches the parent agent's context.
 
 ---
 
@@ -771,15 +771,15 @@ SSE path (`EventLog.tail`), which never touches the parent agent's context.
 | Piece | Location |
 |---|---|
 | `Agent`, `AgentRunContext` Protocols | `kernel/runtime/agent.py` |
-| `RunLogEntry`, `EventLog` | `kernel/runtime/log_entry.py` |
+| `RunLogEntry`, `EventLogProtocol` | `kernel/runtime/log_entry.py` |
 | `Effect`, `EffectResult`, `Journal` | `kernel/runtime/effects.py` |
 | `RunId`, `new_run_id`, `RunStatus` | `kernel/runtime/ids.py` |
-| `Inbox`, `DeadLetterEntry`, `DeadLetterReason` | `kernel/runtime/inbox.py` |
-| `Scheduler`, `Lease`, `RunRetryPolicy` | `kernel/runtime/scheduler.py` |
-| `Supervisor`, `RunHandle`, `RunResult` | `kernel/runtime/supervisor.py` |
+| `InboxProtocol`, `DeadLetterEntry`, `DeadLetterReason` | `kernel/runtime/inbox.py` |
+| `SchedulerProtocol`, `Lease`, `RunRetryPolicy` | `kernel/runtime/scheduler.py` |
+| `SupervisorProtocol`, `RunHandle`, `RunResult` | `kernel/runtime/supervisor.py` |
 | `FollowGraph` | `kernel/runtime/follow_graph.py` |
 | `FanoutStrategy` | `kernel/runtime/fanout.py` |
-| `Wakeup`, `SignalBus` | `kernel/runtime/wakeup.py` |
+| `Wakeup`, `SignalBusProtocol` | `kernel/runtime/wakeup.py` |
 | `AskOutcome`, `RunStatusSummary` | `kernel/runtime/communication.py` |
 | `Worker`, `RunContext` (the concrete drivers) | `agents/runtime/` (L1) |
 | In-memory backends | `agents/runtime/backends/` |

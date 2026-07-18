@@ -27,7 +27,7 @@ Because it lets the framework swap *implementations* freely while the *agent cod
 
 - The same `LLMClient` contract is satisfied by the OpenAI, Anthropic, Gemini, and Ollama clients.
 - The same `HistoryProvider` contract is satisfied by in-memory, Redis, and Postgres backends.
-- The same `EventLog` and `Journal` contracts are satisfied by in-process dicts (dev) and Postgres + Redis (production).
+- The same `EventLogProtocol` and `Journal` contracts are satisfied by in-process dicts (dev) and Postgres + Redis (production).
 
 Write your agent against the contract once. Pick the backend at startup. That single idea is what makes the framework testable in-memory and durable in production with no code fork.
 
@@ -69,7 +69,7 @@ graph TB
     LLM --> BLOCKS["① ContentBlocks<br/>(the reply)"]:::core
     AG --> TOOLS["④ Tools<br/>(act, with risk gating)"]:::tool
     AG --> STORE["⑤ Storage<br/>(remember)"]:::store
-    AG --> RT["⑦ Runtime<br/>(EventLog + Journal — durable)"]:::core
+    AG --> RT["⑦ Runtime<br/>(EventLogProtocol + Journal — durable)"]:::core
     RT -.->|"every step logged"| AG
 ```
 
@@ -84,7 +84,7 @@ graph TB
     Token counts are `input_tokens` / `output_tokens` / `cached_tokens` / `reasoning_tokens` — not the OpenAI-style `prompt_tokens` / `completion_tokens`. See [Core](01-core.md).
 
 !!! note "Some iterator methods are sync defs that *return* an async iterator"
-    `EventLog.read` / `EventLog.tail` and `FollowGraph.followers_of` / `following` are **synchronous** methods that return an `AsyncIterator` — you write `async for x in log.read(...)` without `await`ing the call itself. See [Runtime](07-runtime.md).
+    `EventLogProtocol.read` / `EventLogProtocol.tail` and `FollowGraph.followers_of` / `following` are **synchronous** methods that return an `AsyncIterator` — you write `async for x in log.read(...)` without `await`ing the call itself. See [Runtime](07-runtime.md).
 
 ---
 

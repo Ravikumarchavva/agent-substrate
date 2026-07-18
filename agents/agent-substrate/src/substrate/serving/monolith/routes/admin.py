@@ -48,9 +48,9 @@ async def admin_stats(
 ) -> Dict[str, Any]:
     """Return top-level aggregate stats.
 
-    ``total_events`` counts durable EventLog rows (``substrate_event_log``)
+    ``total_events`` counts durable EventLogProtocol rows (``substrate_event_log``)
     directly — conversation history has no separate steps table anymore; the
-    EventLog is the single source of truth (see ``serving/stream/history.py``).
+    EventLogProtocol is the single source of truth (see ``serving/stream/history.py``).
     """
     thread_count: int = (await db.execute(select(func.count(Thread.id)))).scalar_one()
     event_count: int = (
@@ -70,7 +70,7 @@ async def list_all_threads(
     db: AsyncSession = Depends(get_db),
     _: AuthClaims = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
-    """Return all threads with EventLog event counts, newest first.
+    """Return all threads with EventLogProtocol event counts, newest first.
 
     Raw SQL (not the ORM) for the event-count join: substrate_run_queue and
     substrate_event_log are asyncpg-managed tables in the same physical

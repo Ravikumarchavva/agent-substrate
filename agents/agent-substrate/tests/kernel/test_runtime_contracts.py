@@ -123,7 +123,7 @@ class TestRunLogEntry:
 
 
 class InMemoryEventLog:
-    """Minimal in-memory EventLog for contract conformance testing."""
+    """Minimal in-memory EventLogProtocol for contract conformance testing."""
 
     def __init__(self) -> None:
         self._logs: dict[RunId, list[RunLogEntry]] = defaultdict(list)
@@ -292,7 +292,7 @@ class TestEffectResult:
 
 
 class InMemoryInbox:
-    """Minimal in-memory Inbox — dedup + FIFO + dead-letter after 3 retries."""
+    """Minimal in-memory InboxProtocol — dedup + FIFO + dead-letter after 3 retries."""
 
     MAX_RETRIES = 3
 

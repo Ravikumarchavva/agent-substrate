@@ -1,4 +1,4 @@
-"""PostgresInbox — Stage 1 durable Inbox backed by asyncpg.
+"""Inbox — Stage 1 durable implementation of InboxProtocol, backed by asyncpg.
 
 Schema::
 
@@ -67,8 +67,8 @@ CREATE TABLE IF NOT EXISTS substrate_dead_letters (
 """
 
 
-class PostgresInbox:
-    """Postgres-backed Inbox implementing the kernel Inbox Protocol."""
+class Inbox:
+    """Postgres-backed Inbox implementing the kernel InboxProtocol."""
 
     def __init__(
         self,
@@ -218,4 +218,4 @@ class PostgresInbox:
             )
 
 
-__all__ = ["PostgresInbox"]
+__all__ = ["Inbox"]

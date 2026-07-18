@@ -1,7 +1,7 @@
 """agents.runtime.backends — Stage 0 in-memory implementations.
 
 All backend classes implement the corresponding kernel Protocol
-(EventLog, Inbox, Scheduler, etc.) using pure asyncio
+(EventLogProtocol, InboxProtocol, SchedulerProtocol, etc.) using pure asyncio
 data structures.  Stage 1 will add Postgres/Redis backends in
 capabilities/runtime/ behind the same kernel contracts.
 """

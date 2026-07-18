@@ -212,8 +212,8 @@ class ParentJoinAgent:
 
 async def test_pg_spawn_join(pg_runtime) -> None:
     """ctx.join() suspends the parent (durably) and resumes when the child
-    finishes — the PostgresSupervisor.finish_run() -> child:{run_id} signal
-    path, replacing the old asyncio.Event()-blocking Supervisor.join()."""
+    finishes — the Supervisor.finish_run() -> child:{run_id} signal
+    path, replacing the old asyncio.Event()-blocking SupervisorProtocol.join()."""
     from substrate.kernel.runtime.ids import RunStatus
 
     child_id = _agent_id("pg-join-child")
@@ -381,11 +381,11 @@ async def test_pg_reclaim_orphans() -> None:
         pytest.skip("Postgres not reachable")
     import asyncpg
 
-    from substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
+    from substrate.infrastructure.runtime.scheduler import Scheduler
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:
-        scheduler = PostgresScheduler(pool)
+        scheduler = Scheduler(pool)
         await scheduler.setup()
 
         run_id = f"orphan-{id(object())}"
@@ -439,7 +439,7 @@ async def test_pg_cold_resume() -> None:
         pytest.skip("Postgres not reachable")
 
     from substrate.infrastructure.runtime import build_postgres_runtime
-    from substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
+    from substrate.infrastructure.runtime.scheduler import Scheduler
     from substrate.agents.factory import rebuild_agent
 
     done_a = asyncio.Event()
@@ -505,8 +505,8 @@ async def test_pg_cold_resume() -> None:
                 orphan_run_id,
             )
 
-        # Use PostgresScheduler to read back pending run specs
-        scheduler = PostgresScheduler(pool)
+        # Use Scheduler to read back pending run specs
+        scheduler = Scheduler(pool)
         await scheduler.setup()
         pending = await scheduler.pending_run_specs()
         our_specs = [(rid, aid, s) for rid, aid, s in pending if rid == orphan_run_id]
@@ -544,7 +544,7 @@ async def test_pg_cold_resume_refuses_version_mismatch() -> None:
     direct 'pending' insert before ``resume_pending_runs`` gets to read it.
 
     Asserts: the run ends up 'failed' (not silently resumed), exactly one
-    ``run.failed`` EventLog entry is appended, and no agent is registered
+    ``run.failed`` EventLogProtocol entry is appended, and no agent is registered
     for it.
     """
     if not await _pg_reachable():
@@ -555,11 +555,11 @@ async def test_pg_cold_resume_refuses_version_mismatch() -> None:
     import asyncpg
 
     import substrate
-    from substrate.infrastructure.runtime.pg_event_log import PostgresEventLog
-    from substrate.infrastructure.runtime.pg_inbox import PostgresInbox
-    from substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
-    from substrate.infrastructure.runtime.pg_signal_bus import PostgresSignalBus
-    from substrate.infrastructure.runtime.pg_supervisor import PostgresSupervisor
+    from substrate.infrastructure.runtime.event_log import EventLog
+    from substrate.infrastructure.runtime.inbox import Inbox
+    from substrate.infrastructure.runtime.scheduler import Scheduler
+    from substrate.infrastructure.runtime.signal_bus import SignalBus
+    from substrate.infrastructure.runtime.supervisor import Supervisor
     from substrate.infrastructure.serving_factory import resume_pending_runs
 
     stale_spec = {
@@ -576,11 +576,11 @@ async def test_pg_cold_resume_refuses_version_mismatch() -> None:
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:
-        event_log = PostgresEventLog(pool)
-        scheduler = PostgresScheduler(pool)
-        inbox = PostgresInbox(pool)
-        signal_bus = PostgresSignalBus(pool)
-        supervisor = PostgresSupervisor(
+        event_log = EventLog(pool)
+        scheduler = Scheduler(pool)
+        inbox = Inbox(pool)
+        signal_bus = SignalBus(pool)
+        supervisor = Supervisor(
             pool,
             event_log=event_log,
             inbox=inbox,
@@ -652,6 +652,231 @@ async def test_pg_cold_resume_refuses_version_mismatch() -> None:
         await pool.close()
 
 
+async def test_pg_spawn_denied_once_headcount_cap_reached() -> None:
+    """Supervisor.spawn() enforces SpawnBudget itself, durably —
+    called directly here, bypassing SpawnTracker/OrchestratorAgent entirely,
+    to prove the cap applies regardless of caller."""
+    import asyncpg
+
+    from substrate.infrastructure.runtime.event_log import EventLog
+    from substrate.infrastructure.runtime.inbox import Inbox
+    from substrate.infrastructure.runtime.scheduler import Scheduler
+    from substrate.infrastructure.runtime.signal_bus import SignalBus
+    from substrate.infrastructure.runtime.supervisor import Supervisor
+    from substrate.kernel.agent.supervision import Supervision, SpawnBudget
+    from substrate.kernel.core.errors import BudgetExhaustedError
+    from substrate.kernel.runtime.effects import Effect
+
+    pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
+    root_agent = _agent_id("spawn-budget-root")
+    root = Supervision.root(root_agent, spawn_budget=SpawnBudget(max_agents=3))
+    try:
+        event_log = EventLog(pool)
+        scheduler = Scheduler(pool)
+        inbox = Inbox(pool)
+        signal_bus = SignalBus(pool)
+        supervisor = Supervisor(
+            pool,
+            event_log=event_log,
+            inbox=inbox,
+            scheduler=scheduler,
+            signal_bus=signal_bus,
+        )
+        await event_log.setup()
+        await scheduler.setup()
+        await inbox.setup()
+        await signal_bus.setup()
+        await supervisor.setup()
+
+        spawn_effect_ids: list[str] = []
+        children: list[AgentId] = []
+
+        # root counts as 1; max_agents=3 allows exactly 2 more spawns.
+        for i in range(2):
+            child = _agent_id(f"spawn-budget-child-{i}")
+            children.append(child)
+            path = f"spawn-{i}"
+            spawn_effect_ids.append(
+                Effect.make_id(root.run_id, path, "spawn", {"child_agent": str(child)})
+            )
+            await supervisor.spawn(
+                child,
+                parent=root.run_id,
+                supervision=root,
+                boot=_msg(child, {}),
+                path=path,
+                correlation_id=f"corr-{i}",
+            )
+
+        over = _agent_id("spawn-budget-child-over")
+        with pytest.raises(BudgetExhaustedError, match="headcount cap reached"):
+            await supervisor.spawn(
+                over,
+                parent=root.run_id,
+                supervision=root,
+                boot=_msg(over, {}),
+                path="spawn-over",
+                correlation_id="corr-over",
+            )
+
+        # Replay of an already-recorded spawn (same path AND same child
+        # AgentId, matching the effect_id exactly) must still succeed even
+        # though the budget is now fully consumed.
+        replay_child = children[0]
+        replayed = await supervisor.spawn(
+            replay_child,
+            parent=root.run_id,
+            supervision=root,
+            boot=_msg(replay_child, {}),
+            path="spawn-0",
+            correlation_id="corr-0",
+        )
+        assert replayed is not None
+    finally:
+        await pool.execute(
+            "DELETE FROM substrate_run_tree WHERE root_run = $1", root.run_id
+        )
+        if spawn_effect_ids:
+            await pool.execute(
+                "DELETE FROM substrate_spawn_effects WHERE effect_id = ANY($1)",
+                spawn_effect_ids,
+            )
+        await pool.close()
+
+
+async def test_pg_tool_approval_survives_full_pool_close_and_reopen() -> None:
+    """A pending CRITICAL/HIGH-risk tool approval is durable — the same
+    property ask_human already had. Proven against the real backend by
+    fully closing the connection pool (as close as a test gets to an actual
+    process restart) between suspend and resume, not just discarding a
+    Python object."""
+    import asyncpg
+
+    from substrate.agents.runtime.backends._fanout import PushAllFanout
+    from substrate.agents.runtime.backends._follow_graph import InMemoryFollowGraph
+    from substrate.agents.runtime.cancellation import CancellationToken
+    from substrate.agents.runtime.context import RunContext
+    from substrate.agents.runtime.effect_cache import EffectCache
+    from substrate.agents.tools.invoker import ToolInvoker
+    from substrate.agents.tools.toolbox import Toolbox
+    from substrate.infrastructure.runtime.event_log import EventLog
+    from substrate.infrastructure.runtime.inbox import Inbox
+    from substrate.infrastructure.runtime.scheduler import Scheduler
+    from substrate.infrastructure.runtime.signal_bus import SignalBus
+    from substrate.infrastructure.runtime.supervisor import Supervisor
+    from substrate.kernel.agent.runtime_context import RunMeta
+    from substrate.kernel.core.errors import SuspendInterrupt
+    from substrate.kernel.tools import ToolExecutionResult, ToolRisk
+    from substrate.kernel.tools.approval import ApprovalRequest, ApprovalResult
+
+    class SendEmailTool:
+        name = "send_email"
+        description = "Sends an email."
+        risk = ToolRisk.HIGH
+        input_schema: dict = {
+            "type": "object",
+            "properties": {"to": {"type": "string"}},
+        }
+
+        async def execute(self, *, ctx=None, **kwargs) -> ToolExecutionResult:
+            from substrate.kernel.core.content import TextBlock
+
+            return ToolExecutionResult(
+                content=[TextBlock(text=f"email sent to {kwargs.get('to')}")]
+            )
+
+    class FakeSignalApprovalHandler:
+        suspends_via_signal = True
+
+        async def request(self, req: ApprovalRequest) -> ApprovalResult:
+            raise AssertionError("signal path should have been used, not this fallback")
+
+    async def _build_ctx(pool: "asyncpg.Pool", run_id) -> RunContext:
+        event_log = EventLog(pool)
+        scheduler = Scheduler(pool)
+        inbox = Inbox(pool)
+        signal_bus = SignalBus(pool)
+        supervisor = Supervisor(
+            pool,
+            event_log=event_log,
+            inbox=inbox,
+            scheduler=scheduler,
+            signal_bus=signal_bus,
+        )
+        await event_log.setup()
+        await scheduler.setup()
+        await inbox.setup()
+        await signal_bus.setup()
+        await supervisor.setup()
+        registry = Toolbox()
+        registry.add(SendEmailTool())
+        tool_invoker = ToolInvoker(
+            registry=registry, approval_handler=FakeSignalApprovalHandler()
+        )
+        meta = RunMeta(run_id=run_id, cancellation=CancellationToken())
+        effect_cache = await EffectCache.fold(event_log, run_id)
+        return RunContext(
+            meta=meta,
+            event_log=event_log,
+            effect_cache=effect_cache,
+            inbox=inbox,
+            follow_graph=InMemoryFollowGraph(),
+            fanout=PushAllFanout(),
+            scheduler=scheduler,
+            supervisor=supervisor,
+            signal_bus=signal_bus,
+            tool_invoker=tool_invoker,
+        )
+
+    run_id = f"approval-durability-{uuid.uuid4().hex}"
+
+    # "Process 1"
+    pool_a = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
+    try:
+        ctx1 = await _build_ctx(pool_a, run_id)
+        with pytest.raises(SuspendInterrupt):
+            await ctx1.tool("send_email", to="user@example.com")
+
+        request_id = None
+        async for entry in ctx1._event_log.read(run_id):  # type: ignore[attr-defined]
+            if entry.kind == "approval.requested":
+                request_id = entry.payload["request_id"]
+        assert request_id is not None
+
+        # The human responds through a THIRD, independent connection —
+        # nothing about process 1 is involved in delivering this.
+        responder_pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=1)
+        try:
+            responder_signal_bus = SignalBus(responder_pool)
+            await responder_signal_bus.setup()
+            await responder_signal_bus.signal(
+                run_id, f"hitl:{request_id}", {"action": "approve"}
+            )
+        finally:
+            await responder_pool.close()
+    finally:
+        # Fully close process 1's pool — as close to "the process died" as
+        # a test gets. No Python object below this line came from pool_a.
+        await pool_a.close()
+
+    # "Process 2" — an entirely new pool, entirely new RunContext.
+    pool_b = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
+    try:
+        ctx2 = await _build_ctx(pool_b, run_id)
+        result = await ctx2.tool("send_email", to="user@example.com")
+        assert result.status == "ok"
+        assert result.text is not None
+        assert "user@example.com" in result.text
+    finally:
+        await pool_b.execute(
+            "DELETE FROM substrate_event_log WHERE run_id = $1", run_id
+        )
+        await pool_b.execute(
+            "DELETE FROM substrate_run_queue WHERE run_id = $1", run_id
+        )
+        await pool_b.close()
+
+
 # ---------------------------------------------------------------------------
 # 6. PR7 — cancel cascade, deadline enforcement, ask() crash fast-path
 # ---------------------------------------------------------------------------
@@ -687,7 +912,7 @@ class SpawnChainAgent:
 async def test_pg_cancel_cascade(pg_runtime) -> None:
     """Cancelling the root of a 2-deep spawn tree of suspended runs marks
     the entire subtree cancelled — the recursive CTE in
-    PostgresSupervisor.cancel(), exercised through the public Runtime."""
+    Supervisor.cancel(), exercised through the public Runtime."""
     from substrate.kernel.runtime.supervisor import RunHandle
 
     grandchild_id = _agent_id("pg-cancel-grandchild")
@@ -754,7 +979,7 @@ class BusyAgent:
 
 
 async def test_pg_cancel_pending_leaves_a_running_run_alone(pg_runtime) -> None:
-    """Scheduler.cancel_pending() must not force-terminalize a run another
+    """SchedulerProtocol.cancel_pending() must not force-terminalize a run another
     worker is actively leasing — that's the bug Worker.cancel()'s old
     getattr(scheduler, "_status") poke had: it force-appended run.cancelled
     and finish_run() for ANY run this worker had no local Task for, even one
@@ -1089,11 +1314,11 @@ async def test_pg_thread_single_flight_frees_after_completion(pg_runtime) -> Non
 
 async def test_pg_tail_reconnect_from_different_pool_and_seq(pg_runtime) -> None:
     """Simulates a reconnect landing on a different replica: a SECOND,
-    independent PostgresEventLog (its own asyncpg pool, its own LISTEN
+    independent EventLog (its own asyncpg pool, its own LISTEN
     connection) resumes tailing an in-progress run from a mid-stream
     from_seq and sees only what it asked for, then the rest live — proving
     SSE reconnect doesn't depend on replica affinity."""
-    from substrate.infrastructure.runtime.pg_event_log import PostgresEventLog
+    from substrate.infrastructure.runtime.event_log import EventLog
 
     agent_id = _agent_id("pg-reconnect")
     agent = StreamingAgent(agent_id)
@@ -1118,7 +1343,7 @@ async def test_pg_tail_reconnect_from_different_pool_and_seq(pg_runtime) -> None
 
     other_pool = await asyncpg.create_pool(_PG_URL)
     try:
-        other_replica_log = PostgresEventLog(other_pool, dsn=_PG_URL)
+        other_replica_log = EventLog(other_pool, dsn=_PG_URL)
         seen_second_pass: list[str] = []
         async for entry in other_replica_log.tail(run_id, from_seq=resume_from):
             seen_second_pass.append(entry.kind)
@@ -1152,7 +1377,7 @@ async def test_pg_fair_scheduling_across_tenants() -> None:
     fairness signal, so asserting on it would make this test flaky on
     tie-break luck rather than testing the actual guarantee.
 
-    Uses a bare PostgresScheduler (no Runtime/Worker) so nothing else is
+    Uses a bare Scheduler (no Runtime/Worker) so nothing else is
     competing for leases — a live Worker's default capacity=10 would drain
     all 6 rows in a single poll tick regardless of fairness, which would
     defeat the point of this test.
@@ -1161,11 +1386,11 @@ async def test_pg_fair_scheduling_across_tenants() -> None:
         pytest.skip("Postgres not reachable")
     import asyncpg
 
-    from substrate.infrastructure.runtime.pg_scheduler import PostgresScheduler
+    from substrate.infrastructure.runtime.scheduler import Scheduler
 
     pool = await asyncpg.create_pool(_PG_URL, min_size=1, max_size=2)
     try:
-        scheduler = PostgresScheduler(pool)
+        scheduler = Scheduler(pool)
         await scheduler.setup()
 
         # Isolation: the ranking in lease() scans the WHOLE table, and its
@@ -1292,7 +1517,7 @@ async def test_pg_spawn_inherits_execution_budget(pg_runtime) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 8. Retry re-execution + backoff against the real PostgresScheduler
+# 8. Retry re-execution + backoff against the real Scheduler
 # ---------------------------------------------------------------------------
 
 
@@ -1330,7 +1555,7 @@ async def test_pg_flaky_retry_genuinely_re_executes(pg_runtime) -> None:
 
 async def test_pg_permanent_error_skips_retry(pg_runtime) -> None:
     """PermanentError terminal-fails on the first attempt against the real
-    PostgresScheduler — no backoff, no retry_count increment wasted."""
+    Scheduler — no backoff, no retry_count increment wasted."""
     from substrate.kernel.core.errors import PermanentError
     from substrate.kernel.runtime.scheduler import RunRetryPolicy
 

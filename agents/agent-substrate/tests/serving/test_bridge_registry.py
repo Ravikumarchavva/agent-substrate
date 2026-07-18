@@ -2,7 +2,7 @@
 
 A request_id with no local bridge (this "replica" never tailed the
 input.requested event for that thread) must still resolve via
-Scheduler.find_run_by_wake_signal(), not silently fail.
+SchedulerProtocol.find_run_by_wake_signal(), not silently fail.
 """
 
 from __future__ import annotations

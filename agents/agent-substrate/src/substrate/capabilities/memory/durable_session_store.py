@@ -1,4 +1,4 @@
-"""PostgresSessionStore — Postgres-backed ShortTermMemory (JSONB).
+"""DurableSessionStore — Postgres-backed ShortTermMemory (JSONB).
 
 The durable backend the kernel protocol's own docstring already names
 ("Backed by: Redis HASH, Postgres JSONB, in-memory dict") but that never
@@ -16,7 +16,7 @@ Schema (created automatically via ``connect()``)::
 
 Usage::
 
-    store = PostgresSessionStore(database_url="postgresql+asyncpg://...")
+    store = DurableSessionStore(database_url="postgresql+asyncpg://...")
     async with store:
         await store.update_state("sess-123", {"preferred_language": "Python"})
         state = await store.get_state("sess-123")
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS session_state (
 """
 
 
-class PostgresSessionStore:
+class DurableSessionStore:
     """ShortTermMemory backed by a Postgres JSONB column.
 
     ``update_state`` merges via Postgres's ``||`` JSONB operator inside a
@@ -65,7 +65,7 @@ class PostgresSessionStore:
         self._engine = create_async_engine(self._url, pool_pre_ping=True)
         async with self._eng().begin() as conn:
             await conn.execute(text(_CREATE_TABLE))
-        logger.info("PostgresSessionStore connected and table ensured")
+        logger.info("DurableSessionStore connected and table ensured")
 
     async def disconnect(self) -> None:
         if self._engine is not None:
@@ -75,7 +75,7 @@ class PostgresSessionStore:
     def _eng(self) -> AsyncEngine:
         if self._engine is None:
             raise RuntimeError(
-                "PostgresSessionStore not connected — call await connect() first"
+                "DurableSessionStore not connected — call await connect() first"
             )
         return self._engine
 
@@ -127,7 +127,7 @@ class PostgresSessionStore:
                 {"sid": session_id},
             )
 
-    async def __aenter__(self) -> PostgresSessionStore:
+    async def __aenter__(self) -> DurableSessionStore:
         await self.connect()
         return self
 
@@ -135,4 +135,4 @@ class PostgresSessionStore:
         await self.disconnect()
 
 
-__all__ = ["PostgresSessionStore"]
+__all__ = ["DurableSessionStore"]

@@ -253,7 +253,7 @@
 <!-- Gmail Tab -->
 <div class="tab-view hidden" id="tab-gmail">
   <div class="section-hdr">
-    <span>Inbox</span>
+    <span>InboxProtocol</span>
     <button class="refresh-btn" onclick="loadGmail()">↻ Refresh</button>
   </div>
   <div class="content-scroll">
@@ -488,7 +488,7 @@
       const listData = await googleGet(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&maxResults=20"
       );
-      if (!listData || !listData.messages) { el.innerHTML = '<div class="no-data">Inbox is empty</div>'; return; }
+      if (!listData || !listData.messages) { el.innerHTML = '<div class="no-data">InboxProtocol is empty</div>'; return; }
 
       // Fetch message snippets in parallel (batch of 20)
       const msgs = await Promise.all(

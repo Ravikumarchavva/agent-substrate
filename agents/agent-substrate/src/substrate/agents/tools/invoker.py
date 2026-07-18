@@ -230,29 +230,63 @@ class ToolInvoker:
                         "Call this tool directly outside the chain."
                     ),
                 )
-            from substrate.kernel.core.identity import AgentId
+            if ctx is not None and getattr(
+                self._approval, "suspends_via_signal", False
+            ):
+                # Durable path: suspend via ctx.sleep_until_signal() instead
+                # of blocking on an in-process Future — a pending approval
+                # then survives a process restart the same way ask_human's
+                # HITL already does (see AskHumanTool.execute()'s signal
+                # branch, capabilities/tools/human_input.py — this mirrors
+                # it exactly). getattr(..., "suspends_via_signal", False) is
+                # the marker WebHITLBridge.human_handler already uses for
+                # the same purpose; SSEApprovalHandler sets it identically.
+                #
+                # ctx.uuid() (not uuid4()) is replay-stable: this tool body
+                # re-executes from the top on every resume attempt (a
+                # suspending call is never itself a cache hit while
+                # suspended), so a fresh id here would mint a new
+                # request_id each attempt and orphan whatever card the
+                # human is looking at.
+                request_id = await ctx.uuid()
+                log_payload = {
+                    "request_id": request_id,
+                    "tool_name": tool_name,
+                    "args": dict(call.arguments),
+                }
+                try:
+                    # log_once, not _log: see the docstring reasoning above —
+                    # a plain _log would duplicate this entry (and the UI
+                    # card built from it) on every resume.
+                    await ctx.log_once("approval.requested", log_payload)
+                except Exception:
+                    pass
+                signal_payload = await ctx.sleep_until_signal(f"hitl:{request_id}")
+                result: ApprovalResult = _approval_result_from_signal(signal_payload)
+            else:
+                from substrate.kernel.core.identity import AgentId
 
-            approval_req = ApprovalRequest(
-                call=call,
-                risk=tool_risk,
-                agent_id=AgentId(type="chain", key=call.call_id),
-                run_id=call.call_id,
-                context={"source": "tool_chain"},
-            )
-            try:
-                result: ApprovalResult = await asyncio.wait_for(
-                    self._approval.request(approval_req),
-                    timeout=policy.approval_timeout_s,
+                approval_req = ApprovalRequest(
+                    call=call,
+                    risk=tool_risk,
+                    agent_id=AgentId(type="chain", key=call.call_id),
+                    run_id=call.call_id,
+                    context={"source": "tool_chain"},
                 )
-            except TimeoutError:
-                return InvocationResult(
-                    status="denied",
-                    text=(
-                        f"Approval for '{tool_name}' timed out after "
-                        f"{policy.approval_timeout_s}s. "
-                        "Call this tool directly outside the chain for interactive approval."
-                    ),
-                )
+                try:
+                    result = await asyncio.wait_for(
+                        self._approval.request(approval_req),
+                        timeout=policy.approval_timeout_s,
+                    )
+                except TimeoutError:
+                    return InvocationResult(
+                        status="denied",
+                        text=(
+                            f"Approval for '{tool_name}' timed out after "
+                            f"{policy.approval_timeout_s}s. "
+                            "Call this tool directly outside the chain for interactive approval."
+                        ),
+                    )
             if result.decision == ApprovalDecision.MODIFIED:
                 call = call.model_copy(update={"arguments": result.modified_args or {}})
             elif result.decision != ApprovalDecision.APPROVED:
@@ -448,6 +482,25 @@ class InvokerSession:
 def _digest(arguments: JsonObject) -> str:
     raw = json.dumps(arguments, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _approval_result_from_signal(data: dict[str, Any]) -> ApprovalResult:
+    """Map the frontend's response payload (``{action, modified_arguments}``,
+    or ``{action: "cancelled"}`` on a disconnect/new-message cancel) to an
+    ``ApprovalResult``. Deliberately duplicated in
+    ``serving/monolith/sse/approval.py`` (that copy backs the Future-based
+    fallback path) rather than imported — agents/ (L1) must never import
+    serving/, and this ~10-line function is small enough that duplicating it
+    is cheaper than the layering violation an import would cost."""
+    action = data.get("action", "deny")
+    if action == "modify":
+        return ApprovalResult(
+            decision=ApprovalDecision.MODIFIED,
+            modified_args=data.get("modified_arguments") or {},
+        )
+    if action == "approve":
+        return ApprovalResult(decision=ApprovalDecision.APPROVED)
+    return ApprovalResult(decision=ApprovalDecision.DENIED)
 
 
 def _emit_progress(

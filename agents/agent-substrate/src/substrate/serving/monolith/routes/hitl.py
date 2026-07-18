@@ -81,7 +81,7 @@ async def hitl_status(
     # In-memory bridge has nothing (e.g. the monolith process restarted —
     # BridgeRegistry._bridges is not durable, only the run itself is). The
     # run's own suspension IS durable (substrate_run_queue.status='suspended'),
-    # and its input.requested card content lives in the EventLog (logged
+    # and its input.requested card content lives in the EventLogProtocol (logged
     # exactly once now via ctx.log_once — see agents/runtime/context.py),
     # so reconstruct the card from there instead of just returning empty.
     pending = await _durable_pending_hitl(ctx, str(thread_id))
@@ -101,28 +101,39 @@ async def _durable_pending_hitl(ctx: ServerDependencies, thread_id: str) -> list
     if status != RunStatus.SUSPENDED:
         return []
 
+    last_kind: str | None = None
     last_request: dict | None = None
     async for entry in runtime.event_log.read(run_id):
-        if entry.kind == "input.requested":
+        if entry.kind in ("input.requested", "approval.requested"):
+            last_kind = entry.kind
             last_request = entry.payload
-    if last_request is None:
+    if last_request is None or last_kind is None:
         return []
 
     request_id = last_request.get("request_id", "")
-    card = {
-        "request_id": request_id,
-        "run_id": run_id,
-        "question": last_request.get("question", ""),
-        "context": last_request.get("context", ""),
-        "options": last_request.get("options", []),
-        "allow_freeform": last_request.get("allow_freeform", True),
-    }
+    if last_kind == "input.requested":
+        card = {
+            "request_id": request_id,
+            "run_id": run_id,
+            "question": last_request.get("question", ""),
+            "context": last_request.get("context", ""),
+            "options": last_request.get("options", []),
+            "allow_freeform": last_request.get("allow_freeform", True),
+        }
+        signal_card = {
+            k: card[k] for k in ("question", "context", "options", "allow_freeform")
+        }
+    else:  # approval.requested
+        card = {
+            "request_id": request_id,
+            "run_id": run_id,
+            "tool_name": last_request.get("tool_name", ""),
+            "args": last_request.get("args", {}),
+        }
+        signal_card = {k: card[k] for k in ("tool_name", "args")}
+
     # Rehydrate the in-memory bridge so a subsequent POST /chat/respond
     # resolves through the normal path instead of needing its own lookup.
     bridge = await ctx.bridge_registry.acquire(thread_id)
-    bridge.register_signal_request(
-        request_id,
-        run_id,
-        card={k: card[k] for k in ("question", "context", "options", "allow_freeform")},
-    )
+    bridge.register_signal_request(request_id, run_id, card=signal_card)
     return [card]

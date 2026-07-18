@@ -3,8 +3,8 @@
 ## What this is
 
 The [kernel page on runtime contracts](../kernel/07-runtime.md) describes a *shape*
-— a handful of pure Protocols (`EventLog`, `Journal`, `Inbox`, `Scheduler`,
-`Supervisor`, `SignalBus`, `FollowGraph`, `FanoutStrategy`) with no I/O, no
+— a handful of pure Protocols (`EventLogProtocol`, `Journal`, `InboxProtocol`, `SchedulerProtocol`,
+`SupervisorProtocol`, `SignalBusProtocol`, `FollowGraph`, `FanoutStrategy`) with no I/O, no
 sockets, no database. **This page describes the first real machine that fills in
 that shape.**
 
@@ -116,11 +116,11 @@ class Runtime:
     def __init__(
         self,
         *,
-        event_log: EventLog | None = None,
-        inbox: Inbox | None = None,
+        event_log: EventLogProtocol | None = None,
+        inbox: InboxProtocol | None = None,
         journal: Journal | None = None,
-        scheduler: Scheduler | None = None,
-        signal_bus: SignalBus | None = None,
+        scheduler: SchedulerProtocol | None = None,
+        signal_bus: SignalBusProtocol | None = None,
         follow_graph: FollowGraph | None = None,
         fanout: FanoutStrategy | None = None,
     ) -> None:
@@ -134,7 +134,7 @@ class Runtime:
 
 !!! note "Why `Runtime` never imports a durable backend"
     Notice it only ever names `InMemory*` classes — it never imports
-    `PostgresEventLog` or `RedisJournal`. That keeps the `agents` layer (L1)
+    `EventLog` or `RedisJournal`. That keeps the `agents` layer (L1)
     strictly **above** `infrastructure`. The durable backends are injected from
     the outside by the infra-layer factory, so the dependency rule
     (`agents` may not reach sideways into `infrastructure`) is never violated.
@@ -212,11 +212,11 @@ flowchart TD
 ### Start / stop as a context manager
 
 `start()` constructs the `InMemorySupervisor` (it needs references to the
-EventLog, Inbox, Journal, and Scheduler) and the single `Worker`, then starts the
+EventLogProtocol, InboxProtocol, Journal, and SchedulerProtocol) and the single `Worker`, then starts the
 Worker's poll loop. `async with` calls `start`/`stop` for you.
 
 ```python
-async with Runtime() as rt:        # -> start() : builds Supervisor + Worker, starts poll loop
+async with Runtime() as rt:        # -> start() : builds SupervisorProtocol + Worker, starts poll loop
     await rt.register(agent)
     await rt.submit(agent.id, msg)
     ...                            # Worker drives runs in the background
@@ -405,7 +405,7 @@ async def _journaled(self, kind, args, fn):
 
 This is the same lookup -> execute -> record dance described in
 [Durability](../concepts/durability.md#the-at-most-once-protocol), just backed
-by the EffectCache/EventLog rather than a Journal. `ctx.llm()` and `ctx.tool()`
+by the EffectCache/EventLogProtocol rather than a Journal. `ctx.llm()` and `ctx.tool()`
 inline the same pattern (so they can stream and serialize their own results)
 rather than calling `_journaled` directly, but the contract is identical.
 Values over 64KB are transparently offloaded to `BlobStore` and referenced by
@@ -423,7 +423,7 @@ flowchart TD
     ID --> LOOK{"EffectCache.lookup(effect_id)"}:::decision
     LOOK -->|"HIT — already done"| RET["return cached result<br/>(model NOT re-called)"]:::cache
     LOOK -->|"MISS"| EXEC["run the real effect<br/>(stream LLM / invoke tool)"]:::process
-    EXEC --> REC["append effect.result to EventLog<br/>and update EffectCache"]:::process
+    EXEC --> REC["append effect.result to EventLogProtocol<br/>and update EffectCache"]:::process
     REC --> RET2["return result"]:::process
 ```
 
@@ -440,7 +440,7 @@ flowchart TD
 |---|---|---|
 | `ctx.llm(messages, *, options)` | Stream a model response, emit `text.delta` log entries, return `LLMResponse` | yes — replay never re-bills |
 | `ctx.tool(name, **args)` | Invoke a tool via the `ToolInvoker`, return `InvocationResult` | yes — at-most-once side effect |
-| `ctx.spawn(child_agent, *, boot, supervision)` | Spawn a child run, return a `RunHandle` (does not wait) | yes (in Supervisor) |
+| `ctx.spawn(child_agent, *, boot, supervision)` | Spawn a child run, return a `RunHandle` (does not wait) | yes (in SupervisorProtocol) |
 | `ctx.join(handle)` | Suspend until the child reaches a terminal state, return its `RunResult` | suspend point |
 | `ctx.cancel(handle, *, reason)` | Cancel a child run and its whole subtree | — |
 | `ctx.ask(target, msg, *, timeout)` | Send and suspend until a reply / timeout / target failure, return `AskOutcome` | suspend point |
@@ -503,11 +503,11 @@ fast tests, identical surface. They all live in `agents/runtime/backends/`.
 
 | In-memory backend | Implements kernel Protocol | Production counterpart (`infrastructure/runtime/`) |
 |---|---|---|
-| `InMemoryEventLog` | `EventLog` | `PostgresEventLog` (append-only table, `(run_id, seq)` PK) |
-| `InMemoryInbox` | `Inbox` | `PostgresInbox` (durable queue + dead-letter) |
-| `InMemoryScheduler` | `Scheduler` | `PostgresScheduler` (`SELECT … FOR UPDATE SKIP LOCKED` + leases) |
-| `InMemorySupervisor` | `Supervisor` | `PostgresSupervisor` (`ravi_run_tree` + `ravi_spawn_effects` tables — shipped) |
-| `InMemorySignalBus` | `SignalBus` | `PostgresSignalBus` (`ravi_signals` table, exactly-once consume-based fencing — shipped) |
+| `InMemoryEventLog` | `EventLogProtocol` | `EventLog` (append-only table, `(run_id, seq)` PK) |
+| `InMemoryInbox` | `InboxProtocol` | `Inbox` (durable queue + dead-letter) |
+| `InMemoryScheduler` | `SchedulerProtocol` | `Scheduler` (`SELECT … FOR UPDATE SKIP LOCKED` + leases) |
+| `InMemorySupervisor` | `SupervisorProtocol` | `Supervisor` (`ravi_run_tree` + `ravi_spawn_effects` tables — shipped) |
+| `InMemorySignalBus` | `SignalBusProtocol` | `SignalBus` (`ravi_signals` table, exactly-once consume-based fencing — shipped) |
 | `PushAllFanout` | `FanoutStrategy` | *(still in-memory — a push/pull hybrid for celebrity agents is unbuilt)* |
 | `InMemoryFollowGraph` | `FollowGraph` | *(still in-memory)* |
 
@@ -520,7 +520,7 @@ fast tests, identical surface. They all live in `agents/runtime/backends/`.
     comes from the EventLog itself (`effect.result` entries, folded into an
     `EffectCache` per lease; see `agents/runtime/effect_cache.py` and the
     "Hierarchical effect paths and the `EffectCache`" section above). The
-    production path drops Journal entirely: `PostgresSupervisor` uses its own
+    production path drops Journal entirely: `Supervisor` uses its own
     `ravi_spawn_effects` table for spawn dedup instead of a Journal
     implementation, and there is no `RedisJournal` anymore — closing a real
     gap the old TTL'd Redis store had (a run suspended past the TTL used to
@@ -529,8 +529,8 @@ fast tests, identical surface. They all live in `agents/runtime/backends/`.
 
 !!! note "`build_postgres_runtime` swaps five backends"
     `infrastructure/runtime/factory.py::build_postgres_runtime` injects
-    `PostgresEventLog`, `PostgresInbox`, `PostgresScheduler`,
-    `PostgresSignalBus`, and `PostgresSupervisor` — the full coordination core
+    `EventLog`, `Inbox`, `Scheduler`,
+    `SignalBus`, and `Supervisor` — the full coordination core
     is durable today, not just the four originally hardened. `PushAllFanout`
     and `InMemoryFollowGraph` are still in-memory; because everything is
     behind a Protocol, hardening those two is a drop-in swap later if a
@@ -556,7 +556,7 @@ A one-line tour:
   `EffectCache` (so replay returns the *same* child and never duplicates it),
   delivers the boot message with `notify=False`, and logs `child.spawned` in
   the parent's EventLog. `join` suspends on a consume-based `child:{run_id}`
-  signal (via `SignalBus`) rather than blocking on an `asyncio.Event`; `cancel`
+  signal (via `SignalBusProtocol`) rather than blocking on an `asyncio.Event`; `cancel`
   recurses through the subtree.
 - **`InMemorySignalBus`** — `run_id -> name -> (asyncio.Event, payload_box)`.
   `signal` fired *before* a run waits is buffered (delivered eagerly), so a signal
@@ -590,7 +590,7 @@ A one-line tour:
 | `PushAllFanout` | `agents/runtime/backends/_fanout.py` |
 | `InMemoryFollowGraph` | `agents/runtime/backends/_follow_graph.py` |
 | The kernel Protocols these implement | `kernel/runtime/` ([contracts page](../kernel/07-runtime.md)) |
-| `PostgresEventLog`/`Inbox`/`Scheduler`/`SignalBus`/`Supervisor` + `build_postgres_runtime` factory | `infrastructure/runtime/` |
+| `EventLog`/`InboxProtocol`/`SchedulerProtocol`/`SignalBusProtocol`/`SupervisorProtocol` + `build_postgres_runtime` factory | `infrastructure/runtime/` |
 
 **Next:** [Context, Compaction & Memory Backends](03-context-and-memory.md) — how
 an agent's conversation history is stored, trimmed, and summarised so a long run

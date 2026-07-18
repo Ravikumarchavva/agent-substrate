@@ -1,4 +1,4 @@
-"""PostgresMemoryStore — Postgres-backed LongTermMemory with full-text search.
+"""DurableMemoryStore — Postgres-backed LongTermMemory with full-text search.
 
 Stores memories as rows in an ``agent_memories`` table.  Retrieval uses
 Postgres ``tsvector`` full-text search — no embeddings required.  To add
@@ -20,7 +20,7 @@ Schema (run once via migration or ``create_tables()``)::
 
 Usage::
 
-    store = PostgresMemoryStore(database_url="postgresql+asyncpg://...")
+    store = DurableMemoryStore(database_url="postgresql+asyncpg://...")
     async with store:
         mem_id = await store.save(agent_id, "User prefers Python")
         memories = await store.search(agent_id, "language preference")
@@ -61,7 +61,7 @@ CREATE INDEX IF NOT EXISTS agent_memories_namespace_idx
 """
 
 
-class PostgresMemoryStore:
+class DurableMemoryStore:
     """LongTermMemory backed by Postgres full-text search.
 
     Retrieval ranks results by ``ts_rank`` against the search query so the
@@ -109,7 +109,7 @@ class PostgresMemoryStore:
     def _eng(self) -> AsyncEngine:
         if self._engine is None:
             raise RuntimeError(
-                "PostgresMemoryStore not connected — call await connect() first"
+                "DurableMemoryStore not connected — call await connect() first"
             )
         return self._engine
 
@@ -241,7 +241,7 @@ class PostgresMemoryStore:
                 {"agent_name": str(agent_id), "namespace": namespace},
             )
 
-    async def __aenter__(self) -> PostgresMemoryStore:
+    async def __aenter__(self) -> DurableMemoryStore:
         await self.connect()
         return self
 
@@ -249,4 +249,4 @@ class PostgresMemoryStore:
         await self.disconnect()
 
 
-__all__ = ["PostgresMemoryStore"]
+__all__ = ["DurableMemoryStore"]

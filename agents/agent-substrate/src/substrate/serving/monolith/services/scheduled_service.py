@@ -131,7 +131,7 @@ async def execute_scheduled_task(
             start = time.monotonic()
             await app_state.runtime.register(agent)
             # thread_id=: tags this run so it appears in the thread's history
-            # via project_thread() (the EventLog is the single source of
+            # via project_thread() (the EventLogProtocol is the single source of
             # truth for conversation history — see serving/stream/history.py
             # — there's no separate steps-table write needed here anymore).
             run_id = await app_state.runtime.submit(
@@ -164,13 +164,13 @@ async def execute_scheduled_task(
             db.add(run)
 
             # The run's user.message/text.delta are already durably in the
-            # EventLog (ReActAgent logs them unconditionally) and will show
+            # EventLogProtocol (ReActAgent logs them unconditionally) and will show
             # up via project_thread() since the run is thread_id-tagged
             # above — no separate persistence needed. The old "don't show
             # silent monitoring checks in chat" filter is now a display-time
             # concern (skip an assistant turn whose text is exactly
             # "[SILENT_CHECK]") rather than a write-time one, since the
-            # EventLog can't be filtered retroactively — see
+            # EventLogProtocol can't be filtered retroactively — see
             # substrate-ui's history-fold.ts.
             if not is_silent:
                 # Auto-disable if one-shot

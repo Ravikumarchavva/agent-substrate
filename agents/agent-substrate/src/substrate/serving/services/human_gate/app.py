@@ -42,13 +42,13 @@ async def lifespan(app):
     # (both read DATABASE_URL, see deployment/docker/docker-compose.
     # microservices.yml's shared x-common-env) — this is what lets
     # resolve_request() wake a signal-suspended run directly, converging
-    # onto the Phase-1 SignalBus instead of only Redis pub/sub.
+    # onto the Phase-1 SignalBusProtocol instead of only Redis pub/sub.
     import asyncpg
 
-    from substrate.infrastructure.runtime.pg_signal_bus import PostgresSignalBus
+    from substrate.infrastructure.runtime.signal_bus import SignalBus
 
     signal_pool = await asyncpg.create_pool(db_url.replace("+asyncpg", ""))
-    signal_bus = PostgresSignalBus(signal_pool)
+    signal_bus = SignalBus(signal_pool)
     await signal_bus.setup()
     app.state.signal_bus = signal_bus
     app.state.signal_pool = signal_pool

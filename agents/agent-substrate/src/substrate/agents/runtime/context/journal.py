@@ -1,4 +1,4 @@
-"""RunContext journaling mixin — effect-path allocation, EventLog append, effect cache.
+"""RunContext journaling mixin — effect-path allocation, EventLogProtocol append, effect cache.
 
 Split out of ``context/__init__.py`` (see that module's docstring for the full
 suspend/resume/replay contract this all serves). Everything here is
@@ -18,25 +18,25 @@ from substrate.kernel.runtime.effects import Effect, EffectResult
 from substrate.kernel.runtime.log_entry import RunLogEntry
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.log_entry import EventLog
+    from substrate.kernel.runtime.log_entry import EventLogProtocol
     from substrate.kernel.storage.blob import BlobStore
     from substrate.agents.runtime.effect_cache import EffectCache
 
 # Effect results serialized larger than this are offloaded to the BlobStore
-# and referenced by ``artifact_ref`` rather than inlined in the EventLog
+# and referenced by ``artifact_ref`` rather than inlined in the EventLogProtocol
 # entry — keeps large tool/LLM payloads out of the hot append-only log.
 _ARTIFACT_OFFLOAD_BYTES = 64 * 1024
 
 
 class _JournalMixin:
-    """Hierarchical effect-path allocation + EventLog/EffectCache journaling."""
+    """Hierarchical effect-path allocation + EventLogProtocol/EffectCache journaling."""
 
     if TYPE_CHECKING:
         run_id: str
         _path_stack: list[int]
         _effect_cache: EffectCache
         _blob_store: BlobStore | None
-        _event_log: EventLog
+        _event_log: EventLogProtocol
         _seq_cursor: int
 
     # ------------------------------------------------------------------
@@ -112,7 +112,7 @@ class _JournalMixin:
         self._seq_cursor = seq
 
     async def log_once(self, kind: str, payload: JsonObject | None = None) -> None:
-        """Journaled EventLog append — happens at most once across all replay
+        """Journaled EventLogProtocol append — happens at most once across all replay
         attempts, unlike plain ``_log`` (which appends unconditionally on
         every call).
 
@@ -137,7 +137,7 @@ class _JournalMixin:
         await self._record_effect(effect_id, "ok", {})
 
     # ------------------------------------------------------------------
-    # Effect cache — lookup/record against the EventLog (replaces Journal)
+    # Effect cache — lookup/record against the EventLogProtocol (replaces Journal)
     # ------------------------------------------------------------------
 
     def _lookup_effect(self, effect_id: str) -> EffectResult | None:
@@ -164,7 +164,7 @@ class _JournalMixin:
     async def _record_effect(
         self, effect_id: str, status: Literal["ok", "error"], value: JsonObject
     ) -> None:
-        """Append ``effect.result`` to the EventLog (durable, replay source of
+        """Append ``effect.result`` to the EventLogProtocol (durable, replay source of
         truth) and update the in-run cache.  Large values are offloaded to
         the BlobStore and referenced rather than inlined in the log entry."""
         payload: JsonObject = {"effect_id": effect_id, "status": status}

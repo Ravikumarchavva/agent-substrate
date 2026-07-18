@@ -449,7 +449,7 @@ async def test_spawn_inherits_execution_budget_transitively() -> None:
     fresh Supervision.root() — and this must hold transitively: a grandchild
     spawned by a child (which was itself spawned with a custom budget) sees
     that same budget too, proving the Worker actually rehydrates
-    RunMeta.supervision from Supervisor.supervision_of() at each lease, not
+    RunMeta.supervision from SupervisorProtocol.supervision_of() at each lease, not
     just at the moment of the original spawn() call."""
     from substrate.kernel.agent.supervision import ExecutionBudget, Supervision
 
@@ -588,7 +588,7 @@ async def test_log_once_does_not_duplicate_across_suspend_resume() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Scheduler.cancel_pending() — the gate Worker.cancel() relies on
+# SchedulerProtocol.cancel_pending() — the gate Worker.cancel() relies on
 # ---------------------------------------------------------------------------
 
 

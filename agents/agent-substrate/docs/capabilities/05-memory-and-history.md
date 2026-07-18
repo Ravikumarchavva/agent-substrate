@@ -27,9 +27,9 @@ flowchart TB
         RSS --> RD
     end
 
-    subgraph POSTGRES["PostgresMemoryStore (memory/postgres_memory_store.py)"]
+    subgraph POSTGRES["DurableMemoryStore (memory/durable_memory_store.py)"]
         direction TB
-        PMS["PostgresMemoryStore<br/>save(agent_id, content, metadata?, namespace?) → mem_id<br/>search(agent_id, query, limit) → list[dict] (FTS)<br/>delete(agent_id, mem_id) · create_tables()"]:::impl
+        PMS["DurableMemoryStore<br/>save(agent_id, content, metadata?, namespace?) → mem_id<br/>search(agent_id, query, limit) → list[dict] (FTS)<br/>delete(agent_id, mem_id) · create_tables()"]:::impl
         PG["PostgreSQL table agent_memories<br/>id · agent_name · content · metadata JSONB · namespace<br/>search_vec TSVECTOR (GIN index) · created_at"]:::store
         PMS --> PG
     end
@@ -62,14 +62,14 @@ await store.disconnect()
 | `update_state` | `HSET` + `EXPIRE` | Merges (patch, not replace) |
 | `clear` | `DEL` | Removes key entirely |
 
-### `PostgresMemoryStore`
+### `DurableMemoryStore`
 
 Long-term, searchable memory. Stored in an **`agent_memories`** table with a generated `tsvector` column for full-text search — no embeddings required.
 
 ```python
-from substrate.capabilities.memory import PostgresMemoryStore
+from substrate.capabilities.memory import DurableMemoryStore
 
-store = PostgresMemoryStore(database_url="postgresql+asyncpg://...")
+store = DurableMemoryStore(database_url="postgresql+asyncpg://...")
 async with store:
     mem_id = await store.save(agent_id, "User prefers Python over JavaScript")
     memories = await store.search(agent_id, "language preference", limit=5)
@@ -112,9 +112,9 @@ flowchart TB
         RHP --> RD
     end
 
-    subgraph PGHIST["PostgresHistoryProvider (history/postgres_history.py)"]
+    subgraph PGHIST["DurableHistoryProvider (history/durable_history.py)"]
         direction TB
-        PHP["PostgresHistoryProvider — SQLAlchemy 2 async<br/>append → upsert session + INSERT message<br/>get_messages → SELECT ORDER BY sequence<br/>session_id validated by regex at boundary"]:::impl
+        PHP["DurableHistoryProvider — SQLAlchemy 2 async<br/>append → upsert session + INSERT message<br/>get_messages → SELECT ORDER BY sequence<br/>session_id validated by regex at boundary"]:::impl
         PG["PostgreSQL — history_sessions (unique key, count)<br/>history_messages (sequence, payload JSONB, run_id)"]:::store
         PHP --> PG
     end
@@ -145,7 +145,7 @@ await provider.connect()
 # Pass to agent via context config
 ```
 
-### `PostgresHistoryProvider`
+### `DurableHistoryProvider`
 
 SQLAlchemy 2.0 async ORM. Two tables:
 
@@ -155,9 +155,9 @@ SQLAlchemy 2.0 async ORM. Two tables:
 All queries are fully parameterised — no raw SQL string interpolation. Raw `session_id` values are validated at the public boundary (regex check) before being composed into the internal `agent_type:agent_key:session_id` key.
 
 ```python
-from substrate.capabilities.history import PostgresHistoryProvider
+from substrate.capabilities.history import DurableHistoryProvider
 
-provider = PostgresHistoryProvider(
+provider = DurableHistoryProvider(
     database_url="postgresql+asyncpg://postgres:postgres@localhost/agentdb",
 )
 await provider.connect()
@@ -168,9 +168,9 @@ await provider.connect()
 | Need | Use |
 |---|---|
 | Fast, ephemeral session state | `RedisSessionStore` |
-| Durable long-term agent memory with search | `PostgresMemoryStore` |
+| Durable long-term agent memory with search | `DurableMemoryStore` |
 | Dev/testing (no infra) | `InMemoryHistoryProvider` |
-| Production chat history, restartable | `PostgresHistoryProvider` |
+| Production chat history, restartable | `DurableHistoryProvider` |
 | High-throughput, tolerate loss on restart | `RedisHistoryProvider` |
 
 ## Wiring

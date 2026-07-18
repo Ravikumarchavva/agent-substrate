@@ -1,4 +1,4 @@
-"""project_thread() — conversation history projected from the EventLog,
+"""project_thread() — conversation history projected from the EventLogProtocol,
 the single source of truth (replaces the old steps-table write path).
 
 Covers the crash-mid-run motivation directly: a thread's SECOND run (e.g.

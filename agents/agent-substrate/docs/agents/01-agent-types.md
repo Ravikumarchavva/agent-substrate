@@ -546,7 +546,7 @@ async def run(self, ctx: RunContext, inbox: list[Message]) -> None:
 ```
 
 The takeaway: producers `emit`, consumers `follow`, and the runtime's fan-out
-does the delivery — the same `Inbox` / `FollowGraph` contracts described in
+does the delivery — the same `InboxProtocol` / `FollowGraph` contracts described in
 [the runtime page](../kernel/07-runtime.md#pubsub-followgraph-fanoutstrategy).
 
 ---
@@ -589,22 +589,24 @@ serving code (monolith *and* the distributed path) builds agents the same way.
   `ReActAgent`. You still call `await runtime.register(agent)` yourself — the
   factory stays decoupled from the runtime so it's testable without live infra.
 
-- **`load_session_memory(...)`** — the cold-start helper. Given a `session_id`
-  and a `load_persisted_steps` callback, it checks whether a `HistoryProvider`
-  already has that session; on a **miss** it seeds the session from cold storage
-  (rebuilding `ChatMessage` turns from persisted step rows) and returns the
-  provider. This is how a conversation resumes after a restart without re-reading
-  everything every turn.
-
 - **`rebuild_messages_from_steps(...)`** — the lower-level converter that turns
   persisted step rows (`user_message`, `assistant_message`, `tool_result`, …)
-  back into the unified `ChatMessage` list the agent loop expects.
+  back into the unified `ChatMessage` list the agent loop expects. Used as the
+  `reseed` callback for `CachedHistoryProvider` (`capabilities/history/`) — the
+  cold-start mechanism: it wraps the shared, TTL'd Redis history and, on a
+  cache miss, reconstructs the transcript from whichever cold store exists
+  (the EventLog in the monolith, the `conversation` service over HTTP for the
+  `agent_runtime` microservice) via this exact function, then repopulates the
+  cache. This replaced an earlier side-channel helper
+  (`load_session_memory`, since removed) — the cold-start behavior is now a
+  property of the `HistoryProvider` itself, not a step every caller had to
+  remember to invoke.
 
 !!! tip "There's also `rebuild_agent(spec, ...)`"
     For full cold resume, `rebuild_agent` reconstructs a whole `ReActAgent` from
     the spec dict saved at submit time (`model`, `system_instructions`,
-    `tool_names`, `max_iterations`, `session_id`, …) — pairing with
-    `load_session_memory` to bring a crashed conversation fully back to life.
+    `tool_names`, `max_iterations`, `session_id`, …) — pairing with a
+    `CachedHistoryProvider` to bring a crashed conversation fully back to life.
 
 ---
 
@@ -618,7 +620,8 @@ serving code (monolith *and* the distributed path) builds agents the same way.
 | `InformationAgent` | `agents/core/information_agent.py` |
 | `PersonalFeedAgent` | `agents/core/personal_feed_agent.py` |
 | Shared helpers (`message_to_chat`, `load_history`, `persist_turns`, `final_text`, `deliver`, `summarize`) | `agents/core/_loop.py` |
-| `create_assistant_agent`, `load_session_memory`, `rebuild_messages_from_steps`, `rebuild_agent` | `agents/factory.py` |
+| `create_assistant_agent`, `rebuild_messages_from_steps`, `rebuild_agent` | `agents/factory.py` |
+| `CachedHistoryProvider` (cold-start cache-aside) | `capabilities/history/cached_history.py` |
 | `SpawnTracker`, `SpawnBudget` | `agents/supervision/budget.py`, `kernel/agent/supervision.py` |
 | `ExecutionTracker` (budget) | `agents/resources/budget.py` |
 | The `Agent` Protocol these implement | `kernel/runtime/agent.py` |

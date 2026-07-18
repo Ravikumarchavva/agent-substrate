@@ -1,10 +1,10 @@
 """human_gate service-layer tests — the signal_bus convergence added in
 Phase 2 of the remediation program (resolve_request() now fires a durable
-SignalBus signal alongside the legacy Redis pub/sub publish).
+SignalBusProtocol signal alongside the legacy Redis pub/sub publish).
 
 Uses the real Postgres test DB (skips if unreachable) — human_gate is
 SQLAlchemy-ORM-backed (its own hitl_requests table), separate from the
-asyncpg-based substrate_* tables PostgresSignalBus itself uses, but both point at
+asyncpg-based substrate_* tables SignalBus itself uses, but both point at
 the same physical database (see human_gate/app.py's lifespan docstring).
 """
 
@@ -59,10 +59,10 @@ async def db_session():
 async def signal_bus():
     import asyncpg
 
-    from substrate.infrastructure.runtime.pg_signal_bus import PostgresSignalBus
+    from substrate.infrastructure.runtime.signal_bus import SignalBus
 
     pool = await asyncpg.create_pool(_PG_URL.replace("+asyncpg", ""))
-    bus = PostgresSignalBus(pool)
+    bus = SignalBus(pool)
     await bus.setup()
     yield bus
     await pool.close()

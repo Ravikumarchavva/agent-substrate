@@ -1,4 +1,4 @@
-"""RunLogEntry and EventLog — the append-only durable spine of every run.
+"""RunLogEntry and EventLogProtocol — the append-only durable spine of every run.
 
 Named ``RunLogEntry`` (not ``RunEvent``) to avoid collision with
 ``kernel/events.py::Event`` (the generic pub/sub envelope — a different thing).
@@ -61,7 +61,7 @@ class RunLogEntry(BaseModel):
     model_config = {"frozen": True}
 
 
-class EventLog(Protocol):
+class EventLogProtocol(Protocol):
     """Append-only, ordered log of ``RunLogEntry`` objects per run.
 
     Implementations: in-memory (Stage 0), Postgres append-only table with
@@ -131,4 +131,4 @@ class EventLog(Protocol):
         ...
 
 
-__all__ = ["RunLogEntry", "EventLog"]
+__all__ = ["RunLogEntry", "EventLogProtocol"]

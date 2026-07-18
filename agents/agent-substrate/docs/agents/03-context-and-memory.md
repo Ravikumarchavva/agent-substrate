@@ -217,7 +217,7 @@ class InMemoryHistoryProvider:
 It implements the full Protocol: `append`, `append_many`, `get_messages` (with
 `limit` / `offset`), `clear`, `clear_run`, and `count_messages`. Its
 production counterparts in `capabilities/history/` — `RedisHistoryProvider`
-(fast, TTL'd) and `PostgresHistoryProvider` (durable, queryable) — obey the same
+(fast, TTL'd) and `DurableHistoryProvider` (durable, queryable) — obey the same
 contract, so swapping them in needs no agent-code change.
 
 ---

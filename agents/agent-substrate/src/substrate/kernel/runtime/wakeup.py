@@ -1,14 +1,14 @@
-"""Wakeup and SignalBus — what resumes a dormant run.
+"""Wakeup and SignalBusProtocol — what resumes a dormant run.
 
 A run in SUSPENDED state costs zero RAM and zero CPU.  It wakes when one of
 four things happens:
 
-    ``message``    — a message was delivered to its Inbox
+    ``message``    — a message was delivered to its InboxProtocol
     ``timer``      — a wall-clock deadline has passed (ctx.sleep_until)
-    ``signal``     — a named event was fired on the SignalBus
+    ``signal``     — a named event was fired on the SignalBusProtocol
     ``child_done`` — a spawned subagent reached a terminal state
 
-Wakeup is a sealed value object carried by the Scheduler from the event that
+Wakeup is a sealed value object carried by the SchedulerProtocol from the event that
 triggers it to the release call that records the next sleep.  It is also the
 payload of the ``run.suspended`` log entry so the cause of every suspension
 is replayable.
@@ -16,9 +16,9 @@ is replayable.
 Multiple wakeup sources coalescing
 -----------------------------------
 If a timer fires AND a message arrives while the run is suspended, the
-Scheduler coalesces them into a single wakeup and enqueues the run once —
+SchedulerProtocol coalesces them into a single wakeup and enqueues the run once —
 never twice.  The order of the combined triggers is unspecified; the agent
-drains its Inbox and checks timers/signals during the same wake-cycle.
+drains its InboxProtocol and checks timers/signals during the same wake-cycle.
 Implementations must honour this coalescing guarantee.
 """
 
@@ -61,7 +61,7 @@ class Wakeup(BaseModel):
     model_config = {"frozen": True}
 
 
-class SignalBus(Protocol):
+class SignalBusProtocol(Protocol):
     """Contract for sending named signals and timers to suspended runs.
 
     Signals are lightweight — they carry a small JSON payload and wake a
@@ -124,4 +124,4 @@ class SignalBus(Protocol):
         ...
 
 
-__all__ = ["Wakeup", "SignalBus"]
+__all__ = ["Wakeup", "SignalBusProtocol"]

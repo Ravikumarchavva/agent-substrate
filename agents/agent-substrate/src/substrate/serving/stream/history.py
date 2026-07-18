@@ -23,12 +23,12 @@ from substrate.serving.protocol.events import WireEvent
 from substrate.serving.protocol.from_log import wire_from_log
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.log_entry import EventLog
-    from substrate.kernel.runtime.scheduler import Scheduler
+    from substrate.kernel.runtime.log_entry import EventLogProtocol
+    from substrate.kernel.runtime.scheduler import SchedulerProtocol
 
 
 async def project_thread(
-    event_log: "EventLog", scheduler: "Scheduler", thread_id: str
+    event_log: "EventLogProtocol", scheduler: "SchedulerProtocol", thread_id: str
 ) -> list[WireEvent]:
     """Return the full conversation for ``thread_id`` as an ordered wire-event
     list — the canonical history read, used by the history endpoint and by
@@ -51,8 +51,8 @@ async def project_thread(
 
 
 async def _append_to_thread(
-    event_log: "EventLog",
-    scheduler: "Scheduler",
+    event_log: "EventLogProtocol",
+    scheduler: "SchedulerProtocol",
     thread_id: str,
     kind: str,
     payload: dict[str, Any],
@@ -88,8 +88,8 @@ async def _append_to_thread(
 
 
 async def append_mcp_app_context(
-    event_log: "EventLog",
-    scheduler: "Scheduler",
+    event_log: "EventLogProtocol",
+    scheduler: "SchedulerProtocol",
     thread_id: str,
     payload: dict[str, Any],
 ) -> None:
@@ -102,7 +102,10 @@ async def append_mcp_app_context(
 
 
 async def append_user_message(
-    event_log: "EventLog", scheduler: "Scheduler", thread_id: str, text: str
+    event_log: "EventLogProtocol",
+    scheduler: "SchedulerProtocol",
+    thread_id: str,
+    text: str,
 ) -> bool:
     """Log an out-of-band user message to the thread's run (e.g. feedback
     added to a scheduled task between its runs, for lookback context on the

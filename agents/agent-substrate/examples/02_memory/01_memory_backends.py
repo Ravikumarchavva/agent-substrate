@@ -1,9 +1,15 @@
 """Example 2-1: Memory Backends — raw history operations across all three storage tiers.
 
+DurableHistoryProvider (Postgres) is the real default — conversation history
+that survives a restart. RedisHistoryProvider is a faster, TTL'd cache in
+front of that same durable store, not an alternative to it.
+InMemoryHistoryProvider only exists for tests and local scratch runs; it's
+the one non-durable exception, which is why its name says so.
+
 Demonstrates using:
-  - InMemoryHistoryProvider
-  - RedisHistoryProvider
-  - PostgresHistoryProvider
+  - InMemoryHistoryProvider (non-durable — tests / local dev only)
+  - RedisHistoryProvider (TTL'd hot-path cache, backed by the durable store)
+  - DurableHistoryProvider (Postgres — the default, durable source of truth)
 """
 
 from __future__ import annotations
@@ -12,7 +18,7 @@ import asyncio
 import os
 
 from substrate.agents.context import InMemoryHistoryProvider
-from substrate.capabilities.history import RedisHistoryProvider, PostgresHistoryProvider
+from substrate.capabilities.history import RedisHistoryProvider, DurableHistoryProvider
 from substrate.kernel.core.content import ChatMessage, Role, TextBlock
 from substrate.kernel.core.identity import AgentId
 
@@ -28,8 +34,9 @@ async def main() -> None:
     session_id = "demo-session"
     run_id = "run-123"
 
-    # 1. InMemoryHistoryProvider (no infra needed)
-    print("=== 1. InMemoryHistoryProvider (in-memory) ===")
+    # 1. InMemoryHistoryProvider — non-durable, no infra needed. The exception,
+    # not the default: use this only for tests and local scratch runs.
+    print("=== 1. InMemoryHistoryProvider (non-durable, testing only) ===")
     mem = InMemoryHistoryProvider()
     await mem.append(
         agent_id,
@@ -49,8 +56,9 @@ async def main() -> None:
     for m in msgs:
         print(f"    [{m.role}]: {[b.text for b in m.content if isinstance(b, TextBlock)]}")
 
-    # 2. RedisHistoryProvider (Hot Tier / TTL-based history)
-    print("\n=== 2. RedisHistoryProvider (requires Redis) ===")
+    # 2. RedisHistoryProvider — TTL'd cache in front of the durable store,
+    # for hot-path reads. Not durable on its own; entries expire.
+    print("\n=== 2. RedisHistoryProvider (TTL cache, requires Redis) ===")
     try:
         redis_provider = RedisHistoryProvider(redis_url=REDIS_URL, ttl=3600)
         await redis_provider.connect()
@@ -78,10 +86,11 @@ async def main() -> None:
     except Exception as exc:
         print(f"  [SKIP] Redis unavailable: {exc}")
 
-    # 3. PostgresHistoryProvider (Cold Tier / Durable Checkpointing)
-    print("\n=== 3. PostgresHistoryProvider (requires PostgreSQL) ===")
+    # 3. DurableHistoryProvider — the default in production. Postgres-backed,
+    # survives a restart; this is the source of truth the Redis cache reads through.
+    print("\n=== 3. DurableHistoryProvider (durable default, requires PostgreSQL) ===")
     try:
-        pg_provider = PostgresHistoryProvider(database_url=DB_URL)
+        pg_provider = DurableHistoryProvider(database_url=DB_URL)
         await pg_provider.connect()
         await pg_provider.append(
             agent_id,

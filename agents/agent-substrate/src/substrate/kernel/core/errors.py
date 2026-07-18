@@ -23,14 +23,14 @@ class AgentCrashError(KernelError):
 
     The Worker catches this, journals ``run.failed``, and (per retry policy)
     re-enqueues the run. Resume is a fresh lease: any worker folds a new
-    ``EffectCache`` from the EventLog (``fold(entries from seq=0)`` — see
+    ``EffectCache`` from the EventLogProtocol (``fold(entries from seq=0)`` — see
     ``kernel/runtime/log_entry.py``) and calls ``agent.run()`` again from the
     top; every already-completed effect replays as a cache hit. There is no
-    separate checkpoint/snapshot mechanism — the EventLog fold is the sole
+    separate checkpoint/snapshot mechanism — the EventLogProtocol fold is the sole
     source of truth.
 
     ``run_id`` and ``agent_id`` identify which run/agent failed so the
-    resuming worker knows which EventLog to fold.
+    resuming worker knows which EventLogProtocol to fold.
     """
 
     def __init__(
@@ -50,7 +50,7 @@ class PermanentError(KernelError):
 
     The Worker's failure handler treats this (along with
     ``MiddlewareTermination`` and ``BudgetExhaustedError``, which are always
-    permanent) as a signal to skip the Scheduler's retry policy entirely and
+    permanent) as a signal to skip the SchedulerProtocol's retry policy entirely and
     terminal-fail the run on the first attempt. Any other exception defaults
     to retryable — the framework can't safely assume an unclassified error is
     permanent, so it errs toward retrying (see ``RunRetryPolicy``).
@@ -107,7 +107,7 @@ class SuspendInterrupt(BaseException):
 
     ``wakeup`` (a ``kernel.runtime.wakeup.Wakeup``, referenced under
     ``TYPE_CHECKING`` to avoid a kernel/core -> kernel/runtime import cycle)
-    is what the Worker passes to ``Scheduler.release(status=SUSPENDED,
+    is what the Worker passes to ``SchedulerProtocol.release(status=SUSPENDED,
     wake_on=wakeup)`` — it's how the raiser (``RunContext``) tells the
     catcher (``Worker``) what should wake this run back up.
     """
@@ -120,7 +120,7 @@ class SuspendInterrupt(BaseException):
 
 
 class ConcurrentAppendError(KernelError):
-    """Raised by ``EventLog.append`` when optimistic concurrency fails.
+    """Raised by ``EventLogProtocol.append`` when optimistic concurrency fails.
 
     Two workers tried to write to the same run simultaneously.  The caller
     must reload the current ``last_seq`` and retry with the correct value.
@@ -145,7 +145,7 @@ class ConcurrentAppendError(KernelError):
 
 
 class ThreadBusyError(KernelError):
-    """Raised by ``Scheduler.enqueue`` when ``thread_id`` already has an
+    """Raised by ``SchedulerProtocol.enqueue`` when ``thread_id`` already has an
     active (PENDING/RUNNING/SUSPENDED) run.
 
     Durable, cross-replica single-flight: unlike a per-process

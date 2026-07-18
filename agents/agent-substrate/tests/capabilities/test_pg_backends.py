@@ -46,16 +46,16 @@ async def pg_pool():
 
 
 # ---------------------------------------------------------------------------
-# PostgresEventLog
+# EventLog
 # ---------------------------------------------------------------------------
 
 
 async def test_pg_event_log_append_and_read(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresEventLog
+    from substrate.infrastructure.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
     from substrate.kernel.runtime.ids import new_run_id
 
-    log = PostgresEventLog(pg_pool)
+    log = EventLog(pg_pool)
     await log.setup()
 
     run_id = new_run_id()
@@ -70,12 +70,12 @@ async def test_pg_event_log_append_and_read(pg_pool) -> None:
 
 
 async def test_pg_event_log_occ_raises(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresEventLog
+    from substrate.infrastructure.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
     from substrate.kernel.core.errors import ConcurrentAppendError
     from substrate.kernel.runtime.ids import new_run_id
 
-    log = PostgresEventLog(pg_pool)
+    log = EventLog(pg_pool)
     await log.setup()
 
     run_id = new_run_id()
@@ -88,11 +88,11 @@ async def test_pg_event_log_occ_raises(pg_pool) -> None:
 
 
 async def test_pg_event_log_last_seq(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresEventLog
+    from substrate.infrastructure.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
     from substrate.kernel.runtime.ids import new_run_id
 
-    log = PostgresEventLog(pg_pool)
+    log = EventLog(pg_pool)
     await log.setup()
 
     run_id = new_run_id()
@@ -104,11 +104,11 @@ async def test_pg_event_log_last_seq(pg_pool) -> None:
 
 
 async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresEventLog
+    from substrate.infrastructure.runtime import EventLog
     from substrate.kernel.runtime.log_entry import RunLogEntry
     from substrate.kernel.runtime.ids import new_run_id
 
-    log = PostgresEventLog(pg_pool)
+    log = EventLog(pg_pool)
     await log.setup()
 
     run_id = new_run_id()
@@ -129,19 +129,19 @@ async def test_pg_event_log_tail_yields_existing(pg_pool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PostgresInbox
+# Inbox
 # ---------------------------------------------------------------------------
 
 
 async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresInbox
+    from substrate.infrastructure.runtime import Inbox
     from substrate.kernel.core.identity import AgentId
     from substrate.kernel.messaging.message import Message
     from substrate.kernel.core.content import TextBlock
     from substrate.kernel.core.content import ChatMessage, Role
     from substrate.kernel.messaging.message import ChatPayload
 
-    inbox = PostgresInbox(pg_pool)
+    inbox = Inbox(pg_pool)
     await inbox.setup()
 
     agent_id = AgentId(type="agent", key=f"test-inbox-agent-{id(object())}")
@@ -167,14 +167,14 @@ async def test_pg_inbox_deliver_and_drain(pg_pool) -> None:
 
 
 async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresInbox
+    from substrate.infrastructure.runtime import Inbox
     from substrate.kernel.core.identity import AgentId
     from substrate.kernel.messaging.message import Message
     from substrate.kernel.core.content import TextBlock
     from substrate.kernel.core.content import ChatMessage, Role
     from substrate.kernel.messaging.message import ChatPayload
 
-    inbox = PostgresInbox(pg_pool, max_retries=2)
+    inbox = Inbox(pg_pool, max_retries=2)
     await inbox.setup()
 
     agent_id = AgentId(type="agent", key=f"test-nack-agent-{id(object())}")
@@ -197,16 +197,16 @@ async def test_pg_inbox_nack_dead_letters(pg_pool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PostgresScheduler
+# Scheduler
 # ---------------------------------------------------------------------------
 
 
 async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresScheduler
+    from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
     from substrate.kernel.core.identity import AgentId
 
-    sched = PostgresScheduler(pg_pool)
+    sched = Scheduler(pg_pool)
     await sched.setup()
 
     run_id = new_run_id()
@@ -223,11 +223,11 @@ async def test_pg_scheduler_enqueue_and_lease(pg_pool) -> None:
 
 
 async def test_pg_scheduler_coalescing(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresScheduler
+    from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id
     from substrate.kernel.core.identity import AgentId
 
-    sched = PostgresScheduler(pg_pool)
+    sched = Scheduler(pg_pool)
     await sched.setup()
 
     run_id = new_run_id()
@@ -242,11 +242,11 @@ async def test_pg_scheduler_coalescing(pg_pool) -> None:
 
 
 async def test_pg_scheduler_release_completed(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresScheduler
+    from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
     from substrate.kernel.core.identity import AgentId
 
-    sched = PostgresScheduler(pg_pool)
+    sched = Scheduler(pg_pool)
     await sched.setup()
 
     run_id = new_run_id()
@@ -355,11 +355,11 @@ async def test_pg_task_store_add_and_delete() -> None:
 
 
 async def test_pg_scheduler_find_run_for_agent(pg_pool) -> None:
-    from substrate.infrastructure.runtime import PostgresScheduler
+    from substrate.infrastructure.runtime import Scheduler
     from substrate.kernel.runtime.ids import new_run_id, RunStatus
     from substrate.kernel.core.identity import AgentId
 
-    sched = PostgresScheduler(pg_pool)
+    sched = Scheduler(pg_pool)
     await sched.setup()
 
     agent_id = AgentId(type="agent", key="find-agent-test")

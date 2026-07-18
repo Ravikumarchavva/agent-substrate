@@ -1,9 +1,11 @@
-# Human-in-the-Loop — Three Mechanisms, One Intended Direction
+# Human-in-the-Loop — Three Mechanisms, Converging
 
-There are currently **three different HITL implementations** in this codebase.
-Only one (`ask_human`, monolith) is "dead suspend" (zero compute while
-waiting). The other two are historical and should eventually converge on the
-same signal-based pattern — see [`roadmap.md`](../roadmap.md) P1/P2.
+There are **three HITL implementations** in this codebase. Two — `ask_human`
+and tool approval, both monolith — are now "dead suspend" (zero compute
+while waiting, durable across a process restart) on the identical
+`ctx.sleep_until_signal()` path. The third (`human_gate`, microservices) has
+converged on the same wire signal but isn't fully wired to a live tool yet —
+see [`roadmap.md`](../roadmap.md).
 
 ## 1. `ask_human` — signal-based, monolith (the target pattern)
 
@@ -46,17 +48,29 @@ reconstructs cards from `tool_result` rows using `_card`, never from
 **Skip is always offered** — the frontend always renders a Skip button
 regardless of what the agent requested; the agent doesn't get to suppress it.
 
-## 2. Tool approval — Future-based, monolith (not yet migrated)
+## 2. Tool approval — signal-based, monolith (migrated)
 
-**Where:** `WebHITLBridge._handle_approval()`, `ToolApprovalHandler`.
+**Where:** `agents/tools/invoker.py` (`ToolInvoker._invoke_inner`'s approval
+branch), `serving/monolith/sse/approval.py` (`SSEApprovalHandler`).
 
-Still uses `asyncio.Future` + `_request_and_wait()` — the agent's Task stays
-alive (not truly suspended) while blocked on the Future. This is the same
-flaw `ask_human` had before the signal-based migration. Three tools are
-explicitly marked as needing this migration via `# TODO: L4-hitl` comments:
-`capabilities/tools/web/surfer.py`, `capabilities/tools/code_interpreter/tool.py`,
-`capabilities/tools/code_interpreter/code_interpreter/k8s_tool.py` (all
-`risk = "critical"` or `"sensitive"`).
+Mirrors `ask_human` exactly: `ToolInvoker` checks
+`getattr(self._approval, "suspends_via_signal", False)` — `SSEApprovalHandler`
+sets this marker whenever its `WebHITLBridge` has a real `signal_bus`. When
+set, `ToolInvoker` logs `approval.requested` (`ctx.log_once`, replay-stable
+`request_id` via `ctx.uuid()`) and suspends via
+`ctx.sleep_until_signal(f"hitl:{request_id}")` — the identical signal
+namespace `ask_human` uses, so `WebHITLBridge.register_signal_request()`/
+`resolve()`/`cancel_signal_requests()` needed zero new methods. A Future-based
+`request()` fallback still exists on `SSEApprovalHandler` for a handler
+constructed without a `signal_bus` (tests, or a deliberately non-durable
+setup) — the normal path never calls it.
+
+All three risk-gated tools that used to carry a `# TODO: L4-hitl` marker
+(`capabilities/tools/web/surfer.py`, `capabilities/tools/code_interpreter/
+tool.py`, `capabilities/tools/code_interpreter/code_interpreter/k8s_tool.py`)
+needed no code changes themselves — the durability fix lives entirely in the
+invoker/bridge layer, so any tool declaring `risk = "critical"`/`"sensitive"`
+gets the durable gate automatically. Markers removed.
 
 ## 3. `human_gate` microservice — Postgres + Redis pub/sub, now signal-converged
 
@@ -90,6 +104,7 @@ don't assume a working end-to-end HITL flow through `agent_runtime`.
   `suspends = True`, log `input.requested`-equivalent, `ctx.sleep_until_signal()`.
   Don't add a fourth Future-based mechanism.
 - **Anything that needs approval before executing (not asking a question):**
-  currently still Future-based (#2 above) until that migration happens.
+  declare the tool's real `risk` tier — `ToolInvoker` gates it durably via
+  the signal path automatically (#2 above). No per-tool wiring needed.
 - **Microservices:** use `human_gate`, not the monolith bridge — they're not
   interchangeable.

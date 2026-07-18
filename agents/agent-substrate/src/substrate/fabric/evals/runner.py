@@ -132,7 +132,7 @@ class EvalRunner:
         trace = _Trace()
         try:
             run_id = await rt.submit(self._agent.id, msg)
-            # Poll consume() rather than block: SignalBus is consume-based
+            # Poll consume() rather than block: SignalBusProtocol is consume-based
             # (matches the durable backend, which has no way to "block" on a
             # DB row). sentinel_run_id is a synthetic mailbox key for this
             # external harness, not a real tracked run, so a fixed effect_id

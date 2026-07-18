@@ -194,7 +194,7 @@ const HISTORY = [
      {name:"ttl", label:"TTL (seconds)", type:"int", default:"3600"},
      {name:"max_messages", label:"MAX MESSAGES", type:"int", default:"200"},
    ]},
-  {id:"postgres", n:"PostgresHistoryProvider", cls:"PostgresHistoryProvider", import:"substrate.capabilities.history",
+  {id:"postgres", n:"DurableHistoryProvider", cls:"DurableHistoryProvider", import:"substrate.capabilities.history",
    desc:"Durable, survives restarts.", needsConnect:true,
    fields:[
      {name:"database_url", label:"DATABASE URL", type:"str", positional:true, default:"postgresql+asyncpg://user:pass@localhost/db"},

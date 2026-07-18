@@ -2,7 +2,7 @@
 
 The proxy receives messages FROM other agents (HITL clarification requests)
 and suspends via ``ctx.sleep_until_signal`` until a human provides input
-(delivered via the HTTP layer → ``SignalBus.signal()``).
+(delivered via the HTTP layer → ``SignalBusProtocol.signal()``).
 
 External callers that want to START a task should submit a Message directly
 to a ``ReActAgent`` via ``Runtime.submit()``.
@@ -28,7 +28,7 @@ class UserProxyAgent:
 
     The serving layer is responsible for:
     1. Surfacing the question to the human (via SSE or notification).
-    2. Calling ``SignalBus.signal(run_id, "human_reply:<cid>", {text: ...})``
+    2. Calling ``SignalBusProtocol.signal(run_id, "human_reply:<cid>", {text: ...})``
        when the human replies.
 
     Parameters

@@ -27,7 +27,7 @@ implement a kernel Protocol and be swapped without touching `agents/`,
 `capabilities/`, or `fabric/`. This is what makes the Stage 0 → Stage 1 → Stage 2
 runtime migration (see [`runtime-stages.md`](runtime-stages.md)) possible without
 a rewrite — the `Agent.run(ctx, inbox)` contract and all the runtime Protocols
-(`EventLog`, `Inbox`, `Scheduler`, `SignalBus`, ...) don't change; only what's
+(`EventLogProtocol`, `InboxProtocol`, `SchedulerProtocol`, `SignalBusProtocol`, ...) don't change; only what's
 injected behind them does.
 
 Kernel invariants are enforced by `tests/architecture/test_kernel_invariants.py`:

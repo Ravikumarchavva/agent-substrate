@@ -1,4 +1,4 @@
-"""Scheduler retry semantics: re-execution, backoff, and classification.
+"""SchedulerProtocol retry semantics: re-execution, backoff, and classification.
 
 Covers the fix for a real bug: a journaled error effect used to be
 rehydrated by EffectCache.fold() and re-raised from cache on every replay,
@@ -37,7 +37,7 @@ async def _run_to_terminal(rt: Runtime, run_id: str) -> str:
     async for entry in rt.event_log.tail(run_id):
         if entry.kind in ("run.completed", "run.failed", "run.cancelled"):
             return entry.kind
-    raise AssertionError("run never reached a terminal EventLog entry")
+    raise AssertionError("run never reached a terminal EventLogProtocol entry")
 
 
 class _FlakyAgent:
@@ -195,7 +195,7 @@ async def test_fold_error_then_success_at_same_effect_id_ends_up_cached() -> Non
 
 
 async def test_retry_and_suspension_are_reflected_in_otel_counters() -> None:
-    """The Scheduler backends emit substrate.runtime.retries/.suspensions
+    """The SchedulerProtocol backends emit substrate.runtime.retries/.suspensions
     counters (see infrastructure/observability/runtime_metrics.py) — this is
     the only place they're exercised end-to-end. Uses a temporary
     MeterProvider with InMemoryMetricReader so it doesn't depend on (or

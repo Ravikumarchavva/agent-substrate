@@ -1,12 +1,12 @@
-"""Scheduler — work-queue, leasing, and admission control.
+"""SchedulerProtocol — work-queue, leasing, and admission control.
 
-The Scheduler is the coordination layer between the durable stores (EventLog,
-Inbox) and the stateless Workers.  It knows *which* runs need attention and
+The SchedulerProtocol is the coordination layer between the durable stores (EventLogProtocol,
+InboxProtocol) and the stateless Workers.  It knows *which* runs need attention and
 *which* workers should handle them — but it never runs agent logic itself.
 
 Responsibilities
 ----------------
-- Accept enqueue requests (from Inbox delivery, timer fires, signal fires,
+- Accept enqueue requests (from InboxProtocol delivery, timer fires, signal fires,
   child completions).
 - Issue leases to workers that poll for work.
 - Track heartbeats and reclaim leases from dead workers.
@@ -16,20 +16,20 @@ Responsibilities
 Coalescing guarantee
 --------------------
 If a timer fires AND a message arrives while a run is already in the pending
-queue (or active), the Scheduler does NOT create a second queue entry.  It
+queue (or active), the SchedulerProtocol does NOT create a second queue entry.  It
 merges the new wakeup trigger into the existing pending entry.  Workers receive
 a run at most once per wake-cycle regardless of how many sources fired.
 
 Dead-run retry policy
 ---------------------
-When a worker releases a run with status=FAILED, the Scheduler consults
+When a worker releases a run with status=FAILED, the SchedulerProtocol consults
 ``RunRetryPolicy`` to decide whether to re-enqueue, move to dead-run, or
 escalate.  The policy is passed at enqueue time and stored with the queue
 entry.
 
 Three-tier topology role
 ------------------------
-Scheduler sits between Gateway (enqueues) and Workers (lease).  It is the
+SchedulerProtocol sits between Gateway (enqueues) and Workers (lease).  It is the
 valve that prevents a viral agent from melting the cluster — per-tenant quotas
 and backpressure live here, not in the Gateway or Workers.
 """
@@ -73,7 +73,7 @@ class RunRetryPolicy(BaseModel):
 class Lease(BaseModel):
     """A time-limited grant for a worker to process a specific run.
 
-    When a lease expires (worker crashed / timed out), the Scheduler
+    When a lease expires (worker crashed / timed out), the SchedulerProtocol
     reclaims it and re-enqueues the run for another worker to pick up.
     Workers must call ``heartbeat`` periodically to renew their lease.
     """
@@ -88,7 +88,7 @@ class Lease(BaseModel):
     model_config = {"frozen": True}
 
 
-class Scheduler(Protocol):
+class SchedulerProtocol(Protocol):
     """Work-queue, leasing, and admission control for durable runs.
 
     Implementations: single-process asyncio priority queue (Stage 0),
@@ -128,8 +128,8 @@ class Scheduler(Protocol):
         the worker when it drains the wakeup reason).
         ``deadline`` (``datetime | None``) is an optional hard wall-clock
         cutoff for this run — a coarser circuit breaker than any single
-        ``ctx.ask``/``ctx.join`` timeout, enforced durably by the Scheduler
-        itself (see ``PostgresScheduler.lease``/``heartbeat``) so a run stuck
+        ``ctx.ask``/``ctx.join`` timeout, enforced durably by the SchedulerProtocol
+        itself (see ``Scheduler.lease``/``heartbeat``) so a run stuck
         pending or suspended past its deadline terminates even with no
         parent waiting on it.
         ``thread_id`` (optional) tags this run as owned by a conversation
@@ -163,10 +163,10 @@ class Scheduler(Protocol):
         """Renew the expiry on ``lease`` to prove the worker is still alive.
 
         Workers must call this at least once per (``expires_at`` − now) / 2
-        interval.  A missing heartbeat causes the Scheduler to reclaim the
+        interval.  A missing heartbeat causes the SchedulerProtocol to reclaim the
         lease and re-enqueue the run.
 
-        Returns ``True`` if a durable cancel (``Supervisor.cancel``) or a
+        Returns ``True`` if a durable cancel (``SupervisorProtocol.cancel``) or a
         deadline has been observed for this run since the last heartbeat.
         The Worker cancels the run's local ``CancellationToken`` in
         response, which ``ctx.check()`` picks up cooperatively — this is
@@ -201,7 +201,7 @@ class Scheduler(Protocol):
 
         Returns ``True`` if the run actually reached a terminal state
         (COMPLETED, CANCELLED, or a non-retried/exhausted FAILED) — the
-        Worker only calls ``Supervisor.finish_run()`` when this is ``True``.
+        Worker only calls ``SupervisorProtocol.finish_run()`` when this is ``True``.
         Returns ``False`` for SUSPENDED and for a FAILED release that the
         retry policy turned into a fresh (backed-off) pending attempt: the
         run isn't actually done, so a parent watching it via ``ctx.ask``/
@@ -251,7 +251,7 @@ class Scheduler(Protocol):
         durable multi-replica backend it may be actively leased elsewhere.
         Forcibly terminalizing it locally in that case would race the owning
         worker's own eventual completion. Cross-replica cancellation of a
-        genuinely RUNNING run goes through ``Supervisor.cancel()``'s durable
+        genuinely RUNNING run goes through ``SupervisorProtocol.cancel()``'s durable
         ``cancel_requested`` flag instead (observed by that worker's own
         heartbeat), not through this method.
         """
@@ -288,7 +288,7 @@ class Scheduler(Protocol):
         """Return ``(run_id, status)`` for any active run tagged with ``thread_id``.
 
         Returns ``None`` when no PENDING, RUNNING, or SUSPENDED run is tagged
-        with this thread. ``thread_id`` is set via ``Scheduler.enqueue(...,
+        with this thread. ``thread_id`` is set via ``SchedulerProtocol.enqueue(...,
         thread_id=...)`` and enforced unique-while-active by a partial index
         on the durable backend — this is what makes "one non-terminal run per
         thread" a real, cross-replica-safe constraint (a DB unique-violation
@@ -303,8 +303,8 @@ class Scheduler(Protocol):
 
         Unlike ``find_run_for_thread`` (the single *active* run, used for
         cancel/single-flight), this is the full history — the basis for
-        projecting a thread's conversation from the EventLog: concatenate
-        each returned run's ``EventLog.read()`` in this order and the result
+        projecting a thread's conversation from the EventLogProtocol: concatenate
+        each returned run's ``EventLogProtocol.read()`` in this order and the result
         is the complete, chronological turn-by-turn record.
         """
         ...
@@ -318,4 +318,4 @@ class Scheduler(Protocol):
         ...
 
 
-__all__ = ["RunRetryPolicy", "Lease", "Scheduler"]
+__all__ = ["RunRetryPolicy", "Lease", "SchedulerProtocol"]

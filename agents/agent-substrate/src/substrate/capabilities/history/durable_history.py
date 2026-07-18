@@ -1,4 +1,4 @@
-"""PostgresHistoryProvider — PostgreSQL-backed durable conversation history.
+"""DurableHistoryProvider — PostgreSQL-backed durable conversation history.
 
 Durable, queryable persistence for session messages using SQLAlchemy 2.0 async ORM.
 
@@ -172,11 +172,11 @@ class HistoryMessage(HistoryBase):
 
 
 # ---------------------------------------------------------------------------
-# PostgresHistoryProvider
+# DurableHistoryProvider
 # ---------------------------------------------------------------------------
 
 
-class PostgresHistoryProvider:
+class DurableHistoryProvider:
     """Async PostgreSQL-backed history provider.
 
     Parameters:
@@ -210,19 +210,19 @@ class PostgresHistoryProvider:
         )
         async with self._engine.begin() as conn:
             await conn.run_sync(HistoryBase.metadata.create_all)
-        logger.info("PostgresHistoryProvider connected and tables ensured")
+        logger.info("DurableHistoryProvider connected and tables ensured")
 
     async def disconnect(self) -> None:
         if self._engine is not None:
             await self._engine.dispose()
             self._engine = None
             self._session_factory = None
-            logger.info("PostgresHistoryProvider disconnected")
+            logger.info("DurableHistoryProvider disconnected")
 
     def _get_session(self) -> async_sessionmaker[AsyncSession]:
         if self._session_factory is None:
             raise RuntimeError(
-                "PostgresHistoryProvider not connected. Call await connect() first."
+                "DurableHistoryProvider not connected. Call await connect() first."
             )
         return self._session_factory
 

@@ -111,7 +111,7 @@ async def chat(
 
     # 2. Single-flight: only one active stream per thread at a time.
     # Durable and cross-replica: a unique partial index on substrate_run_queue
-    # (see PostgresScheduler) is the actual enforcement, at Runtime.submit()
+    # (see Scheduler) is the actual enforcement, at Runtime.submit()
     # time — this is a cheap pre-check so the common case still gets a clean
     # 409 before the (comparatively expensive) agent build below runs, same
     # as the old per-process asyncio.Lock did. Unlike that lock, this holds
@@ -312,7 +312,7 @@ async def chat(
         )
         await hooks.fire_message(hook_ctx, user_content)
         # The user's turn is durably logged inside the run itself
-        # (ReActAgent's log_user_message -> user.message EventLog entry,
+        # (ReActAgent's log_user_message -> user.message EventLogProtocol entry,
         # including display_content/attachments via Message.metadata below)
         # — no separate steps-table write here anymore.
         await db.commit()
@@ -429,7 +429,7 @@ async def stream_thread(
 
     A still-pending HITL card is NOT re-sent here — GET /hitl/status/{id}
     (called on page load, see substrate-ui's loadMessages) already restores that
-    from the EventLog. This endpoint picks up from whatever's already known
+    from the EventLogProtocol. This endpoint picks up from whatever's already known
     (``last_seq`` at connect time) onward, so the two are complementary, not
     duplicative.
     """

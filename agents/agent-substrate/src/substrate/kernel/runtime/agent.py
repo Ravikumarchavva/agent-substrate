@@ -6,7 +6,7 @@ that the runtime calls each time the agent wakes.
 
 ``Agent.run(ctx, inbox)`` receives a batch of messages and an execution
 context that wires in the runtime's durability machinery.  The runtime calls
-``run`` each time the agent wakes from SUSPENDED, after folding the EventLog
+``run`` each time the agent wakes from SUSPENDED, after folding the EventLogProtocol
 to reconstruct state.
 
 The author writes normal async code.  Durability is transparent:
@@ -24,7 +24,7 @@ the email isn't re-sent.
 AgentRunContext (kernel-visible slice)
 --------------------------------------
 The full ``RunContext`` lives at L1 (agents/) — it composes the EffectCache,
-EventLog, Supervisor, and capability clients.  The kernel only sees the minimal
+EventLogProtocol, SupervisorProtocol, and capability clients.  The kernel only sees the minimal
 slice it needs to define the contract: ``run_id``, ``tenant_id``, ``check()``.
 The author's actual ctx at runtime IS a ``RunContext`` (L1) and has all the
 journaled methods (ctx.llm, ctx.tool, ctx.spawn, ctx.join, etc.).
@@ -79,11 +79,11 @@ narrower, richer ctx) is expected — not the other way around."""
 class Agent(Protocol[CtxT]):
     """Contract every agent must satisfy.
 
-    ``id`` — stable routing identity; used by the Inbox and Scheduler to
+    ``id`` — stable routing identity; used by the InboxProtocol and SchedulerProtocol to
     address this agent.
 
     ``run`` — the entry point called each time the agent wakes from SUSPENDED.
-    ``inbox`` is the batch of messages drained from the Inbox for this wake
+    ``inbox`` is the batch of messages drained from the InboxProtocol for this wake
     cycle (may be empty if the wakeup was a timer or signal).
 
     The agent author's body is a normal async coroutine.  It may:
@@ -95,8 +95,8 @@ class Agent(Protocol[CtxT]):
     - Call ``ctx.check()`` at cooperative cancellation points
 
     The function returns ``None`` — the final output (if any) is written to the
-    EventLog as the ``run.completed`` entry and surfaced as ``RunResult.output``
-    to the parent or the caller of ``Supervisor.join``.
+    EventLogProtocol as the ``run.completed`` entry and surfaced as ``RunResult.output``
+    to the parent or the caller of ``SupervisorProtocol.join``.
 
     ``isinstance(x, Agent)`` (bare, unparametrized) still works —
     ``runtime_checkable`` Protocol checks are structural on member names and

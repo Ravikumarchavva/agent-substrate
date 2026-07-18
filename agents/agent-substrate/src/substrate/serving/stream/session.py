@@ -3,7 +3,7 @@
 This is the single place that orchestrates a streaming chat run:
 
   * registers the agent with the Runtime and submits the entry Message,
-  * tails the run's EventLog, turning each entry into a WireEvent via
+  * tails the run's EventLogProtocol, turning each entry into a WireEvent via
     ``protocol.wire_from_log`` (a log entry *is* a wire event — no mapping),
   * merges out-of-band HITL / task-board events from the thread's
     ``WebHITLBridge``,
@@ -15,7 +15,7 @@ and stream ``session.events()`` as SSE.  All the concurrency lives here.
 
 There is no inline persistence here anymore: the agent itself durably logs
 its own conversation (``ReActAgent``'s ``log_user_message``/journaled
-``ctx.llm()``/``ctx.tool()`` calls) straight to the EventLog, the single
+``ctx.llm()``/``ctx.tool()`` calls) straight to the EventLogProtocol, the single
 source of truth for conversation history (see
 ``serving/stream/history.py::project_thread()``). This session's only
 remaining job is relaying that same log, live, to one SSE connection — a
@@ -49,6 +49,7 @@ from substrate.serving.monolith.sse.bridge import (
     bridge_event_to_wire,
 )
 from substrate.serving.protocol import (
+    ApprovalRequestedEvent,
     HelloEvent,
     InputRequestedEvent,
     RunCancelledEvent,
@@ -106,7 +107,7 @@ class AgentStreamSession:
     # -- workers --------------------------------------------------------------
 
     async def _agent_worker(self) -> str:
-        """Register agent, submit message, tail EventLog. Returns terminal reason."""
+        """Register agent, submit message, tail EventLogProtocol. Returns terminal reason."""
         from substrate.kernel.core.errors import ThreadBusyError
 
         try:
@@ -171,6 +172,16 @@ class AgentStreamSession:
                             "options": wire.options,
                             "allow_freeform": wire.allow_freeform,
                         },
+                    )
+                elif isinstance(wire, ApprovalRequestedEvent) and run_id:
+                    # ApprovalRequestedEvent has no run_id field of its own
+                    # (unlike InputRequestedEvent) — this tailing loop is
+                    # always tailing exactly one run, so the loop-local
+                    # run_id is correct without needing one on the wire type.
+                    self._bridge.register_signal_request(
+                        wire.request_id,
+                        run_id,
+                        card={"tool_name": wire.tool_name, "args": wire.args},
                     )
                 await self._queue.put(wire)
         except Exception as exc:
@@ -297,8 +308,8 @@ class AgentStreamSession:
         durable suspend/resume is that a refresh must not destroy in-flight
         progress. Explicit cancel (``POST /chat/{thread_id}/cancel``) is the
         only thing that actually stops a run — it durably cancels via
-        ``Supervisor.cancel()`` (see ``routes/cancel.py``), and this session
-        notices that the same way it notices completion: the EventLog gets a
+        ``SupervisorProtocol.cancel()`` (see ``routes/cancel.py``), and this session
+        notices that the same way it notices completion: the EventLogProtocol gets a
         ``run.cancelled`` entry, ``_agent_worker``'s tail loop sees it and
         returns. That works correctly regardless of which replica initiated
         the cancel — a local ``asyncio.Event`` (the previous design) only

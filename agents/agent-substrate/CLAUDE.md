@@ -121,8 +121,8 @@ src/substrate/
 │   │   ├── task_manager/ TaskManagerTool (Kanban board)
 │   │   └── code_interpreter/ CodeInterpreterTool (Firecracker VM / K8s — explicit opt-in)
 │   ├── knowledge/        RAGPipeline, GraphRAGPipeline, chunkers, reranker, loaders/
-│   ├── memory/           RedisSessionStore, PostgresMemoryStore
-│   ├── history/          RedisHistoryProvider, PostgresHistoryProvider
+│   ├── memory/           RedisSessionStore, DurableMemoryStore
+│   ├── history/          RedisHistoryProvider, DurableHistoryProvider
 │   ├── vector/           PgVectorStore  (implements VectorStore Protocol)
 │   ├── graph/            AGEGraphStore  (implements GraphStore Protocol)
 │   ├── storage/          S3FileStore (wraps infrastructure MinIOConnector)
@@ -143,7 +143,7 @@ src/substrate/
 │   ├── database/         PostgresConnector (asyncpg pool — engine's own DB)
 │   ├── cache/            RedisConnector
 │   ├── storage/          MinIOConnector (S3-compatible object storage)
-│   └── runtime/          PostgresEventLog/Inbox/Scheduler, RedisJournal,
+│   └── runtime/          EventLog/Inbox/Scheduler, RedisJournal,
 │                         build_postgres_runtime() — durable runtime backends
 │
 ├── serving/      deployment shells (orthogonal to layers)
@@ -349,7 +349,7 @@ from substrate.agents.context import InMemoryHistoryProvider
 from substrate.capabilities.history import RedisHistoryProvider
 
 # Postgres-backed
-from substrate.capabilities.history import PostgresHistoryProvider
+from substrate.capabilities.history import DurableHistoryProvider
 ```
 
 All `HistoryProvider` methods are `async def`. Always `await` them.

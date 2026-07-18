@@ -1,4 +1,4 @@
-"""PostgresScheduler — Stage 1 durable Scheduler backed by asyncpg.
+"""Scheduler — Stage 1 durable implementation of SchedulerProtocol, backed by asyncpg.
 
 Schema::
 
@@ -135,8 +135,8 @@ def _retry_backoff_seconds(retry_count: int, policy: RunRetryPolicy) -> float:
     return min(delay, policy.max_backoff_s)
 
 
-class PostgresScheduler:
-    """Postgres-backed Scheduler implementing the kernel Scheduler Protocol."""
+class Scheduler:
+    """Postgres-backed Scheduler implementing the kernel SchedulerProtocol."""
 
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
@@ -218,7 +218,7 @@ class PostgresScheduler:
         is requeued immediately rather than waiting out the lease.
 
         Requeued runs become ``pending``; when their agent is (re-)registered
-        the worker leases them and the kernel replays from the EventLog (the
+        the worker leases them and the kernel replays from the EventLogProtocol (the
         journal makes completed effects at-most-once).  Returns the count.
         """
         where = "status = 'running'"
@@ -365,7 +365,7 @@ class PostgresScheduler:
                 run_id,
             )
 
-    # -- Scheduler Protocol --------------------------------------------------
+    # -- SchedulerProtocol --------------------------------------------------
 
     async def enqueue(
         self,
@@ -691,4 +691,4 @@ class PostgresScheduler:
             yield RunId(row["run_id"])
 
 
-__all__ = ["PostgresScheduler"]
+__all__ = ["Scheduler"]

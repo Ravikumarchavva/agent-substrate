@@ -1,4 +1,4 @@
-"""Runtime metrics — OpenTelemetry counters shared by both Scheduler backends.
+"""Runtime metrics — OpenTelemetry counters shared by both SchedulerProtocol backends.
 
 Uses the raw ``opentelemetry.metrics`` API directly (not
 ``serving.shared.observability``'s ``Metrics`` wrapper, which is server-only

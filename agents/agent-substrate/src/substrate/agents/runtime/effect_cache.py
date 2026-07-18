@@ -1,11 +1,11 @@
-"""EffectCache — per-run effect-result cache, built by folding the EventLog.
+"""EffectCache — per-run effect-result cache, built by folding the EventLogProtocol.
 
 This is the "fold" half of the kernel's fold-is-truth doctrine
 (``kernel/runtime/log_entry.py``): reconstructing a run's effect-dedup state
 from its append-only log instead of a separate, independently-TTL'd store.
 
 It replaces the Journal as ``RunContext``'s source of truth for at-most-once
-effect execution. Effect results are ``effect.result`` EventLog entries — the
+effect execution. Effect results are ``effect.result`` EventLogProtocol entries — the
 same durable, optimistically-concurrent, cross-process-safe store that
 already backs run history — so there is no longer a Redis journal whose TTL
 can silently expire mid-run and break the at-most-once guarantee (a run
@@ -17,7 +17,7 @@ run — lookups are a plain dict access, no I/O.
 
 Error effects are deliberately excluded from the fold (see ``fold()``): a
 scheduler retry must re-execute a failed effect, not replay its failure
-forever from cache. They're still written to the EventLog by
+forever from cache. They're still written to the EventLogProtocol by
 ``RunContext._record_effect`` for the durable per-attempt record — this only
 affects what a *fresh* fold (a new lease, i.e. every retry) rehydrates.
 """
@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from substrate.kernel.runtime.effects import EffectResult
 from substrate.kernel.runtime.ids import RunId
-from substrate.kernel.runtime.log_entry import EventLog
+from substrate.kernel.runtime.log_entry import EventLogProtocol
 
 
 class EffectCache:
@@ -49,7 +49,7 @@ class EffectCache:
         self._effects[result.effect_id] = result
 
     @classmethod
-    async def fold(cls, event_log: EventLog, run_id: RunId) -> "EffectCache":
+    async def fold(cls, event_log: EventLogProtocol, run_id: RunId) -> "EffectCache":
         """Reconstruct the effect cache by reading a run's full log.
 
         ``last_seq`` seeds ``RunContext``'s local seq cursor, so the Worker

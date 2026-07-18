@@ -14,7 +14,7 @@ spawns a duplicate agent while the original is still running.
 ``RunStatusSummary`` is the compact snapshot returned by ``RunContext.status(handle)``.
 It is a batched peek — NOT a stream. The parent agent calls it rarely and only
 when it has a reason (e.g., LLM tool call, supervision rule).  The human/UI
-watches live progress through the SSE path (``EventLog.tail``), which is
+watches live progress through the SSE path (``EventLogProtocol.tail``), which is
 entirely separate and never touches the parent agent's context.
 """
 
@@ -33,7 +33,7 @@ class AskOutcome(BaseModel):
 
     Always check ``kind`` before accessing ``result`` or ``handle``.
 
-    ``last_seq`` is the last EventLog sequence number observed for the target
+    ``last_seq`` is the last EventLogProtocol sequence number observed for the target
     at outcome time — useful for estimating how far the target got before
     timeout or failure.
     """
@@ -41,7 +41,7 @@ class AskOutcome(BaseModel):
     kind: Literal["replied", "timed_out", "target_failed", "target_cancelled"]
     result: RunResult | None = None  # set when kind="replied"
     handle: RunHandle | None = None  # still-live run when kind="timed_out"
-    last_seq: int = -1  # target's EventLog progress
+    last_seq: int = -1  # target's EventLogProtocol progress
 
     model_config = {"frozen": True}
 
@@ -51,7 +51,7 @@ class RunStatusSummary(BaseModel):
 
     Returned by ``RunContext.status(handle)`` — not a stream.
     ``last_milestone`` is the ``kind`` string of the most recent meaningful
-    EventLog entry (e.g. ``"tool.result"``, ``"child.spawned"``).
+    EventLogProtocol entry (e.g. ``"tool.result"``, ``"child.spawned"``).
     """
 
     run_id: RunId

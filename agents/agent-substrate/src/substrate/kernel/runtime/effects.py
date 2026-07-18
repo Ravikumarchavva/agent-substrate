@@ -5,7 +5,7 @@ Why this exists
 You cannot make a real-world side-effect (send email, charge card, call an
 external API) atomic with your event log — the external service doesn't
 participate in your transaction.  Journaling ``EffectResult`` entries straight
-into the EventLog provides the closest safe approximation: **at-most-once
+into the EventLogProtocol provides the closest safe approximation: **at-most-once
 execution** via an idempotent lookup.
 
 Protocol on every effect
@@ -15,7 +15,7 @@ Protocol on every effect
    produces the same id. ``path`` is hierarchical (see ``Effect.make_id``),
    not a flat counter, so a journal-hit ancestor whose body never executes
    cannot desync the ids of everything that comes after it.
-2. ``EffectCache.lookup(effect_id)`` (folded from the EventLog — see
+2. ``EffectCache.lookup(effect_id)`` (folded from the EventLogProtocol — see
    ``agents/runtime/effect_cache.py``) → hit → return cached result, **do not
    re-run**.
 3. Miss → execute the effect → append an ``effect.result`` log entry.
@@ -99,7 +99,7 @@ class Effect(BaseModel):
 class EffectResult(BaseModel):
     """Cached result of a completed effect execution.
 
-    Logged to the EventLog as an ``effect.result`` entry immediately after the
+    Logged to the EventLogProtocol as an ``effect.result`` entry immediately after the
     external call returns. On replay, ``EffectCache.fold()`` (built from these
     entries — see ``agents/runtime/effect_cache.py``) returns this instead of
     re-running the effect.

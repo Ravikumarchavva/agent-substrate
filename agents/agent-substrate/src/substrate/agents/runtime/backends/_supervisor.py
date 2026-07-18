@@ -1,11 +1,11 @@
-"""InMemorySupervisor — Stage 0 in-process implementation of Supervisor.
+"""InMemorySupervisor — Stage 0 in-process implementation of SupervisorProtocol.
 
 ``spawn`` is lifecycle: creates a child run, records the spawn in
 ``_spawn_effects`` (so replay returns the same child_run_id), delivers the
 boot message, and enqueues the child.  It does NOT wait.  Mirrors
-``PostgresSupervisor``'s dedicated ``substrate_spawn_effects`` table — spawn
-dedup is a Supervisor-local concern, not the generic effect Journal (which no
-longer exists; ``ctx.llm()``/``ctx.tool()`` dedup through the EventLog itself
+``Supervisor``'s dedicated ``substrate_spawn_effects`` table — spawn
+dedup is a SupervisorProtocol-local concern, not the generic effect Journal (which no
+longer exists; ``ctx.llm()``/``ctx.tool()`` dedup through the EventLogProtocol itself
 via ``EffectCache.fold()``).
 
 ``cancel`` cascades through the child's subtree by recursively cancelling
@@ -75,7 +75,7 @@ class InMemorySupervisor:
         # attempt). Both would drift attempt-to-attempt precisely because
         # spawning is what advances them, silently defeating the "replay
         # returns the same child_run_id" guarantee — see the kernel
-        # Supervisor.spawn() docstring.
+        # SupervisorProtocol.spawn() docstring.
         effect_id = Effect.make_id(
             parent, path, "spawn", {"child_agent": str(child_agent)}
         )
@@ -83,6 +83,26 @@ class InMemorySupervisor:
         if cached is not None:
             child_run_id: RunId = cached
         else:
+            # Budget check only on a genuine new spawn — see Supervisor
+            # for why a replay (the cache-hit branch above) must never
+            # re-check. No lock needed here: asyncio's cooperative scheduling
+            # means nothing else can run between this check and the
+            # `_spawn_effects` mutation below since neither awaits.
+            root_run = supervision.run_id
+            max_agents = supervision.spawn_budget.max_agents
+            active = self._count_active(root_run)
+            if 1 + active >= max_agents:
+                from substrate.kernel.core.errors import BudgetExhaustedError
+
+                raise BudgetExhaustedError(
+                    f"Run headcount cap reached ({1 + active}/{max_agents} "
+                    f"agents) for root {root_run!r}. Cannot spawn "
+                    f"'{child_agent}'. This is the durable enforcement point "
+                    "— it applies regardless of caller, unlike the "
+                    "in-process SpawnTracker fast-path OrchestratorAgent "
+                    "uses, which only covers spawns it mediates."
+                )
+
             child_run_id = new_run_id()
             self._spawn_effects[effect_id] = child_run_id
             # Deliver boot message to child inbox, stamped with the caller's
@@ -97,7 +117,7 @@ class InMemorySupervisor:
             # Register and enqueue the child run
             self._scheduler.register_run(child_run_id, child_agent)
             await self._scheduler.enqueue(child_run_id, priority=5, tenant="default")
-            # Log spawn in parent's EventLog — ONLY on a genuine new spawn.
+            # Log spawn in parent's EventLogProtocol — ONLY on a genuine new spawn.
             # Logging this unconditionally (including on a cache hit) would
             # append a duplicate "child.spawned" entry on every replay.
             seq = await self._event_log.last_seq(parent)
@@ -129,6 +149,20 @@ class InMemorySupervisor:
             self._children[parent].append(handle)
         self._parent_of[child_run_id] = parent
         return handle
+
+    def _count_active(self, root_run: RunId) -> int:
+        """Count non-terminal descendants of *root_run*, recursively.
+
+        Mirrors Supervisor's ``WHERE root_run = $1 AND status IN
+        ('pending', 'running', 'suspended')`` — same recursive-subtree shape
+        ``cancel()`` already walks via ``self._children``.
+        """
+        total = 0
+        for child in self._children.get(root_run, []):
+            if child.run_id not in self._results:
+                total += 1
+            total += self._count_active(child.run_id)
+        return total
 
     async def cancel(self, handle: RunHandle, *, reason: str = "cancelled") -> None:
         from substrate.kernel.runtime.log_entry import RunLogEntry
@@ -162,7 +196,7 @@ class InMemorySupervisor:
         """Protocol conformance only — ``RunContext.join()`` never calls this.
 
         The actual suspend-based join lives in ``agents/runtime/context.py``
-        (consumes a ``child:{run_id}`` signal via the SignalBus, raising
+        (consumes a ``child:{run_id}`` signal via the SignalBusProtocol, raising
         ``SuspendInterrupt`` on a miss so the Task genuinely ends rather than
         blocking). This asyncio.Event-based wait is dead weight on that path
         but kept for Protocol conformance / any future direct caller.

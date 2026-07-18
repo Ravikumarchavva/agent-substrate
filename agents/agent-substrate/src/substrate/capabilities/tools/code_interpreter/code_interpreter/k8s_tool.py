@@ -68,7 +68,7 @@ class K8sSandboxCodeInterpreterTool:
                     Set this to the active thread/session ID before calling execute().
     """
 
-    risk: str = "critical"  # TODO: L4-hitl  # executes arbitrary code
+    risk: str = "critical"  # executes arbitrary code
 
     def __init__(
         self,

@@ -38,11 +38,11 @@ async def build_short_term_memory(
     writes, cache-first reads, self-healing on a cache miss. Omit it for a
     Postgres-only setup with no cache.
     """
-    from substrate.capabilities.memory.postgres_session_store import (
-        PostgresSessionStore,
+    from substrate.capabilities.memory.durable_session_store import (
+        DurableSessionStore,
     )
 
-    primary = PostgresSessionStore(database_url)
+    primary = DurableSessionStore(database_url)
     await primary.connect()
     if redis_url is None:
         return primary
@@ -65,11 +65,11 @@ async def build_long_term_memory(database_url: str) -> LongTermMemory:
     future semantic-cache-style wrapper would be a different mechanism, not
     this one with a flag flipped.
     """
-    from substrate.capabilities.memory.postgres_memory_store import (
-        PostgresMemoryStore,
+    from substrate.capabilities.memory.durable_memory_store import (
+        DurableMemoryStore,
     )
 
-    store = PostgresMemoryStore(database_url)
+    store = DurableMemoryStore(database_url)
     await store.connect()
     await store.create_tables()
     return store

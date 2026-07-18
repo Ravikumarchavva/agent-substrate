@@ -37,7 +37,7 @@ async def _runtime_cm(backend: str, pg_url: str):
             pool_min_size=pool_min_size,
             pool_max_size=pool_max_size,
         ) as rt:
-            logger.info("Agent Runtime: durable (Postgres EventLog)")
+            logger.info("Agent Runtime: durable (Postgres EventLogProtocol)")
             yield rt
     else:
         from substrate.agents.runtime import Runtime
@@ -54,7 +54,7 @@ async def _cancel_listener(runtime: object, event_bus: object) -> None:
     which is not necessarily the replica actually leasing this run (the
     durable Postgres backend is shared across replicas). ``runtime.cancel()``
     is only a same-process fast path — it no-ops for a run leased elsewhere
-    (see ``Worker.cancel``/``Scheduler.cancel_pending``). ``supervisor.cancel()``
+    (see ``Worker.cancel``/``SchedulerProtocol.cancel_pending``). ``supervisor.cancel()``
     is what's actually cross-replica-safe: it sets the durable
     ``cancel_requested`` flag the owning replica's own heartbeat observes,
     same as the monolith's ``POST /chat/{id}/cancel`` (see routes/cancel.py).
@@ -107,7 +107,11 @@ async def lifespan(app):
         await event_bus.connect()
         app.state.event_bus = event_bus
 
-        history = await build_history_provider(redis_url)
+        history = await build_history_provider(
+            redis_url,
+            ttl=int(os.environ.get("REDIS_SESSION_TTL", "3600")),
+            max_messages=int(os.environ.get("SESSION_MAX_MESSAGES", "200")),
+        )
         app.state.history = history
 
         app.state.short_term_memory = (

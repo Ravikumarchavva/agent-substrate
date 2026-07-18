@@ -1,4 +1,4 @@
-"""InMemoryInbox — Stage 0 in-process implementation of Inbox."""
+"""InMemoryInbox — Stage 0 in-process implementation of InboxProtocol."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class InMemoryInbox:
-    """Single-process in-memory Inbox.
+    """Single-process in-memory InboxProtocol.
 
     Robustness guarantees honoured (identical to the Protocol contract):
     1. Dedup by Message.id — deliver is idempotent.
@@ -23,7 +23,7 @@ class InMemoryInbox:
     3. Retry + dead-letter after ``max_retries`` nacks.
 
     The ``on_deliver`` callback is called after a new (non-duplicate) message
-    is stored — the Scheduler uses this hook to enqueue a wakeup for the agent.
+    is stored — the SchedulerProtocol uses this hook to enqueue a wakeup for the agent.
     """
 
     def __init__(self, max_retries: int = 3) -> None:

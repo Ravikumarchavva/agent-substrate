@@ -1,4 +1,4 @@
-"""PostgresEventLog — Stage 1 durable EventLog backed by asyncpg.
+"""EventLog — Stage 1 durable implementation of EventLogProtocol, backed by asyncpg.
 
 Schema (created on setup())::
 
@@ -56,8 +56,8 @@ _TAIL_FALLBACK_INTERVAL = 2.0  # seconds
 _CHANNEL = "substrate_evlog"  # NOTIFY channel; payload is the run_id
 
 
-class PostgresEventLog:
-    """Postgres-backed append-only EventLog implementing the kernel EventLog Protocol."""
+class EventLog:
+    """Postgres-backed append-only EventLog implementing the kernel EventLogProtocol."""
 
     def __init__(self, pool: asyncpg.Pool, *, dsn: str | None = None) -> None:
         self._pool = pool
@@ -253,4 +253,4 @@ def _row_to_entry(run_id: RunId, row: object) -> RunLogEntry:
     )
 
 
-__all__ = ["PostgresEventLog"]
+__all__ = ["EventLog"]

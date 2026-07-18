@@ -100,7 +100,7 @@ class PersonalFeedAgent:
             ctx, ranking_prompt, instructions=self._system_instructions
         )
 
-        # Log the curated entry so it's visible via EventLog.tail()
+        # Log the curated entry so it's visible via EventLogProtocol.tail()
         await ctx._log(
             "feed.curated",
             {

@@ -6,7 +6,7 @@ than deleting history.
 
 ---
 
-## Suspension uses `SignalBus.signal()`, never `asyncio.Future`
+## Suspension uses `SignalBusProtocol.signal()`, never `asyncio.Future`
 
 **Decision:** any tool or agent behavior that pauses a run waiting on an
 external event (human input, a timer, another agent) uses
@@ -26,7 +26,7 @@ approval path (`ToolApprovalHandler`) still uses Futures — that's tracked
 debt to migrate ([`roadmap.md`](roadmap.md) P1), not a template to copy from.
 
 **Update (2026-07-03):** the durability gap this caveat used to describe is
-closed — `PostgresSignalBus` + `SuspendInterrupt`-based suspend/resume
+closed — `SignalBus` + `SuspendInterrupt`-based suspend/resume
 (Phase 1 PR4-PR5, see [`roadmap.md`](roadmap.md) "Recently shipped") means a
 suspended run's `ravi_run_queue.status` row is genuinely `'suspended'` and
 survives a process restart. See
@@ -119,7 +119,7 @@ reliably answer "which turn created this," only the server's timestamp can.
 
 **Decision:** every primitive that suspends a run (`ctx.ask`, `ctx.join`,
 `ctx.sleep_until_signal`, `ctx.sleep_until`) follows one shape: attempt a
-non-blocking claim (`SignalBus.consume()` or a direct wall-clock check); on a
+non-blocking claim (`SignalBusProtocol.consume()` or a direct wall-clock check); on a
 miss, raise `SuspendInterrupt` — a `BaseException` subclass in
 `kernel/core/errors.py`. This unwinds straight out of `agent.run()` to the
 Worker, which releases the lease as `SUSPENDED` and lets the asyncio Task end
@@ -137,12 +137,12 @@ Exception` around a tool call) must NOT be able to swallow a suspension and
 silently turn "go dormant" into "crash" or "keep running as if nothing
 happened."
 
-**Ruled out:** giving `SignalBus` a blocking `wait_for_signal()`/`Supervisor`
+**Ruled out:** giving `SignalBusProtocol` a blocking `wait_for_signal()`/`SupervisorProtocol`
 a blocking `join()` that parks a live coroutine — that was the actual
 original implementation and is exactly what made suspended runs
 non-durable (see the "signal-based pattern isn't fully durable" caveat
 above, now resolved). Both `InMemorySupervisor.join()` and
-`PostgresSupervisor.join()` still exist, purely for kernel `Supervisor`
+`Supervisor.join()` still exist, purely for kernel `SupervisorProtocol`
 Protocol conformance — nothing in this codebase calls them; `ctx.join()`
 consumes a `child:{run_id}` signal exactly like `ctx.ask()` does instead.
 
@@ -173,7 +173,7 @@ reached a journaled call before," which is identical on every replay by
 construction (see `RunContext`'s class docstring in `context.py`).
 
 **Concretely fixed by this pattern:** `ctx.ask()`'s correlation_id,
-`Supervisor.spawn()`'s effect_id (removed `boot.id` from the hash args
+`SupervisorProtocol.spawn()`'s effect_id (removed `boot.id` from the hash args
 entirely), and a `spawn()`+`ask()` double-delivery collision closed by
 `RunHandle.boot_correlation_id` (spawn's boot delivery and a subsequent
 `ctx.ask()` to the same handle must never both deliver — see that field's
@@ -183,9 +183,9 @@ docstring in `kernel/runtime/supervisor.py`).
 
 ## Coordination state (signals, supervision, cancel, deadlines) is all-Postgres, one database, transactional with the scheduler
 
-**Decision:** `SignalBus`, `Supervisor`, and the scheduler's wakeup/cancel/
+**Decision:** `SignalBusProtocol`, `SupervisorProtocol`, and the scheduler's wakeup/cancel/
 deadline columns (`wake_signals`, `wake_at`, `cancel_requested`, `deadline`)
-all live in the same Postgres database as `EventLog`/`Inbox`/`Scheduler`
+all live in the same Postgres database as `EventLogProtocol`/`InboxProtocol`/`SchedulerProtocol`
 (`ravi_signals`, `ravi_run_tree`, `ravi_spawn_effects` alongside
 `ravi_run_queue`), not in Redis or a separate coordination store.
 
@@ -193,9 +193,9 @@ all live in the same Postgres database as `EventLog`/`Inbox`/`Scheduler`
 "nothing here yet" check and its `release(SUSPENDED)` landing) and the
 cancel-cascade race (a run finishing between a cascading cancel's read and
 its write) both need to be closed with actual transactions, not "check twice
-and hope." `PostgresScheduler.release(SUSPENDED)` double-checks
+and hope." `Scheduler.release(SUSPENDED)` double-checks
 `ravi_signals` for an already-arrived signal in the same transaction as the
-park; `PostgresSignalBus.signal()` does the INSERT and the matching-run wake
+park; `SignalBus.signal()` does the INSERT and the matching-run wake
 in one transaction. Neither is expressible cleanly across two different
 datastores (Postgres for the scheduler, Redis for signals) without a
 distributed transaction or an accepted race window. `RedisJournal` was
@@ -203,7 +203,7 @@ already removed from the effect-durability path in PR3 for the same class of
 reason (a TTL'd store silently expiring mid-suspension); Redis's role in this
 codebase is now cache/rate-limiting only, never correctness.
 
-**Ruled out:** a Redis-backed `SignalBus` (the original Stage 1 direction
+**Ruled out:** a Redis-backed `SignalBusProtocol` (the original Stage 1 direction
 documented in `kernel/runtime/wakeup.py`'s docstring before this decision) —
 superseded once the race-closure requirement above became clear during PR4
 design. If that docstring still says Redis, it's stale; Postgres is correct.
@@ -212,8 +212,8 @@ design. If that docstring still says Redis, it's stale; Postgres is correct.
 
 ## Durable cross-process cancellation rides the existing heartbeat, not a new push channel
 
-**Decision:** `Supervisor.cancel()` cascading to a run currently owned by a
-*different* worker process reaches that process via `Scheduler.heartbeat()`
+**Decision:** `SupervisorProtocol.cancel()` cascading to a run currently owned by a
+*different* worker process reaches that process via `SchedulerProtocol.heartbeat()`
 returning `bool` (kernel Protocol change, Phase 1 PR7) — the Worker's
 periodic heartbeat call now also reads back `cancel_requested`/`deadline`
 and cancels the run's local `CancellationToken` when either fires. No new
@@ -225,7 +225,7 @@ bounded cadence is the heartbeat every running lease already sends
 (`_HEARTBEAT_INTERVAL = 15s` in `worker.py`). Reusing it means cancellation
 latency is bounded (≤15s) and requires no new infrastructure. Suspended runs
 are the one case heartbeat can't reach (no live task polling anything) —
-those are terminal-marked directly by `Supervisor.cancel()` instead, since
+those are terminal-marked directly by `SupervisorProtocol.cancel()` instead, since
 nothing will ever heartbeat them again.
 
 **Ruled out:** a lower-latency push-based cancel (e.g. `pg_notify` straight
@@ -241,7 +241,7 @@ shows up.
 
 **Decision:** "only one active run per thread" and "stop this run" are both
 enforced entirely through durable state (`ravi_run_queue.thread_id` +
-unique partial index; `Supervisor.cancel()`'s `cancel_requested`/terminal-mark)
+unique partial index; `SupervisorProtocol.cancel()`'s `cancel_requested`/terminal-mark)
 — never through an `asyncio.Lock`/`asyncio.Event` owned by the HTTP request
 handler (`ServerDependencies.thread_locks`/`cancel_registry`, both deleted
 in Phase 2, 2026-07-03).
@@ -266,7 +266,7 @@ need to notify" logic was needed on the reading side at all — see
 `AgentStreamSession._check_disconnect`'s docstring.
 
 **Ruled out:** adding a cross-replica pub/sub channel (Redis, `pg_notify`)
-purely to propagate "someone cancelled this" faster. The EventLog's own
+purely to propagate "someone cancelled this" faster. The EventLogProtocol's own
 LISTEN/NOTIFY-backed tail already delivers `run.cancelled` to every replica
 tailing that run — a second notification channel would be solving a
 problem that doesn't exist.
@@ -305,9 +305,9 @@ risk, needs a design decision first, etc.) — not folded into a vague
 **Decision:** when `resume_pending_runs()` (`infrastructure/serving_factory.py`)
 finds a cold-resume spec whose `agent_version` doesn't match the running
 `substrate.__version__`, it refuses to rebuild/register the agent. The run
-is terminally failed instead (`run.failed` EventLog entry with
-`status: "version_mismatch"`, `PostgresScheduler.fail_pending_run()`,
-`Supervisor.finish_run(FAILED)`).
+is terminally failed instead (`run.failed` EventLogProtocol entry with
+`status: "version_mismatch"`, `Scheduler.fail_pending_run()`,
+`SupervisorProtocol.finish_run(FAILED)`).
 
 **Why:** replay-from-top (Phase 1's suspend/resume design) re-executes the
 agent's actual code path and only skips effects it finds in the journal.

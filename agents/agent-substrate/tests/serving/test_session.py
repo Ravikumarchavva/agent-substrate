@@ -1,7 +1,7 @@
 """Kernel-native AgentStreamSession tests.
 
 Drives the session with stub kernel agents and a real in-process Runtime.
-No mocks — the session, Runtime, and EventLog all run as they would in prod.
+No mocks — the session, Runtime, and EventLogProtocol all run as they would in prod.
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
     """The scenario that used to cause data loss: a run suspends on
     ask_human, the browser disconnects (a refresh does this), the human
     answers some time LATER, the run resumes and only then produces its
-    final response — which must still land in the EventLog (the single
+    final response — which must still land in the EventLogProtocol (the single
     source of truth for conversation history — see
     serving/stream/history.py::project_thread()) even though nothing is
     watching this specific SSE connection anymore.
@@ -229,7 +229,7 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
 
         # Now the human answers. The detached task must still be tailing (or
         # the run resumes on its own via a fresh lease either way) for the
-        # post-resume reply to land durably in the EventLog.
+        # post-resume reply to land durably in the EventLogProtocol.
         await rt.signal_bus.signal(run_id, signal_name, {})
 
         found_reply = False
@@ -242,13 +242,13 @@ async def test_run_survives_disconnect_through_suspend_and_resume() -> None:
                 found_reply = True
                 break
             await asyncio.sleep(0.02)
-        assert found_reply, "post-resume reply must land in the EventLog"
+        assert found_reply, "post-resume reply must land in the EventLogProtocol"
 
 
 async def test_durable_cancel_ends_session() -> None:
-    """Supervisor.cancel() — the durable, cross-replica path routes/cancel.py
+    """SupervisorProtocol.cancel() — the durable, cross-replica path routes/cancel.py
     actually calls — terminates the session exactly like a same-process
-    cancel does: purely via the EventLog's run.cancelled entry appearing,
+    cancel does: purely via the EventLogProtocol's run.cancelled entry appearing,
     with no session-owned cancel Event/registry involved at all. This is
     what makes cancel work correctly even when POST /cancel lands on a
     different replica than the one running the SSE stream."""
@@ -289,7 +289,7 @@ async def test_durable_cancel_ends_session() -> None:
                 await asyncio.sleep(0.01)
             assert found is not None, "run never became active for thread"
             run_id, _status = found
-            # agent_id/parent_run are placeholders — Supervisor.cancel() only
+            # agent_id/parent_run are placeholders — SupervisorProtocol.cancel() only
             # reads handle.run_id (see routes/cancel.py for the same pattern).
             handle = RunHandle(
                 run_id=run_id, agent_id=_AgentId(type="", key=""), parent_run=""

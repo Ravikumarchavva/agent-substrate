@@ -1,7 +1,7 @@
 """Retention sweep — delete durable runtime state for old terminal runs.
 
 Not wired into any automatic poll loop — call this from an ops cron job or a
-one-off maintenance script. A run's full history (EventLog, spawn tree,
+one-off maintenance script. A run's full history (EventLogProtocol, spawn tree,
 signals) has no automatic expiry otherwise, so left unswept these tables grow
 without bound for the lifetime of the deployment.
 
@@ -11,9 +11,9 @@ running, or suspended) and is never touched, no matter how old
 ``enqueued_at`` is.
 
 **Operational note:** conversation history is projected directly from the
-EventLog (``serving/stream/history.py::project_thread()``) — there is no
+EventLogProtocol (``serving/stream/history.py::project_thread()``) — there is no
 separate, independently-retained chat-history table anymore. Sweeping a
-thread's terminal runs deletes their EventLog entries, which means their
+thread's terminal runs deletes their EventLogProtocol entries, which means their
 conversation history is gone too, not just runtime bookkeeping. If a
 deployment ever wires this into an automatic cron job, size the retention
 window with that in mind — it now doubles as the chat-history retention

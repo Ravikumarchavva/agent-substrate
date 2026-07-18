@@ -1,28 +1,38 @@
 """WebHITL Bridge — connects the agent's blocking HITL requests to HTTP/SSE.
 
 The bridge is the glue between:
-  - The agent (which blocks on ``await handler.request_input()`` or
-    ``await handler.request()`` — see ``kernel/tools/approval.py``)
+  - The agent (which suspends via ``ctx.sleep_until_signal()`` in the normal,
+    durable case, or blocks on ``await handler.request_input()`` /
+    ``await handler.request()`` in the Future-based fallback — see
+    ``kernel/tools/approval.py``)
   - The HTTP layer (which streams SSE events to the frontend and
     receives responses via a separate POST endpoint)
 
-Flow:
-  1. Agent calls a CRITICAL/HIGH-risk tool → ``ToolInvoker`` calls
-     ``approval_handler.request()`` → ``SSEApprovalHandler``
-     (``serving/monolith/sse/approval.py``) calls
-     ``bridge.request_and_wait()``, which puts an event on the outgoing
-     queue and creates an ``asyncio.Future``.
-  2. The SSE generator drains the outgoing queue and sends the event
-     to the frontend.
-  3. The frontend shows a UI card (ToolApprovalCard or HumanInputCard)
-     and POSTs the user's response to ``/chat/respond/{request_id}``.
-  4. The POST endpoint calls ``bridge.resolve(request_id, data)`` which
-     completes the Future.
+Durable flow (both HITL kinds — tool approval and ``ask_human`` — go through
+this identical path today):
+  1. The agent logs an ``input.requested``/``approval.requested`` entry
+     (``ctx.log_once``) and suspends via ``ctx.sleep_until_signal
+     ("hitl:{request_id}")`` — see ``AskHumanTool.execute()`` and
+     ``ToolInvoker._invoke_inner``'s approval branch.
+  2. The monolith's run-log tailing loop (``serving/stream/session.py``)
+     converts the log entry to a wire event and calls
+     ``bridge.register_signal_request()`` so ``resolve()`` knows which run
+     to signal back.
+  3. The frontend shows a UI card and POSTs the user's response to
+     ``/chat/respond/{request_id}``.
+  4. The POST endpoint calls ``bridge.resolve(request_id, data)``, which
+     fires ``SignalBus.signal()`` — durable, survives a process restart in
+     between steps 1 and 4.
   5. The agent resumes with the response.
+
+Future-based fallback (only when a handler is constructed with no
+``signal_bus`` — tests, or a deliberately non-durable setup): steps 1 and 4
+instead go through ``bridge.request_and_wait()``/an ``asyncio.Future`` held
+in this process's memory, per ``_pending`` below.
 
 Usage::
 
-    bridge = WebHITLBridge()
+    bridge = WebHITLBridge(signal_bus=runtime.signal_bus)
     agent = ReActAgent(
         ...,
         approval_handler=SSEApprovalHandler(bridge),
@@ -38,7 +48,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
     from substrate.serving.protocol import WireEvent
-    from substrate.kernel.runtime.wakeup import SignalBus
+    from substrate.kernel.runtime.wakeup import SignalBusProtocol
 
 from substrate.capabilities.tools.human_input import (
     CallbackHumanHandler,
@@ -124,7 +134,9 @@ class WebHITLBridge:
     """
 
     def __init__(
-        self, response_timeout: float = 300.0, signal_bus: Optional["SignalBus"] = None
+        self,
+        response_timeout: float = 300.0,
+        signal_bus: Optional["SignalBusProtocol"] = None,
     ):
         self._outgoing: asyncio.Queue[Any] = asyncio.Queue()
         self._pending: Dict[str, asyncio.Future[Dict[str, Any]]] = {}
@@ -424,7 +436,7 @@ class BridgeRegistry:
     def __init__(
         self,
         response_timeout: float = 300.0,
-        signal_bus: Optional["SignalBus"] = None,
+        signal_bus: Optional["SignalBusProtocol"] = None,
         scheduler: Optional[Any] = None,
     ) -> None:
         self._timeout = response_timeout

@@ -1,7 +1,7 @@
-"""InMemorySignalBus — Stage 0 in-process implementation of SignalBus.
+"""InMemorySignalBus — Stage 0 in-process implementation of SignalBusProtocol.
 
 Consume-based, matching the durable (Postgres) backend's semantics exactly:
-``signal()`` buffers a payload and wakes the target run via the Scheduler if
+``signal()`` buffers a payload and wakes the target run via the SchedulerProtocol if
 it's suspended and waiting on that name; ``consume()`` claims one buffered
 payload, exactly-once per ``effect_id`` (idempotent re-claim on replay).
 There is no blocking wait here — suspension is achieved by the caller
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 class InMemorySignalBus:
-    """Single-process in-memory SignalBus, consume-based.
+    """Single-process in-memory SignalBusProtocol, consume-based.
 
     Internal structure:
         _buffered[run_id][name] = [payload, payload, ...]   (FIFO per name)
@@ -68,7 +68,7 @@ class InMemorySignalBus:
         sleeps then directly wakes the suspended run — no polling needed
         in-process. (The durable Postgres backend instead sets a ``wake_at``
         column and relies on the scheduler's existing lease-poll cadence,
-        since a DB row can't sleep — see infrastructure/runtime/pg_signal_bus.py.)
+        since a DB row can't sleep — see infrastructure/runtime/signal_bus.py.)
         """
         old = self._timer_tasks.pop(run_id, None)
         if old is not None and not old.done():

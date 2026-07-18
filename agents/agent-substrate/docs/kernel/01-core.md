@@ -428,7 +428,7 @@ flowchart LR
 | `MiddlewareTermination` | Middleware *intentionally* halts the run (a guardrail blocked the request, a rate limit tripped). The loop turns this into a result with `status="guardrail_tripped"`. | `message` |
 | `CancellationError` | An operation is cancelled via a `CancellationToken`. Propagate it — don't swallow it. | — |
 | `ConcurrentAppendError` | Two workers tried to append to the same run's event log at once (optimistic-concurrency clash). Reload and retry. | `run_id`, `expected_seq`, `actual_seq` |
-| `SpawnDenied` | A `Supervisor.spawn` is refused because the root run's `SpawnBudget` is exhausted. | `parent_run`, `budget` |
+| `SpawnDenied` | A `SupervisorProtocol.spawn` is refused because the root run's `SpawnBudget` is exhausted. | `parent_run`, `budget` |
 
 !!! tip "Crash vs. intentional halt — two very different errors"
     `AgentCrashError` means *something broke unexpectedly* — the orchestrator may

@@ -40,11 +40,11 @@ from substrate.agents.runtime.context import Agent
 from substrate.kernel.runtime.fanout import FanoutStrategy
 from substrate.kernel.runtime.follow_graph import FollowGraph
 from substrate.kernel.runtime.ids import RunId, RunStatus, new_run_id
-from substrate.kernel.runtime.inbox import Inbox
-from substrate.kernel.runtime.log_entry import EventLog
-from substrate.kernel.runtime.scheduler import RunRetryPolicy, Scheduler
-from substrate.kernel.runtime.supervisor import Supervisor
-from substrate.kernel.runtime.wakeup import SignalBus
+from substrate.kernel.runtime.inbox import InboxProtocol
+from substrate.kernel.runtime.log_entry import EventLogProtocol
+from substrate.kernel.runtime.scheduler import RunRetryPolicy, SchedulerProtocol
+from substrate.kernel.runtime.supervisor import SupervisorProtocol
+from substrate.kernel.runtime.wakeup import SignalBusProtocol
 
 from substrate.agents.runtime.backends._event_log import InMemoryEventLog
 from substrate.agents.runtime.backends._fanout import PushAllFanout
@@ -87,33 +87,33 @@ class Runtime:
     def __init__(
         self,
         *,
-        event_log: EventLog | None = None,
-        inbox: Inbox | None = None,
-        scheduler: Scheduler | None = None,
-        signal_bus: SignalBus | None = None,
-        supervisor: Supervisor | None = None,
+        event_log: EventLogProtocol | None = None,
+        inbox: InboxProtocol | None = None,
+        scheduler: SchedulerProtocol | None = None,
+        signal_bus: SignalBusProtocol | None = None,
+        supervisor: SupervisorProtocol | None = None,
         follow_graph: FollowGraph | None = None,
         fanout: FanoutStrategy | None = None,
     ) -> None:
-        self._event_log: EventLog = event_log or InMemoryEventLog()
-        self._scheduler: Scheduler = scheduler or InMemoryScheduler()
-        self._inbox: Inbox = inbox or InMemoryInbox()
+        self._event_log: EventLogProtocol = event_log or InMemoryEventLog()
+        self._scheduler: SchedulerProtocol = scheduler or InMemoryScheduler()
+        self._inbox: InboxProtocol = inbox or InMemoryInbox()
         # The inbox→runtime wakeup hook is a runtime concern; wire it on whatever
         # inbox was injected (or the default).
         self._inbox.set_deliver_hook(self._on_inbox_deliver)  # type: ignore[attr-defined]
         self._follow_graph: FollowGraph = follow_graph or InMemoryFollowGraph()
         self._fanout: FanoutStrategy = fanout or PushAllFanout()
-        # The default in-memory SignalBus wakes suspended runs via the
+        # The default in-memory SignalBusProtocol wakes suspended runs via the
         # scheduler it's paired with — see backends/_signal_bus.py.
-        self._signal_bus: SignalBus = signal_bus or InMemorySignalBus(
+        self._signal_bus: SignalBusProtocol = signal_bus or InMemorySignalBus(
             self._scheduler  # type: ignore[arg-type]
         )
-        self._supervisor: Supervisor | None = supervisor
+        self._supervisor: SupervisorProtocol | None = supervisor
         self._registry: dict[AgentId, Agent] = {}
         self._worker: Worker | None = None
 
     def _on_inbox_deliver(self, agent_id: AgentId) -> None:
-        """Sync hook called by Inbox.deliver(); schedules an async dispatch task."""
+        """Sync hook called by InboxProtocol.deliver(); schedules an async dispatch task."""
         import asyncio
 
         try:
@@ -231,7 +231,7 @@ class Runtime:
         """Run ``agent`` on a single ``prompt`` and wait for the final answer.
 
         The ergonomic one-shot entry point: registers the agent, delivers the
-        prompt as a chat message, submits a run, tails its EventLog until the
+        prompt as a chat message, submits a run, tails its EventLogProtocol until the
         run reaches a terminal state, and returns a :class:`RunOutcome` whose
         ``output`` is the agent's final assistant text.
 
@@ -297,7 +297,7 @@ class Runtime:
         don't produce ``text.delta`` log entries, so :meth:`run` can't capture
         their output. This method mirrors how one agent invokes another via
         ``ctx.ask()``: the entry message carries a synthetic ``reply_to``, and
-        the result is read directly off the ``SignalBus`` — the same
+        the result is read directly off the ``SignalBusProtocol`` — the same
         mechanism ``ctx.ask()`` itself consumes.
 
         Register any of ``agent``'s dependencies (e.g. a flow's ``steps``)
@@ -411,22 +411,22 @@ class Runtime:
     # ------------------------------------------------------------------
 
     @property
-    def event_log(self) -> EventLog:
+    def event_log(self) -> EventLogProtocol:
         return self._event_log
 
     @property
-    def inbox(self) -> Inbox:
+    def inbox(self) -> InboxProtocol:
         return self._inbox
 
     @property
-    def scheduler(self) -> Scheduler:
+    def scheduler(self) -> SchedulerProtocol:
         # Exposed for find_run_for_thread() — serving code resolves a
         # conversation thread's active run_id durably (works across
         # replicas) instead of keeping its own thread_id → run_id registry.
         return self._scheduler
 
     @property
-    def signal_bus(self) -> SignalBus:
+    def signal_bus(self) -> SignalBusProtocol:
         # Whatever backend was injected (InMemorySignalBus by default, or a
         # durable backend via build_postgres_runtime) — serving/console code
         # only ever calls .signal() on this, which every backend implements
@@ -434,12 +434,12 @@ class Runtime:
         return self._signal_bus
 
     @property
-    def supervisor(self) -> Supervisor:
-        """The active Supervisor — ``None`` until ``start()``/``__aenter__``.
+    def supervisor(self) -> SupervisorProtocol:
+        """The active SupervisorProtocol — ``None`` until ``start()``/``__aenter__``.
 
         Exposed for cascading ``cancel(handle)`` (recursive subtree
         cancellation — distinct from ``Runtime.cancel(run_id)`` above, which
-        only cancels a single in-process Task) and other Supervisor-level
+        only cancels a single in-process Task) and other SupervisorProtocol-level
         operations (``children_of`` for crash reconciliation).
         """
         assert self._supervisor is not None, "Runtime not started"

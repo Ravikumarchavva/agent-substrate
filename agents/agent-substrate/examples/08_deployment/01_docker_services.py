@@ -87,7 +87,7 @@ async def section_2_memory_clients() -> None:
 
     # --- PostgresMemory ---
     try:
-        from substrate.capabilities.history import PostgresHistoryProvider
+        from substrate.capabilities.history import DurableHistoryProvider
 
         db_url = (
             settings.DATABASE_URL

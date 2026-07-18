@@ -42,10 +42,10 @@ hide:
 
 ## Memory — two scopes × pluggable backends
 
-| Scope | Contract | Shipped backend | Retrieval styles |
-|---|---|---|---|
-| **Short-term**<br>*one session* | `ShortTermMemory` | `CachedShortTermMemory` — durable-first: writes land in Postgres JSONB, then the Redis cache; reads check Redis first, fall back to Postgres on a miss | key-value session state |
-| **Long-term**<br>*across sessions* | `LongTermMemory` | `PostgresMemoryStore` | full-text search · semantic (vector) · entity graph · reasoning-based page-index navigation |
+| Scope | Shipped backend | Retrieval styles |
+|---|---|---|
+| **Short-term** (`ShortTermMemory`)<br>*one session* | `CachedShortTermMemory` — durable-first: writes land in Postgres JSONB, then the Redis cache; reads check Redis first, fall back to Postgres on a miss | key-value session state |
+| **Long-term** (`LongTermMemory`)<br>*across sessions* | `DurableMemoryStore` | full-text search · semantic (vector) · entity graph · reasoning-based page-index navigation |
 
 Default construction, one call:
 
@@ -81,7 +81,7 @@ ltm = await build_long_term_memory(database_url)
 
     The RAM tier — history providers feed compaction strategies that produce the per-turn prompt window.
 
-    `ContextConfig` · `CachedHistoryProvider` · `InMemoryHistoryProvider` · `RedisHistoryProvider` · `PostgresHistoryProvider` · `SlidingWindowCompaction` · `SummarizationCompaction` · `TokenBudgetComposedStrategy` · `CompactionPipeline`
+    `ContextConfig` · `CachedHistoryProvider` · `InMemoryHistoryProvider` · `RedisHistoryProvider` · `DurableHistoryProvider` · `SlidingWindowCompaction` · `SummarizationCompaction` · `TokenBudgetComposedStrategy` · `CompactionPipeline`
 
 -   :material-brain: **Memory & Knowledge** — `CAPABILITIES`
 
@@ -89,7 +89,7 @@ ltm = await build_long_term_memory(database_url)
 
     Session state, durable facts, and document knowledge — each behind a protocol with swappable retrieval.
 
-    `CachedShortTermMemory` · `PostgresSessionStore` · `RedisSessionStore` · `PostgresMemoryStore` · `RAGPipeline` · `GraphRAGPipeline` · PageIndex RAG
+    `CachedShortTermMemory` · `DurableSessionStore` · `RedisSessionStore` · `DurableMemoryStore` · `RAGPipeline` · `GraphRAGPipeline` · PageIndex RAG
 
 -   :material-database-outline: **Storage** — `INFRASTRUCTURE`
 

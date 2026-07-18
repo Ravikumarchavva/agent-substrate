@@ -171,7 +171,7 @@ sequenceDiagram
 ```
 
 **Example backends:** `InMemoryHistoryProvider` (dev), `RedisHistoryProvider`
-(fast, TTL'd), `PostgresHistoryProvider` (durable, queryable).
+(fast, TTL'd), `DurableHistoryProvider` (durable, queryable).
 
 ---
 

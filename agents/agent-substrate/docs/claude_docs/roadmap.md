@@ -15,7 +15,7 @@ retried safely — at enterprise scale.
 2. Microservices are THE scale path; monolith remains for dev.
 3. Full tenant isolation.
 4. Postgres for all coordination (signals/supervision/wakeups/cancel —
-   transactional with EventLog + scheduler). EventLog becomes the single
+   transactional with EventLogProtocol + scheduler). EventLogProtocol becomes the single
    source of truth for effect results; Redis journal leaves the correctness
    path. Suspension = `SuspendInterrupt` unwind + replay-from-top with
    journal fast-forward. Hierarchical effect paths replace flat `_step_seq`.
@@ -26,8 +26,8 @@ retried safely — at enterprise scale.
 | Phase | Content | Status |
 |---|---|---|
 | **0** | Audit record; IDOR fix (thread ownership); stable advisory-lock key; rate-limiter fail-closed | **Done** (2026-07-02) — `get_owned_thread` + ownership on chat/cancel/hitl-status/threads/tasks/mcp-context; ownership stamped at creation; list scoped per user; legacy NULL-owner threads claim-on-first-access; sha256 `_lock_key`; `RATE_LIMIT_FAIL_OPEN=False` default (503 when Redis down); tests in `tests/serving/test_thread_ownership.py` |
-| **1** | Durable coordination core: hierarchical effect paths (**PR2 done**) → event-log-as-journal + fold (**PR3 done**) → PostgresSignalBus + scheduler columns (**PR4 done**) → durable suspend/resume via `SuspendInterrupt` (**PR5 done**) → PostgresSupervisor (**PR6 done**) → cancel cascade + deadlines + crash fast-path (**PR7 done**) → cleanup/GC/docs (**PR8 done**) | **Done** (2026-07-03) — all 7 PRs shipped; Phase 2 (horizontally scalable serving) is next |
-| **2** | Horizontally scalable serving: scheduler-enforced single-flight (kill `thread_locks`); cancel via durable signal (kill `cancel_registry`); HITL cross-replica via PostgresSignalBus; SSE-from-any-replica verification; memory-seed idempotency | **Done** (2026-07-03) — see "Recently shipped". Tool-approval durability/wiring: see the "Explicitly deferred" entries below — the 2026-07-12 kernel audit found this was worse than "Future-based," it wasn't wired to a live agent at all; now wired (kernel-Protocol-based), still Future-based (signal migration still open) |
+| **1** | Durable coordination core: hierarchical effect paths (**PR2 done**) → event-log-as-journal + fold (**PR3 done**) → SignalBus + scheduler columns (**PR4 done**) → durable suspend/resume via `SuspendInterrupt` (**PR5 done**) → Supervisor (**PR6 done**) → cancel cascade + deadlines + crash fast-path (**PR7 done**) → cleanup/GC/docs (**PR8 done**) | **Done** (2026-07-03) — all 7 PRs shipped; Phase 2 (horizontally scalable serving) is next |
+| **2** | Horizontally scalable serving: scheduler-enforced single-flight (kill `thread_locks`); cancel via durable signal (kill `cancel_registry`); HITL cross-replica via SignalBus; SSE-from-any-replica verification; memory-seed idempotency | **Done** (2026-07-03) — see "Recently shipped". Tool-approval durability/wiring: see the "Explicitly deferred" entries below — the 2026-07-12 kernel audit found this was worse than "Future-based," it wasn't wired to a live agent at all; now wired (kernel-Protocol-based), still Future-based (signal migration still open) |
 | **3** | Full multi-tenancy: `tenant_id` through thread ownership + `RunMeta`; per-tenant fair scheduling in `lease()`; wire `Supervision.execution_budget`/`spawn_child()` (was dead code) | **Done** (2026-07-03) — see "Recently shipped". `RedisHistoryProvider`/`GlobalTaskStore` tenant-keying and tenant-level quota aggregation/rate limits explicitly deferred (see below). **Correction (2026-07-12, kernel audit):** "wire execution_budget" here only ever meant the *propagation* half (`Supervision.spawn_child()` correctly threading the field through) — the *enforcement* half (actually building an `ExecutionTracker` from it for the spawned child) was still dead code until the kernel audit's Tier B fixed it. See `docs/claude_docs/kernel/2026-07-12-audit.md`. |
 | **4** | Microservices as the scale path: converge `human_gate` onto the Phase-1 signal bus | **Partially done** (2026-07-03) — signal convergence shipped; wiring `agent_runtime` to actually run an HITL-capable tool against it is deferred (see below). Feature-parity porting (files/RAG → triggers/scheduled → pipelines → MCP apps) and k8s replica policy tuning not started — long tail, out of this program's architecture-remediation scope |
 | **5** | Enterprise hardening: tracing spans on agent runs/LLM calls/tool calls; webhook idempotency keys + HMAC; agent versioning guard on replay; event-log retention/compaction | **Done** (2026-07-04) — see "Recently shipped". `ChatTracingMiddleware` deleted rather than installed (see below); most of the pre-existing guardrail/infra middleware family found unwireable in its current form (see below) |
@@ -59,6 +59,62 @@ check .` · `uv run pytest` · `uv run lint-imports`.
   language not yet re-audited.
 - **Test coverage gaps** outside the program's new suites: guardrails,
   middleware, MCP adapter, `fabric/evals`.
+- ~~`SpawnBudget` enforcement was fictional~~ — **Done** (2026-07-18,
+  durable-agent-developer audit). Kernel docstrings (`kernel/runtime/
+  supervisor.py`, `kernel/agent/supervision.py`) described a durable,
+  `SpawnDenied`-raising enforcement point at `SupervisorProtocol.spawn()` that
+  didn't exist in code — no such exception class ever existed either (the
+  real one, already in use for `ExecutionTracker`, is
+  `BudgetExhaustedError`; docstrings now say so). The only real enforcement
+  was `SpawnTracker.acquire()`/`release()`, an in-process,
+  per-`OrchestratorAgent`-instance convention — any other code calling
+  `ctx.spawn()` directly bypassed the headcount cap entirely. Fixed by
+  moving the check into `Supervisor.spawn()` (advisory-lock-
+  serialized against a concurrent-spawn race, mirroring `EventLog`'s
+  own check+insert pattern) and `InMemorySupervisor.spawn()`, so the budget
+  applies regardless of caller. `SpawnTracker`'s cooperative-preemption
+  half (`is_paused()`/`reprioritize()`) is real and tested but its own
+  docstring's claim that an agent loop checks it "before each LLM call" was
+  false — no loop in this codebase does; docstring corrected, methods kept
+  (real, useful bookkeeping, just not auto-consumed yet). Tests:
+  `tests/agents/test_spawn_budget_enforcement.py` (in-memory),
+  `test_pg_spawn_denied_once_headcount_cap_reached`
+  (`tests/agents/test_runtime_postgres.py`, real Postgres).
+- ~~`agents/supervision/policies.py::RetryPolicy` was dead code~~ — **Done**
+  (2026-07-18). In-memory, per-process, no-backoff retry counter with zero
+  real callers anywhere (confirmed via grep — not even its own test;
+  `tests/agents/test_retry.py` tests `RunRetryPolicy`, the actual durable
+  mechanism, despite the similar name). Deleted the class and its
+  `__all__` export; `agents/supervision/__init__.py` now points readers at
+  `RunRetryPolicy` instead.
+- **`ctx.tenant_id` is set but never read anywhere in the execution layer**
+  (found 2026-07-18, durable-agent-developer audit, not previously
+  flagged). `RunContext.tenant_id` is correctly plumbed from JWT claims
+  through `SchedulerProtocol.enqueue`/`Lease.tenant`/`RunMeta.tenant_id`, but
+  nothing inside an agent's own execution (tools, history/memory access)
+  ever reads it — isolation today is fully enforced upstream, at the
+  thread-ownership/route layer (`get_owned_thread`), which is sufficient
+  (no cross-tenant leak path found). Not urgent, but the field is
+  currently decorative inside a run; either consume it somewhere real
+  (tenant-scoped tool/resource access) or document plainly that
+  execution-layer code must not assume it does anything on its own.
+- **`InMemorySupervisor`/`Supervisor` cancel semantics diverge**
+  (found 2026-07-18). `InMemorySupervisor.cancel()` is immediate/forceful —
+  no cooperative-heartbeat wait, no `cancel_requested` round-trip.
+  `Supervisor.cancel()` is cooperative with a real ≤15s latency
+  bound (heartbeat interval). A test written and passing only against the
+  in-memory backend cannot catch a real cooperative-cancel-latency
+  regression. Not a bug — Stage-0 in-memory has no concurrent-lease
+  scenario to race against — but worth knowing before trusting an
+  in-memory-only cancel test as proof of production cancel behavior.
+- **Dual retry counters (scheduler retry vs. inbox nack) — unverified**
+  (found 2026-07-18). The 2026-07-02 audit's M4 finding described
+  independent retry counters over the same underlying failure; the
+  2026-07-05 v1 remediation fixed the backoff/ordering half but didn't
+  explicitly confirm the dual-counter aspect closed. Needs a targeted grep
+  on `Lease.attempt` and the inbox nack path before triaging further —
+  not done as part of this audit (out of scope; flagged for a future
+  session).
 
 ## Explicitly deferred from Phase 2-4 (scoped out, not forgotten)
 
@@ -83,18 +139,24 @@ so the decision is visible, not silently dropped.
   process restart mid-approval, matching how `ask_human` already works) is
   still open and now tracked as its own item below, not blocking on
   "connect it at all" anymore.
-- **Tool-approval: Future-based → signal-based** (new, 2026-07-12). Now that
-  approval is actually wired and working, it has the same durability gap
-  `ask_human` had before its own signal migration: a pending approval
-  Future lives only in the owning replica's process memory
-  (`WebHITLBridge._pending`) — a process restart while a CRITICAL tool call
-  is paused loses the pending request (the run stays suspended, per
-  `SuspendInterrupt`, but nothing can ever resolve it). Mirroring
-  `ask_human`'s fix: have `SSEApprovalHandler` suspend via
-  `ctx.sleep_until_signal()` instead of blocking on a Future, firing
-  `hitl:{request_id}` through the `SignalBus` the same way. New, comparably
-  scoped work (not attempted alongside the audit's wiring fix) — its own
-  session.
+- ~~**Tool-approval: Future-based → signal-based**~~ — **Done** (2026-07-18,
+  durable-agent-developer audit). `ToolInvoker._invoke_inner`'s approval
+  branch now suspends via `ctx.sleep_until_signal(f"hitl:{request_id}")`
+  exactly like `ask_human`, reusing the identical signal namespace so
+  `WebHITLBridge.register_signal_request()`/`resolve()` needed zero new
+  methods — only `serving/stream/session.py`'s tailing loop and
+  `routes/hitl.py`'s cold-restart card reconstruction gained an
+  `ApprovalRequestedEvent`/`"approval.requested"` branch alongside their
+  existing `InputRequestedEvent`/`"input.requested"` one.
+  `SSEApprovalHandler.request()` (Future-based) survives only as a fallback
+  for a handler constructed with no `signal_bus`. Proven durable against a
+  fully closed-and-reopened `asyncpg` pool (not just a discarded Python
+  object) in `test_pg_tool_approval_survives_full_pool_close_and_reopen`
+  (`tests/agents/test_runtime_postgres.py`), plus 3 in-memory unit tests
+  (`tests/agents/test_tool_approval_durability.py`). Stale `# TODO: L4-hitl`
+  markers removed from the three risk-gated tools that prompted this —
+  they needed no code changes themselves, since the fix lives entirely in
+  the invoker/bridge layer.
 - **`RedisHistoryProvider._key`/`GlobalTaskStore` tenant-namespacing.**
   Evaluated and scoped out: both are keyed by `session_id`/`conversation_id`,
   which are UUIDs in every real call path — two different tenants can never
@@ -146,7 +208,7 @@ so the decision is visible, not silently dropped.
   total. This is documented in code, not fixed.
 - **Event-log snapshot/compaction (`Checkpoint`).** Evaluated during Phase 5
   (2026-07-04): `sweep_terminal_runs` (`infrastructure/runtime/retention.py`,
-  shipped in PR8) already handles retention — deleting EventLog/signals/
+  shipped in PR8) already handles retention — deleting EventLogProtocol/signals/
   tree/spec/queue rows for old *terminal* runs. Compaction (folding a
   long-lived run's effect history into a snapshot so replay doesn't refold
   from entry 0) is the genuinely unbuilt half, but the plan's own guidance is
@@ -158,7 +220,7 @@ so the decision is visible, not silently dropped.
   **Update (2026-07-05, v1 remediation):** the stakes of this changed —
   `sweep_terminal_runs` now deletes a thread's *only* copy of its
   conversation history, not just internal coordination rows, because the
-  EventLog is the sole source of truth for both (see the "Persistence
+  EventLogProtocol is the sole source of truth for both (see the "Persistence
   collapsed onto the EventLog" entry below). The function's docstring
   carries an operational warning, but nothing *enforces* a minimum
   retention window or warns an operator before they run it against threads
@@ -167,7 +229,7 @@ so the decision is visible, not silently dropped.
   confirmation in whatever calls it in production — not addressed yet.
 - **History-replay pagination/snapshotting for `project_thread()` /
   `step_rows_from_log()`.** Both (`serving/stream/history.py`,
-  `agents/factory.py`) replay a thread's *entire* EventLog — every run, every
+  `agents/factory.py`) replay a thread's *entire* EventLogProtocol — every run, every
   entry — from scratch on every history load, reconnect-cold-start, and
   memory-seed. Fine at today's scale; for a thread with hundreds of turns
   this is unbounded work on every page load with no pagination, incremental
@@ -289,7 +351,7 @@ so the decision is visible, not silently dropped.
     added exponential backoff (`RunRetryPolicy.max_backoff_s`) and
     retryable-vs-`PermanentError` classification (`kernel/core/errors.py`).
     Also fixed an ordering bug in `worker.py`: `run.failed`/
-    `Supervisor.finish_run()` used to fire on the *first* transient error
+    `SupervisorProtocol.finish_run()` used to fire on the *first* transient error
     even when a retry was about to succeed, telling a parent's `ctx.join()`
     about a failure prematurely.
   - **Persistence collapsed onto the EventLog** — the largest piece. The
@@ -318,18 +380,18 @@ so the decision is visible, not silently dropped.
   - **Journal retired** — `RedisJournal` (dead, never wired to a real path)
     and `InMemoryJournal` (only consumer was `InMemorySupervisor.spawn()`'s
     dedup) both deleted; spawn dedup now uses a plain dict, mirroring
-    `PostgresSupervisor`'s own `substrate_spawn_effects` table. One
-    durability primitive (EventLog), zero Journal.
+    `Supervisor`'s own `substrate_spawn_effects` table. One
+    durability primitive (EventLogProtocol), zero Journal.
   - **`Worker.cancel()` ownership bug** — it used to poke
     `scheduler._status` (a private attribute) and, whenever this worker held
     no local Task for a run_id, unconditionally force-append `run.cancelled`
-    + call `Supervisor.finish_run()` — including for a run genuinely RUNNING
+    + call `SupervisorProtocol.finish_run()` — including for a run genuinely RUNNING
     on *another* replica, racing that replica's real completion. Added
-    `Scheduler.cancel_pending(run_id) -> bool` (atomic, both backends) as a
+    `SchedulerProtocol.cancel_pending(run_id) -> bool` (atomic, both backends) as a
     proper gate; only a non-RUNNING run gets force-terminalized locally now.
     Also fixed the `agent_runtime` microservice's cancel listener, which had
     the same gap (only called the local fast path, never the durable
-    `Supervisor.cancel()` cascade).
+    `SupervisorProtocol.cancel()` cascade).
   - **Dependency hygiene** — heavy tool stacks (`web`/`code`/`rag`/`s3`) moved
     to `[project.optional-dependencies]` extras; dead hard-deps
     (`markitdown-ocr`, `ipykernel`, `ipywidgets`, `pgvector`) deleted.
@@ -508,11 +570,11 @@ so the decision is visible, not silently dropped.
     (`infrastructure/serving_factory.py`) checks this against the running
     version before rebuilding an agent from a cold-resumed spec; on
     mismatch, it refuses to replay (never calls `rebuild_agent`/
-    `runtime.register`), instead appending a `run.failed` EventLog entry
+    `runtime.register`), instead appending a `run.failed` EventLogProtocol entry
     (`status: "version_mismatch"`) and terminally failing the run via the
-    new `PostgresScheduler.fail_pending_run()` (a direct pending→failed
+    new `Scheduler.fail_pending_run()` (a direct pending→failed
     transition for specs that were never leased in this process, so no
-    `Lease` exists to hand to `release()`) + `Supervisor.finish_run()`. This
+    `Lease` exists to hand to `release()`) + `SupervisorProtocol.finish_run()`. This
     was chosen over silently resuming (which risks the replayed effect path
     diverging from what actually happened once code has moved on) or
     resuming-with-a-warning (which risks the same silent divergence, just
@@ -538,7 +600,7 @@ so the decision is visible, not silently dropped.
   microservices convergence** (2026-07-03):
   - **Phase 2**: Durable single-flight — `ravi_run_queue` gained a
     `thread_id` column + unique partial index (`WHERE status IN ('pending',
-    'running', 'suspended')`); `Scheduler.enqueue(..., thread_id=...)` raises
+    'running', 'suspended')`); `SchedulerProtocol.enqueue(..., thread_id=...)` raises
     the new `ThreadBusyError` (kernel) on conflict; `routes/chat.py` does a
     cheap `find_run_for_thread()` pre-check for a clean 409 in the common
     case, `Runtime.submit()` is the authoritative enforcement (the rare race
@@ -547,16 +609,18 @@ so the decision is visible, not silently dropped.
     entirely from `ServerDependencies`/`app.py`. Cancel is now
     `routes/cancel.py` resolving the active run via `find_run_for_thread()`
     then calling both `Runtime.cancel()` (fast, same-process best-effort)
-    and `Supervisor.cancel()` (durable, cross-replica — the actual
+    and `SupervisorProtocol.cancel()` (durable, cross-replica — the actual
     guarantee). `AgentStreamSession` dropped its `cancel_event` entirely;
     cancellation from *any* replica is observed the same way completion
-    always was — a `run.cancelled` EventLog entry appearing under tail().
-    HITL: new `Scheduler.find_run_by_wake_signal(name)` lets
+    always was — a `run.cancelled` EventLogProtocol entry appearing under tail().
+    HITL: new `SchedulerProtocol.find_run_by_wake_signal(name)` lets
     `BridgeRegistry.resolve()` fall back to a durable lookup
     (`ravi_run_queue.wake_signals`) when no local bridge owns a
     `request_id` — the cross-replica case. Memory-seed race:
     `RedisHistoryProvider.try_acquire_seed_lock()` (atomic `SET NX EX`)
-    guards `agents/factory.py::load_session_memory()`'s seed — closes the
+    guards the seed inside `CachedHistoryProvider._ensure_seeded()`
+    (`capabilities/history/cached_history.py`, formerly
+    `agents/factory.py::load_session_memory()`, since removed) — closes the
     double-seed-truncates-older-messages bug at the root (prevents the race
     that caused it, rather than working around the truncation symptom).
   - **Phase 3**: `Thread` gained a `tenant_id` column (additive migration in
@@ -564,16 +628,16 @@ so the decision is visible, not silently dropped.
     `get_owned_thread()` now requires matching tenant, not just matching
     user, with the same claim-on-first-access affordance for legacy NULL
     rows. `Lease` (kernel) gained a `tenant` field, threaded from
-    `PostgresScheduler`/`InMemoryScheduler.lease()`; `Worker._run_agent()`
+    `Scheduler`/`InMemoryScheduler.lease()`; `Worker._run_agent()`
     finally populates `RunMeta.tenant_id` from it (previously always `None`
     regardless of what was enqueued — the field existed end-to-end but
-    nothing wrote it). `PostgresScheduler.lease()`'s claim query rewritten
+    nothing wrote it). `Scheduler.lease()`'s claim query rewritten
     as `ROW_NUMBER() OVER (PARTITION BY tenant ORDER BY priority,
     enqueued_at)` — a tenant flooding the queue can no longer push another
     tenant's run down to a fixed low rank; both always compete for the next
     slot. `Supervision` (kernel) gained `to_dict()`/`from_dict()`;
     `ravi_run_tree.supervision` (JSONB) persists it at spawn time; new
-    `Supervisor.supervision_of(run_id)` lets the Worker rehydrate it into
+    `SupervisorProtocol.supervision_of(run_id)` lets the Worker rehydrate it into
     `RunMeta.supervision` at lease time; `ctx.spawn()` without an explicit
     `supervision=` override now calls `self._meta.supervision.spawn_child()`
     when available instead of unconditionally falling back to
@@ -608,8 +672,8 @@ so the decision is visible, not silently dropped.
   `InMemorySignalBus` got a matching `gc()` for the in-memory backend's
   `_buffered` dict. New `terminated_at` column on `ravi_run_queue` (set by
   every path that lands a run in a terminal state: `release()`,
-  `PostgresSupervisor.cancel()`'s suspended-terminal-mark,
-  `PostgresScheduler.lease()`'s deadline-fail) backs a new
+  `Supervisor.cancel()`'s suspended-terminal-mark,
+  `Scheduler.lease()`'s deadline-fail) backs a new
   `infrastructure/runtime/retention.py::sweep_terminal_runs(pool,
   older_than=...)` — not wired into any automatic loop, callable from an ops
   cron job, deletes `ravi_event_log`/`ravi_signals`/`ravi_spawn_effects`/
@@ -620,7 +684,7 @@ so the decision is visible, not silently dropped.
   docstring references in `kernel/core/errors.py` and
   `kernel/runtime/log_entry.py` (no such type has ever existed in this
   codebase — replaced with the actual fold/EffectCache mechanism) and a
-  stale `Supervisor` cancellation-cascade docstring describing the
+  stale `SupervisorProtocol` cancellation-cascade docstring describing the
   pre-PR7 wakeup-message design. Added 7 new decision records to
   `decisions.md` (SuspendInterrupt/replay-from-top, path-derived
   determinism, all-Postgres coordination, heartbeat-based cross-process
@@ -630,9 +694,9 @@ so the decision is visible, not silently dropped.
   (436 unit + 13 Postgres integration), 5/5 import-linter contracts, 10/10
   kernel invariants — Phase 1 is now fully shipped.
 - **Phase 1 PR4-PR7 — durable coordination core, completed** (2026-07-03):
-  the heart of the program — `SignalBus`/`Supervisor` coordination moved
+  the heart of the program — `SignalBusProtocol`/`SupervisorProtocol` coordination moved
   fully off in-process memory onto Postgres.
-  - **PR4**: `PostgresSignalBus` (`infrastructure/runtime/pg_signal_bus.py`)
+  - **PR4**: `SignalBus` (`infrastructure/runtime/signal_bus.py`)
     — buffered `ravi_signals` table, `consumed_by=effect_id` exactly-once
     fencing, `FOR UPDATE SKIP LOCKED` claim. `ravi_run_queue` gained
     `wake_signals`/`wake_at`/`cancel_requested`/`deadline` columns (additive
@@ -655,7 +719,7 @@ so the decision is visible, not silently dropped.
     correlation_id, `InMemorySupervisor.spawn()`'s effect_id, and a
     `spawn()`+`ask()` double-delivery collision via the Inbox's msg-id
     dedup (fixed with `RunHandle.boot_correlation_id`).
-  - **PR6**: `PostgresSupervisor` (`infrastructure/runtime/pg_supervisor.py`)
+  - **PR6**: `Supervisor` (`infrastructure/runtime/supervisor.py`)
     — `ravi_run_tree` (parent/root/status) + `ravi_spawn_effects` (spawn
     idempotency keyed by the caller's replay-stable effect_id, mirroring
     `InMemorySupervisor`). `finish_run()` is the new Protocol method
@@ -664,26 +728,26 @@ so the decision is visible, not silently dropped.
     call. `Runtime.__init__` takes an injected `supervisor` (added a
     public `Runtime.supervisor` property alongside the existing
     `event_log`/`inbox`/`signal_bus`). `ctx.join()` rewritten off
-    `Supervisor.join()` (asyncio.Event blocking — the one remaining
+    `SupervisorProtocol.join()` (asyncio.Event blocking — the one remaining
     kernel-contract-violating wait) onto the same consume-based
     `child:{run_id}` signal `ask()` already used — a miss raises
     `SuspendInterrupt` like every other suspension primitive.
   - **PR7**: cancel cascade via a recursive CTE in
-    `PostgresSupervisor.cancel()` — seeds with the handle's own run_id
+    `Supervisor.cancel()` — seeds with the handle's own run_id
     unconditionally (a top-level `submit()` run has no `ravi_run_tree` row
     at all; only `ctx.spawn()`'d runs do) then walks `parent_run` down.
     Pending/running runs in the subtree get `cancel_requested=true`
     (observed at the next heartbeat, ≤15s); suspended runs have no live
     task to ever heartbeat, so they're terminal-marked directly via
-    `finish_run()`. `Scheduler.heartbeat()` now returns `bool` (kernel
+    `finish_run()`. `SchedulerProtocol.heartbeat()` now returns `bool` (kernel
     Protocol change) — `True` means a durable cancel or deadline was
     observed, and the Worker cancels the run's local
     `CancellationToken` in response (this is how a cancel issued by a
     *different* worker process reaches a live Task, since only the
     leasing worker holds it). Deadline enforcement lives in
-    `PostgresScheduler.lease()`'s existing poll: a pending/suspended run
+    `Scheduler.lease()`'s existing poll: a pending/suspended run
     past its `deadline` column terminal-fails directly (nothing will ever
-    heartbeat it); `Scheduler.enqueue()` gained an optional `deadline`
+    heartbeat it); `SchedulerProtocol.enqueue()` gained an optional `deadline`
     param to set it. The `ask()` crash fast-path (child fails →
     `child:{run_id}` signal → parent's `ask()` returns `target_failed`
     immediately) was already wired in PR5/PR6; PR7 added dedicated test
@@ -698,11 +762,11 @@ so the decision is visible, not silently dropped.
     column has no writer yet (`ExecutionBudget.deadline_s` is still not
     threaded through `ctx.spawn()` — same pre-existing gap the audit
     flagged); the scheduler-level deadline-fail path also doesn't notify
-    a joining parent (no Supervisor reference from `PostgresScheduler`) —
+    a joining parent (no SupervisorProtocol reference from `Scheduler`) —
     a parent relying on that instead needs its own `ask()`/`join()`
     timeout, which is unaffected and already correct.
 - **Phase 1 PR3 — event-log-as-journal** (2026-07-02): `EffectCache`
-  (`agents/runtime/effect_cache.py`) folds a run's `effect.result` EventLog
+  (`agents/runtime/effect_cache.py`) folds a run's `effect.result` EventLogProtocol
   entries into an in-memory dict once per lease — this is `fold()` for real,
   not just a docstring promise. `RunContext` no longer uses the Journal for
   effect dedup: `_record_effect()` appends `effect.result` to the EventLog
@@ -719,7 +783,7 @@ so the decision is visible, not silently dropped.
   back to a journal miss on every effect (LLM calls re-billed, tools
   re-executed). Found and fixed a real bug during this work:
   `InMemorySupervisor.spawn()` appends `child.spawned` directly to the
-  *parent's own* EventLog, bypassing `RunContext`'s new cursor — surfaced as
+  *parent's own* EventLogProtocol, bypassing `RunContext`'s new cursor — surfaced as
   `ConcurrentAppendError` failures across all of `tests/fabric/test_flows.py`;
   fixed by resyncing the cursor in `RunContext.spawn()` after the supervisor
   call returns. New test file `tests/agents/test_effect_cache.py` (10 tests):

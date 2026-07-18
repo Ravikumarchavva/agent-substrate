@@ -52,7 +52,7 @@ async def _run_flow(flow, text: str, *extra_agents, timeout: float = 5.0) -> str
             await rt.register(agent)
         await rt.register(flow)
         await rt.submit(flow.id, msg)
-        # SignalBus is consume-based (matches the durable backend) — poll
+        # SignalBusProtocol is consume-based (matches the durable backend) — poll
         # rather than block.
         deadline = asyncio.get_event_loop().time() + timeout
         payload = None

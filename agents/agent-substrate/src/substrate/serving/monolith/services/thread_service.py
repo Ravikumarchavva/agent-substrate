@@ -111,7 +111,7 @@ async def list_threads(
     unowned legacy rows (``user_identifier IS NULL`` — claimable on access,
     see ``get_owned_thread``).
 
-    Message counts come from the EventLog (``substrate_run_queue`` joined to
+    Message counts come from the EventLogProtocol (``substrate_run_queue`` joined to
     ``substrate_event_log``), not a separate steps table — see
     ``routes/admin.py::list_all_threads`` for the same join pattern.
     """

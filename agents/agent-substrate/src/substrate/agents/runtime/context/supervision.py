@@ -22,9 +22,9 @@ from substrate.kernel.agent.supervision import Supervision
 
 if TYPE_CHECKING:
     from substrate.kernel.agent.runtime_context import RunMeta
-    from substrate.kernel.runtime.log_entry import EventLog
-    from substrate.kernel.runtime.wakeup import SignalBus
-    from substrate.kernel.runtime.supervisor import Supervisor
+    from substrate.kernel.runtime.log_entry import EventLogProtocol
+    from substrate.kernel.runtime.wakeup import SignalBusProtocol
+    from substrate.kernel.runtime.supervisor import SupervisorProtocol
 
 
 class _SupervisionMixin:
@@ -33,10 +33,10 @@ class _SupervisionMixin:
     if TYPE_CHECKING:
         run_id: str
         _meta: RunMeta
-        _supervisor: Supervisor
-        _event_log: EventLog
+        _supervisor: SupervisorProtocol
+        _event_log: EventLogProtocol
         _seq_cursor: int
-        _signal_bus: SignalBus
+        _signal_bus: SignalBusProtocol
 
         def check(self) -> None: ...
         def _alloc_path(self) -> str: ...
@@ -56,7 +56,7 @@ class _SupervisionMixin:
         elif self._meta.supervision is not None:
             # Inherit the caller's own execution_budget/spawn_budget (this
             # run was itself ctx.spawn()'d, and its Supervision was
-            # persisted by Supervisor.spawn() and rehydrated by the Worker
+            # persisted by SupervisorProtocol.spawn() and rehydrated by the Worker
             # at lease time — see RunMeta.supervision / Worker._run_agent).
             # spawn_child() defaults the child's execution_budget to the
             # parent's; previously this branch never existed and every
@@ -68,7 +68,7 @@ class _SupervisionMixin:
             sup = Supervision.root(child_agent)
         # The spawn effect's identity, and the boot message's correlation_id,
         # must come from OUR OWN replay-stable path allocation — never from
-        # anything the Supervisor computes fresh (e.g. the parent log's
+        # anything the SupervisorProtocol computes fresh (e.g. the parent log's
         # current last_seq) or from boot.id/boot.correlation_id (agent
         # authors routinely construct a fresh Message, with fresh
         # auto-generated ids, on every call to their own run()). Any of
@@ -86,8 +86,8 @@ class _SupervisionMixin:
             path=path,
             correlation_id=correlation_id,
         )
-        # Supervisor.spawn() appends a "child.spawned" entry directly to this
-        # run's own EventLog (bypassing ctx._log — it has no ctx reference,
+        # SupervisorProtocol.spawn() appends a "child.spawned" entry directly to this
+        # run's own EventLogProtocol (bypassing ctx._log — it has no ctx reference,
         # only the shared event_log), so the local seq cursor must be
         # resynced here or the next ctx._log() call would see a stale
         # expected_seq and raise ConcurrentAppendError.
@@ -102,10 +102,10 @@ class _SupervisionMixin:
         """Suspend the parent until the child run reaches a terminal state.
 
         Non-blocking claim, not a wait (same model as ``ask`` and
-        ``sleep_until_signal``): the Supervisor's ``finish_run`` fires a
+        ``sleep_until_signal``): the SupervisorProtocol's ``finish_run`` fires a
         ``child:{run_id}`` signal when the child reaches a terminal state,
         so this consumes that signal — a miss raises ``SuspendInterrupt``
-        rather than parking on ``Supervisor.join()`` (which blocks a live
+        rather than parking on ``SupervisorProtocol.join()`` (which blocks a live
         coroutine and would not survive a process restart).
         """
         self.check()

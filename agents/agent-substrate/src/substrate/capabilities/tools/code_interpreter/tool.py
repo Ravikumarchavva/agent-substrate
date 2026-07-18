@@ -91,7 +91,7 @@ class CodeInterpreterTool:
         "required": ["code"],
         "additionalProperties": False,
     }
-    risk: str = "critical"  # TODO: L4-hitl  # executes arbitrary code
+    risk: str = "critical"  # executes arbitrary code
 
     def __init__(
         self,

@@ -1,4 +1,4 @@
-"""InMemoryEventLog — Stage 0 in-process implementation of EventLog."""
+"""InMemoryEventLog — Stage 0 in-process implementation of EventLogProtocol."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from substrate.kernel.runtime.log_entry import RunLogEntry
 
 
 class InMemoryEventLog:
-    """Single-process in-memory EventLog.
+    """Single-process in-memory EventLogProtocol.
 
     Thread-safe within a single asyncio event loop.  Not crash-durable —
-    that is Stage 1 (Postgres).  Satisfies the EventLog Protocol exactly,
+    that is Stage 1 (Postgres).  Satisfies EventLogProtocol exactly,
     so Stage 1 swaps this out without touching any caller.
     """
 

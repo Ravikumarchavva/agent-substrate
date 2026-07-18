@@ -27,7 +27,7 @@ class RunStatus(str, Enum):
     Non-terminal: PENDING, RUNNING, SUSPENDED.
 
     A run in SUSPENDED is dormant — zero RAM, zero CPU, just rows in storage.
-    The Scheduler wakes it when a message, timer, signal, or child_done arrives.
+    The SchedulerProtocol wakes it when a message, timer, signal, or child_done arrives.
     """
 
     PENDING = "pending"

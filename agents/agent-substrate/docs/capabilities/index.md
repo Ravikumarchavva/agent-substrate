@@ -10,9 +10,9 @@ Prefer a visual, concern-organized tour instead? See the **[Capability Map](../c
 capabilities/
 ├── tools/          Tool implementations + Skills + ToolChain
 ├── knowledge/      RAGPipeline, GraphRAGPipeline, chunkers, loaders, reranker
-├── memory/         CachedShortTermMemory + PostgresSessionStore + RedisSessionStore (session state)
-│                   PostgresMemoryStore (long-term facts)
-├── history/        CachedHistoryProvider + PostgresHistoryProvider + RedisHistoryProvider (chat logs)
+├── memory/         CachedShortTermMemory + DurableSessionStore + RedisSessionStore (session state)
+│                   DurableMemoryStore (long-term facts)
+├── history/        CachedHistoryProvider + DurableHistoryProvider + RedisHistoryProvider (chat logs)
 ├── vector/         PgVectorStore — implements kernel VectorStore Protocol
 ├── graph/          AGEGraphStore — implements kernel GraphStore Protocol
 ├── storage/        S3FileStore — implements kernel BlobStore Protocol
@@ -37,7 +37,7 @@ flowchart TB
         direction TB
         T["tools/ · skills/ · chain/<br/>CapabilityDiscovery · 18 built-in tools<br/>SkillManager · ToolChainTool + BridgeSession"]:::cap
         K["knowledge/<br/>RAGPipeline · GraphRAGPipeline<br/>chunkers · loaders · reranker"]:::cap
-        MH["memory/ + history/<br/>CachedShortTermMemory · PostgresMemoryStore<br/>CachedHistoryProvider"]:::cap
+        MH["memory/ + history/<br/>CachedShortTermMemory · DurableMemoryStore<br/>CachedHistoryProvider"]:::cap
         SS["vector/ · graph/ · storage/<br/>PgVectorStore · AGEGraphStore · S3FileStore"]:::cap
         PE["pipeline/ + llm/<br/>PipelineEngine · DataRefStore<br/>OpenAIChatCompletionClient · embeddings"]:::cap
         TR["triggers/<br/>TriggerScheduler · WebhookRegistry · ConditionMonitor"]:::cap

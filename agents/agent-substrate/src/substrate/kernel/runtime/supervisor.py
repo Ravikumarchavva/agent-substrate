@@ -1,4 +1,4 @@
-"""Supervisor — agents spawning, joining, and cancelling subagents.
+"""SupervisorProtocol — agents spawning, joining, and cancelling subagents.
 
 This realizes supervision-v2 on the event-sourced substrate.
 
@@ -6,11 +6,11 @@ Relationship to kernel/supervision.py
 --------------------------------------
 ``kernel/supervision.py::Supervision`` is the **policy** half: tree position
 (run_id, parent_id, root_id, depth), budget (SpawnBudget), and retention
-(HistoryRetention).  ``Supervisor`` (this file) is the **runtime** half: the
+(HistoryRetention).  ``SupervisorProtocol`` (this file) is the **runtime** half: the
 contract that actually creates and joins running entities.
 
 ``Supervision.spawn_child()`` mints the child's policy object.
-``Supervisor.spawn()`` takes that policy and makes a real durable run out of it.
+``SupervisorProtocol.spawn()`` takes that policy and makes a real durable run out of it.
 
 The four hard properties realized on the durable substrate
 ----------------------------------------------------------
@@ -21,17 +21,22 @@ The four hard properties realized on the durable substrate
    as a tool call: look up by (parent_run_id, step_seq, "child.spawn", child_agent).
 
 2. **Mobile children.**
-   A child is its own run with its own EventLog — any worker can pick it up.
+   A child is its own run with its own EventLogProtocol — any worker can pick it up.
    ``join`` is a suspend point: the parent suspends with
    ``Wakeup(kind="child_done", child_run=handle.run_id)``.  When the child
-   reaches a terminal state, its worker calls ``Supervisor._complete`` which
+   reaches a terminal state, its worker calls ``SupervisorProtocol._complete`` which
    appends ``child.completed`` to the parent's log, stores the ``RunResult`` in
-   ArtifactStore, and delivers a wakeup to the parent's Scheduler queue.
+   ArtifactStore, and delivers a wakeup to the parent's SchedulerProtocol queue.
 
 3. **Budget, not depth.**
    ``spawn`` consults a ``SpawnBudget`` bound to the root ``run_id``.  Over
-   budget → ``SpawnDenied``.  Per supervision-v2, ``max_agents`` / ``depth``
-   ceilings are dropped — the budget is the single constraint.
+   budget → ``BudgetExhaustedError`` (``kernel/core/errors.py`` — the same
+   exception ``ExecutionTracker`` raises for token/cost/turn exhaustion; one
+   exception type for "a budget of some kind ran out," not a spawn-specific
+   one).  Per supervision-v2, ``max_agents`` / ``depth`` ceilings are
+   dropped — the budget is the single constraint.  Enforced durably here
+   (every ``SupervisorProtocol`` implementation), not only by the in-process
+   ``SpawnTracker`` fast-path ``OrchestratorAgent`` uses.
 
 4. **Cancellation cascade.**
    ``cancel(handle)`` durably marks ``handle``'s entire subtree (a recursive
@@ -40,7 +45,7 @@ The four hard properties realized on the durable substrate
    heartbeat (``ctx.check()`` then raises ``CancellationError``); suspended
    runs — with no live task left to ever heartbeat — are terminal-marked
    directly. Either way the at-most-once effect guarantee still holds; see
-   ``PostgresSupervisor.cancel()`` for the concrete implementation.
+   ``Supervisor.cancel()`` for the concrete implementation.
 
 Orphan handling on permanent parent failure
 -------------------------------------------
@@ -71,14 +76,14 @@ from substrate.kernel.agent.supervision import Supervision
 class RunHandle(BaseModel):
     """An opaque reference to a spawned run.
 
-    Returned by ``Supervisor.spawn``; passed to ``join``/``cancel``/``ask``.
+    Returned by ``SupervisorProtocol.spawn``; passed to ``join``/``cancel``/``ask``.
     ``parent_run`` links the child to the run that spawned it.
 
     ``boot_correlation_id`` is the (replay-stable) correlation id the child's
     boot message was actually delivered with. ``ctx.ask(handle, ...)`` uses
     it to wait for the child's reply WITHOUT re-delivering anything — the
     child was already started by ``spawn``'s own boot delivery, so a second
-    send from ``ask`` would (a) be redundant and (b) collide with the Inbox's
+    send from ``ask`` would (a) be redundant and (b) collide with the InboxProtocol's
     idempotent-by-message-id dedup if the caller reuses the same ``Message``
     object for both calls (a natural, common pattern), silently dropping
     whichever delivery lands second.
@@ -95,7 +100,7 @@ class RunHandle(BaseModel):
 class RunResult(BaseModel):
     """Terminal output of any run.
 
-    Also the value returned by ``Supervisor.join`` and the result type for
+    Also the value returned by ``SupervisorProtocol.join`` and the result type for
     cross-agent delegation (send to an existing agent + await its completion).
 
     ``output`` carries the agent's final payload (if any).
@@ -112,7 +117,7 @@ class RunResult(BaseModel):
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
 
-class Supervisor(Protocol):
+class SupervisorProtocol(Protocol):
     """Contract for agents to spawn, join, and cancel subagents.
 
     Implementations: in-process asyncio (Stage 0), Postgres-backed durable
@@ -165,8 +170,8 @@ class Supervisor(Protocol):
         ``boot_correlation_id`` — this is what ``ctx.ask(handle, ...)`` waits
         on, so the child's reply is found without a second delivery.
 
-        Raises ``SpawnDenied`` (``kernel/errors.py``) when the root's
-        ``SpawnBudget`` is exhausted.
+        Raises ``BudgetExhaustedError`` (``kernel/core/errors.py``) when the
+        root's ``SpawnBudget`` is exhausted.
 
         The spawn is journaled on the parent before the child is enqueued —
         on parent replay the same child_run_id is returned deterministically.
@@ -176,7 +181,7 @@ class Supervisor(Protocol):
     async def join(self, handle: RunHandle) -> RunResult:
         """Suspend the parent until ``handle``'s run reaches a terminal state.
 
-        The caller's run transitions to SUSPENDED and the Scheduler releases
+        The caller's run transitions to SUSPENDED and the SchedulerProtocol releases
         its lease.  When the child completes, the parent is re-enqueued with a
         ``child_done`` wakeup, resumes, and this coroutine returns the child's
         ``RunResult``.
@@ -237,4 +242,4 @@ class Supervisor(Protocol):
         ...
 
 
-__all__ = ["RunHandle", "RunResult", "Supervisor"]
+__all__ = ["RunHandle", "RunResult", "SupervisorProtocol"]

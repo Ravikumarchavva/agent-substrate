@@ -69,7 +69,7 @@ class SpawnBudget:
     ``max_agents``   — total agents allowed in the run (root counts as 1).
     ``allow_preempt``— when True, HIGH/CRITICAL agents may cooperatively
                        pause lower-priority ones to claim their slot instead
-                       of raising ``SpawnDenied`` immediately.
+                       of raising ``BudgetExhaustedError`` immediately.
     """
 
     max_agents: int = 50
@@ -212,7 +212,7 @@ class Supervision:
         ``RunContext`` built by whichever worker later leases it (possibly a
         different process entirely), so this is what makes
         ``execution_budget`` inheritance survive that boundary — see
-        ``Supervisor.spawn()``'s persistence of this alongside the run.
+        ``SupervisorProtocol.spawn()``'s persistence of this alongside the run.
         """
         return {
             "run_id": self.run_id,

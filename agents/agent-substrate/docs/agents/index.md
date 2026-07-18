@@ -41,7 +41,7 @@ Each page below cross-links to its concept and kernel companions, so you can hop
 | # | Page | What it implements | Analogy |
 |---|------|--------------------|---------|
 | 1 | [Agent Types](01-agent-types.md) | The kernel `Agent` Protocol — `ReActAgent`, `OrchestratorAgent`, `UserProxyAgent` | Workers who think-act-repeat |
-| 2 | [The In-Process Runtime](02-runtime.md) | `EventLog`/`Journal`/`Scheduler`/`Inbox` contracts (in-memory) + `Worker` + `RunContext` | The dispatcher and the job paperwork |
+| 2 | [The In-Process Runtime](02-runtime.md) | `EventLogProtocol`/`Journal`/`SchedulerProtocol`/`InboxProtocol` contracts (in-memory) + `Worker` + `RunContext` | The dispatcher and the job paperwork |
 | 3 | [Context, Compaction & Memory](03-context-and-memory.md) | `HistoryProvider`, `BlobStore`, `VectorStore`, `GraphStore` (in-memory) + compaction | A diary plus an editor and desk drawers |
 | 4 | [The LLM Stack](04-llm-stack.md) | The kernel `LLMClient` (wrappers: cache, fallback, router) | Nesting adapters around one socket |
 | 5 | [Middleware & Guardrails](05-middleware-and-guardrails.md) | The middleware pipeline + safety guardrails | Airport-security layers around the gate |

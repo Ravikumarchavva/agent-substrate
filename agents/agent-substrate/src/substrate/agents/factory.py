@@ -34,8 +34,8 @@ from substrate.agents.middleware.pipeline import MiddlewarePipeline
 
 if TYPE_CHECKING:
     from substrate.agents.core import ReActAgent, OrchestratorAgent
-    from substrate.kernel.runtime.log_entry import EventLog
-    from substrate.kernel.runtime.scheduler import Scheduler
+    from substrate.kernel.runtime.log_entry import EventLogProtocol
+    from substrate.kernel.runtime.scheduler import SchedulerProtocol
 
 logger = setup_logging()
 
@@ -56,7 +56,7 @@ async def rebuild_messages_from_steps(
     ``step_rows`` doesn't have to come from an actual ``steps`` database row —
     it's a plain schema (``type``/``input``/``output``/``generation``/
     ``metadata``/``name``) that any cold-store source can project into. The
-    monolith projects it from the EventLog (see ``step_rows_from_log``); the
+    monolith projects it from the EventLogProtocol (see ``step_rows_from_log``); the
     microservices ``agent_runtime`` service projects it from the
     ``conversation`` service's own independent store via HTTP — both funnel
     through this one conversion so there's a single place that knows how a
@@ -155,10 +155,10 @@ async def rebuild_messages_from_steps(
 
 
 async def step_rows_from_log(
-    event_log: EventLog, scheduler: Scheduler, thread_id: str
+    event_log: EventLogProtocol, scheduler: SchedulerProtocol, thread_id: str
 ) -> list[dict]:
-    """Project a thread's EventLog into ``rebuild_messages_from_steps``'s
-    step-row schema — the monolith's cold-store source, now that the EventLog
+    """Project a thread's EventLogProtocol into ``rebuild_messages_from_steps``'s
+    step-row schema — the monolith's cold-store source, now that the EventLogProtocol
     (not a separate ``steps`` table) is the single source of truth for
     conversation history (see ``serving/stream/history.py::project_thread()``,
     the sibling projection for UI display).

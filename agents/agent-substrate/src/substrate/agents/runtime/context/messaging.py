@@ -22,10 +22,10 @@ from substrate.kernel.runtime.supervisor import RunHandle, RunResult
 from substrate.kernel.runtime.wakeup import Wakeup
 
 if TYPE_CHECKING:
-    from substrate.kernel.runtime.log_entry import EventLog
-    from substrate.kernel.runtime.inbox import Inbox
-    from substrate.kernel.runtime.scheduler import Scheduler
-    from substrate.kernel.runtime.wakeup import SignalBus
+    from substrate.kernel.runtime.log_entry import EventLogProtocol
+    from substrate.kernel.runtime.inbox import InboxProtocol
+    from substrate.kernel.runtime.scheduler import SchedulerProtocol
+    from substrate.kernel.runtime.wakeup import SignalBusProtocol
     from substrate.kernel.runtime.fanout import FanoutStrategy
     from substrate.kernel.runtime.follow_graph import FollowGraph
 
@@ -35,12 +35,12 @@ class _MessagingMixin:
 
     if TYPE_CHECKING:
         run_id: str
-        _inbox: Inbox
-        _scheduler: Scheduler
+        _inbox: InboxProtocol
+        _scheduler: SchedulerProtocol
         _fanout: FanoutStrategy
         _follow_graph: FollowGraph
-        _signal_bus: SignalBus
-        _event_log: EventLog
+        _signal_bus: SignalBusProtocol
+        _event_log: EventLogProtocol
 
         def check(self) -> None: ...
         def _alloc_path(self) -> str: ...
@@ -78,7 +78,7 @@ class _MessagingMixin:
           child is already running, already booted with a message. This call
           only WAITS, using ``handle.boot_correlation_id`` — it does not
           send anything. (Re-sending ``msg`` here — even a copy — would
-          collide with the Inbox's idempotent-by-message-id dedup the moment
+          collide with the InboxProtocol's idempotent-by-message-id dedup the moment
           the caller reuses the same ``Message`` object for both the
           ``spawn(boot=msg)`` and this call, a natural and common pattern:
           whichever delivery lands second is silently dropped, and if it's
@@ -97,7 +97,7 @@ class _MessagingMixin:
         The target calls ``ctx.reply(msg, result)`` to complete the ask.  If
         ``target`` is a ``RunHandle``, a supervisor that fires
         ``child:{run_id}`` signals on completion (see
-        ``PostgresSupervisor``/``InMemorySupervisor``) makes a
+        ``Supervisor``/``InMemorySupervisor``) makes a
         crashed/cancelled child resolve immediately instead of only after
         the full timeout — this wait watches both names at once.
         """

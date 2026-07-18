@@ -1,6 +1,6 @@
-"""user.message EventLog entry — the log's self-complete record of the turn
+"""user.message EventLogProtocol entry — the log's self-complete record of the turn
 that started a run, which history is projected from (see WS4 persistence
-redesign: the EventLog becomes the single source of truth for conversation
+redesign: the EventLogProtocol becomes the single source of truth for conversation
 history, replacing the old steps-table write path)."""
 
 from __future__ import annotations

@@ -13,7 +13,7 @@ agents:
 - An **information agent** (e.g. "trades-watcher") follows external sources
   and emits structured findings on its own topic.
 - A **personal agent** follows several information agents it cares about.
-- When the trades-watcher emits, fan-out delivers to every follower's Inbox,
+- When the trades-watcher emits, fan-out delivers to every follower's InboxProtocol,
   waking each personal agent with the finding.
 
 Relationship to existing primitives
@@ -22,7 +22,7 @@ Relationship to existing primitives
 they are the identity and record types.  ``FollowGraph`` is the durable store
 that keeps the graph alive across restarts and provides the fan-out query
 (``followers_of``).  ``FanoutStrategy`` (``kernel/runtime/fanout.py``) uses
-``FollowGraph`` to enumerate followers and deliver via ``Inbox``.
+``FollowGraph`` to enumerate followers and deliver via ``InboxProtocol``.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ class FollowGraph(Protocol):
         """Yield all agents currently subscribed to ``topic``.
 
         Returns an async iterator directly (not a coroutine), matching
-        ``EventLog.read``/``tail`` — callers use ``async for`` without awaiting.
+        ``EventLogProtocol.read``/``tail`` — callers use ``async for`` without awaiting.
 
         Used by ``FanoutStrategy`` to enumerate delivery targets.
         Order is unspecified; duplicates will not appear.

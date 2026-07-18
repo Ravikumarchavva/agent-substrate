@@ -4,7 +4,7 @@ Coalescing guarantee: enqueuing a run_id that is already pending is a no-op
 (the Wakeup is merged into the existing entry).  Workers receive each run at
 most once per wake-cycle regardless of how many sources enqueued it.
 
-In Stage 0 runs are in-process asyncio Tasks, so the Scheduler primarily
+In Stage 0 runs are in-process asyncio Tasks, so the SchedulerProtocol primarily
 acts as a ready-queue and state-tracker.  Stage 1 replaces this with
 Postgres SELECT … FOR UPDATE SKIP LOCKED.
 """
@@ -80,7 +80,7 @@ class InMemoryScheduler:
         # deadline: not enforced in-process — Worker.cancel() already
         # reaches this same process's CancellationToken directly and
         # synchronously; the durable deadline column exists specifically
-        # for Postgres's multi-worker case (see PostgresScheduler).
+        # for Postgres's multi-worker case (see Scheduler).
         del deadline
         if run_id in self._pending or run_id in self._leases:
             # Coalesce: merge wakeup but don't add duplicate entry
@@ -175,7 +175,7 @@ class InMemoryScheduler:
             if count <= policy.max_retries:
                 self._retry_counts[lease.run_id] = count
                 # Exponential backoff: park as SUSPENDED for the delay, then
-                # re-enqueue — mirrors PostgresScheduler's wake_at mechanism,
+                # re-enqueue — mirrors Scheduler's wake_at mechanism,
                 # just via asyncio.sleep since Stage 0 has no durable timer.
                 self._status[lease.run_id] = RunStatus.SUSPENDED
                 delay = _retry_backoff_seconds(count, policy)
@@ -187,8 +187,8 @@ class InMemoryScheduler:
 
         if status == RunStatus.SUSPENDED and wake_on:
             self._wakeups[lease.run_id] = wake_on
-            # For timer wakeups the SignalBus will call enqueue when it fires.
-            # For signal wakeups same.  For message wakeups the Inbox on_deliver
+            # For timer wakeups the SignalBusProtocol will call enqueue when it fires.
+            # For signal wakeups same.  For message wakeups the InboxProtocol on_deliver
             # hook calls enqueue.  Do NOT enqueue here — that would defeat dormancy.
 
         if status == RunStatus.SUSPENDED:
@@ -227,7 +227,7 @@ class InMemoryScheduler:
         return True
 
     async def wake_suspended(self, run_id: RunId, *, priority: int = 5) -> None:
-        """Re-enqueue a suspended run (called by SignalBus/Inbox when a wakeup fires)."""
+        """Re-enqueue a suspended run (called by SignalBusProtocol/InboxProtocol when a wakeup fires)."""
         if self._status.get(run_id) == RunStatus.SUSPENDED:
             await self.enqueue(run_id, priority=priority, tenant="default")
 

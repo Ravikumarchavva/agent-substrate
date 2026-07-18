@@ -157,7 +157,7 @@ agents/context/compaction/
 
 Storage for page bodies:
 - **Dev / tests** — `InMemoryFileStore` (already in `agents/storage/`)
-- **Production** — `S3FileStore` or `PostgresMemoryStore` (already in `capabilities/`)
+- **Production** — `S3FileStore` or `DurableMemoryStore` (already in `capabilities/`)
 
 No new kernel contracts are needed. The compactor only imports from `kernel` (content types, history protocol) and `agents/storage`.
 
@@ -239,4 +239,4 @@ class PagedMemoryCompactor:
 2. **How many pages in one retrieval?** Start with 1. Allowing bulk retrieval risks blowing the context window.
 3. **Index size limit?** If the session runs for thousands of turns, even the index grows large. A "meta-index" (summaries of groups of pages) solves this at the cost of one more indirection level.
 4. **Page size?** 20 turns is a reasonable default. Semantic boundaries (topic shifts) would be better but require more machinery.
-5. **Persistence?** `InMemoryFileStore` for dev. Wire `S3FileStore` / `PostgresMemoryStore` behind the `BlobStore` Protocol for production — the compactor itself doesn't change.
+5. **Persistence?** `InMemoryFileStore` for dev. Wire `S3FileStore` / `DurableMemoryStore` behind the `BlobStore` Protocol for production — the compactor itself doesn't change.

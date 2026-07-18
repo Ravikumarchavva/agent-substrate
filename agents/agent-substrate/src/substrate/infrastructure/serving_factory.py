@@ -155,7 +155,7 @@ async def init_runtime(cfg: SubstrateConfig) -> tuple[Any, AsyncExitStack | None
                 pool_max_size=cfg.RUNTIME_PG_POOL_MAX_SIZE,
             )
         )
-        logger.info("Agent runtime: durable (Postgres EventLog)")
+        logger.info("Agent runtime: durable (Postgres EventLogProtocol)")
         return runtime, stack
 
     from substrate.agents.runtime import Runtime
@@ -198,19 +198,15 @@ async def init_infrastructure(
     """
     import redis.asyncio as aioredis
 
-    from substrate.capabilities.history.redis_history import RedisHistoryProvider
     from substrate.capabilities.knowledge.pipeline import RAGPipeline
     from substrate.capabilities.pipeline.data_ref import DataRefStore
     from substrate.capabilities.tools.skills._manager import SkillManager
     from substrate.capabilities.vector.pgvector_store import PgVectorStore
     from substrate.serving.monolith.sse.bridge import BridgeRegistry
 
-    history = RedisHistoryProvider(
-        redis_url=cfg.REDIS_URL,
-        ttl=cfg.REDIS_SESSION_TTL,
-        max_messages=cfg.SESSION_MAX_MESSAGES,
+    history = await build_history_provider(
+        cfg.REDIS_URL, ttl=cfg.REDIS_SESSION_TTL, max_messages=cfg.SESSION_MAX_MESSAGES
     )
-    await history.connect()
 
     short_term_memory = await build_short_term_memory(
         redis_url=cfg.REDIS_URL,
@@ -575,13 +571,13 @@ async def build_agent_for_thread(
     rather than imported from ``substrate.serving.*`` — this module
     (``infrastructure/``) must not reach into ``serving/``, only the reverse.
 
-    Cold-store memory-seeding reads straight off ``runtime``'s EventLog
-    (``agents.factory.step_rows_from_log`` — the EventLog is the single
+    Cold-store memory-seeding reads straight off ``runtime``'s EventLogProtocol
+    (``agents.factory.step_rows_from_log`` — the EventLogProtocol is the single
     source of truth for conversation history, not a separate steps table;
     see ``serving/stream/history.py::project_thread()``, the sibling
     projection for UI display). ``history`` (the shared, TTL'd Redis cache)
     is wrapped in ``CachedHistoryProvider`` per request so it self-heals from
-    the EventLog on a cold cache — one contract any caller holding
+    the EventLogProtocol on a cold cache — one contract any caller holding
     ``memory: HistoryProvider`` benefits from, not a side-channel step a
     caller has to remember to invoke first.
 
@@ -624,7 +620,7 @@ async def build_agent_for_thread(
     if history is None:
         history = InMemoryHistoryProvider()
     memory = CachedHistoryProvider(
-        cache=history, reseed=_reseed_from_event_log, cold_store_name="EventLog"
+        cache=history, reseed=_reseed_from_event_log, cold_store_name="EventLogProtocol"
     )
 
     memory_tool = build_memory_tool(session_id, short_term_memory)
@@ -695,11 +691,20 @@ def build_chat_tools(toolbox: Any, bridge: Any) -> list[Any]:
     return tools
 
 
-async def build_history_provider(redis_url: str) -> Any:
-    """Build and connect a RedisHistoryProvider for the agent_runtime microservice."""
+async def build_history_provider(
+    redis_url: str, *, ttl: int = 3600, max_messages: int = 200
+) -> Any:
+    """Build and connect the shared RedisHistoryProvider cache.
+
+    Shared by the monolith (``init_infrastructure``) and the ``agent_runtime``
+    microservice — one construction path instead of two, so both deployment
+    modes honor ``REDIS_SESSION_TTL``/``SESSION_MAX_MESSAGES`` the same way.
+    """
     from substrate.capabilities.history.redis_history import RedisHistoryProvider
 
-    provider = RedisHistoryProvider(redis_url=redis_url)
+    provider = RedisHistoryProvider(
+        redis_url=redis_url, ttl=ttl, max_messages=max_messages
+    )
     await provider.connect()
     return provider
 
@@ -730,7 +735,7 @@ async def build_cached_history_for_thread(
 ) -> Any:
     """Wrap the agent_runtime microservice's shared history cache so it
     self-heals from the ``conversation`` service (its cold store — the
-    microservices deployment has no local EventLog, see
+    microservices deployment has no local EventLogProtocol, see
     ``build_agent_for_thread``'s monolith equivalent) on a cold session."""
     import httpx
 

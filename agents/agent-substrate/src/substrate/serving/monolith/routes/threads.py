@@ -159,9 +159,9 @@ async def get_thread_messages(
     db: AsyncSession = Depends(get_db),
     user: AuthClaims = Depends(get_current_user),
 ) -> List[dict]:
-    """Return a thread's full conversation, projected from the EventLog.
+    """Return a thread's full conversation, projected from the EventLogProtocol.
 
-    The EventLog is the single source of truth — there is no separate,
+    The EventLogProtocol is the single source of truth — there is no separate,
     independently-written history table. This concatenates every run ever
     submitted for this thread (oldest first) through the same
     ``wire_from_log`` mapping that powers live streaming (``POST /chat``)

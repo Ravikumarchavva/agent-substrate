@@ -11,7 +11,7 @@ by the agent directly.  The agent calls ``ctx.emit(topic, msg)``; RunContext
 
 Stage 0 — push fan-out (simple, works for normal agents)
 ---------------------------------------------------------
-For each follower of ``topic``:  ``Inbox.deliver(follower, msg)``
+For each follower of ``topic``:  ``InboxProtocol.deliver(follower, msg)``
 One synchronous inbox write per follower.  Fine at small scale.
 
 Stage 3 — push/pull hybrid (celebrity agents)
@@ -30,7 +30,7 @@ from typing import Protocol
 from substrate.kernel.core.identity import TopicId
 from substrate.kernel.messaging.message import Message
 from substrate.kernel.runtime.follow_graph import FollowGraph
-from substrate.kernel.runtime.inbox import Inbox
+from substrate.kernel.runtime.inbox import InboxProtocol
 
 
 class FanoutStrategy(Protocol):
@@ -47,7 +47,7 @@ class FanoutStrategy(Protocol):
         msg: Message,
         *,
         graph: FollowGraph,
-        inbox: Inbox,
+        inbox: InboxProtocol,
     ) -> None:
         """Deliver ``msg`` to every agent that follows ``topic``.
 

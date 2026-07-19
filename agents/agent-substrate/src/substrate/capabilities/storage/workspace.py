@@ -79,6 +79,16 @@ class WorkspaceFileStore:
             raise WorkspacePathError(f"Key escapes workspace root: {key!r}") from None
         return candidate
 
+    def exists(self, key: str) -> bool:
+        """True if *key* resolves to an existing file within the workspace.
+
+        Cheap point check (no directory walk) so callers can try an exact key
+        before falling back to a broader search."""
+        try:
+            return self._resolve(key).is_file()
+        except WorkspacePathError:
+            return False
+
     @staticmethod
     def _user_id_from_key(key: str) -> str | None:
         parts = Path(key).parts

@@ -243,6 +243,28 @@ services:
       - "8023:8888"
     restart: unless-stopped
 
+  # ONLYOFFICE Document Server — editable Word/Excel/PowerPoint in the panel.
+  # Opt-in (heavy ~2GB image). The JWT_SECRET here MUST equal the backend's
+  # ONLYOFFICE_JWT_SECRET so the signed editor config + save callbacks verify.
+  # See serving/monolith/routes/onlyoffice.py for the integration + networking.
+  onlyoffice:
+    profiles:
+      - onlyoffice
+    image: onlyoffice/documentserver:latest
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-me-onlyoffice-secret}
+      JWT_HEADER: Authorization
+    ports:
+      - "8024:80"
+    # The doc server fetches documents from / saves back to the backend via
+    # ONLYOFFICE_INTERNAL_CALLBACK_BASE (host.docker.internal:8000 when the
+    # backend runs on the host with `uv run start`). On Linux that name only
+    # resolves with the host-gateway mapping — same as the backend service.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
 volumes:
   pgdata18:
   redisdata:

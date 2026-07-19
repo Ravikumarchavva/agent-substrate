@@ -269,9 +269,7 @@ class FileVersion(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    __table_args__ = (
-        Index("ix_file_versions_key_seq", "object_key", "seq"),
-    )
+    __table_args__ = (Index("ix_file_versions_key_seq", "object_key", "seq"),)
 
     def __repr__(self) -> str:
         return (
